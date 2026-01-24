@@ -347,8 +347,17 @@ bun add -D @types/node vite-plugin-pwa workbox-window
 ```
 
 **Acceptance Criteria**:
-- [ ] All packages install without errors
-- [ ] No peer dependency warnings
+- [x] All packages install without errors
+- [x] No peer dependency warnings
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Core dependencies installed: react-router-dom@7.13.0, dexie@4.2.1, dexie-react-hooks@4.2.0, i18next@25.8.0, react-i18next@16.5.3, i18next-browser-languagedetector@8.2.0, nanoid@5.1.6, qrcode.react@4.2.0, @tanstack/react-query@5.90.20
+- Dev dependencies installed: vite-plugin-pwa@1.2.0, workbox-window@7.4.0
+- Skipped already-installed packages: date-fns, lucide-react, @types/node
+- JS bundle: 194.51 kB (61.18 kB gzip) - dependencies not imported yet (tree-shaking working)
+- Build time: 669ms
 
 ---
 
