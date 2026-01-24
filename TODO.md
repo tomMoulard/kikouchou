@@ -891,9 +891,20 @@ interface TripContextValue {
 - Handle loading and error states
 
 **Acceptance Criteria**:
-- [ ] Context provides reactive trip data
-- [ ] Current trip persists across page refreshes
-- [ ] Loading and error states are properly managed
+- [x] Context provides reactive trip data
+- [x] Current trip persists across page refreshes
+- [x] Loading and error states are properly managed
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Uses combined live query for trips and settings (single atomic load)
+- Auto-cleanup of stale trip references when persisted ID points to deleted trip
+- `setCurrentTrip` uses transaction for atomicity between validation and persistence
+- Empty string normalized to null for form input compatibility
+- Error handling for live queries (surfaces errors without crashing)
+- `checkConnection` for database connectivity verification and error recovery
+- Triple code review applied: fixed TOCTOU race condition, added stale reference cleanup, improved error handling
 
 ---
 
