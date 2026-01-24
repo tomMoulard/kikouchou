@@ -1,0 +1,277 @@
+/**
+ * Room Assignment Repository
+ *
+ * Provides CRUD operations for RoomAssignment entities with conflict detection.
+ * All operations use the Dexie.js database and branded types for type safety.
+ *
+ * @module lib/db/repositories/assignment-repository
+ */
+
+import { db } from '@/lib/db/database';
+import { createRoomAssignmentId } from '@/lib/db/utils';
+import type {
+  RoomAssignment,
+  RoomAssignmentFormData,
+  RoomAssignmentId,
+  RoomId,
+  PersonId,
+  TripId,
+} from '@/types';
+
+/**
+ * Creates a new room assignment in the database.
+ *
+ * @param tripId - The trip this assignment belongs to
+ * @param data - The assignment form data (roomId, personId, startDate, endDate)
+ * @returns The created RoomAssignment object
+ *
+ * @example
+ * ```typescript
+ * const assignment = await createAssignment(tripId, {
+ *   roomId,
+ *   personId,
+ *   startDate: '2024-07-15',
+ *   endDate: '2024-07-19',
+ * });
+ * ```
+ */
+export async function createAssignment(
+  tripId: TripId,
+  data: RoomAssignmentFormData,
+): Promise<RoomAssignment> {
+  const assignment: RoomAssignment = {
+    id: createRoomAssignmentId(),
+    tripId,
+    ...data,
+  };
+
+  await db.roomAssignments.add(assignment);
+  return assignment;
+}
+
+/**
+ * Retrieves all assignments for a trip.
+ *
+ * @param tripId - The trip ID to filter by
+ * @returns Array of room assignments
+ *
+ * @example
+ * ```typescript
+ * const assignments = await getAssignmentsByTripId(tripId);
+ * ```
+ */
+export async function getAssignmentsByTripId(
+  tripId: TripId,
+): Promise<RoomAssignment[]> {
+  return db.roomAssignments.where('tripId').equals(tripId).toArray();
+}
+
+/**
+ * Retrieves all assignments for a specific room.
+ *
+ * @param roomId - The room ID to filter by
+ * @returns Array of assignments for the room, sorted by start date
+ *
+ * @example
+ * ```typescript
+ * const assignments = await getAssignmentsByRoomId(roomId);
+ * ```
+ */
+export async function getAssignmentsByRoomId(
+  roomId: RoomId,
+): Promise<RoomAssignment[]> {
+  const assignments = await db.roomAssignments
+    .where('roomId')
+    .equals(roomId)
+    .toArray();
+
+  // Sort by startDate
+  return assignments.sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
+/**
+ * Retrieves all assignments for a specific person.
+ *
+ * @param personId - The person ID to filter by
+ * @returns Array of assignments for the person, sorted by start date
+ *
+ * @example
+ * ```typescript
+ * const assignments = await getAssignmentsByPersonId(personId);
+ * ```
+ */
+export async function getAssignmentsByPersonId(
+  personId: PersonId,
+): Promise<RoomAssignment[]> {
+  const assignments = await db.roomAssignments
+    .where('personId')
+    .equals(personId)
+    .toArray();
+
+  // Sort by startDate
+  return assignments.sort((a, b) => a.startDate.localeCompare(b.startDate));
+}
+
+/**
+ * Retrieves an assignment by its unique ID.
+ *
+ * @param id - The assignment's unique identifier
+ * @returns The assignment if found, undefined otherwise
+ *
+ * @example
+ * ```typescript
+ * const assignment = await getAssignmentById(assignmentId);
+ * ```
+ */
+export async function getAssignmentById(
+  id: RoomAssignmentId,
+): Promise<RoomAssignment | undefined> {
+  return db.roomAssignments.get(id);
+}
+
+/**
+ * Updates an existing assignment with partial data.
+ *
+ * @param id - The assignment's unique identifier
+ * @param data - Partial assignment form data to update
+ * @throws {Error} If the assignment with the given ID does not exist
+ *
+ * @example
+ * ```typescript
+ * await updateAssignment(assignmentId, {
+ *   startDate: '2024-07-16',
+ *   endDate: '2024-07-20',
+ * });
+ * ```
+ */
+export async function updateAssignment(
+  id: RoomAssignmentId,
+  data: Partial<RoomAssignmentFormData>,
+): Promise<void> {
+  const updatedCount = await db.roomAssignments.update(id, data);
+
+  if (updatedCount === 0) {
+    throw new Error(`Assignment with id "${id}" not found`);
+  }
+}
+
+/**
+ * Deletes a room assignment.
+ *
+ * @param id - The assignment's unique identifier
+ *
+ * @example
+ * ```typescript
+ * await deleteAssignment(assignmentId);
+ * ```
+ */
+export async function deleteAssignment(id: RoomAssignmentId): Promise<void> {
+  await db.roomAssignments.delete(id);
+}
+
+/**
+ * Checks if a person has any conflicting assignments for the given date range.
+ *
+ * A conflict exists when the person is already assigned to another room
+ * for any overlapping dates. Uses inclusive date comparison.
+ *
+ * @param tripId - The trip ID to search within
+ * @param personId - The person to check for conflicts
+ * @param startDate - Start date of the proposed assignment (YYYY-MM-DD)
+ * @param endDate - End date of the proposed assignment (YYYY-MM-DD)
+ * @param excludeId - Optional assignment ID to exclude (for edit scenarios)
+ * @returns True if a conflict exists, false otherwise
+ *
+ * @example
+ * ```typescript
+ * // Check before creating assignment
+ * const hasConflict = await checkAssignmentConflict(
+ *   tripId,
+ *   personId,
+ *   '2024-07-15',
+ *   '2024-07-19',
+ * );
+ *
+ * // Check when editing (exclude current assignment)
+ * const hasConflict = await checkAssignmentConflict(
+ *   tripId,
+ *   personId,
+ *   '2024-07-15',
+ *   '2024-07-19',
+ *   currentAssignmentId,
+ * );
+ * ```
+ */
+export async function checkAssignmentConflict(
+  tripId: TripId,
+  personId: PersonId,
+  startDate: string,
+  endDate: string,
+  excludeId?: RoomAssignmentId,
+): Promise<boolean> {
+  // Get all assignments for this person in this trip
+  const assignments = await db.roomAssignments
+    .where('tripId')
+    .equals(tripId)
+    .filter((a) => a.personId === personId)
+    .toArray();
+
+  // Check for overlapping date ranges
+  // Two ranges overlap if: start1 <= end2 AND end1 >= start2
+  for (const existing of assignments) {
+    // Skip the excluded assignment (when editing)
+    if (excludeId && existing.id === excludeId) {
+      continue;
+    }
+
+    // Check for overlap using string comparison (works for ISO dates)
+    const overlaps =
+      startDate <= existing.endDate && endDate >= existing.startDate;
+
+    if (overlaps) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Gets all assignments for a trip that overlap with a specific date.
+ *
+ * Useful for getting current room assignments for "today" view.
+ *
+ * @param tripId - The trip ID to search within
+ * @param date - The date to check (YYYY-MM-DD)
+ * @returns Array of assignments active on the given date
+ *
+ * @example
+ * ```typescript
+ * const todayAssignments = await getAssignmentsForDate(tripId, '2024-07-17');
+ * ```
+ */
+export async function getAssignmentsForDate(
+  tripId: TripId,
+  date: string,
+): Promise<RoomAssignment[]> {
+  return db.roomAssignments
+    .where('tripId')
+    .equals(tripId)
+    .filter((a) => a.startDate <= date && a.endDate >= date)
+    .toArray();
+}
+
+/**
+ * Gets the count of assignments for a trip.
+ *
+ * @param tripId - The trip ID to count assignments for
+ * @returns Number of assignments in the trip
+ *
+ * @example
+ * ```typescript
+ * const count = await getAssignmentCount(tripId);
+ * ```
+ */
+export async function getAssignmentCount(tripId: TripId): Promise<number> {
+  return db.roomAssignments.where('tripId').equals(tripId).count();
+}

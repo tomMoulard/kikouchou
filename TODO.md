@@ -639,8 +639,17 @@ export async function deleteTrip(id: string): Promise<void>
 ```
 
 **Acceptance Criteria**:
-- [ ] All CRUD operations work correctly
-- [ ] Cascade delete removes rooms, persons, assignments, and transports
+- [x] All CRUD operations work correctly
+- [x] Cascade delete removes rooms, persons, assignments, and transports
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Implemented with retry logic for shareId collision handling (max 3 retries)
+- Fixed TOCTOU race condition in updateTrip by using atomic update() return value
+- Parallelized cascade deletes in deleteTrip with Promise.all for better performance
+- All operations use branded types (TripId, ShareId) for type safety
+- Comprehensive JSDoc documentation with examples
 
 ---
 
@@ -661,8 +670,17 @@ export async function reorderRooms(tripId: string, roomIds: string[]): Promise<v
 ```
 
 **Acceptance Criteria**:
-- [ ] Rooms are returned sorted by `order` field
-- [ ] Reordering updates all affected rooms' order values
+- [x] Rooms are returned sorted by `order` field
+- [x] Reordering updates all affected rooms' order values
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Uses compound index [tripId+order] for efficient sorted queries
+- Auto-assigns next order value when creating rooms
+- Cascade deletes room assignments when deleting a room
+- Reorder function validates room ownership within transaction
+- Added getRoomCount helper function
 
 ---
 
@@ -690,8 +708,17 @@ const COLORS = [
 ```
 
 **Acceptance Criteria**:
-- [ ] New persons get a color from the palette automatically
-- [ ] Deleting a person removes their assignments and transports
+- [x] New persons get a color from the palette automatically
+- [x] Deleting a person removes their assignments and transports
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Added createPersonWithAutoColor convenience function
+- Uses compound index [tripId+name] for sorted person lists
+- Cascade deletes assignments and transports when deleting a person
+- Clears driverId references in transports when person is deleted
+- Added searchPersonsByName for filtering persons
 
 ---
 
@@ -721,8 +748,17 @@ export async function checkAssignmentConflict(
 ```
 
 **Acceptance Criteria**:
-- [ ] Conflict checking works correctly for overlapping date ranges
-- [ ] Assignments can be queried by room or person
+- [x] Conflict checking works correctly for overlapping date ranges
+- [x] Assignments can be queried by room or person
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- checkAssignmentConflict uses inclusive date range overlap logic
+- Supports excludeId parameter for edit scenarios
+- Added getAssignmentsForDate for "today" view
+- All query functions sort by startDate
+- Added getAssignmentCount helper
 
 ---
 
@@ -748,8 +784,17 @@ export async function getUpcomingPickups(tripId: string): Promise<Transport[]>
 ```
 
 **Acceptance Criteria**:
-- [ ] Transports are sorted by datetime
-- [ ] Filter functions work correctly for arrivals/departures
+- [x] Transports are sorted by datetime
+- [x] Filter functions work correctly for arrivals/departures
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Uses compound index [tripId+datetime] for efficient sorted queries
+- getArrivals and getDepartures filter by type and sort by datetime
+- getUpcomingPickups filters by needsPickup and future datetime
+- Added getTransportsForDate for daily view
+- Added getTransportsByDriverId for driver assignments
 
 ---
 
@@ -777,8 +822,16 @@ const DEFAULT_SETTINGS: AppSettings = {
 ```
 
 **Acceptance Criteria**:
-- [ ] Settings are created with defaults if not existing
-- [ ] Language preference persists across sessions
+- [x] Settings are created with defaults if not existing
+- [x] Language preference persists across sessions
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Uses DEFAULT_SETTINGS from types for consistency
+- getSettings creates defaults if not found (lazy initialization)
+- Added convenience functions: getCurrentTripId, getLanguage, resetSettings
+- Singleton pattern with fixed 'settings' ID
 
 ---
 
@@ -800,7 +853,15 @@ export * from './repositories/settings-repository';
 ```
 
 **Acceptance Criteria**:
-- [ ] All exports are accessible from `@/lib/db`
+- [x] All exports are accessible from `@/lib/db`
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Comprehensive barrel export with all database functionality
+- Exports grouped by category: database, utils, repositories
+- Type export for KikoushouDatabase class
+- All 6 repositories fully exported with 50+ functions
 
 ---
 
