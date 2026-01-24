@@ -436,8 +436,18 @@ export default defineConfig({
 ```
 
 **Acceptance Criteria**:
-- [ ] Path aliases work in imports (`@/components/...`)
-- [ ] PWA manifest is generated during build
+- [x] Path aliases work in imports (`@/components/...`)
+- [x] PWA manifest is generated during build
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Added VitePWA plugin with autoUpdate registration
+- Configured manifest with app name, colors, icons
+- PWA build generates: manifest.webmanifest, registerSW.js, sw.js, workbox-*.js
+- Precache includes 7 entries (250.19 KiB)
+- Icons placeholder paths configured (192x192 and 512x512)
+- Build time: 645ms
 
 ---
 
