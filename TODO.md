@@ -595,8 +595,19 @@ export const now = (): number => Date.now();
 ```
 
 **Acceptance Criteria**:
-- [ ] Functions return expected values
-- [ ] IDs are unique
+- [x] Functions return expected values
+- [x] IDs are unique
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Created `src/lib/db/utils.ts` with comprehensive utility functions
+- ID generation: `createTripId`, `createRoomId`, `createPersonId`, `createRoomAssignmentId`, `createTransportId`, `createShareId` (10 chars), `generateId`
+- Timestamp utilities: `now`, `toUnixTimestamp`, `fromUnixTimestamp`, `toISODateString` (UTC), `toISODateTimeString`
+- Validation type guards: `isValidISODateString`, `isValidISODateTimeString`, `isValidHexColor`
+- Parsing functions: `parseISODateString`, `parseISODateTimeString` (return null on invalid input)
+- Database helpers: `createTimestamps`, `updateTimestamp`
+- Fixed from code review: Added invalid Date guards (throws Error), switched to UTC for toISODateString, optimized parsing to avoid redundant Date allocations
 
 ---
 
