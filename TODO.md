@@ -312,8 +312,20 @@ bunx shadcn@latest add textarea
 ```
 
 **Acceptance Criteria**:
-- [ ] All components are installed in `src/components/ui/`
-- [ ] Components can be imported and rendered
+- [x] All components are installed in `src/components/ui/`
+- [x] Components can be imported and rendered
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Installed 17 components in 3 batches using `bunx --bun shadcn@latest add ... -y`
+- Used `sonner` instead of deprecated `toast` component
+- Components installed: avatar, badge, button, calendar, card, dialog, dropdown-menu, input, label, popover, select, separator, sheet, sonner, switch, tabs, textarea
+- Dependencies added: @radix-ui/* primitives, date-fns, react-day-picker, sonner, next-themes
+- CSS output: 55.35 kB (9.51 kB gzip) - includes all component styles
+- JS unchanged at 194.51 kB (tree-shaking working - components not imported yet)
+- Build time: 642ms
+- Note: ThemeProvider from next-themes needed when using Toaster component
 
 ---
 
