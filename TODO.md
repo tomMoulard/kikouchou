@@ -268,9 +268,21 @@ bunx shadcn@latest init
 - CSS variables: Yes
 
 **Acceptance Criteria**:
-- [ ] `components.json` is created
-- [ ] `src/lib/utils.ts` contains the `cn()` utility
-- [ ] CSS variables are added to `src/index.css`
+- [x] `components.json` is created
+- [x] `src/lib/utils.ts` contains the `cn()` utility
+- [x] CSS variables are added to `src/index.css`
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Used `bunx --bun shadcn@latest init` with slate base color
+- Added path aliases to root tsconfig.json for shadcn CLI detection
+- shadcn automatically detected Tailwind v4 and configured correctly
+- Style: new-york, CSS variables: enabled, RSC: disabled (Vite SPA)
+- Installed dependencies: clsx, tailwind-merge, class-variance-authority, lucide-react, tw-animate-css
+- CSS uses modern oklch color format with light/dark theme support
+- CSS output: 13.09 kB (3.25 kB gzip) - includes full theming system
+- Build time: 628ms
 
 ---
 
