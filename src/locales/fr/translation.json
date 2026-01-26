@@ -1,0 +1,154 @@
+{
+  "app": {
+    "name": "Kikoushou",
+    "tagline": "Organisez vos vacances entre amis"
+  },
+  "common": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "add": "Ajouter",
+    "close": "Fermer",
+    "loading": "Chargement...",
+    "error": "Une erreur est survenue",
+    "confirm": "Confirmer",
+    "back": "Retour",
+    "search": "Rechercher",
+    "noResults": "Aucun résultat",
+    "required": "Requis"
+  },
+  "nav": {
+    "calendar": "Calendrier",
+    "rooms": "Chambres",
+    "persons": "Participants",
+    "transports": "Transports",
+    "settings": "Paramètres",
+    "share": "Partager"
+  },
+  "trips": {
+    "title": "Mes voyages",
+    "new": "Nouveau voyage",
+    "edit": "Modifier le voyage",
+    "name": "Nom du voyage",
+    "namePlaceholder": "Ex : Vacances d'été 2024",
+    "location": "Lieu",
+    "locationPlaceholder": "Ex : Maison de vacances, Bretagne",
+    "startDate": "Date de début",
+    "endDate": "Date de fin",
+    "deleteConfirm": "Voulez-vous vraiment supprimer ce voyage ? Cette action est irréversible.",
+    "empty": "Aucun voyage",
+    "emptyDescription": "Créez votre premier voyage pour commencer"
+  },
+  "rooms": {
+    "title": "Chambres",
+    "new": "Nouvelle chambre",
+    "edit": "Modifier la chambre",
+    "name": "Nom de la chambre",
+    "namePlaceholder": "Ex : Chambre parentale",
+    "capacity": "Nombre de lits",
+    "description": "Description",
+    "descriptionPlaceholder": "Notes optionnelles...",
+    "deleteConfirm": "Voulez-vous vraiment supprimer cette chambre ?",
+    "empty": "Aucune chambre",
+    "emptyDescription": "Ajoutez les chambres de votre logement",
+    "beds_zero": "Aucun lit",
+    "beds": "{{count}} lit",
+    "beds_plural": "{{count}} lits",
+    "occupied": "Occupée",
+    "available": "Disponible"
+  },
+  "persons": {
+    "title": "Participants",
+    "new": "Nouveau participant",
+    "edit": "Modifier le participant",
+    "name": "Nom",
+    "namePlaceholder": "Ex : Marie",
+    "color": "Couleur",
+    "deleteConfirm": "Voulez-vous vraiment supprimer ce participant ?",
+    "empty": "Aucun participant",
+    "emptyDescription": "Ajoutez les personnes qui participent au voyage"
+  },
+  "assignments": {
+    "title": "Attribution des chambres",
+    "assign": "Attribuer une chambre",
+    "room": "Chambre",
+    "person": "Participant",
+    "period": "Période",
+    "conflict": "Cette personne est déjà assignée à une autre chambre pour ces dates",
+    "empty": "Aucune attribution",
+    "emptyDescription": "Assignez les participants aux chambres"
+  },
+  "transports": {
+    "title": "Transports",
+    "arrivals": "Arrivées",
+    "departures": "Départs",
+    "new": "Nouveau transport",
+    "edit": "Modifier le transport",
+    "type": "Type",
+    "arrival": "Arrivée",
+    "departure": "Départ",
+    "datetime": "Date et heure",
+    "location": "Lieu",
+    "locationPlaceholder": "Ex : Gare Montparnasse",
+    "mode": "Mode de transport",
+    "modes": {
+      "train": "Train",
+      "plane": "Avion",
+      "car": "Voiture",
+      "bus": "Bus",
+      "other": "Autre"
+    },
+    "number": "Numéro",
+    "numberPlaceholder": "Ex : TGV 8541",
+    "driver": "Chauffeur",
+    "driverPlaceholder": "Qui va chercher/déposer ?",
+    "needsPickup": "Nécessite un transport",
+    "notes": "Notes",
+    "notesPlaceholder": "Informations complémentaires...",
+    "deleteConfirm": "Voulez-vous vraiment supprimer ce transport ?",
+    "empty": "Aucun transport",
+    "emptyDescription": "Ajoutez les arrivées et départs des participants",
+    "upcomingPickups": "Prochains transports à prévoir"
+  },
+  "calendar": {
+    "title": "Calendrier",
+    "today": "Aujourd'hui",
+    "month": "Mois",
+    "week": "Semaine",
+    "noAssignments": "Aucune attribution pour cette période"
+  },
+  "sharing": {
+    "title": "Partager le voyage",
+    "description": "Partagez ce lien avec vos amis pour qu'ils puissent voir le voyage",
+    "link": "Lien de partage",
+    "copy": "Copier le lien",
+    "copied": "Lien copié !",
+    "qrCode": "QR Code",
+    "scanToView": "Scannez pour voir le voyage",
+    "import": "Importer un voyage",
+    "importDescription": "Entrez le code de partage ou scannez un QR code"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "language": "Langue",
+    "languages": {
+      "fr": "Français",
+      "en": "English"
+    },
+    "about": "À propos",
+    "version": "Version"
+  },
+  "errors": {
+    "generic": "Une erreur est survenue",
+    "notFound": "Page non trouvée",
+    "tripNotFound": "Voyage non trouvé",
+    "loadingFailed": "Échec du chargement",
+    "saveFailed": "Échec de l'enregistrement",
+    "deleteFailed": "Échec de la suppression"
+  },
+  "pwa": {
+    "install": "Installer l'application",
+    "installDescription": "Installez Kikoushou sur votre appareil pour un accès rapide"
+  }
+}

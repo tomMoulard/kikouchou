@@ -1332,8 +1332,24 @@ export default i18n;
 ```
 
 **Acceptance Criteria**:
-- [ ] All UI strings are defined
-- [ ] Pluralization works (`beds` / `beds_plural`)
+- [x] All UI strings are defined
+- [x] Pluralization works (`beds` / `beds_plural`)
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/locales/fr/translation.json` with 155 lines, ~4KB
+- Complete coverage of all 12 UI sections: app, common, nav, trips, rooms, persons, assignments, transports, calendar, sharing, settings, errors, pwa
+- Natural idiomatic French translations (not word-for-word from English)
+- Pluralization: `beds_zero`, `beds`, `beds_plural` for count=0, 1, 2+ cases
+- Interpolation: `{{count}}` preserved correctly for i18next
+- Triple code review applied:
+  - Fixed terminology consistency: `assignments.person` → "Participant" (was "Personne")
+  - Added `beds_zero` for better UX when count=0
+- French-appropriate examples: Gare Montparnasse, TGV 8541, Bretagne, Marie
+- Consistent tone: friendly but professional, uses "vous" form
+- All accents correct: é, è, ê, à, ô, ç
+- Build passes, valid JSON syntax
 
 ---
 
