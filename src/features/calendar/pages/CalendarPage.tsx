@@ -229,18 +229,18 @@ const CalendarHeader = memo(function CalendarHeader({
           size="icon"
           onClick={onPrevMonth}
           aria-label={t('calendar.previousMonth', 'Previous month')}
-          className="size-8"
+          className="size-10 md:size-8"
         >
-          <ChevronLeft className="size-4" aria-hidden="true" />
+          <ChevronLeft className="size-5 md:size-4" aria-hidden="true" />
         </Button>
         <Button
           variant="outline"
           size="icon"
           onClick={onNextMonth}
           aria-label={t('calendar.nextMonth', 'Next month')}
-          className="size-8"
+          className="size-10 md:size-8"
         >
-          <ChevronRight className="size-4" aria-hidden="true" />
+          <ChevronRight className="size-5 md:size-4" aria-hidden="true" />
         </Button>
       </div>
 
@@ -345,7 +345,8 @@ const CalendarEvent = memo(function CalendarEvent({
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       className={cn(
-        'w-full text-left text-xs rounded px-1 py-0.5 truncate',
+        'w-full text-left text-xs rounded px-1.5 py-1 md:px-1 md:py-0.5 truncate',
+        'min-h-[28px] md:min-h-0',
         'transition-opacity hover:opacity-80',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
         'cursor-pointer',

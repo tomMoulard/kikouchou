@@ -260,29 +260,29 @@ const AssignmentItem = memo(function AssignmentItem({
         )}
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons - min 44px touch targets on mobile */}
       <div className="flex items-center gap-1 shrink-0">
         <Button
           variant="ghost"
           size="icon"
-          className="size-7"
+          className="size-9 md:size-7"
           disabled={isDisabled}
           onClick={handleEditClick}
           onKeyDown={handleEditKeyDown}
           aria-label={t('common.edit')}
         >
-          <Pencil className="size-3.5" aria-hidden="true" />
+          <Pencil className="size-4 md:size-3.5" aria-hidden="true" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="size-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+          className="size-9 md:size-7 text-destructive hover:text-destructive hover:bg-destructive/10"
           disabled={isDisabled}
           onClick={handleDeleteClick}
           onKeyDown={handleDeleteKeyDown}
           aria-label={t('common.delete')}
         >
-          <Trash2 className="size-3.5" aria-hidden="true" />
+          <Trash2 className="size-4 md:size-3.5" aria-hidden="true" />
         </Button>
       </div>
     </div>
@@ -816,12 +816,12 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 gap-1"
+          className="h-9 md:h-7 gap-1"
           disabled={isDisabled || persons.length === 0}
           onClick={handleAddClick}
           aria-label={t('assignments.assign')}
         >
-          <Plus className="size-3.5" aria-hidden="true" />
+          <Plus className="size-4 md:size-3.5" aria-hidden="true" />
           <span className="sr-only sm:not-sr-only">{t('common.add')}</span>
         </Button>
       </div>

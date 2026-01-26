@@ -255,8 +255,8 @@ const ColorPicker = memo(function ColorPicker({
             disabled={disabled}
             onClick={() => handleColorClick(color)}
             className={cn(
-              // Base styles
-              'size-10 rounded-full border-2 transition-all duration-150',
+              // Base styles - min 44px touch targets on mobile
+              'size-11 md:size-10 rounded-full border-2 transition-all duration-150',
               // Focus styles
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
               // Hover styles

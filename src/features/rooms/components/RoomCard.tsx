@@ -256,11 +256,11 @@ const RoomCard = memo(function RoomCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8"
+                className="size-10 md:size-8"
                 aria-label={t('common.openMenu', 'Open menu')}
                 disabled={isDisabled}
               >
-                <MoreHorizontal className="size-4" aria-hidden="true" />
+                <MoreHorizontal className="size-5 md:size-4" aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

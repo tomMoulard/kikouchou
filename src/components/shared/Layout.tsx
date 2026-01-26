@@ -140,8 +140,8 @@ const Header = memo(function Header({
         {t('app.name')}
       </Link>
 
-      {/* Current trip name or placeholder */}
-      <span className="ml-auto text-sm text-muted-foreground truncate max-w-[200px]">
+      {/* Current trip name or placeholder - responsive max-width */}
+      <span className="ml-auto text-sm text-muted-foreground truncate max-w-[120px] sm:max-w-[200px]">
         {tripName ?? t('trips.empty')}
       </span>
     </header>

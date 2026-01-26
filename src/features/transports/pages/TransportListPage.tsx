@@ -303,11 +303,11 @@ const TransportCard = memo(function TransportCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8 shrink-0"
+                className="size-10 md:size-8 shrink-0"
                 disabled={isActionsDisabled}
                 aria-label={t('common.actions', 'Actions')}
               >
-                <MoreVertical className="size-4" aria-hidden="true" />
+                <MoreVertical className="size-5 md:size-4" aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

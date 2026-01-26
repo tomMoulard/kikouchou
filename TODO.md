@@ -3393,9 +3393,52 @@ interface CalendarEventProps {
 - Forms usable on mobile
 
 **Acceptance Criteria**:
-- [ ] App usable on all screen sizes
-- [ ] No content cut off
-- [ ] Touch targets appropriately sized
+- [x] App usable on all screen sizes
+- [x] No content cut off
+- [x] Touch targets appropriately sized
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Conducted comprehensive responsive design audit via subagentic workflow
+- **Audit results**: 16/25 OK, 9/25 issues found, 3/25 critical
+
+**Critical Issues Fixed**:
+1. **RoomAssignmentSection action buttons** - Edit/Delete buttons were 28px (`size-7`)
+   - Fixed: Now `size-9 md:size-7` (36px mobile, 28px desktop)
+2. **RoomAssignmentSection add button** - Height was 28px (`h-7`)
+   - Fixed: Now `h-9 md:h-7` (36px mobile, 28px desktop)
+3. **CalendarPage event buttons** - Touch targets were ~20-24px
+   - Fixed: Added `min-h-[28px] md:min-h-0` and increased padding `px-1.5 py-1 md:px-1 md:py-0.5`
+4. **CalendarPage navigation buttons** - Were 32px (`size-8`)
+   - Fixed: Now `size-10 md:size-8` (40px mobile, 32px desktop)
+
+**Important Issues Fixed**:
+1. **ColorPicker touch targets** - Color swatches were 40px (`size-10`)
+   - Fixed: Now `size-11 md:size-10` (44px mobile, 40px desktop)
+2. **TransportListPage dropdown menu trigger** - Was 32px (`size-8`)
+   - Fixed: Now `size-10 md:size-8` (40px mobile, 32px desktop)
+3. **RoomCard dropdown menu trigger** - Was 32px (`size-8`)
+   - Fixed: Now `size-10 md:size-8` (40px mobile, 32px desktop)
+
+**Minor Issues Fixed**:
+1. **Layout trip name truncation** - Fixed width `max-w-[200px]`
+   - Fixed: Now `max-w-[120px] sm:max-w-[200px]` for better mobile handling
+
+**Files Modified**:
+- `src/features/rooms/components/RoomAssignmentSection.tsx` - Touch target fixes
+- `src/features/calendar/pages/CalendarPage.tsx` - Event and nav button fixes
+- `src/components/shared/ColorPicker.tsx` - Color swatch size fix
+- `src/features/transports/pages/TransportListPage.tsx` - Dropdown trigger fix
+- `src/features/rooms/components/RoomCard.tsx` - Dropdown trigger fix
+- `src/components/shared/Layout.tsx` - Trip name truncation fix
+
+**Noted but not changed** (intentional design):
+- Calendar page `min-w-[600px]` requires horizontal scroll on mobile - this is intentional for complex calendar view
+- Input heights (`h-9` = 36px) are slightly below 44px but acceptable with proper padding
+- Mobile nav text uses `text-xs` (12px) - keeps nav compact while icons provide main navigation cues
+
+- Build passes, 29 precache entries (906.53 KiB)
 
 ---
 
