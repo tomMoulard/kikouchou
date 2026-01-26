@@ -3664,6 +3664,1085 @@ export default function App() {
 
 ---
 
+## Phase 15: Test Suite
+
+### Testing Strategy Overview
+
+**Goal**: Implement a comprehensive test suite covering unit tests, integration tests, component tests, and end-to-end tests to ensure code quality, prevent regressions, and maintain confidence during refactoring.
+
+**Framework Selection**: Vitest (native Vite integration, Jest-compatible API, fast execution)
+
+**Test Categories**:
+| Category          | Target                                  | Priority | Coverage Goal |
+|-------------------|-----------------------------------------|----------|---------------|
+| Unit Tests        | Pure functions, utilities               | High     | 90%+          |
+| Integration Tests | Database repositories                   | High     | 80%+          |
+| Component Tests   | React components with user interactions | Medium   | 70%+          |
+| E2E Tests         | Critical user flows                     | Medium   | Core paths    |
+
+---
+
+### 15.1 Test Framework Setup
+
+**Description**: Install and configure Vitest with necessary testing libraries.
+
+**Commands**:
+```bash
+# Core testing framework
+bun add -D vitest @vitest/coverage-v8
+
+# React testing utilities
+bun add -D @testing-library/react @testing-library/jest-dom @testing-library/user-event
+
+# DOM environment
+bun add -D jsdom
+
+# IndexedDB mock for database tests
+bun add -D fake-indexeddb
+
+# MSW for API mocking (future use)
+bun add -D msw
+```
+
+**Files to create**:
+- `vitest.config.ts` - Vitest configuration
+- `src/test/setup.ts` - Global test setup
+- `src/test/utils.tsx` - Test utilities and custom render function
+
+**Configuration** (`vitest.config.ts`):
+```typescript
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        'src/components/ui/',  // shadcn/ui components
+        '**/*.d.ts',
+      ],
+    },
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+});
+```
+
+**Test Setup** (`src/test/setup.ts`):
+```typescript
+import '@testing-library/jest-dom';
+import 'fake-indexeddb/auto';
+import { cleanup } from '@testing-library/react';
+import { afterEach, beforeEach, vi } from 'vitest';
+
+// Cleanup after each test
+afterEach(() => {
+  cleanup();
+});
+
+// Reset IndexedDB before each test
+beforeEach(async () => {
+  const { db } = await import('@/lib/db/database');
+  await db.delete();
+  await db.open();
+});
+
+// Mock matchMedia for responsive tests
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation((query) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
+// Mock i18n
+vi.mock('@/lib/i18n', () => ({
+  default: {
+    t: (key: string) => key,
+    changeLanguage: vi.fn(),
+  },
+  i18nReady: Promise.resolve(),
+}));
+```
+
+**Package.json scripts**:
+```json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui"
+  }
+}
+```
+
+**Acceptance Criteria**:
+- [x] Vitest runs successfully with `bun run test`
+- [x] Coverage reports generate correctly
+- [x] Path aliases work in tests
+- [x] IndexedDB mocking works
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Installed 8 testing packages: vitest, @vitest/coverage-v8, @testing-library/react, @testing-library/jest-dom, @testing-library/user-event, jsdom, fake-indexeddb, msw
+- Created `vitest.config.ts` with:
+  - jsdom environment
+  - v8 coverage provider with 70% thresholds
+  - Path alias `@/` resolution
+  - Threads pool for better performance (vs forks)
+  - Exclusion of shadcn/ui components from coverage
+- Created `src/test/setup.ts` with:
+  - fake-indexeddb/auto import (first) for IndexedDB mocking
+  - @testing-library/jest-dom matchers
+  - Optimized database reset using `table.clear()` in transaction (vs delete/recreate)
+  - Browser API mocks: matchMedia, ResizeObserver, IntersectionObserver, scrollTo, URL.createObjectURL
+  - i18n mocks returning translation keys directly
+- Created `src/test/utils.tsx` with:
+  - Custom `render()` function wrapping AppProviders + MemoryRouter
+  - `withProviders` option for isolated component testing
+  - `initialRoute`/`initialEntries` for routing tests
+  - `userEvent` instance per render
+  - Database helper functions: `createTestTrip`, `createTestPerson`, `createTestRoom`, `waitForDb`
+  - Re-exports of all @testing-library/react utilities
+- Added 4 test scripts to package.json: `test`, `test:run`, `test:coverage`, `test:ui`
+- Added `vitest/globals` to tsconfig.app.json types
+- Added `vitest.config.ts` to tsconfig.node.json includes
+- Created `src/test/setup.test.ts` with 12 verification tests (all passing)
+- Triple code review applied:
+  - Fixed database reset to use `table.clear()` instead of expensive `delete/open` cycle
+  - Changed dynamic import to static import for database module
+  - Added error handling to beforeEach database reset
+  - Added error handling to test helper functions (createTestTrip, etc.)
+  - Fixed redundant re-exports in utils.tsx
+  - Fixed Trans mock type safety
+  - Changed pool from 'forks' to 'threads' for better performance
+- Build passes, all 12 tests pass, TypeScript strict mode compliant
+
+---
+
+### 15.2 Unit Tests: Database Utilities
+
+**Description**: Test pure utility functions in `src/lib/db/utils.ts`.
+
+**File**: `src/lib/db/__tests__/utils.test.ts`
+
+**Functions to test**:
+```typescript
+// ID Generation
+- generateId()
+- createTripId(), createRoomId(), createPersonId(), etc.
+- createShareId() // Should be 10 characters
+
+// Timestamp Utilities
+- now()
+- toUnixTimestamp()
+- fromUnixTimestamp()
+- toISODateString()
+- toISODateTimeString()
+
+// Validation Type Guards
+- isValidISODateString()
+- isValidISODateTimeString()
+- isValidHexColor()
+
+// Parsing Functions
+- parseISODateString()
+- parseISODateTimeString()
+
+// Database Helpers
+- createTimestamps()
+- updateTimestamp()
+```
+
+**Test cases**:
+```typescript
+describe('ID Generation', () => {
+  it('generateId returns unique 21-character strings');
+  it('createShareId returns 10-character strings');
+  it('consecutive calls produce unique IDs');
+});
+
+describe('Timestamp Utilities', () => {
+  it('now returns current Unix timestamp');
+  it('toUnixTimestamp converts Date to number');
+  it('fromUnixTimestamp converts number to Date');
+  it('toISODateString formats as YYYY-MM-DD');
+  it('toISODateTimeString formats as ISO 8601');
+  it('handles invalid dates by throwing Error');
+});
+
+describe('Validation Type Guards', () => {
+  it('isValidISODateString validates YYYY-MM-DD format');
+  it('isValidISODateString rejects invalid dates (2024-13-45)');
+  it('isValidISODateTimeString validates ISO 8601 datetime');
+  it('isValidHexColor accepts #RGB, #RRGGBB, #RRGGBBAA');
+  it('isValidHexColor rejects invalid formats');
+});
+
+describe('Parsing Functions', () => {
+  it('parseISODateString returns Date for valid input');
+  it('parseISODateString returns null for invalid input');
+  it('parseISODateTimeString handles timezone offsets');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] 100% coverage for all utility functions
+- [ ] Edge cases tested (invalid inputs, boundary values)
+- [ ] All tests pass
+
+**Status**: PENDING
+
+---
+
+### 15.3 Unit Tests: Type Utilities
+
+**Description**: Test utility functions and type guards in `src/types/index.ts`.
+
+**File**: `src/types/__tests__/index.test.ts`
+
+**Functions to test**:
+```typescript
+- getDefaultPersonColor()
+```
+
+**Test cases**:
+```typescript
+describe('getDefaultPersonColor', () => {
+  it('returns colors cyclically based on index');
+  it('handles negative indices gracefully');
+  it('handles index larger than palette size');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] All type utility functions tested
+- [ ] Edge cases covered
+
+**Status**: PENDING
+
+---
+
+### 15.4 Integration Tests: Trip Repository
+
+**Description**: Test CRUD operations and business logic in trip repository.
+
+**File**: `src/lib/db/repositories/__tests__/trip-repository.test.ts`
+
+**Functions to test**:
+```typescript
+- createTrip()
+- getAllTrips()
+- getTripById()
+- getTripByShareId()
+- updateTrip()
+- deleteTrip() // Including cascade delete
+```
+
+**Test cases**:
+```typescript
+describe('createTrip', () => {
+  it('creates trip with all required fields');
+  it('generates unique id and shareId');
+  it('sets createdAt and updatedAt timestamps');
+  it('handles shareId collision with retry');
+});
+
+describe('getAllTrips', () => {
+  it('returns empty array when no trips');
+  it('returns trips sorted by startDate descending');
+});
+
+describe('getTripById', () => {
+  it('returns trip when found');
+  it('returns undefined when not found');
+});
+
+describe('getTripByShareId', () => {
+  it('returns trip when shareId matches');
+  it('returns undefined for non-existent shareId');
+});
+
+describe('updateTrip', () => {
+  it('updates trip fields');
+  it('updates only updatedAt timestamp');
+  it('throws/returns error for non-existent trip');
+});
+
+describe('deleteTrip', () => {
+  it('deletes trip');
+  it('cascade deletes associated rooms');
+  it('cascade deletes associated persons');
+  it('cascade deletes associated assignments');
+  it('cascade deletes associated transports');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] All CRUD operations tested
+- [ ] Cascade delete verified
+- [ ] Collision handling tested
+- [ ] 90%+ coverage
+
+**Status**: PENDING
+
+---
+
+### 15.5 Integration Tests: Room Repository
+
+**Description**: Test room CRUD operations and ordering.
+
+**File**: `src/lib/db/repositories/__tests__/room-repository.test.ts`
+
+**Functions to test**:
+```typescript
+- createRoom()
+- getRoomsByTripId()
+- getRoomById()
+- updateRoom()
+- deleteRoom()
+- reorderRooms()
+```
+
+**Test cases**:
+```typescript
+describe('createRoom', () => {
+  it('creates room with auto-assigned order');
+  it('assigns next order value based on existing rooms');
+});
+
+describe('getRoomsByTripId', () => {
+  it('returns rooms sorted by order');
+  it('returns empty array for non-existent trip');
+});
+
+describe('deleteRoom', () => {
+  it('cascade deletes room assignments');
+});
+
+describe('reorderRooms', () => {
+  it('reorders rooms correctly');
+  it('validates room ownership within trip');
+  it('rejects invalid room IDs');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] All CRUD operations tested
+- [ ] Ordering logic tested
+- [ ] Cascade delete tested
+
+**Status**: PENDING
+
+---
+
+### 15.6 Integration Tests: Person Repository
+
+**Description**: Test person CRUD operations and auto-color assignment.
+
+**File**: `src/lib/db/repositories/__tests__/person-repository.test.ts`
+
+**Functions to test**:
+```typescript
+- createPerson()
+- createPersonWithAutoColor()
+- getPersonsByTripId()
+- getPersonById()
+- updatePerson()
+- deletePerson()
+- searchPersonsByName()
+```
+
+**Test cases**:
+```typescript
+describe('createPersonWithAutoColor', () => {
+  it('assigns color from palette based on person count');
+  it('cycles through colors when count exceeds palette');
+});
+
+describe('deletePerson', () => {
+  it('cascade deletes assignments');
+  it('cascade deletes transports');
+  it('clears driverId references in other transports');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Auto-color assignment tested
+- [ ] Cascade delete tested
+- [ ] DriverId cleanup tested
+
+**Status**: PENDING
+
+---
+
+### 15.7 Integration Tests: Assignment Repository (Critical)
+
+**Description**: Test room assignment operations with focus on conflict detection.
+
+**File**: `src/lib/db/repositories/__tests__/assignment-repository.test.ts`
+
+**Functions to test**:
+```typescript
+- createAssignment()
+- getAssignmentsByTripId()
+- getAssignmentsByRoomId()
+- getAssignmentsByPersonId()
+- updateAssignment()
+- deleteAssignment()
+- checkAssignmentConflict()  // CRITICAL
+- getAssignmentsForDate()
+```
+
+**Test cases for conflict detection**:
+```typescript
+describe('checkAssignmentConflict', () => {
+  // No conflict cases
+  it('returns false when no existing assignments');
+  it('returns false when dates do not overlap');
+  it('returns false when person has no other assignments');
+  
+  // Conflict cases
+  it('returns true when new assignment fully overlaps existing');
+  it('returns true when new assignment partially overlaps start');
+  it('returns true when new assignment partially overlaps end');
+  it('returns true when new assignment is contained within existing');
+  it('returns true when new assignment contains existing');
+  it('returns true when assignments share single boundary date');
+  
+  // Edge cases
+  it('excludes specified assignment ID from check (edit mode)');
+  it('only checks assignments for same person');
+  it('does not flag different persons in same room');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] All conflict scenarios tested with date range overlaps
+- [ ] excludeId parameter tested for edit mode
+- [ ] 100% coverage for checkAssignmentConflict
+
+**Status**: PENDING
+
+---
+
+### 15.8 Integration Tests: Transport Repository
+
+**Description**: Test transport CRUD operations and filtering.
+
+**File**: `src/lib/db/repositories/__tests__/transport-repository.test.ts`
+
+**Functions to test**:
+```typescript
+- createTransport()
+- getTransportsByTripId()
+- getTransportsByPersonId()
+- getArrivals()
+- getDepartures()
+- getUpcomingPickups()
+- updateTransport()
+- deleteTransport()
+```
+
+**Test cases**:
+```typescript
+describe('getArrivals/getDepartures', () => {
+  it('filters by transport type correctly');
+  it('sorts by datetime');
+});
+
+describe('getUpcomingPickups', () => {
+  it('filters by needsPickup flag');
+  it('excludes past transports');
+  it('sorts by datetime ascending');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Filter functions tested
+- [ ] Datetime sorting verified
+
+**Status**: PENDING
+
+---
+
+### 15.9 Integration Tests: Settings Repository
+
+**Description**: Test settings persistence and singleton behavior.
+
+**File**: `src/lib/db/repositories/__tests__/settings-repository.test.ts`
+
+**Functions to test**:
+```typescript
+- getSettings()
+- updateSettings()
+- setCurrentTrip()
+- setLanguage()
+- resetSettings()
+```
+
+**Test cases**:
+```typescript
+describe('getSettings', () => {
+  it('creates default settings if not exists');
+  it('returns existing settings');
+});
+
+describe('setLanguage', () => {
+  it('updates language setting');
+  it('persists across getSettings calls');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Lazy initialization tested
+- [ ] Setting persistence tested
+
+**Status**: PENDING
+
+---
+
+### 15.10 Component Tests: TripForm
+
+**Description**: Test form validation and submission.
+
+**File**: `src/features/trips/components/__tests__/TripForm.test.tsx`
+
+**Test cases**:
+```typescript
+describe('TripForm', () => {
+  describe('Create Mode', () => {
+    it('renders empty form');
+    it('validates required name field');
+    it('validates end date >= start date');
+    it('submits form with valid data');
+    it('disables submit button during submission');
+  });
+  
+  describe('Edit Mode', () => {
+    it('pre-fills form with trip data');
+    it('updates form when trip prop changes');
+    it('submits with updated data');
+  });
+  
+  describe('Validation', () => {
+    it('shows error for empty name on blur');
+    it('shows error when end date before start date');
+    it('clears errors when valid input provided');
+  });
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Form validation tested
+- [ ] Create/edit modes tested
+- [ ] User interactions tested
+
+**Status**: PENDING
+
+---
+
+### 15.11 Component Tests: DateRangePicker
+
+**Description**: Test date range selection and constraints.
+
+**File**: `src/components/shared/__tests__/DateRangePicker.test.tsx`
+
+**Test cases**:
+```typescript
+describe('DateRangePicker', () => {
+  it('renders placeholder when no value');
+  it('renders formatted date range when value set');
+  it('opens calendar on click');
+  it('disables dates outside min/max range');
+  it('normalizes reversed date ranges');
+  it('closes popover when complete range selected');
+  it('formats dates according to locale');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Date selection tested
+- [ ] Constraint enforcement tested
+- [ ] Locale formatting tested
+
+**Status**: PENDING
+
+---
+
+### 15.12 Component Tests: ColorPicker
+
+**Description**: Test color selection and keyboard navigation.
+
+**File**: `src/components/shared/__tests__/ColorPicker.test.tsx`
+
+**Test cases**:
+```typescript
+describe('ColorPicker', () => {
+  it('renders all colors in palette');
+  it('shows checkmark on selected color');
+  it('calls onChange when color clicked');
+  it('supports keyboard navigation with arrow keys');
+  it('selects color with Enter/Space');
+  it('supports disabled state');
+  it('uses custom colors when provided');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Color selection tested
+- [ ] Keyboard navigation tested
+- [ ] Accessibility verified
+
+**Status**: PENDING
+
+---
+
+### 15.13 Component Tests: PersonBadge
+
+**Description**: Test badge rendering and contrast calculation.
+
+**File**: `src/components/shared/__tests__/PersonBadge.test.tsx`
+
+**Test cases**:
+```typescript
+describe('PersonBadge', () => {
+  it('renders person name');
+  it('applies background color from person');
+  it('calculates correct text color for light backgrounds');
+  it('calculates correct text color for dark backgrounds');
+  it('handles invalid hex colors gracefully');
+  it('supports onClick for interactive badges');
+  it('applies correct size variant');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Color rendering tested
+- [ ] Contrast calculation tested
+- [ ] Interactive behavior tested
+
+**Status**: PENDING
+
+---
+
+### 15.14 Component Tests: ConfirmDialog
+
+**Description**: Test dialog behavior and async handling.
+
+**File**: `src/components/shared/__tests__/ConfirmDialog.test.tsx`
+
+**Test cases**:
+```typescript
+describe('ConfirmDialog', () => {
+  it('opens and closes correctly');
+  it('calls onConfirm when confirm button clicked');
+  it('shows loading state during async operation');
+  it('disables buttons during loading');
+  it('prevents close during loading');
+  it('closes automatically on successful confirm');
+  it('stays open on error for retry');
+  it('applies destructive variant styling');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Dialog lifecycle tested
+- [ ] Async handling tested
+- [ ] Variant styling tested
+
+**Status**: PENDING
+
+---
+
+### 15.15 Component Tests: EmptyState
+
+**Description**: Test empty state rendering and action.
+
+**File**: `src/components/shared/__tests__/EmptyState.test.tsx`
+
+**Test cases**:
+```typescript
+describe('EmptyState', () => {
+  it('renders icon, title, and description');
+  it('renders action button when provided');
+  it('calls action onClick when clicked');
+  it('applies custom className');
+  it('has correct accessibility attributes');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] All props tested
+- [ ] Accessibility verified
+
+**Status**: PENDING
+
+---
+
+### 15.16 Context Tests: TripContext
+
+**Description**: Test context state management and persistence.
+
+**File**: `src/contexts/__tests__/TripContext.test.tsx`
+
+**Test cases**:
+```typescript
+describe('TripContext', () => {
+  it('provides trips list');
+  it('provides current trip');
+  it('setCurrentTrip updates current trip');
+  it('persists current trip to settings');
+  it('clears stale trip references');
+  it('handles loading state');
+  it('handles error state');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] State management tested
+- [ ] Persistence tested
+- [ ] Error handling tested
+
+**Status**: PENDING
+
+---
+
+### 15.17 Context Tests: AssignmentContext
+
+**Description**: Test assignment context with conflict checking.
+
+**File**: `src/contexts/__tests__/AssignmentContext.test.tsx`
+
+**Test cases**:
+```typescript
+describe('AssignmentContext', () => {
+  it('provides assignments for current trip');
+  it('provides filtered assignments by room');
+  it('provides filtered assignments by person');
+  it('checkConflict delegates to repository');
+  it('createAssignment adds new assignment');
+  it('updateAssignment modifies existing');
+  it('deleteAssignment removes assignment');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] CRUD operations tested
+- [ ] Filter functions tested
+- [ ] Conflict checking integrated
+
+**Status**: PENDING
+
+---
+
+### 15.18 E2E Tests: Trip Lifecycle
+
+**Description**: Test complete trip creation, editing, and deletion flow.
+
+**File**: `e2e/trip-lifecycle.spec.ts`
+
+**Framework**: Playwright
+
+**Test cases**:
+```typescript
+describe('Trip Lifecycle', () => {
+  it('creates a new trip from empty state');
+  it('edits an existing trip');
+  it('deletes a trip with confirmation');
+  it('navigates between trips');
+  it('persists trip data across page reload');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Happy path tested
+- [ ] Data persistence verified
+- [ ] Navigation tested
+
+**Status**: PENDING
+
+---
+
+### 15.19 E2E Tests: Room Assignment Flow
+
+**Description**: Test complete room assignment workflow including conflict handling.
+
+**File**: `e2e/room-assignment.spec.ts`
+
+**Test cases**:
+```typescript
+describe('Room Assignment Flow', () => {
+  it('adds room to trip');
+  it('adds person to trip');
+  it('assigns person to room for date range');
+  it('shows conflict error when dates overlap');
+  it('edits existing assignment');
+  it('deletes assignment with confirmation');
+  it('displays assignment on calendar');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Full assignment workflow tested
+- [ ] Conflict detection verified
+- [ ] Calendar display verified
+
+**Status**: PENDING
+
+---
+
+### 15.20 E2E Tests: Sharing Flow
+
+**Description**: Test trip sharing via link and QR code.
+
+**File**: `e2e/sharing.spec.ts`
+
+**Test cases**:
+```typescript
+describe('Sharing Flow', () => {
+  it('generates shareable link');
+  it('copies link to clipboard');
+  it('generates QR code');
+  it('downloads QR code as PNG');
+  it('imports trip via share link');
+  it('shows not found for invalid share ID');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Link generation tested
+- [ ] Import flow tested
+- [ ] Error handling tested
+
+**Status**: PENDING
+
+---
+
+### 15.21 E2E Tests: PWA Functionality
+
+**Description**: Test PWA installation and offline functionality.
+
+**File**: `e2e/pwa.spec.ts`
+
+**Test cases**:
+```typescript
+describe('PWA Functionality', () => {
+  it('shows install prompt on supported browsers');
+  it('dismisses install prompt correctly');
+  it('installs app when prompted');
+  it('app loads when offline');
+  it('data operations work offline');
+  it('shows offline indicator when disconnected');
+  it('shows back online notification');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Install flow tested
+- [ ] Offline functionality verified
+- [ ] Network status indicator tested
+
+**Status**: PENDING
+
+---
+
+### 15.22 E2E Tests: Accessibility
+
+**Description**: Automated accessibility testing with axe-core.
+
+**File**: `e2e/accessibility.spec.ts`
+
+**Test cases**:
+```typescript
+describe('Accessibility', () => {
+  it('trip list page has no a11y violations');
+  it('room list page has no a11y violations');
+  it('person list page has no a11y violations');
+  it('calendar page has no a11y violations');
+  it('transport list page has no a11y violations');
+  it('settings page has no a11y violations');
+  it('dialogs have proper focus management');
+  it('forms have associated labels');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] No critical a11y violations
+- [ ] WCAG AA compliance verified
+
+**Status**: PENDING
+
+---
+
+### 15.23 Performance Tests
+
+**Description**: Test rendering performance and bundle size.
+
+**File**: `e2e/performance.spec.ts`
+
+**Test cases**:
+```typescript
+describe('Performance', () => {
+  it('initial page load < 3s on simulated 3G');
+  it('calendar renders 100 assignments without jank');
+  it('room list renders 50 rooms smoothly');
+  it('person list renders 30 persons smoothly');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Load time under threshold
+- [ ] No rendering jank with large datasets
+
+**Status**: PENDING
+
+---
+
+### 15.24 i18n Tests
+
+**Description**: Test internationalization coverage and language switching.
+
+**File**: `src/lib/i18n/__tests__/index.test.ts`
+
+**Test cases**:
+```typescript
+describe('i18n', () => {
+  it('initializes with default language');
+  it('changes language correctly');
+  it('all FR keys have EN equivalents');
+  it('all EN keys have FR equivalents');
+  it('no missing translation keys in components');
+  it('date formatting respects locale');
+});
+```
+
+**Acceptance Criteria**:
+- [ ] Language switching tested
+- [ ] Translation coverage verified
+- [ ] Date formatting tested
+
+**Status**: PENDING
+
+---
+
+### 15.25 Test Infrastructure: Custom Render Utility
+
+**Description**: Create custom render function with all providers.
+
+**File**: `src/test/utils.tsx`
+
+```typescript
+import { render, RenderOptions } from '@testing-library/react';
+import { AppProviders } from '@/contexts';
+import { MemoryRouter } from 'react-router-dom';
+
+interface CustomRenderOptions extends Omit<RenderOptions, 'wrapper'> {
+  initialRoute?: string;
+}
+
+export function renderWithProviders(
+  ui: React.ReactElement,
+  { initialRoute = '/', ...options }: CustomRenderOptions = {}
+) {
+  function Wrapper({ children }: { children: React.ReactNode }) {
+    return (
+      <MemoryRouter initialEntries={[initialRoute]}>
+        <AppProviders>{children}</AppProviders>
+      </MemoryRouter>
+    );
+  }
+
+  return {
+    ...render(ui, { wrapper: Wrapper, ...options }),
+  };
+}
+
+export * from '@testing-library/react';
+export { renderWithProviders as render };
+```
+
+**Acceptance Criteria**:
+- [ ] Custom render wraps all providers
+- [ ] Router integration works
+- [ ] Utilities exported correctly
+
+**Status**: PENDING
+
+---
+
+### 15.26 Test Coverage Goals and CI Integration
+
+**Description**: Configure coverage thresholds and CI pipeline.
+
+**Coverage Thresholds** (`vitest.config.ts`):
+```typescript
+coverage: {
+  thresholds: {
+    statements: 70,
+    branches: 70,
+    functions: 70,
+    lines: 70,
+  },
+}
+```
+
+**CI Pipeline** (`.github/workflows/test.yml`):
+```yaml
+name: Test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: bun run test:coverage
+      - uses: codecov/codecov-action@v3
+```
+
+**Target Coverage by Module**:
+| Module | Target |
+|--------|--------|
+| `lib/db/utils.ts` | 95% |
+| `lib/db/repositories/*` | 90% |
+| `contexts/*` | 80% |
+| `components/shared/*` | 80% |
+| `features/*/components/*` | 70% |
+| `features/*/pages/*` | 60% |
+
+**Acceptance Criteria**:
+- [ ] Coverage thresholds configured
+- [ ] CI pipeline runs tests on push
+- [ ] Coverage reports uploaded to Codecov
+
+**Status**: PENDING
+
+---
+
 ## Definition of Done Checklist
 
 Before considering the MVP complete, verify (with as much test as possible) the following:
