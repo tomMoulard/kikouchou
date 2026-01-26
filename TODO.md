@@ -1974,9 +1974,29 @@ interface TripCardProps {
 - Dropdown menu with Edit/Delete
 
 **Acceptance Criteria**:
-- [ ] Card displays all information
-- [ ] Click navigates to trip
-- [ ] Menu actions work
+- [x] Card displays all information
+- [x] Click navigates to trip
+- [x] Menu actions work
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/trips/components/TripCard.tsx` with ~310 lines
+- Displays trip name, optional location (with MapPin icon), and formatted date range
+- Date range formatting handles same-month and cross-month scenarios
+- Dropdown menu with Edit and Delete actions using DropdownMenu from shadcn/ui
+- Event propagation control: menu clicks don't trigger card click
+- Full keyboard accessibility: Enter/Space on card, proper tabIndex, aria-label
+- Disabled state support with visual feedback (opacity + cursor)
+- Exports utility functions: `getDateLocale()`, `formatDateRange()` for reuse
+- Added Invalid Date validation in `formatDateRange()` with graceful fallback
+- Uses memo() for performance optimization
+- All event handlers use useCallback with correct dependencies
+- Triple code review applied:
+  - Code Quality: Grade A - Well-structured, accessible, follows project patterns
+  - Error Analysis: Grade B+ - Added Invalid Date guard for robustness
+  - Performance: Grade A - Proper memoization, no unnecessary re-renders
+- Build passes, TypeScript strict mode compliant
 
 ---
 
