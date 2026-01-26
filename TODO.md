@@ -2185,9 +2185,36 @@ interface TripCardProps {
 - Handle create and edit modes
 
 **Acceptance Criteria**:
-- [ ] Dialog opens/closes correctly
-- [ ] Form submission closes dialog
-- [ ] Success/error toasts display
+- [x] Dialog opens/closes correctly
+- [x] Form submission closes dialog
+- [x] Success/error toasts display
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/rooms/components/RoomDialog.tsx` with ~240 lines
+- Dual mode support: Create (roomId undefined) and Edit (roomId provided)
+- Integrates RoomForm for form handling and validation
+- Dialog lifecycle management:
+  - Controlled via `open` and `onOpenChange` props
+  - Prevents closing during submission
+  - Resets submission state when dialog closes
+- Async operation safety:
+  - `isMountedRef` prevents state updates after unmount
+  - `isSubmittingRef` for synchronous double-submission guard
+  - Uses `roomId` directly instead of `room.id` to avoid stale closure issues
+- Shows success/error toasts via sonner
+- Handles "room not found" edge case with user-friendly error dialog
+- Added missing i18n keys to both FR and EN locale files:
+  - `rooms.newDescription`, `rooms.editDescription`
+  - `rooms.createSuccess`, `rooms.updateSuccess`
+  - `rooms.deleteSuccess`, `rooms.deleteConfirmTitle`
+  - `errors.roomNotFound`
+- Triple code review applied (Grade: A-):
+  - Fixed redundant `isMountedRef.current = true` in useEffect
+  - Added `isSubmittingRef` for synchronous submission guard
+  - Changed to use `roomId` directly instead of `room.id`
+- Build passes, TypeScript strict mode compliant
 
 ---
 
@@ -2200,7 +2227,26 @@ interface TripCardProps {
 - `src/features/rooms/routes.tsx`
 
 **Acceptance Criteria**:
-- [ ] All room components are exported
+- [x] All room components are exported
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/rooms/index.ts` barrel export with ~45 lines:
+  - Exports page: RoomListPage
+  - Exports components: RoomForm, RoomCard, RoomDialog with their type interfaces
+  - Exports route configuration: roomRoutes
+  - Exports types: RoomListParams
+- Created `src/features/rooms/routes.tsx` with ~110 lines:
+  - Implements lazy loading with React.lazy() for code splitting
+  - Uses .then() pattern to convert named exports to default exports
+  - Route configured: `/trips/:tripId/rooms` (room list)
+  - Note: Room create/edit handled via RoomDialog rather than separate pages
+  - withSuspense wrapper provides ErrorBoundary + Suspense with LoadingState fallback
+  - Exports RoomListParams type for type-safe useParams usage
+- Pattern follows established trips feature structure
+- Build passes, TypeScript strict mode compliant
+- Phase 6 (Room Management Feature) is now COMPLETE
 
 ---
 
