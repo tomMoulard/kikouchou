@@ -2268,9 +2268,33 @@ interface TripCardProps {
 - Empty state
 
 **Acceptance Criteria**:
-- [ ] Persons display with colors
-- [ ] Transport summary shows
-- [ ] Add button works
+- [x] Persons display with colors
+- [x] Transport summary shows
+- [x] Add button works
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/persons/pages/PersonListPage.tsx` with ~526 lines
+- Displays persons as cards in responsive grid (1/2/3 columns on mobile/tablet/desktop)
+- Shows person name with color indicator (circular dot with ring)
+- Transport summary shows earliest arrival and latest departure dates with locations
+- Uses O(n) single-pass algorithm for transport summary calculation (optimized from O(n log n) sort)
+- Inline PersonCard component with full accessibility:
+  - Keyboard navigation (Enter/Space to activate)
+  - ARIA labels with person name and transport info
+  - Focus states for keyboard users
+- Three-state rendering: loading → trip-not-found/error → empty → list
+- FAB on mobile, header button on desktop for "Add Person" action
+- Navigation guard with refs to prevent double-clicks
+- Validates URL tripId matches current trip context
+- Combined loading state includes transports to avoid "no transport info" flash
+- Triple code review applied (Grade: A-):
+  - Added `isTransportsLoading` to combined loading state
+  - Optimized transport summary from O(n log n) to O(n) single-pass
+- Build passes, TypeScript strict mode compliant
+- TODO: PersonCard to be extracted to standalone component in Task 7.3
+- TODO: Replace navigation with PersonDialog in Task 7.4
 
 ---
 
