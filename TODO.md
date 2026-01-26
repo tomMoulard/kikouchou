@@ -1507,8 +1507,24 @@ interface EmptyStateProps {
 - Accessible (aria-busy, screen reader text)
 
 **Acceptance Criteria**:
-- [ ] Loading states are accessible
-- [ ] Both variants work correctly
+- [x] Loading states are accessible
+- [x] Both variants work correctly
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/components/shared/LoadingState.tsx` with two variants
+- **Full-page variant**: Fixed overlay with backdrop blur, centered spinner, ideal for route transitions
+- **Inline variant**: Compact inline-flex layout for contextual loading within sections
+- Three size options: `sm` (16px), `md` (24px), `lg` (32px)
+- Uses Lucide `Loader2` icon with `motion-safe:animate-spin` (respects `prefers-reduced-motion`)
+- Full accessibility: `role="status"`, `aria-busy="true"`, `aria-live="polite"`, `sr-only` screen reader text
+- Integrates with react-i18next for default loading text (`common.loading`)
+- Custom `label` prop for contextual messages ("Saving...", "Uploading...")
+- Smart `showLabel` default: visible for fullPage, hidden for inline
+- Memoized with `memo()` for performance
+- Triple code review passed with no critical issues
+- Bundle impact: ~500-700 bytes (tree-shakeable)
 
 ---
 
