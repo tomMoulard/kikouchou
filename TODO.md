@@ -4740,9 +4740,9 @@ export { renderWithProviders as render };
 
 ---
 
-### 15.26 Test Coverage Goals and CI Integration
+### 15.26 Test Coverage Goals
 
-**Description**: Configure coverage thresholds and CI pipeline.
+**Description**: Configure coverage thresholds.
 
 **Coverage Thresholds** (`vitest.config.ts`):
 ```typescript
@@ -4754,21 +4754,6 @@ coverage: {
     lines: 70,
   },
 }
-```
-
-**CI Pipeline** (`.github/workflows/test.yml`):
-```yaml
-name: Test
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
-      - run: bun install
-      - run: bun run test:coverage
-      - uses: codecov/codecov-action@v3
 ```
 
 **Target Coverage by Module**:
@@ -4783,7 +4768,6 @@ jobs:
 
 **Acceptance Criteria**:
 - [ ] Coverage thresholds configured
-- [ ] CI pipeline runs tests on push
 - [ ] Coverage reports uploaded to Codecov
 
 **Status**: PENDING
