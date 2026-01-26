@@ -452,9 +452,9 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
 
   // Context hooks
   const { currentTrip, isLoading: isTripLoading } = useTripContext();
-  const { rooms, isLoading: isRoomsLoading } = useRoomContext();
-  const { assignments, isLoading: isAssignmentsLoading } = useAssignmentContext();
-  const { getPersonById, isLoading: isPersonsLoading } = usePersonContext();
+  const { rooms, isLoading: isRoomsLoading, error: roomsError } = useRoomContext();
+  const { assignments, isLoading: isAssignmentsLoading, error: assignmentsError } = useAssignmentContext();
+  const { getPersonById, isLoading: isPersonsLoading, error: personsError } = usePersonContext();
 
   // Local state for current viewing month
   // Initialized to today - will sync with trip start date via useEffect when loaded
@@ -655,6 +655,32 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         <PageHeader title={t('calendar.title')} />
         <div className="flex-1 flex items-center justify-center min-h-[400px]">
           <LoadingState variant="inline" size="lg" />
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================================================
+  // Render: Error State
+  // ============================================================================
+
+  if (roomsError || assignmentsError || personsError) {
+    const error = roomsError ?? assignmentsError ?? personsError;
+    return (
+      <div className="container max-w-6xl py-6 md:py-8">
+        <PageHeader title={t('calendar.title')} backLink="/trips" />
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4 min-h-[400px]">
+          <div className="text-center" role="alert" aria-live="assertive">
+            <p className="text-lg font-semibold text-destructive">
+              {t('errors.loadingFailed')}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {error?.message}
+            </p>
+          </div>
+          <Button onClick={() => window.location.reload()} variant="outline">
+            {t('common.retry', 'Retry')}
+          </Button>
         </div>
       </div>
     );

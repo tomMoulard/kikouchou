@@ -3305,8 +3305,22 @@ interface CalendarEventProps {
 - No flash of empty state before data loads
 
 **Acceptance Criteria**:
-- [ ] Loading spinners appear during data fetch
-- [ ] No layout shift when data loads
+- [x] Loading spinners appear during data fetch
+- [x] No layout shift when data loads
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Conducted comprehensive loading state audit via subagentic workflow
+- **Audit result**: All pages correctly check `isLoading` before rendering empty states
+- Pages reviewed: TripListPage, RoomListPage, PersonListPage, TransportListPage, CalendarPage
+- **One enhancement identified and fixed**: CalendarPage.tsx was missing error state handling
+- Added error state rendering section to CalendarPage.tsx with:
+  - Error destructuring from Room, Assignment, and Person contexts
+  - User-friendly error message with `role="alert" aria-live="assertive"` for accessibility
+  - Retry button using `window.location.reload()`
+  - Consistent styling with other pages
+- Build passes, 28 precache entries (906.08 KiB)
 
 ---
 
