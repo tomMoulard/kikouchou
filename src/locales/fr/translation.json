@@ -126,14 +126,27 @@
     "driver": "Chauffeur",
     "driverPlaceholder": "Qui va chercher/déposer ?",
     "needsPickup": "Nécessite un transport",
+    "needsPickupDescription": "Cochez si quelqu'un doit venir chercher ou déposer cette personne",
+    "noOtherPersons": "Aucune autre personne disponible",
     "notes": "Notes",
     "notesPlaceholder": "Informations complémentaires...",
     "deleteConfirm": "Voulez-vous vraiment supprimer ce transport ?",
     "deleteConfirmTitle": "Supprimer le transport ?",
     "deleteSuccess": "Transport supprimé avec succès",
+    "newDescription": "Remplissez les informations pour ajouter un nouveau transport.",
+    "editDescription": "Modifiez les informations du transport ci-dessous.",
+    "createSuccess": "Transport créé avec succès",
+    "updateSuccess": "Transport mis à jour avec succès",
     "empty": "Aucun transport",
     "emptyDescription": "Ajoutez les arrivées et départs des participants",
     "upcomingPickups": "Prochains transports à prévoir"
+  },
+  "upcomingPickups": {
+    "empty": "Aucun transport à venir prévu.",
+    "overdue": "En retard",
+    "tomorrowAt": "Demain à {{time}}",
+    "showMore": "Afficher {{count}} de plus",
+    "showLess": "Afficher moins"
   },
   "calendar": {
     "title": "Calendrier",
@@ -166,12 +179,17 @@
     "about": "À propos",
     "version": "Version"
   },
+  "validation": {
+    "invalidDate": "Date invalide",
+    "capacityMin": "Minimum {{min}} lit"
+  },
   "errors": {
     "generic": "Une erreur est survenue",
     "notFound": "Page non trouvée",
     "tripNotFound": "Voyage non trouvé",
     "roomNotFound": "Chambre non trouvée. Veuillez réessayer.",
     "personNotFound": "Participant non trouvé. Veuillez réessayer.",
+    "transportNotFound": "Transport non trouvé. Veuillez réessayer.",
     "loadingFailed": "Échec du chargement",
     "saveFailed": "Échec de l'enregistrement",
     "deleteFailed": "Échec de la suppression"

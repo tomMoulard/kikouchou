@@ -2788,9 +2788,20 @@ interface CalendarEventProps {
 - Notes (textarea, optional)
 
 **Acceptance Criteria**:
-- [ ] All fields work correctly
-- [ ] Validation works
-- [ ] Edit mode pre-fills
+- [x] All fields work correctly
+- [x] Validation works
+- [x] Edit mode pre-fills
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/transports/components/TransportForm.tsx` with ~834 lines
+- Controlled form with all transport fields: type (radio), person (select), datetime, location, mode, number, driver, needsPickup (switch), notes
+- Dual mode: Create (defaultType prop) and Edit (transport prop)
+- Full validation on blur and submit
+- Comprehensive accessibility (ARIA attributes, role="alert")
+- Uses refs for race condition prevention (isSubmittingRef, isMountedRef)
+- Triple code review passed with minor suggestions applied
 
 ---
 
@@ -2798,7 +2809,7 @@ interface CalendarEventProps {
 
 **Description**: Create a card for displaying a transport.
 
-**File**: `src/features/transports/components/TransportCard.tsx`
+**File**: Implemented as `TransportCard` memoized subcomponent in `TransportListPage.tsx`
 
 **Display**:
 - Person name with color
@@ -2812,9 +2823,17 @@ interface CalendarEventProps {
 - Edit/Delete menu
 
 **Acceptance Criteria**:
-- [ ] All information displays
-- [ ] Icons are clear
-- [ ] Pickup status is visible
+- [x] All information displays
+- [x] Icons are clear
+- [x] Pickup status is visible
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Implemented as inline memoized subcomponent in TransportListPage (similar to RoomCard pattern)
+- Full feature set: type icon (green/orange), PersonBadge, pickup badge, datetime, location, mode with number, driver, notes
+- Dropdown menu with Edit/Delete actions
+- Full accessibility: ARIA labels, keyboard navigation
 
 ---
 
@@ -2825,8 +2844,21 @@ interface CalendarEventProps {
 **File**: `src/features/transports/components/TransportDialog.tsx`
 
 **Acceptance Criteria**:
-- [ ] Dialog works for create/edit
-- [ ] Form submits correctly
+- [x] Dialog works for create/edit
+- [x] Form submits correctly
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/transports/components/TransportDialog.tsx` with ~260 lines
+- Follows RoomDialog patterns exactly
+- Dual mode: Create (transportId undefined, defaultType optional) and Edit (transportId provided)
+- Integrates TransportForm with persons from PersonContext
+- Shows success/error toasts via sonner
+- Proper lifecycle management: isMountedRef, isSubmittingRef, handleOpenChange prevents close during submission
+- Handles "transport not found" edge case with user-friendly error dialog
+- Triple code review applied: fixed isSubmittingRef reset on close, removed isEditMode from handleSubmit dependencies
+- Added i18n keys: transports.newDescription, editDescription, createSuccess, updateSuccess, errors.transportNotFound
 
 ---
 
@@ -2843,9 +2875,22 @@ interface CalendarEventProps {
 - Show countdown or relative time
 
 **Acceptance Criteria**:
-- [ ] Only pickup-needed transports show
-- [ ] Sorted chronologically
-- [ ] Time display is clear
+- [x] Only pickup-needed transports show
+- [x] Sorted chronologically
+- [x] Time display is clear
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/transports/components/UpcomingPickups.tsx` with ~310 lines
+- Uses upcomingPickups from TransportContext (pre-filtered and sorted)
+- Relative time display: "in X hours" (today), "Tomorrow at HH:mm", "Day Date HH:mm"
+- Collapsible list: shows first 3 items by default, expand/collapse button for more
+- PickupItem subcomponent displays: PersonBadge, type icon, relative time, location
+- Empty state handling
+- Full i18n support with 5 new translation keys
+- O(1) person lookups via Map
+- Accessible with proper ARIA attributes
 
 ---
 
@@ -2858,7 +2903,17 @@ interface CalendarEventProps {
 - `src/features/transports/routes.tsx`
 
 **Acceptance Criteria**:
-- [ ] All transport components are exported
+- [x] All transport components are exported
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Updated `src/features/transports/index.ts` with comprehensive exports:
+  - Pages: TransportListPage
+  - Components: TransportForm, TransportDialog, UpcomingPickups (with types)
+  - Routes: transportRoutes, TransportListRoute
+- `src/features/transports/routes.tsx` provides lazy-loaded route configuration
+- **Phase 10 (Transport Management Feature) is now COMPLETE**
 
 ---
 
