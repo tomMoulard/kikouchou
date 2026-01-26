@@ -7,14 +7,14 @@
  */
 
 import {
+  type ChangeEvent,
+  type FormEvent,
   memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
-  type FormEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format, parseISO } from 'date-fns';
@@ -93,12 +93,12 @@ interface FormState {
 /**
  * Available transport modes.
  */
-const TRANSPORT_MODES: TransportMode[] = ['train', 'plane', 'car', 'bus', 'other'];
+const TRANSPORT_MODES: TransportMode[] = ['train', 'plane', 'car', 'bus', 'other'],
 
 /**
  * Special value for "no selection" in select dropdowns.
  */
-const NO_SELECTION = '__none__';
+ NO_SELECTION = '__none__';
 
 // ============================================================================
 // Helper Functions
@@ -137,7 +137,7 @@ function getInitialFormState(
 function formatDatetimeLocal(isoDatetime: string): string {
   try {
     const date = parseISO(isoDatetime);
-    if (isNaN(date.getTime())) return '';
+    if (isNaN(date.getTime())) {return '';}
     return format(date, "yyyy-MM-dd'T'HH:mm");
   } catch {
     return '';
@@ -151,11 +151,11 @@ function formatDatetimeLocal(isoDatetime: string): string {
  * @returns ISO datetime string
  */
 function toISODatetime(localDatetime: string): string {
-  if (!localDatetime) return '';
+  if (!localDatetime) {return '';}
   try {
-    // datetime-local gives us local time, convert to ISO
+    // Datetime-local gives us local time, convert to ISO
     const date = new Date(localDatetime);
-    if (isNaN(date.getTime())) return '';
+    if (isNaN(date.getTime())) {return '';}
     return date.toISOString();
   } catch {
     return '';
@@ -169,7 +169,7 @@ function toISODatetime(localDatetime: string): string {
  * @returns true if valid
  */
 function isValidDatetime(datetime: string): boolean {
-  if (!datetime) return false;
+  if (!datetime) {return false;}
   try {
     const date = new Date(datetime);
     return !isNaN(date.getTime());
@@ -220,34 +220,34 @@ function isValidDatetime(datetime: string): boolean {
  * />
  * ```
  */
-const TransportForm = memo(function TransportForm({
+const TransportForm = memo(({
   transport,
   persons,
   defaultType,
   onSubmit,
   onCancel,
-}: TransportFormProps) {
-  const { t } = useTranslation();
+}: TransportFormProps) => {
+  const { t } = useTranslation(),
 
   // ============================================================================
   // Form State
   // ============================================================================
 
   // Form field values
-  const [formState, setFormState] = useState<FormState>(() =>
+   [formState, setFormState] = useState<FormState>(() =>
     getInitialFormState(transport, defaultType),
-  );
+  ),
 
   // Validation errors
-  const [errors, setErrors] = useState<FormErrors>({});
+   [errors, setErrors] = useState<FormErrors>({}),
 
   // Submission state
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+   [isSubmitting, setIsSubmitting] = useState(false),
+   [submitError, setSubmitError] = useState<string | null>(null),
 
   // Refs for preventing race conditions and memory leaks
-  const isSubmittingRef = useRef(false);
-  const isMountedRef = useRef(true);
+   isSubmittingRef = useRef(false),
+   isMountedRef = useRef(true),
 
   // ============================================================================
   // Derived State
@@ -256,16 +256,16 @@ const TransportForm = memo(function TransportForm({
   /**
    * Filter driver options to exclude the currently selected person.
    */
-  const driverOptions = useMemo(() => {
-    if (!formState.personId) return persons;
+   driverOptions = useMemo(() => {
+    if (!formState.personId) {return persons;}
     return persons.filter((p) => p.id !== formState.personId);
-  }, [persons, formState.personId]);
+  }, [persons, formState.personId]),
 
   /**
    * Check if the selected person still exists.
    */
-  const selectedPersonExists = useMemo(() => {
-    if (!formState.personId) return true; // No selection is valid for showing placeholder
+   selectedPersonExists = useMemo(() => {
+    if (!formState.personId) {return true;} // No selection is valid for showing placeholder
     return persons.some((p) => p.id === formState.personId);
   }, [persons, formState.personId]);
 
@@ -274,11 +274,9 @@ const TransportForm = memo(function TransportForm({
   // ============================================================================
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
-    };
-  }, []);
+    }, []);
 
   // Sync form state when transport prop changes (for edit mode navigation)
   useEffect(() => {
@@ -313,12 +311,12 @@ const TransportForm = memo(function TransportForm({
       return undefined;
     },
     [t, persons],
-  );
+  ),
 
   /**
    * Validates the datetime field.
    */
-  const validateDatetime = useCallback(
+   validateDatetime = useCallback(
     (value: string): string | undefined => {
       if (!value) {
         return t('common.required');
@@ -329,12 +327,12 @@ const TransportForm = memo(function TransportForm({
       return undefined;
     },
     [t],
-  );
+  ),
 
   /**
    * Validates the location field.
    */
-  const validateLocation = useCallback(
+   validateLocation = useCallback(
     (value: string): string | undefined => {
       const trimmed = value.trim();
       if (!trimmed) {
@@ -343,24 +341,24 @@ const TransportForm = memo(function TransportForm({
       return undefined;
     },
     [t],
-  );
+  ),
 
   /**
    * Validates all form fields.
    * Returns true if valid, false otherwise.
    */
-  const validateForm = useCallback((): boolean => {
-    const newErrors: FormErrors = {};
+   validateForm = useCallback((): boolean => {
+    const newErrors: FormErrors = {},
 
     // Validate personId
-    const personIdError = validatePersonId(formState.personId);
+     personIdError = validatePersonId(formState.personId);
     if (personIdError) {
       newErrors.personId = personIdError;
     }
 
     // Validate datetime (convert to ISO for validation)
-    const isoDatetime = toISODatetime(formState.datetime);
-    const datetimeError = validateDatetime(isoDatetime);
+    const isoDatetime = toISODatetime(formState.datetime),
+     datetimeError = validateDatetime(isoDatetime);
     if (datetimeError) {
       newErrors.datetime = datetimeError;
     }
@@ -373,7 +371,7 @@ const TransportForm = memo(function TransportForm({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [formState, validatePersonId, validateDatetime, validateLocation]);
+  }, [formState, validatePersonId, validateDatetime, validateLocation]),
 
   // ============================================================================
   // Event Handlers
@@ -382,17 +380,17 @@ const TransportForm = memo(function TransportForm({
   /**
    * Handles type radio button change.
    */
-  const handleTypeChange = useCallback((value: string) => {
+   handleTypeChange = useCallback((value: string) => {
     setFormState((prev) => ({
       ...prev,
       type: value as TransportType,
     }));
-  }, []);
+  }, []),
 
   /**
    * Handles person select change.
    */
-  const handlePersonChange = useCallback(
+   handlePersonChange = useCallback(
     (value: string) => {
       const personId = value === NO_SELECTION ? '' : (value as PersonId);
       setFormState((prev) => ({ ...prev, personId }));
@@ -400,110 +398,110 @@ const TransportForm = memo(function TransportForm({
       setErrors((prev) => (prev.personId ? { ...prev, personId: undefined } : prev));
     },
     [],
-  );
+  ),
 
   /**
    * Handles datetime input change.
    */
-  const handleDatetimeChange = useCallback(
+   handleDatetimeChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value;
+      const {value} = e.target;
       setFormState((prev) => ({ ...prev, datetime: value }));
       // Clear error when user types
       setErrors((prev) => (prev.datetime ? { ...prev, datetime: undefined } : prev));
     },
     [],
-  );
+  ),
 
   /**
    * Handles datetime input blur for validation.
    */
-  const handleDatetimeBlur = useCallback(() => {
-    const isoDatetime = toISODatetime(formState.datetime);
-    const error = validateDatetime(isoDatetime);
+   handleDatetimeBlur = useCallback(() => {
+    const isoDatetime = toISODatetime(formState.datetime),
+     error = validateDatetime(isoDatetime);
     if (error) {
       setErrors((prev) => ({ ...prev, datetime: error }));
     }
-  }, [formState.datetime, validateDatetime]);
+  }, [formState.datetime, validateDatetime]),
 
   /**
    * Handles location input change.
    */
-  const handleLocationChange = useCallback(
+   handleLocationChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value;
+      const {value} = e.target;
       setFormState((prev) => ({ ...prev, location: value }));
       // Clear error when user types
       setErrors((prev) => (prev.location ? { ...prev, location: undefined } : prev));
     },
     [],
-  );
+  ),
 
   /**
    * Handles location input blur for validation.
    */
-  const handleLocationBlur = useCallback(() => {
+   handleLocationBlur = useCallback(() => {
     const error = validateLocation(formState.location);
     if (error) {
       setErrors((prev) => ({ ...prev, location: error }));
     }
-  }, [formState.location, validateLocation]);
+  }, [formState.location, validateLocation]),
 
   /**
    * Handles transport mode select change.
    */
-  const handleTransportModeChange = useCallback((value: string) => {
+   handleTransportModeChange = useCallback((value: string) => {
     const mode = value === NO_SELECTION ? '' : (value as TransportMode);
     setFormState((prev) => ({ ...prev, transportMode: mode }));
-  }, []);
+  }, []),
 
   /**
    * Handles transport number input change.
    */
-  const handleTransportNumberChange = useCallback(
+   handleTransportNumberChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       setFormState((prev) => ({ ...prev, transportNumber: e.target.value }));
     },
     [],
-  );
+  ),
 
   /**
    * Handles driver select change.
    */
-  const handleDriverChange = useCallback((value: string) => {
+   handleDriverChange = useCallback((value: string) => {
     const driverId = value === NO_SELECTION ? '' : (value as PersonId);
     setFormState((prev) => ({ ...prev, driverId }));
-  }, []);
+  }, []),
 
   /**
    * Handles needs pickup switch change.
    */
-  const handleNeedsPickupChange = useCallback((checked: boolean) => {
+   handleNeedsPickupChange = useCallback((checked: boolean) => {
     setFormState((prev) => ({ ...prev, needsPickup: checked }));
-  }, []);
+  }, []),
 
   /**
    * Handles notes textarea change.
    */
-  const handleNotesChange = useCallback(
+   handleNotesChange = useCallback(
     (e: ChangeEvent<HTMLTextAreaElement>) => {
       setFormState((prev) => ({ ...prev, notes: e.target.value }));
     },
     [],
-  );
+  ),
 
   /**
    * Handles form submission.
    */
-  const handleSubmit = useCallback(
+   handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
 
       // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) return;
+      if (isSubmittingRef.current) {return;}
 
       // Validate form
-      if (!validateForm()) return;
+      if (!validateForm()) {return;}
 
       isSubmittingRef.current = true;
       setIsSubmitting(true);
@@ -589,7 +587,7 @@ const TransportForm = memo(function TransportForm({
           <SelectTrigger
             id="transport-person"
             className="w-full"
-            aria-invalid={!!errors.personId || !selectedPersonExists}
+            aria-invalid={Boolean(errors.personId) || !selectedPersonExists}
             aria-describedby={errors.personId ? 'transport-person-error' : undefined}
           >
             <SelectValue placeholder={t('assignments.selectPerson')} />
@@ -645,7 +643,7 @@ const TransportForm = memo(function TransportForm({
           value={formState.datetime}
           onChange={handleDatetimeChange}
           onBlur={handleDatetimeBlur}
-          aria-invalid={!!errors.datetime}
+          aria-invalid={Boolean(errors.datetime)}
           aria-describedby={errors.datetime ? 'transport-datetime-error' : undefined}
           disabled={isSubmitting}
           className="w-full sm:w-auto"
@@ -674,7 +672,7 @@ const TransportForm = memo(function TransportForm({
           onChange={handleLocationChange}
           onBlur={handleLocationBlur}
           placeholder={t('transports.locationPlaceholder')}
-          aria-invalid={!!errors.location}
+          aria-invalid={Boolean(errors.location)}
           aria-describedby={errors.location ? 'transport-location-error' : undefined}
           disabled={isSubmitting}
         />

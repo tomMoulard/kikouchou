@@ -12,12 +12,12 @@ import Dexie, { type Table } from 'dexie';
 /** Current database schema version */
 export const DB_VERSION = 1;
 import type {
-  Trip,
-  Room,
+  AppSettings,
   Person,
+  Room,
   RoomAssignment,
   Transport,
-  AppSettings,
+  Trip,
 } from '@/types';
 
 /**

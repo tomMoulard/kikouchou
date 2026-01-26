@@ -69,12 +69,12 @@ const INITIAL_STATE: ErrorBoundaryState = {
   hasError: false,
   error: null,
   errorInfo: null,
-};
+},
 
 /**
  * Whether the app is running in development mode.
  */
-const IS_DEVELOPMENT = import.meta.env.DEV;
+ IS_DEVELOPMENT = import.meta.env.DEV;
 
 // ============================================================================
 // Class Component
@@ -164,8 +164,8 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
    * Render the error boundary.
    */
   render(): ReactNode {
-    const { hasError, error, errorInfo } = this.state;
-    const { children, fallback, className } = this.props;
+    const { hasError, error, errorInfo } = this.state,
+     { children, fallback, className } = this.props;
 
     // Render children if no error
     if (!hasError) {
@@ -178,9 +178,9 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
     }
 
     // Get error details safely for development display
-    const errorMessage = error?.message;
-    const errorStack = error?.stack;
-    const componentStack = errorInfo?.componentStack;
+    const errorMessage = error?.message,
+     errorStack = error?.stack,
+     componentStack = errorInfo?.componentStack;
 
     // Render default error UI with safe translations
     return (

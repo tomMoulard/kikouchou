@@ -34,13 +34,13 @@ export async function createRoom(
   data: RoomFormData,
 ): Promise<Room> {
   // Get the next order value (max + 1, or 0 if no rooms exist)
-  const existingRooms = await db.rooms.where('tripId').equals(tripId).toArray();
-  const maxOrder = existingRooms.reduce(
+  const existingRooms = await db.rooms.where('tripId').equals(tripId).toArray(),
+   maxOrder = existingRooms.reduce(
     (max, room) => Math.max(max, room.order),
     -1,
-  );
+  ),
 
-  const room: Room = {
+   room: Room = {
     id: createRoomId(),
     tripId,
     ...data,
@@ -158,8 +158,8 @@ export async function reorderRooms(
 ): Promise<void> {
   await db.transaction('rw', db.rooms, async () => {
     // Validate all rooms exist and belong to the trip
-    const rooms = await db.rooms.where('tripId').equals(tripId).toArray();
-    const roomMap = new Map(rooms.map((r) => [r.id, r]));
+    const rooms = await db.rooms.where('tripId').equals(tripId).toArray(),
+     roomMap = new Map(rooms.map((r) => [r.id, r]));
 
     for (const roomId of roomIds) {
       if (!roomMap.has(roomId)) {

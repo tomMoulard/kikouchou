@@ -6,25 +6,25 @@
  */
 
 import {
+  type ReactElement,
+  type ReactNode,
   createContext,
   useCallback,
   useContext,
   useMemo,
   useRef,
   useState,
-  type ReactElement,
-  type ReactNode,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import {
-  createRoom as repositoryCreateRoom,
   getRoomById,
-  updateRoom as repositoryUpdateRoom,
+  createRoom as repositoryCreateRoom,
   deleteRoom as repositoryDeleteRoom,
   reorderRooms as repositoryReorderRooms,
+  updateRoom as repositoryUpdateRoom,
 } from '@/lib/db';
 import type { Room, RoomFormData, RoomId, TripId } from '@/types';
 
@@ -124,7 +124,7 @@ function wrapAndSetError(
  * Used to maintain stable array references.
  */
 function areRoomsEqual(a: Room[], b: Room[]): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length) {return false;}
   return a.every(
     (room, index) =>
       room.id === b[index]?.id && room.order === b[index]?.order,
@@ -183,18 +183,18 @@ RoomContext.displayName = 'RoomContext';
  */
 export function RoomProvider({ children }: RoomProviderProps): ReactElement {
   // Get current trip from TripContext - extract ID to avoid object reference issues
-  const { currentTrip } = useTripContext();
-  const currentTripId = currentTrip?.id;
+  const { currentTrip } = useTripContext(),
+   currentTripId = currentTrip?.id,
 
   // Error state for CRUD operations
-  const [error, setError] = useState<Error | null>(null);
+   [error, setError] = useState<Error | null>(null),
 
   // Stable array reference to prevent unnecessary re-renders
-  const roomsRef = useRef<Room[]>([]);
+   roomsRef = useRef<Room[]>([]),
 
   // Live query for rooms, scoped to current trip
   // Re-runs automatically when currentTripId changes or rooms are modified
-  const roomsQuery = useLiveQuery(
+   roomsQuery = useLiveQuery(
     async () => {
       if (!currentTripId) {
         return [];
@@ -215,23 +215,23 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
       }
     },
     [currentTripId],
-  );
+  ),
 
   // Determine loading state
   // Loading when query hasn't resolved yet AND a trip is selected
-  const isLoading = currentTripId !== undefined && roomsQuery === undefined;
+   isLoading = currentTripId !== undefined && roomsQuery === undefined,
 
   // Maintain stable array reference to prevent cascading re-renders
-  const rawRooms = roomsQuery ?? [];
+   rawRooms = roomsQuery ?? [];
   if (!areRoomsEqual(rawRooms, roomsRef.current)) {
     roomsRef.current = rawRooms;
   }
-  const rooms = roomsRef.current;
+  const rooms = roomsRef.current,
 
   /**
    * Validates that a room exists and belongs to the current trip.
    */
-  const validateRoomOwnership = useCallback(
+   validateRoomOwnership = useCallback(
     async (roomId: RoomId, tripId: TripId): Promise<Room> => {
       const room = await getRoomById(roomId);
       if (!room) {
@@ -245,12 +245,12 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
       return room;
     },
     [],
-  );
+  ),
 
   /**
    * Creates a new room in the current trip.
    */
-  const createRoom = useCallback(
+   createRoom = useCallback(
     async (data: RoomFormData): Promise<Room> => {
       // Capture tripId at invocation time to avoid stale closure
       const tripId = currentTripId;
@@ -268,12 +268,12 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
       }
     },
     [currentTripId],
-  );
+  ),
 
   /**
    * Updates an existing room after validating ownership.
    */
-  const updateRoom = useCallback(
+   updateRoom = useCallback(
     async (id: RoomId, data: Partial<RoomFormData>): Promise<void> => {
       const tripId = currentTripId;
       if (!tripId) {
@@ -291,12 +291,12 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
       }
     },
     [currentTripId, validateRoomOwnership],
-  );
+  ),
 
   /**
    * Deletes a room after validating ownership.
    */
-  const deleteRoom = useCallback(
+   deleteRoom = useCallback(
     async (id: RoomId): Promise<void> => {
       const tripId = currentTripId;
       if (!tripId) {
@@ -314,12 +314,12 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
       }
     },
     [currentTripId, validateRoomOwnership],
-  );
+  ),
 
   /**
    * Reorders rooms within the current trip with validation.
    */
-  const reorderRooms = useCallback(
+   reorderRooms = useCallback(
     async (roomIds: RoomId[]): Promise<void> => {
       const tripId = currentTripId;
       if (!tripId) {
@@ -338,11 +338,11 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
       }
 
       // Validate all IDs match current rooms
-      const currentRoomIds = new Set(rooms.map((r) => r.id));
-      const missingFromReorder = [...currentRoomIds].filter(
+      const currentRoomIds = new Set(rooms.map((r) => r.id)),
+       missingFromReorder = [...currentRoomIds].filter(
         (id) => !uniqueIds.has(id),
-      );
-      const unknownIds = roomIds.filter((id) => !currentRoomIds.has(id));
+      ),
+       unknownIds = roomIds.filter((id) => !currentRoomIds.has(id));
 
       if (missingFromReorder.length > 0) {
         throw new Error(
@@ -362,10 +362,10 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
       }
     },
     [currentTripId, rooms],
-  );
+  ),
 
   // Memoize context value to prevent unnecessary re-renders in consumers
-  const contextValue = useMemo<RoomContextValue>(
+   contextValue = useMemo<RoomContextValue>(
     () => ({
       rooms,
       isLoading,

@@ -16,18 +16,18 @@
  */
 
 import {
+  type ReactElement,
   memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactElement,
 } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { Plus, DoorOpen } from 'lucide-react';
+import { DoorOpen, Plus } from 'lucide-react';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { useRoomContext } from '@/contexts/RoomContext';
@@ -42,7 +42,7 @@ import { cn } from '@/lib/utils';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
 import { RoomDialog } from '@/features/rooms/components/RoomDialog';
 import { RoomAssignmentSection } from '@/features/rooms/components/RoomAssignmentSection';
-import type { Room, Person, RoomId } from '@/types';
+import type { Person, Room, RoomId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -98,9 +98,9 @@ function isDateInStayRange(
  * @returns ISO date string
  */
 function formatToISODate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const year = date.getFullYear(),
+   month = String(date.getMonth() + 1).padStart(2, '0'),
+   day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
@@ -118,35 +118,35 @@ function formatToISODate(date: Date): string {
  * { path: '/trips/:tripId/rooms', element: <RoomListPage /> }
  * ```
  */
-const RoomListPage = memo(function RoomListPage(): ReactElement {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { tripId: tripIdFromUrl } = useParams<'tripId'>();
+const RoomListPage = memo((): ReactElement => {
+  const { t } = useTranslation(),
+   navigate = useNavigate(),
+   { tripId: tripIdFromUrl } = useParams<'tripId'>(),
 
   // Context hooks
-  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
-  const {
+   { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
+   {
     rooms,
     isLoading: isRoomsLoading,
     error: roomsError,
     deleteRoom,
-  } = useRoomContext();
-  const { getAssignmentsByRoom } = useAssignmentContext();
-  const { getPersonById } = usePersonContext();
+  } = useRoomContext(),
+   { getAssignmentsByRoom } = useAssignmentContext(),
+   { getPersonById } = usePersonContext(),
 
   // Track if we're currently performing an action to prevent double-clicks
-  const isActionInProgressRef = useRef(false);
-  const [isActionInProgress] = useState(false);
+   isActionInProgressRef = useRef(false),
+   [isActionInProgress] = useState(false),
 
   // Dialog state for create/edit room
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingRoomId, setEditingRoomId] = useState<RoomId | undefined>(undefined);
+   [isDialogOpen, setIsDialogOpen] = useState(false),
+   [editingRoomId, setEditingRoomId] = useState<RoomId | undefined>(undefined),
 
   // Track which room is expanded to show assignments
-  const [expandedRoomId, setExpandedRoomId] = useState<RoomId | undefined>(undefined);
+   [expandedRoomId, setExpandedRoomId] = useState<RoomId | undefined>(undefined),
 
   // Combined loading state
-  const isLoading = isTripLoading || isRoomsLoading;
+   isLoading = isTripLoading || isRoomsLoading;
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -159,28 +159,27 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
   // Validate tripId matches current trip
   const tripMismatch = useMemo(() => {
-    if (!tripIdFromUrl || !currentTrip) return false;
+    if (!tripIdFromUrl || !currentTrip) {return false;}
     return tripIdFromUrl !== currentTrip.id;
-  }, [tripIdFromUrl, currentTrip]);
+  }, [tripIdFromUrl, currentTrip]),
 
   // Calculate today's date as ISO string (YYYY-MM-DD)
   // Note: This value is captured on mount. For long-running sessions past midnight,
-  // users should refresh to get updated occupancy data.
-  const todayStr = useMemo(() => formatToISODate(new Date()), []);
+  // Users should refresh to get updated occupancy data.
+   todayStr = useMemo(() => formatToISODate(new Date()), []),
 
   // Calculate rooms with occupancy data
-  const roomsWithOccupancy = useMemo((): readonly RoomWithOccupancy[] => {
-    return rooms.map((room) => {
+   roomsWithOccupancy = useMemo((): readonly RoomWithOccupancy[] => rooms.map((room) => {
       // Get all assignments for this room
-      const assignments = getAssignmentsByRoom(room.id);
+      const assignments = getAssignmentsByRoom(room.id),
 
       // Filter to assignments active today
-      const activeAssignments = assignments.filter((assignment) =>
+       activeAssignments = assignments.filter((assignment) =>
         isDateInStayRange(assignment.startDate, assignment.endDate, todayStr),
-      );
+      ),
 
       // Map person IDs to Person objects, filtering out any not found
-      const currentOccupants = activeAssignments
+       currentOccupants = activeAssignments
         .map((assignment) => getPersonById(assignment.personId))
         .filter((person): person is Person => person !== undefined);
 
@@ -188,8 +187,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         room,
         currentOccupants,
       };
-    });
-  }, [rooms, getAssignmentsByRoom, getPersonById, todayStr]);
+    }), [rooms, getAssignmentsByRoom, getPersonById, todayStr]),
 
   // ============================================================================
   // Event Handlers
@@ -198,31 +196,31 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   /**
    * Handles room card click - toggles the expanded state to show/hide assignments.
    */
-  const handleRoomClick = useCallback(
+   handleRoomClick = useCallback(
     (room: Room) => {
-      if (isActionInProgressRef.current) return;
+      if (isActionInProgressRef.current) {return;}
       setExpandedRoomId((prev) => (prev === room.id ? undefined : room.id));
     },
     [],
-  );
+  ),
 
   /**
    * Handles room edit action from dropdown menu.
    */
-  const handleRoomEdit = useCallback(
+   handleRoomEdit = useCallback(
     (room: Room) => {
-      if (isActionInProgressRef.current) return;
+      if (isActionInProgressRef.current) {return;}
       setEditingRoomId(room.id);
       setIsDialogOpen(true);
     },
     [],
-  );
+  ),
 
   /**
    * Handles room delete action from dropdown menu.
    * This is called after the user confirms the deletion in ConfirmDialog.
    */
-  const handleRoomDelete = useCallback(
+   handleRoomDelete = useCallback(
     async (room: Room) => {
       try {
         await deleteRoom(room.id);
@@ -234,38 +232,38 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       }
     },
     [deleteRoom, t],
-  );
+  ),
 
   /**
    * Handles add room button click - opens the create room dialog.
    */
-  const handleAddRoom = useCallback(() => {
+   handleAddRoom = useCallback(() => {
     setEditingRoomId(undefined); // Clear editing room ID for create mode
     setIsDialogOpen(true);
-  }, []);
+  }, []),
 
   /**
    * Handles back navigation.
    */
-  const handleBack = useCallback(() => {
+   handleBack = useCallback(() => {
     navigate(`/trips/${tripIdFromUrl}/calendar`);
-  }, [navigate, tripIdFromUrl]);
+  }, [navigate, tripIdFromUrl]),
 
   /**
    * Handles dialog close - resets editing state.
    */
-  const handleDialogOpenChange = useCallback((open: boolean) => {
+   handleDialogOpenChange = useCallback((open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
       setEditingRoomId(undefined);
     }
-  }, []);
+  }, []),
 
   // ============================================================================
   // Header Action (desktop button)
   // ============================================================================
 
-  const headerAction = useMemo(
+   headerAction = useMemo(
     () => (
       <Button onClick={handleAddRoom} className="hidden sm:flex">
         <Plus className="size-4 mr-2" aria-hidden="true" />

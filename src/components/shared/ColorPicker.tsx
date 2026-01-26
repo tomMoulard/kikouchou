@@ -6,7 +6,7 @@
  * @module components/shared/ColorPicker
  */
 
-import { memo, useCallback, useRef, type KeyboardEvent } from 'react';
+import { type KeyboardEvent, memo, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 
@@ -33,13 +33,13 @@ const DEFAULT_COLORS = [
   '#6366f1', // Indigo
   '#8b5cf6', // Violet
   '#ec4899', // Pink
-] as const;
+] as const,
 
 /**
  * Translation keys for color names (used for accessibility labels).
  * Maps hex color codes to i18n translation keys.
  */
-const COLOR_KEYS: Readonly<Record<string, string>> = {
+ COLOR_KEYS: Readonly<Record<string, string>> = {
   '#ef4444': 'colors.red',
   '#f97316': 'colors.orange',
   '#f59e0b': 'colors.amber',
@@ -52,10 +52,10 @@ const COLOR_KEYS: Readonly<Record<string, string>> = {
   '#6366f1': 'colors.indigo',
   '#8b5cf6': 'colors.violet',
   '#ec4899': 'colors.pink',
-};
+},
 
 /** Number of columns in the color grid for keyboard navigation. */
-const GRID_COLUMNS = 4;
+ GRID_COLUMNS = 4;
 
 // ============================================================================
 // Type Definitions
@@ -125,47 +125,47 @@ function getColorKey(color: string): string | undefined {
  * }
  * ```
  */
-const ColorPicker = memo(function ColorPicker({
+const ColorPicker = memo(({
   value,
   onChange,
   colors = DEFAULT_COLORS,
   className,
   disabled = false,
   label = 'Color selection',
-}: ColorPickerProps): React.ReactElement {
-  const { t } = useTranslation();
+}: ColorPickerProps): React.ReactElement => {
+  const { t } = useTranslation(),
   
   // Ref for managing focus during keyboard navigation
-  const buttonsRef = useRef<(HTMLButtonElement | null)[]>([]);
+   buttonsRef = useRef<(HTMLButtonElement | null)[]>([]),
 
   // Find the index of the currently selected color
-  const selectedIndex = colors.findIndex(
+   selectedIndex = colors.findIndex(
     (c) => c.toLowerCase() === value?.toLowerCase(),
-  );
+  ),
 
   /**
    * Handle color selection via click.
    */
-  const handleColorClick = useCallback(
+   handleColorClick = useCallback(
     (color: string) => {
       if (!disabled) {
         onChange(color);
       }
     },
     [disabled, onChange],
-  );
+  ),
 
   /**
    * Handle keyboard navigation within the color grid.
    * Implements roving tabindex pattern with arrow key navigation.
    */
-  const handleKeyDown = useCallback(
+   handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (disabled) return;
+      if (disabled) {return;}
 
-      const { key } = event;
-      const currentIndex = selectedIndex >= 0 ? selectedIndex : 0;
-      const totalColors = colors.length;
+      const { key } = event,
+       currentIndex = selectedIndex >= 0 ? selectedIndex : 0,
+       totalColors = colors.length;
 
       let newIndex: number | null = null;
 
@@ -190,8 +190,8 @@ const ColorPicker = memo(function ColorPicker({
             (btn) => btn === document.activeElement,
           );
           if (focusedButton) {
-            const focusedIndex = buttonsRef.current.indexOf(focusedButton);
-            const colorAtIndex = colors[focusedIndex];
+            const focusedIndex = buttonsRef.current.indexOf(focusedButton),
+             colorAtIndex = colors[focusedIndex];
             if (colorAtIndex !== undefined) {
               onChange(colorAtIndex);
             }
@@ -233,11 +233,11 @@ const ColorPicker = memo(function ColorPicker({
     >
       {colors.map((color, index) => {
         // Use pre-computed selectedIndex for efficiency
-        const isSelected = index === selectedIndex;
-        const colorKey = getColorKey(color);
+        const isSelected = index === selectedIndex,
+         colorKey = getColorKey(color),
         // Get translated color name, with fallback for missing translations
-        const rawTranslation = colorKey ? t(colorKey) : t('colors.custom', 'Custom color');
-        const colorName = typeof rawTranslation === 'string' ? rawTranslation : 'Custom color';
+         rawTranslation = colorKey ? t(colorKey) : t('colors.custom', 'Custom color'),
+         colorName = typeof rawTranslation === 'string' ? rawTranslation : 'Custom color';
 
         return (
           <button

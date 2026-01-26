@@ -76,33 +76,31 @@ export interface PersonDialogProps {
  * />
  * ```
  */
-const PersonDialog = memo(function PersonDialog({
+const PersonDialog = memo(({
   personId,
   open,
   onOpenChange,
-}: PersonDialogProps) {
-  const { t } = useTranslation();
-  const { persons, createPerson, updatePerson } = usePersonContext();
+}: PersonDialogProps) => {
+  const { t } = useTranslation(),
+   { persons, createPerson, updatePerson } = usePersonContext(),
 
   // Track mounted state to prevent state updates after unmount
-  const isMountedRef = useRef(true);
+   isMountedRef = useRef(true),
 
   // Synchronous guard for double-submission prevention
-  const isSubmittingRef = useRef(false);
+   isSubmittingRef = useRef(false),
 
   // Submission loading state for UI
-  const [isSubmitting, setIsSubmitting] = useState(false);
+   [isSubmitting, setIsSubmitting] = useState(false);
 
   // ============================================================================
   // Lifecycle Effects
   // ============================================================================
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
-    };
-  }, []);
+    }, []);
 
   // Reset submission state when dialog closes
   useEffect(() => {
@@ -118,28 +116,28 @@ const PersonDialog = memo(function PersonDialog({
   /**
    * Determines if the dialog is in edit mode.
    */
-  const isEditMode = Boolean(personId);
+  const isEditMode = Boolean(personId),
 
   /**
    * Find the person from context for edit mode.
    * Returns undefined if personId is not provided or person not found.
    */
-  const person = useMemo((): Person | undefined => {
-    if (!personId) return undefined;
+   person = useMemo((): Person | undefined => {
+    if (!personId) {return undefined;}
     return persons.find((p) => p.id === personId);
-  }, [personId, persons]);
+  }, [personId, persons]),
 
   /**
    * Dialog title based on mode.
    */
-  const dialogTitle = isEditMode ? t('persons.edit') : t('persons.new');
+   dialogTitle = isEditMode ? t('persons.edit') : t('persons.new'),
 
   /**
    * Dialog description for accessibility.
    */
-  const dialogDescription = isEditMode
+   dialogDescription = isEditMode
     ? t('persons.editDescription', 'Modify the participant details below.')
-    : t('persons.newDescription', 'Fill in the details to add a new participant.');
+    : t('persons.newDescription', 'Fill in the details to add a new participant.'),
 
   // ============================================================================
   // Event Handlers
@@ -149,10 +147,10 @@ const PersonDialog = memo(function PersonDialog({
    * Handles form submission.
    * Creates or updates the person based on mode, shows toast, and closes dialog on success.
    */
-  const handleSubmit = useCallback(
+   handleSubmit = useCallback(
     async (data: PersonFormData) => {
       // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) return;
+      if (isSubmittingRef.current) {return;}
 
       isSubmittingRef.current = true;
       setIsSubmitting(true);
@@ -186,26 +184,26 @@ const PersonDialog = memo(function PersonDialog({
       }
     },
     [isEditMode, personId, updatePerson, createPerson, t, onOpenChange],
-  );
+  ),
 
   /**
    * Handles form cancel action.
    * Closes the dialog if not currently submitting.
    */
-  const handleCancel = useCallback(() => {
+   handleCancel = useCallback(() => {
     if (!isSubmitting) {
       onOpenChange(false);
     }
-  }, [isSubmitting, onOpenChange]);
+  }, [isSubmitting, onOpenChange]),
 
   /**
    * Handles dialog open state change.
    * Prevents closing during submission.
    */
-  const handleOpenChange = useCallback(
+   handleOpenChange = useCallback(
     (newOpen: boolean) => {
       // Prevent closing while submitting
-      if (!newOpen && isSubmitting) return;
+      if (!newOpen && isSubmitting) {return;}
       onOpenChange(newOpen);
     },
     [isSubmitting, onOpenChange],

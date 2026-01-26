@@ -36,7 +36,7 @@ export interface UseOnlineStatusResult {
  * Duration in milliseconds to show "recently changed" state.
  * Used to provide visual feedback when coming back online.
  */
-const RECENT_CHANGE_DURATION_MS = 3000;
+const RECENT_CHANGE_DURATION_MS = 3000,
 
 // ============================================================================
 // Store for useSyncExternalStore
@@ -45,7 +45,7 @@ const RECENT_CHANGE_DURATION_MS = 3000;
 /**
  * Subscriptions for the online status store.
  */
-const subscribers = new Set<() => void>();
+ subscribers = new Set<() => void>();
 
 /**
  * Notify all subscribers of a status change.
@@ -138,7 +138,7 @@ export function useOnlineStatus(): UseOnlineStatusResult {
    * Current online status using useSyncExternalStore for proper React 18 handling.
    * This avoids hydration mismatches and tearing issues.
    */
-  const isOnline = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const isOnline = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot),
 
   // ============================================================================
   // Local State
@@ -148,12 +148,12 @@ export function useOnlineStatus(): UseOnlineStatusResult {
    * Tracks whether the network status recently changed.
    * Used for showing "back online" feedback.
    */
-  const [hasRecentlyChanged, setHasRecentlyChanged] = useState(false);
+   [hasRecentlyChanged, setHasRecentlyChanged] = useState(false),
 
   /**
    * Previous online status for detecting changes.
    */
-  const previousOnlineRef = useRef(isOnline);
+   previousOnlineRef = useRef(isOnline),
 
   // ============================================================================
   // Refs
@@ -162,12 +162,12 @@ export function useOnlineStatus(): UseOnlineStatusResult {
   /**
    * Timer ref for clearing the "recently changed" state.
    */
-  const recentChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   recentChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null),
 
   /**
    * Tracks whether the component is still mounted.
    */
-  const isMountedRef = useRef(true);
+   isMountedRef = useRef(true);
 
   // ============================================================================
   // Effects
@@ -176,14 +176,12 @@ export function useOnlineStatus(): UseOnlineStatusResult {
   /**
    * Cleanup effect to track component unmount.
    */
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
       if (recentChangeTimerRef.current) {
         clearTimeout(recentChangeTimerRef.current);
       }
-    };
-  }, []);
+    }, []);
 
   /**
    * Detect status changes and update hasRecentlyChanged.

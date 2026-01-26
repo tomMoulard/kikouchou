@@ -6,15 +6,15 @@
  */
 
 import {
+  type ReactElement,
   memo,
   useCallback,
   useMemo,
   useState,
-  type ReactElement,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { formatDistanceToNow, format, isToday, isTomorrow, parseISO } from 'date-fns';
-import { fr, enUS } from 'date-fns/locale';
+import { format, formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns';
+import { enUS, fr } from 'date-fns/locale';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -132,22 +132,22 @@ function formatRelativeTime(
 /**
  * Individual pickup item displaying transport details.
  */
-const PickupItem = memo(function PickupItem({
+const PickupItem = memo(({
   transport,
   person,
   dateLocale,
-}: PickupItemProps): ReactElement {
-  const { t } = useTranslation();
+}: PickupItemProps): ReactElement => {
+  const { t } = useTranslation(),
 
   // Format the relative time
-  const relativeTime = useMemo(
+   relativeTime = useMemo(
     () => formatRelativeTime(transport.datetime, dateLocale, t),
     [transport.datetime, dateLocale, t],
-  );
+  ),
 
   // Get transport type icon and label
-  const TypeIcon = transport.type === 'arrival' ? ArrowDownToLine : ArrowUpFromLine;
-  const typeLabel = transport.type === 'arrival' 
+   TypeIcon = transport.type === 'arrival' ? ArrowDownToLine : ArrowUpFromLine,
+   typeLabel = transport.type === 'arrival' 
     ? t('transports.arrival') 
     : t('transports.departure');
 
@@ -236,42 +236,42 @@ PickupItem.displayName = 'PickupItem';
  * <UpcomingPickups className="mt-4" />
  * ```
  */
-const UpcomingPickups = memo(function UpcomingPickups({
+const UpcomingPickups = memo(({
   initialDisplayCount = INITIAL_DISPLAY_COUNT,
   className,
-}: UpcomingPickupsProps): ReactElement {
-  const { t, i18n } = useTranslation();
-  const { upcomingPickups } = useTransportContext();
-  const { persons } = usePersonContext();
+}: UpcomingPickupsProps): ReactElement => {
+  const { t, i18n } = useTranslation(),
+   { upcomingPickups } = useTransportContext(),
+   { persons } = usePersonContext(),
 
   // Track expanded state
-  const [isExpanded, setIsExpanded] = useState(false);
+   [isExpanded, setIsExpanded] = useState(false),
 
   // Get date locale
-  const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+   dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
 
   // Build persons map for O(1) lookups
-  const personsMap = useMemo(() => {
+   personsMap = useMemo(() => {
     const map = new Map<PersonId, Person>();
     for (const person of persons) {
       map.set(person.id, person);
     }
     return map;
-  }, [persons]);
+  }, [persons]),
 
   // Determine if we need to show expand/collapse
-  const hasMoreItems = upcomingPickups.length > initialDisplayCount;
-  const visiblePickups = isExpanded 
+   hasMoreItems = upcomingPickups.length > initialDisplayCount,
+   visiblePickups = isExpanded 
     ? upcomingPickups 
-    : upcomingPickups.slice(0, initialDisplayCount);
+    : upcomingPickups.slice(0, initialDisplayCount),
 
   // Handle toggle expand/collapse
-  const handleToggleExpanded = useCallback(() => {
+   handleToggleExpanded = useCallback(() => {
     setIsExpanded((prev) => !prev);
-  }, []);
+  }, []),
 
   // Count of hidden items
-  const hiddenCount = upcomingPickups.length - initialDisplayCount;
+   hiddenCount = upcomingPickups.length - initialDisplayCount;
 
   // ============================================================================
   // Render: Empty State

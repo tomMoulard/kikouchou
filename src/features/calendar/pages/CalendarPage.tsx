@@ -17,37 +17,37 @@
  */
 
 import {
+  type ReactElement,
   memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactElement,
 } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  format,
-  parseISO,
-  isValid,
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  endOfWeek,
-  eachDayOfInterval,
-  isSameMonth,
-  isSameDay,
-  isWithinInterval,
   addMonths,
-  subMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isSameDay,
+  isSameMonth,
+  isValid,
+  isWithinInterval,
+  parseISO,
+  startOfMonth,
+  startOfWeek,
   subDays,
+  subMonths,
 } from 'date-fns';
-import { fr, enUS, type Locale } from 'date-fns/locale';
+import { type Locale, enUS, fr } from 'date-fns/locale';
 import {
+  Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
-  Calendar as CalendarIcon,
   PlaneLanding,
   PlaneTakeoff,
 } from 'lucide-react';
@@ -64,10 +64,10 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type {
-  RoomAssignment,
+  HexColor,
   Person,
   Room,
-  HexColor,
+  RoomAssignment,
   Transport,
   TransportType,
 } from '@/types';
@@ -193,13 +193,13 @@ function getLuminance(hex: string): number {
   }
 
   // Parse RGB values
-  const r = parseInt(cleanHex.substring(0, 2), 16) / 255;
-  const g = parseInt(cleanHex.substring(2, 4), 16) / 255;
-  const b = parseInt(cleanHex.substring(4, 6), 16) / 255;
+  const r = parseInt(cleanHex.substring(0, 2), 16) / 255,
+   g = parseInt(cleanHex.substring(2, 4), 16) / 255,
+   b = parseInt(cleanHex.substring(4, 6), 16) / 255,
 
   // Calculate relative luminance using sRGB formula
-  const linearize = (c: number) =>
-    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+   linearize = (c: number) =>
+    c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055)**2.4;
 
   return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
 }
@@ -230,12 +230,12 @@ function toISODateString(date: Date): string {
  * Stable empty array constant to prevent re-renders for days without events.
  * Using a module-level constant ensures referential equality across renders.
  */
-const EMPTY_EVENTS: readonly CalendarEvent[] = [];
+const EMPTY_EVENTS: readonly CalendarEvent[] = [],
 
 /**
  * Stable empty array constant to prevent re-renders for days without transports.
  */
-const EMPTY_TRANSPORTS: readonly CalendarTransport[] = [];
+ EMPTY_TRANSPORTS: readonly CalendarTransport[] = [],
 
 // ============================================================================
 // CalendarHeader Subcomponent
@@ -244,16 +244,16 @@ const EMPTY_TRANSPORTS: readonly CalendarTransport[] = [];
 /**
  * Header with month/year display and navigation controls.
  */
-const CalendarHeader = memo(function CalendarHeader({
+ CalendarHeader = memo(({
   currentMonth,
   onPrevMonth,
   onNextMonth,
   onToday,
   dateLocale,
-}: CalendarHeaderProps): ReactElement {
-  const { t } = useTranslation();
+}: CalendarHeaderProps): ReactElement => {
+  const { t } = useTranslation(),
 
-  const monthYearLabel = useMemo(
+   monthYearLabel = useMemo(
     () => format(currentMonth, 'LLLL yyyy', { locale: dateLocale }),
     [currentMonth, dateLocale],
   );
@@ -318,9 +318,9 @@ CalendarHeader.displayName = 'CalendarHeader';
 /**
  * Row of day-of-week headers (Mon-Sun).
  */
-const CalendarDayHeader = memo(function CalendarDayHeader({
+const CalendarDayHeader = memo(({
   dateLocale,
-}: CalendarDayHeaderProps): ReactElement {
+}: CalendarDayHeaderProps): ReactElement => {
   // Generate day names starting from Monday
   const dayNames = useMemo(() => {
     const baseDate = new Date(2024, 0, 1); // Jan 1, 2024 is a Monday
@@ -359,15 +359,15 @@ CalendarDayHeader.displayName = 'CalendarDayHeader';
 /**
  * Single event pill displayed within a calendar day.
  */
-const CalendarEvent = memo(function CalendarEvent({
+const CalendarEvent = memo(({
   event,
   onClick,
-}: CalendarEventProps): ReactElement {
+}: CalendarEventProps): ReactElement => {
   const handleClick = useCallback(() => {
     onClick(event.assignment);
-  }, [onClick, event.assignment]);
+  }, [onClick, event.assignment]),
 
-  const handleKeyDown = useCallback(
+   handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -411,15 +411,15 @@ CalendarEvent.displayName = 'CalendarEvent';
  * Transport indicator pill displayed within a calendar day.
  * Shows arrival (green) or departure (orange) with person name.
  */
-const TransportIndicator = memo(function TransportIndicator({
+const TransportIndicator = memo(({
   transport,
   type,
-}: TransportIndicatorProps): ReactElement {
-  const { t } = useTranslation();
+}: TransportIndicatorProps): ReactElement => {
+  const { t } = useTranslation(),
 
-  const isArrival = type === 'arrival';
-  const Icon = isArrival ? PlaneLanding : PlaneTakeoff;
-  const ariaLabel = isArrival
+   isArrival = type === 'arrival',
+   Icon = isArrival ? PlaneLanding : PlaneTakeoff,
+   ariaLabel = isArrival
     ? t('calendar.personArriving', '{{name}} arriving', { name: transport.personName })
     : t('calendar.personDeparting', '{{name}} departing', { name: transport.personName });
 
@@ -455,7 +455,7 @@ TransportIndicator.displayName = 'TransportIndicator';
 /**
  * Single day cell in the calendar grid.
  */
-const CalendarDay = memo(function CalendarDay({
+const CalendarDay = memo(({
   date,
   events,
   transports,
@@ -464,19 +464,19 @@ const CalendarDay = memo(function CalendarDay({
   isWithinTrip,
   dateLocale,
   onEventClick,
-}: CalendarDayProps): ReactElement {
-  const dayNumber = format(date, 'd', { locale: dateLocale });
-  const dateLabel = format(date, 'PPPP', { locale: dateLocale });
+}: CalendarDayProps): ReactElement => {
+  const dayNumber = format(date, 'd', { locale: dateLocale }),
+   dateLabel = format(date, 'PPPP', { locale: dateLocale }),
 
   // Limit visible items (events + transports) to prevent overflow
-  const maxVisibleItems = 3;
-  const totalItems = events.length + transports.length;
+   maxVisibleItems = 3,
+   totalItems = events.length + transports.length,
 
   // Prioritize showing transports first (arrivals/departures are time-sensitive)
-  const visibleTransports = transports.slice(0, maxVisibleItems);
-  const remainingSlots = Math.max(0, maxVisibleItems - visibleTransports.length);
-  const visibleEvents = events.slice(0, remainingSlots);
-  const hiddenCount = totalItems - visibleTransports.length - visibleEvents.length;
+   visibleTransports = transports.slice(0, maxVisibleItems),
+   remainingSlots = Math.max(0, maxVisibleItems - visibleTransports.length),
+   visibleEvents = events.slice(0, remainingSlots),
+   hiddenCount = totalItems - visibleTransports.length - visibleEvents.length;
 
   return (
     <div
@@ -546,23 +546,23 @@ CalendarDay.displayName = 'CalendarDay';
  * { path: '/trips/:tripId/calendar', element: <CalendarPage /> }
  * ```
  */
-const CalendarPage = memo(function CalendarPage(): ReactElement {
-  const { t, i18n } = useTranslation();
-  const { tripId: tripIdFromUrl } = useParams<'tripId'>();
+const CalendarPage = memo((): ReactElement => {
+  const { t, i18n } = useTranslation(),
+   { tripId: tripIdFromUrl } = useParams<'tripId'>(),
 
   // Context hooks
-  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
-  const { rooms, isLoading: isRoomsLoading, error: roomsError } = useRoomContext();
-  const { assignments, isLoading: isAssignmentsLoading, error: assignmentsError } = useAssignmentContext();
-  const { getPersonById, isLoading: isPersonsLoading, error: personsError } = usePersonContext();
-  const { arrivals, departures, isLoading: isTransportsLoading, error: transportsError } = useTransportContext();
+   { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
+   { rooms, isLoading: isRoomsLoading, error: roomsError } = useRoomContext(),
+   { assignments, isLoading: isAssignmentsLoading, error: assignmentsError } = useAssignmentContext(),
+   { getPersonById, isLoading: isPersonsLoading, error: personsError } = usePersonContext(),
+   { arrivals, departures, isLoading: isTransportsLoading, error: transportsError } = useTransportContext(),
 
   // Local state for current viewing month
   // Initialized to today - will sync with trip start date via useEffect when loaded
-  const [currentMonth, setCurrentMonth] = useState<Date>(() => startOfMonth(new Date()));
+   [currentMonth, setCurrentMonth] = useState<Date>(() => startOfMonth(new Date())),
 
   // Track if user has manually navigated to avoid overwriting their selection
-  const hasUserNavigatedRef = useRef(false);
+   hasUserNavigatedRef = useRef(false);
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -584,47 +584,47 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   }, [currentTrip?.startDate]);
 
   // Combined loading state
-  const isLoading = isTripLoading || isRoomsLoading || isAssignmentsLoading || isPersonsLoading || isTransportsLoading;
+  const isLoading = isTripLoading || isRoomsLoading || isAssignmentsLoading || isPersonsLoading || isTransportsLoading,
 
   // Date locale based on current language
-  const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+   dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
 
   // Build room lookup map for O(1) access
-  const roomsMap = useMemo(() => {
+   roomsMap = useMemo(() => {
     const map = new Map<string, Room>();
     for (const room of rooms) {
       map.set(room.id, room);
     }
     return map;
-  }, [rooms]);
+  }, [rooms]),
 
   // Trip date boundaries for visual indicators
-  const tripBoundaries = useMemo(() => {
-    if (!currentTrip) return null;
-    const start = parseISO(currentTrip.startDate);
-    const end = parseISO(currentTrip.endDate);
-    if (!isValid(start) || !isValid(end)) return null;
+   tripBoundaries = useMemo(() => {
+    if (!currentTrip) {return null;}
+    const start = parseISO(currentTrip.startDate),
+     end = parseISO(currentTrip.endDate);
+    if (!isValid(start) || !isValid(end)) {return null;}
     return { start, end };
-  }, [currentTrip]);
+  }, [currentTrip]),
 
   // Generate calendar days for the current month view
-  const calendarDays = useMemo(() => {
-    const monthStart = startOfMonth(currentMonth);
-    const monthEnd = endOfMonth(currentMonth);
+   calendarDays = useMemo(() => {
+    const monthStart = startOfMonth(currentMonth),
+     monthEnd = endOfMonth(currentMonth),
     // Week starts on Monday (weekStartsOn: 1)
-    const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
-    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+     calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 }),
+     calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
     return eachDayOfInterval({ start: calendarStart, end: calendarEnd });
-  }, [currentMonth]);
+  }, [currentMonth]),
 
   // Extract translated fallback outside the expensive computation
   // This ensures stable dependency and avoids recalculation on language change
-  const unknownLabel = t('common.unknown');
+   unknownLabel = t('common.unknown'),
 
   // Build calendar events from assignments
   // Optimized algorithm: O(assignments × avgAssignmentLength) instead of O(assignments × calendarDays)
-  const eventsByDate = useMemo(() => {
+   eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
 
     // Early return if no days to display
@@ -633,16 +633,16 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     }
 
     // Pre-compute calendar boundaries for efficient range checking
-    const firstDay = calendarDays[0];
-    const lastDay = calendarDays[calendarDays.length - 1];
+    const firstDay = calendarDays[0],
+     lastDay = calendarDays[calendarDays.length - 1];
 
     // Safety check for array access (satisfies noUncheckedIndexedAccess)
     if (!firstDay || !lastDay) {
       return map;
     }
 
-    const calendarStartStr = toISODateString(firstDay);
-    const calendarEndStr = toISODateString(lastDay);
+    const calendarStartStr = toISODateString(firstDay),
+     calendarEndStr = toISODateString(lastDay);
 
     for (const assignment of assignments) {
       // Skip assignments completely outside visible calendar range
@@ -650,30 +650,30 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         continue;
       }
 
-      const person = getPersonById(assignment.personId);
-      const room = roomsMap.get(assignment.roomId);
+      const person = getPersonById(assignment.personId),
+       room = roomsMap.get(assignment.roomId),
 
       // Build display label
-      const personName = person?.name ?? unknownLabel;
-      const roomName = room?.name ?? unknownLabel;
-      const label = `${personName} - ${roomName}`;
+       personName = person?.name ?? unknownLabel,
+       roomName = room?.name ?? unknownLabel,
+       label = `${personName} - ${roomName}`,
 
       // Determine colors with fallback for invalid/missing colors
-      const color = (person?.color && person.color.length >= 4) ? person.color : '#6b7280';
-      const textColor = getContrastTextColor(color);
+       color = (person?.color && person.color.length >= 4) ? person.color : '#6b7280',
+       textColor = getContrastTextColor(color),
 
-      const event: CalendarEvent = {
+       event: CalendarEvent = {
         assignment,
         person,
         room,
         label,
         color,
         textColor,
-      };
+      },
 
       // Parse assignment dates to determine the actual range to iterate
-      const assignmentStart = parseISO(assignment.startDate);
-      const assignmentEnd = parseISO(assignment.endDate);
+       assignmentStart = parseISO(assignment.startDate),
+       assignmentEnd = parseISO(assignment.endDate);
 
       // Skip if dates are invalid
       if (!isValid(assignmentStart) || !isValid(assignmentEnd)) {
@@ -696,15 +696,15 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       }
 
       // Calculate intersection with visible calendar range
-      const effectiveStart = assignmentStart < firstDay ? firstDay : assignmentStart;
-      const effectiveEnd = lastNight > lastDay ? lastDay : lastNight;
+      const effectiveStart = assignmentStart < firstDay ? firstDay : assignmentStart,
+       effectiveEnd = lastNight > lastDay ? lastDay : lastNight,
 
       // Only iterate through days within the assignment range (not all 42 calendar days)
-      const assignmentDays = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
+       assignmentDays = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
 
       for (const day of assignmentDays) {
-        const dateKey = toISODateString(day);
-        const existing = map.get(dateKey);
+        const dateKey = toISODateString(day),
+         existing = map.get(dateKey);
         if (existing) {
           existing.push(event);
         } else {
@@ -714,11 +714,11 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     }
 
     return map;
-  }, [assignments, getPersonById, roomsMap, calendarDays, unknownLabel]);
+  }, [assignments, getPersonById, roomsMap, calendarDays, unknownLabel]),
 
   // Build transport events grouped by date for calendar display
   // Maps date strings (YYYY-MM-DD) to arrays of transports on that date
-  const transportsByDate = useMemo(() => {
+   transportsByDate = useMemo(() => {
     const map = new Map<string, CalendarTransport[]>();
 
     // Early return if no days to display
@@ -727,16 +727,16 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     }
 
     // Pre-compute calendar boundaries for efficient range checking
-    const firstDay = calendarDays[0];
-    const lastDay = calendarDays[calendarDays.length - 1];
+    const firstDay = calendarDays[0],
+     lastDay = calendarDays[calendarDays.length - 1];
 
     // Safety check for array access (satisfies noUncheckedIndexedAccess)
     if (!firstDay || !lastDay) {
       return map;
     }
 
-    const calendarStartStr = toISODateString(firstDay);
-    const calendarEndStr = toISODateString(lastDay);
+    const calendarStartStr = toISODateString(firstDay),
+     calendarEndStr = toISODateString(lastDay);
 
     // Process arrivals
     for (const transport of arrivals) {
@@ -746,17 +746,17 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         continue;
       }
 
-      const person = getPersonById(transport.personId);
-      const color = (person?.color && person.color.length >= 4) ? person.color : '#6b7280';
+      const person = getPersonById(transport.personId),
+       color = (person?.color && person.color.length >= 4) ? person.color : '#6b7280',
 
-      const calTransport: CalendarTransport = {
+       calTransport: CalendarTransport = {
         transport,
         person,
         personName: person?.name ?? unknownLabel,
         color: color as HexColor,
-      };
+      },
 
-      const existing = map.get(transportDate);
+       existing = map.get(transportDate);
       if (existing) {
         existing.push(calTransport);
       } else {
@@ -772,17 +772,17 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         continue;
       }
 
-      const person = getPersonById(transport.personId);
-      const color = (person?.color && person.color.length >= 4) ? person.color : '#6b7280';
+      const person = getPersonById(transport.personId),
+       color = (person?.color && person.color.length >= 4) ? person.color : '#6b7280',
 
-      const calTransport: CalendarTransport = {
+       calTransport: CalendarTransport = {
         transport,
         person,
         personName: person?.name ?? unknownLabel,
         color: color as HexColor,
-      };
+      },
 
-      const existing = map.get(transportDate);
+       existing = map.get(transportDate);
       if (existing) {
         existing.push(calTransport);
       } else {
@@ -791,13 +791,13 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     }
 
     return map;
-  }, [arrivals, departures, getPersonById, calendarDays, unknownLabel]);
+  }, [arrivals, departures, getPersonById, calendarDays, unknownLabel]),
 
   // Today's date for highlighting
   // Note: This value is captured on mount. For long-running sessions past midnight,
-  // users should refresh to get updated "today" highlighting.
+  // Users should refresh to get updated "today" highlighting.
   // Using useMemo with empty deps to match project pattern (see RoomListPage).
-  const today = useMemo(() => new Date(), []);
+   today = useMemo(() => new Date(), []),
 
   // ============================================================================
   // Event Handlers
@@ -806,26 +806,26 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   /**
    * Navigate to previous month.
    */
-  const handlePrevMonth = useCallback(() => {
+   handlePrevMonth = useCallback(() => {
     hasUserNavigatedRef.current = true;
     setCurrentMonth((prev) => subMonths(prev, 1));
-  }, []);
+  }, []),
 
   /**
    * Navigate to next month.
    */
-  const handleNextMonth = useCallback(() => {
+   handleNextMonth = useCallback(() => {
     hasUserNavigatedRef.current = true;
     setCurrentMonth((prev) => addMonths(prev, 1));
-  }, []);
+  }, []),
 
   /**
    * Navigate to current month (today).
    */
-  const handleToday = useCallback(() => {
+   handleToday = useCallback(() => {
     hasUserNavigatedRef.current = true;
     setCurrentMonth(startOfMonth(new Date()));
-  }, []);
+  }, []),
 
   /**
    * Handle event click - opens edit dialog.
@@ -833,17 +833,17 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
    *
    * @param _assignment - The assignment to edit (unused until feature implemented)
    */
-  const handleEventClick = useCallback((_assignment: RoomAssignment) => {
+   handleEventClick = useCallback((_assignment: RoomAssignment) => {
     // TODO: Task 9.x - Integrate with RoomAssignmentSection's edit dialog
     // Feature not yet implemented - clicking events will be functional in future task
-  }, []);
+  }, []),
 
   // ============================================================================
   // Validate Trip Context
   // ============================================================================
 
-  const tripMismatch = useMemo(() => {
-    if (!tripIdFromUrl || !currentTrip) return false;
+   tripMismatch = useMemo(() => {
+    if (!tripIdFromUrl || !currentTrip) {return false;}
     return tripIdFromUrl !== currentTrip.id;
   }, [tripIdFromUrl, currentTrip]);
 
@@ -940,13 +940,13 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
             aria-label={t('calendar.monthView', 'Month view calendar')}
           >
             {calendarDays.map((day) => {
-              const dateKey = toISODateString(day);
+              const dateKey = toISODateString(day),
               // Use stable EMPTY_EVENTS/EMPTY_TRANSPORTS constants to prevent CalendarDay re-renders
-              const events = eventsByDate.get(dateKey) ?? EMPTY_EVENTS;
-              const transports = transportsByDate.get(dateKey) ?? EMPTY_TRANSPORTS;
-              const isCurrentMonth = isSameMonth(day, currentMonth);
-              const isDayToday = isSameDay(day, today);
-              const isWithinTrip =
+               events = eventsByDate.get(dateKey) ?? EMPTY_EVENTS,
+               transports = transportsByDate.get(dateKey) ?? EMPTY_TRANSPORTS,
+               isCurrentMonth = isSameMonth(day, currentMonth),
+               isDayToday = isSameDay(day, today),
+               isWithinTrip =
                 tripBoundaries !== null &&
                 isWithinInterval(day, tripBoundaries);
 

@@ -8,18 +8,18 @@
  */
 
 import {
+  type ReactElement,
   memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactElement,
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { format, parseISO, isValid } from 'date-fns';
-import { fr, enUS, type Locale } from 'date-fns/locale';
+import { format, isValid, parseISO } from 'date-fns';
+import { type Locale, enUS, fr } from 'date-fns/locale';
 import { Calendar, ExternalLink, MapPin, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -76,17 +76,17 @@ function formatDateRange(
   endDate: ISODateString,
   locale: Locale,
 ): string {
-  const start = parseISO(startDate);
-  const end = parseISO(endDate);
+  const start = parseISO(startDate),
+   end = parseISO(endDate);
 
   // Fallback to raw values if parsing fails
   if (!isValid(start) || !isValid(end)) {
     return `${startDate} - ${endDate}`;
   }
 
-  const dateFormat = 'PP'; // Localized date format (e.g., "Jan 15, 2024")
-  const startStr = format(start, dateFormat, { locale });
-  const endStr = format(end, dateFormat, { locale });
+  const dateFormat = 'PP', // Localized date format (e.g., "Jan 15, 2024")
+   startStr = format(start, dateFormat, { locale }),
+   endStr = format(end, dateFormat, { locale });
 
   // Same day - show single date
   if (startDate === endDate) {
@@ -120,18 +120,18 @@ function formatDateRange(
  * ```
  */
 function ShareImportPageComponent(): ReactElement {
-  const navigate = useNavigate();
-  const { t, i18n } = useTranslation();
-  const { shareId } = useParams<ShareImportParams>();
+  const navigate = useNavigate(),
+   { t, i18n } = useTranslation(),
+   { shareId } = useParams<ShareImportParams>(),
 
   // ============================================================================
   // State
   // ============================================================================
 
-  const [trip, setTrip] = useState<Trip | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-  const [isNavigating, setIsNavigating] = useState(false);
+   [trip, setTrip] = useState<Trip | null>(null),
+   [isLoading, setIsLoading] = useState(true),
+   [notFound, setNotFound] = useState(false),
+   [isNavigating, setIsNavigating] = useState(false),
 
   // ============================================================================
   // Refs for Async Operation Safety
@@ -141,7 +141,7 @@ function ShareImportPageComponent(): ReactElement {
    * Tracks whether the component is still mounted.
    * Used to prevent state updates after unmount.
    */
-  const isMountedRef = useRef(true);
+   isMountedRef = useRef(true),
 
   // ============================================================================
   // Derived Values
@@ -150,16 +150,16 @@ function ShareImportPageComponent(): ReactElement {
   /**
    * Date locale for formatting dates based on current language.
    */
-  const dateLocale = useMemo(
+   dateLocale = useMemo(
     () => getDateLocale(i18n.language),
     [i18n.language],
-  );
+  ),
 
   /**
    * Formatted date range for display.
    */
-  const formattedDateRange = useMemo(() => {
-    if (!trip) return '';
+   formattedDateRange = useMemo(() => {
+    if (!trip) {return '';}
     return formatDateRange(trip.startDate, trip.endDate, dateLocale);
   }, [trip, dateLocale]);
 
@@ -170,11 +170,9 @@ function ShareImportPageComponent(): ReactElement {
   /**
    * Cleanup effect to track component unmount.
    */
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
-    };
-  }, []);
+    }, []);
 
   /**
    * Load trip data when shareId changes.
@@ -245,7 +243,7 @@ function ShareImportPageComponent(): ReactElement {
    * and ensure the sharing route works even when mounted outside the main layout.
    */
   const handleViewTrip = useCallback(async (): Promise<void> => {
-    if (!trip || isNavigating) return;
+    if (!trip || isNavigating) {return;}
 
     setIsNavigating(true);
 
@@ -273,12 +271,12 @@ function ShareImportPageComponent(): ReactElement {
         setIsNavigating(false);
       }
     }
-  }, [trip, isNavigating, navigate, t]);
+  }, [trip, isNavigating, navigate, t]),
 
   /**
    * Handles navigation to trips list.
    */
-  const handleGoToTrips = useCallback(() => {
+   handleGoToTrips = useCallback(() => {
     navigate('/trips');
   }, [navigate]);
 

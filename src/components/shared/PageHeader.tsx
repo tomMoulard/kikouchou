@@ -87,13 +87,13 @@ interface PageHeaderProps {
  * />
  * ```
  */
-const PageHeader = memo(function PageHeader({
+const PageHeader = memo(({
   title,
   description,
   action,
   backLink,
   className,
-}: PageHeaderProps): React.ReactElement {
+}: PageHeaderProps): React.ReactElement => {
   const { t } = useTranslation();
 
   return (

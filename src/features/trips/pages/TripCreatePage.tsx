@@ -5,7 +5,7 @@
  * @module features/trips/pages/TripCreatePage
  */
 
-import { memo, useCallback, useEffect, useRef, type ReactElement } from 'react';
+import { type ReactElement, memo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -39,8 +39,8 @@ import type { TripFormData } from '@/types';
  * ```
  */
 function TripCreatePageComponent(): ReactElement {
-  const navigate = useNavigate();
-  const { t } = useTranslation();
+  const navigate = useNavigate(),
+   { t } = useTranslation(),
 
   // ============================================================================
   // Refs for Async Operation Safety
@@ -50,13 +50,13 @@ function TripCreatePageComponent(): ReactElement {
    * Tracks whether the component is still mounted.
    * Used to prevent state updates and navigation after unmount.
    */
-  const isMountedRef = useRef(true);
+   isMountedRef = useRef(true),
 
   /**
    * Guards against double-submission during async operations.
    * Synchronous check prevents race conditions between rapid clicks.
    */
-  const isSubmittingRef = useRef(false);
+   isSubmittingRef = useRef(false);
 
   // ============================================================================
   // Effects
@@ -65,11 +65,9 @@ function TripCreatePageComponent(): ReactElement {
   /**
    * Cleanup effect to track component unmount.
    */
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
-    };
-  }, []);
+    }, []);
 
   // ============================================================================
   // Event Handlers
@@ -104,7 +102,7 @@ function TripCreatePageComponent(): ReactElement {
 
         // Navigate to the new trip's calendar
         // Note: We intentionally navigate even if component is unmounting,
-        // as the trip was successfully created and the user expects to see it
+        // As the trip was successfully created and the user expects to see it
         navigate(`/trips/${newTrip.id}/calendar`);
       } catch (error) {
         // Log error for debugging
@@ -122,12 +120,12 @@ function TripCreatePageComponent(): ReactElement {
       }
     },
     [navigate, t],
-  );
+  ),
 
   /**
    * Handles cancel action by navigating back to trips list.
    */
-  const handleCancel = useCallback(() => {
+   handleCancel = useCallback(() => {
     navigate('/trips');
   }, [navigate]);
 

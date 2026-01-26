@@ -115,7 +115,7 @@ type I18nResources = {
 // ============================================================================
 
 /**
- * i18next resources configuration.
+ * I18next resources configuration.
  * Maps each supported language to its translation namespace.
  */
 const resources: I18nResources = {
@@ -125,7 +125,7 @@ const resources: I18nResources = {
   fr: {
     translation: frTranslations,
   },
-} satisfies Resource;
+} satisfies Resource,
 
 /**
  * Language detector configuration.
@@ -136,7 +136,7 @@ const resources: I18nResources = {
  *
  * The detected language is cached in localStorage for subsequent visits.
  */
-const detectionOptions: DetectorOptions = {
+ detectionOptions: DetectorOptions = {
   // Detection order priority
   order: ['localStorage', 'navigator'],
 
@@ -153,12 +153,12 @@ const detectionOptions: DetectorOptions = {
   lookupQuerystring: undefined,
   lookupFromPathIndex: undefined,
   lookupFromSubdomainIndex: undefined,
-};
+},
 
 /**
  * Main i18next initialization options.
  */
-const initOptions: InitOptions = {
+ initOptions: InitOptions = {
   // Translation resources
   resources,
 
@@ -181,7 +181,7 @@ const initOptions: InitOptions = {
     escapeValue: false,
 
     // Format function for dates, numbers, etc. (can be extended later)
-    // format: (value, format, lng) => { ... }
+    // Format: (value, format, lng) => { ... }
   },
 
   // React-specific settings
@@ -307,11 +307,11 @@ export function getCurrentLanguage(): Language {
     return DEFAULT_LANGUAGE;
   }
 
-  const current = i18n.language;
+  const current = i18n.language,
 
   // Ensure we return a valid Language type
   // Handle cases like 'en-US' by extracting the base language
-  const baseLanguage = current?.split('-')[0];
+   baseLanguage = current?.split('-')[0];
 
   // Use isLanguageSupported for consistent validation
   if (baseLanguage && isLanguageSupported(baseLanguage)) {

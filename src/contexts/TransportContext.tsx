@@ -6,6 +6,8 @@
  */
 
 import {
+  type ReactElement,
+  type ReactNode,
   createContext,
   useCallback,
   useContext,
@@ -13,8 +15,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactElement,
-  type ReactNode,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
@@ -22,15 +22,15 @@ import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import {
   createTransport as repositoryCreateTransport,
+  deleteTransport as repositoryDeleteTransport,
   getTransportById as repositoryGetTransportById,
   updateTransport as repositoryUpdateTransport,
-  deleteTransport as repositoryDeleteTransport,
 } from '@/lib/db';
 import type {
+  PersonId,
   Transport,
   TransportFormData,
   TransportId,
-  PersonId,
   TripId,
 } from '@/types';
 
@@ -156,11 +156,11 @@ function wrapAndSetError(
  */
 function areTransportsEqual(a: Transport[], b: Transport[]): boolean {
   // Fast path: same reference means no change
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
+  if (a === b) {return true;}
+  if (a.length !== b.length) {return false;}
   return a.every((transport, index) => {
     const other = b[index];
-    if (!other) return false;
+    if (!other) {return false;}
     return (
       transport.id === other.id &&
       transport.tripId === other.tripId &&
@@ -253,29 +253,29 @@ export function TransportProvider({
   children,
 }: TransportProviderProps): ReactElement {
   // Get current trip from TripContext - extract ID to avoid object reference issues
-  const { currentTrip } = useTripContext();
-  const currentTripId = currentTrip?.id;
+  const { currentTrip } = useTripContext(),
+   currentTripId = currentTrip?.id,
 
   // Error state for CRUD operations
-  const [error, setError] = useState<Error | null>(null);
+   [error, setError] = useState<Error | null>(null),
 
   // Stable array reference to prevent unnecessary re-renders
   // Updated via useEffect to avoid side effects during render
-  const transportsRef = useRef<Transport[]>([]);
+   transportsRef = useRef<Transport[]>([]),
 
   // Map for O(1) transport lookup by ID
   // Used for fast validation in update/delete operations
-  const transportsMapRef = useRef<Map<TransportId, Transport>>(new Map());
+   transportsMapRef = useRef<Map<TransportId, Transport>>(new Map()),
 
   // Map for O(1) lookup by person
   // Updated via useEffect to stay in sync with transports array
-  const transportsByPersonMapRef = useRef<Map<PersonId, Transport[]>>(
+   transportsByPersonMapRef = useRef<Map<PersonId, Transport[]>>(
     new Map(),
-  );
+  ),
 
   // Live query for transports, scoped to current trip
   // Re-runs automatically when currentTripId changes or transports are modified
-  const transportsQuery = useLiveQuery(
+   transportsQuery = useLiveQuery(
     async () => {
       if (!currentTripId) {
         return [];
@@ -296,14 +296,14 @@ export function TransportProvider({
       }
     },
     [currentTripId],
-  );
+  ),
 
   // Determine loading state
   // Loading when query hasn't resolved yet AND a trip is selected
-  const isLoading = currentTripId !== undefined && transportsQuery === undefined;
+   isLoading = currentTripId !== undefined && transportsQuery === undefined,
 
   // Get raw transports from query, defaulting to empty array
-  const rawTransports = transportsQuery ?? [];
+   rawTransports = transportsQuery ?? [];
 
   // Clear refs and error when trip changes to prevent stale cross-trip data
   useEffect(() => {
@@ -330,34 +330,34 @@ export function TransportProvider({
   const transports =
     transportsRef.current.length > 0 || rawTransports.length === 0
       ? transportsRef.current
-      : rawTransports;
+      : rawTransports,
 
   // Compute arrivals - transports where type === 'arrival'
-  const arrivals = useMemo(
+   arrivals = useMemo(
     () => transports.filter((t) => t.type === 'arrival'),
     [transports],
-  );
+  ),
 
   // Compute departures - transports where type === 'departure'
-  const departures = useMemo(
+   departures = useMemo(
     () => transports.filter((t) => t.type === 'departure'),
     [transports],
-  );
+  ),
 
   // Compute upcoming pickups - transports that need pickup and are in the future
   // Note: ISO string comparison works correctly for datetime ordering
-  const upcomingPickups = useMemo(() => {
+   upcomingPickups = useMemo(() => {
     const now = new Date().toISOString();
     return transports
       .filter((t) => t.needsPickup && t.datetime >= now)
       .sort((a, b) => a.datetime.localeCompare(b.datetime));
-  }, [transports]);
+  }, [transports]),
 
   /**
    * Validates that a transport exists and belongs to the current trip.
    * Uses in-memory cache first, falls back to DB for authoritative check.
    */
-  const validateTransportOwnership = useCallback(
+   validateTransportOwnership = useCallback(
     async (
       transportId: TransportId,
       tripId: TripId,
@@ -386,12 +386,12 @@ export function TransportProvider({
       return transport;
     },
     [],
-  );
+  ),
 
   /**
    * Creates a new transport in the current trip.
    */
-  const createTransport = useCallback(
+   createTransport = useCallback(
     async (data: TransportFormData): Promise<Transport> => {
       // Capture tripId at invocation time to avoid stale closure
       const tripId = currentTripId;
@@ -409,12 +409,12 @@ export function TransportProvider({
       }
     },
     [currentTripId],
-  );
+  ),
 
   /**
    * Updates an existing transport after validating ownership.
    */
-  const updateTransport = useCallback(
+   updateTransport = useCallback(
     async (
       id: TransportId,
       data: Partial<TransportFormData>,
@@ -435,12 +435,12 @@ export function TransportProvider({
       }
     },
     [currentTripId, validateTransportOwnership],
-  );
+  ),
 
   /**
    * Deletes a transport after validating ownership.
    */
-  const deleteTransport = useCallback(
+   deleteTransport = useCallback(
     async (id: TransportId): Promise<void> => {
       const tripId = currentTripId;
       if (!tripId) {
@@ -458,20 +458,18 @@ export function TransportProvider({
       }
     },
     [currentTripId, validateTransportOwnership],
-  );
+  ),
 
   /**
    * Synchronously retrieves transports by person using O(1) Map lookup.
    */
-  const getTransportsByPerson = useCallback(
-    (personId: PersonId): Transport[] => {
-      return transportsByPersonMapRef.current.get(personId) ?? [];
-    },
+   getTransportsByPerson = useCallback(
+    (personId: PersonId): Transport[] => transportsByPersonMapRef.current.get(personId) ?? [],
     [],
-  );
+  ),
 
   // Memoize context value to prevent unnecessary re-renders in consumers
-  const contextValue = useMemo<TransportContextValue>(
+   contextValue = useMemo<TransportContextValue>(
     () => ({
       transports,
       arrivals,

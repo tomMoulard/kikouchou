@@ -5,7 +5,7 @@
  * @module components/shared/PersonBadge
  */
 
-import { memo, useCallback, useMemo, type MouseEvent, type KeyboardEvent } from 'react';
+import { type KeyboardEvent, type MouseEvent, memo, useCallback, useMemo } from 'react';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -16,10 +16,10 @@ import type { Person } from '@/types';
 // ============================================================================
 
 /** Fallback color when an invalid hex color is provided */
-const FALLBACK_COLOR = '#6B7280'; // Neutral gray
+const FALLBACK_COLOR = '#6B7280', // Neutral gray
 
 /** WCAG luminance threshold for determining text color */
-const LUMINANCE_THRESHOLD = 0.179;
+ LUMINANCE_THRESHOLD = 0.179;
 
 // ============================================================================
 // Type Definitions
@@ -110,9 +110,9 @@ function parseHexColor(hex: string): RGB | null {
   }
 
   // Parse hex values and normalize to 0-1 range
-  const r = parseInt(normalized.slice(0, 2), 16) / 255;
-  const g = parseInt(normalized.slice(2, 4), 16) / 255;
-  const b = parseInt(normalized.slice(4, 6), 16) / 255;
+  const r = parseInt(normalized.slice(0, 2), 16) / 255,
+   g = parseInt(normalized.slice(2, 4), 16) / 255,
+   b = parseInt(normalized.slice(4, 6), 16) / 255;
 
   return { r, g, b };
 }
@@ -129,11 +129,11 @@ function parseHexColor(hex: string): RGB | null {
 function calculateLuminance(rgb: RGB): number {
   // Apply sRGB gamma correction
   const gammaCorrected = (value: number): number =>
-    value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+    value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055)**2.4,
 
-  const r = gammaCorrected(rgb.r);
-  const g = gammaCorrected(rgb.g);
-  const b = gammaCorrected(rgb.b);
+   r = gammaCorrected(rgb.r),
+   g = gammaCorrected(rgb.g),
+   b = gammaCorrected(rgb.b);
 
   // WCAG luminance formula
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -169,22 +169,22 @@ function calculateLuminance(rgb: RGB): number {
  * />
  * ```
  */
-const PersonBadge = memo(function PersonBadge(
+const PersonBadge = memo((
   props: PersonBadgeProps
-): React.ReactElement {
+): React.ReactElement => {
   // Extract name and color from either prop pattern
-  const name = props.person?.name ?? props.name ?? '';
-  const color = props.person?.color ?? props.color ?? FALLBACK_COLOR;
-  const { size = 'default', onClick, className } = props;
+  const name = props.person?.name ?? props.name ?? '',
+   color = props.person?.color ?? props.color ?? FALLBACK_COLOR,
+   { size = 'default', onClick, className } = props,
 
   // Calculate contrast text color based on background
   // Validate color and calculate text color in a single computation (DRY)
-  const { validatedColor, textColor } = useMemo(() => {
+   { validatedColor, textColor } = useMemo(() => {
     const rgb = parseHexColor(color);
     if (!rgb) {
       // Invalid color - use fallback with appropriate text color
-      const fallbackRgb = parseHexColor(FALLBACK_COLOR);
-      const fallbackLuminance = fallbackRgb ? calculateLuminance(fallbackRgb) : 0.5;
+      const fallbackRgb = parseHexColor(FALLBACK_COLOR),
+       fallbackLuminance = fallbackRgb ? calculateLuminance(fallbackRgb) : 0.5;
       return {
         validatedColor: FALLBACK_COLOR,
         textColor: fallbackLuminance > LUMINANCE_THRESHOLD ? '#000000' : '#FFFFFF',
@@ -195,13 +195,13 @@ const PersonBadge = memo(function PersonBadge(
       validatedColor: color,
       textColor: luminance > LUMINANCE_THRESHOLD ? '#000000' : '#FFFFFF',
     };
-  }, [color]);
+  }, [color]),
 
   // Determine if the badge is interactive
-  const isInteractive = onClick !== undefined;
+   isInteractive = onClick !== undefined,
 
   // Handle keyboard events for interactive badges
-  const handleKeyDown = useCallback(
+   handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLSpanElement>) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -209,22 +209,22 @@ const PersonBadge = memo(function PersonBadge(
       }
     },
     [onClick]
-  );
+  ),
 
   // Handle click events
-  const handleClick = useCallback(
+   handleClick = useCallback(
     (event: MouseEvent<HTMLSpanElement>) => {
       event.stopPropagation();
       onClick?.();
     },
     [onClick]
-  );
+  ),
 
   // Size-specific classes
-  const sizeClasses = size === 'sm' ? 'text-xs px-1.5 py-0' : 'text-sm px-2.5 py-0.5';
+   sizeClasses = size === 'sm' ? 'text-xs px-1.5 py-0' : 'text-sm px-2.5 py-0.5',
 
   // Interactive-specific classes
-  const interactiveClasses = isInteractive
+   interactiveClasses = isInteractive
     ? 'cursor-pointer hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
     : '';
 

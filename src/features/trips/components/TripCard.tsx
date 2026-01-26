@@ -6,29 +6,29 @@
  */
 
 import {
+  type KeyboardEvent,
+  type MouseEvent,
   memo,
   useCallback,
   useMemo,
-  type KeyboardEvent,
-  type MouseEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { format, parseISO, type Locale } from 'date-fns';
-import { fr, enUS } from 'date-fns/locale';
-import { MoreHorizontal, MapPin, Calendar, Pencil, Trash2 } from 'lucide-react';
+import { type Locale, format, parseISO } from 'date-fns';
+import { enUS, fr } from 'date-fns/locale';
+import { Calendar, MapPin, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 import {
   Card,
+  CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
-  CardDescription,
-  CardContent,
 } from '@/components/ui/card';
 import {
   DropdownMenu,
-  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -78,8 +78,8 @@ export function formatDateRange(
   locale: Locale,
 ): string {
   try {
-    const start = parseISO(startDate);
-    const end = parseISO(endDate);
+    const start = parseISO(startDate),
+     end = parseISO(endDate);
 
     // Validate parsed dates (parseISO returns Invalid Date, doesn't throw)
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
@@ -151,33 +151,33 @@ interface TripCardProps {
  * />
  * ```
  */
-const TripCard = memo(function TripCard({
+const TripCard = memo(({
   trip,
   onClick,
   onEdit,
   onDelete,
   isDisabled = false,
-}: TripCardProps) {
-  const { t, i18n } = useTranslation();
+}: TripCardProps) => {
+  const { t, i18n } = useTranslation(),
 
   // Get locale based on current language
-  const locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+   locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
 
   // Format the date range
-  const dateRange = useMemo(
+   dateRange = useMemo(
     () => formatDateRange(trip.startDate, trip.endDate, locale),
     [trip.startDate, trip.endDate, locale],
-  );
+  ),
 
   // Build aria-label for screen readers
-  const ariaLabel = useMemo(() => {
+   ariaLabel = useMemo(() => {
     const parts = [trip.name];
     if (trip.location) {
       parts.push(trip.location);
     }
     parts.push(dateRange);
     return parts.join(', ');
-  }, [trip.name, trip.location, dateRange]);
+  }, [trip.name, trip.location, dateRange]),
 
   // ============================================================================
   // Event Handlers
@@ -186,17 +186,17 @@ const TripCard = memo(function TripCard({
   /**
    * Handles card click - triggers onClick if not disabled.
    */
-  const handleCardClick = useCallback(() => {
-    if (isDisabled) return;
+   handleCardClick = useCallback(() => {
+    if (isDisabled) {return;}
     onClick();
-  }, [onClick, isDisabled]);
+  }, [onClick, isDisabled]),
 
   /**
    * Handles keyboard activation (Enter or Space) on the card.
    */
-  const handleCardKeyDown = useCallback(
+   handleCardKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (isDisabled) return;
+      if (isDisabled) {return;}
 
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -204,26 +204,26 @@ const TripCard = memo(function TripCard({
       }
     },
     [onClick, isDisabled],
-  );
+  ),
 
   /**
    * Stops event propagation to prevent card click when interacting with menu.
    */
-  const handleMenuTriggerClick = useCallback((e: MouseEvent) => {
+   handleMenuTriggerClick = useCallback((e: MouseEvent) => {
     e.stopPropagation();
-  }, []);
+  }, []),
 
   /**
    * Handles Edit menu item click.
    */
-  const handleEditClick = useCallback(() => {
+   handleEditClick = useCallback(() => {
     onEdit();
-  }, [onEdit]);
+  }, [onEdit]),
 
   /**
    * Handles Delete menu item click.
    */
-  const handleDeleteClick = useCallback(() => {
+   handleDeleteClick = useCallback(() => {
     onDelete();
   }, [onDelete]);
 

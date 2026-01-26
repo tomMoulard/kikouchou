@@ -75,33 +75,31 @@ export interface RoomDialogProps {
  * />
  * ```
  */
-const RoomDialog = memo(function RoomDialog({
+const RoomDialog = memo(({
   roomId,
   open,
   onOpenChange,
-}: RoomDialogProps) {
-  const { t } = useTranslation();
-  const { rooms, createRoom, updateRoom } = useRoomContext();
+}: RoomDialogProps) => {
+  const { t } = useTranslation(),
+   { rooms, createRoom, updateRoom } = useRoomContext(),
 
   // Track mounted state to prevent state updates after unmount
-  const isMountedRef = useRef(true);
+   isMountedRef = useRef(true),
 
   // Synchronous guard for double-submission prevention
-  const isSubmittingRef = useRef(false);
+   isSubmittingRef = useRef(false),
 
   // Submission loading state for UI
-  const [isSubmitting, setIsSubmitting] = useState(false);
+   [isSubmitting, setIsSubmitting] = useState(false);
 
   // ============================================================================
   // Lifecycle Effects
   // ============================================================================
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
-    };
-  }, []);
+    }, []);
 
   // Reset submission state when dialog closes
   useEffect(() => {
@@ -117,28 +115,28 @@ const RoomDialog = memo(function RoomDialog({
   /**
    * Determines if the dialog is in edit mode.
    */
-  const isEditMode = Boolean(roomId);
+  const isEditMode = Boolean(roomId),
 
   /**
    * Find the room from context for edit mode.
    * Returns undefined if roomId is not provided or room not found.
    */
-  const room = useMemo((): Room | undefined => {
-    if (!roomId) return undefined;
+   room = useMemo((): Room | undefined => {
+    if (!roomId) {return undefined;}
     return rooms.find((r) => r.id === roomId);
-  }, [roomId, rooms]);
+  }, [roomId, rooms]),
 
   /**
    * Dialog title based on mode.
    */
-  const dialogTitle = isEditMode ? t('rooms.edit') : t('rooms.new');
+   dialogTitle = isEditMode ? t('rooms.edit') : t('rooms.new'),
 
   /**
    * Dialog description for accessibility.
    */
-  const dialogDescription = isEditMode
+   dialogDescription = isEditMode
     ? t('rooms.editDescription', 'Modify the room details below.')
-    : t('rooms.newDescription', 'Fill in the details to create a new room.');
+    : t('rooms.newDescription', 'Fill in the details to create a new room.'),
 
   // ============================================================================
   // Event Handlers
@@ -148,10 +146,10 @@ const RoomDialog = memo(function RoomDialog({
    * Handles form submission.
    * Creates or updates the room based on mode, shows toast, and closes dialog on success.
    */
-  const handleSubmit = useCallback(
+   handleSubmit = useCallback(
     async (data: RoomFormData) => {
       // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) return;
+      if (isSubmittingRef.current) {return;}
 
       isSubmittingRef.current = true;
       setIsSubmitting(true);
@@ -185,26 +183,26 @@ const RoomDialog = memo(function RoomDialog({
       }
     },
     [isEditMode, roomId, updateRoom, createRoom, t, onOpenChange],
-  );
+  ),
 
   /**
    * Handles form cancel action.
    * Closes the dialog if not currently submitting.
    */
-  const handleCancel = useCallback(() => {
+   handleCancel = useCallback(() => {
     if (!isSubmitting) {
       onOpenChange(false);
     }
-  }, [isSubmitting, onOpenChange]);
+  }, [isSubmitting, onOpenChange]),
 
   /**
    * Handles dialog open state change.
    * Prevents closing during submission.
    */
-  const handleOpenChange = useCallback(
+   handleOpenChange = useCallback(
     (newOpen: boolean) => {
       // Prevent closing while submitting
-      if (!newOpen && isSubmitting) return;
+      if (!newOpen && isSubmitting) {return;}
       onOpenChange(newOpen);
     },
     [isSubmitting, onOpenChange],

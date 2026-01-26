@@ -8,29 +8,29 @@
  */
 
 import {
+  type KeyboardEvent,
+  type MouseEvent,
   memo,
   useCallback,
   useMemo,
   useState,
-  type KeyboardEvent,
-  type MouseEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format, parseISO } from 'date-fns';
-import { fr, enUS } from 'date-fns/locale';
-import { MoreHorizontal, Plane, Pencil, Trash2 } from 'lucide-react';
+import { enUS, fr } from 'date-fns/locale';
+import { MoreHorizontal, Pencil, Plane, Trash2 } from 'lucide-react';
 
 import {
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
-  CardContent,
 } from '@/components/ui/card';
 import {
   DropdownMenu,
-  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -95,7 +95,7 @@ function formatTransportDate(
 ): string {
   try {
     const date = parseISO(datetime);
-    if (isNaN(date.getTime())) return '';
+    if (isNaN(date.getTime())) {return '';}
     return format(date, 'd MMM', { locale });
   } catch {
     return '';
@@ -111,15 +111,15 @@ function formatTransportDate(
  */
 function getInitials(name: string): string {
   const trimmed = name.trim();
-  if (!trimmed) return '?';
+  if (!trimmed) {return '?';}
   
   const words = trimmed.split(/\s+/);
   if (words.length === 1) {
     return words[0]?.charAt(0).toUpperCase() ?? '?';
   }
   
-  const first = words[0]?.charAt(0) ?? '';
-  const last = words[words.length - 1]?.charAt(0) ?? '';
+  const first = words[0]?.charAt(0) ?? '',
+   last = words[words.length - 1]?.charAt(0) ?? '';
   return (first + last).toUpperCase();
 }
 
@@ -154,7 +154,7 @@ function getInitials(name: string): string {
  * />
  * ```
  */
-const PersonCard = memo(function PersonCard({
+const PersonCard = memo(({
   person,
   transportSummary,
   dateLocale,
@@ -162,22 +162,22 @@ const PersonCard = memo(function PersonCard({
   onClick,
   onEdit,
   onDelete,
-}: PersonCardProps) {
-  const { t } = useTranslation();
+}: PersonCardProps) => {
+  const { t } = useTranslation(),
 
   // State for delete confirmation dialog
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+   [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false),
 
   // ============================================================================
   // Derived Values
   // ============================================================================
 
-  const initials = useMemo(() => getInitials(person.name), [person.name]);
+   initials = useMemo(() => getInitials(person.name), [person.name]),
 
-  const hasTransportInfo = transportSummary.arrival || transportSummary.departure;
+   hasTransportInfo = transportSummary.arrival || transportSummary.departure,
 
   // Build aria-label for screen readers
-  const ariaLabel = useMemo(() => {
+   ariaLabel = useMemo(() => {
     const parts = [person.name];
     if (transportSummary.arrival) {
       const arrivalDate = formatTransportDate(transportSummary.arrival.datetime, dateLocale);
@@ -192,10 +192,10 @@ const PersonCard = memo(function PersonCard({
       }
     }
     return parts.join(', ');
-  }, [person.name, transportSummary, dateLocale, t]);
+  }, [person.name, transportSummary, dateLocale, t]),
 
   // Determine if card should be interactive (has onClick handler)
-  const isInteractive = Boolean(onClick) && !isDisabled;
+   isInteractive = Boolean(onClick) && !isDisabled,
 
   // ============================================================================
   // Event Handlers
@@ -204,17 +204,17 @@ const PersonCard = memo(function PersonCard({
   /**
    * Handles card click - triggers onClick if interactive.
    */
-  const handleCardClick = useCallback(() => {
-    if (!isInteractive) return;
+   handleCardClick = useCallback(() => {
+    if (!isInteractive) {return;}
     onClick?.(person);
-  }, [onClick, person, isInteractive]);
+  }, [onClick, person, isInteractive]),
 
   /**
    * Handles keyboard activation (Enter or Space) on the card.
    */
-  const handleCardKeyDown = useCallback(
+   handleCardKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (!isInteractive) return;
+      if (!isInteractive) {return;}
 
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -222,50 +222,50 @@ const PersonCard = memo(function PersonCard({
       }
     },
     [onClick, person, isInteractive],
-  );
+  ),
 
   /**
    * Stops event propagation to prevent card click when interacting with menu.
    */
-  const handleMenuAreaClick = useCallback((e: MouseEvent) => {
+   handleMenuAreaClick = useCallback((e: MouseEvent) => {
     e.stopPropagation();
-  }, []);
+  }, []),
 
   /**
    * Stops keyboard event propagation in menu area.
    */
-  const handleMenuAreaKeyDown = useCallback(
+   handleMenuAreaKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
       e.stopPropagation();
     },
     [],
-  );
+  ),
 
   /**
    * Handles Edit menu item click.
    */
-  const handleEditClick = useCallback(() => {
+   handleEditClick = useCallback(() => {
     onEdit(person);
-  }, [onEdit, person]);
+  }, [onEdit, person]),
 
   /**
    * Opens the delete confirmation dialog.
    */
-  const handleDeleteClick = useCallback(() => {
+   handleDeleteClick = useCallback(() => {
     setIsDeleteDialogOpen(true);
-  }, []);
+  }, []),
 
   /**
    * Handles delete confirmation - calls onDelete callback.
    */
-  const handleConfirmDelete = useCallback(async () => {
+   handleConfirmDelete = useCallback(async () => {
     await onDelete(person);
-  }, [onDelete, person]);
+  }, [onDelete, person]),
 
   /**
    * Handles delete dialog open state change.
    */
-  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+   handleDeleteDialogOpenChange = useCallback((open: boolean) => {
     setIsDeleteDialogOpen(open);
   }, []);
 

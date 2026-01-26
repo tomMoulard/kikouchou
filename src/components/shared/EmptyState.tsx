@@ -81,14 +81,13 @@ interface EmptyStateProps {
  * />
  * ```
  */
-const EmptyState = memo(function EmptyState({
+const EmptyState = memo(({
   icon: Icon,
   title,
   description,
   action,
   className,
-}: EmptyStateProps): React.ReactElement {
-  return (
+}: EmptyStateProps): React.ReactElement => (
     <section
       role="status"
       aria-live="polite"
@@ -126,8 +125,7 @@ const EmptyState = memo(function EmptyState({
         </div>
       )}
     </section>
-  );
-});
+  ));
 
 // ============================================================================
 // Exports

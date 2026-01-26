@@ -6,12 +6,12 @@
  */
 
 import {
+  type ReactElement,
   memo,
   useCallback,
   useEffect,
   useRef,
   useState,
-  type ReactElement,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, X } from 'lucide-react';
@@ -34,12 +34,12 @@ import { cn } from '@/lib/utils';
 /**
  * LocalStorage key for storing dismissal timestamp.
  */
-const STORAGE_KEY = 'kikoushou-install-dismissed';
+const STORAGE_KEY = 'kikoushou-install-dismissed',
 
 /**
  * Duration in milliseconds to hide the prompt after dismissal (7 days).
  */
-const DISMISSAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+ DISMISSAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ============================================================================
 // Type Definitions
@@ -65,15 +65,15 @@ export interface InstallPromptProps {
 function isDismissedRecently(): boolean {
   try {
     const dismissedAt = localStorage.getItem(STORAGE_KEY);
-    if (!dismissedAt) return false;
+    if (!dismissedAt) {return false;}
 
     const timestamp = parseInt(dismissedAt, 10);
-    if (isNaN(timestamp)) return false;
+    if (isNaN(timestamp)) {return false;}
 
     const now = Date.now();
     return now - timestamp < DISMISSAL_DURATION_MS;
   } catch {
-    // localStorage not available (private browsing, etc.)
+    // LocalStorage not available (private browsing, etc.)
     return false;
   }
 }
@@ -85,7 +85,7 @@ function storeDismissal(): void {
   try {
     localStorage.setItem(STORAGE_KEY, Date.now().toString());
   } catch {
-    // localStorage not available - dismissal will only last for session
+    // LocalStorage not available - dismissal will only last for session
   }
 }
 
@@ -123,8 +123,8 @@ function storeDismissal(): void {
 function InstallPromptComponent({
   className,
 }: InstallPromptProps): ReactElement | null {
-  const { t } = useTranslation();
-  const { canInstall, install, isInstalling, isInstalled } = useInstallPrompt();
+  const { t } = useTranslation(),
+   { canInstall, install, isInstalling, isInstalled } = useInstallPrompt(),
 
   // ============================================================================
   // State
@@ -133,14 +133,14 @@ function InstallPromptComponent({
   /**
    * Whether the prompt has been dismissed by the user.
    */
-  const [isDismissed, setIsDismissed] = useState<boolean>(() =>
+   [isDismissed, setIsDismissed] = useState<boolean>(() =>
     isDismissedRecently(),
-  );
+  ),
 
   /**
    * Whether the prompt is visible (for enter/exit animations).
    */
-  const [isVisible, setIsVisible] = useState(false);
+   [isVisible, setIsVisible] = useState(false),
 
   // ============================================================================
   // Refs
@@ -149,7 +149,7 @@ function InstallPromptComponent({
   /**
    * Ref for the dismiss animation timer to ensure proper cleanup.
    */
-  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ============================================================================
   // Effects
@@ -158,13 +158,11 @@ function InstallPromptComponent({
   /**
    * Cleanup dismiss timer on unmount.
    */
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       if (dismissTimerRef.current) {
         clearTimeout(dismissTimerRef.current);
       }
-    };
-  }, []);
+    }, []);
 
   /**
    * Show the prompt with a slight delay for smoother UX.
@@ -208,12 +206,12 @@ function InstallPromptComponent({
     if (!success && !isInstalled) {
       toast.error(t('pwa.installFailed', 'Installation failed. Please try again.'));
     }
-  }, [install, isInstalled, t]);
+  }, [install, isInstalled, t]),
 
   /**
    * Handles the dismiss button click.
    */
-  const handleDismiss = useCallback((): void => {
+   handleDismiss = useCallback((): void => {
     storeDismissal();
     setIsVisible(false);
     // Delay setting dismissed to allow exit animation

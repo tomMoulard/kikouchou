@@ -6,13 +6,13 @@
  */
 
 import {
+  type ReactElement,
   memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ReactElement,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -47,17 +47,17 @@ import { cn } from '@/lib/utils';
 /**
  * Size of the QR code in pixels.
  */
-const QR_CODE_SIZE = 200;
+const COPY_FEEDBACK_DURATION = 2000,
 
 /**
  * Duration to show "copied" feedback in milliseconds.
  */
-const COPY_FEEDBACK_DURATION = 2000;
+ QR_CANVAS_ID = 'share-qr-code-canvas',
 
 /**
  * ID for the QR code canvas element (used for download).
  */
-const QR_CANVAS_ID = 'share-qr-code-canvas';
+ QR_CODE_SIZE = 200;
 
 // ============================================================================
 // Type Definitions
@@ -121,8 +121,8 @@ function downloadQrCode(canvasId: string, filename: string): boolean {
   }
 
   try {
-    const dataUrl = canvas.toDataURL('image/png');
-    const link = document.createElement('a');
+    const dataUrl = canvas.toDataURL('image/png'),
+     link = document.createElement('a');
     link.href = dataUrl;
     link.download = `${filename}.png`;
     document.body.appendChild(link);
@@ -160,35 +160,33 @@ function downloadQrCode(canvasId: string, filename: string): boolean {
  * <ShareDialog open={isOpen} onOpenChange={setIsOpen} />
  * ```
  */
-const ShareDialog = memo(function ShareDialog({
+const ShareDialog = memo(({
   open,
   onOpenChange,
-}: ShareDialogProps): ReactElement {
-  const { t } = useTranslation();
-  const { currentTrip } = useTripContext();
+}: ShareDialogProps): ReactElement => {
+  const { t } = useTranslation(),
+   { currentTrip } = useTripContext(),
 
   // Track mounted state to prevent state updates after unmount
-  const isMountedRef = useRef(true);
+   isMountedRef = useRef(true),
 
   // Track copied state for visual feedback
-  const [isCopied, setIsCopied] = useState(false);
+   [isCopied, setIsCopied] = useState(false),
 
   // Timer ref for cleanup
-  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ============================================================================
   // Lifecycle Effects
   // ============================================================================
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
       if (copyTimeoutRef.current) {
         clearTimeout(copyTimeoutRef.current);
       }
-    };
-  }, []);
+    }, []);
 
   // Reset copied state when dialog closes
   useEffect(() => {
@@ -209,22 +207,22 @@ const ShareDialog = memo(function ShareDialog({
    * Construct the shareable URL from the current trip's shareId.
    */
   const shareUrl = useMemo(() => {
-    if (!currentTrip?.shareId) return '';
+    if (!currentTrip?.shareId) {return '';}
     return constructShareUrl(currentTrip.shareId);
-  }, [currentTrip?.shareId]);
+  }, [currentTrip?.shareId]),
 
   /**
    * Generate a sanitized filename for QR code download.
    */
-  const qrFilename = useMemo(() => {
-    if (!currentTrip?.name) return 'trip-qrcode';
+   qrFilename = useMemo(() => {
+    if (!currentTrip?.name) {return 'trip-qrcode';}
     return `${sanitizeFilename(currentTrip.name)}-qrcode`;
-  }, [currentTrip?.name]);
+  }, [currentTrip?.name]),
 
   /**
    * Check if sharing is available (trip is selected and has shareId).
    */
-  const canShare = Boolean(currentTrip?.shareId && shareUrl);
+   canShare = Boolean(currentTrip?.shareId && shareUrl),
 
   // ============================================================================
   // Event Handlers
@@ -234,8 +232,8 @@ const ShareDialog = memo(function ShareDialog({
    * Sets the copied state and schedules reset after feedback duration.
    * Clears any existing timeout to prevent accumulation.
    */
-  const setCopiedWithTimeout = useCallback(() => {
-    if (!isMountedRef.current) return;
+   setCopiedWithTimeout = useCallback(() => {
+    if (!isMountedRef.current) {return;}
     
     // Clear any existing timeout to prevent accumulation
     if (copyTimeoutRef.current) {
@@ -248,13 +246,13 @@ const ShareDialog = memo(function ShareDialog({
         setIsCopied(false);
       }
     }, COPY_FEEDBACK_DURATION);
-  }, []);
+  }, []),
 
   /**
    * Handles copying the share URL to clipboard.
    */
-  const handleCopy = useCallback(async () => {
-    if (!shareUrl || isCopied) return;
+   handleCopy = useCallback(async () => {
+    if (!shareUrl || isCopied) {return;}
 
     try {
       await navigator.clipboard.writeText(shareUrl);
@@ -279,12 +277,12 @@ const ShareDialog = memo(function ShareDialog({
         toast.error(t('sharing.copyError'));
       }
     }
-  }, [shareUrl, isCopied, setCopiedWithTimeout, t]);
+  }, [shareUrl, isCopied, setCopiedWithTimeout, t]),
 
   /**
    * Handles downloading the QR code as PNG.
    */
-  const handleDownloadQr = useCallback(() => {
+   handleDownloadQr = useCallback(() => {
     const success = downloadQrCode(QR_CANVAS_ID, qrFilename);
     if (success) {
       toast.success(t('sharing.downloadSuccess'));

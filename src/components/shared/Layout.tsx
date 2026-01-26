@@ -5,8 +5,8 @@
  * @module components/shared/Layout
  */
 
-import { memo, useCallback, useMemo, useState, type ReactNode } from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import { type ReactNode, memo, useCallback, useMemo, useState } from 'react';
+import { Link, NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Calendar,
@@ -14,11 +14,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Home,
+  type LucideIcon,
   Luggage,
   Menu,
   Settings,
   Users,
-  type LucideIcon,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -111,13 +111,13 @@ function buildNavPath(item: NavItem, tripId: string | null): string {
  * Header component displaying the app name and current trip.
  * Memoized to prevent unnecessary re-renders on route changes.
  */
-const Header = memo(function Header({
+const Header = memo(({
   tripName,
   onMenuClick,
 }: {
   readonly tripName: string | null;
   readonly onMenuClick?: () => void;
-}): React.ReactElement {
+}): React.ReactElement => {
   const { t } = useTranslation();
 
   return (
@@ -146,14 +146,14 @@ const Header = memo(function Header({
       </span>
     </header>
   );
-});
+}),
 
 /**
  * Mobile bottom navigation bar.
  * Fixed at the bottom of the screen, visible only on mobile.
  * Memoized to prevent unnecessary re-renders on route changes.
  */
-const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElement {
+ MobileNav = memo(({ tripId }: NavProps): React.ReactElement => {
   const { t } = useTranslation();
 
   return (
@@ -163,8 +163,8 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
     >
       <ul className="flex h-16 items-center justify-around">
         {NAV_ITEMS.map((item) => {
-          const path = buildNavPath(item, tripId);
-          const isDisabled = item.requiresTrip && !tripId;
+          const path = buildNavPath(item, tripId),
+           isDisabled = item.requiresTrip && !tripId;
 
           return (
             <li key={item.pathSuffix || 'trips'} className="flex-1">
@@ -198,14 +198,14 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
       </ul>
     </nav>
   );
-});
+}),
 
 /**
  * Desktop sidebar navigation.
  * Collapsible sidebar visible only on desktop.
  * Memoized to prevent unnecessary re-renders on route changes.
  */
-const DesktopSidebar = memo(function DesktopSidebar({
+ DesktopSidebar = memo(({
   isCollapsed,
   onToggle,
   tripId,
@@ -213,7 +213,7 @@ const DesktopSidebar = memo(function DesktopSidebar({
   readonly isCollapsed: boolean;
   readonly onToggle: () => void;
   readonly tripId: string | null;
-}): React.ReactElement {
+}): React.ReactElement => {
   const { t } = useTranslation();
 
   return (
@@ -228,8 +228,8 @@ const DesktopSidebar = memo(function DesktopSidebar({
       <nav className="flex-1 overflow-y-auto py-4">
         <ul className="space-y-1 px-2">
           {NAV_ITEMS.map((item) => {
-            const path = buildNavPath(item, tripId);
-            const isDisabled = item.requiresTrip && !tripId;
+            const path = buildNavPath(item, tripId),
+             isDisabled = item.requiresTrip && !tripId;
 
             return (
               <li key={item.pathSuffix || 'trips'}>
@@ -322,16 +322,16 @@ const DesktopSidebar = memo(function DesktopSidebar({
  * ```
  */
 export function Layout({ children }: LayoutProps): React.ReactElement {
-  const { t } = useTranslation();
-  const { currentTrip } = useTripContext();
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const { t } = useTranslation(),
+   { currentTrip } = useTripContext(),
+   [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false),
 
   // Memoize derived values to prevent unnecessary re-renders
-  const tripName = useMemo(() => currentTrip?.name ?? null, [currentTrip?.name]);
-  const tripId = useMemo(() => currentTrip?.id ?? null, [currentTrip?.id]);
+   tripName = useMemo(() => currentTrip?.name ?? null, [currentTrip?.name]),
+   tripId = useMemo(() => currentTrip?.id ?? null, [currentTrip?.id]),
 
   // Memoize callback to maintain stable reference for DesktopSidebar
-  const toggleSidebar = useCallback(() => {
+   toggleSidebar = useCallback(() => {
     setIsSidebarCollapsed((prev) => !prev);
   }, []);
 

@@ -6,6 +6,8 @@
  */
 
 import {
+  type ReactElement,
+  type ReactNode,
   createContext,
   useCallback,
   useContext,
@@ -13,28 +15,26 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactElement,
-  type ReactNode,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import {
+  checkAssignmentConflict as repositoryCheckAssignmentConflict,
   createAssignment as repositoryCreateAssignment,
+  deleteAssignment as repositoryDeleteAssignment,
   getAssignmentById as repositoryGetAssignmentById,
   updateAssignment as repositoryUpdateAssignment,
-  deleteAssignment as repositoryDeleteAssignment,
-  checkAssignmentConflict as repositoryCheckAssignmentConflict,
 } from '@/lib/db';
 import type {
+  ISODateString,
+  PersonId,
   RoomAssignment,
   RoomAssignmentFormData,
   RoomAssignmentId,
   RoomId,
-  PersonId,
   TripId,
-  ISODateString,
 } from '@/types';
 
 // ============================================================================
@@ -165,8 +165,8 @@ function wrapAndSetError(
  */
 function areAssignmentsEqual(a: RoomAssignment[], b: RoomAssignment[]): boolean {
   // Fast path: same reference means no change
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
+  if (a === b) {return true;}
+  if (a.length !== b.length) {return false;}
   return a.every((assignment, index) => {
     const other = b[index];
     return (
@@ -188,8 +188,8 @@ function buildAssignmentMaps(
   byRoom: Map<RoomId, RoomAssignment[]>;
   byPerson: Map<PersonId, RoomAssignment[]>;
 } {
-  const byRoom = new Map<RoomId, RoomAssignment[]>();
-  const byPerson = new Map<PersonId, RoomAssignment[]>();
+  const byRoom = new Map<RoomId, RoomAssignment[]>(),
+   byPerson = new Map<PersonId, RoomAssignment[]>();
 
   for (const assignment of assignments) {
     // Group by room
@@ -268,34 +268,34 @@ export function AssignmentProvider({
   children,
 }: AssignmentProviderProps): ReactElement {
   // Get current trip from TripContext - extract ID to avoid object reference issues
-  const { currentTrip } = useTripContext();
-  const currentTripId = currentTrip?.id;
+  const { currentTrip } = useTripContext(),
+   currentTripId = currentTrip?.id,
 
   // Error state for CRUD operations
-  const [error, setError] = useState<Error | null>(null);
+   [error, setError] = useState<Error | null>(null),
 
   // Stable array reference to prevent unnecessary re-renders
   // Updated via useEffect to avoid side effects during render
-  const assignmentsRef = useRef<RoomAssignment[]>([]);
+   assignmentsRef = useRef<RoomAssignment[]>([]),
 
   // Map for O(1) assignment lookup by ID
   // Used for fast validation in update/delete operations
-  const assignmentsMapRef = useRef<Map<RoomAssignmentId, RoomAssignment>>(
+   assignmentsMapRef = useRef<Map<RoomAssignmentId, RoomAssignment>>(
     new Map(),
-  );
+  ),
 
   // Maps for O(1) lookup by room and person
   // Updated via useEffect to stay in sync with assignments array
-  const assignmentsByRoomMapRef = useRef<Map<RoomId, RoomAssignment[]>>(
+   assignmentsByRoomMapRef = useRef<Map<RoomId, RoomAssignment[]>>(
     new Map(),
-  );
-  const assignmentsByPersonMapRef = useRef<Map<PersonId, RoomAssignment[]>>(
+  ),
+   assignmentsByPersonMapRef = useRef<Map<PersonId, RoomAssignment[]>>(
     new Map(),
-  );
+  ),
 
   // Live query for assignments, scoped to current trip
   // Re-runs automatically when currentTripId changes or assignments are modified
-  const assignmentsQuery = useLiveQuery(
+   assignmentsQuery = useLiveQuery(
     async () => {
       if (!currentTripId) {
         return [];
@@ -316,14 +316,14 @@ export function AssignmentProvider({
       }
     },
     [currentTripId],
-  );
+  ),
 
   // Determine loading state
   // Loading when query hasn't resolved yet AND a trip is selected
-  const isLoading = currentTripId !== undefined && assignmentsQuery === undefined;
+   isLoading = currentTripId !== undefined && assignmentsQuery === undefined,
 
   // Get raw assignments from query, defaulting to empty array
-  const rawAssignments = assignmentsQuery ?? [];
+   rawAssignments = assignmentsQuery ?? [];
 
   // Clear refs when trip changes to prevent stale cross-trip data
   useEffect(() => {
@@ -352,13 +352,13 @@ export function AssignmentProvider({
   const assignments =
     assignmentsRef.current.length > 0 || rawAssignments.length === 0
       ? assignmentsRef.current
-      : rawAssignments;
+      : rawAssignments,
 
   /**
    * Validates that an assignment exists and belongs to the current trip.
    * Uses in-memory cache first, falls back to DB for authoritative check.
    */
-  const validateAssignmentOwnership = useCallback(
+   validateAssignmentOwnership = useCallback(
     async (
       assignmentId: RoomAssignmentId,
       tripId: TripId,
@@ -387,12 +387,12 @@ export function AssignmentProvider({
       return assignment;
     },
     [],
-  );
+  ),
 
   /**
    * Creates a new room assignment in the current trip.
    */
-  const createAssignment = useCallback(
+   createAssignment = useCallback(
     async (data: RoomAssignmentFormData): Promise<RoomAssignment> => {
       // Capture tripId at invocation time to avoid stale closure
       const tripId = currentTripId;
@@ -410,12 +410,12 @@ export function AssignmentProvider({
       }
     },
     [currentTripId],
-  );
+  ),
 
   /**
    * Updates an existing assignment after validating ownership.
    */
-  const updateAssignment = useCallback(
+   updateAssignment = useCallback(
     async (
       id: RoomAssignmentId,
       data: Partial<RoomAssignmentFormData>,
@@ -436,12 +436,12 @@ export function AssignmentProvider({
       }
     },
     [currentTripId, validateAssignmentOwnership],
-  );
+  ),
 
   /**
    * Deletes an assignment after validating ownership.
    */
-  const deleteAssignment = useCallback(
+   deleteAssignment = useCallback(
     async (id: RoomAssignmentId): Promise<void> => {
       const tripId = currentTripId;
       if (!tripId) {
@@ -459,32 +459,28 @@ export function AssignmentProvider({
       }
     },
     [currentTripId, validateAssignmentOwnership],
-  );
+  ),
 
   /**
    * Synchronously retrieves assignments by room using O(1) Map lookup.
    */
-  const getAssignmentsByRoom = useCallback(
-    (roomId: RoomId): RoomAssignment[] => {
-      return assignmentsByRoomMapRef.current.get(roomId) ?? [];
-    },
+   getAssignmentsByRoom = useCallback(
+    (roomId: RoomId): RoomAssignment[] => assignmentsByRoomMapRef.current.get(roomId) ?? [],
     [],
-  );
+  ),
 
   /**
    * Synchronously retrieves assignments by person using O(1) Map lookup.
    */
-  const getAssignmentsByPerson = useCallback(
-    (personId: PersonId): RoomAssignment[] => {
-      return assignmentsByPersonMapRef.current.get(personId) ?? [];
-    },
+   getAssignmentsByPerson = useCallback(
+    (personId: PersonId): RoomAssignment[] => assignmentsByPersonMapRef.current.get(personId) ?? [],
     [],
-  );
+  ),
 
   /**
    * Checks for conflicting assignments for a person in the given date range.
    */
-  const checkConflict = useCallback(
+   checkConflict = useCallback(
     async (
       personId: PersonId,
       startDate: ISODateString,
@@ -511,10 +507,10 @@ export function AssignmentProvider({
       }
     },
     [currentTripId],
-  );
+  ),
 
   // Memoize context value to prevent unnecessary re-renders in consumers
-  const contextValue = useMemo<AssignmentContextValue>(
+   contextValue = useMemo<AssignmentContextValue>(
     () => ({
       assignments,
       isLoading,

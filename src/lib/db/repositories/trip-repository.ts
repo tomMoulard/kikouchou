@@ -10,9 +10,9 @@
 import Dexie from 'dexie';
 import { db } from '@/lib/db/database';
 import {
-  createTripId,
   createShareId,
   createTimestamps,
+  createTripId,
   updateTimestamp,
 } from '@/lib/db/utils';
 import type { Trip, TripFormData, TripId } from '@/types';

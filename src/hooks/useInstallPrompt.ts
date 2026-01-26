@@ -91,7 +91,7 @@ const STANDALONE_MEDIA_QUERY = '(display-mode: standalone)';
  * @returns True if running as installed PWA
  */
 function isRunningStandalone(): boolean {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') {return false;}
 
   // Check display-mode media query
   if (window.matchMedia(STANDALONE_MEDIA_QUERY).matches) {
@@ -115,7 +115,7 @@ function isRunningStandalone(): boolean {
  * @returns Promise resolving to true if app is found in related apps
  */
 async function checkInstalledRelatedApps(): Promise<boolean> {
-  if (typeof navigator === 'undefined') return false;
+  if (typeof navigator === 'undefined') {return false;}
 
   // Feature detection for getInstalledRelatedApps
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -174,19 +174,19 @@ export function useInstallPrompt(): UseInstallPromptResult {
    * Null until the browser fires beforeinstallprompt.
    */
   const [deferredPrompt, setDeferredPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null);
+    useState<BeforeInstallPromptEvent | null>(null),
 
   /**
    * Whether the app is detected as already installed.
    */
-  const [isInstalled, setIsInstalled] = useState<boolean>(() =>
+   [isInstalled, setIsInstalled] = useState<boolean>(() =>
     isRunningStandalone(),
-  );
+  ),
 
   /**
    * Whether installation is currently in progress.
    */
-  const [isInstalling, setIsInstalling] = useState(false);
+   [isInstalling, setIsInstalling] = useState(false),
 
   // ============================================================================
   // Refs
@@ -196,13 +196,13 @@ export function useInstallPrompt(): UseInstallPromptResult {
    * Tracks whether the component is still mounted.
    * Used to prevent state updates after unmount.
    */
-  const isMountedRef = useRef(true);
+   isMountedRef = useRef(true),
 
   /**
    * Ref to track installing state for the guard check.
    * Using a ref avoids stale closure issues in the install callback.
    */
-  const isInstallingRef = useRef(false);
+   isInstallingRef = useRef(false);
 
   // ============================================================================
   // Effects
@@ -211,18 +211,16 @@ export function useInstallPrompt(): UseInstallPromptResult {
   /**
    * Cleanup effect to track component unmount.
    */
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
-    };
-  }, []);
+    }, []);
 
   /**
    * Set up event listeners and check installation status.
    */
   useEffect(() => {
     // Guard for SSR
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') {return;}
 
     /**
      * Handler for the beforeinstallprompt event.
@@ -293,7 +291,7 @@ export function useInstallPrompt(): UseInstallPromptResult {
    * Whether the app can be installed.
    * True when we have a deferred prompt and the app is not already installed.
    */
-  const canInstall = deferredPrompt !== null && !isInstalled;
+  const canInstall = deferredPrompt !== null && !isInstalled,
 
   // ============================================================================
   // Handlers
@@ -304,7 +302,7 @@ export function useInstallPrompt(): UseInstallPromptResult {
    *
    * @returns Promise resolving to true if installed, false if dismissed or failed
    */
-  const install = useCallback(async (): Promise<boolean> => {
+   install = useCallback(async (): Promise<boolean> => {
     // Guard: No prompt available
     if (!deferredPrompt) {
       console.warn('No install prompt available');

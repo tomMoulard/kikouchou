@@ -5,7 +5,7 @@
  * @module features/settings/pages/SettingsPage
  */
 
-import { memo, useCallback, useState, type ReactElement } from 'react';
+import { type ReactElement, memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Globe, Info, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { db } from '@/lib/db';
-import { changeLanguage, getCurrentLanguage, SUPPORTED_LANGUAGES } from '@/lib/i18n';
+import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage } from '@/lib/i18n';
 
 // ============================================================================
 // Constants
@@ -39,7 +39,7 @@ import { changeLanguage, getCurrentLanguage, SUPPORTED_LANGUAGES } from '@/lib/i
  * Application version from package.json.
  * In a real app, this would be injected at build time.
  */
-const APP_VERSION = '0.1.0';
+const APP_VERSION = '0.1.0',
 
 // ============================================================================
 // Sub-Components
@@ -49,11 +49,11 @@ const APP_VERSION = '0.1.0';
  * Language selector component.
  * Allows switching between supported languages.
  */
-const LanguageSelector = memo(function LanguageSelector(): ReactElement {
-  const { t } = useTranslation();
-  const currentLanguage = getCurrentLanguage();
+ LanguageSelector = memo((): ReactElement => {
+  const { t } = useTranslation(),
+   currentLanguage = getCurrentLanguage(),
 
-  const handleLanguageChange = useCallback((value: string): void => {
+   handleLanguageChange = useCallback((value: string): void => {
     if (value === 'fr' || value === 'en') {
       void changeLanguage(value);
       toast.success(t('settings.languageChanged', 'Language changed'));
@@ -91,13 +91,13 @@ const LanguageSelector = memo(function LanguageSelector(): ReactElement {
       </CardContent>
     </Card>
   );
-});
+}),
 
 /**
  * About section component.
  * Displays app information and version.
  */
-const AboutSection = memo(function AboutSection(): ReactElement {
+ AboutSection = memo((): ReactElement => {
   const { t } = useTranslation();
 
   return (
@@ -128,18 +128,18 @@ const AboutSection = memo(function AboutSection(): ReactElement {
       </CardContent>
     </Card>
   );
-});
+}),
 
 /**
  * Data management section component.
  * Allows clearing all app data.
  */
-const DataSection = memo(function DataSection(): ReactElement {
-  const { t } = useTranslation();
-  const [showClearDialog, setShowClearDialog] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
+ DataSection = memo((): ReactElement => {
+  const { t } = useTranslation(),
+   [showClearDialog, setShowClearDialog] = useState(false),
+   [isClearing, setIsClearing] = useState(false),
 
-  const handleClearData = useCallback(async (): Promise<void> => {
+   handleClearData = useCallback(async (): Promise<void> => {
     setIsClearing(true);
     try {
       // Delete the entire database
@@ -158,9 +158,9 @@ const DataSection = memo(function DataSection(): ReactElement {
     } finally {
       setIsClearing(false);
     }
-  }, [t]);
+  }, [t]),
 
-  const handleOpenChange = useCallback((open: boolean): void => {
+   handleOpenChange = useCallback((open: boolean): void => {
     if (!isClearing) {
       setShowClearDialog(open);
     }

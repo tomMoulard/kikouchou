@@ -16,34 +16,34 @@
  */
 
 import {
+  type KeyboardEvent,
+  type ReactElement,
   memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
-  type ReactElement,
 } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
-import { fr, enUS } from 'date-fns/locale';
+import { enUS, fr } from 'date-fns/locale';
 import {
-  Plus,
-  Plane,
-  Train,
-  Car,
-  Bus,
-  CircleDot,
-  MoreVertical,
-  Edit,
-  Trash2,
   ArrowDownToLine,
   ArrowUpFromLine,
-  MapPin,
+  Bus,
+  Car,
+  CircleDot,
   Clock,
+  Edit,
+  MapPin,
+  MoreVertical,
+  Plane,
+  Plus,
+  Train,
+  Trash2,
   User,
 } from 'lucide-react';
 
@@ -60,14 +60,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Card,
-  CardHeader,
   CardContent,
+  CardHeader,
 } from '@/components/ui/card';
 import {
   Tabs,
+  TabsContent,
   TabsList,
   TabsTrigger,
-  TabsContent,
 } from '@/components/ui/tabs';
 import {
   DropdownMenu,
@@ -77,7 +77,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
-import type { Transport, TransportId, TransportMode, TransportType, Person, PersonId } from '@/types';
+import type { Person, PersonId, Transport, TransportId, TransportMode, TransportType } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -196,7 +196,7 @@ function formatTransportDatetime(
 /**
  * Individual transport card displaying transport details with actions.
  */
-const TransportCard = memo(function TransportCard({
+const TransportCard = memo(({
   transport,
   person,
   driver,
@@ -204,36 +204,36 @@ const TransportCard = memo(function TransportCard({
   onDelete,
   dateLocale,
   isActionsDisabled = false,
-}: TransportCardProps): ReactElement {
-  const { t } = useTranslation();
+}: TransportCardProps): ReactElement => {
+  const { t } = useTranslation(),
 
   // Format datetime for display
-  const { date, time } = useMemo(
+   { date, time } = useMemo(
     () => formatTransportDatetime(transport.datetime, dateLocale),
     [transport.datetime, dateLocale],
-  );
+  ),
 
   // Get transport mode icon
-  const ModeIcon = useMemo(
+   ModeIcon = useMemo(
     () => getTransportModeIcon(transport.transportMode),
     [transport.transportMode],
-  );
+  ),
 
   // Get transport type icon
-  const TypeIcon = transport.type === 'arrival' ? ArrowDownToLine : ArrowUpFromLine;
+   TypeIcon = transport.type === 'arrival' ? ArrowDownToLine : ArrowUpFromLine,
 
   // Handle edit click
-  const handleEdit = useCallback(() => {
+   handleEdit = useCallback(() => {
     onEdit(transport.id);
-  }, [transport.id, onEdit]);
+  }, [transport.id, onEdit]),
 
   // Handle delete click
-  const handleDelete = useCallback(() => {
+   handleDelete = useCallback(() => {
     onDelete(transport.id);
-  }, [transport.id, onDelete]);
+  }, [transport.id, onDelete]),
 
   // Handle keyboard activation for card
-  const handleKeyDown = useCallback(
+   handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -241,10 +241,10 @@ const TransportCard = memo(function TransportCard({
       }
     },
     [handleEdit],
-  );
+  ),
 
   // Build aria-label for accessibility
-  const ariaLabel = useMemo(() => {
+   ariaLabel = useMemo(() => {
     const parts = [
       transport.type === 'arrival' ? t('transports.arrival') : t('transports.departure'),
       person?.name ?? t('common.unknown'),
@@ -389,7 +389,7 @@ TransportCard.displayName = 'TransportCard';
 /**
  * List of transport cards with empty state handling.
  */
-const TransportList = memo(function TransportList({
+const TransportList = memo(({
   transports,
   personsMap,
   onEdit,
@@ -399,7 +399,7 @@ const TransportList = memo(function TransportList({
   emptyTitle,
   emptyDescription,
   isActionsDisabled = false,
-}: TransportListProps): ReactElement {
+}: TransportListProps): ReactElement => {
   // Render empty state if no transports
   if (transports.length === 0) {
     return (
@@ -425,8 +425,8 @@ const TransportList = memo(function TransportList({
       )}
     >
       {transports.map((transport) => {
-        const person = personsMap.get(transport.personId);
-        const driver = transport.driverId
+        const person = personsMap.get(transport.personId),
+         driver = transport.driverId
           ? personsMap.get(transport.driverId)
           : undefined;
 
@@ -464,42 +464,42 @@ TransportList.displayName = 'TransportList';
  * { path: '/trips/:tripId/transports', element: <TransportListPage /> }
  * ```
  */
-const TransportListPage = memo(function TransportListPage(): ReactElement {
-  const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const { tripId: tripIdFromUrl } = useParams<'tripId'>();
+const TransportListPage = memo((): ReactElement => {
+  const { t, i18n } = useTranslation(),
+   navigate = useNavigate(),
+   { tripId: tripIdFromUrl } = useParams<'tripId'>(),
 
   // Context hooks
-  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
-  const { persons, isLoading: isPersonsLoading } = usePersonContext();
-  const {
+   { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
+   { persons, isLoading: isPersonsLoading } = usePersonContext(),
+   {
     arrivals,
     departures,
     isLoading: isTransportsLoading,
     error: transportsError,
     deleteTransport,
-  } = useTransportContext();
+  } = useTransportContext(),
 
   // Local state
-  const [activeTab, setActiveTab] = useState<'arrivals' | 'departures'>('arrivals');
-  const [transportToDelete, setTransportToDelete] = useState<TransportId | null>(null);
+   [activeTab, setActiveTab] = useState<'arrivals' | 'departures'>('arrivals'),
+   [transportToDelete, setTransportToDelete] = useState<TransportId | null>(null),
 
   // Dialog state for create/edit transport
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingTransportId, setEditingTransportId] = useState<TransportId | undefined>(undefined);
-  const [defaultTransportType, setDefaultTransportType] = useState<TransportType>('arrival');
+   [isDialogOpen, setIsDialogOpen] = useState(false),
+   [editingTransportId, setEditingTransportId] = useState<TransportId | undefined>(undefined),
+   [defaultTransportType, setDefaultTransportType] = useState<TransportType>('arrival'),
 
   // Track if we're currently navigating to prevent double-clicks
-  const isNavigatingRef = useRef(false);
+   isNavigatingRef = useRef(false),
 
   // Combined loading state
-  const isLoading = isTripLoading || isPersonsLoading || isTransportsLoading;
+   isLoading = isTripLoading || isPersonsLoading || isTransportsLoading,
 
   // Get date locale based on current language
-  const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+   dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
 
   // Build persons map for O(1) lookups
-  const personsMap = useMemo(() => {
+   personsMap = useMemo(() => {
     const map = new Map<PersonId, Person>();
     for (const person of persons) {
       map.set(person.id, person);
@@ -518,9 +518,9 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
 
   // Validate tripId matches current trip
   const tripMismatch = useMemo(() => {
-    if (!tripIdFromUrl || !currentTrip) return false;
+    if (!tripIdFromUrl || !currentTrip) {return false;}
     return tripIdFromUrl !== currentTrip.id;
-  }, [tripIdFromUrl, currentTrip]);
+  }, [tripIdFromUrl, currentTrip]),
 
   // ============================================================================
   // Event Handlers
@@ -529,28 +529,28 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   /**
    * Handles edit transport click - opens the transport edit dialog.
    */
-  const handleEdit = useCallback(
+   handleEdit = useCallback(
     (transportId: TransportId) => {
-      if (isNavigatingRef.current) return;
+      if (isNavigatingRef.current) {return;}
       setEditingTransportId(transportId);
       setIsDialogOpen(true);
     },
     [],
-  );
+  ),
 
   /**
    * Opens delete confirmation dialog.
    */
-  const handleDeleteClick = useCallback((transportId: TransportId) => {
+   handleDeleteClick = useCallback((transportId: TransportId) => {
     setTransportToDelete(transportId);
-  }, []);
+  }, []),
 
   /**
    * Confirms and executes transport deletion.
    * Note: Loading state is managed by ConfirmDialog internally.
    */
-  const handleConfirmDelete = useCallback(async () => {
-    if (!transportToDelete) return;
+   handleConfirmDelete = useCallback(async () => {
+    if (!transportToDelete) {return;}
 
     try {
       await deleteTransport(transportToDelete);
@@ -562,48 +562,48 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       toast.error(t('errors.deleteFailed', 'Failed to delete'));
       throw error; // Re-throw to keep dialog open for retry
     }
-  }, [transportToDelete, deleteTransport, t]);
+  }, [transportToDelete, deleteTransport, t]),
 
   /**
    * Closes delete confirmation dialog.
    */
-  const handleCancelDelete = useCallback((open: boolean) => {
+   handleCancelDelete = useCallback((open: boolean) => {
     if (!open) {
       setTransportToDelete(null);
     }
-  }, []);
+  }, []),
 
   /**
    * Handles add transport button click - opens the create transport dialog.
    */
-  const handleAddTransport = useCallback(() => {
+   handleAddTransport = useCallback(() => {
     setEditingTransportId(undefined); // Clear editing transport ID for create mode
     setDefaultTransportType(activeTab === 'arrivals' ? 'arrival' : 'departure');
     setIsDialogOpen(true);
-  }, [activeTab]);
+  }, [activeTab]),
 
   /**
    * Handles back navigation.
    */
-  const handleBack = useCallback(() => {
+   handleBack = useCallback(() => {
     navigate(`/trips/${tripIdFromUrl}/calendar`);
-  }, [navigate, tripIdFromUrl]);
+  }, [navigate, tripIdFromUrl]),
 
   /**
    * Handles dialog close - resets editing state.
    */
-  const handleDialogOpenChange = useCallback((open: boolean) => {
+   handleDialogOpenChange = useCallback((open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
       setEditingTransportId(undefined);
     }
-  }, []);
+  }, []),
 
   // ============================================================================
   // Header Action (desktop button)
   // ============================================================================
 
-  const headerAction = useMemo(
+   headerAction = useMemo(
     () => (
       <Button onClick={handleAddTransport} className="hidden sm:flex">
         <Plus className="size-4 mr-2" aria-hidden="true" />

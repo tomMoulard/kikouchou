@@ -77,16 +77,16 @@ const SIZE_CLASSES: Record<LoadingSize, string> = {
   sm: 'size-4',
   md: 'size-6',
   lg: 'size-8',
-} as const;
+} as const,
 
 /**
  * Tailwind classes for text sizes matching spinner sizes.
  */
-const TEXT_SIZE_CLASSES: Record<LoadingSize, string> = {
+ TEXT_SIZE_CLASSES: Record<LoadingSize, string> = {
   sm: 'text-xs',
   md: 'text-sm',
   lg: 'text-base',
-} as const;
+} as const,
 
 // ============================================================================
 // Component
@@ -129,28 +129,28 @@ const TEXT_SIZE_CLASSES: Record<LoadingSize, string> = {
  * />
  * ```
  */
-const LoadingState = memo(function LoadingState({
+ LoadingState = memo(({
   variant = 'inline',
   size = 'md',
   label,
   showLabel,
   className,
-}: LoadingStateProps): React.ReactElement {
-  const { t } = useTranslation();
+}: LoadingStateProps): React.ReactElement => {
+  const { t } = useTranslation(),
 
   // Determine loading text with fallback
-  const loadingText = label ?? t('common.loading', 'Loading...');
+   loadingText = label ?? t('common.loading', 'Loading...'),
 
   // Determine if label should be shown visually
   // Default: show for fullPage, hide for inline
-  const shouldShowLabel = showLabel ?? variant === 'fullPage';
+   shouldShowLabel = showLabel ?? variant === 'fullPage',
 
   // Get size classes for spinner and text
-  const spinnerSizeClass = SIZE_CLASSES[size];
-  const textSizeClass = TEXT_SIZE_CLASSES[size];
+   spinnerSizeClass = SIZE_CLASSES[size],
+   textSizeClass = TEXT_SIZE_CLASSES[size],
 
   // Common spinner element
-  const spinner = (
+   spinner = (
     <Loader2
       className={cn(
         spinnerSizeClass,

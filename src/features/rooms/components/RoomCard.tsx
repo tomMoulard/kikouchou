@@ -7,37 +7,37 @@
  */
 
 import {
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
   memo,
   useCallback,
   useMemo,
   useState,
-  type KeyboardEvent,
-  type MouseEvent,
-  type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MoreHorizontal, BedDouble, Users, Pencil, Trash2, ChevronDown } from 'lucide-react';
+import { BedDouble, ChevronDown, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
 
 import {
   Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
 } from '@/components/ui/card';
 import {
   DropdownMenu,
-  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { cn } from '@/lib/utils';
-import type { Room, Person } from '@/types';
+import type { Person, Room } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -80,8 +80,8 @@ function getOccupancyBadgeVariant(
   occupancyCount: number,
   capacity: number,
 ): 'secondary' | 'default' | 'destructive' {
-  if (occupancyCount === 0) return 'secondary';
-  if (occupancyCount >= capacity) return 'destructive';
+  if (occupancyCount === 0) {return 'secondary';}
+  if (occupancyCount >= capacity) {return 'destructive';}
   return 'default';
 }
 
@@ -115,7 +115,7 @@ function getOccupancyBadgeVariant(
  * />
  * ```
  */
-const RoomCard = memo(function RoomCard({
+const RoomCard = memo(({
   room,
   occupants,
   isDisabled = false,
@@ -124,38 +124,38 @@ const RoomCard = memo(function RoomCard({
   onEdit,
   onDelete,
   expandedContent,
-}: RoomCardProps) {
-  const { t } = useTranslation();
+}: RoomCardProps) => {
+  const { t } = useTranslation(),
 
   // State for delete confirmation dialog
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+   [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false),
 
   // ============================================================================
   // Derived Values
   // ============================================================================
 
-  const occupancyCount = occupants.length;
+   occupancyCount = occupants.length,
 
   // Determine occupancy badge variant (trivial O(1) computation - no memoization needed)
-  const occupancyVariant = getOccupancyBadgeVariant(occupancyCount, room.capacity);
+   occupancyVariant = getOccupancyBadgeVariant(occupancyCount, room.capacity),
 
   // Occupancy status text
-  const occupancyStatusText = occupancyCount === 0
+   occupancyStatusText = occupancyCount === 0
     ? t('rooms.available')
-    : t('rooms.occupied');
+    : t('rooms.occupied'),
 
   // Build aria-label for screen readers
-  const ariaLabel = useMemo(() => {
+   ariaLabel = useMemo(() => {
     const parts = [
       room.name,
       t('rooms.beds', { count: room.capacity }),
       `${occupancyCount}/${room.capacity} ${occupancyStatusText.toLowerCase()}`,
     ];
     return parts.join(', ');
-  }, [room.name, room.capacity, occupancyCount, occupancyStatusText, t]);
+  }, [room.name, room.capacity, occupancyCount, occupancyStatusText, t]),
 
   // Determine if card should be interactive (has onClick handler)
-  const isInteractive = Boolean(onClick) && !isDisabled;
+   isInteractive = Boolean(onClick) && !isDisabled,
 
   // ============================================================================
   // Event Handlers
@@ -164,17 +164,17 @@ const RoomCard = memo(function RoomCard({
   /**
    * Handles card click - triggers onClick if interactive.
    */
-  const handleCardClick = useCallback(() => {
-    if (!isInteractive) return;
+   handleCardClick = useCallback(() => {
+    if (!isInteractive) {return;}
     onClick?.(room);
-  }, [onClick, room, isInteractive]);
+  }, [onClick, room, isInteractive]),
 
   /**
    * Handles keyboard activation (Enter or Space) on the card.
    */
-  const handleCardKeyDown = useCallback(
+   handleCardKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (!isInteractive) return;
+      if (!isInteractive) {return;}
 
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -182,50 +182,50 @@ const RoomCard = memo(function RoomCard({
       }
     },
     [onClick, room, isInteractive],
-  );
+  ),
 
   /**
    * Stops event propagation to prevent card click when interacting with menu.
    */
-  const handleMenuAreaClick = useCallback((e: MouseEvent) => {
+   handleMenuAreaClick = useCallback((e: MouseEvent) => {
     e.stopPropagation();
-  }, []);
+  }, []),
 
   /**
    * Stops keyboard event propagation in menu area.
    */
-  const handleMenuAreaKeyDown = useCallback(
+   handleMenuAreaKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
       e.stopPropagation();
     },
     [],
-  );
+  ),
 
   /**
    * Handles Edit menu item click.
    */
-  const handleEditClick = useCallback(() => {
+   handleEditClick = useCallback(() => {
     onEdit(room);
-  }, [onEdit, room]);
+  }, [onEdit, room]),
 
   /**
    * Opens the delete confirmation dialog.
    */
-  const handleDeleteClick = useCallback(() => {
+   handleDeleteClick = useCallback(() => {
     setIsDeleteDialogOpen(true);
-  }, []);
+  }, []),
 
   /**
    * Handles delete confirmation - calls onDelete callback.
    */
-  const handleConfirmDelete = useCallback(async () => {
+   handleConfirmDelete = useCallback(async () => {
     await onDelete(room);
-  }, [onDelete, room]);
+  }, [onDelete, room]),
 
   /**
    * Handles delete dialog open state change.
    */
-  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+   handleDeleteDialogOpenChange = useCallback((open: boolean) => {
     setIsDeleteDialogOpen(open);
   }, []);
 

@@ -10,16 +10,16 @@
 
 import { nanoid } from 'nanoid';
 import type {
-  TripId,
-  RoomId,
-  PersonId,
-  RoomAssignmentId,
-  TransportId,
-  ShareId,
-  UnixTimestamp,
+  HexColor,
   ISODateString,
   ISODateTimeString,
-  HexColor,
+  PersonId,
+  RoomAssignmentId,
+  RoomId,
+  ShareId,
+  TransportId,
+  TripId,
+  UnixTimestamp,
 } from '@/types';
 
 // ============================================================================
@@ -142,9 +142,9 @@ export const toISODateString = (date: Date): ISODateString => {
     throw new Error('Invalid Date passed to toISODateString');
   }
   // Use UTC methods for consistency with parseISODateString
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
+  const year = date.getUTCFullYear(),
+   month = String(date.getUTCMonth() + 1).padStart(2, '0'),
+   day = String(date.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}` as ISODateString;
 };
 
@@ -172,20 +172,20 @@ export const toISODateTimeString = (date: Date): ISODateTimeString => {
  * Regex pattern for validating ISO date strings (YYYY-MM-DD).
  * Validates format only - does not verify date validity (e.g., Feb 30).
  */
-const ISO_DATE_REGEX = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
+const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/,
 
 /**
  * Regex pattern for validating ISO datetime strings.
  * Accepts full ISO 8601 format with optional milliseconds and timezone.
  */
-const ISO_DATETIME_REGEX =
-  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/;
+ ISO_DATETIME_REGEX =
+  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/,
 
 /**
  * Regex pattern for validating 6-digit hex color codes.
  * Accepts format #RRGGBB (case-insensitive).
  */
-const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
+ ISO_DATE_REGEX = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
 
 // ============================================================================
 // Parsing Functions
@@ -210,16 +210,16 @@ export const parseISODateString = (str: string): Date | null => {
   }
 
   // Parse as UTC midnight
-  const parsed = new Date(str + 'T00:00:00.000Z');
+  const parsed = new Date(`${str  }T00:00:00.000Z`);
   if (isNaN(parsed.getTime())) {
     return null;
   }
 
   // Verify date components match (catches invalid dates like Feb 30)
   // Use direct parsing to avoid array allocation
-  const year = parseInt(str.slice(0, 4), 10);
-  const month = parseInt(str.slice(5, 7), 10);
-  const day = parseInt(str.slice(8, 10), 10);
+  const year = parseInt(str.slice(0, 4), 10),
+   month = parseInt(str.slice(5, 7), 10),
+   day = parseInt(str.slice(8, 10), 10);
 
   if (
     parsed.getUTCFullYear() !== year ||

@@ -6,12 +6,12 @@
  */
 
 import {
+  type ReactElement,
   memo,
   useCallback,
   useEffect,
   useRef,
   useState,
-  type ReactElement,
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -26,7 +26,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TripForm } from '@/features/trips/components/TripForm';
 
-import { getTripById, updateTrip, deleteTrip } from '@/lib/db';
+import { deleteTrip, getTripById, updateTrip } from '@/lib/db';
 import type { Trip, TripFormData, TripId } from '@/types';
 
 // ============================================================================
@@ -53,18 +53,18 @@ import type { Trip, TripFormData, TripId } from '@/types';
  * ```
  */
 function TripEditPageComponent(): ReactElement {
-  const navigate = useNavigate();
-  const { t } = useTranslation();
-  const { tripId } = useParams<{ tripId: string }>();
+  const navigate = useNavigate(),
+   { t } = useTranslation(),
+   { tripId } = useParams<{ tripId: string }>(),
 
   // ============================================================================
   // State
   // ============================================================================
 
-  const [trip, setTrip] = useState<Trip | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<Error | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+   [trip, setTrip] = useState<Trip | null>(null),
+   [isLoading, setIsLoading] = useState(true),
+   [loadError, setLoadError] = useState<Error | null>(null),
+   [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false),
 
   // ============================================================================
   // Refs for Async Operation Safety
@@ -74,17 +74,17 @@ function TripEditPageComponent(): ReactElement {
    * Tracks whether the component is still mounted.
    * Used to prevent state updates and navigation after unmount.
    */
-  const isMountedRef = useRef(true);
+   isMountedRef = useRef(true),
 
   /**
    * Guards against double-submission during update operations.
    */
-  const isSubmittingRef = useRef(false);
+   isSubmittingRef = useRef(false),
 
   /**
    * Guards against double-click during delete operations.
    */
-  const isDeletingRef = useRef(false);
+   isDeletingRef = useRef(false);
 
   // ============================================================================
   // Effects
@@ -93,11 +93,9 @@ function TripEditPageComponent(): ReactElement {
   /**
    * Cleanup effect to track component unmount.
    */
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
-    };
-  }, []);
+    }, []);
 
   /**
    * Load trip data when tripId changes.
@@ -203,20 +201,20 @@ function TripEditPageComponent(): ReactElement {
       }
     },
     [navigate, t, tripId],
-  );
+  ),
 
   /**
    * Handles cancel action by navigating back to trips list.
    */
-  const handleCancel = useCallback(() => {
+   handleCancel = useCallback(() => {
     navigate('/trips');
-  }, [navigate]);
+  }, [navigate]),
 
   /**
    * Handles trip deletion with confirmation.
    * Called by ConfirmDialog on confirm.
    */
-  const handleDelete = useCallback(async (): Promise<void> => {
+   handleDelete = useCallback(async (): Promise<void> => {
     // Prevent double-click during deletion
     if (isDeletingRef.current || !tripId) {
       return;
@@ -253,26 +251,26 @@ function TripEditPageComponent(): ReactElement {
     } finally {
       isDeletingRef.current = false;
     }
-  }, [navigate, t, tripId]);
+  }, [navigate, t, tripId]),
 
   /**
    * Handles opening the delete confirmation dialog.
    */
-  const handleOpenDeleteDialog = useCallback(() => {
+   handleOpenDeleteDialog = useCallback(() => {
     setIsDeleteDialogOpen(true);
-  }, []);
+  }, []),
 
   /**
    * Handles delete dialog open state changes.
    */
-  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+   handleDeleteDialogOpenChange = useCallback((open: boolean) => {
     setIsDeleteDialogOpen(open);
-  }, []);
+  }, []),
 
   /**
    * Handles navigation back to trips list from error state.
    */
-  const handleBackToTrips = useCallback(() => {
+   handleBackToTrips = useCallback(() => {
     navigate('/trips');
   }, [navigate]);
 

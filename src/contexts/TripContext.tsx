@@ -6,22 +6,22 @@
  */
 
 import {
+  type ReactElement,
+  type ReactNode,
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
-  type ReactElement,
-  type ReactNode,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { db } from '@/lib/db/database';
 import {
+  getSettings,
   getTripById,
   setCurrentTrip as repositorySetCurrentTrip,
-  getSettings,
 } from '@/lib/db';
 import type { Trip, TripId } from '@/types';
 
@@ -137,11 +137,11 @@ TripContext.displayName = 'TripContext';
  */
 export function TripProvider({ children }: TripProviderProps): ReactElement {
   // Error state for async operations and query failures
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<Error | null>(null),
 
   // Combined live query for trips and current trip ID
   // Single atomic load prevents timing issues between separate queries
-  const queryResult = useLiveQuery(async (): Promise<TripQueryResult> => {
+   queryResult = useLiveQuery(async (): Promise<TripQueryResult> => {
     try {
       const [trips, settings] = await Promise.all([
         db.trips.orderBy('startDate').reverse().toArray(),
@@ -156,19 +156,19 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
       // Return empty result to prevent crash
       return { trips: [], currentTripId: undefined };
     }
-  }, []);
+  }, []),
 
   // Determine loading state: true if query hasn't resolved yet
-  const isLoading = queryResult === undefined;
+   isLoading = queryResult === undefined,
 
   // Extract trips from query result
-  const trips = queryResult?.trips ?? [];
+   trips = queryResult?.trips ?? [],
 
   // Extract current trip ID from query result
-  const currentTripId = queryResult?.currentTripId;
+   currentTripId = queryResult?.currentTripId,
 
   // Derive current trip from trips array and current trip ID
-  const currentTrip = useMemo((): Trip | null => {
+   currentTrip = useMemo((): Trip | null => {
     if (isLoading || currentTripId === undefined || currentTripId === null) {
       return null;
     }
@@ -230,13 +230,13 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
       }
     },
     [],
-  );
+  ),
 
   /**
    * Verifies database connectivity and clears error state.
    * Useful for error recovery when IndexedDB access has failed.
    */
-  const checkConnection = useCallback(async (): Promise<void> => {
+   checkConnection = useCallback(async (): Promise<void> => {
     setError(null);
 
     try {
@@ -255,10 +255,10 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
       setError(wrappedError);
       throw wrappedError;
     }
-  }, []);
+  }, []),
 
   // Memoize context value to prevent unnecessary re-renders in consumers
-  const contextValue = useMemo<TripContextValue>(
+   contextValue = useMemo<TripContextValue>(
     () => ({
       currentTrip,
       trips,

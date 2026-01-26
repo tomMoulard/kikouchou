@@ -7,28 +7,28 @@
  */
 
 import {
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactElement,
   memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
-  type MouseEvent,
-  type ReactElement,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { format, parseISO, isValid } from 'date-fns';
-import { fr, enUS, type Locale } from 'date-fns/locale';
+import { format, isValid, parseISO } from 'date-fns';
+import { type Locale, enUS, fr } from 'date-fns/locale';
 import {
-  Plus,
-  Calendar,
-  Pencil,
-  Trash2,
   AlertTriangle,
-  Users,
+  Calendar,
   Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+  Users,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -51,20 +51,20 @@ import {
 import { Label } from '@/components/ui/label';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
+import { type DateRange, DateRangePicker } from '@/components/shared/DateRangePicker';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { cn } from '@/lib/utils';
 import type {
+  ISODateString,
+  Person,
+  PersonId,
   RoomAssignment,
   RoomAssignmentFormData,
   RoomAssignmentId,
   RoomId,
-  PersonId,
-  Person,
-  ISODateString,
 } from '@/types';
 
 // ============================================================================
@@ -149,16 +149,16 @@ function formatDateRange(
   endDate: ISODateString,
   locale: Locale,
 ): string {
-  const start = parseISO(startDate);
-  const end = parseISO(endDate);
+  const start = parseISO(startDate),
+   end = parseISO(endDate);
 
   if (!isValid(start) || !isValid(end)) {
     return `${startDate} - ${endDate}`;
   }
 
-  const dateFormat = 'PP'; // Localized date format
-  const startStr = format(start, dateFormat, { locale });
-  const endStr = format(end, dateFormat, { locale });
+  const dateFormat = 'PP', // Localized date format
+   startStr = format(start, dateFormat, { locale }),
+   endStr = format(end, dateFormat, { locale });
 
   // Same day
   if (startDate === endDate) {
@@ -182,7 +182,7 @@ function toISODateString(date: Date): ISODateString {
 /**
  * Displays a single assignment with person badge, date range, and actions.
  */
-const AssignmentItem = memo(function AssignmentItem({
+const AssignmentItem = memo(({
   assignment,
   person,
   hasConflict,
@@ -190,19 +190,19 @@ const AssignmentItem = memo(function AssignmentItem({
   isDisabled,
   onEdit,
   onDelete,
-}: AssignmentItemProps): ReactElement {
-  const { t } = useTranslation();
+}: AssignmentItemProps): ReactElement => {
+  const { t } = useTranslation(),
 
   // Event handlers with propagation control
-  const handleEditClick = useCallback(
+   handleEditClick = useCallback(
     (e: MouseEvent) => {
       e.stopPropagation();
       onEdit(assignment);
     },
     [onEdit, assignment],
-  );
+  ),
 
-  const handleEditKeyDown = useCallback(
+   handleEditKeyDown = useCallback(
     (e: KeyboardEvent<HTMLButtonElement>) => {
       e.stopPropagation();
       if (e.key === 'Enter' || e.key === ' ') {
@@ -211,17 +211,17 @@ const AssignmentItem = memo(function AssignmentItem({
       }
     },
     [onEdit, assignment],
-  );
+  ),
 
-  const handleDeleteClick = useCallback(
+   handleDeleteClick = useCallback(
     (e: MouseEvent) => {
       e.stopPropagation();
       onDelete(assignment);
     },
     [onDelete, assignment],
-  );
+  ),
 
-  const handleDeleteKeyDown = useCallback(
+   handleDeleteKeyDown = useCallback(
     (e: KeyboardEvent<HTMLButtonElement>) => {
       e.stopPropagation();
       if (e.key === 'Enter' || e.key === ' ') {
@@ -230,9 +230,9 @@ const AssignmentItem = memo(function AssignmentItem({
       }
     },
     [onDelete, assignment],
-  );
+  ),
 
-  const formattedDateRange = useMemo(
+   formattedDateRange = useMemo(
     () => formatDateRange(assignment.startDate, assignment.endDate, dateLocale),
     [assignment.startDate, assignment.endDate, dateLocale],
   );
@@ -311,7 +311,7 @@ AssignmentItem.displayName = 'AssignmentItem';
 /**
  * Dialog for creating or editing a room assignment.
  */
-const AssignmentFormDialog = memo(function AssignmentFormDialog({
+const AssignmentFormDialog = memo(({
   open,
   onOpenChange,
   roomId,
@@ -322,23 +322,23 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   onSubmit,
   checkConflict,
   getPersonTransportDates,
-}: AssignmentFormDialogProps): ReactElement {
-  const { t } = useTranslation();
+}: AssignmentFormDialogProps): ReactElement => {
+  const { t } = useTranslation(),
 
   // Form state
-  const [selectedPersonId, setSelectedPersonId] = useState<PersonId | ''>('');
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [conflictError, setConflictError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCheckingConflict, setIsCheckingConflict] = useState(false);
-  const [wasAutoFilled, setWasAutoFilled] = useState(false);
+   [selectedPersonId, setSelectedPersonId] = useState<PersonId | ''>(''),
+   [dateRange, setDateRange] = useState<DateRange | undefined>(undefined),
+   [conflictError, setConflictError] = useState<string | null>(null),
+   [isSubmitting, setIsSubmitting] = useState(false),
+   [isCheckingConflict, setIsCheckingConflict] = useState(false),
+   [wasAutoFilled, setWasAutoFilled] = useState(false),
 
   // Refs for async safety
-  const isMountedRef = useRef(true);
-  const isSubmittingRef = useRef(false);
+   isMountedRef = useRef(true),
+   isSubmittingRef = useRef(false),
 
   // Edit mode detection
-  const isEditMode = Boolean(existingAssignment);
+   isEditMode = Boolean(existingAssignment);
 
   // Initialize/reset form when dialog opens or assignment changes
   useEffect(() => {
@@ -376,8 +376,8 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
       return;
     }
 
-    const startDate = toISODateString(dateRange.from);
-    const endDate = toISODateString(dateRange.to);
+    const startDate = toISODateString(dateRange.from),
+     endDate = toISODateString(dateRange.to);
 
     let cancelled = false;
     setIsCheckingConflict(true);
@@ -411,19 +411,17 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   }, [selectedPersonId, dateRange, checkConflict, existingAssignment?.id, t]);
 
   // Form validation
-  const isFormValid = useMemo(() => {
-    return (
+  const isFormValid = useMemo(() => (
       selectedPersonId !== '' &&
       dateRange?.from !== undefined &&
       dateRange?.to !== undefined &&
       !conflictError
-    );
-  }, [selectedPersonId, dateRange, conflictError]);
+    ), [selectedPersonId, dateRange, conflictError]),
 
   // Handle form submission
-  const handleSubmit = useCallback(async () => {
-    if (isSubmittingRef.current || !isFormValid) return;
-    if (!selectedPersonId || !dateRange?.from || !dateRange?.to) return;
+   handleSubmit = useCallback(async () => {
+    if (isSubmittingRef.current || !isFormValid) {return;}
+    if (!selectedPersonId || !dateRange?.from || !dateRange?.to) {return;}
 
     isSubmittingRef.current = true;
     setIsSubmitting(true);
@@ -449,19 +447,19 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
       }
       isSubmittingRef.current = false;
     }
-  }, [isFormValid, selectedPersonId, dateRange, roomId, onSubmit, onOpenChange]);
+  }, [isFormValid, selectedPersonId, dateRange, roomId, onSubmit, onOpenChange]),
 
   // Prevent closing during submission
-  const handleOpenChange = useCallback(
+   handleOpenChange = useCallback(
     (newOpen: boolean) => {
-      if (isSubmitting && !newOpen) return;
+      if (isSubmitting && !newOpen) {return;}
       onOpenChange(newOpen);
     },
     [isSubmitting, onOpenChange],
-  );
+  ),
 
   // Handle person selection with transport dates autofill
-  const handlePersonChange = useCallback((value: string) => {
+   handlePersonChange = useCallback((value: string) => {
     const personId = value as PersonId | '';
     setSelectedPersonId(personId);
 
@@ -551,7 +549,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
               onChange={(range) => {
                 setDateRange(range);
                 // Clear autofill indicator when user manually changes dates
-                if (wasAutoFilled) setWasAutoFilled(false);
+                if (wasAutoFilled) {setWasAutoFilled(false);}
               }}
               minDate={tripStartDate}
               maxDate={tripEndDate}
@@ -637,38 +635,38 @@ AssignmentFormDialog.displayName = 'AssignmentFormDialog';
  * />
  * ```
  */
-export const RoomAssignmentSection = memo(function RoomAssignmentSection({
+export const RoomAssignmentSection = memo(({
   roomId,
   variant = 'compact',
   className,
   onAssignmentChange,
-}: RoomAssignmentSectionProps): ReactElement {
-  const { t, i18n } = useTranslation();
-  const { currentTrip } = useTripContext();
-  const { persons, isLoading: isPersonsLoading, getPersonById } = usePersonContext();
-  const {
+}: RoomAssignmentSectionProps): ReactElement => {
+  const { t, i18n } = useTranslation(),
+   { currentTrip } = useTripContext(),
+   { persons, isLoading: isPersonsLoading, getPersonById } = usePersonContext(),
+   {
     getAssignmentsByRoom,
     createAssignment,
     updateAssignment,
     deleteAssignment,
     checkConflict,
     isLoading: isAssignmentsLoading,
-  } = useAssignmentContext();
-  const { getTransportsByPerson } = useTransportContext();
+  } = useAssignmentContext(),
+   { getTransportsByPerson } = useTransportContext(),
 
   // Local state
-  const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
-  const [editingAssignment, setEditingAssignment] = useState<RoomAssignment | undefined>(
+   [isFormDialogOpen, setIsFormDialogOpen] = useState(false),
+   [editingAssignment, setEditingAssignment] = useState<RoomAssignment | undefined>(
     undefined,
-  );
-  const [deletingAssignment, setDeletingAssignment] = useState<RoomAssignment | undefined>(
+  ),
+   [deletingAssignment, setDeletingAssignment] = useState<RoomAssignment | undefined>(
     undefined,
-  );
-  const [isOperationPending, setIsOperationPending] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  ),
+   [isOperationPending, setIsOperationPending] = useState(false),
+   [isExpanded, setIsExpanded] = useState(false),
 
   // Refs for async safety
-  const isMountedRef = useRef(true);
+   isMountedRef = useRef(true);
 
   // Mount tracking
   useEffect(() => {
@@ -679,35 +677,35 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
   }, []);
 
   // Get date locale
-  const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+  const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
 
   // Get assignments for this room
-  const assignments = useMemo(
+   assignments = useMemo(
     () => getAssignmentsByRoom(roomId),
     [getAssignmentsByRoom, roomId],
-  );
+  ),
 
   // Get trip date constraints
-  const tripDates = useMemo(() => {
-    if (!currentTrip) return { start: undefined, end: undefined };
+   tripDates = useMemo(() => {
+    if (!currentTrip) {return { start: undefined, end: undefined };}
     return {
       start: parseISO(currentTrip.startDate),
       end: parseISO(currentTrip.endDate),
     };
-  }, [currentTrip]);
+  }, [currentTrip]),
 
   // Get transport dates for a person (for autofill in assignment dialog)
-  const getPersonTransportDates = useCallback(
+   getPersonTransportDates = useCallback(
     (personId: PersonId): PersonTransportDates => {
       const transports = getTransportsByPerson(personId);
       
       // Find earliest arrival and latest departure
-      let arrivalDate: Date | undefined;
-      let departureDate: Date | undefined;
+      let arrivalDate: Date | undefined,
+       departureDate: Date | undefined;
 
       for (const transport of transports) {
         const transportDate = parseISO(transport.datetime);
-        if (!isValid(transportDate)) continue;
+        if (!isValid(transportDate)) {continue;}
 
         if (transport.type === 'arrival') {
           if (!arrivalDate || transportDate < arrivalDate) {
@@ -723,18 +721,18 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
       return { arrivalDate, departureDate };
     },
     [getTransportsByPerson],
-  );
+  ),
 
   // Loading state
-  const isLoading = isPersonsLoading || isAssignmentsLoading;
+   isLoading = isPersonsLoading || isAssignmentsLoading,
 
   // Combined disabled state
-  const isDisabled = isLoading || isOperationPending;
+   isDisabled = isLoading || isOperationPending,
 
   // Limit displayed items in compact mode (can be expanded)
-  const maxVisibleItems = variant === 'compact' && !isExpanded ? 3 : Infinity;
-  const visibleAssignments = assignments.slice(0, maxVisibleItems);
-  const hiddenCount = Math.max(0, assignments.length - maxVisibleItems);
+   maxVisibleItems = variant === 'compact' && !isExpanded ? 3 : Infinity,
+   visibleAssignments = assignments.slice(0, maxVisibleItems),
+   hiddenCount = Math.max(0, assignments.length - maxVisibleItems),
 
   // ============================================================================
   // Event Handlers
@@ -743,39 +741,39 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
   /**
    * Opens the add assignment dialog.
    */
-  const handleAddClick = useCallback((e: MouseEvent) => {
+   handleAddClick = useCallback((e: MouseEvent) => {
     e.stopPropagation();
     setEditingAssignment(undefined);
     setIsFormDialogOpen(true);
-  }, []);
+  }, []),
 
   /**
    * Expands the list to show all assignments (in compact mode).
    */
-  const handleExpandClick = useCallback((e: MouseEvent) => {
+   handleExpandClick = useCallback((e: MouseEvent) => {
     e.stopPropagation();
     setIsExpanded(true);
-  }, []);
+  }, []),
 
   /**
    * Opens the edit dialog for an assignment.
    */
-  const handleEditAssignment = useCallback((assignment: RoomAssignment) => {
+   handleEditAssignment = useCallback((assignment: RoomAssignment) => {
     setEditingAssignment(assignment);
     setIsFormDialogOpen(true);
-  }, []);
+  }, []),
 
   /**
    * Opens the delete confirmation dialog for an assignment.
    */
-  const handleDeleteAssignment = useCallback((assignment: RoomAssignment) => {
+   handleDeleteAssignment = useCallback((assignment: RoomAssignment) => {
     setDeletingAssignment(assignment);
-  }, []);
+  }, []),
 
   /**
    * Handles form submission (create or update).
    */
-  const handleFormSubmit = useCallback(
+   handleFormSubmit = useCallback(
     async (data: RoomAssignmentFormData) => {
       setIsOperationPending(true);
 
@@ -801,14 +799,14 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
       }
     },
     [editingAssignment, updateAssignment, createAssignment, onAssignmentChange, t],
-  );
+  ),
 
   /**
    * Handles delete confirmation.
    * Note: Errors are re-thrown to be handled by ConfirmDialog (keeps dialog open for retry).
    */
-  const handleConfirmDelete = useCallback(async () => {
-    if (!deletingAssignment) return;
+   handleConfirmDelete = useCallback(async () => {
+    if (!deletingAssignment) {return;}
 
     setIsOperationPending(true);
 
@@ -829,21 +827,21 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
         setIsOperationPending(false);
       }
     }
-  }, [deletingAssignment, deleteAssignment, onAssignmentChange, t]);
+  }, [deletingAssignment, deleteAssignment, onAssignmentChange, t]),
 
   /**
    * Closes the delete confirmation dialog.
    */
-  const handleDeleteDialogClose = useCallback((open: boolean) => {
+   handleDeleteDialogClose = useCallback((open: boolean) => {
     if (!open) {
       setDeletingAssignment(undefined);
     }
-  }, []);
+  }, []),
 
   /**
    * Handles form dialog close.
    */
-  const handleFormDialogClose = useCallback((open: boolean) => {
+   handleFormDialogClose = useCallback((open: boolean) => {
     if (!open) {
       setIsFormDialogOpen(false);
       setEditingAssignment(undefined);

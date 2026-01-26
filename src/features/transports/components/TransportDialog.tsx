@@ -80,35 +80,33 @@ export interface TransportDialogProps {
  * />
  * ```
  */
-const TransportDialog = memo(function TransportDialog({
+const TransportDialog = memo(({
   transportId,
   open,
   onOpenChange,
   defaultType,
-}: TransportDialogProps) {
-  const { t } = useTranslation();
-  const { transports, createTransport, updateTransport } = useTransportContext();
-  const { persons } = usePersonContext();
+}: TransportDialogProps) => {
+  const { t } = useTranslation(),
+   { transports, createTransport, updateTransport } = useTransportContext(),
+   { persons } = usePersonContext(),
 
   // Track mounted state to prevent state updates after unmount
-  const isMountedRef = useRef(true);
+   isMountedRef = useRef(true),
 
   // Synchronous guard for double-submission prevention
-  const isSubmittingRef = useRef(false);
+   isSubmittingRef = useRef(false),
 
   // Submission loading state for UI
-  const [isSubmitting, setIsSubmitting] = useState(false);
+   [isSubmitting, setIsSubmitting] = useState(false);
 
   // ============================================================================
   // Lifecycle Effects
   // ============================================================================
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
-    };
-  }, []);
+    }, []);
 
   // Reset submission state when dialog closes
   useEffect(() => {
@@ -125,28 +123,28 @@ const TransportDialog = memo(function TransportDialog({
   /**
    * Determines if the dialog is in edit mode.
    */
-  const isEditMode = Boolean(transportId);
+  const isEditMode = Boolean(transportId),
 
   /**
    * Find the transport from context for edit mode.
    * Returns undefined if transportId is not provided or transport not found.
    */
-  const transport = useMemo((): Transport | undefined => {
-    if (!transportId) return undefined;
+   transport = useMemo((): Transport | undefined => {
+    if (!transportId) {return undefined;}
     return transports.find((t) => t.id === transportId);
-  }, [transportId, transports]);
+  }, [transportId, transports]),
 
   /**
    * Dialog title based on mode.
    */
-  const dialogTitle = isEditMode ? t('transports.edit') : t('transports.new');
+   dialogTitle = isEditMode ? t('transports.edit') : t('transports.new'),
 
   /**
    * Dialog description for accessibility.
    */
-  const dialogDescription = isEditMode
+   dialogDescription = isEditMode
     ? t('transports.editDescription', 'Modify the transport details below.')
-    : t('transports.newDescription', 'Fill in the details to add a new transport.');
+    : t('transports.newDescription', 'Fill in the details to add a new transport.'),
 
   // ============================================================================
   // Event Handlers
@@ -156,10 +154,10 @@ const TransportDialog = memo(function TransportDialog({
    * Handles form submission.
    * Creates or updates the transport based on mode, shows toast, and closes dialog on success.
    */
-  const handleSubmit = useCallback(
+   handleSubmit = useCallback(
     async (data: TransportFormData) => {
       // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) return;
+      if (isSubmittingRef.current) {return;}
 
       isSubmittingRef.current = true;
       setIsSubmitting(true);
@@ -193,26 +191,26 @@ const TransportDialog = memo(function TransportDialog({
       }
     },
     [transportId, updateTransport, createTransport, t, onOpenChange],
-  );
+  ),
 
   /**
    * Handles form cancel action.
    * Closes the dialog if not currently submitting.
    */
-  const handleCancel = useCallback(() => {
+   handleCancel = useCallback(() => {
     if (!isSubmitting) {
       onOpenChange(false);
     }
-  }, [isSubmitting, onOpenChange]);
+  }, [isSubmitting, onOpenChange]),
 
   /**
    * Handles dialog open state change.
    * Prevents closing during submission.
    */
-  const handleOpenChange = useCallback(
+   handleOpenChange = useCallback(
     (newOpen: boolean) => {
       // Prevent closing while submitting
-      if (!newOpen && isSubmitting) return;
+      if (!newOpen && isSubmitting) {return;}
       onOpenChange(newOpen);
     },
     [isSubmitting, onOpenChange],

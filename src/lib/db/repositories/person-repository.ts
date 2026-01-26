@@ -61,8 +61,8 @@ export async function createPersonWithAutoColor(
   tripId: TripId,
   name: string,
 ): Promise<Person> {
-  const existingCount = await db.persons.where('tripId').equals(tripId).count();
-  const color = getDefaultPersonColor(existingCount);
+  const existingCount = await db.persons.where('tripId').equals(tripId).count(),
+   color = getDefaultPersonColor(existingCount);
 
   return createPerson(tripId, { name, color });
 }

@@ -7,13 +7,13 @@
  */
 
 import {
+  type ChangeEvent,
+  type FormEvent,
   memo,
   useCallback,
   useEffect,
   useRef,
   useState,
-  type ChangeEvent,
-  type FormEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -55,12 +55,12 @@ interface FormErrors {
 /**
  * Default capacity for new rooms.
  */
-const DEFAULT_CAPACITY = 1;
+const DEFAULT_CAPACITY = 1,
 
 /**
  * Minimum allowed capacity for a room.
  */
-const MIN_CAPACITY = 1;
+ MIN_CAPACITY = 1,
 
 // ============================================================================
 // Component
@@ -96,43 +96,41 @@ const MIN_CAPACITY = 1;
  * />
  * ```
  */
-const RoomForm = memo(function RoomForm({
+ RoomForm = memo(({
   room,
   onSubmit,
   onCancel,
-}: RoomFormProps) {
-  const { t } = useTranslation();
+}: RoomFormProps) => {
+  const { t } = useTranslation(),
 
   // ============================================================================
   // Form State
   // ============================================================================
 
   // Form field values
-  const [name, setName] = useState(room?.name ?? '');
-  const [capacity, setCapacity] = useState<number>(room?.capacity ?? DEFAULT_CAPACITY);
-  const [description, setDescription] = useState(room?.description ?? '');
+   [name, setName] = useState(room?.name ?? ''),
+   [capacity, setCapacity] = useState<number>(room?.capacity ?? DEFAULT_CAPACITY),
+   [description, setDescription] = useState(room?.description ?? ''),
 
   // Validation errors
-  const [errors, setErrors] = useState<FormErrors>({});
+   [errors, setErrors] = useState<FormErrors>({}),
 
   // Submission state
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+   [isSubmitting, setIsSubmitting] = useState(false),
+   [submitError, setSubmitError] = useState<string | null>(null),
 
   // Refs for preventing race conditions and memory leaks
-  const isSubmittingRef = useRef(false);
-  const isMountedRef = useRef(true);
+   isSubmittingRef = useRef(false),
+   isMountedRef = useRef(true);
 
   // ============================================================================
   // Lifecycle Effects
   // ============================================================================
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
-    };
-  }, []);
+    }, []);
 
   // Sync form state when room prop changes (for edit mode navigation)
   useEffect(() => {
@@ -159,12 +157,12 @@ const RoomForm = memo(function RoomForm({
       return undefined;
     },
     [t],
-  );
+  ),
 
   /**
    * Validates the capacity field.
    */
-  const validateCapacity = useCallback(
+   validateCapacity = useCallback(
     (value: number): string | undefined => {
       if (!Number.isInteger(value) || value < MIN_CAPACITY) {
         return t('validation.capacityMin', { min: MIN_CAPACITY, defaultValue: `Minimum ${MIN_CAPACITY} bed` });
@@ -172,17 +170,17 @@ const RoomForm = memo(function RoomForm({
       return undefined;
     },
     [t],
-  );
+  ),
 
   /**
    * Validates all form fields.
    * Returns true if valid, false otherwise.
    */
-  const validateForm = useCallback((): boolean => {
-    const newErrors: FormErrors = {};
+   validateForm = useCallback((): boolean => {
+    const newErrors: FormErrors = {},
 
     // Validate name
-    const nameError = validateName(name);
+     nameError = validateName(name);
     if (nameError) {
       newErrors.name = nameError;
     }
@@ -195,7 +193,7 @@ const RoomForm = memo(function RoomForm({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [name, capacity, validateName, validateCapacity]);
+  }, [name, capacity, validateName, validateCapacity]),
 
   // ============================================================================
   // Event Handlers
@@ -205,31 +203,31 @@ const RoomForm = memo(function RoomForm({
    * Handles name input change.
    * Uses functional update to avoid dependency on error state.
    */
-  const handleNameChange = useCallback(
+   handleNameChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value;
+      const {value} = e.target;
       setName(value);
       // Clear error when user starts typing (functional update avoids stale closure)
       setErrors((prev) => (prev.name ? { ...prev, name: undefined } : prev));
     },
     [],
-  );
+  ),
 
   /**
    * Handles name input blur for validation.
    */
-  const handleNameBlur = useCallback(() => {
+   handleNameBlur = useCallback(() => {
     const error = validateName(name);
     if (error) {
       setErrors((prev) => ({ ...prev, name: error }));
     }
-  }, [name, validateName]);
+  }, [name, validateName]),
 
   /**
    * Handles capacity input change.
    * Allows user to type freely, validation happens on blur and submit.
    */
-  const handleCapacityChange = useCallback(
+   handleCapacityChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const rawValue = e.target.value;
       
@@ -249,42 +247,42 @@ const RoomForm = memo(function RoomForm({
       setErrors((prev) => (prev.capacity ? { ...prev, capacity: undefined } : prev));
     },
     [],
-  );
+  ),
 
   /**
    * Handles capacity input blur for validation.
    * Ensures value is valid and shows error if not.
    */
-  const handleCapacityBlur = useCallback(() => {
+   handleCapacityBlur = useCallback(() => {
     const error = validateCapacity(capacity);
     if (error) {
       setErrors((prev) => ({ ...prev, capacity: error }));
     }
-  }, [capacity, validateCapacity]);
+  }, [capacity, validateCapacity]),
 
   /**
    * Handles description textarea change.
    */
-  const handleDescriptionChange = useCallback(
+   handleDescriptionChange = useCallback(
     (e: ChangeEvent<HTMLTextAreaElement>) => {
       setDescription(e.target.value);
     },
     [],
-  );
+  ),
 
   /**
    * Handles form submission.
    * Uses refs for synchronous guard (prevents race condition) and unmount safety.
    */
-  const handleSubmit = useCallback(
+   handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
 
       // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) return;
+      if (isSubmittingRef.current) {return;}
 
       // Validate form
-      if (!validateForm()) return;
+      if (!validateForm()) {return;}
 
       isSubmittingRef.current = true;
       setIsSubmitting(true);
@@ -333,7 +331,7 @@ const RoomForm = memo(function RoomForm({
           onChange={handleNameChange}
           onBlur={handleNameBlur}
           placeholder={t('rooms.namePlaceholder')}
-          aria-invalid={!!errors.name}
+          aria-invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? 'room-name-error' : undefined}
           disabled={isSubmitting}
           autoFocus
@@ -362,7 +360,7 @@ const RoomForm = memo(function RoomForm({
           value={capacity}
           onChange={handleCapacityChange}
           onBlur={handleCapacityBlur}
-          aria-invalid={!!errors.capacity}
+          aria-invalid={Boolean(errors.capacity)}
           aria-describedby={errors.capacity ? 'room-capacity-error' : undefined}
           disabled={isSubmitting}
           className={cn(

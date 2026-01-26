@@ -8,13 +8,13 @@
  */
 
 import {
+  type ChangeEvent,
+  type FormEvent,
   memo,
   useCallback,
   useEffect,
   useRef,
   useState,
-  type ChangeEvent,
-  type FormEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -54,7 +54,7 @@ interface FormErrors {
 /**
  * Default color for new persons (first color in palette).
  */
-const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6';
+const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
 
 // ============================================================================
 // Component
@@ -90,42 +90,40 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6';
  * />
  * ```
  */
-const PersonForm = memo(function PersonForm({
+ PersonForm = memo(({
   person,
   onSubmit,
   onCancel,
-}: PersonFormProps) {
-  const { t } = useTranslation();
+}: PersonFormProps) => {
+  const { t } = useTranslation(),
 
   // ============================================================================
   // Form State
   // ============================================================================
 
   // Form field values
-  const [name, setName] = useState(person?.name ?? '');
-  const [color, setColor] = useState(person?.color ?? DEFAULT_COLOR);
+   [name, setName] = useState(person?.name ?? ''),
+   [color, setColor] = useState(person?.color ?? DEFAULT_COLOR),
 
   // Validation errors
-  const [errors, setErrors] = useState<FormErrors>({});
+   [errors, setErrors] = useState<FormErrors>({}),
 
   // Submission state
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+   [isSubmitting, setIsSubmitting] = useState(false),
+   [submitError, setSubmitError] = useState<string | null>(null),
 
   // Refs for preventing race conditions and memory leaks
-  const isSubmittingRef = useRef(false);
-  const isMountedRef = useRef(true);
+   isSubmittingRef = useRef(false),
+   isMountedRef = useRef(true);
 
   // ============================================================================
   // Lifecycle Effects
   // ============================================================================
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
-    };
-  }, []);
+    }, []);
 
   // Sync form state when person prop changes (for edit mode navigation)
   // Only depends on person.id to avoid resetting on every prop reference change
@@ -153,24 +151,24 @@ const PersonForm = memo(function PersonForm({
       return undefined;
     },
     [t],
-  );
+  ),
 
   /**
    * Validates all form fields.
    * Returns true if valid, false otherwise.
    */
-  const validateForm = useCallback((): boolean => {
-    const newErrors: FormErrors = {};
+   validateForm = useCallback((): boolean => {
+    const newErrors: FormErrors = {},
 
     // Validate name
-    const nameError = validateName(name);
+     nameError = validateName(name);
     if (nameError) {
       newErrors.name = nameError;
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [name, validateName]);
+  }, [name, validateName]),
 
   // ============================================================================
   // Event Handlers
@@ -180,46 +178,46 @@ const PersonForm = memo(function PersonForm({
    * Handles name input change.
    * Uses functional update to avoid dependency on error state.
    */
-  const handleNameChange = useCallback(
+   handleNameChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value;
+      const {value} = e.target;
       setName(value);
       // Clear error when user starts typing (functional update avoids stale closure)
       setErrors((prev) => (prev.name ? { ...prev, name: undefined } : prev));
     },
     [],
-  );
+  ),
 
   /**
    * Handles name input blur for validation.
    */
-  const handleNameBlur = useCallback(() => {
+   handleNameBlur = useCallback(() => {
     const error = validateName(name);
     if (error) {
       setErrors((prev) => ({ ...prev, name: error }));
     }
-  }, [name, validateName]);
+  }, [name, validateName]),
 
   /**
    * Handles color selection from ColorPicker.
    */
-  const handleColorChange = useCallback((newColor: string) => {
+   handleColorChange = useCallback((newColor: string) => {
     setColor(newColor);
-  }, []);
+  }, []),
 
   /**
    * Handles form submission.
    * Uses refs for synchronous guard (prevents race condition) and unmount safety.
    */
-  const handleSubmit = useCallback(
+   handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
 
       // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) return;
+      if (isSubmittingRef.current) {return;}
 
       // Validate form
-      if (!validateForm()) return;
+      if (!validateForm()) {return;}
 
       isSubmittingRef.current = true;
       setIsSubmitting(true);
@@ -267,7 +265,7 @@ const PersonForm = memo(function PersonForm({
           onChange={handleNameChange}
           onBlur={handleNameBlur}
           placeholder={t('persons.namePlaceholder')}
-          aria-invalid={!!errors.name}
+          aria-invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? 'person-name-error' : undefined}
           disabled={isSubmitting}
           autoFocus

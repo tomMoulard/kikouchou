@@ -5,12 +5,12 @@
  * @module features/trips/pages/TripListPage
  */
 
-import { memo, useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { type KeyboardEvent, memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { format, parseISO, type Locale } from 'date-fns';
-import { fr, enUS } from 'date-fns/locale';
-import { Plus, Luggage, MapPin, Calendar } from 'lucide-react';
+import { type Locale, format, parseISO } from 'date-fns';
+import { enUS, fr } from 'date-fns/locale';
+import { Calendar, Luggage, MapPin, Plus } from 'lucide-react';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -20,10 +20,10 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { Button } from '@/components/ui/button';
 import {
   Card,
+  CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
-  CardDescription,
-  CardContent,
 } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { Trip } from '@/types';
@@ -42,7 +42,7 @@ interface TripCardProps {
   readonly onSelect: (trip: Trip) => void;
   /** Whether the card interaction is currently disabled */
   readonly isDisabled?: boolean;
-  /** date-fns locale for date formatting */
+  /** Date-fns locale for date formatting */
   readonly locale: Locale;
 }
 
@@ -72,11 +72,11 @@ function formatDateRange(
   locale: Locale,
 ): string {
   try {
-    const start = parseISO(startDate);
-    const end = parseISO(endDate);
+    const start = parseISO(startDate),
+     end = parseISO(endDate),
 
     // Check if dates are in the same month and year
-    const sameMonth =
+     sameMonth =
       start.getMonth() === end.getMonth() &&
       start.getFullYear() === end.getFullYear();
 
@@ -108,21 +108,21 @@ function getDateLocale(lang: string): Locale {
  * Individual trip card component displaying trip information.
  * Supports click and keyboard interaction for accessibility.
  */
-const TripCard = memo(function TripCard({
+const TripCard = memo(({
   trip,
   onSelect,
   isDisabled = false,
   locale,
-}: TripCardProps) {
+}: TripCardProps) => {
   const dateRange = useMemo(
     () => formatDateRange(trip.startDate, trip.endDate, locale),
     [trip.startDate, trip.endDate, locale],
-  );
+  ),
 
   // Handle keyboard activation (Enter or Space)
-  const handleKeyDown = useCallback(
+   handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (isDisabled) return;
+      if (isDisabled) {return;}
 
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -130,11 +130,11 @@ const TripCard = memo(function TripCard({
       }
     },
     [trip, onSelect, isDisabled],
-  );
+  ),
 
   // Handle click
-  const handleClick = useCallback(() => {
-    if (isDisabled) return;
+   handleClick = useCallback(() => {
+    if (isDisabled) {return;}
     onSelect(trip);
   }, [trip, onSelect, isDisabled]);
 
@@ -195,27 +195,27 @@ TripCard.displayName = 'TripCard';
  * { path: '/trips', element: <TripListPage /> }
  * ```
  */
-const TripListPage = memo(function TripListPage() {
-  const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const { trips, isLoading, error, setCurrentTrip, checkConnection } =
-    useTripContext();
+const TripListPage = memo(() => {
+  const { t, i18n } = useTranslation(),
+   navigate = useNavigate(),
+   { trips, isLoading, error, setCurrentTrip, checkConnection } =
+    useTripContext(),
 
   // Track if we're currently navigating to prevent double-clicks
   // Using ref for guard check to avoid stale closure issues
-  const isNavigatingRef = useRef(false);
-  const [isNavigating, setIsNavigating] = useState(false);
+   isNavigatingRef = useRef(false),
+   [isNavigating, setIsNavigating] = useState(false),
 
   // Get locale based on current language, reactive to language changes
-  const locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+   locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
 
   /**
    * Handles trip selection: sets current trip and navigates to calendar.
    */
-  const handleTripSelect = useCallback(
+   handleTripSelect = useCallback(
     async (trip: Trip) => {
       // Use ref for guard to prevent stale closure issues
-      if (isNavigatingRef.current) return;
+      if (isNavigatingRef.current) {return;}
 
       isNavigatingRef.current = true;
       setIsNavigating(true);
@@ -232,28 +232,28 @@ const TripListPage = memo(function TripListPage() {
       }
     },
     [setCurrentTrip, navigate],
-  );
+  ),
 
   /**
    * Handles create button click - navigates to trip creation form.
    */
-  const handleCreateClick = useCallback(() => {
+   handleCreateClick = useCallback(() => {
     navigate('/trips/new');
-  }, [navigate]);
+  }, [navigate]),
 
   /**
    * Handles retry when there's an error.
    */
-  const handleRetry = useCallback(async () => {
+   handleRetry = useCallback(async () => {
     try {
       await checkConnection();
     } catch {
       // Error is captured in context
     }
-  }, [checkConnection]);
+  }, [checkConnection]),
 
   // Create button for header action (desktop)
-  const headerAction = useMemo(
+   headerAction = useMemo(
     () => (
       <Button onClick={handleCreateClick} className="hidden sm:flex">
         <Plus className="size-4 mr-2" aria-hidden="true" />

@@ -6,6 +6,8 @@
  */
 
 import {
+  type ReactElement,
+  type ReactNode,
   createContext,
   useCallback,
   useContext,
@@ -13,8 +15,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactElement,
-  type ReactNode,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
@@ -22,9 +22,9 @@ import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import {
   createPerson as repositoryCreatePerson,
+  deletePerson as repositoryDeletePerson,
   getPersonById as repositoryGetPersonById,
   updatePerson as repositoryUpdatePerson,
-  deletePerson as repositoryDeletePerson,
 } from '@/lib/db';
 import type { Person, PersonFormData, PersonId, TripId } from '@/types';
 
@@ -129,8 +129,8 @@ function wrapAndSetError(
  */
 function arePersonsEqual(a: Person[], b: Person[]): boolean {
   // Fast path: same reference means no change
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
+  if (a === b) {return true;}
+  if (a.length !== b.length) {return false;}
   return a.every((person, index) => {
     const other = b[index];
     return (
@@ -194,23 +194,23 @@ PersonContext.displayName = 'PersonContext';
  */
 export function PersonProvider({ children }: PersonProviderProps): ReactElement {
   // Get current trip from TripContext - extract ID to avoid object reference issues
-  const { currentTrip } = useTripContext();
-  const currentTripId = currentTrip?.id;
+  const { currentTrip } = useTripContext(),
+   currentTripId = currentTrip?.id,
 
   // Error state for CRUD operations
-  const [error, setError] = useState<Error | null>(null);
+   [error, setError] = useState<Error | null>(null),
 
   // Stable array reference to prevent unnecessary re-renders
   // Updated via useEffect to avoid side effects during render
-  const personsRef = useRef<Person[]>([]);
+   personsRef = useRef<Person[]>([]),
 
   // Map for O(1) person lookup by ID
   // Updated via useEffect to stay in sync with persons array
-  const personsMapRef = useRef<Map<PersonId, Person>>(new Map());
+   personsMapRef = useRef<Map<PersonId, Person>>(new Map()),
 
   // Live query for persons, scoped to current trip
   // Re-runs automatically when currentTripId changes or persons are modified
-  const personsQuery = useLiveQuery(
+   personsQuery = useLiveQuery(
     async () => {
       if (!currentTripId) {
         return [];
@@ -231,14 +231,14 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
       }
     },
     [currentTripId],
-  );
+  ),
 
   // Determine loading state
   // Loading when query hasn't resolved yet AND a trip is selected
-  const isLoading = currentTripId !== undefined && personsQuery === undefined;
+   isLoading = currentTripId !== undefined && personsQuery === undefined,
 
   // Get raw persons from query, defaulting to empty array
-  const rawPersons = personsQuery ?? [];
+   rawPersons = personsQuery ?? [];
 
   // Update stable array reference via useEffect (not during render)
   // This prevents mutable state updates during render phase
@@ -255,13 +255,13 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
   const persons =
     personsRef.current.length > 0 || rawPersons.length === 0
       ? personsRef.current
-      : rawPersons;
+      : rawPersons,
 
   /**
    * Validates that a person exists and belongs to the current trip.
    * Uses in-memory lookup first, falls back to DB for authoritative check.
    */
-  const validatePersonOwnership = useCallback(
+   validatePersonOwnership = useCallback(
     async (personId: PersonId, tripId: TripId): Promise<Person> => {
       // Fast path: check in-memory cache first
       const cachedPerson = personsMapRef.current.get(personId);
@@ -287,12 +287,12 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
       return person;
     },
     [],
-  );
+  ),
 
   /**
    * Creates a new person in the current trip.
    */
-  const createPerson = useCallback(
+   createPerson = useCallback(
     async (data: PersonFormData): Promise<Person> => {
       // Capture tripId at invocation time to avoid stale closure
       const tripId = currentTripId;
@@ -312,12 +312,12 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
       }
     },
     [currentTripId, error],
-  );
+  ),
 
   /**
    * Updates an existing person after validating ownership.
    */
-  const updatePerson = useCallback(
+   updatePerson = useCallback(
     async (id: PersonId, data: Partial<PersonFormData>): Promise<void> => {
       const tripId = currentTripId;
       if (!tripId) {
@@ -337,12 +337,12 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
       }
     },
     [currentTripId, error, validatePersonOwnership],
-  );
+  ),
 
   /**
    * Deletes a person after validating ownership.
    */
-  const deletePerson = useCallback(
+   deletePerson = useCallback(
     async (id: PersonId): Promise<void> => {
       const tripId = currentTripId;
       if (!tripId) {
@@ -362,18 +362,16 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
       }
     },
     [currentTripId, error, validatePersonOwnership],
-  );
+  ),
 
   /**
    * Synchronously retrieves a person by ID using O(1) Map lookup.
    * Uses a ref-based Map to maintain a stable function reference.
    */
-  const getPersonById = useCallback((id: PersonId): Person | undefined => {
-    return personsMapRef.current.get(id);
-  }, []);
+   getPersonById = useCallback((id: PersonId): Person | undefined => personsMapRef.current.get(id), []),
 
   // Memoize context value to prevent unnecessary re-renders in consumers
-  const contextValue = useMemo<PersonContextValue>(
+   contextValue = useMemo<PersonContextValue>(
     () => ({
       persons,
       isLoading,

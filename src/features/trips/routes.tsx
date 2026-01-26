@@ -22,7 +22,7 @@
  * ```
  */
 
-import { lazy, Suspense, type ReactElement } from 'react';
+import { type ReactElement, Suspense, lazy } from 'react';
 import type { RouteObject } from 'react-router-dom';
 
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
@@ -40,23 +40,23 @@ const TripListPage = lazy(() =>
   import('./pages/TripListPage').then((module) => ({
     default: module.TripListPage,
   })),
-);
+),
 
 /**
  * Lazy-loaded TripCreatePage component for code splitting.
  * Transforms named export to default export for React.lazy compatibility.
  */
-const TripCreatePage = lazy(() =>
+ TripCreatePage = lazy(() =>
   import('./pages/TripCreatePage').then((module) => ({
     default: module.TripCreatePage,
   })),
-);
+),
 
 /**
  * Lazy-loaded TripEditPage component for code splitting.
  * Transforms named export to default export for React.lazy compatibility.
  */
-const TripEditPage = lazy(() =>
+ TripEditPage = lazy(() =>
   import('./pages/TripEditPage').then((module) => ({
     default: module.TripEditPage,
   })),

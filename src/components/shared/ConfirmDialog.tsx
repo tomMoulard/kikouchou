@@ -6,7 +6,7 @@
  * @module components/shared/ConfirmDialog
  */
 
-import { memo, useState, useEffect, useRef, useCallback } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 
@@ -112,7 +112,7 @@ interface ConfirmDialogProps {
  * />
  * ```
  */
-const ConfirmDialog = memo(function ConfirmDialog({
+const ConfirmDialog = memo(({
   open,
   onOpenChange,
   title,
@@ -122,12 +122,12 @@ const ConfirmDialog = memo(function ConfirmDialog({
   onConfirm,
   variant = 'default',
   className,
-}: ConfirmDialogProps): React.ReactElement {
-  const { t } = useTranslation();
-  const [isLoading, setIsLoading] = useState(false);
+}: ConfirmDialogProps): React.ReactElement => {
+  const { t } = useTranslation(),
+   [isLoading, setIsLoading] = useState(false),
 
   // Track mounted state to prevent state updates after unmount
-  const isMountedRef = useRef(true);
+   isMountedRef = useRef(true);
 
   // Reset loading state when dialog closes externally
   useEffect(() => {
@@ -137,22 +137,20 @@ const ConfirmDialog = memo(function ConfirmDialog({
   }, [open]);
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       isMountedRef.current = false;
-    };
-  }, []);
+    }, []);
 
   // Get button labels with i18n fallbacks
-  const resolvedConfirmLabel = confirmLabel ?? t('common.confirm', 'Confirm');
-  const resolvedCancelLabel = cancelLabel ?? t('common.cancel', 'Cancel');
+  const resolvedConfirmLabel = confirmLabel ?? t('common.confirm', 'Confirm'),
+   resolvedCancelLabel = cancelLabel ?? t('common.cancel', 'Cancel'),
 
   /**
    * Handle the confirm action with loading state management.
    * Closes the dialog on success, keeps it open on error for retry.
    */
-  const handleConfirm = useCallback(async (): Promise<void> => {
-    if (isLoading) return; // Prevent double-click race condition
+   handleConfirm = useCallback(async (): Promise<void> => {
+    if (isLoading) {return;} // Prevent double-click race condition
     setIsLoading(true);
     try {
       await onConfirm();
@@ -169,12 +167,12 @@ const ConfirmDialog = memo(function ConfirmDialog({
         setIsLoading(false);
       }
     }
-  }, [isLoading, onConfirm, onOpenChange]);
+  }, [isLoading, onConfirm, onOpenChange]),
 
   /**
    * Handle open change, preventing close during loading.
    */
-  const handleOpenChange = useCallback(
+   handleOpenChange = useCallback(
     (newOpen: boolean): void => {
       if (!isLoading) {
         onOpenChange(newOpen);

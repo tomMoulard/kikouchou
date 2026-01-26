@@ -30,9 +30,9 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { format, isValid, isAfter, isSameDay } from 'date-fns';
-import { fr, enUS } from 'date-fns/locale';
-import type { DateRange as RdpDateRange, Matcher } from 'react-day-picker';
+import { format, isAfter, isSameDay, isValid } from 'date-fns';
+import { enUS, fr } from 'date-fns/locale';
+import type { Matcher, DateRange as RdpDateRange } from 'react-day-picker';
 import { CalendarIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -112,7 +112,7 @@ function getDateFnsLocale(language: string): typeof fr | typeof enUS {
  */
 type SelectionState = 'idle' | 'selecting' | 'complete';
 
-const DateRangePicker = memo(function DateRangePicker({
+const DateRangePicker = memo(({
   value,
   onChange,
   minDate,
@@ -124,15 +124,15 @@ const DateRangePicker = memo(function DateRangePicker({
   'aria-label': ariaLabel,
   'aria-describedby': ariaDescribedBy,
   id,
-}: DateRangePickerProps): React.ReactElement {
-  const { t, i18n } = useTranslation();
-  const [open, setOpen] = useState(false);
+}: DateRangePickerProps): React.ReactElement => {
+  const { t, i18n } = useTranslation(),
+   [open, setOpen] = useState(false),
 
   // Track selection state for two-click behavior
-  const [selectionState, setSelectionState] = useState<SelectionState>('idle');
+   [selectionState, setSelectionState] = useState<SelectionState>('idle'),
   
   // Track the pending start date during selection
-  const pendingStartRef = useRef<Date | undefined>(undefined);
+   pendingStartRef = useRef<Date | undefined>(undefined);
 
   // Reset selection state when popover closes or value changes externally
   useEffect(() => {
@@ -159,10 +159,10 @@ const DateRangePicker = memo(function DateRangePicker({
   const locale = useMemo(
     () => getDateFnsLocale(i18n.language),
     [i18n.language]
-  );
+  ),
 
   // Build disabled date matchers for react-day-picker
-  const disabledDays = useMemo((): Matcher[] => {
+   disabledDays = useMemo((): Matcher[] => {
     const matchers: Matcher[] = [];
 
     if (minDate && isValidDate(minDate)) {
@@ -188,10 +188,10 @@ const DateRangePicker = memo(function DateRangePicker({
     }
 
     return matchers;
-  }, [minDate, maxDate]);
+  }, [minDate, maxDate]),
 
   // Format the display text based on selected range
-  const displayText = useMemo((): string => {
+   displayText = useMemo((): string => {
     const defaultPlaceholder =
       placeholder ?? t('dateRangePicker.placeholder', 'Select date range');
 
@@ -199,8 +199,8 @@ const DateRangePicker = memo(function DateRangePicker({
       return defaultPlaceholder;
     }
 
-    const dateFormat = 'PP'; // Localized date format (e.g., "Jan 1, 2024" or "1 janv. 2024")
-    const fromStr = format(value.from, dateFormat, { locale });
+    const dateFormat = 'PP', // Localized date format (e.g., "Jan 1, 2024" or "1 janv. 2024")
+     fromStr = format(value.from, dateFormat, { locale });
 
     if (!value.to || !isValidDate(value.to)) {
       // Only start date selected - show that we're waiting for end date
@@ -215,23 +215,23 @@ const DateRangePicker = memo(function DateRangePicker({
     }
 
     return `${fromStr} → ${toStr}`;
-  }, [value, placeholder, locale, t]);
+  }, [value, placeholder, locale, t]),
 
   // Determine if a value is currently selected (for styling)
   // Simple computation - no need for useMemo overhead
-  const hasSelection = value?.from !== undefined && isValidDate(value.from);
+   hasSelection = value?.from !== undefined && isValidDate(value.from),
 
   // Memoize selected value to prevent unnecessary Calendar re-renders
-  const selected = useMemo(
+   selected = useMemo(
     () => (value ? { from: value.from, to: value.to } : undefined),
     [value?.from, value?.to]
-  );
+  ),
 
   // Handle date selection from the calendar with two-click behavior
   // Click 1: Select start date
   // Click 2: Select end date (auto-closes)
   // Click 3: Reset and start new selection
-  const handleSelect = useCallback(
+   handleSelect = useCallback(
     (range: RdpDateRange | undefined) => {
       // If range is undefined or empty, start fresh
       if (!range?.from) {
@@ -254,8 +254,8 @@ const DateRangePicker = memo(function DateRangePicker({
 
       if (selectionState === 'selecting' && pendingStartRef.current) {
         // Second click - complete the range
-        let startDate = pendingStartRef.current;
-        let endDate = clickedDate;
+        let startDate = pendingStartRef.current,
+         endDate = clickedDate;
 
         // Normalize: ensure from <= to
         if (isAfter(startDate, endDate)) {
@@ -285,10 +285,10 @@ const DateRangePicker = memo(function DateRangePicker({
       setSelectionState('selecting');
     },
     [onChange, selectionState]
-  );
+  ),
 
   // Determine the default month to show in the calendar
-  const defaultMonth = useMemo((): Date | undefined => {
+   defaultMonth = useMemo((): Date | undefined => {
     if (value?.from && isValidDate(value.from)) {
       return value.from;
     }
@@ -296,11 +296,11 @@ const DateRangePicker = memo(function DateRangePicker({
       return minDate;
     }
     return undefined;
-  }, [value, minDate]);
+  }, [value, minDate]),
 
   // Accessible label for the trigger button
   // Simple computation - no need for useMemo overhead
-  const accessibleLabel = ariaLabel ?? t('dateRangePicker.ariaLabel', 'Date range picker');
+   accessibleLabel = ariaLabel ?? t('dateRangePicker.ariaLabel', 'Date range picker');
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

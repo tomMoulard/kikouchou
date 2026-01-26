@@ -5,7 +5,7 @@
  * @module components/shared/ErrorDisplay
  */
 
-import { memo, type ReactNode } from 'react';
+import { type ReactNode, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -118,7 +118,7 @@ export interface ErrorDisplayProps {
  * />
  * ```
  */
-export const ErrorDisplay = memo(function ErrorDisplay({
+export const ErrorDisplay = memo(({
   error,
   title,
   onRetry,
@@ -128,10 +128,10 @@ export const ErrorDisplay = memo(function ErrorDisplay({
   children,
   size = 'default',
   showMessage = true,
-}: ErrorDisplayProps) {
-  const { t } = useTranslation();
+}: ErrorDisplayProps) => {
+  const { t } = useTranslation(),
 
-  const isCompact = size === 'compact';
+   isCompact = size === 'compact';
 
   return (
     <div

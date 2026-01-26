@@ -10,10 +10,10 @@
 import { db } from '@/lib/db/database';
 import { createTransportId } from '@/lib/db/utils';
 import type {
+  PersonId,
   Transport,
   TransportFormData,
   TransportId,
-  PersonId,
   TripId,
 } from '@/types';
 
@@ -217,9 +217,9 @@ export async function getUpcomingPickups(
   tripId: TripId,
   fromDatetime?: string,
 ): Promise<Transport[]> {
-  const now = fromDatetime ?? new Date().toISOString();
+  const now = fromDatetime ?? new Date().toISOString(),
 
-  const transports = await db.transports
+   transports = await db.transports
     .where('tripId')
     .equals(tripId)
     .filter((t) => t.needsPickup && t.datetime >= now)

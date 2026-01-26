@@ -22,7 +22,7 @@
  * ```
  */
 
-import { lazy, Suspense, type ReactElement } from 'react';
+import { type ReactElement, Suspense, lazy } from 'react';
 import type { RouteObject } from 'react-router-dom';
 
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';

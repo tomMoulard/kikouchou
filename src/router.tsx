@@ -5,14 +5,14 @@
  * @module router
  */
 
-import { lazy, Suspense, type ReactElement } from 'react';
+import { type ReactElement, Suspense, lazy } from 'react';
 import {
-  createBrowserRouter,
   Navigate,
   Outlet,
-  useRouteError,
-  isRouteErrorResponse,
   type RouteObject,
+  createBrowserRouter,
+  isRouteErrorResponse,
+  useRouteError,
 } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Home, RefreshCw } from 'lucide-react';
@@ -53,13 +53,13 @@ const SettingsPage = lazy(() =>
  * Uses React Router's error handling utilities for type-safe error access.
  */
 function ErrorPage(): ReactElement {
-  const { t } = useTranslation();
-  const error = useRouteError();
+  const { t } = useTranslation(),
+   error = useRouteError();
 
   // Determine error type and message
-  let title = t('errors.generic', 'Something went wrong');
-  let description = t('errors.loadingFailed', 'An unexpected error occurred');
-  let status: number | undefined;
+  let title = t('errors.generic', 'Something went wrong'),
+   description = t('errors.loadingFailed', 'An unexpected error occurred'),
+   status: number | undefined;
 
   if (isRouteErrorResponse(error)) {
     // React Router error response (404, etc.)
@@ -81,9 +81,9 @@ function ErrorPage(): ReactElement {
 
   const handleRetry = (): void => {
     window.location.reload();
-  };
+  },
 
-  const handleGoHome = (): void => {
+   handleGoHome = (): void => {
     window.location.href = '/trips';
   };
 
@@ -163,13 +163,13 @@ const settingsRoute: RouteObject = {
       </Suspense>
     </ErrorBoundary>
   ),
-};
+},
 
 /**
  * Main application routes wrapped with Layout.
  * All these routes have the navigation chrome (header, sidebar, bottom nav).
  */
-const appRoutes: RouteObject = {
+ appRoutes: RouteObject = {
   path: '/',
   element: <LayoutWrapper />,
   errorElement: <ErrorPage />,
@@ -205,13 +205,13 @@ const appRoutes: RouteObject = {
       element: <ErrorPage />,
     },
   ],
-};
+},
 
 /**
  * Public sharing routes - NOT wrapped with Layout.
  * These routes are accessed via shared links and should not show navigation.
  */
-const publicRoutes: RouteObject = {
+ publicRoutes: RouteObject = {
   path: 'share/:shareId',
   element: sharingRoutes[0]?.element,
   errorElement: <ErrorPage />,

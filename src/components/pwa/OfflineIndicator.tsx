@@ -5,9 +5,9 @@
  * @module components/pwa/OfflineIndicator
  */
 
-import { memo, useEffect, useState, type ReactElement } from 'react';
+import { type ReactElement, memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { WifiOff, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, WifiOff } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -59,8 +59,8 @@ export interface OfflineIndicatorProps {
 function OfflineIndicatorComponent({
   className,
 }: OfflineIndicatorProps): ReactElement | null {
-  const { t } = useTranslation();
-  const { isOnline, hasRecentlyChanged } = useOnlineStatus();
+  const { t } = useTranslation(),
+   { isOnline, hasRecentlyChanged } = useOnlineStatus(),
 
   // ============================================================================
   // State
@@ -69,7 +69,7 @@ function OfflineIndicatorComponent({
   /**
    * Whether the indicator is visible (for enter/exit animations).
    */
-  const [isVisible, setIsVisible] = useState(false);
+   [isVisible, setIsVisible] = useState(false);
 
 
 

@@ -10,11 +10,11 @@
 import { db } from '@/lib/db/database';
 import { createRoomAssignmentId } from '@/lib/db/utils';
 import type {
+  PersonId,
   RoomAssignment,
   RoomAssignmentFormData,
   RoomAssignmentId,
   RoomId,
-  PersonId,
   TripId,
 } from '@/types';
 

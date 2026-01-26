@@ -16,20 +16,20 @@
  */
 
 import {
+  type KeyboardEvent,
+  type ReactElement,
   memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
-  type ReactElement,
 } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { format, parseISO } from 'date-fns';
-import { fr, enUS } from 'date-fns/locale';
-import { Plus, Users, Plane } from 'lucide-react';
+import { enUS, fr } from 'date-fns/locale';
+import { Plane, Plus, Users } from 'lucide-react';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
@@ -41,9 +41,9 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { Button } from '@/components/ui/button';
 import {
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
-  CardContent,
 } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
@@ -113,7 +113,7 @@ function formatTransportDate(
 ): string {
   try {
     const date = parseISO(datetime);
-    if (isNaN(date.getTime())) return '';
+    if (isNaN(date.getTime())) {return '';}
     return format(date, 'd MMM', { locale });
   } catch {
     return '';
@@ -127,19 +127,19 @@ function formatTransportDate(
 /**
  * Individual person card displaying name, color, and transport summary.
  */
-const PersonCard = memo(function PersonCard({
+const PersonCard = memo(({
   person,
   transportSummary,
   onClick,
   isDisabled = false,
   dateLocale,
-}: PersonCardProps): ReactElement {
-  const { t } = useTranslation();
+}: PersonCardProps): ReactElement => {
+  const { t } = useTranslation(),
 
   // Handle keyboard activation (Enter or Space)
-  const handleKeyDown = useCallback(
+   handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (isDisabled) return;
+      if (isDisabled) {return;}
 
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
@@ -147,16 +147,16 @@ const PersonCard = memo(function PersonCard({
       }
     },
     [person.id, onClick, isDisabled],
-  );
+  ),
 
   // Handle click
-  const handleClick = useCallback(() => {
-    if (isDisabled) return;
+   handleClick = useCallback(() => {
+    if (isDisabled) {return;}
     onClick(person.id);
-  }, [person.id, onClick, isDisabled]);
+  }, [person.id, onClick, isDisabled]),
 
   // Build aria-label for screen readers
-  const ariaLabel = useMemo(() => {
+   ariaLabel = useMemo(() => {
     const parts = [person.name];
     if (transportSummary.arrival) {
       parts.push(`${t('transports.arrival')}: ${formatTransportDate(transportSummary.arrival.datetime, dateLocale)}`);
@@ -165,9 +165,9 @@ const PersonCard = memo(function PersonCard({
       parts.push(`${t('transports.departure')}: ${formatTransportDate(transportSummary.departure.datetime, dateLocale)}`);
     }
     return parts.join(', ');
-  }, [person.name, transportSummary, dateLocale, t]);
+  }, [person.name, transportSummary, dateLocale, t]),
 
-  const hasTransportInfo = transportSummary.arrival || transportSummary.departure;
+   hasTransportInfo = transportSummary.arrival || transportSummary.departure;
 
   return (
     <Card
@@ -253,29 +253,29 @@ PersonCard.displayName = 'PersonCard';
  * { path: '/trips/:tripId/persons', element: <PersonListPage /> }
  * ```
  */
-const PersonListPage = memo(function PersonListPage(): ReactElement {
-  const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const { tripId: tripIdFromUrl } = useParams<'tripId'>();
+const PersonListPage = memo((): ReactElement => {
+  const { t, i18n } = useTranslation(),
+   navigate = useNavigate(),
+   { tripId: tripIdFromUrl } = useParams<'tripId'>(),
 
   // Context hooks
-  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
-  const { persons, isLoading: isPersonsLoading, error: personsError } = usePersonContext();
-  const { getTransportsByPerson, isLoading: isTransportsLoading } = useTransportContext();
+   { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
+   { persons, isLoading: isPersonsLoading, error: personsError } = usePersonContext(),
+   { getTransportsByPerson, isLoading: isTransportsLoading } = useTransportContext(),
 
   // Track if we're currently navigating to prevent double-clicks
-  const isNavigatingRef = useRef(false);
-  const [isNavigating] = useState(false);
+   isNavigatingRef = useRef(false),
+   [isNavigating] = useState(false),
 
   // Dialog state for create/edit person
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingPersonId, setEditingPersonId] = useState<PersonId | undefined>(undefined);
+   [isDialogOpen, setIsDialogOpen] = useState(false),
+   [editingPersonId, setEditingPersonId] = useState<PersonId | undefined>(undefined),
 
   // Combined loading state (includes transports to avoid "no transport info" flash)
-  const isLoading = isTripLoading || isPersonsLoading || isTransportsLoading;
+   isLoading = isTripLoading || isPersonsLoading || isTransportsLoading,
 
   // Get date locale based on current language
-  const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+   dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -288,19 +288,18 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
 
   // Validate tripId matches current trip
   const tripMismatch = useMemo(() => {
-    if (!tripIdFromUrl || !currentTrip) return false;
+    if (!tripIdFromUrl || !currentTrip) {return false;}
     return tripIdFromUrl !== currentTrip.id;
-  }, [tripIdFromUrl, currentTrip]);
+  }, [tripIdFromUrl, currentTrip]),
 
   // Calculate transport summaries for all persons
   // Uses single-pass O(n) algorithm instead of sort-based O(n log n)
-  const personsWithTransports = useMemo(() => {
-    return persons.map((person) => {
+   personsWithTransports = useMemo(() => persons.map((person) => {
       const transports = getTransportsByPerson(person.id);
 
       // Single-pass algorithm to find earliest arrival and latest departure
-      let earliestArrival: { datetime: string; location: string } | null = null;
-      let latestDeparture: { datetime: string; location: string } | null = null;
+      let earliestArrival: { datetime: string; location: string } | null = null,
+       latestDeparture: { datetime: string; location: string } | null = null;
 
       for (const transport of transports) {
         if (transport.type === 'arrival') {
@@ -311,7 +310,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
             };
           }
         } else {
-          // type === 'departure'
+          // Type === 'departure'
           if (!latestDeparture || transport.datetime > latestDeparture.datetime) {
             latestDeparture = {
               datetime: transport.datetime,
@@ -327,8 +326,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
       };
 
       return { person, transportSummary };
-    });
-  }, [persons, getTransportsByPerson]);
+    }), [persons, getTransportsByPerson]),
 
   // ============================================================================
   // Event Handlers
@@ -337,45 +335,45 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   /**
    * Handles person card click - opens the person edit dialog.
    */
-  const handlePersonClick = useCallback(
+   handlePersonClick = useCallback(
     (personId: PersonId) => {
-      if (isNavigatingRef.current) return;
+      if (isNavigatingRef.current) {return;}
       setEditingPersonId(personId);
       setIsDialogOpen(true);
     },
     [],
-  );
+  ),
 
   /**
    * Handles add person button click - opens the create person dialog.
    */
-  const handleAddPerson = useCallback(() => {
+   handleAddPerson = useCallback(() => {
     setEditingPersonId(undefined); // Clear editing person ID for create mode
     setIsDialogOpen(true);
-  }, []);
+  }, []),
 
   /**
    * Handles back navigation.
    */
-  const handleBack = useCallback(() => {
+   handleBack = useCallback(() => {
     navigate(`/trips/${tripIdFromUrl}/calendar`);
-  }, [navigate, tripIdFromUrl]);
+  }, [navigate, tripIdFromUrl]),
 
   /**
    * Handles dialog close - resets editing state.
    */
-  const handleDialogOpenChange = useCallback((open: boolean) => {
+   handleDialogOpenChange = useCallback((open: boolean) => {
     setIsDialogOpen(open);
     if (!open) {
       setEditingPersonId(undefined);
     }
-  }, []);
+  }, []),
 
   // ============================================================================
   // Header Action (desktop button)
   // ============================================================================
 
-  const headerAction = useMemo(
+   headerAction = useMemo(
     () => (
       <Button onClick={handleAddPerson} className="hidden sm:flex">
         <Plus className="size-4 mr-2" aria-hidden="true" />
