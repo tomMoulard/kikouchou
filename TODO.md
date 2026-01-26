@@ -1095,8 +1095,17 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 **File**: `src/contexts/index.ts` (barrel export)
 
 **Acceptance Criteria**:
-- [ ] All contexts are accessible in the app
-- [ ] Proper provider nesting order is maintained
+- [x] All contexts are accessible in the app
+- [x] Proper provider nesting order is maintained
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/contexts/AppProviders.tsx` with correct nesting order: TripProvider → RoomProvider → PersonProvider → AssignmentProvider → TransportProvider
+- Created `src/contexts/index.ts` barrel export with all providers, contexts, hooks, and type exports
+- Comprehensive JSDoc documentation with usage examples
+- All trip-scoped providers (Room, Person, Assignment, Transport) correctly depend on TripProvider
+- Build passes, TypeScript compilation successful
 
 ---
 
