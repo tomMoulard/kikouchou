@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "prod": "vite --mode production",
+    "validate": "bun run lint && bun run build",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

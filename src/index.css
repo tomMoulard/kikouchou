@@ -121,3 +121,30 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Calendar booked dates indicator */
+.rdp-day-booked {
+  position: relative;
+}
+
+.rdp-day-booked::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--destructive);
+  opacity: 0.7;
+}
+
+/* Ensure the dot is visible even when the day is selected */
+.rdp-day-booked[data-range-start=true]::after,
+.rdp-day-booked[data-range-end=true]::after,
+.rdp-day-booked[data-range-middle=true]::after,
+.rdp-day-booked[data-selected-single=true]::after {
+  background-color: var(--primary-foreground);
+  opacity: 0.8;
+}

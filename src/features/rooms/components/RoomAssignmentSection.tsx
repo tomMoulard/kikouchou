@@ -128,6 +128,8 @@ interface AssignmentFormDialogProps {
   ) => Promise<boolean>;
   /** Function to get transport dates for a person (for autofill) */
   readonly getPersonTransportDates?: (personId: PersonId) => PersonTransportDates;
+  /** Existing assignments for this room (to show as booked in calendar) */
+  readonly existingAssignments?: readonly RoomAssignment[];
 }
 
 // ============================================================================
@@ -322,6 +324,7 @@ const AssignmentFormDialog = memo(({
   onSubmit,
   checkConflict,
   getPersonTransportDates,
+  existingAssignments,
 }: AssignmentFormDialogProps): ReactElement => {
   const { t } = useTranslation(),
 
@@ -482,6 +485,21 @@ const AssignmentFormDialog = memo(({
     }
   }, [isEditMode, dateRange, getPersonTransportDates]);
 
+  // Compute booked ranges for the calendar visualization
+  // Exclude the current assignment being edited (if any)
+  const bookedRanges = useMemo(() => {
+    if (!existingAssignments || existingAssignments.length === 0) {
+      return undefined;
+    }
+
+    return existingAssignments
+      .filter((a) => a.id !== existingAssignment?.id) // Exclude the one being edited
+      .map((a) => ({
+        from: parseISO(a.startDate),
+        to: parseISO(a.endDate),
+      }));
+  }, [existingAssignments, existingAssignment?.id]);
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
@@ -555,6 +573,7 @@ const AssignmentFormDialog = memo(({
               maxDate={tripEndDate}
               disabled={isSubmitting}
               aria-label={t('assignments.period')}
+              bookedRanges={bookedRanges}
             />
             {/* Hint about check-in/check-out model */}
             <p className="text-xs text-muted-foreground">
@@ -952,6 +971,7 @@ export const RoomAssignmentSection = memo(({
         onSubmit={handleFormSubmit}
         checkConflict={checkConflict}
         getPersonTransportDates={getPersonTransportDates}
+        existingAssignments={assignments}
       />
 
       {/* Delete Confirmation Dialog */}

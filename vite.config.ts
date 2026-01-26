@@ -4,6 +4,36 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+/**
+ * Manual chunk splitting strategy to keep bundles under 500KB
+ * Groups dependencies by functionality for optimal caching
+ * 
+ * Strategy: Split only truly independent libraries to avoid circular deps
+ */
+function manualChunks(id: string): string | undefined {
+  if (!id.includes('node_modules')) {
+    return undefined
+  }
+
+  // date-fns is a pure utility library with no React deps
+  if (id.includes('date-fns')) {
+    return 'vendor-date'
+  }
+
+  // i18next core is standalone (but react-i18next depends on React)
+  if (id.includes('node_modules/i18next/') || id.includes('node_modules/i18next-browser-languagedetector/')) {
+    return 'vendor-i18n'
+  }
+
+  // Radix primitives - large but self-contained UI library
+  if (id.includes('@radix-ui')) {
+    return 'vendor-radix'
+  }
+
+  // Let Rollup handle the rest to avoid circular dependencies
+  return undefined
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -43,6 +73,13 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(import.meta.dirname, './src'),
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks,
+      },
     },
   },
 })

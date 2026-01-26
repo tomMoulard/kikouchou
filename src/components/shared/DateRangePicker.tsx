@@ -28,9 +28,9 @@
  * ```
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { format, isAfter, isSameDay, isValid } from 'date-fns';
+import { eachDayOfInterval, format, isAfter, isValid } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
 import type { Matcher, DateRange as RdpDateRange } from 'react-day-picker';
 import { CalendarIcon } from 'lucide-react';
@@ -50,6 +50,18 @@ import {
 interface DateRange {
   readonly from: Date | undefined;
   readonly to: Date | undefined;
+}
+
+/**
+ * Represents an already booked date range to display in the calendar.
+ */
+interface BookedRange {
+  /** Start date of the booked period */
+  readonly from: Date;
+  /** End date of the booked period */
+  readonly to: Date;
+  /** Optional label to show (e.g., person's name) */
+  readonly label?: string;
 }
 
 /**
@@ -78,6 +90,8 @@ interface DateRangePickerProps {
   readonly 'aria-describedby'?: string;
   /** Unique identifier for the component */
   readonly id?: string;
+  /** Date ranges that are already booked (shown with visual indicator) */
+  readonly bookedRanges?: readonly BookedRange[];
 }
 
 /**
@@ -104,14 +118,6 @@ function getDateFnsLocale(language: string): typeof fr | typeof enUS {
  * - Accessible with proper ARIA attributes
  * - Auto-closes when range selection is complete
  */
-/**
- * Selection state for the two-click range picker.
- * - 'idle': No selection in progress, waiting for first click
- * - 'selecting': First date selected, waiting for second click
- * - 'complete': Both dates selected
- */
-type SelectionState = 'idle' | 'selecting' | 'complete';
-
 const DateRangePicker = memo(({
   value,
   onChange,
@@ -124,45 +130,10 @@ const DateRangePicker = memo(({
   'aria-label': ariaLabel,
   'aria-describedby': ariaDescribedBy,
   id,
+  bookedRanges,
 }: DateRangePickerProps): React.ReactElement => {
   const { t, i18n } = useTranslation(),
-   [open, setOpen] = useState(false),
-
-  // Track selection state for two-click behavior
-   [selectionState, setSelectionState] = useState<SelectionState>('idle'),
-  
-  // Track the pending start date during selection
-   pendingStartRef = useRef<Date | undefined>(undefined);
-
-  // Reset selection state when popover closes or value changes externally
-  useEffect(() => {
-    if (!open) {
-      // Use timeout to avoid synchronous setState in effect
-      const timer = setTimeout(() => {
-        setSelectionState('idle');
-        pendingStartRef.current = undefined;
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [open]);
-
-  // Sync selection state with external value
-  useEffect(() => {
-    // Use timeout to avoid synchronous setState in effect
-    const timer = setTimeout(() => {
-      if (value?.from && value?.to) {
-        setSelectionState('complete');
-      } else if (value?.from) {
-        setSelectionState('selecting');
-        pendingStartRef.current = value.from;
-      } else {
-        setSelectionState('idle');
-        pendingStartRef.current = undefined;
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [value?.from, value?.to]);
+   [open, setOpen] = useState(false);
 
   // Get the appropriate date-fns locale
   const locale = useMemo(
@@ -199,6 +170,47 @@ const DateRangePicker = memo(({
     return matchers;
   }, [minDate, maxDate]),
 
+  // Build array of booked dates for visual indicator
+   bookedDates = useMemo((): Date[] => {
+    if (!bookedRanges || bookedRanges.length === 0) {
+      return [];
+    }
+
+    const dates: Date[] = [];
+    for (const range of bookedRanges) {
+      if (isValidDate(range.from) && isValidDate(range.to)) {
+        // For room assignments: start date is check-in, end date is check-out
+        // Only the nights (start date up to but NOT including end date) are "booked"
+        // Example: Jan 15-16 = staying night of Jan 15, checking out morning of Jan 16
+        // So only Jan 15 should show as booked, not Jan 16
+        const daysInRange = eachDayOfInterval({ start: range.from, end: range.to });
+        // Exclude the last day (checkout day)
+        dates.push(...daysInRange.slice(0, -1));
+      }
+    }
+    return dates;
+  }, [bookedRanges]),
+
+  // Modifiers for react-day-picker to style booked dates
+   modifiers = useMemo(() => {
+    if (bookedDates.length === 0) {
+      return undefined;
+    }
+    return {
+      booked: bookedDates,
+    };
+  }, [bookedDates]),
+
+  // Custom class names for modifiers
+   modifiersClassNames = useMemo(() => {
+    if (bookedDates.length === 0) {
+      return undefined;
+    }
+    return {
+      booked: 'rdp-day-booked',
+    };
+  }, [bookedDates]),
+
   // Format the display text based on selected range
    displayText = useMemo((): string => {
     const defaultPlaceholder =
@@ -230,70 +242,36 @@ const DateRangePicker = memo(({
   // Simple computation - no need for useMemo overhead
    hasSelection = value?.from !== undefined && isValidDate(value.from),
 
-  // Memoize selected value to prevent unnecessary Calendar re-renders
-   selected = useMemo(
-    () => (value ? { from: value.from, to: value.to } : undefined),
-    [value]
-  ),
+  // Pass value directly to Calendar - no memoization needed as value changes are the intended re-render trigger
+   selected = value ? { from: value.from, to: value.to } : undefined,
 
-  // Handle date selection from the calendar with two-click behavior
-  // Click 1: Select start date
-  // Click 2: Select end date (auto-closes)
-  // Click 3: Reset and start new selection
+  // Handle date selection from the calendar
+  // react-day-picker v9 passes the updated range directly to onSelect
    handleSelect = useCallback(
     (range: RdpDateRange | undefined) => {
-      // If range is undefined or empty, start fresh
-      if (!range?.from) {
+      // Pass the range through to parent
+      // Note: range.from and range.to may both be set (complete range)
+      // or only range.from may be set (start of selection)
+      if (!range) {
         onChange(undefined);
-        setSelectionState('idle');
-        pendingStartRef.current = undefined;
         return;
       }
 
-      const clickedDate = range.from;
+      // Pass the new range to parent
+      onChange({ from: range.from, to: range.to });
 
-      // Determine behavior based on current state
-      if (selectionState === 'complete') {
-        // Already have a complete selection - start new selection with this date
-        pendingStartRef.current = clickedDate;
-        onChange({ from: clickedDate, to: undefined });
-        setSelectionState('selecting');
-        return;
-      }
-
-      if (selectionState === 'selecting' && pendingStartRef.current) {
-        // Second click - complete the range
-        let startDate = pendingStartRef.current,
-         endDate = clickedDate;
-
-        // Normalize: ensure from <= to
-        if (isAfter(startDate, endDate)) {
-          [startDate, endDate] = [endDate, startDate];
-        }
-
-        // If same day clicked, treat as single-day range
-        if (isSameDay(startDate, endDate)) {
-          onChange({ from: startDate, to: endDate });
-        } else {
-          onChange({ from: startDate, to: endDate });
-        }
-
-        setSelectionState('complete');
-        pendingStartRef.current = undefined;
-
-        // Auto-close popover after complete selection
+      // Auto-close popover when range is complete (two different dates selected)
+      // IMPORTANT: react-day-picker v9 sets BOTH from AND to on the FIRST click
+      // (when min=0), both pointing to the same date. We must NOT close in this case
+      // because the user is just starting their selection, not completing it.
+      // We only close when from !== to, indicating the user has selected two different dates.
+      if (range.from && range.to && range.from.getTime() !== range.to.getTime()) {
         requestAnimationFrame(() => {
           setOpen(false);
         });
-        return;
       }
-
-      // First click - start new selection
-      pendingStartRef.current = clickedDate;
-      onChange({ from: clickedDate, to: undefined });
-      setSelectionState('selecting');
     },
-    [onChange, selectionState]
+    [onChange]
   ),
 
   // Determine the default month to show in the calendar
@@ -346,12 +324,22 @@ const DateRangePicker = memo(({
           disabled={disabledDays}
           defaultMonth={defaultMonth}
           locale={locale}
+          modifiers={modifiers}
+          modifiersClassNames={modifiersClassNames}
           initialFocus
         />
+        {bookedDates.length > 0 && (
+          <div className="flex items-center gap-2 px-3 pb-3 text-xs text-muted-foreground">
+            <span className="relative flex h-4 w-4 items-center justify-center">
+              <span className="absolute h-1 w-1 rounded-full bg-destructive opacity-70" />
+            </span>
+            <span>{t('dateRangePicker.alreadyBooked', 'Already assigned')}</span>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
 });
 
 export { DateRangePicker };
-export type { DateRangePickerProps, DateRange };
+export type { DateRangePickerProps, DateRange, BookedRange };

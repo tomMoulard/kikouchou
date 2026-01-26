@@ -15,14 +15,14 @@
 
 ## Tech Stack
 
-| Category | Technology |
-|----------|------------|
-| Runtime | Bun |
-| Build Tool | Vite |
-| Framework | React 18 + TypeScript |
+| Category   | Technology               |
+|------------|--------------------------|
+| Runtime    | Bun                      |
+| Build Tool | Vite                     |
+| Framework  | React 18 + TypeScript    |
 | UI Library | shadcn/ui + Tailwind CSS |
-| Database | IndexedDB (Dexie.js) |
-| i18n | react-i18next |
+| Database   | IndexedDB (Dexie.js)     |
+| i18n       | react-i18next            |
 
 ## Documentation
 
