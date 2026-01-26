@@ -238,7 +238,18 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
    isLoading = currentTripId !== undefined && personsQuery === undefined,
 
   // Get raw persons from query, defaulting to empty array
-   rawPersons = personsQuery ?? [];
+  // Wrapped in useMemo to prevent dependency changes on every render
+   rawPersons = useMemo(() => personsQuery ?? [], [personsQuery]),
+
+  // State to hold stable persons (replacing ref for render-safe access)
+   [persons, setPersons] = useState<Person[]>([]);
+
+  // Clear state when trip changes to prevent stale cross-trip data
+  useEffect(() => {
+    setPersons([]);
+    personsRef.current = [];
+    personsMapRef.current = new Map();
+  }, [currentTripId]);
 
   // Update stable array reference via useEffect (not during render)
   // This prevents mutable state updates during render phase
@@ -247,15 +258,13 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
       personsRef.current = rawPersons;
       // Rebuild the Map for O(1) lookups
       personsMapRef.current = new Map(rawPersons.map((p) => [p.id, p]));
+      // Update state for render-safe access
+      setPersons(rawPersons);
     }
   }, [rawPersons]);
 
-  // Use the stable reference for the context value
-  // On first render before useEffect runs, use rawPersons
-  const persons =
-    personsRef.current.length > 0 || rawPersons.length === 0
-      ? personsRef.current
-      : rawPersons,
+  // Use persons from state (render-safe)
+  const
 
   /**
    * Validates that a person exists and belongs to the current trip.
@@ -453,3 +462,4 @@ export function usePersonContext(): PersonContextValue {
 // ============================================================================
 
 export { PersonContext };
+export type { PersonProviderProps };

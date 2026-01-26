@@ -145,14 +145,15 @@ const RoomCard = memo(({
     : t('rooms.occupied'),
 
   // Build aria-label for screen readers
-   ariaLabel = useMemo(() => {
-    const parts = [
-      room.name,
-      t('rooms.beds', { count: room.capacity }),
-      `${occupancyCount}/${room.capacity} ${occupancyStatusText.toLowerCase()}`,
-    ];
-    return parts.join(', ');
-  }, [room.name, room.capacity, occupancyCount, occupancyStatusText, t]),
+   ariaLabel = useMemo(
+    () =>
+      [
+        room.name,
+        t('rooms.beds', { count: room.capacity }),
+        `${occupancyCount}/${room.capacity} ${occupancyStatusText.toLowerCase()}`,
+      ].join(', '),
+    [room.name, room.capacity, occupancyCount, occupancyStatusText, t]
+  ),
 
   // Determine if card should be interactive (has onClick handler)
    isInteractive = Boolean(onClick) && !isDisabled,

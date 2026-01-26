@@ -303,10 +303,15 @@ export function TransportProvider({
    isLoading = currentTripId !== undefined && transportsQuery === undefined,
 
   // Get raw transports from query, defaulting to empty array
-   rawTransports = transportsQuery ?? [];
+  // Wrapped in useMemo to prevent dependency changes on every render
+   rawTransports = useMemo(() => transportsQuery ?? [], [transportsQuery]),
 
-  // Clear refs and error when trip changes to prevent stale cross-trip data
+  // State to hold stable transports (replacing ref for render-safe access)
+   [transports, setTransports] = useState<Transport[]>([]);
+
+  // Clear refs, state, and error when trip changes to prevent stale cross-trip data
   useEffect(() => {
+    setTransports([]);
     transportsRef.current = [];
     transportsMapRef.current = new Map();
     transportsByPersonMapRef.current = new Map();
@@ -322,15 +327,13 @@ export function TransportProvider({
       transportsByPersonMapRef.current = buildTransportsByPersonMap(rawTransports);
       // Build ID map for O(1) validation lookups
       transportsMapRef.current = new Map(rawTransports.map((t) => [t.id, t]));
+      // Update state for render-safe access
+      setTransports(rawTransports);
     }
   }, [rawTransports]);
 
-  // Use the stable reference for the context value
-  // On first render before useEffect runs, use rawTransports
-  const transports =
-    transportsRef.current.length > 0 || rawTransports.length === 0
-      ? transportsRef.current
-      : rawTransports,
+  // Use transports from state (render-safe)
+  const
 
   // Compute arrivals - transports where type === 'arrival'
    arrivals = useMemo(
@@ -565,3 +568,4 @@ export function useTransportContext(): TransportContextValue {
 // ============================================================================
 
 export { TransportContext };
+export type { TransportProviderProps };

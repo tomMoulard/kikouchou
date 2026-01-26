@@ -322,11 +322,18 @@ export function AssignmentProvider({
   // Loading when query hasn't resolved yet AND a trip is selected
    isLoading = currentTripId !== undefined && assignmentsQuery === undefined,
 
-  // Get raw assignments from query, defaulting to empty array
-   rawAssignments = assignmentsQuery ?? [];
+  // State to hold stable assignments (replacing ref for render-safe access)
+   [assignments, setAssignments] = useState<RoomAssignment[]>([]),
 
-  // Clear refs when trip changes to prevent stale cross-trip data
+  // Get raw assignments from query, wrapped in useMemo to prevent dependency warnings
+   rawAssignments = useMemo(
+    () => assignmentsQuery ?? [],
+    [assignmentsQuery]
+  );
+
+  // Clear state when trip changes to prevent stale cross-trip data
   useEffect(() => {
+    setAssignments([]);
     assignmentsRef.current = [];
     assignmentsMapRef.current = new Map();
     assignmentsByRoomMapRef.current = new Map();
@@ -344,15 +351,13 @@ export function AssignmentProvider({
       assignmentsByPersonMapRef.current = byPerson;
       // Build ID map for O(1) validation lookups
       assignmentsMapRef.current = new Map(rawAssignments.map((a) => [a.id, a]));
+      // Update state for render-safe access
+      setAssignments(rawAssignments);
     }
   }, [rawAssignments]);
 
-  // Use the stable reference for the context value
-  // On first render before useEffect runs, use rawAssignments
-  const assignments =
-    assignmentsRef.current.length > 0 || rawAssignments.length === 0
-      ? assignmentsRef.current
-      : rawAssignments,
+  // Use assignments from state (render-safe)
+  const
 
   /**
    * Validates that an assignment exists and belongs to the current trip.
@@ -599,3 +604,4 @@ export function useAssignmentContext(): AssignmentContextValue {
 // ============================================================================
 
 export { AssignmentContext };
+export type { AssignmentProviderProps };

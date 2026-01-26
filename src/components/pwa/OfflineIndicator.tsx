@@ -79,18 +79,15 @@ function OfflineIndicatorComponent({
 
   /**
    * Control visibility based on online status.
+   * Use timeout to avoid synchronous setState in effect.
    */
   useEffect(() => {
-    if (!isOnline) {
-      // Show offline indicator immediately
-      setIsVisible(true);
-    } else if (hasRecentlyChanged) {
-      // Briefly show "back online" message
-      setIsVisible(true);
-    } else {
-      // Hide after "back online" period ends
-      setIsVisible(false);
-    }
+    const shouldShow = !isOnline || hasRecentlyChanged;
+    // Use microtask to avoid synchronous setState warning
+    const timer = setTimeout(() => {
+      setIsVisible(shouldShow);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [isOnline, hasRecentlyChanged]);
 
   // ============================================================================

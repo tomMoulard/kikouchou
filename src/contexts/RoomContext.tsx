@@ -11,6 +11,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -221,12 +222,31 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
   // Loading when query hasn't resolved yet AND a trip is selected
    isLoading = currentTripId !== undefined && roomsQuery === undefined,
 
-  // Maintain stable array reference to prevent cascading re-renders
-   rawRooms = roomsQuery ?? [];
-  if (!areRoomsEqual(rawRooms, roomsRef.current)) {
-    roomsRef.current = rawRooms;
-  }
-  const rooms = roomsRef.current,
+  // Get raw rooms from query, defaulting to empty array
+  // Wrapped in useMemo to prevent dependency changes on every render
+   rawRooms = useMemo(() => roomsQuery ?? [], [roomsQuery]),
+
+  // State to hold stable rooms (replacing ref for render-safe access)
+   [rooms, setRooms] = useState<Room[]>([]);
+
+  // Clear state when trip changes to prevent stale cross-trip data
+  useEffect(() => {
+    setRooms([]);
+    roomsRef.current = [];
+  }, [currentTripId]);
+
+  // Update stable array reference via useEffect (not during render)
+  // This prevents mutable state updates during render phase
+  useEffect(() => {
+    if (!areRoomsEqual(rawRooms, roomsRef.current)) {
+      roomsRef.current = rawRooms;
+      // Update state for render-safe access
+      setRooms(rawRooms);
+    }
+  }, [rawRooms]);
+
+  // Use rooms from state (render-safe)
+  const
 
   /**
    * Validates that a room exists and belongs to the current trip.
@@ -437,3 +457,4 @@ export function useRoomContext(): RoomContextValue {
 // ============================================================================
 
 export { RoomContext };
+export type { RoomProviderProps };

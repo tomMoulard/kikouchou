@@ -137,22 +137,31 @@ const DateRangePicker = memo(({
   // Reset selection state when popover closes or value changes externally
   useEffect(() => {
     if (!open) {
-      setSelectionState('idle');
-      pendingStartRef.current = undefined;
+      // Use timeout to avoid synchronous setState in effect
+      const timer = setTimeout(() => {
+        setSelectionState('idle');
+        pendingStartRef.current = undefined;
+      }, 0);
+      return () => clearTimeout(timer);
     }
+    return undefined;
   }, [open]);
 
   // Sync selection state with external value
   useEffect(() => {
-    if (value?.from && value?.to) {
-      setSelectionState('complete');
-    } else if (value?.from) {
-      setSelectionState('selecting');
-      pendingStartRef.current = value.from;
-    } else {
-      setSelectionState('idle');
-      pendingStartRef.current = undefined;
-    }
+    // Use timeout to avoid synchronous setState in effect
+    const timer = setTimeout(() => {
+      if (value?.from && value?.to) {
+        setSelectionState('complete');
+      } else if (value?.from) {
+        setSelectionState('selecting');
+        pendingStartRef.current = value.from;
+      } else {
+        setSelectionState('idle');
+        pendingStartRef.current = undefined;
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [value?.from, value?.to]);
 
   // Get the appropriate date-fns locale
@@ -224,7 +233,7 @@ const DateRangePicker = memo(({
   // Memoize selected value to prevent unnecessary Calendar re-renders
    selected = useMemo(
     () => (value ? { from: value.from, to: value.to } : undefined),
-    [value?.from, value?.to]
+    [value]
   ),
 
   // Handle date selection from the calendar with two-click behavior

@@ -162,7 +162,8 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
    isLoading = queryResult === undefined,
 
   // Extract trips from query result
-   trips = queryResult?.trips ?? [],
+  // Wrapped in useMemo to prevent dependency changes on every render
+   trips = useMemo(() => queryResult?.trips ?? [], [queryResult?.trips]),
 
   // Extract current trip ID from query result
    currentTripId = queryResult?.currentTripId,
@@ -229,14 +230,14 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
         throw wrappedError;
       }
     },
-    [],
-  ),
+    [setError],
+  );
 
   /**
    * Verifies database connectivity and clears error state.
    * Useful for error recovery when IndexedDB access has failed.
    */
-   checkConnection = useCallback(async (): Promise<void> => {
+  const checkConnection = useCallback(async (): Promise<void> => {
     setError(null);
 
     try {
@@ -255,10 +256,10 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
       setError(wrappedError);
       throw wrappedError;
     }
-  }, []),
+  }, [setError]);
 
   // Memoize context value to prevent unnecessary re-renders in consumers
-   contextValue = useMemo<TripContextValue>(
+  const contextValue = useMemo<TripContextValue>(
     () => ({
       currentTrip,
       trips,
@@ -333,3 +334,4 @@ export function useTripContext(): TripContextValue {
 // ============================================================================
 
 export { TripContext };
+export type { TripProviderProps };

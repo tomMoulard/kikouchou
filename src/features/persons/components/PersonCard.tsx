@@ -192,7 +192,7 @@ const PersonCard = memo(({
       }
     }
     return parts.join(', ');
-  }, [person.name, transportSummary, dateLocale, t]),
+  }, [person.name, transportSummary.arrival, transportSummary.departure, dateLocale, t]),
 
   // Determine if card should be interactive (has onClick handler)
    isInteractive = Boolean(onClick) && !isDisabled,
@@ -253,7 +253,7 @@ const PersonCard = memo(({
    */
    handleDeleteClick = useCallback(() => {
     setIsDeleteDialogOpen(true);
-  }, []),
+  }, [setIsDeleteDialogOpen]),
 
   /**
    * Handles delete confirmation - calls onDelete callback.
@@ -267,7 +267,7 @@ const PersonCard = memo(({
    */
    handleDeleteDialogOpenChange = useCallback((open: boolean) => {
     setIsDeleteDialogOpen(open);
-  }, []);
+  }, [setIsDeleteDialogOpen]);
 
   // ============================================================================
   // Render

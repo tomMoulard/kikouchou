@@ -183,7 +183,7 @@ const ColorPicker = memo(({
           newIndex = (currentIndex - GRID_COLUMNS + totalColors) % totalColors;
           break;
         case 'Enter':
-        case ' ':
+        case ' ': {
           // Select the currently focused color
           event.preventDefault();
           const focusedButton = buttonsRef.current.find(
@@ -197,6 +197,7 @@ const ColorPicker = memo(({
             }
           }
           return;
+        }
         default:
           return;
       }

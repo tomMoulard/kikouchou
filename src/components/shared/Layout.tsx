@@ -327,13 +327,13 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
    [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false),
 
   // Memoize derived values to prevent unnecessary re-renders
-   tripName = useMemo(() => currentTrip?.name ?? null, [currentTrip?.name]),
-   tripId = useMemo(() => currentTrip?.id ?? null, [currentTrip?.id]),
+   tripName = useMemo(() => currentTrip?.name ?? null, [currentTrip]),
+   tripId = useMemo(() => currentTrip?.id ?? null, [currentTrip]),
 
   // Memoize callback to maintain stable reference for DesktopSidebar
    toggleSidebar = useCallback(() => {
     setIsSidebarCollapsed((prev) => !prev);
-  }, []);
+  }, [setIsSidebarCollapsed]);
 
   return (
     <div className="min-h-screen bg-background">

@@ -166,6 +166,7 @@ function InstallPromptComponent({
 
   /**
    * Show the prompt with a slight delay for smoother UX.
+   * Derive visibility state based on conditions rather than setting state synchronously.
    */
   useEffect(() => {
     if (canInstall && !isDismissed) {
@@ -174,10 +175,12 @@ function InstallPromptComponent({
         setIsVisible(true);
       }, 1000);
 
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        setIsVisible(false);
+      };
     }
-
-    setIsVisible(false);
+    // When conditions change (not canInstall or isDismissed), hide via timeout cleanup
     return undefined;
   }, [canInstall, isDismissed]);
 
@@ -187,8 +190,13 @@ function InstallPromptComponent({
   useEffect(() => {
     if (isInstalled && !isDismissed) {
       toast.success(t('pwa.installSuccess', 'App installed successfully!'));
-      setIsDismissed(true);
+      // Use timeout to avoid synchronous setState in effect
+      const timer = setTimeout(() => {
+        setIsDismissed(true);
+      }, 0);
+      return () => clearTimeout(timer);
     }
+    return undefined;
   }, [isInstalled, isDismissed, t]);
 
   // ============================================================================

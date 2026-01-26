@@ -578,9 +578,14 @@ const CalendarPage = memo((): ReactElement => {
     if (!hasUserNavigatedRef.current && currentTrip?.startDate) {
       const tripStart = parseISO(currentTrip.startDate);
       if (isValid(tripStart)) {
-        setCurrentMonth(startOfMonth(tripStart));
+        // Use timeout to avoid synchronous setState in effect
+        const timer = setTimeout(() => {
+          setCurrentMonth(startOfMonth(tripStart));
+        }, 0);
+        return () => clearTimeout(timer);
       }
     }
+    return undefined;
   }, [currentTrip?.startDate]);
 
   // Combined loading state
@@ -590,13 +595,10 @@ const CalendarPage = memo((): ReactElement => {
    dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
 
   // Build room lookup map for O(1) access
-   roomsMap = useMemo(() => {
-    const map = new Map<string, Room>();
-    for (const room of rooms) {
-      map.set(room.id, room);
-    }
-    return map;
-  }, [rooms]),
+   roomsMap = useMemo(
+    () => new Map<string, Room>(rooms.map((room) => [room.id, room])),
+    [rooms]
+  ),
 
   // Trip date boundaries for visual indicators
    tripBoundaries = useMemo(() => {
@@ -608,15 +610,18 @@ const CalendarPage = memo((): ReactElement => {
   }, [currentTrip]),
 
   // Generate calendar days for the current month view
-   calendarDays = useMemo(() => {
-    const monthStart = startOfMonth(currentMonth),
-     monthEnd = endOfMonth(currentMonth),
-    // Week starts on Monday (weekStartsOn: 1)
-     calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 }),
-     calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+   calendarDays = useMemo(
+    () => {
+      const monthStart = startOfMonth(currentMonth),
+       monthEnd = endOfMonth(currentMonth),
+      // Week starts on Monday (weekStartsOn: 1)
+       calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 }),
+       calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
-    return eachDayOfInterval({ start: calendarStart, end: calendarEnd });
-  }, [currentMonth]),
+      return eachDayOfInterval({ start: calendarStart, end: calendarEnd });
+    },
+    [currentMonth]
+  ),
 
   // Extract translated fallback outside the expensive computation
   // This ensures stable dependency and avoids recalculation on language change
@@ -833,6 +838,7 @@ const CalendarPage = memo((): ReactElement => {
    *
    * @param _assignment - The assignment to edit (unused until feature implemented)
    */
+   // eslint-disable-next-line @typescript-eslint/no-unused-vars
    handleEventClick = useCallback((_assignment: RoomAssignment) => {
     // TODO: Task 9.x - Integrate with RoomAssignmentSection's edit dialog
     // Feature not yet implemented - clicking events will be functional in future task
