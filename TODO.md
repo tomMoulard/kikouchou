@@ -2142,9 +2142,34 @@ interface TripCardProps {
 - Edit/Delete menu
 
 **Acceptance Criteria**:
-- [ ] All room info displays
-- [ ] Occupants show with colors
-- [ ] Actions work correctly
+- [x] All room info displays
+- [x] Occupants show with colors
+- [x] Actions work correctly
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/rooms/components/RoomCard.tsx` with ~350 lines
+- Extracted and enhanced inline RoomCard from RoomListPage into standalone component
+- Displays room name, capacity badge, description (truncated with line-clamp-2), and occupancy status
+- Shows current occupants using PersonBadge components with their colors
+- Dropdown menu with Edit and Delete actions:
+  - Edit triggers `onEdit` callback
+  - Delete opens ConfirmDialog for confirmation before triggering `onDelete`
+- Full accessibility:
+  - Conditional `role="button"` when card is interactive (has onClick)
+  - `aria-label` with room context for screen readers
+  - Keyboard navigation (Enter/Space to activate)
+  - Event propagation control (menu clicks don't trigger card click)
+- Disabled state support with visual feedback and interaction prevention
+- Uses `t('rooms.beds', { count })` for proper i18n pluralization
+- Triple code review applied (Grade: A-):
+  - Code Quality: Excellent structure, follows TripCard patterns
+  - Error Analysis: No critical issues, ConfirmDialog handles async errors
+  - Performance: Removed over-memoization of occupancyVariant (trivial O(1) computation)
+  - Added translation fallback for `rooms.deleteConfirm`
+- Updated RoomListPage to use standalone RoomCard with new props interface
+- Build passes, TypeScript strict mode compliant
 
 ---
 

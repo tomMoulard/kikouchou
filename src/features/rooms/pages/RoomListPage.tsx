@@ -9,6 +9,7 @@
  * - Shows real-time occupancy status based on today's date
  * - Add room action (FAB on mobile, header button on desktop)
  * - Empty state for trips with no rooms
+ * - Edit/Delete actions via RoomCard dropdown menu
  *
  * @module features/rooms/pages/RoomListPage
  * @see TripListPage.tsx for reference implementation pattern
@@ -20,12 +21,12 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
   type ReactElement,
 } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Plus, DoorOpen, Users, BedDouble } from 'lucide-react';
+import { toast } from 'sonner';
+import { Plus, DoorOpen } from 'lucide-react';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { useRoomContext } from '@/contexts/RoomContext';
@@ -34,19 +35,10 @@ import { usePersonContext } from '@/contexts/PersonContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-} from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import type { Room, Person, RoomId } from '@/types';
+import { RoomCard } from '@/features/rooms/components/RoomCard';
+import type { Room, Person } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -60,22 +52,6 @@ interface RoomWithOccupancy {
   readonly room: Room;
   /** Current occupants (persons assigned today) */
   readonly currentOccupants: readonly Person[];
-  /** Number of current occupants */
-  readonly occupancyCount: number;
-  /** Whether the room is at or over capacity */
-  readonly isAtCapacity: boolean;
-}
-
-/**
- * Props for the RoomCard component.
- */
-interface RoomCardProps {
-  /** Room with occupancy data */
-  readonly roomData: RoomWithOccupancy;
-  /** Callback when the room card is clicked */
-  readonly onClick: (roomId: RoomId) => void;
-  /** Whether interaction is disabled */
-  readonly isDisabled?: boolean;
 }
 
 // ============================================================================
@@ -120,116 +96,6 @@ function formatToISODate(date: Date): string {
 }
 
 // ============================================================================
-// RoomCard Component
-// ============================================================================
-
-/**
- * Individual room card displaying room information and occupancy.
- * Supports click and keyboard interaction for accessibility.
- */
-const RoomCard = memo(function RoomCard({
-  roomData,
-  onClick,
-  isDisabled = false,
-}: RoomCardProps): ReactElement {
-  const { t } = useTranslation();
-  const { room, currentOccupants, occupancyCount, isAtCapacity } = roomData;
-
-  // Handle keyboard activation (Enter or Space)
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (isDisabled) return;
-
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        onClick(room.id);
-      }
-    },
-    [room.id, onClick, isDisabled],
-  );
-
-  // Handle click
-  const handleClick = useCallback(() => {
-    if (isDisabled) return;
-    onClick(room.id);
-  }, [room.id, onClick, isDisabled]);
-
-  // Build aria-label for screen readers (direct computation - cheaper than useMemo overhead)
-  const ariaLabel = `${room.name}, ${t('rooms.beds', { count: room.capacity })}, ${occupancyCount}/${room.capacity} ${t('rooms.occupied').toLowerCase()}`;
-
-  // Determine occupancy status badge variant (trivial computation - no memoization needed)
-  const occupancyVariant = occupancyCount === 0
-    ? 'secondary'
-    : isAtCapacity
-      ? 'destructive'
-      : 'default';
-
-  return (
-    <Card
-      role="button"
-      tabIndex={isDisabled ? -1 : 0}
-      aria-label={ariaLabel}
-      aria-disabled={isDisabled}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      className={cn(
-        'cursor-pointer transition-all duration-200',
-        'hover:shadow-md hover:border-primary/20',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        isDisabled && 'opacity-50 cursor-not-allowed',
-      )}
-    >
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-lg truncate" title={room.name}>
-            {room.name}
-          </CardTitle>
-          <Badge variant="outline" className="shrink-0">
-            <BedDouble className="size-3 mr-1" aria-hidden="true" />
-            {room.capacity}
-          </Badge>
-        </div>
-        {room.description && (
-          <CardDescription className="line-clamp-2" title={room.description}>
-            {room.description}
-          </CardDescription>
-        )}
-      </CardHeader>
-
-      <CardContent className="pb-2">
-        {/* Occupancy Status */}
-        <div className="flex items-center gap-2 mb-3">
-          <Users className="size-4 text-muted-foreground" aria-hidden="true" />
-          <Badge variant={occupancyVariant}>
-            {occupancyCount} / {room.capacity}
-          </Badge>
-          <span className="text-sm text-muted-foreground">
-            {occupancyCount === 0 ? t('rooms.available') : t('rooms.occupied')}
-          </span>
-        </div>
-
-        {/* Current Occupants */}
-        {currentOccupants.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {currentOccupants.map((person) => (
-              <PersonBadge key={person.id} person={person} size="sm" />
-            ))}
-          </div>
-        )}
-      </CardContent>
-
-      <CardFooter className="pt-0">
-        <p className="text-xs text-muted-foreground">
-          {t('rooms.beds', { count: room.capacity })}
-        </p>
-      </CardFooter>
-    </Card>
-  );
-});
-
-RoomCard.displayName = 'RoomCard';
-
-// ============================================================================
 // RoomListPage Component
 // ============================================================================
 
@@ -250,13 +116,18 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
   // Context hooks
   const { currentTrip, isLoading: isTripLoading } = useTripContext();
-  const { rooms, isLoading: isRoomsLoading, error: roomsError } = useRoomContext();
+  const {
+    rooms,
+    isLoading: isRoomsLoading,
+    error: roomsError,
+    deleteRoom,
+  } = useRoomContext();
   const { getAssignmentsByRoom } = useAssignmentContext();
   const { getPersonById } = usePersonContext();
 
-  // Track if we're currently navigating to prevent double-clicks
-  const isNavigatingRef = useRef(false);
-  const [isNavigating, setIsNavigating] = useState(false);
+  // Track if we're currently performing an action to prevent double-clicks
+  const isActionInProgressRef = useRef(false);
+  const [isActionInProgress, setIsActionInProgress] = useState(false);
 
   // Combined loading state
   const isLoading = isTripLoading || isRoomsLoading;
@@ -288,13 +159,9 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         .map((assignment) => getPersonById(assignment.personId))
         .filter((person): person is Person => person !== undefined);
 
-      const occupancyCount = currentOccupants.length;
-
       return {
         room,
         currentOccupants,
-        occupancyCount,
-        isAtCapacity: occupancyCount >= room.capacity,
       };
     });
   }, [rooms, getAssignmentsByRoom, getPersonById, todayStr]);
@@ -305,22 +172,55 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
   /**
    * Handles room card click - navigates to room detail/edit page.
-   * Note: Navigation guard prevents double-clicks. State is NOT reset after navigation
+   * Note: Action guard prevents double-clicks. State is NOT reset after navigation
    * because the component will typically unmount when navigating away.
    */
   const handleRoomClick = useCallback(
-    (roomId: RoomId) => {
-      if (isNavigatingRef.current) return;
+    (room: Room) => {
+      if (isActionInProgressRef.current) return;
 
-      isNavigatingRef.current = true;
-      setIsNavigating(true);
+      isActionInProgressRef.current = true;
+      setIsActionInProgress(true);
 
       // TODO: Navigate to room detail page when implemented
       // For now, navigate to a placeholder route
-      navigate(`/trips/${tripIdFromUrl}/rooms/${roomId}/edit`);
+      navigate(`/trips/${tripIdFromUrl}/rooms/${room.id}/edit`);
       // Don't reset state - let component unmount naturally
     },
     [navigate, tripIdFromUrl],
+  );
+
+  /**
+   * Handles room edit action from dropdown menu.
+   */
+  const handleRoomEdit = useCallback(
+    (room: Room) => {
+      if (isActionInProgressRef.current) return;
+
+      isActionInProgressRef.current = true;
+      setIsActionInProgress(true);
+
+      navigate(`/trips/${tripIdFromUrl}/rooms/${room.id}/edit`);
+    },
+    [navigate, tripIdFromUrl],
+  );
+
+  /**
+   * Handles room delete action from dropdown menu.
+   * This is called after the user confirms the deletion in ConfirmDialog.
+   */
+  const handleRoomDelete = useCallback(
+    async (room: Room) => {
+      try {
+        await deleteRoom(room.id);
+        toast.success(t('rooms.deleteSuccess', 'Room deleted successfully'));
+      } catch (error) {
+        console.error('Failed to delete room:', error);
+        toast.error(t('errors.deleteFailed', 'Failed to delete room'));
+        throw error; // Re-throw to keep ConfirmDialog open for retry
+      }
+    },
+    [deleteRoom, t],
   );
 
   /**
@@ -474,12 +374,15 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           'pb-20 sm:pb-4',
         )}
       >
-        {roomsWithOccupancy.map((roomData) => (
-          <div key={roomData.room.id} role="listitem">
+        {roomsWithOccupancy.map(({ room, currentOccupants }) => (
+          <div key={room.id} role="listitem">
             <RoomCard
-              roomData={roomData}
+              room={room}
+              occupants={currentOccupants}
               onClick={handleRoomClick}
-              isDisabled={isNavigating}
+              onEdit={handleRoomEdit}
+              onDelete={handleRoomDelete}
+              isDisabled={isActionInProgress}
             />
           </div>
         ))}
