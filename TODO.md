@@ -929,8 +929,21 @@ interface RoomContextValue {
 **Dependencies**: Must be used within TripContext
 
 **Acceptance Criteria**:
-- [ ] Rooms update reactively when trip changes
-- [ ] All CRUD operations work correctly
+- [x] Rooms update reactively when trip changes
+- [x] All CRUD operations work correctly
+
+**Status**: COMPLETED (2026-01-24)
+
+**Notes**:
+- Integrated with TripContext via `useTripContext()` hook
+- Uses compound index `[tripId+order]` for efficient sorted queries
+- Stable array reference via `useRef` to prevent cascading re-renders
+- Room ownership validation in `updateRoom`/`deleteRoom` (security fix from review)
+- Input validation in `reorderRooms` (duplicates, missing rooms, unknown IDs)
+- Dependencies use `currentTripId` primitive instead of object to prevent stale closures
+- Utility function `wrapAndSetError` for consistent error handling
+- Conditional error clearing to avoid unnecessary state updates
+- Triple code review applied: fixed cross-trip data access, stale closures, stable array refs
 
 ---
 
