@@ -1541,8 +1541,28 @@ interface EmptyStateProps {
 - Use `t('errors.generic')` for message
 
 **Acceptance Criteria**:
-- [ ] Errors are caught and displayed gracefully
-- [ ] Reset functionality works
+- [x] Errors are caught and displayed gracefully
+- [x] Reset functionality works
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/components/shared/ErrorBoundary.tsx` with class component (React requirement)
+- Functional wrapper component integrates `useTranslation` hook with class-based error boundary
+- Implements `getDerivedStateFromError` for synchronous state updates
+- Implements `componentDidCatch` for error logging and `onError` callback
+- `resetErrorBoundary` method clears state and calls `onReset` callback
+- Full accessibility: `role="alert"`, `aria-live="assertive"` for screen reader announcements
+- Uses `AlertTriangle` icon for visual error indication, `RefreshCw` for retry button
+- Development-only collapsible error details (`<details>/<summary>`) showing:
+  - Error message
+  - Stack trace
+  - React component stack
+- Production mode shows only user-friendly translated message
+- Safe translation wrapper prevents cascading failures if i18n context breaks
+- Callbacks wrapped in try-catch to prevent cascade failures
+- Optional `fallback` prop for custom error UI
+- Triple code review passed with defensive improvements applied
 
 ---
 
