@@ -309,7 +309,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           backLink={`/trips/${tripIdFromUrl}/calendar`}
         />
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4 min-h-[200px]">
-          <div className="text-center">
+          <div className="text-center" role="alert" aria-live="assertive">
             <p className="text-lg font-semibold text-destructive">
               {t('errors.loadingFailed')}
             </p>

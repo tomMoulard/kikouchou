@@ -286,7 +286,7 @@ const TripListPage = memo(function TripListPage() {
       <div className="flex flex-col min-h-[calc(100vh-4rem)]">
         <PageHeader title={t('trips.title')} />
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <div className="text-center">
+          <div className="text-center" role="alert" aria-live="assertive">
             <p className="text-lg font-semibold text-destructive">
               {t('errors.loadingFailed')}
             </p>
@@ -341,15 +341,18 @@ const TripListPage = memo(function TripListPage() {
           // Extra bottom padding for FAB on mobile
           'pb-20 sm:pb-4',
         )}
+        role="list"
+        aria-label={t('trips.title')}
       >
         {trips.map((trip) => (
-          <TripCard
-            key={trip.id}
-            trip={trip}
-            onSelect={handleTripSelect}
-            isDisabled={isNavigating}
-            locale={locale}
-          />
+          <div key={trip.id} role="listitem">
+            <TripCard
+              trip={trip}
+              onSelect={handleTripSelect}
+              isDisabled={isNavigating}
+              locale={locale}
+            />
+          </div>
         ))}
       </div>
 

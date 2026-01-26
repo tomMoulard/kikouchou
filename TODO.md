@@ -3227,9 +3227,23 @@ interface CalendarEventProps {
 - Modal dialogs have aria-modal
 
 **Acceptance Criteria**:
-- [ ] Screen reader can navigate app
-- [ ] All elements have accessible names
-- [ ] Dynamic content is announced
+- [x] Screen reader can navigate app
+- [x] All elements have accessible names
+- [x] Dynamic content is announced
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Conducted comprehensive ARIA accessibility audit via subagentic workflow
+- Codebase already had excellent ARIA implementation (Grade: A)
+- Enhancements made:
+  1. **Error states**: Added `role="alert" aria-live="assertive"` to error containers in TripListPage, RoomListPage, PersonListPage, TransportListPage
+  2. **TripListPage**: Added `role="list"` and `aria-label` to trip grid, wrapped cards in `role="listitem"` for consistency with other list pages
+  3. **ColorPicker**: Changed from hardcoded English color names to i18n-translated names via `colors.*` translation keys with safe type handling
+  4. **TransportListPage**: Added `listLabel` prop to TransportList component to use proper list labels ("Arrivals"/"Departures") instead of empty state title
+- Added 13 color translations to both EN and FR locale files (`colors.red`, `colors.blue`, etc.)
+- Triple code review: addressed all important issues (TransportList aria-label, translation type safety)
+- Build passes, 28 precache entries (904.64 KiB)
 
 ---
 

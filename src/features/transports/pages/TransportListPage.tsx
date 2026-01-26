@@ -114,6 +114,8 @@ interface TransportListProps {
   readonly onDelete: (transportId: TransportId) => void;
   /** Date locale for formatting */
   readonly dateLocale: typeof fr | typeof enUS;
+  /** Accessible label for the list (e.g., "Arrivals" or "Departures") */
+  readonly listLabel: string;
   /** Empty state message */
   readonly emptyTitle: string;
   /** Empty state description */
@@ -390,6 +392,7 @@ const TransportList = memo(function TransportList({
   onEdit,
   onDelete,
   dateLocale,
+  listLabel,
   emptyTitle,
   emptyDescription,
   isActionsDisabled = false,
@@ -410,7 +413,7 @@ const TransportList = memo(function TransportList({
   return (
     <div
       role="list"
-      aria-label={emptyTitle}
+      aria-label={listLabel}
       className={cn(
         'grid gap-4',
         'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
@@ -641,7 +644,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
           backLink={`/trips/${tripIdFromUrl}/calendar`}
         />
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4 min-h-[200px]">
-          <div className="text-center">
+          <div className="text-center" role="alert" aria-live="assertive">
             <p className="text-lg font-semibold text-destructive">
               {t('errors.loadingFailed')}
             </p>
@@ -704,6 +707,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
             onEdit={handleEdit}
             onDelete={handleDeleteClick}
             dateLocale={dateLocale}
+            listLabel={t('transports.arrivals')}
             emptyTitle={t('transports.empty')}
             emptyDescription={t('transports.emptyDescription')}
           />
@@ -717,6 +721,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
             onEdit={handleEdit}
             onDelete={handleDeleteClick}
             dateLocale={dateLocale}
+            listLabel={t('transports.departures')}
             emptyTitle={t('transports.empty')}
             emptyDescription={t('transports.emptyDescription')}
           />

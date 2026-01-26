@@ -227,5 +227,20 @@
     "placeholder": "Sélectionner une période",
     "ariaLabel": "Sélecteur de période",
     "calendarDialog": "Sélectionner une période"
+  },
+  "colors": {
+    "red": "Rouge",
+    "orange": "Orange",
+    "amber": "Ambre",
+    "yellow": "Jaune",
+    "lime": "Citron vert",
+    "green": "Vert",
+    "teal": "Sarcelle",
+    "cyan": "Cyan",
+    "blue": "Bleu",
+    "indigo": "Indigo",
+    "violet": "Violet",
+    "pink": "Rose",
+    "custom": "Couleur personnalisée"
   }
 }

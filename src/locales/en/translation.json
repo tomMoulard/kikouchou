@@ -227,5 +227,20 @@
     "placeholder": "Select date range",
     "ariaLabel": "Date range picker",
     "calendarDialog": "Select date range"
+  },
+  "colors": {
+    "red": "Red",
+    "orange": "Orange",
+    "amber": "Amber",
+    "yellow": "Yellow",
+    "lime": "Lime",
+    "green": "Green",
+    "teal": "Teal",
+    "cyan": "Cyan",
+    "blue": "Blue",
+    "indigo": "Indigo",
+    "violet": "Violet",
+    "pink": "Pink",
+    "custom": "Custom color"
   }
 }

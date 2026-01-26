@@ -7,6 +7,7 @@
  */
 
 import { memo, useCallback, useRef, type KeyboardEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -35,21 +36,22 @@ const DEFAULT_COLORS = [
 ] as const;
 
 /**
- * Human-readable names for colors (used for accessibility labels).
+ * Translation keys for color names (used for accessibility labels).
+ * Maps hex color codes to i18n translation keys.
  */
-const COLOR_NAMES: Readonly<Record<string, string>> = {
-  '#ef4444': 'Red',
-  '#f97316': 'Orange',
-  '#f59e0b': 'Amber',
-  '#eab308': 'Yellow',
-  '#84cc16': 'Lime',
-  '#22c55e': 'Green',
-  '#14b8a6': 'Teal',
-  '#06b6d4': 'Cyan',
-  '#3b82f6': 'Blue',
-  '#6366f1': 'Indigo',
-  '#8b5cf6': 'Violet',
-  '#ec4899': 'Pink',
+const COLOR_KEYS: Readonly<Record<string, string>> = {
+  '#ef4444': 'colors.red',
+  '#f97316': 'colors.orange',
+  '#f59e0b': 'colors.amber',
+  '#eab308': 'colors.yellow',
+  '#84cc16': 'colors.lime',
+  '#22c55e': 'colors.green',
+  '#14b8a6': 'colors.teal',
+  '#06b6d4': 'colors.cyan',
+  '#3b82f6': 'colors.blue',
+  '#6366f1': 'colors.indigo',
+  '#8b5cf6': 'colors.violet',
+  '#ec4899': 'colors.pink',
 };
 
 /** Number of columns in the color grid for keyboard navigation. */
@@ -82,11 +84,11 @@ interface ColorPickerProps {
 // ============================================================================
 
 /**
- * Get a human-readable name for a color.
- * Returns "Custom color" for unknown colors.
+ * Get the translation key for a color.
+ * Returns undefined for unknown colors.
  */
-function getColorName(color: string): string {
-  return COLOR_NAMES[color.toLowerCase()] ?? 'Custom color';
+function getColorKey(color: string): string | undefined {
+  return COLOR_KEYS[color.toLowerCase()];
 }
 
 // ============================================================================
@@ -131,6 +133,8 @@ const ColorPicker = memo(function ColorPicker({
   disabled = false,
   label = 'Color selection',
 }: ColorPickerProps): React.ReactElement {
+  const { t } = useTranslation();
+  
   // Ref for managing focus during keyboard navigation
   const buttonsRef = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -230,7 +234,10 @@ const ColorPicker = memo(function ColorPicker({
       {colors.map((color, index) => {
         // Use pre-computed selectedIndex for efficiency
         const isSelected = index === selectedIndex;
-        const colorName = getColorName(color);
+        const colorKey = getColorKey(color);
+        // Get translated color name, with fallback for missing translations
+        const rawTranslation = colorKey ? t(colorKey) : t('colors.custom', 'Custom color');
+        const colorName = typeof rawTranslation === 'string' ? rawTranslation : 'Custom color';
 
         return (
           <button
