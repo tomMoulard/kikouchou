@@ -3194,9 +3194,24 @@ interface CalendarEventProps {
 **Files to audit**: All components with interactive elements
 
 **Acceptance Criteria**:
-- [ ] Tab navigation works throughout app
-- [ ] Enter/Space activate buttons
-- [ ] Escape closes dialogs
+- [x] Tab navigation works throughout app
+- [x] Enter/Space activate buttons
+- [x] Escape closes dialogs
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Conducted accessibility audit via subagentic workflow
+- Codebase already has excellent keyboard accessibility:
+  - All shadcn/ui components (Dialog, DropdownMenu, Select, etc.) have built-in focus trapping and keyboard support
+  - Custom components (TripCard, RoomCard, PersonCard, etc.) have proper `tabIndex`, `onKeyDown` handlers
+  - Calendar navigation supports arrow keys, Enter/Space for selection
+  - ColorPicker uses roving tabindex pattern with arrow key navigation
+- Added skip link to Layout component:
+  - "Skip to main content" link (sr-only, visible on focus)
+  - Added `id="main-content"` and `tabIndex={-1}` to main element for programmatic focus
+  - Styled with clear focus ring for visibility
+- Added `nav.skipToMain` translation key to EN and FR locale files
 
 ---
 

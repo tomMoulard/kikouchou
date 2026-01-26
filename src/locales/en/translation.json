@@ -27,7 +27,8 @@
     "persons": "Guests",
     "transports": "Transport",
     "settings": "Settings",
-    "share": "Share"
+    "share": "Share",
+    "skipToMain": "Skip to main content"
   },
   "trips": {
     "title": "My trips",

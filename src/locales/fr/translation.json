@@ -27,7 +27,8 @@
     "persons": "Participants",
     "transports": "Transports",
     "settings": "Paramètres",
-    "share": "Partager"
+    "share": "Partager",
+    "skipToMain": "Aller au contenu principal"
   },
   "trips": {
     "title": "Mes voyages",

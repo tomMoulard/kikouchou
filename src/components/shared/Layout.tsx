@@ -322,6 +322,7 @@ const DesktopSidebar = memo(function DesktopSidebar({
  * ```
  */
 export function Layout({ children }: LayoutProps): React.ReactElement {
+  const { t } = useTranslation();
   const { currentTrip } = useTripContext();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -336,6 +337,21 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Skip link for keyboard navigation - allows users to bypass navigation */}
+      <a
+        href="#main-content"
+        className={cn(
+          'sr-only focus:not-sr-only',
+          'focus:absolute focus:top-2 focus:left-2 focus:z-[100]',
+          'focus:px-4 focus:py-2 focus:rounded-md',
+          'focus:bg-background focus:text-foreground',
+          'focus:ring-2 focus:ring-ring focus:ring-offset-2',
+          'focus:shadow-lg',
+        )}
+      >
+        {t('nav.skipToMain', 'Skip to main content')}
+      </a>
+
       {/* Header */}
       <Header tripName={tripName} />
 
@@ -348,11 +364,15 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
 
       {/* Main content area */}
       <main
+        id="main-content"
+        tabIndex={-1}
         className={cn(
           'pb-20 pt-4 transition-all duration-300 md:pb-4',
           // Adjust left margin based on sidebar state (desktop only)
           isSidebarCollapsed ? 'md:ml-16' : 'md:ml-60',
           'px-4 md:px-6',
+          // Remove focus outline when programmatically focused via skip link
+          'focus:outline-none',
         )}
       >
         {children}
