@@ -1923,9 +1923,31 @@ interface TripFormProps {
 - Delete button with confirmation
 
 **Acceptance Criteria**:
-- [ ] Existing data loads correctly
-- [ ] Updates save correctly
-- [ ] Delete with confirmation works
+- [x] Existing data loads correctly
+- [x] Updates save correctly
+- [x] Delete with confirmation works
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/trips/pages/TripEditPage.tsx` with ~354 lines
+- Loads trip data from URL params via `useParams` with proper TypeScript typing
+- Displays loading state while fetching trip data (`LoadingState` component)
+- Handles trip not found with `EmptyState` showing error icon and back navigation
+- Uses TripForm component in edit mode (passes existing trip)
+- Implements update functionality with success/error toasts
+- Implements delete functionality with `ConfirmDialog` (destructive variant)
+- Delete button in PageHeader action slot with Trash2 icon
+- Three-state rendering: loading → error → form
+- Triple code review applied (Grade: A- from all reviewers):
+  - Code Quality: No critical issues, follows project patterns
+  - Error Analysis: All edge cases handled (tripId validation, unmount safety)
+  - Performance: O(1) database operations, proper memoization
+- Uses refs for async safety: `isMountedRef`, `isSubmittingRef`, `isDeletingRef`
+- Cancelled flag pattern in load effect prevents stale updates
+- Navigation: update→`/trips/${tripId}/calendar`, delete→`/trips`, cancel→`/trips`
+- All translation keys have fallbacks for missing keys
+- Build passes, TypeScript strict mode compliant
 
 ---
 
