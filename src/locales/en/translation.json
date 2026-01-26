@@ -202,7 +202,11 @@
   },
   "pwa": {
     "install": "Install app",
-    "installDescription": "Install Kikoushou on your device for quick access"
+    "installDescription": "Install Kikoushou on your device for quick access",
+    "notNow": "Not now",
+    "installSuccess": "App installed successfully!",
+    "installFailed": "Installation failed. Please try again.",
+    "installPromptRegion": "App installation prompt"
   },
   "dateRangePicker": {
     "placeholder": "Select date range",

@@ -202,7 +202,11 @@
   },
   "pwa": {
     "install": "Installer l'application",
-    "installDescription": "Installez Kikoushou sur votre appareil pour un accès rapide"
+    "installDescription": "Installez Kikoushou sur votre appareil pour un accès rapide",
+    "notNow": "Pas maintenant",
+    "installSuccess": "Application installée avec succès !",
+    "installFailed": "L'installation a échoué. Veuillez réessayer.",
+    "installPromptRegion": "Invite d'installation de l'application"
   },
   "dateRangePicker": {
     "placeholder": "Sélectionner une période",
