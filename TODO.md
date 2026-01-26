@@ -1806,9 +1806,20 @@ type PersonBadgeProps = PersonBadgeWithPersonProps | PersonBadgeWithNameColorPro
 **Route**: `/trips`
 
 **Acceptance Criteria**:
-- [ ] Trips display in a list/grid
-- [ ] Empty state shows when no trips
-- [ ] Create button navigates to form
+- [x] Trips display in a list/grid
+- [x] Empty state shows when no trips
+- [x] Create button navigates to form
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/trips/pages/TripListPage.tsx` with responsive grid layout
+- TripCard subcomponent with memoization and keyboard accessibility
+- Supports loading, error, and empty states with shared components
+- FAB for mobile (bottom-right), header action button for desktop
+- Date range formatting with date-fns and locale support (reactive to language changes)
+- Uses ref for navigation state guard to prevent stale closures and race conditions
+- Triple code review applied: fixed isNavigating race condition, lifted locale to parent, added retry translation key
 
 ---
 

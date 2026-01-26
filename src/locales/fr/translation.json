@@ -16,7 +16,8 @@
     "back": "Retour",
     "search": "Rechercher",
     "noResults": "Aucun résultat",
-    "required": "Requis"
+    "required": "Requis",
+    "retry": "Réessayer"
   },
   "nav": {
     "calendar": "Calendrier",
