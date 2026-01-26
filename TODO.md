@@ -1670,9 +1670,33 @@ const COLORS = [
 ```
 
 **Acceptance Criteria**:
-- [ ] Colors display in a grid
-- [ ] Selection is visually clear
-- [ ] Keyboard navigation works
+- [x] Colors display in a grid
+- [x] Selection is visually clear
+- [x] Keyboard navigation works
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/components/shared/ColorPicker.tsx` with 12-color palette
+- 4-column responsive grid layout with `size-10` (40px) touch-friendly swatches
+- Visual selection indicators:
+  - White checkmark icon with drop-shadow for contrast
+  - Ring outline matching the selected color
+  - Border change on selection
+- Full ARIA radiogroup pattern:
+  - `role="radiogroup"` on container with `aria-label`
+  - `role="radio"` with `aria-checked` on each button
+  - `aria-label` with human-readable color names (Red, Blue, etc.)
+- Roving tabindex for keyboard navigation:
+  - Arrow keys (Up/Down/Left/Right) navigate between colors
+  - Enter/Space selects the focused color
+  - Tab moves focus to/from the group
+- Controlled component with `value` and `onChange` props
+- Optional `colors` prop for custom palettes
+- Disabled state support with visual feedback
+- Exports `DEFAULT_COLORS` for reuse elsewhere
+- Memoized with `memo()` and `useCallback` for handlers
+- Triple code review: optimized redundant computations, no critical issues
 
 ---
 
