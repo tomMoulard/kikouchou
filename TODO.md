@@ -3141,7 +3141,7 @@ interface CalendarEventProps {
 
 **Description**: Create a component that shows online/offline status.
 
-**File**: `src/components/shared/OfflineIndicator.tsx`
+**File**: `src/components/pwa/OfflineIndicator.tsx`
 
 **Requirements**:
 - Detect online/offline status
@@ -3149,9 +3149,32 @@ interface CalendarEventProps {
 - Non-intrusive but visible
 
 **Acceptance Criteria**:
-- [ ] Indicator appears when offline
-- [ ] Disappears when back online
-- [ ] Doesn't block interaction
+- [x] Indicator appears when offline
+- [x] Disappears when back online
+- [x] Doesn't block interaction
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/hooks/useOnlineStatus.ts` with ~190 lines:
+  - Uses `useSyncExternalStore` for proper React 18 SSR handling and tear-safe updates
+  - Provides `isOnline` and `hasRecentlyChanged` states
+  - Global event listeners for `online`/`offline` events (one instance, not per-hook)
+  - `hasRecentlyChanged` flag for showing "back online" feedback (3 second duration)
+  - SSR-safe: assumes online during server rendering
+  - Proper cleanup of subscriptions and timers
+- Created `src/components/pwa/OfflineIndicator.tsx` with ~140 lines:
+  - Fixed-position banner at top of screen
+  - Shows "You are offline" with WifiOff icon when offline (destructive badge)
+  - Shows "Back online" with CheckCircle icon when connectivity restored (green badge)
+  - Smooth enter/exit animations (translate-y)
+  - Non-intrusive: doesn't block interaction, z-50 positioning
+  - Full accessibility: `role="status"`, `aria-live="polite"`, `aria-atomic="true"`
+  - Memoized with `memo()` for performance
+- Created `src/components/pwa/index.ts` barrel export
+- Added i18n keys: `pwa.offline`, `pwa.backOnline` (EN and FR)
+- **Phase 12 (PWA Configuration) tasks 12.3 and 12.5 are now COMPLETE**
+- Remaining: Task 12.1 (PWA Icons - requires image files), Task 12.2 (Manifest verification), Task 12.4 (Service Worker verification)
 
 ---
 
@@ -3318,9 +3341,21 @@ const router = createBrowserRouter([
 ```
 
 **Acceptance Criteria**:
-- [ ] All routes work
-- [ ] 404 handled gracefully
-- [ ] Navigation updates URL
+- [x] All routes work
+- [x] 404 handled gracefully
+- [x] Navigation updates URL
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/router.tsx` with ~270 lines
+- Uses `createBrowserRouter` from React Router v7
+- Integrates all feature route modules via spread operator
+- ErrorPage component handles 404s and route errors with user-friendly UI
+- LayoutWrapper renders Layout with Outlet for nested routes
+- Public sharing route is outside Layout (no navigation chrome)
+- All feature routes have ErrorBoundary and Suspense via their module wrappers
+- Exports route param types for type-safe useParams usage
 
 ---
 
@@ -3347,9 +3382,18 @@ export default function App() {
 ```
 
 **Acceptance Criteria**:
-- [ ] App renders without errors
-- [ ] All providers are accessible
-- [ ] Toaster displays notifications
+- [x] App renders without errors
+- [x] All providers are accessible
+- [x] Toaster displays notifications
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Updated `src/App.tsx` with ~55 lines
+- Wraps RouterProvider with AppProviders (Trip, Room, Person, Assignment, Transport contexts)
+- Uses Sonner Toaster for toast notifications
+- Includes InstallPrompt and OfflineIndicator PWA components
+- Build passes with code splitting (25+ chunks)
 
 ---
 
@@ -3368,8 +3412,23 @@ export default function App() {
 - About section
 
 **Acceptance Criteria**:
-- [ ] Language changes immediately
-- [ ] Setting persists after reload
+- [x] Language changes immediately
+- [x] Setting persists after reload
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/settings/pages/SettingsPage.tsx` with ~230 lines
+- Three sections: LanguageSelector, AboutSection, DataSection
+- Language selector uses Select component with immediate language change via i18n
+- About section shows app name, tagline, and version
+- Data management section with "Clear All Data" button and ConfirmDialog
+- Clear data deletes IndexedDB database and reloads to `/trips`
+- All components memoized for performance
+- Created `src/features/settings/index.ts` barrel export
+- Added 10 new i18n keys to EN and FR locale files
+- Lazy-loaded in router for code splitting (31.74 kB chunk)
+- **Phase 14 (App Router Setup) is now COMPLETE**
 
 ---
 

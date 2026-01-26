@@ -6,7 +6,7 @@
  */
 
 import { memo, useCallback, useMemo, useState, type ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Calendar,
@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Home,
+  Luggage,
   Menu,
   Settings,
   Users,
@@ -34,10 +35,20 @@ import { Button } from '@/components/ui/button';
 interface NavItem {
   /** Translation key for the label */
   readonly labelKey: string;
-  /** Route path */
-  readonly path: string;
+  /** Route path suffix (will be prefixed with tripId for trip-scoped routes) */
+  readonly pathSuffix: string;
   /** Lucide icon component */
   readonly icon: LucideIcon;
+  /** Whether this route requires a trip (trip-scoped) */
+  readonly requiresTrip: boolean;
+}
+
+/**
+ * Props for the navigation components.
+ */
+interface NavProps {
+  /** Current trip ID for building trip-scoped paths */
+  readonly tripId: string | null;
 }
 
 /**
@@ -55,14 +66,42 @@ interface LayoutProps {
 /**
  * Navigation items configuration.
  * Defines the main navigation structure used in both mobile and desktop nav.
+ *
+ * Trip-scoped routes (calendar, rooms, persons, transports) require a tripId.
+ * Non-trip-scoped routes (trips list, settings) work without a tripId.
  */
 const NAV_ITEMS: readonly NavItem[] = [
-  { labelKey: 'nav.calendar', path: '/calendar', icon: Calendar },
-  { labelKey: 'nav.rooms', path: '/rooms', icon: Home },
-  { labelKey: 'nav.persons', path: '/persons', icon: Users },
-  { labelKey: 'nav.transports', path: '/transports', icon: Car },
-  { labelKey: 'nav.settings', path: '/settings', icon: Settings },
+  { labelKey: 'nav.calendar', pathSuffix: 'calendar', icon: Calendar, requiresTrip: true },
+  { labelKey: 'nav.rooms', pathSuffix: 'rooms', icon: Home, requiresTrip: true },
+  { labelKey: 'nav.persons', pathSuffix: 'persons', icon: Users, requiresTrip: true },
+  { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
+  { labelKey: 'trips.title', pathSuffix: '', icon: Luggage, requiresTrip: false },
+  { labelKey: 'nav.settings', pathSuffix: 'settings', icon: Settings, requiresTrip: false },
 ] as const;
+
+/**
+ * Builds the navigation path for a nav item.
+ *
+ * @param item - The navigation item
+ * @param tripId - Current trip ID or null
+ * @returns The full path for the navigation item
+ */
+function buildNavPath(item: NavItem, tripId: string | null): string {
+  if (item.requiresTrip) {
+    // Trip-scoped routes require a tripId
+    if (!tripId) {
+      // If no trip is selected, link to trips list
+      return '/trips';
+    }
+    return `/trips/${tripId}/${item.pathSuffix}`;
+  }
+
+  // Non-trip-scoped routes
+  if (item.pathSuffix === '') {
+    return '/trips';
+  }
+  return `/${item.pathSuffix}`;
+}
 
 // ============================================================================
 // Sub-Components
@@ -96,11 +135,13 @@ const Header = memo(function Header({
         </Button>
       )}
 
-      {/* App name */}
-      <h1 className="text-lg font-semibold">{t('app.name')}</h1>
+      {/* App name - links to trips list */}
+      <Link to="/trips" className="text-lg font-semibold hover:text-primary transition-colors">
+        {t('app.name')}
+      </Link>
 
       {/* Current trip name or placeholder */}
-      <span className="ml-auto text-sm text-muted-foreground">
+      <span className="ml-auto text-sm text-muted-foreground truncate max-w-[200px]">
         {tripName ?? t('trips.empty')}
       </span>
     </header>
@@ -112,7 +153,7 @@ const Header = memo(function Header({
  * Fixed at the bottom of the screen, visible only on mobile.
  * Memoized to prevent unnecessary re-renders on route changes.
  */
-const MobileNav = memo(function MobileNav(): React.ReactElement {
+const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElement {
   const { t } = useTranslation();
 
   return (
@@ -121,32 +162,39 @@ const MobileNav = memo(function MobileNav(): React.ReactElement {
       aria-label={t('nav.main', 'Main navigation')}
     >
       <ul className="flex h-16 items-center justify-around">
-        {NAV_ITEMS.map((item) => (
-          <li key={item.path} className="flex-1">
-            <NavLink
-              to={item.path}
-              className={({ isActive }) =>
-                cn(
-                  'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors',
-                  'hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  isActive
-                    ? 'text-primary font-medium'
-                    : 'text-muted-foreground',
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <item.icon
-                    className={cn('h-5 w-5', isActive && 'text-primary')}
-                    aria-hidden="true"
-                  />
-                  <span>{t(item.labelKey)}</span>
-                </>
-              )}
-            </NavLink>
-          </li>
-        ))}
+        {NAV_ITEMS.map((item) => {
+          const path = buildNavPath(item, tripId);
+          const isDisabled = item.requiresTrip && !tripId;
+
+          return (
+            <li key={item.pathSuffix || 'trips'} className="flex-1">
+              <NavLink
+                to={path}
+                className={({ isActive }) =>
+                  cn(
+                    'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors',
+                    'hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    isActive
+                      ? 'text-primary font-medium'
+                      : 'text-muted-foreground',
+                    isDisabled && 'opacity-50 pointer-events-none',
+                  )
+                }
+                aria-disabled={isDisabled}
+              >
+                {({ isActive }) => (
+                  <>
+                    <item.icon
+                      className={cn('h-5 w-5', isActive && 'text-primary')}
+                      aria-hidden="true"
+                    />
+                    <span>{t(item.labelKey)}</span>
+                  </>
+                )}
+              </NavLink>
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );
@@ -160,9 +208,11 @@ const MobileNav = memo(function MobileNav(): React.ReactElement {
 const DesktopSidebar = memo(function DesktopSidebar({
   isCollapsed,
   onToggle,
+  tripId,
 }: {
   readonly isCollapsed: boolean;
   readonly onToggle: () => void;
+  readonly tripId: string | null;
 }): React.ReactElement {
   const { t } = useTranslation();
 
@@ -177,30 +227,37 @@ const DesktopSidebar = memo(function DesktopSidebar({
       {/* Navigation items */}
       <nav className="flex-1 overflow-y-auto py-4">
         <ul className="space-y-1 px-2">
-          {NAV_ITEMS.map((item) => (
-            <li key={item.path}>
-              <NavLink
-                to={item.path}
-                className={({ isActive }) =>
-                  cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2 transition-colors',
-                    'hover:bg-accent hover:text-accent-foreground',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    isActive
-                      ? 'bg-accent text-accent-foreground font-medium'
-                      : 'text-muted-foreground',
-                    isCollapsed && 'justify-center px-2',
-                  )
-                }
-                title={isCollapsed ? t(item.labelKey) : undefined}
-              >
-                <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                {!isCollapsed && (
-                  <span className="truncate">{t(item.labelKey)}</span>
-                )}
-              </NavLink>
-            </li>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const path = buildNavPath(item, tripId);
+            const isDisabled = item.requiresTrip && !tripId;
+
+            return (
+              <li key={item.pathSuffix || 'trips'}>
+                <NavLink
+                  to={path}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-2 transition-colors',
+                      'hover:bg-accent hover:text-accent-foreground',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      isActive
+                        ? 'bg-accent text-accent-foreground font-medium'
+                        : 'text-muted-foreground',
+                      isCollapsed && 'justify-center px-2',
+                      isDisabled && 'opacity-50 pointer-events-none',
+                    )
+                  }
+                  title={isCollapsed ? t(item.labelKey) : undefined}
+                  aria-disabled={isDisabled}
+                >
+                  <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                  {!isCollapsed && (
+                    <span className="truncate">{t(item.labelKey)}</span>
+                  )}
+                </NavLink>
+              </li>
+            );
+          })}
         </ul>
       </nav>
 
@@ -244,6 +301,10 @@ const DesktopSidebar = memo(function DesktopSidebar({
  * - Collapsible sidebar on desktop
  * - Main content area for page content
  *
+ * Navigation paths are dynamically built based on the current trip:
+ * - Trip-scoped routes (calendar, rooms, persons, transports) use `/trips/:tripId/:path`
+ * - Non-trip-scoped routes (trips list, settings) use `/:path`
+ *
  * @param props - Layout props including children
  * @returns The layout wrapper with navigation and content area
  *
@@ -264,8 +325,9 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
   const { currentTrip } = useTripContext();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // Memoize derived value to prevent unnecessary re-renders
+  // Memoize derived values to prevent unnecessary re-renders
   const tripName = useMemo(() => currentTrip?.name ?? null, [currentTrip?.name]);
+  const tripId = useMemo(() => currentTrip?.id ?? null, [currentTrip?.id]);
 
   // Memoize callback to maintain stable reference for DesktopSidebar
   const toggleSidebar = useCallback(() => {
@@ -281,6 +343,7 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
       <DesktopSidebar
         isCollapsed={isSidebarCollapsed}
         onToggle={toggleSidebar}
+        tripId={tripId}
       />
 
       {/* Main content area */}
@@ -296,7 +359,7 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
       </main>
 
       {/* Mobile bottom navigation */}
-      <MobileNav />
+      <MobileNav tripId={tripId} />
     </div>
   );
 }

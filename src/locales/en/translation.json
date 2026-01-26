@@ -177,13 +177,25 @@
   },
   "settings": {
     "title": "Settings",
+    "description": "Manage your app preferences",
     "language": "Language",
+    "languageDescription": "Choose your preferred language",
+    "languageChanged": "Language changed",
     "languages": {
       "fr": "Français",
       "en": "English"
     },
     "about": "About",
-    "version": "Version"
+    "aboutDescription": "Application information",
+    "version": "Version",
+    "dataManagement": "Data Management",
+    "dataManagementDescription": "Manage your app data",
+    "clearData": "Clear All Data",
+    "clearDataWarning": "This will permanently delete all trips, rooms, persons, and transports.",
+    "clearDataConfirmTitle": "Clear All Data?",
+    "clearDataConfirmDescription": "This will permanently delete all your trips, rooms, persons, and transport information. This action cannot be undone.",
+    "dataCleared": "All data has been cleared",
+    "clearDataFailed": "Failed to clear data. Please try again."
   },
   "validation": {
     "invalidDate": "Invalid date",
@@ -206,7 +218,9 @@
     "notNow": "Not now",
     "installSuccess": "App installed successfully!",
     "installFailed": "Installation failed. Please try again.",
-    "installPromptRegion": "App installation prompt"
+    "installPromptRegion": "App installation prompt",
+    "offline": "You are offline",
+    "backOnline": "Back online"
   },
   "dateRangePicker": {
     "placeholder": "Select date range",

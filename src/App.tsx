@@ -1,37 +1,57 @@
-import { useState } from 'react'
-import reactLogo from '@/assets/react.svg'
-import viteLogo from '/vite.svg'
+/**
+ * @fileoverview Main application component.
+ * Sets up the application with providers, router, and global UI components.
+ *
+ * @module App
+ */
 
-function App() {
-  const [count, setCount] = useState(0)
+import { type ReactElement } from 'react';
+import { RouterProvider } from 'react-router-dom';
 
+import { AppProviders } from '@/contexts/AppProviders';
+import { Toaster } from '@/components/ui/sonner';
+import { InstallPrompt, OfflineIndicator } from '@/components/pwa';
+import { router } from '@/router';
+
+// ============================================================================
+// Component
+// ============================================================================
+
+/**
+ * Main application component.
+ *
+ * Provides:
+ * - AppProviders: Trip, Room, Person, Assignment, Transport contexts
+ * - RouterProvider: React Router with configured routes
+ * - Toaster: Toast notifications via Sonner
+ * - InstallPrompt: PWA install prompt
+ * - OfflineIndicator: Network status indicator
+ *
+ * @returns The root application element with all providers and global UI
+ *
+ * @example
+ * ```tsx
+ * // In main.tsx
+ * import App from './App';
+ *
+ * ReactDOM.createRoot(document.getElementById('root')!).render(
+ *   <React.StrictMode>
+ *     <App />
+ *   </React.StrictMode>,
+ * );
+ * ```
+ */
+function App(): ReactElement {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-center p-8">
-      <div className="flex gap-8 mb-8">
-        <a href="https://vite.dev" target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-110">
-          <img src={viteLogo} className="h-24 w-24" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank" rel="noopener noreferrer" className="transition-transform hover:scale-110">
-          <img src={reactLogo} className="h-24 w-24 animate-spin" style={{ animationDuration: '20s' }} alt="React logo" />
-        </a>
-      </div>
-      <h1 className="text-5xl font-bold text-white mb-8">Vite + React</h1>
-      <div className="bg-slate-700 rounded-lg p-6 mb-4">
-        <button 
-          onClick={() => setCount((count) => count + 1)}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
-        >
-          count is {count}
-        </button>
-        <p className="text-slate-300 mt-4">
-          Edit <code className="bg-slate-600 px-2 py-1 rounded">src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="text-slate-400">
-        Click on the Vite and React logos to learn more
-      </p>
-    </div>
-  )
+    <AppProviders>
+      <RouterProvider router={router} />
+
+      {/* Global UI components */}
+      <Toaster position="bottom-center" richColors closeButton />
+      <InstallPrompt />
+      <OfflineIndicator />
+    </AppProviders>
+  );
 }
 
-export default App
+export default App;

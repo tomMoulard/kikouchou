@@ -177,13 +177,25 @@
   },
   "settings": {
     "title": "Paramètres",
+    "description": "Gérez vos préférences",
     "language": "Langue",
+    "languageDescription": "Choisissez votre langue préférée",
+    "languageChanged": "Langue modifiée",
     "languages": {
       "fr": "Français",
       "en": "English"
     },
     "about": "À propos",
-    "version": "Version"
+    "aboutDescription": "Informations sur l'application",
+    "version": "Version",
+    "dataManagement": "Gestion des données",
+    "dataManagementDescription": "Gérez les données de l'application",
+    "clearData": "Supprimer toutes les données",
+    "clearDataWarning": "Cela supprimera définitivement tous les voyages, chambres, participants et transports.",
+    "clearDataConfirmTitle": "Supprimer toutes les données ?",
+    "clearDataConfirmDescription": "Cela supprimera définitivement tous vos voyages, chambres, participants et informations de transport. Cette action est irréversible.",
+    "dataCleared": "Toutes les données ont été supprimées",
+    "clearDataFailed": "Échec de la suppression des données. Veuillez réessayer."
   },
   "validation": {
     "invalidDate": "Date invalide",
@@ -206,7 +218,9 @@
     "notNow": "Pas maintenant",
     "installSuccess": "Application installée avec succès !",
     "installFailed": "L'installation a échoué. Veuillez réessayer.",
-    "installPromptRegion": "Invite d'installation de l'application"
+    "installPromptRegion": "Invite d'installation de l'application",
+    "offline": "Vous êtes hors ligne",
+    "backOnline": "Connexion rétablie"
   },
   "dateRangePicker": {
     "placeholder": "Sélectionner une période",
