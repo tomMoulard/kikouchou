@@ -18,6 +18,7 @@ import {
   type ReactElement,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { format, parseISO, isValid } from 'date-fns';
 import { fr, enUS, type Locale } from 'date-fns/locale';
 import {
@@ -704,20 +705,25 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
       try {
         if (editingAssignment) {
           await updateAssignment(editingAssignment.id, data);
+          toast.success(t('assignments.updateSuccess'));
         } else {
           await createAssignment(data);
+          toast.success(t('assignments.createSuccess'));
         }
 
         if (isMountedRef.current) {
           onAssignmentChange?.();
         }
+      } catch (error) {
+        toast.error(t('errors.saveFailed'));
+        throw error;
       } finally {
         if (isMountedRef.current) {
           setIsOperationPending(false);
         }
       }
     },
-    [editingAssignment, updateAssignment, createAssignment, onAssignmentChange],
+    [editingAssignment, updateAssignment, createAssignment, onAssignmentChange, t],
   );
 
   /**
@@ -731,12 +737,14 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
 
     try {
       await deleteAssignment(deletingAssignment.id);
+      toast.success(t('assignments.deleteSuccess'));
 
       if (isMountedRef.current) {
         setDeletingAssignment(undefined);
         onAssignmentChange?.();
       }
     } catch (error) {
+      toast.error(t('errors.deleteFailed'));
       // Re-throw to let ConfirmDialog handle error state (keeps dialog open for retry)
       throw error;
     } finally {
@@ -744,7 +752,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
         setIsOperationPending(false);
       }
     }
-  }, [deletingAssignment, deleteAssignment, onAssignmentChange]);
+  }, [deletingAssignment, deleteAssignment, onAssignmentChange, t]);
 
   /**
    * Closes the delete confirmation dialog.

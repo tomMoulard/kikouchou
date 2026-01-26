@@ -15,6 +15,7 @@ import {
   type ReactElement,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { QRCodeCanvas } from 'qrcode.react';
 import {
   Check,
@@ -258,6 +259,7 @@ const ShareDialog = memo(function ShareDialog({
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopiedWithTimeout();
+      toast.success(t('sharing.copied'));
     } catch (error) {
       console.error('Failed to copy to clipboard:', error);
       // Fallback for older browsers (deprecated but kept for legacy support)
@@ -271,19 +273,25 @@ const ShareDialog = memo(function ShareDialog({
         document.execCommand('copy');
         document.body.removeChild(textArea);
         setCopiedWithTimeout();
+        toast.success(t('sharing.copied'));
       } catch (fallbackError) {
         console.error('Fallback copy also failed:', fallbackError);
-        // TODO: Consider adding user feedback via toast notification
+        toast.error(t('sharing.copyError'));
       }
     }
-  }, [shareUrl, isCopied, setCopiedWithTimeout]);
+  }, [shareUrl, isCopied, setCopiedWithTimeout, t]);
 
   /**
    * Handles downloading the QR code as PNG.
    */
   const handleDownloadQr = useCallback(() => {
-    downloadQrCode(QR_CANVAS_ID, qrFilename);
-  }, [qrFilename]);
+    const success = downloadQrCode(QR_CANVAS_ID, qrFilename);
+    if (success) {
+      toast.success(t('sharing.downloadSuccess'));
+    } else {
+      toast.error(t('sharing.downloadError'));
+    }
+  }, [qrFilename, t]);
 
   // ============================================================================
   // Render: Empty State (No Trip Selected)

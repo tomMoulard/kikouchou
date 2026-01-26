@@ -42,7 +42,10 @@
     "endDate": "End date",
     "deleteConfirm": "Are you sure you want to delete this trip? This action cannot be undone.",
     "empty": "No trips",
-    "emptyDescription": "Create your first trip to get started"
+    "emptyDescription": "Create your first trip to get started",
+    "created": "Trip created successfully",
+    "updated": "Trip updated successfully",
+    "deleted": "Trip deleted successfully"
   },
   "rooms": {
     "title": "Rooms",
@@ -81,6 +84,7 @@
     "editDescription": "Modify the guest details below.",
     "createSuccess": "Guest added successfully",
     "updateSuccess": "Guest updated successfully",
+    "deleteSuccess": "Guest removed successfully",
     "empty": "No guests",
     "emptyDescription": "Add the people joining the trip"
   },
@@ -100,7 +104,10 @@
     "emptyDescription": "Assign guests to rooms",
     "showMore": "+{{count}} more",
     "deleteConfirmTitle": "Delete assignment?",
-    "deleteConfirm": "Are you sure you want to delete this assignment? This action cannot be undone."
+    "deleteConfirm": "Are you sure you want to delete this assignment? This action cannot be undone.",
+    "createSuccess": "Room assignment created",
+    "updateSuccess": "Room assignment updated",
+    "deleteSuccess": "Room assignment removed"
   },
   "transports": {
     "title": "Transport",
@@ -165,9 +172,12 @@
     "link": "Share link",
     "copy": "Copy link",
     "copied": "Link copied!",
+    "copyError": "Failed to copy link",
     "qrCode": "QR Code",
     "scanToView": "Scan to view the trip",
     "downloadQr": "Download QR Code",
+    "downloadSuccess": "QR code downloaded",
+    "downloadError": "Failed to download QR code",
     "import": "Import a trip",
     "importDescription": "Enter the share code or scan a QR code",
     "viewTrip": "View this trip",

@@ -3263,9 +3263,35 @@ interface CalendarEventProps {
 - Error states
 
 **Acceptance Criteria**:
-- [ ] Toasts appear for all actions
-- [ ] Success/error variants styled differently
-- [ ] Auto-dismiss after appropriate time
+- [x] Toasts appear for all actions
+- [x] Success/error variants styled differently
+- [x] Auto-dismiss after appropriate time
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Conducted comprehensive toast notification audit via subagentic workflow
+- Sonner Toaster configured in App.tsx with `richColors`, `closeButton`, position `bottom-center`
+- Custom icons for success/error/warning/info states in `src/components/ui/sonner.tsx`
+- **Existing toast coverage was excellent**, most CRUD operations already had toasts
+- **Gaps identified and fixed**:
+  1. **RoomAssignmentSection.tsx**: Added toast notifications for assignment create/update/delete (was completely missing)
+  2. **ShareDialog.tsx**: Added toast notifications for copy-to-clipboard and QR download success/error
+- **Missing translation keys added** (EN + FR):
+  - `trips.created`, `trips.updated`, `trips.deleted` (used with inline fallbacks, now proper keys)
+  - `persons.deleteSuccess` (was missing)
+  - `assignments.createSuccess`, `assignments.updateSuccess`, `assignments.deleteSuccess`
+  - `sharing.copyError`, `sharing.downloadSuccess`, `sharing.downloadError`
+- **Full toast coverage verified**:
+  - Trips: create/update/delete ✅
+  - Rooms: create/update/delete ✅
+  - Persons: create/update/delete ✅
+  - Transports: create/update/delete ✅
+  - Assignments: create/update/delete ✅ (newly added)
+  - Sharing: copy/download ✅ (newly added)
+  - Settings: language change/clear data ✅
+  - PWA: install success/error ✅
+- Build passes, 28 precache entries (905.42 KiB)
 
 ---
 
