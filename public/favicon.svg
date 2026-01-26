@@ -1,0 +1,24 @@
+<!--
+  Kikoushou Favicon - Simplified for small sizes (16x16, 32x32)
+  Design: Minimalist house silhouette - recognizable at tiny sizes
+  ViewBox: 32x32
+  Optimized: Removed fine details, increased stroke weights, simplified shapes
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Background -->
+  <rect width="32" height="32" rx="6" fill="#0f172a"/>
+  
+  <!-- Simplified house: Just roof + body -->
+  <!-- Roof (teal) -->
+  <path d="M4 17 L16 7 L28 17 L24 17 L16 10 L8 17 Z" fill="#14b8a6"/>
+  
+  <!-- House body -->
+  <rect x="8" y="15" width="16" height="12" rx="1" fill="#1e293b"/>
+  
+  <!-- Door (simple rectangle) -->
+  <rect x="14" y="19" width="4" height="8" rx="0.5" fill="#0f172a"/>
+  
+  <!-- Two simplified room indicators (dots) -->
+  <circle cx="11" cy="18" r="1.5" fill="#ef4444"/>
+  <circle cx="21" cy="18" r="1.5" fill="#3b82f6"/>
+</svg>

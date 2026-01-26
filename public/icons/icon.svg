@@ -1,0 +1,44 @@
+<!--
+  Kikoushou PWA Icon - Master Version
+  Design: Stylized house with calendar grid motif representing vacation house room management
+  ViewBox: 512x512
+  Colors: Slate-900 background (#0f172a) with white/teal accents for contrast
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background: Rounded square matching app theme -->
+  <rect width="512" height="512" rx="76" fill="#0f172a"/>
+  
+  <!-- House body: Main rectangle -->
+  <rect x="128" y="240" width="256" height="180" rx="12" fill="#1e293b"/>
+  
+  <!-- Roof: Triangle shape with slight overhang -->
+  <path d="M96 260 L256 120 L416 260 L384 260 L256 152 L128 260 Z" fill="#14b8a6"/>
+  
+  <!-- Door: Central entrance (arrivals/departures) -->
+  <rect x="224" y="320" width="64" height="100" rx="6" fill="#0f172a"/>
+  <circle cx="276" cy="375" r="6" fill="#14b8a6"/>
+  
+  <!-- Calendar grid inside house: 2x2 room representation -->
+  <!-- Top-left room -->
+  <rect x="144" y="256" width="64" height="48" rx="4" fill="#334155"/>
+  <!-- Top-right room -->
+  <rect x="304" y="256" width="64" height="48" rx="4" fill="#334155"/>
+  <!-- Bottom-left room (next to door) -->
+  <rect x="144" y="320" width="64" height="48" rx="4" fill="#334155"/>
+  <!-- Bottom-right room (next to door) -->
+  <rect x="304" y="320" width="64" height="48" rx="4" fill="#334155"/>
+  
+  <!-- Room assignment indicators (colored dots representing assigned persons) -->
+  <circle cx="160" cy="272" r="8" fill="#ef4444"/>
+  <circle cx="180" cy="272" r="8" fill="#3b82f6"/>
+  <circle cx="320" cy="272" r="8" fill="#22c55e"/>
+  <circle cx="160" cy="336" r="8" fill="#f97316"/>
+  <circle cx="320" cy="336" r="8" fill="#8b5cf6"/>
+  <circle cx="340" cy="336" r="8" fill="#ec4899"/>
+  
+  <!-- Chimney detail -->
+  <rect x="320" y="140" width="32" height="60" rx="4" fill="#1e293b"/>
+  
+  <!-- Arrival/departure indicator: Small arrow on roof -->
+  <path d="M380 180 L400 160 L400 172 L420 172 L420 188 L400 188 L400 200 Z" fill="#ffffff" opacity="0.9"/>
+</svg>

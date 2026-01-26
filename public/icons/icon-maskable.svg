@@ -1,0 +1,51 @@
+<!--
+  Kikoushou PWA Icon - Maskable Version for Android Adaptive Icons
+  Design: Same as master but scaled to fit within 80% safe zone (center circle)
+  ViewBox: 512x512
+  Safe zone: All content within center 80% (51.2px padding on each edge)
+  Android may crop up to 20% from edges with various shapes (circle, squircle, etc.)
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background: Full bleed (will be cropped by adaptive icon shapes) -->
+  <rect width="512" height="512" fill="#0f172a"/>
+  
+  <!-- Safe zone visualization (development only, can be removed):
+       Center point: 256,256
+       Safe radius: 204.8px (40% of 512)
+       Content should stay within x:51.2 to x:460.8, y:51.2 to y:460.8
+  -->
+  
+  <!-- House body: Scaled and centered within safe zone -->
+  <rect x="152" y="248" width="208" height="148" rx="10" fill="#1e293b"/>
+  
+  <!-- Roof: Scaled down proportionally -->
+  <path d="M128 264 L256 148 L384 264 L360 264 L256 176 L152 264 Z" fill="#14b8a6"/>
+  
+  <!-- Door: Central entrance -->
+  <rect x="232" y="316" width="48" height="80" rx="5" fill="#0f172a"/>
+  <circle cx="270" cy="360" r="5" fill="#14b8a6"/>
+  
+  <!-- Room grid: 2x2 layout -->
+  <!-- Top-left room -->
+  <rect x="164" y="260" width="52" height="40" rx="3" fill="#334155"/>
+  <!-- Top-right room -->
+  <rect x="296" y="260" width="52" height="40" rx="3" fill="#334155"/>
+  <!-- Bottom-left room -->
+  <rect x="164" y="316" width="52" height="40" rx="3" fill="#334155"/>
+  <!-- Bottom-right room -->
+  <rect x="296" y="316" width="52" height="40" rx="3" fill="#334155"/>
+  
+  <!-- Person assignment dots (scaled) -->
+  <circle cx="178" cy="274" r="7" fill="#ef4444"/>
+  <circle cx="194" cy="274" r="7" fill="#3b82f6"/>
+  <circle cx="310" cy="274" r="7" fill="#22c55e"/>
+  <circle cx="178" cy="330" r="7" fill="#f97316"/>
+  <circle cx="310" cy="330" r="7" fill="#8b5cf6"/>
+  <circle cx="326" cy="330" r="7" fill="#ec4899"/>
+  
+  <!-- Chimney (scaled) -->
+  <rect x="312" y="164" width="26" height="48" rx="3" fill="#1e293b"/>
+  
+  <!-- Arrival arrow (scaled and repositioned within safe zone) -->
+  <path d="M356 196 L372 180 L372 190 L388 190 L388 202 L372 202 L372 212 Z" fill="#ffffff" opacity="0.9"/>
+</svg>

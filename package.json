@@ -8,7 +8,8 @@
     "prod": "vite --mode production",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "generate-icons": "node scripts/generate-icons.js"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",
