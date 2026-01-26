@@ -13,9 +13,10 @@ import {
   useState,
   type KeyboardEvent,
   type MouseEvent,
+  type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MoreHorizontal, BedDouble, Users, Pencil, Trash2 } from 'lucide-react';
+import { MoreHorizontal, BedDouble, Users, Pencil, Trash2, ChevronDown } from 'lucide-react';
 
 import {
   Card,
@@ -52,12 +53,16 @@ export interface RoomCardProps {
   readonly occupants: readonly Person[];
   /** Whether the card interaction is currently disabled */
   readonly isDisabled?: boolean;
-  /** Callback when the card body is clicked (not the menu) */
+  /** Whether the card is currently expanded (controlled mode) */
+  readonly isExpanded?: boolean;
+  /** Callback when the card body is clicked - toggles expansion */
   readonly onClick?: (room: Room) => void;
   /** Callback when Edit is selected from the menu */
   readonly onEdit: (room: Room) => void;
   /** Callback when Delete is confirmed. Can be async. */
   readonly onDelete: (room: Room) => void | Promise<void>;
+  /** Content to render when expanded (typically RoomAssignmentSection) */
+  readonly expandedContent?: ReactNode;
 }
 
 // ============================================================================
@@ -114,9 +119,11 @@ const RoomCard = memo(function RoomCard({
   room,
   occupants,
   isDisabled = false,
+  isExpanded = false,
   onClick,
   onEdit,
   onDelete,
+  expandedContent,
 }: RoomCardProps) {
   const { t } = useTranslation();
 
@@ -320,12 +327,32 @@ const RoomCard = memo(function RoomCard({
           )}
         </CardContent>
 
-        {/* Card Footer - Beds count (localized) */}
-        <CardFooter className="pt-0">
+        {/* Card Footer - Beds count and expand indicator */}
+        <CardFooter className="pt-0 flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
             {t('rooms.beds', { count: room.capacity })}
           </p>
+          {expandedContent && (
+            <ChevronDown
+              className={cn(
+                'size-4 text-muted-foreground transition-transform duration-200',
+                isExpanded && 'rotate-180',
+              )}
+              aria-hidden="true"
+            />
+          )}
         </CardFooter>
+
+        {/* Expanded Content (e.g., RoomAssignmentSection) */}
+        {expandedContent && isExpanded && (
+          <div
+            className="border-t px-4 py-4"
+            onClick={handleMenuAreaClick}
+            onKeyDown={handleMenuAreaKeyDown}
+          >
+            {expandedContent}
+          </div>
+        )}
       </Card>
 
       {/* Delete Confirmation Dialog */}

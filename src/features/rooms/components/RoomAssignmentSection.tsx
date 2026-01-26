@@ -55,6 +55,7 @@ import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePi
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTripContext } from '@/contexts/TripContext';
+import { useTransportContext } from '@/contexts/TransportContext';
 import { cn } from '@/lib/utils';
 import type {
   RoomAssignment,
@@ -98,6 +99,16 @@ interface AssignmentItemProps {
 }
 
 /**
+ * Transport dates for a person (arrival and departure).
+ */
+interface PersonTransportDates {
+  /** Earliest arrival date (from arrival transports) */
+  readonly arrivalDate: Date | undefined;
+  /** Latest departure date (from departure transports) */
+  readonly departureDate: Date | undefined;
+}
+
+/**
  * Props for the AssignmentFormDialog subcomponent.
  */
 interface AssignmentFormDialogProps {
@@ -115,6 +126,8 @@ interface AssignmentFormDialogProps {
     endDate: ISODateString,
     excludeId?: RoomAssignmentId,
   ) => Promise<boolean>;
+  /** Function to get transport dates for a person (for autofill) */
+  readonly getPersonTransportDates?: (personId: PersonId) => PersonTransportDates;
 }
 
 // ============================================================================
@@ -308,6 +321,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   tripEndDate,
   onSubmit,
   checkConflict,
+  getPersonTransportDates,
 }: AssignmentFormDialogProps): ReactElement {
   const { t } = useTranslation();
 
@@ -317,6 +331,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCheckingConflict, setIsCheckingConflict] = useState(false);
+  const [wasAutoFilled, setWasAutoFilled] = useState(false);
 
   // Refs for async safety
   const isMountedRef = useRef(true);
@@ -334,9 +349,11 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
           from: parseISO(existingAssignment.startDate),
           to: parseISO(existingAssignment.endDate),
         });
+        setWasAutoFilled(false);
       } else {
         setSelectedPersonId('');
         setDateRange(undefined);
+        setWasAutoFilled(false);
       }
       setConflictError(null);
       setIsSubmitting(false);
@@ -443,10 +460,29 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
     [isSubmitting, onOpenChange],
   );
 
-  // Handle person selection
+  // Handle person selection with transport dates autofill
   const handlePersonChange = useCallback((value: string) => {
-    setSelectedPersonId(value as PersonId | '');
-  }, []);
+    const personId = value as PersonId | '';
+    setSelectedPersonId(personId);
+
+    // Only autofill if:
+    // 1. Not in edit mode (editing existing assignment)
+    // 2. No dates currently selected
+    // 3. A valid person is selected
+    // 4. getPersonTransportDates is available
+    if (!isEditMode && !dateRange?.from && !dateRange?.to && personId && getPersonTransportDates) {
+      const transportDates = getPersonTransportDates(personId);
+      
+      if (transportDates.arrivalDate || transportDates.departureDate) {
+        const newRange: DateRange = {
+          from: transportDates.arrivalDate,
+          to: transportDates.departureDate,
+        };
+        setDateRange(newRange);
+        setWasAutoFilled(true);
+      }
+    }
+  }, [isEditMode, dateRange, getPersonTransportDates]);
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -512,12 +548,23 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
             <Label>{t('assignments.period')}</Label>
             <DateRangePicker
               value={dateRange}
-              onChange={setDateRange}
+              onChange={(range) => {
+                setDateRange(range);
+                // Clear autofill indicator when user manually changes dates
+                if (wasAutoFilled) setWasAutoFilled(false);
+              }}
               minDate={tripStartDate}
               maxDate={tripEndDate}
               disabled={isSubmitting}
               aria-label={t('assignments.period')}
             />
+            {/* Hint about check-in/check-out model */}
+            <p className="text-xs text-muted-foreground">
+              {wasAutoFilled 
+                ? t('assignments.autofilledFromTransport', 'Dates pre-filled from transport schedule')
+                : t('assignments.periodHint', 'Guest stays from check-in night until check-out morning')
+              }
+            </p>
           </div>
 
           {/* Conflict warning */}
@@ -607,6 +654,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
     checkConflict,
     isLoading: isAssignmentsLoading,
   } = useAssignmentContext();
+  const { getTransportsByPerson } = useTransportContext();
 
   // Local state
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
@@ -647,6 +695,35 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
       end: parseISO(currentTrip.endDate),
     };
   }, [currentTrip]);
+
+  // Get transport dates for a person (for autofill in assignment dialog)
+  const getPersonTransportDates = useCallback(
+    (personId: PersonId): PersonTransportDates => {
+      const transports = getTransportsByPerson(personId);
+      
+      // Find earliest arrival and latest departure
+      let arrivalDate: Date | undefined;
+      let departureDate: Date | undefined;
+
+      for (const transport of transports) {
+        const transportDate = parseISO(transport.datetime);
+        if (!isValid(transportDate)) continue;
+
+        if (transport.type === 'arrival') {
+          if (!arrivalDate || transportDate < arrivalDate) {
+            arrivalDate = transportDate;
+          }
+        } else if (transport.type === 'departure') {
+          if (!departureDate || transportDate > departureDate) {
+            departureDate = transportDate;
+          }
+        }
+      }
+
+      return { arrivalDate, departureDate };
+    },
+    [getTransportsByPerson],
+  );
 
   // Loading state
   const isLoading = isPersonsLoading || isAssignmentsLoading;
@@ -876,6 +953,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
         tripEndDate={tripDates.end}
         onSubmit={handleFormSubmit}
         checkConflict={checkConflict}
+        getPersonTransportDates={getPersonTransportDates}
       />
 
       {/* Delete Confirmation Dialog */}

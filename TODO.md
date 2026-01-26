@@ -3679,6 +3679,7 @@ Before considering the MVP complete, verify (with as much test as possible) the 
 - [ ] Trip sharing via QR code works
 - [ ] Language can be switched between French and English
 - [ ] All data persists in IndexedDB
+- [ ] icons showing the transport must match the transport type whenever the transport type is used
 
 ### PWA Requirements
 - [ ] App is installable on mobile devices

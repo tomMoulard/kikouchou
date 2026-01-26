@@ -41,14 +41,22 @@ import {
   isWithinInterval,
   addMonths,
   subMonths,
+  subDays,
 } from 'date-fns';
 import { fr, enUS, type Locale } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Calendar as CalendarIcon,
+  PlaneLanding,
+  PlaneTakeoff,
+} from 'lucide-react';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { useRoomContext } from '@/contexts/RoomContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
+import { useTransportContext } from '@/contexts/TransportContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
@@ -60,6 +68,8 @@ import type {
   Person,
   Room,
   HexColor,
+  Transport,
+  TransportType,
 } from '@/types';
 
 // ============================================================================
@@ -108,6 +118,7 @@ interface CalendarDayHeaderProps {
 interface CalendarDayProps {
   readonly date: Date;
   readonly events: readonly CalendarEvent[];
+  readonly transports: readonly CalendarTransport[];
   readonly isCurrentMonth: boolean;
   readonly isToday: boolean;
   readonly isWithinTrip: boolean;
@@ -121,6 +132,28 @@ interface CalendarDayProps {
 interface CalendarEventProps {
   readonly event: CalendarEvent;
   readonly onClick: (assignment: RoomAssignment) => void;
+}
+
+/**
+ * Transport indicator data for calendar display.
+ */
+interface CalendarTransport {
+  /** The underlying transport */
+  readonly transport: Transport;
+  /** The person traveling (may be undefined if deleted) */
+  readonly person: Person | undefined;
+  /** Display name for the person */
+  readonly personName: string;
+  /** Person's color for badge */
+  readonly color: HexColor;
+}
+
+/**
+ * Props for the TransportIndicator subcomponent.
+ */
+interface TransportIndicatorProps {
+  readonly transport: CalendarTransport;
+  readonly type: TransportType;
 }
 
 // ============================================================================
@@ -198,6 +231,11 @@ function toISODateString(date: Date): string {
  * Using a module-level constant ensures referential equality across renders.
  */
 const EMPTY_EVENTS: readonly CalendarEvent[] = [];
+
+/**
+ * Stable empty array constant to prevent re-renders for days without transports.
+ */
+const EMPTY_TRANSPORTS: readonly CalendarTransport[] = [];
 
 // ============================================================================
 // CalendarHeader Subcomponent
@@ -366,6 +404,51 @@ const CalendarEvent = memo(function CalendarEvent({
 CalendarEvent.displayName = 'CalendarEvent';
 
 // ============================================================================
+// TransportIndicator Subcomponent
+// ============================================================================
+
+/**
+ * Transport indicator pill displayed within a calendar day.
+ * Shows arrival (green) or departure (orange) with person name.
+ */
+const TransportIndicator = memo(function TransportIndicator({
+  transport,
+  type,
+}: TransportIndicatorProps): ReactElement {
+  const { t } = useTranslation();
+
+  const isArrival = type === 'arrival';
+  const Icon = isArrival ? PlaneLanding : PlaneTakeoff;
+  const ariaLabel = isArrival
+    ? t('calendar.personArriving', '{{name}} arriving', { name: transport.personName })
+    : t('calendar.personDeparting', '{{name}} departing', { name: transport.personName });
+
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-1 text-xs rounded px-1.5 py-0.5 truncate',
+        'border',
+        isArrival
+          ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800'
+          : 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800',
+      )}
+      title={ariaLabel}
+      aria-label={ariaLabel}
+    >
+      <Icon className="size-3 shrink-0" aria-hidden="true" />
+      <span
+        className="size-2 rounded-full shrink-0"
+        style={{ backgroundColor: transport.color }}
+        aria-hidden="true"
+      />
+      <span className="truncate">{transport.personName}</span>
+    </div>
+  );
+});
+
+TransportIndicator.displayName = 'TransportIndicator';
+
+// ============================================================================
 // CalendarDay Subcomponent
 // ============================================================================
 
@@ -375,6 +458,7 @@ CalendarEvent.displayName = 'CalendarEvent';
 const CalendarDay = memo(function CalendarDay({
   date,
   events,
+  transports,
   isCurrentMonth,
   isToday,
   isWithinTrip,
@@ -384,10 +468,15 @@ const CalendarDay = memo(function CalendarDay({
   const dayNumber = format(date, 'd', { locale: dateLocale });
   const dateLabel = format(date, 'PPPP', { locale: dateLocale });
 
-  // Limit visible events to prevent overflow
-  const maxVisibleEvents = 3;
-  const visibleEvents = events.slice(0, maxVisibleEvents);
-  const hiddenCount = events.length - maxVisibleEvents;
+  // Limit visible items (events + transports) to prevent overflow
+  const maxVisibleItems = 3;
+  const totalItems = events.length + transports.length;
+
+  // Prioritize showing transports first (arrivals/departures are time-sensitive)
+  const visibleTransports = transports.slice(0, maxVisibleItems);
+  const remainingSlots = Math.max(0, maxVisibleItems - visibleTransports.length);
+  const visibleEvents = events.slice(0, remainingSlots);
+  const hiddenCount = totalItems - visibleTransports.length - visibleEvents.length;
 
   return (
     <div
@@ -414,8 +503,17 @@ const CalendarDay = memo(function CalendarDay({
         </span>
       </div>
 
-      {/* Events */}
+      {/* Transports (arrivals/departures) */}
       <div className="flex-1 space-y-0.5 overflow-hidden">
+        {visibleTransports.map((transport) => (
+          <TransportIndicator
+            key={transport.transport.id}
+            transport={transport}
+            type={transport.transport.type}
+          />
+        ))}
+
+        {/* Room assignment events */}
         {visibleEvents.map((event) => (
           <CalendarEvent
             key={event.assignment.id}
@@ -457,6 +555,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   const { rooms, isLoading: isRoomsLoading, error: roomsError } = useRoomContext();
   const { assignments, isLoading: isAssignmentsLoading, error: assignmentsError } = useAssignmentContext();
   const { getPersonById, isLoading: isPersonsLoading, error: personsError } = usePersonContext();
+  const { arrivals, departures, isLoading: isTransportsLoading, error: transportsError } = useTransportContext();
 
   // Local state for current viewing month
   // Initialized to today - will sync with trip start date via useEffect when loaded
@@ -485,7 +584,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   }, [currentTrip?.startDate]);
 
   // Combined loading state
-  const isLoading = isTripLoading || isRoomsLoading || isAssignmentsLoading || isPersonsLoading;
+  const isLoading = isTripLoading || isRoomsLoading || isAssignmentsLoading || isPersonsLoading || isTransportsLoading;
 
   // Date locale based on current language
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
@@ -581,9 +680,24 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         continue;
       }
 
+      // Room assignments use "check-in / check-out" model:
+      // - startDate = check-in day (first night staying)
+      // - endDate = check-out day (person leaves, does NOT sleep that night)
+      // So we display from startDate to (endDate - 1 day)
+      // 
+      // Example: Check-in Jan 15, Check-out Jan 17
+      // - Person sleeps nights of Jan 15 and Jan 16
+      // - Calendar shows assignment on Jan 15 and Jan 16 only
+      const lastNight = subDays(assignmentEnd, 1);
+      
+      // If check-in and check-out are the same day, skip (no nights stayed)
+      if (lastNight < assignmentStart) {
+        continue;
+      }
+
       // Calculate intersection with visible calendar range
       const effectiveStart = assignmentStart < firstDay ? firstDay : assignmentStart;
-      const effectiveEnd = assignmentEnd > lastDay ? lastDay : assignmentEnd;
+      const effectiveEnd = lastNight > lastDay ? lastDay : lastNight;
 
       // Only iterate through days within the assignment range (not all 42 calendar days)
       const assignmentDays = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
@@ -601,6 +715,83 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
 
     return map;
   }, [assignments, getPersonById, roomsMap, calendarDays, unknownLabel]);
+
+  // Build transport events grouped by date for calendar display
+  // Maps date strings (YYYY-MM-DD) to arrays of transports on that date
+  const transportsByDate = useMemo(() => {
+    const map = new Map<string, CalendarTransport[]>();
+
+    // Early return if no days to display
+    if (calendarDays.length === 0) {
+      return map;
+    }
+
+    // Pre-compute calendar boundaries for efficient range checking
+    const firstDay = calendarDays[0];
+    const lastDay = calendarDays[calendarDays.length - 1];
+
+    // Safety check for array access (satisfies noUncheckedIndexedAccess)
+    if (!firstDay || !lastDay) {
+      return map;
+    }
+
+    const calendarStartStr = toISODateString(firstDay);
+    const calendarEndStr = toISODateString(lastDay);
+
+    // Process arrivals
+    for (const transport of arrivals) {
+      const transportDate = transport.datetime.substring(0, 10); // Extract YYYY-MM-DD
+      // Skip transports outside visible calendar range
+      if (transportDate < calendarStartStr || transportDate > calendarEndStr) {
+        continue;
+      }
+
+      const person = getPersonById(transport.personId);
+      const color = (person?.color && person.color.length >= 4) ? person.color : '#6b7280';
+
+      const calTransport: CalendarTransport = {
+        transport,
+        person,
+        personName: person?.name ?? unknownLabel,
+        color: color as HexColor,
+      };
+
+      const existing = map.get(transportDate);
+      if (existing) {
+        existing.push(calTransport);
+      } else {
+        map.set(transportDate, [calTransport]);
+      }
+    }
+
+    // Process departures
+    for (const transport of departures) {
+      const transportDate = transport.datetime.substring(0, 10); // Extract YYYY-MM-DD
+      // Skip transports outside visible calendar range
+      if (transportDate < calendarStartStr || transportDate > calendarEndStr) {
+        continue;
+      }
+
+      const person = getPersonById(transport.personId);
+      const color = (person?.color && person.color.length >= 4) ? person.color : '#6b7280';
+
+      const calTransport: CalendarTransport = {
+        transport,
+        person,
+        personName: person?.name ?? unknownLabel,
+        color: color as HexColor,
+      };
+
+      const existing = map.get(transportDate);
+      if (existing) {
+        existing.push(calTransport);
+      } else {
+        map.set(transportDate, [calTransport]);
+      }
+    }
+
+    return map;
+  }, [arrivals, departures, getPersonById, calendarDays, unknownLabel]);
 
   // Today's date for highlighting
   // Note: This value is captured on mount. For long-running sessions past midnight,
@@ -675,8 +866,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // Render: Error State
   // ============================================================================
 
-  if (roomsError || assignmentsError || personsError) {
-    const error = roomsError ?? assignmentsError ?? personsError;
+  if (roomsError || assignmentsError || personsError || transportsError) {
+    const error = roomsError ?? assignmentsError ?? personsError ?? transportsError;
     return (
       <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('calendar.title')} backLink="/trips" />
@@ -750,8 +941,9 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           >
             {calendarDays.map((day) => {
               const dateKey = toISODateString(day);
-              // Use stable EMPTY_EVENTS constant to prevent CalendarDay re-renders
+              // Use stable EMPTY_EVENTS/EMPTY_TRANSPORTS constants to prevent CalendarDay re-renders
               const events = eventsByDate.get(dateKey) ?? EMPTY_EVENTS;
+              const transports = transportsByDate.get(dateKey) ?? EMPTY_TRANSPORTS;
               const isCurrentMonth = isSameMonth(day, currentMonth);
               const isDayToday = isSameDay(day, today);
               const isWithinTrip =
@@ -763,6 +955,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
                   key={dateKey}
                   date={day}
                   events={events}
+                  transports={transports}
                   isCurrentMonth={isCurrentMonth}
                   isToday={isDayToday}
                   isWithinTrip={isWithinTrip}

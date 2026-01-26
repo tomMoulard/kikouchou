@@ -97,12 +97,13 @@
     "title": "Attribution des chambres",
     "assign": "Attribuer une chambre",
     "editAssignment": "Modifier l'attribution",
-    "assignDescription": "Sélectionnez un participant et une période pour cette chambre.",
+    "assignDescription": "Sélectionnez un participant et ses dates d'arrivée/départ.",
     "editDescription": "Modifiez les détails de l'attribution ci-dessous.",
     "selectPerson": "Sélectionner un participant",
     "room": "Chambre",
     "person": "Participant",
-    "period": "Période",
+    "period": "Arrivée / Départ",
+    "periodHint": "Le participant reste de la nuit d'arrivée jusqu'au matin du départ",
     "conflict": "Cette personne est déjà assignée à une autre chambre pour ces dates",
     "checkingConflict": "Vérification de la disponibilité...",
     "empty": "Aucune attribution",
@@ -112,7 +113,8 @@
     "deleteConfirm": "Voulez-vous vraiment supprimer cette attribution ? Cette action est irréversible.",
     "createSuccess": "Attribution créée",
     "updateSuccess": "Attribution mise à jour",
-    "deleteSuccess": "Attribution supprimée"
+    "deleteSuccess": "Attribution supprimée",
+    "autofilledFromTransport": "Dates pré-remplies à partir des transports"
   },
   "transports": {
     "title": "Transports",
@@ -169,7 +171,9 @@
     "noAssignments": "Aucune attribution pour cette période",
     "previousMonth": "Mois précédent",
     "nextMonth": "Mois suivant",
-    "monthView": "Calendrier mensuel"
+    "monthView": "Calendrier mensuel",
+    "personArriving": "Arrivée de {{name}}",
+    "personDeparting": "Départ de {{name}}"
   },
   "sharing": {
     "title": "Partager le voyage",
@@ -243,7 +247,8 @@
   "dateRangePicker": {
     "placeholder": "Sélectionner une période",
     "ariaLabel": "Sélecteur de période",
-    "calendarDialog": "Sélectionner une période"
+    "calendarDialog": "Sélectionner une période",
+    "selectEndDate": "{{date}} → sélectionner la fin"
   },
   "colors": {
     "red": "Rouge",

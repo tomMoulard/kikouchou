@@ -41,6 +41,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
 import { RoomDialog } from '@/features/rooms/components/RoomDialog';
+import { RoomAssignmentSection } from '@/features/rooms/components/RoomAssignmentSection';
 import type { Room, Person, RoomId } from '@/types';
 
 // ============================================================================
@@ -62,15 +63,19 @@ interface RoomWithOccupancy {
 // ============================================================================
 
 /**
- * Checks if a reference date falls within a date range using string comparison.
+ * Checks if a reference date falls within a room assignment's stay period.
+ * Uses the "check-in / check-out" model:
+ * - startDate = check-in day (first night)
+ * - endDate = check-out day (person leaves, NOT a stay night)
+ * 
  * ISO date strings (YYYY-MM-DD) sort lexicographically, making this efficient.
  *
- * @param startDate - Start date in ISO format (YYYY-MM-DD)
- * @param endDate - End date in ISO format (YYYY-MM-DD)
+ * @param startDate - Check-in date in ISO format (YYYY-MM-DD)
+ * @param endDate - Check-out date in ISO format (YYYY-MM-DD)
  * @param referenceDate - Reference date in ISO format (YYYY-MM-DD)
- * @returns True if referenceDate is within the range (inclusive)
+ * @returns True if referenceDate is a night the person is staying (check-in <= ref < check-out)
  */
-function isDateInRange(
+function isDateInStayRange(
   startDate: string,
   endDate: string,
   referenceDate: string,
@@ -80,8 +85,9 @@ function isDateInRange(
     return false;
   }
 
-  // ISO date strings (YYYY-MM-DD) can be compared lexicographically
-  return startDate <= referenceDate && referenceDate <= endDate;
+  // Person stays from check-in (inclusive) to check-out (exclusive)
+  // Example: check-in Jan 15, check-out Jan 17 → stays nights of Jan 15, Jan 16
+  return startDate <= referenceDate && referenceDate < endDate;
 }
 
 /**
@@ -136,6 +142,9 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRoomId, setEditingRoomId] = useState<RoomId | undefined>(undefined);
 
+  // Track which room is expanded to show assignments
+  const [expandedRoomId, setExpandedRoomId] = useState<RoomId | undefined>(undefined);
+
   // Combined loading state
   const isLoading = isTripLoading || isRoomsLoading;
 
@@ -167,7 +176,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
       // Filter to assignments active today
       const activeAssignments = assignments.filter((assignment) =>
-        isDateInRange(assignment.startDate, assignment.endDate, todayStr),
+        isDateInStayRange(assignment.startDate, assignment.endDate, todayStr),
       );
 
       // Map person IDs to Person objects, filtering out any not found
@@ -187,13 +196,12 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   // ============================================================================
 
   /**
-   * Handles room card click - opens the room edit dialog.
+   * Handles room card click - toggles the expanded state to show/hide assignments.
    */
   const handleRoomClick = useCallback(
     (room: Room) => {
       if (isActionInProgressRef.current) return;
-      setEditingRoomId(room.id);
-      setIsDialogOpen(true);
+      setExpandedRoomId((prev) => (prev === room.id ? undefined : room.id));
     },
     [],
   );
@@ -396,6 +404,13 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
               onEdit={handleRoomEdit}
               onDelete={handleRoomDelete}
               isDisabled={isActionInProgress}
+              isExpanded={expandedRoomId === room.id}
+              expandedContent={
+                <RoomAssignmentSection
+                  roomId={room.id}
+                  variant="compact"
+                />
+              }
             />
           </div>
         ))}

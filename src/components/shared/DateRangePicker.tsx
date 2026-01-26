@@ -4,6 +4,11 @@
  * A date range picker that allows users to select a start and end date.
  * Uses shadcn/ui Calendar inside a Popover with locale-aware formatting.
  *
+ * Selection behavior:
+ * 1. First click selects the start date
+ * 2. Second click selects the end date (auto-closes popover)
+ * 3. Third click resets and starts new selection
+ *
  * @example
  * ```tsx
  * import { DateRangePicker } from '@/components/shared/DateRangePicker';
@@ -23,9 +28,9 @@
  * ```
  */
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { format, isValid, isAfter } from 'date-fns';
+import { format, isValid, isAfter, isSameDay } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
 import type { DateRange as RdpDateRange, Matcher } from 'react-day-picker';
 import { CalendarIcon } from 'lucide-react';
@@ -99,6 +104,14 @@ function getDateFnsLocale(language: string): typeof fr | typeof enUS {
  * - Accessible with proper ARIA attributes
  * - Auto-closes when range selection is complete
  */
+/**
+ * Selection state for the two-click range picker.
+ * - 'idle': No selection in progress, waiting for first click
+ * - 'selecting': First date selected, waiting for second click
+ * - 'complete': Both dates selected
+ */
+type SelectionState = 'idle' | 'selecting' | 'complete';
+
 const DateRangePicker = memo(function DateRangePicker({
   value,
   onChange,
@@ -114,6 +127,33 @@ const DateRangePicker = memo(function DateRangePicker({
 }: DateRangePickerProps): React.ReactElement {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
+
+  // Track selection state for two-click behavior
+  const [selectionState, setSelectionState] = useState<SelectionState>('idle');
+  
+  // Track the pending start date during selection
+  const pendingStartRef = useRef<Date | undefined>(undefined);
+
+  // Reset selection state when popover closes or value changes externally
+  useEffect(() => {
+    if (!open) {
+      setSelectionState('idle');
+      pendingStartRef.current = undefined;
+    }
+  }, [open]);
+
+  // Sync selection state with external value
+  useEffect(() => {
+    if (value?.from && value?.to) {
+      setSelectionState('complete');
+    } else if (value?.from) {
+      setSelectionState('selecting');
+      pendingStartRef.current = value.from;
+    } else {
+      setSelectionState('idle');
+      pendingStartRef.current = undefined;
+    }
+  }, [value?.from, value?.to]);
 
   // Get the appropriate date-fns locale
   const locale = useMemo(
@@ -163,8 +203,8 @@ const DateRangePicker = memo(function DateRangePicker({
     const fromStr = format(value.from, dateFormat, { locale });
 
     if (!value.to || !isValidDate(value.to)) {
-      // Only start date selected - show partial selection
-      return `${fromStr} - ...`;
+      // Only start date selected - show that we're waiting for end date
+      return t('dateRangePicker.selectEndDate', '{{date}} → select end date', { date: fromStr });
     }
 
     const toStr = format(value.to, dateFormat, { locale });
@@ -174,7 +214,7 @@ const DateRangePicker = memo(function DateRangePicker({
       return fromStr;
     }
 
-    return `${fromStr} - ${toStr}`;
+    return `${fromStr} → ${toStr}`;
   }, [value, placeholder, locale, t]);
 
   // Determine if a value is currently selected (for styling)
@@ -187,33 +227,64 @@ const DateRangePicker = memo(function DateRangePicker({
     [value?.from, value?.to]
   );
 
-  // Handle date selection from the calendar
+  // Handle date selection from the calendar with two-click behavior
+  // Click 1: Select start date
+  // Click 2: Select end date (auto-closes)
+  // Click 3: Reset and start new selection
   const handleSelect = useCallback(
     (range: RdpDateRange | undefined) => {
-      if (!range) {
+      // If range is undefined or empty, start fresh
+      if (!range?.from) {
         onChange(undefined);
+        setSelectionState('idle');
+        pendingStartRef.current = undefined;
         return;
       }
 
-      let { from, to } = range;
+      const clickedDate = range.from;
 
-      // Normalize: ensure from <= to (defensive against invalid ranges)
-      if (from && to && isAfter(from, to)) {
-        [from, to] = [to, from];
+      // Determine behavior based on current state
+      if (selectionState === 'complete') {
+        // Already have a complete selection - start new selection with this date
+        pendingStartRef.current = clickedDate;
+        onChange({ from: clickedDate, to: undefined });
+        setSelectionState('selecting');
+        return;
       }
 
-      const newRange: DateRange = { from, to };
-      onChange(newRange);
+      if (selectionState === 'selecting' && pendingStartRef.current) {
+        // Second click - complete the range
+        let startDate = pendingStartRef.current;
+        let endDate = clickedDate;
 
-      // Auto-close popover when a complete range is selected
-      // Use requestAnimationFrame to allow state to settle before closing
-      if (from && to) {
+        // Normalize: ensure from <= to
+        if (isAfter(startDate, endDate)) {
+          [startDate, endDate] = [endDate, startDate];
+        }
+
+        // If same day clicked, treat as single-day range
+        if (isSameDay(startDate, endDate)) {
+          onChange({ from: startDate, to: endDate });
+        } else {
+          onChange({ from: startDate, to: endDate });
+        }
+
+        setSelectionState('complete');
+        pendingStartRef.current = undefined;
+
+        // Auto-close popover after complete selection
         requestAnimationFrame(() => {
           setOpen(false);
         });
+        return;
       }
+
+      // First click - start new selection
+      pendingStartRef.current = clickedDate;
+      onChange({ from: clickedDate, to: undefined });
+      setSelectionState('selecting');
     },
-    [onChange]
+    [onChange, selectionState]
   );
 
   // Determine the default month to show in the calendar

@@ -97,12 +97,13 @@
     "title": "Room assignments",
     "assign": "Assign a room",
     "editAssignment": "Edit assignment",
-    "assignDescription": "Select a guest and date range for this room.",
+    "assignDescription": "Select a guest and their check-in/check-out dates.",
     "editDescription": "Modify the assignment details below.",
     "selectPerson": "Select a guest",
     "room": "Room",
     "person": "Guest",
-    "period": "Period",
+    "period": "Check-in / Check-out",
+    "periodHint": "Guest stays from check-in night until check-out morning",
     "conflict": "This person is already assigned to another room for these dates",
     "checkingConflict": "Checking availability...",
     "empty": "No assignments",
@@ -112,7 +113,8 @@
     "deleteConfirm": "Are you sure you want to delete this assignment? This action cannot be undone.",
     "createSuccess": "Room assignment created",
     "updateSuccess": "Room assignment updated",
-    "deleteSuccess": "Room assignment removed"
+    "deleteSuccess": "Room assignment removed",
+    "autofilledFromTransport": "Dates pre-filled from transport schedule"
   },
   "transports": {
     "title": "Transport",
@@ -169,7 +171,9 @@
     "noAssignments": "No assignments for this period",
     "previousMonth": "Previous month",
     "nextMonth": "Next month",
-    "monthView": "Month view calendar"
+    "monthView": "Month view calendar",
+    "personArriving": "{{name}} arriving",
+    "personDeparting": "{{name}} departing"
   },
   "sharing": {
     "title": "Share trip",
@@ -243,7 +247,8 @@
   "dateRangePicker": {
     "placeholder": "Select date range",
     "ariaLabel": "Date range picker",
-    "calendarDialog": "Select date range"
+    "calendarDialog": "Select date range",
+    "selectEndDate": "{{date}} → select end date"
   },
   "colors": {
     "red": "Red",
