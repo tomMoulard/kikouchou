@@ -2936,9 +2936,19 @@ interface CalendarEventProps {
 (For local/PWA: use relative URL `/share/[shareId]`)
 
 **Acceptance Criteria**:
-- [ ] URL displays correctly
-- [ ] Copy button works
-- [ ] QR code generates correctly
+- [x] URL displays correctly
+- [x] Copy button works
+- [x] QR code generates correctly
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/sharing/components/ShareDialog.tsx` with ~280 lines
+- Displays shareable URL with copy-to-clipboard functionality
+- Integrates QRCodeDisplay for QR code generation
+- Uses `qrcode.react` library for QR code rendering
+- Full i18n support with translation keys
+- Accessible with proper ARIA attributes
 
 ---
 
@@ -2955,9 +2965,17 @@ interface CalendarEventProps {
 - Download button (save as PNG)
 
 **Acceptance Criteria**:
-- [ ] QR code renders
-- [ ] Download works
-- [ ] Scannable by phone camera
+- [x] QR code renders
+- [x] Download works
+- [x] Scannable by phone camera
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- QR code functionality implemented as part of ShareDialog component
+- Uses `qrcode.react` QRCodeCanvas component
+- Configurable size prop
+- Download as PNG functionality included
 
 ---
 
@@ -2976,9 +2994,22 @@ interface CalendarEventProps {
 - Handle not found
 
 **Acceptance Criteria**:
-- [ ] Shared trip loads
-- [ ] Info displays correctly
-- [ ] Not found handled gracefully
+- [x] Shared trip loads
+- [x] Info displays correctly
+- [x] Not found handled gracefully
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/sharing/pages/ShareImportPage.tsx` with ~280 lines
+- Loads trip data from shareId URL parameter via `getTripByShareId`
+- Shows loading, not-found, and success states
+- Displays trip info: name, location (conditional), formatted date range
+- "View this trip" button sets current trip and navigates to calendar
+- Uses repository function directly (`setCurrentTrip` from `@/lib/db`) to avoid TripContext dependency on public routes
+- Toast notification for success/error feedback
+- Fixed race condition with `finally` block for `isNavigating` state
+- i18n keys: `sharing.viewTrip`, `sharing.viewTripDescription`, `sharing.notFound`, `sharing.notFoundDescription`, `sharing.viewError`
 
 ---
 
@@ -2991,7 +3022,15 @@ interface CalendarEventProps {
 - `src/features/sharing/routes.tsx`
 
 **Acceptance Criteria**:
-- [ ] All sharing components are exported
+- [x] All sharing components are exported
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/sharing/routes.tsx` with lazy-loaded route configuration
+- Created `src/features/sharing/index.ts` barrel exports
+- Route configured: `/share/:shareId`
+- **Phase 11 (Sharing Feature) is now COMPLETE**
 
 ---
 
@@ -3040,7 +3079,7 @@ interface CalendarEventProps {
 
 **Description**: Create a component to prompt users to install the PWA.
 
-**File**: `src/components/shared/InstallPrompt.tsx`
+**File**: `src/components/pwa/InstallPrompt.tsx`
 
 **Requirements**:
 - Detect if PWA is installable (beforeinstallprompt event)
@@ -3050,9 +3089,33 @@ interface CalendarEventProps {
 - Use `t('pwa.install')` for text
 
 **Acceptance Criteria**:
-- [ ] Prompt appears on installable browsers
-- [ ] Install button triggers native prompt
-- [ ] Dismissal is remembered
+- [x] Prompt appears on installable browsers
+- [x] Install button triggers native prompt
+- [x] Dismissal is remembered
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/hooks/useInstallPrompt.ts` with ~360 lines:
+  - Custom hook that captures `beforeinstallprompt` event
+  - Detects if app is already installed via `display-mode: standalone`, `navigator.standalone`, `navigator.getInstalledRelatedApps()`
+  - Provides `canInstall`, `isInstalled`, `isInstalling` state
+  - Provides `install()` async function that triggers native prompt
+  - Uses `isMountedRef` pattern for async safety
+  - Uses `isInstallingRef` to prevent stale closure race conditions
+  - Clears `deferredPrompt` after any outcome (accept or dismiss)
+  - Properly cleans up all event listeners
+- Created `src/components/pwa/InstallPrompt.tsx` with ~310 lines:
+  - Fixed-position banner at bottom of screen (accounts for mobile nav with `pb-20`)
+  - Only renders when `canInstall` is true
+  - Respects 7-day dismissal cooldown via localStorage
+  - Shows success toast on installation
+  - Shows error toast on failed installation
+  - Proper cleanup for dismiss animation `setTimeout` using `dismissTimerRef`
+  - Full accessibility with ARIA attributes (`role="region"`, `aria-label`)
+  - Uses shadcn/ui Card and Button components
+- i18n keys added: `pwa.notNow`, `pwa.installSuccess`, `pwa.installFailed`, `pwa.installPromptRegion`
+- Triple Code Review Applied: fixed stale closure race condition, prompt invalidation, cleanup for dismiss timer, error feedback toast
 
 ---
 
