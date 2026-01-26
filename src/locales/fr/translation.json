@@ -137,7 +137,10 @@
     "today": "Aujourd'hui",
     "month": "Mois",
     "week": "Semaine",
-    "noAssignments": "Aucune attribution pour cette période"
+    "noAssignments": "Aucune attribution pour cette période",
+    "previousMonth": "Mois précédent",
+    "nextMonth": "Mois suivant",
+    "monthView": "Calendrier mensuel"
   },
   "sharing": {
     "title": "Partager le voyage",

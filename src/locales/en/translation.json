@@ -137,7 +137,10 @@
     "today": "Today",
     "month": "Month",
     "week": "Week",
-    "noAssignments": "No assignments for this period"
+    "noAssignments": "No assignments for this period",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "monthView": "Month view calendar"
   },
   "sharing": {
     "title": "Share trip",
