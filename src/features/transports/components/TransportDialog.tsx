@@ -169,18 +169,14 @@ const TransportDialog = memo(function TransportDialog({
         if (transportId) {
           // Edit mode - update existing transport
           await updateTransport(transportId, data);
-          if (isMountedRef.current) {
-            toast.success(t('transports.updateSuccess', 'Transport updated successfully'));
-            onOpenChange(false);
-          }
+          toast.success(t('transports.updateSuccess', 'Transport updated successfully'));
         } else {
           // Create mode - create new transport
           await createTransport(data);
-          if (isMountedRef.current) {
-            toast.success(t('transports.createSuccess', 'Transport created successfully'));
-            onOpenChange(false);
-          }
+          toast.success(t('transports.createSuccess', 'Transport created successfully'));
         }
+        // Always close dialog on success, regardless of mount state
+        onOpenChange(false);
       } catch (error) {
         console.error('Failed to save transport:', error);
         if (isMountedRef.current) {

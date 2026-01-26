@@ -18,6 +18,7 @@
 import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -45,6 +46,7 @@ import {
   CardContent,
 } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { PersonDialog } from '@/features/persons/components/PersonDialog';
 import type { Person, PersonId } from '@/types';
 
 // ============================================================================
@@ -257,19 +259,32 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
 
   // Context hooks
-  const { currentTrip, isLoading: isTripLoading } = useTripContext();
+  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
   const { persons, isLoading: isPersonsLoading, error: personsError } = usePersonContext();
   const { getTransportsByPerson, isLoading: isTransportsLoading } = useTransportContext();
 
   // Track if we're currently navigating to prevent double-clicks
   const isNavigatingRef = useRef(false);
-  const [isNavigating, setIsNavigating] = useState(false);
+  const [isNavigating] = useState(false);
+
+  // Dialog state for create/edit person
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingPersonId, setEditingPersonId] = useState<PersonId | undefined>(undefined);
 
   // Combined loading state (includes transports to avoid "no transport info" flash)
   const isLoading = isTripLoading || isPersonsLoading || isTransportsLoading;
 
   // Get date locale based on current language
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+
+  // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
+  useEffect(() => {
+    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
+      setCurrentTrip(tripIdFromUrl).catch((err) => {
+        console.error('Failed to set current trip from URL:', err);
+      });
+    }
+  }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
 
   // Validate tripId matches current trip
   const tripMismatch = useMemo(() => {
@@ -320,28 +335,24 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   // ============================================================================
 
   /**
-   * Handles person card click - navigates to person detail/edit page.
+   * Handles person card click - opens the person edit dialog.
    */
   const handlePersonClick = useCallback(
     (personId: PersonId) => {
       if (isNavigatingRef.current) return;
-
-      isNavigatingRef.current = true;
-      setIsNavigating(true);
-
-      // Navigate to person edit page
-      navigate(`/trips/${tripIdFromUrl}/persons/${personId}/edit`);
+      setEditingPersonId(personId);
+      setIsDialogOpen(true);
     },
-    [navigate, tripIdFromUrl],
+    [],
   );
 
   /**
-   * Handles add person button click.
+   * Handles add person button click - opens the create person dialog.
    */
   const handleAddPerson = useCallback(() => {
-    // TODO: Replace with PersonDialog when available (Task 7.4)
-    navigate(`/trips/${tripIdFromUrl}/persons/new`);
-  }, [navigate, tripIdFromUrl]);
+    setEditingPersonId(undefined); // Clear editing person ID for create mode
+    setIsDialogOpen(true);
+  }, []);
 
   /**
    * Handles back navigation.
@@ -349,6 +360,16 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   const handleBack = useCallback(() => {
     navigate(`/trips/${tripIdFromUrl}/calendar`);
   }, [navigate, tripIdFromUrl]);
+
+  /**
+   * Handles dialog close - resets editing state.
+   */
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setEditingPersonId(undefined);
+    }
+  }, []);
 
   // ============================================================================
   // Header Action (desktop button)
@@ -450,6 +471,13 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
             }}
           />
         </div>
+
+        {/* Person Create Dialog - needed even in empty state */}
+        <PersonDialog
+          personId={editingPersonId}
+          open={isDialogOpen}
+          onOpenChange={handleDialogOpenChange}
+        />
       </div>
     );
   }
@@ -504,6 +532,13 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
       >
         <Plus className="size-6" aria-hidden="true" />
       </Button>
+
+      {/* Person Create/Edit Dialog */}
+      <PersonDialog
+        personId={editingPersonId}
+        open={isDialogOpen}
+        onOpenChange={handleDialogOpenChange}
+      />
     </div>
   );
 });

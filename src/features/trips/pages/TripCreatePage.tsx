@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { TripForm } from '@/features/trips/components/TripForm';
-import { createTrip } from '@/lib/db';
+import { createTrip, setCurrentTrip } from '@/lib/db';
 import type { TripFormData } from '@/types';
 
 // ============================================================================
@@ -91,20 +91,20 @@ function TripCreatePageComponent(): ReactElement {
       try {
         const newTrip = await createTrip(data);
 
-        // Only proceed if component is still mounted
-        if (!isMountedRef.current) {
-          return;
-        }
-
         // Validate trip was created with valid ID (defensive check for database quirks)
         if (!newTrip?.id) {
           throw new Error('Trip creation failed: missing trip ID');
         }
 
+        // Set the new trip as the current trip so CalendarPage can display it
+        await setCurrentTrip(newTrip.id);
+
         // Show success toast with fallback for missing translation key
         toast.success(t('trips.created', 'Trip created successfully'));
 
         // Navigate to the new trip's calendar
+        // Note: We intentionally navigate even if component is unmounting,
+        // as the trip was successfully created and the user expects to see it
         navigate(`/trips/${newTrip.id}/calendar`);
       } catch (error) {
         // Log error for debugging

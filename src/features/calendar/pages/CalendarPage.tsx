@@ -453,7 +453,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
 
   // Context hooks
-  const { currentTrip, isLoading: isTripLoading } = useTripContext();
+  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
   const { rooms, isLoading: isRoomsLoading, error: roomsError } = useRoomContext();
   const { assignments, isLoading: isAssignmentsLoading, error: assignmentsError } = useAssignmentContext();
   const { getPersonById, isLoading: isPersonsLoading, error: personsError } = usePersonContext();
@@ -464,6 +464,15 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
 
   // Track if user has manually navigated to avoid overwriting their selection
   const hasUserNavigatedRef = useRef(false);
+
+  // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
+  useEffect(() => {
+    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
+      setCurrentTrip(tripIdFromUrl).catch((err) => {
+        console.error('Failed to set current trip from URL:', err);
+      });
+    }
+  }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
 
   // Sync currentMonth with trip start date when trip loads (but not if user already navigated)
   useEffect(() => {

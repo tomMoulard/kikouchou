@@ -18,6 +18,7 @@
 import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -75,7 +76,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import type { Transport, TransportId, TransportMode, Person, PersonId } from '@/types';
+import { TransportDialog } from '@/features/transports/components/TransportDialog';
+import type { Transport, TransportId, TransportMode, TransportType, Person, PersonId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -468,7 +470,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
 
   // Context hooks
-  const { currentTrip, isLoading: isTripLoading } = useTripContext();
+  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
   const {
     arrivals,
@@ -481,6 +483,11 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // Local state
   const [activeTab, setActiveTab] = useState<'arrivals' | 'departures'>('arrivals');
   const [transportToDelete, setTransportToDelete] = useState<TransportId | null>(null);
+
+  // Dialog state for create/edit transport
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingTransportId, setEditingTransportId] = useState<TransportId | undefined>(undefined);
+  const [defaultTransportType, setDefaultTransportType] = useState<TransportType>('arrival');
 
   // Track if we're currently navigating to prevent double-clicks
   const isNavigatingRef = useRef(false);
@@ -500,6 +507,15 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     return map;
   }, [persons]);
 
+  // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
+  useEffect(() => {
+    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
+      setCurrentTrip(tripIdFromUrl).catch((err) => {
+        console.error('Failed to set current trip from URL:', err);
+      });
+    }
+  }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
+
   // Validate tripId matches current trip
   const tripMismatch = useMemo(() => {
     if (!tripIdFromUrl || !currentTrip) return false;
@@ -511,16 +527,15 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // ============================================================================
 
   /**
-   * Handles edit transport click - navigates to transport edit page.
+   * Handles edit transport click - opens the transport edit dialog.
    */
   const handleEdit = useCallback(
     (transportId: TransportId) => {
-      // Prevent double-clicks and guard against undefined tripId
-      if (isNavigatingRef.current || !tripIdFromUrl) return;
-      isNavigatingRef.current = true;
-      navigate(`/trips/${tripIdFromUrl}/transports/${transportId}/edit`);
+      if (isNavigatingRef.current) return;
+      setEditingTransportId(transportId);
+      setIsDialogOpen(true);
     },
-    [navigate, tripIdFromUrl],
+    [],
   );
 
   /**
@@ -559,14 +574,13 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   }, []);
 
   /**
-   * Handles add transport button click.
+   * Handles add transport button click - opens the create transport dialog.
    */
   const handleAddTransport = useCallback(() => {
-    // Guard against undefined tripId
-    if (!tripIdFromUrl) return;
-    // Navigate to new transport page with active tab as default type
-    navigate(`/trips/${tripIdFromUrl}/transports/new?type=${activeTab === 'arrivals' ? 'arrival' : 'departure'}`);
-  }, [navigate, tripIdFromUrl, activeTab]);
+    setEditingTransportId(undefined); // Clear editing transport ID for create mode
+    setDefaultTransportType(activeTab === 'arrivals' ? 'arrival' : 'departure');
+    setIsDialogOpen(true);
+  }, [activeTab]);
 
   /**
    * Handles back navigation.
@@ -574,6 +588,16 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   const handleBack = useCallback(() => {
     navigate(`/trips/${tripIdFromUrl}/calendar`);
   }, [navigate, tripIdFromUrl]);
+
+  /**
+   * Handles dialog close - resets editing state.
+   */
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setEditingTransportId(undefined);
+    }
+  }, []);
 
   // ============================================================================
   // Header Action (desktop button)
@@ -745,6 +769,14 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={handleConfirmDelete}
+      />
+
+      {/* Transport Create/Edit Dialog */}
+      <TransportDialog
+        transportId={editingTransportId}
+        open={isDialogOpen}
+        onOpenChange={handleDialogOpenChange}
+        defaultType={defaultTransportType}
       />
     </div>
   );

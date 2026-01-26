@@ -161,18 +161,14 @@ const RoomDialog = memo(function RoomDialog({
           // Edit mode - update existing room
           // Use roomId directly instead of room.id to avoid stale closure issues
           await updateRoom(roomId, data);
-          if (isMountedRef.current) {
-            toast.success(t('rooms.updateSuccess', 'Room updated successfully'));
-            onOpenChange(false);
-          }
+          toast.success(t('rooms.updateSuccess', 'Room updated successfully'));
         } else {
           // Create mode - create new room
           await createRoom(data);
-          if (isMountedRef.current) {
-            toast.success(t('rooms.createSuccess', 'Room created successfully'));
-            onOpenChange(false);
-          }
+          toast.success(t('rooms.createSuccess', 'Room created successfully'));
         }
+        // Always close dialog on success, regardless of mount state
+        onOpenChange(false);
       } catch (error) {
         console.error('Failed to save room:', error);
         if (isMountedRef.current) {

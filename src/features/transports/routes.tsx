@@ -69,7 +69,7 @@ function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>)
  */
 export const transportRoutes: RouteObject[] = [
   {
-    path: 'transports',
+    path: 'trips/:tripId/transports',
     element: withSuspense(TransportListPage),
   },
 ];
@@ -78,6 +78,6 @@ export const transportRoutes: RouteObject[] = [
  * Standalone route for use in nested route configurations.
  */
 export const TransportListRoute = {
-  path: 'transports',
+  path: 'trips/:tripId/transports',
   element: withSuspense(TransportListPage),
 } satisfies RouteObject;

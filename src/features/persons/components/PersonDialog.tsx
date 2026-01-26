@@ -162,18 +162,14 @@ const PersonDialog = memo(function PersonDialog({
           // Edit mode - update existing person
           // Use personId directly instead of person.id to avoid stale closure issues
           await updatePerson(personId, data);
-          if (isMountedRef.current) {
-            toast.success(t('persons.updateSuccess', 'Participant updated successfully'));
-            onOpenChange(false);
-          }
+          toast.success(t('persons.updateSuccess', 'Participant updated successfully'));
         } else {
           // Create mode - create new person
           await createPerson(data);
-          if (isMountedRef.current) {
-            toast.success(t('persons.createSuccess', 'Participant added successfully'));
-            onOpenChange(false);
-          }
+          toast.success(t('persons.createSuccess', 'Participant added successfully'));
         }
+        // Always close dialog on success, regardless of mount state
+        onOpenChange(false);
       } catch (error) {
         console.error('Failed to save person:', error);
         if (isMountedRef.current) {

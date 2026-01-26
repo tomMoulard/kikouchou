@@ -18,6 +18,7 @@
 import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -39,7 +40,8 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
-import type { Room, Person } from '@/types';
+import { RoomDialog } from '@/features/rooms/components/RoomDialog';
+import type { Room, Person, RoomId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -116,7 +118,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
 
   // Context hooks
-  const { currentTrip, isLoading: isTripLoading } = useTripContext();
+  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
   const {
     rooms,
     isLoading: isRoomsLoading,
@@ -128,10 +130,23 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
   // Track if we're currently performing an action to prevent double-clicks
   const isActionInProgressRef = useRef(false);
-  const [isActionInProgress, setIsActionInProgress] = useState(false);
+  const [isActionInProgress] = useState(false);
+
+  // Dialog state for create/edit room
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingRoomId, setEditingRoomId] = useState<RoomId | undefined>(undefined);
 
   // Combined loading state
   const isLoading = isTripLoading || isRoomsLoading;
+
+  // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
+  useEffect(() => {
+    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
+      setCurrentTrip(tripIdFromUrl).catch((err) => {
+        console.error('Failed to set current trip from URL:', err);
+      });
+    }
+  }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
 
   // Validate tripId matches current trip
   const tripMismatch = useMemo(() => {
@@ -172,23 +187,15 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   // ============================================================================
 
   /**
-   * Handles room card click - navigates to room detail/edit page.
-   * Note: Action guard prevents double-clicks. State is NOT reset after navigation
-   * because the component will typically unmount when navigating away.
+   * Handles room card click - opens the room edit dialog.
    */
   const handleRoomClick = useCallback(
     (room: Room) => {
       if (isActionInProgressRef.current) return;
-
-      isActionInProgressRef.current = true;
-      setIsActionInProgress(true);
-
-      // TODO: Navigate to room detail page when implemented
-      // For now, navigate to a placeholder route
-      navigate(`/trips/${tripIdFromUrl}/rooms/${room.id}/edit`);
-      // Don't reset state - let component unmount naturally
+      setEditingRoomId(room.id);
+      setIsDialogOpen(true);
     },
-    [navigate, tripIdFromUrl],
+    [],
   );
 
   /**
@@ -197,13 +204,10 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   const handleRoomEdit = useCallback(
     (room: Room) => {
       if (isActionInProgressRef.current) return;
-
-      isActionInProgressRef.current = true;
-      setIsActionInProgress(true);
-
-      navigate(`/trips/${tripIdFromUrl}/rooms/${room.id}/edit`);
+      setEditingRoomId(room.id);
+      setIsDialogOpen(true);
     },
-    [navigate, tripIdFromUrl],
+    [],
   );
 
   /**
@@ -225,13 +229,12 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   );
 
   /**
-   * Handles add room button click.
+   * Handles add room button click - opens the create room dialog.
    */
   const handleAddRoom = useCallback(() => {
-    // TODO: Replace with RoomDialog when available (Task 6.4)
-    // For now, navigate to room creation route
-    navigate(`/trips/${tripIdFromUrl}/rooms/new`);
-  }, [navigate, tripIdFromUrl]);
+    setEditingRoomId(undefined); // Clear editing room ID for create mode
+    setIsDialogOpen(true);
+  }, []);
 
   /**
    * Handles back navigation.
@@ -239,6 +242,16 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   const handleBack = useCallback(() => {
     navigate(`/trips/${tripIdFromUrl}/calendar`);
   }, [navigate, tripIdFromUrl]);
+
+  /**
+   * Handles dialog close - resets editing state.
+   */
+  const handleDialogOpenChange = useCallback((open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setEditingRoomId(undefined);
+    }
+  }, []);
 
   // ============================================================================
   // Header Action (desktop button)
@@ -340,6 +353,13 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             }}
           />
         </div>
+
+        {/* Room Create Dialog - needed even in empty state */}
+        <RoomDialog
+          roomId={editingRoomId}
+          open={isDialogOpen}
+          onOpenChange={handleDialogOpenChange}
+        />
       </div>
     );
   }
@@ -395,6 +415,13 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       >
         <Plus className="size-6" aria-hidden="true" />
       </Button>
+
+      {/* Room Create/Edit Dialog */}
+      <RoomDialog
+        roomId={editingRoomId}
+        open={isDialogOpen}
+        onOpenChange={handleDialogOpenChange}
+      />
     </div>
   );
 });
