@@ -1587,9 +1587,27 @@ interface ConfirmDialogProps {
 ```
 
 **Acceptance Criteria**:
-- [ ] Dialog opens and closes correctly
-- [ ] Destructive variant has red confirm button
-- [ ] Accessible (focus trap, escape to close)
+- [x] Dialog opens and closes correctly
+- [x] Destructive variant has red confirm button
+- [x] Accessible (focus trap, escape to close)
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/components/shared/ConfirmDialog.tsx` wrapping shadcn/ui Dialog primitives
+- Supports `default` and `destructive` variants (red confirm button for delete actions)
+- Handles async `onConfirm` with loading state management:
+  - Loader spinner appears during async operation
+  - Both buttons disabled during loading
+  - Double-click prevention with early return guard
+- Closes automatically on successful confirm, stays open on error for retry
+- Uses `isMountedRef` to prevent state updates after unmount (memory leak fix)
+- Resets loading state when dialog closes externally via `useEffect`
+- Uses `useCallback` for stable handler references
+- Explicit `handleOpenChange` prevents close during loading
+- i18n integration with default labels (`common.confirm`, `common.cancel`)
+- Full accessibility via Radix Dialog primitives (focus trap, escape to close)
+- Triple code review: critical unmount issue fixed, important loading state issues addressed
 
 ---
 
