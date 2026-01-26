@@ -19,7 +19,9 @@
     "required": "Required",
     "retry": "Retry",
     "unknown": "Unknown",
-    "actions": "Actions"
+    "actions": "Actions",
+    "menu": "Menu",
+    "openMenu": "Open menu"
   },
   "nav": {
     "calendar": "Calendar",
@@ -28,7 +30,10 @@
     "transports": "Transport",
     "settings": "Settings",
     "share": "Share",
-    "skipToMain": "Skip to main content"
+    "skipToMain": "Skip to main content",
+    "main": "Main navigation",
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar"
   },
   "trips": {
     "title": "My trips",
@@ -215,7 +220,9 @@
   "errors": {
     "generic": "An error occurred",
     "notFound": "Page not found",
+    "notFoundDescription": "The page you're looking for doesn't exist or has been moved.",
     "tripNotFound": "Trip not found",
+    "tripNotFoundDescription": "The trip you are looking for does not exist or you do not have access to it.",
     "roomNotFound": "Room not found. Please try again.",
     "personNotFound": "Guest not found. Please try again.",
     "transportNotFound": "Transport not found. Please try again.",
