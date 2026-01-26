@@ -1436,9 +1436,22 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 - Use `t()` for all labels
 
 **Acceptance Criteria**:
-- [ ] Navigation works on mobile and desktop
-- [ ] Active route is highlighted
-- [ ] Trip name displays in header
+- [x] Navigation works on mobile and desktop
+- [x] Active route is highlighted
+- [x] Trip name displays in header
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/components/shared/Layout.tsx` with responsive navigation
+- Header component with app name and current trip display
+- Mobile: Fixed bottom navigation bar with 5 tabs (Calendar, Rooms, Persons, Transports, Settings)
+- Desktop: Collapsible sidebar with toggle button at `md` breakpoint (768px)
+- All sub-components memoized (Header, MobileNav, DesktopSidebar) for performance
+- Main Layout uses `useMemo` for tripName derivation and `useCallback` for toggleSidebar
+- NavLink with active state highlighting using `cn()` utility
+- Full i18n support with `useTranslation` hook
+- Accessible with proper ARIA labels
 
 ---
 
