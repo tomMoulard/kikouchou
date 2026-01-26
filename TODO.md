@@ -1402,8 +1402,20 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 ```
 
 **Acceptance Criteria**:
-- [ ] i18n initializes before app renders
-- [ ] `useTranslation` hook works in components
+- [x] i18n initializes before app renders
+- [x] `useTranslation` hook works in components
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Updated `src/main.tsx` to properly initialize i18n before React renders
+- Uses `i18nReady` promise to await i18n initialization (prevents flash of untranslated content)
+- Added proper error handling for i18n initialization failures (falls back to default language)
+- Added root element validation with clear error message
+- Async `initializeApp()` function for clean initialization flow
+- Triple code review applied: fixed race condition by awaiting `i18nReady`
+- Build passes, JS bundle now includes i18n + translations (253KB gzip: 80KB)
+- Phase 3 (Internationalization) is now COMPLETE
 
 ---
 
