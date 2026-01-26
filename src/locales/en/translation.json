@@ -166,8 +166,14 @@
     "copied": "Link copied!",
     "qrCode": "QR Code",
     "scanToView": "Scan to view the trip",
+    "downloadQr": "Download QR Code",
     "import": "Import a trip",
-    "importDescription": "Enter the share code or scan a QR code"
+    "importDescription": "Enter the share code or scan a QR code",
+    "viewTrip": "View this trip",
+    "viewTripDescription": "You've been invited to view this trip",
+    "notFound": "This shared trip could not be found",
+    "notFoundDescription": "The link may have expired or the trip may have been deleted.",
+    "viewError": "Failed to open the trip. Please try again."
   },
   "settings": {
     "title": "Settings",

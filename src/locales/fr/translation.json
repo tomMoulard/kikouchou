@@ -166,8 +166,14 @@
     "copied": "Lien copié !",
     "qrCode": "QR Code",
     "scanToView": "Scannez pour voir le voyage",
+    "downloadQr": "Télécharger le QR Code",
     "import": "Importer un voyage",
-    "importDescription": "Entrez le code de partage ou scannez un QR code"
+    "importDescription": "Entrez le code de partage ou scannez un QR code",
+    "viewTrip": "Voir ce voyage",
+    "viewTripDescription": "Vous avez été invité(e) à voir ce voyage",
+    "notFound": "Ce voyage partagé est introuvable",
+    "notFoundDescription": "Le lien a peut-être expiré ou le voyage a été supprimé.",
+    "viewError": "Impossible d'ouvrir le voyage. Veuillez réessayer."
   },
   "settings": {
     "title": "Paramètres",
