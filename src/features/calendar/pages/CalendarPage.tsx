@@ -51,6 +51,7 @@ import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -669,19 +670,10 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     return (
       <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('calendar.title')} backLink="/trips" />
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4 min-h-[400px]">
-          <div className="text-center" role="alert" aria-live="assertive">
-            <p className="text-lg font-semibold text-destructive">
-              {t('errors.loadingFailed')}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {error?.message}
-            </p>
-          </div>
-          <Button onClick={() => window.location.reload()} variant="outline">
-            {t('common.retry', 'Retry')}
-          </Button>
-        </div>
+        <ErrorDisplay
+          error={error}
+          onRetry={() => window.location.reload()}
+        />
       </div>
     );
   }

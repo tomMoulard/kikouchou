@@ -16,11 +16,11 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { Trash2, AlertTriangle } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -289,18 +289,21 @@ function TripEditPageComponent(): ReactElement {
   if (loadError || !trip) {
     return (
       <div className="container max-w-2xl py-6 md:py-8">
-        <EmptyState
-          icon={AlertTriangle}
+        <PageHeader title={t('trips.edit')} backLink="/trips" />
+        <ErrorDisplay
+          error={loadError}
           title={t('errors.tripNotFound', 'Trip not found')}
-          description={t(
-            'errors.tripNotFoundDescription',
-            'The trip you are looking for does not exist or has been deleted.',
-          )}
-          action={{
-            label: t('common.back', 'Back'),
-            onClick: handleBackToTrips,
-          }}
-        />
+          onRetry={() => window.location.reload()}
+          onBack={handleBackToTrips}
+          showMessage={false}
+        >
+          <p className="text-sm text-muted-foreground text-center">
+            {t(
+              'errors.tripNotFoundDescription',
+              'The trip you are looking for does not exist or has been deleted.',
+            )}
+          </p>
+        </ErrorDisplay>
       </div>
     );
   }

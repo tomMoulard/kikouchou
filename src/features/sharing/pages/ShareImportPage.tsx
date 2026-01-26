@@ -24,7 +24,7 @@ import { Calendar, ExternalLink, MapPin, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { LoadingState } from '@/components/shared/LoadingState';
-import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -295,18 +295,19 @@ function ShareImportPageComponent(): ReactElement {
   if (notFound || !trip) {
     return (
       <div className="container max-w-md py-12 md:py-16">
-        <EmptyState
-          icon={Share2}
+        <ErrorDisplay
           title={t('sharing.notFound', 'This shared trip could not be found')}
-          description={t(
-            'sharing.notFoundDescription',
-            'The link may have expired or the trip may have been deleted.',
-          )}
-          action={{
-            label: t('common.back', 'Back'),
-            onClick: handleGoToTrips,
-          }}
-        />
+          onRetry={() => window.location.reload()}
+          onBack={handleGoToTrips}
+          showMessage={false}
+        >
+          <p className="text-sm text-muted-foreground text-center">
+            {t(
+              'sharing.notFoundDescription',
+              'The link may have expired or the trip may have been deleted.',
+            )}
+          </p>
+        </ErrorDisplay>
       </div>
     );
   }

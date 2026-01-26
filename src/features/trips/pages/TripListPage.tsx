@@ -15,6 +15,7 @@ import { Plus, Luggage, MapPin, Calendar } from 'lucide-react';
 import { useTripContext } from '@/contexts/TripContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Button } from '@/components/ui/button';
 import {
@@ -285,19 +286,7 @@ const TripListPage = memo(function TripListPage() {
     return (
       <div className="flex flex-col min-h-[calc(100vh-4rem)]">
         <PageHeader title={t('trips.title')} />
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-          <div className="text-center" role="alert" aria-live="assertive">
-            <p className="text-lg font-semibold text-destructive">
-              {t('errors.loadingFailed')}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {error.message}
-            </p>
-          </div>
-          <Button onClick={handleRetry} variant="outline">
-            {t('common.retry', 'Retry')}
-          </Button>
-        </div>
+        <ErrorDisplay error={error} onRetry={handleRetry} />
       </div>
     );
   }

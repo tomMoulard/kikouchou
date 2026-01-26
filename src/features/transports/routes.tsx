@@ -8,6 +8,7 @@
 import { lazy, Suspense, type ReactElement } from 'react';
 import type { RouteObject } from 'react-router-dom';
 
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { LoadingState } from '@/components/shared/LoadingState';
 
 // ============================================================================
@@ -29,26 +30,19 @@ const TransportListPage = lazy(() =>
 // ============================================================================
 
 /**
- * Wrapper component with Suspense for lazy-loaded pages.
+ * Wraps a lazy-loaded component in Suspense with a loading fallback and error boundary.
+ * Handles both loading states and chunk loading failures gracefully.
  *
- * @param props - The component to render with a loading fallback
- * @returns The wrapped component with Suspense boundary
+ * @param Component - The lazy-loaded component to wrap
+ * @returns A React element with error boundary and Suspense boundary
  */
-function SuspenseWrapper({
-  children,
-}: {
-  readonly children: ReactElement;
-}): ReactElement {
+function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>): ReactElement {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center min-h-[400px]">
-          <LoadingState variant="inline" size="lg" />
-        </div>
-      }
-    >
-      {children}
-    </Suspense>
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingState variant="fullPage" />}>
+        <Component />
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
@@ -76,11 +70,7 @@ function SuspenseWrapper({
 export const transportRoutes: RouteObject[] = [
   {
     path: 'transports',
-    element: (
-      <SuspenseWrapper>
-        <TransportListPage />
-      </SuspenseWrapper>
-    ),
+    element: withSuspense(TransportListPage),
   },
 ];
 
@@ -89,9 +79,5 @@ export const transportRoutes: RouteObject[] = [
  */
 export const TransportListRoute = {
   path: 'transports',
-  element: (
-    <SuspenseWrapper>
-      <TransportListPage />
-    </SuspenseWrapper>
-  ),
+  element: withSuspense(TransportListPage),
 } satisfies RouteObject;

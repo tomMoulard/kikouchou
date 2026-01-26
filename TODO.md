@@ -3334,9 +3334,46 @@ interface CalendarEventProps {
 - Retry option where appropriate
 
 **Acceptance Criteria**:
-- [ ] Errors don't crash the app
-- [ ] Users see helpful error messages
-- [ ] Retry functionality works
+- [x] Errors don't crash the app
+- [x] Users see helpful error messages
+- [x] Retry functionality works
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Conducted comprehensive error handling audit via subagentic workflow
+- **Audit identified 7 gaps**:
+  1. Missing ErrorBoundary in `transports/routes.tsx` and `sharing/routes.tsx`
+  2. Missing retry mechanism on 6 pages (only had "Back" button)
+  3. Missing accessibility attributes on TripEditPage and ShareImportPage
+  4. No shared ErrorDisplay component (code duplication)
+  5. Inconsistent error handling patterns across pages
+
+- **Fixes implemented**:
+  1. **Added ErrorBoundary wrapper** to `transports/routes.tsx` and `sharing/routes.tsx`
+     - Changed from `SuspenseWrapper` to `withSuspense` pattern (includes ErrorBoundary)
+  2. **Created reusable `ErrorDisplay` component** (`src/components/shared/ErrorDisplay.tsx`)
+     - Features: icon, title, error message, retry button, back button, children slot
+     - Two size variants: 'default' (page-level) and 'compact' (inline)
+     - Full accessibility: `role="alert"`, `aria-live="assertive"`, `aria-hidden` on icons
+     - i18n support with translation fallbacks
+     - Memoized for performance
+  3. **Updated all 7 feature pages** to use ErrorDisplay with retry functionality:
+     - TripListPage: Uses `checkConnection()` for retry
+     - RoomListPage: Uses `window.location.reload()` for retry + back button
+     - PersonListPage: Uses `window.location.reload()` for retry + back button
+     - TransportListPage: Uses `window.location.reload()` for retry + back button
+     - CalendarPage: Uses `window.location.reload()` for retry
+     - TripEditPage: Uses `window.location.reload()` for retry + back button
+     - ShareImportPage: Uses `window.location.reload()` for retry + back button
+  4. **Exported ErrorDisplay** from shared components barrel (`src/components/shared/index.ts`)
+
+- **Triple code review results** (all passed):
+  - Code Quality: No critical issues, minor suggestions for `readonly` modifiers
+  - Error Analysis: No critical issues, suggested `isRetrying` prop (nice-to-have)
+  - Performance: No critical issues, well-optimized for use case
+
+- Build passes, 29 precache entries (905.89 KiB)
 
 ---
 
@@ -3503,7 +3540,7 @@ export default function App() {
 
 ## Definition of Done Checklist
 
-Before considering the MVP complete, verify:
+Before considering the MVP complete, verify (with as much test as possible) the following:
 
 ### Functionality
 - [ ] Can create, edit, delete trips
@@ -3563,3 +3600,4 @@ These features are **NOT** part of the MVP but are documented for future referen
 8. **Export to PDF** - Print-friendly trip summary
 9. **Import from Calendar** - Import dates from iCal/Google Calendar
 10. **Weather Integration** - Show weather forecast for trip location
+11. **Maps Integration** - Show trips location on map
