@@ -150,5 +150,10 @@
   "pwa": {
     "install": "Install app",
     "installDescription": "Install Kikoushou on your device for quick access"
+  },
+  "dateRangePicker": {
+    "placeholder": "Select date range",
+    "ariaLabel": "Date range picker",
+    "calendarDialog": "Select date range"
   }
 }

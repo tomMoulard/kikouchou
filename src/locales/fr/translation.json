@@ -150,5 +150,10 @@
   "pwa": {
     "install": "Installer l'application",
     "installDescription": "Installez Kikoushou sur votre appareil pour un accès rapide"
+  },
+  "dateRangePicker": {
+    "placeholder": "Sélectionner une période",
+    "ariaLabel": "Sélecteur de période",
+    "calendarDialog": "Sélectionner une période"
   }
 }
