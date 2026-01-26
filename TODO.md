@@ -1713,9 +1713,24 @@ const COLORS = [
 - Constrain to trip date range
 
 **Acceptance Criteria**:
-- [ ] Date range selection works
-- [ ] Dates outside trip range are disabled
-- [ ] Display format is localized
+- [x] Date range selection works
+- [x] Dates outside trip range are disabled
+- [x] Display format is localized
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Uses shadcn/ui Calendar (react-day-picker) inside Popover
+- Locale-aware date formatting with date-fns (fr/enUS locales)
+- Props interface with discriminated union: `value`, `onChange`, `minDate`, `maxDate`
+- Automatic text contrast calculation removed (handled by Calendar)
+- Auto-closes popover when complete range is selected (uses requestAnimationFrame for visual stability)
+- Validates and normalizes reversed date ranges (from > to)
+- Memoized selected value to prevent unnecessary Calendar re-renders
+- Development-only console.warn for minDate > maxDate edge case
+- Full ARIA accessibility: `aria-label`, `aria-expanded`, `aria-haspopup="dialog"`
+- Translation keys added: `dateRangePicker.placeholder`, `dateRangePicker.ariaLabel`, `dateRangePicker.calendarDialog`
+- Triple code review applied: fixed race condition, removed over-memoization, optimized object creation
 
 ---
 
@@ -1727,18 +1742,29 @@ const COLORS = [
 
 **Props**:
 ```typescript
-interface PersonBadgeProps {
-  person: Person;
-  size?: 'sm' | 'md' | 'lg';
-  showRemove?: boolean;
-  onRemove?: () => void;
-}
+type PersonBadgeProps = PersonBadgeWithPersonProps | PersonBadgeWithNameColorProps;
+// Flexible API: accepts Person object OR individual name + color props
 ```
 
 **Acceptance Criteria**:
-- [ ] Badge displays person name with colored background
-- [ ] Size variants work correctly
-- [ ] Remove button is accessible
+- [x] Badge displays person name with colored background
+- [x] Size variants work correctly
+- [x] Interactive badges are accessible (keyboard navigation, ARIA)
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Discriminated union props: accepts `person` object OR `name` + `color` individually
+- Automatic WCAG-compliant text color contrast calculation (white/black based on luminance)
+- Size variants: `'sm'` (text-xs, smaller padding) and `'default'` (text-sm)
+- Optional `onClick` handler for interactive badges
+- Full accessibility: `role="button"` when interactive, `role="status"` otherwise
+- Keyboard support: Enter/Space triggers onClick on interactive badges
+- Robust hex color parsing: handles #RGB, #RRGGBB, #RRGGBBAA formats
+- Graceful fallback to neutral gray (#6B7280) for invalid colors
+- Single useMemo for both color validation and text color (DRY, no double parsing)
+- useCallback for event handlers (semantic correctness)
+- Triple code review applied: consolidated color calculations, fixed useMemo anti-pattern
 
 ---
 
@@ -1749,7 +1775,16 @@ interface PersonBadgeProps {
 **File**: `src/components/shared/index.ts`
 
 **Acceptance Criteria**:
-- [ ] All shared components are exported
+- [x] All shared components are exported
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Exports all 9 shared components with their types
+- Organized by category: Layout, State, Dialog, Page, Form, Display components
+- Also exports `DEFAULT_COLORS` constant from ColorPicker
+- Exports `DateRange` type for consumers of DateRangePicker
+- JSDoc example showing import syntax
 
 ---
 
