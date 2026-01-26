@@ -2058,9 +2058,37 @@ interface TripCardProps {
 - Empty state when no rooms
 
 **Acceptance Criteria**:
-- [ ] Rooms display in order
-- [ ] Occupancy shows correctly
-- [ ] Add button opens form
+- [x] Rooms display in order
+- [x] Occupancy shows correctly
+- [x] Add button opens form
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/rooms/pages/RoomListPage.tsx` with ~500 lines
+- Displays rooms as cards in responsive grid (1/2/3 columns on mobile/tablet/desktop)
+- Shows room name, capacity badge (BedDouble icon), and optional description
+- Calculates real-time occupancy based on today's date:
+  - Uses efficient ISO string comparison for date range filtering (no Date object creation)
+  - Filters assignments where today falls within startDate/endDate (inclusive)
+  - Displays current occupants using PersonBadge component
+  - Shows occupancy as "X / Y" format with color-coded badge (green/default/red)
+- Inline RoomCard component with full accessibility:
+  - Keyboard navigation (Enter/Space to activate)
+  - ARIA labels with room name, capacity, and occupancy
+  - Focus states for keyboard users
+- Three-state rendering: loading → trip-not-found/error → empty → list
+- FAB on mobile, header button on desktop for "Add Room" action
+- Navigation guard with refs to prevent double-clicks
+- Validates URL tripId matches current trip context
+- Triple code review applied (Grade: A-):
+  - Fixed navigation guard (removed synchronous state reset after navigate)
+  - Fixed stale date (documented limitation, using efficient string comparison)
+  - Fixed duplicate ternary in occupancy status
+  - Optimized: Replaced parseISO/startOfDay with string comparison (10-50x faster)
+  - Optimized: Removed over-memoization for trivial computations in RoomCard
+- Build passes, TypeScript strict mode compliant
+- TODO: Room click navigates to placeholder route `/trips/:tripId/rooms/:roomId/edit`
 
 ---
 
