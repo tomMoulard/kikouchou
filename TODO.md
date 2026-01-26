@@ -1147,8 +1147,25 @@ export default i18n;
 ```
 
 **Acceptance Criteria**:
-- [ ] Language is detected from browser or localStorage
-- [ ] Fallback to French works correctly
+- [x] Language is detected from browser or localStorage
+- [x] Fallback to French works correctly
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/lib/i18n/index.ts` with comprehensive i18next configuration
+- Language detection order: localStorage → navigator, with localStorage caching
+- French ('fr') as default/fallback language
+- Empty placeholder translation objects (actual translations in Tasks 3.2/3.3)
+- Triple code review performed with fixes applied:
+  - Fixed race condition: Added `i18nReady` promise export and `isI18nInitialized()` check
+  - Fixed type safety: Used `satisfies` for `SUPPORTED_LANGUAGES`, added Set for O(1) lookup
+  - Fixed maintenance: `getCurrentLanguage()` now uses `isLanguageSupported()` for validation
+- Exported utilities: `changeLanguage()`, `getCurrentLanguage()`, `isLanguageSupported()`, `isI18nInitialized()`
+- Exported constants: `SUPPORTED_LANGUAGES`, `DEFAULT_LANGUAGE`, `LANGUAGE_STORAGE_KEY`
+- Type augmentation for react-i18next (placeholder, to be updated with actual types)
+- Comprehensive JSDoc documentation with examples
+- Build passes, TypeScript strict mode compliant
 
 ---
 
