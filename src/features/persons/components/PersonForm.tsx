@@ -128,11 +128,13 @@ const PersonForm = memo(function PersonForm({
   }, []);
 
   // Sync form state when person prop changes (for edit mode navigation)
+  // Only depends on person.id to avoid resetting on every prop reference change
   useEffect(() => {
     setName(person?.name ?? '');
     setColor(person?.color ?? DEFAULT_COLOR);
-    setErrors({});
-    setSubmitError(null);
+    // Use callback to avoid creating new object if already empty
+    setErrors((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+    setSubmitError((prev) => (prev === null ? prev : null));
   }, [person?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on person.id change
 
   // ============================================================================
@@ -283,7 +285,7 @@ const PersonForm = memo(function PersonForm({
 
       {/* Color Field */}
       <div className="space-y-2">
-        <Label id="person-color-label">{t('persons.color')}</Label>
+        <Label>{t('persons.color')}</Label>
         <ColorPicker
           value={color}
           onChange={handleColorChange}

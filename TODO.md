@@ -2309,8 +2309,29 @@ interface TripCardProps {
 - Color (ColorPicker component)
 
 **Acceptance Criteria**:
-- [ ] Validation works
-- [ ] Color picker integrates correctly
+- [x] Validation works
+- [x] Color picker integrates correctly
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/persons/components/PersonForm.tsx` with ~290 lines
+- Two fields: name (text, required), color (ColorPicker component)
+- Dual mode: Create (color defaults to first color in palette) and Edit (pre-fills from person prop)
+- Validation: Name required, validated on blur and submit
+- Uses refs for async operation safety: `isMountedRef`, `isSubmittingRef`
+- Edit mode syncs form state when `person.id` changes via useEffect
+- Full accessibility: `aria-invalid`, `aria-describedby`, `role="alert"`, `aria-busy`
+- Uses `DEFAULT_COLORS` from ColorPicker for consistent default color
+- Triple code review applied (Grade: A- / B+ / A-):
+  - Code Quality: Excellent, follows RoomForm patterns exactly
+  - Error Analysis: Good, proper async safety, minor edge cases documented
+  - Performance: Excellent, proper memoization and cleanup
+- Review fixes applied:
+  - Added ESLint disable comment for person.id dependency
+  - Removed unused `id` attribute from color Label element
+  - Optimized setErrors/setSubmitError to avoid unnecessary object creation
+- Build passes, TypeScript strict mode compliant
 
 ---
 
@@ -2327,9 +2348,30 @@ interface TripCardProps {
 - Edit/Delete menu
 
 **Acceptance Criteria**:
-- [ ] Color displays correctly
-- [ ] Transport info shows
-- [ ] Actions work
+- [x] Color displays correctly
+- [x] Transport info shows
+- [x] Actions work
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/persons/components/PersonCard.tsx` with ~340 lines
+- Follows RoomCard.tsx patterns exactly with adaptations for Person entity
+- Features:
+  - Avatar-style color indicator with initials (getInitials helper)
+  - Transport summary showing arrival/departure dates and locations
+  - "No transport info" message when both are null
+  - Dropdown menu with Edit/Delete actions
+  - Delete confirmation via ConfirmDialog (handles async)
+- Full accessibility: keyboard navigation, ARIA labels, screen reader support
+- Event propagation control for menu area clicks
+- Exports TransportSummary type for consuming components
+- Added missing translation keys: `persons.deleteConfirmTitle` (FR/EN)
+- Triple code review applied (Grade: A- / A / A-):
+  - Code Quality: Excellent pattern consistency with RoomCard
+  - Error Analysis: No critical issues, excellent defensive programming
+  - Performance: Well-optimized with memo/useMemo/useCallback
+- Build passes, TypeScript strict mode compliant
 
 ---
 
@@ -2340,8 +2382,29 @@ interface TripCardProps {
 **File**: `src/features/persons/components/PersonDialog.tsx`
 
 **Acceptance Criteria**:
-- [ ] Dialog works for create/edit
-- [ ] Form submits correctly
+- [x] Dialog works for create/edit
+- [x] Form submits correctly
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/persons/components/PersonDialog.tsx` with ~240 lines
+- Follows RoomDialog.tsx patterns exactly
+- Features:
+  - Dual mode: Create (personId undefined) and Edit (personId provided)
+  - Integrates PersonForm for form handling
+  - Shows success/error toasts via sonner
+  - Handles async operations with loading states
+  - Prevents state updates on unmounted component (isMountedRef)
+  - Prevents double-submission (isSubmittingRef)
+  - Closes automatically on successful submission
+  - Prevents closing during submission
+- Handles "person not found" edge case with user-friendly error dialog
+- Added missing i18n keys to both FR and EN locale files:
+  - `persons.newDescription`, `persons.editDescription`
+  - `persons.createSuccess`, `persons.updateSuccess`
+  - `errors.personNotFound`
+- Build passes, TypeScript strict mode compliant
 
 ---
 
@@ -2354,7 +2417,27 @@ interface TripCardProps {
 - `src/features/persons/routes.tsx`
 
 **Acceptance Criteria**:
-- [ ] All person components are exported
+- [x] All person components are exported
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/persons/index.ts` barrel export with ~45 lines:
+  - Exports page: PersonListPage
+  - Exports components: PersonForm, PersonCard, PersonDialog with their type interfaces
+  - Exports TransportSummary type from PersonCard
+  - Exports route configuration: personRoutes
+  - Exports types: PersonListParams
+- Created `src/features/persons/routes.tsx` with ~105 lines:
+  - Implements lazy loading with React.lazy() for code splitting
+  - Uses .then() pattern to convert named exports to default exports
+  - Route configured: `/trips/:tripId/persons` (person list)
+  - Note: Person create/edit handled via PersonDialog rather than separate pages
+  - withSuspense wrapper provides ErrorBoundary + Suspense with LoadingState fallback
+  - Exports PersonListParams type for type-safe useParams usage
+- Pattern follows established trips/rooms feature structure
+- Build passes, TypeScript strict mode compliant
+- **Phase 7 (Person Management Feature) is now COMPLETE**
 
 ---
 

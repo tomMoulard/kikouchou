@@ -73,6 +73,11 @@
     "namePlaceholder": "e.g. Sarah",
     "color": "Color",
     "deleteConfirm": "Are you sure you want to delete this guest?",
+    "deleteConfirmTitle": "Delete guest?",
+    "newDescription": "Fill in the details to add a new guest.",
+    "editDescription": "Modify the guest details below.",
+    "createSuccess": "Guest added successfully",
+    "updateSuccess": "Guest updated successfully",
     "empty": "No guests",
     "emptyDescription": "Add the people joining the trip"
   },
@@ -151,6 +156,7 @@
     "notFound": "Page not found",
     "tripNotFound": "Trip not found",
     "roomNotFound": "Room not found. Please try again.",
+    "personNotFound": "Guest not found. Please try again.",
     "loadingFailed": "Failed to load",
     "saveFailed": "Failed to save",
     "deleteFailed": "Failed to delete"

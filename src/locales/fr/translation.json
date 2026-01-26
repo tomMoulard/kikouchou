@@ -73,6 +73,11 @@
     "namePlaceholder": "Ex : Marie",
     "color": "Couleur",
     "deleteConfirm": "Voulez-vous vraiment supprimer ce participant ?",
+    "deleteConfirmTitle": "Supprimer le participant ?",
+    "newDescription": "Remplissez les informations pour ajouter un nouveau participant.",
+    "editDescription": "Modifiez les informations du participant ci-dessous.",
+    "createSuccess": "Participant ajouté avec succès",
+    "updateSuccess": "Participant mis à jour avec succès",
     "empty": "Aucun participant",
     "emptyDescription": "Ajoutez les personnes qui participent au voyage"
   },
@@ -151,6 +156,7 @@
     "notFound": "Page non trouvée",
     "tripNotFound": "Voyage non trouvé",
     "roomNotFound": "Chambre non trouvée. Veuillez réessayer.",
+    "personNotFound": "Participant non trouvé. Veuillez réessayer.",
     "loadingFailed": "Échec du chargement",
     "saveFailed": "Échec de l'enregistrement",
     "deleteFailed": "Échec de la suppression"
