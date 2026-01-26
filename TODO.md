@@ -2104,8 +2104,27 @@ interface TripCardProps {
 - Description (optional, textarea)
 
 **Acceptance Criteria**:
-- [ ] Validation works
-- [ ] Edit mode pre-fills data
+- [x] Validation works
+- [x] Edit mode pre-fills data
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/rooms/components/RoomForm.tsx` with ~437 lines
+- Controlled form with three fields: name (text, required), capacity (number, min 1), description (textarea, optional)
+- Dual mode: Create (capacity defaults to 1) and Edit (pre-fills from room prop)
+- Validation:
+  - Name: required, validated on blur and submit
+  - Capacity: must be integer >= 1, validated on blur and submit
+- Uses refs for async operation safety: `isMountedRef`, `isSubmittingRef`
+- Edit mode syncs form state when `room.id` changes via useEffect
+- Full accessibility: `aria-invalid`, `aria-describedby`, `role="alert"`, `aria-busy`
+- Capacity input UX: allows clearing to type new value, enforces min on blur
+- Triple code review applied:
+  - Added `onBlur` validation for capacity field
+  - Fixed capacity input UX (allows clearing to type new value)
+  - All handlers use functional state updates to avoid stale closures
+- Build passes, TypeScript strict mode compliant
 
 ---
 
