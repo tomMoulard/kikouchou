@@ -1007,8 +1007,22 @@ interface AssignmentContextValue {
 ```
 
 **Acceptance Criteria**:
-- [ ] Assignments are filtered correctly by room and person
-- [ ] Conflict checking is exposed to components
+- [x] Assignments are filtered correctly by room and person
+- [x] Conflict checking is exposed to components
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Integrated with TripContext via `useTripContext()` hook
+- Uses compound index `[tripId+startDate]` for efficient sorted queries
+- Stable array reference via `useRef` + `useEffect` (not during render)
+- O(1) lookups via three Map refs: `assignmentsMapRef` (by ID), `assignmentsByRoomMapRef`, `assignmentsByPersonMapRef`
+- Assignment ownership validation in `updateAssignment`/`deleteAssignment` with in-memory cache fast path
+- Clear refs on trip change to prevent stale cross-trip data (race condition fix from code review)
+- Dependencies use `currentTripId` primitive instead of object to prevent stale closures
+- Functional state update for error clearing to avoid `error` in callback dependencies
+- Comprehensive JSDoc documentation
+- Triple code review applied: fixed race condition on trip change, added in-memory cache for validation, removed error from callback deps
 
 ---
 
