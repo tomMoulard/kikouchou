@@ -115,6 +115,7 @@ export {
 // Settings repository
 export {
   getSettings,
+  ensureSettings,
   updateSettings,
   setCurrentTrip,
   setLanguage,

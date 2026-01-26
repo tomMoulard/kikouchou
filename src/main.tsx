@@ -1,6 +1,6 @@
 /**
  * @fileoverview Application entry point.
- * Initializes i18n and renders the React application.
+ * Initializes i18n, database, and renders the React application.
  *
  * @module main
  */
@@ -11,6 +11,7 @@ import { i18nReady } from '@/lib/i18n';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { ensureSettings } from '@/lib/db';
 import App from './App.tsx';
 import './index.css';
 
@@ -35,9 +36,10 @@ function getRootElement(): HTMLElement {
 /**
  * Initialize and render the application.
  *
- * Waits for i18n to be fully initialized before rendering to ensure
- * translations are available from the first render. This prevents
- * flash of untranslated content (FOUC).
+ * Performs the following initialization steps:
+ * 1. Waits for i18n to be fully initialized (prevents flash of untranslated content)
+ * 2. Ensures database settings exist (required for liveQuery read-only operations)
+ * 3. Renders the React application
  */
 async function initializeApp(): Promise<void> {
   const rootElement = getRootElement();
@@ -48,6 +50,15 @@ async function initializeApp(): Promise<void> {
   } catch (error) {
     // Log error but continue - i18n has fallback language configured
     console.error('i18n initialization failed, using fallback:', error);
+  }
+
+  try {
+    // Ensure settings exist in database before app renders.
+    // This prevents write operations inside liveQuery contexts.
+    await ensureSettings();
+  } catch (error) {
+    // Log error but continue - getSettings() returns defaults if DB is unavailable
+    console.error('Database initialization failed:', error);
   }
 
   // Render the application

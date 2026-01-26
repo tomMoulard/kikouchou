@@ -17,12 +17,15 @@ import { DEFAULT_SETTINGS } from '@/types';
 const SETTINGS_ID = 'settings' as const;
 
 /**
- * Retrieves the application settings.
+ * Retrieves the application settings (read-only).
  *
- * Creates default settings if they don't exist yet.
- * This ensures settings are always available without explicit initialization.
+ * Returns default settings if none exist in the database.
+ * Does NOT create settings in the database - use ensureSettings() for that.
  *
- * @returns The application settings
+ * This function is safe to use inside Dexie liveQuery contexts because
+ * it only performs read operations.
+ *
+ * @returns The application settings (from DB or defaults)
  *
  * @example
  * ```typescript
@@ -31,6 +34,26 @@ const SETTINGS_ID = 'settings' as const;
  * ```
  */
 export async function getSettings(): Promise<AppSettings> {
+  const settings = await db.settings.get(SETTINGS_ID);
+  // Return existing settings or defaults (no write operation)
+  return settings ?? DEFAULT_SETTINGS;
+}
+
+/**
+ * Ensures settings exist in the database by creating defaults if needed.
+ *
+ * Call this during app initialization to ensure settings are persisted.
+ * This is a write operation and should NOT be used inside liveQuery contexts.
+ *
+ * @returns The application settings (newly created or existing)
+ *
+ * @example
+ * ```typescript
+ * // In app initialization
+ * await ensureSettings();
+ * ```
+ */
+export async function ensureSettings(): Promise<AppSettings> {
   const settings = await db.settings.get(SETTINGS_ID);
 
   if (settings) {
