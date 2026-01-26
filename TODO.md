@@ -968,8 +968,21 @@ interface PersonContextValue {
 **Dependencies**: Must be used within TripContext
 
 **Acceptance Criteria**:
-- [ ] Persons update reactively
-- [ ] `getPersonById` helper works for lookups
+- [x] Persons update reactively
+- [x] `getPersonById` helper works for lookups
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Integrated with TripContext via `useTripContext()` hook
+- Uses compound index `[tripId+name]` for efficient sorted queries
+- Stable array reference via `useRef` + `useEffect` (not during render)
+- O(1) lookup via `personsMapRef` Map for `getPersonById`
+- Person ownership validation in `updatePerson`/`deletePerson` (security fix)
+- Dependencies use `currentTripId` primitive instead of object to prevent stale closures
+- Fast-path equality check in `arePersonsEqual` for performance
+- Conditional error clearing to avoid unnecessary state updates
+- Triple code review applied: fixed mutable state during render, added Map for O(1) lookup, stable function references
 
 ---
 
