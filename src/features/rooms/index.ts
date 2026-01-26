@@ -35,6 +35,9 @@ export type { RoomCardProps } from './components/RoomCard';
 export { RoomDialog } from './components/RoomDialog';
 export type { RoomDialogProps } from './components/RoomDialog';
 
+export { RoomAssignmentSection } from './components/RoomAssignmentSection';
+export type { RoomAssignmentSectionProps } from './components/RoomAssignmentSection';
+
 // ============================================================================
 // Route Configuration
 // ============================================================================

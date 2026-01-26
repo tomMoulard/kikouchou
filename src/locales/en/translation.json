@@ -17,7 +17,8 @@
     "search": "Search",
     "noResults": "No results",
     "required": "Required",
-    "retry": "Retry"
+    "retry": "Retry",
+    "unknown": "Unknown"
   },
   "nav": {
     "calendar": "Calendar",
@@ -84,12 +85,20 @@
   "assignments": {
     "title": "Room assignments",
     "assign": "Assign a room",
+    "editAssignment": "Edit assignment",
+    "assignDescription": "Select a guest and date range for this room.",
+    "editDescription": "Modify the assignment details below.",
+    "selectPerson": "Select a guest",
     "room": "Room",
     "person": "Guest",
     "period": "Period",
     "conflict": "This person is already assigned to another room for these dates",
+    "checkingConflict": "Checking availability...",
     "empty": "No assignments",
-    "emptyDescription": "Assign guests to rooms"
+    "emptyDescription": "Assign guests to rooms",
+    "showMore": "+{{count}} more",
+    "deleteConfirmTitle": "Delete assignment?",
+    "deleteConfirm": "Are you sure you want to delete this assignment? This action cannot be undone."
   },
   "transports": {
     "title": "Transport",

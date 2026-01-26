@@ -17,7 +17,8 @@
     "search": "Rechercher",
     "noResults": "Aucun résultat",
     "required": "Requis",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "unknown": "Inconnu"
   },
   "nav": {
     "calendar": "Calendrier",
@@ -84,12 +85,20 @@
   "assignments": {
     "title": "Attribution des chambres",
     "assign": "Attribuer une chambre",
+    "editAssignment": "Modifier l'attribution",
+    "assignDescription": "Sélectionnez un participant et une période pour cette chambre.",
+    "editDescription": "Modifiez les détails de l'attribution ci-dessous.",
+    "selectPerson": "Sélectionner un participant",
     "room": "Chambre",
     "person": "Participant",
     "period": "Période",
     "conflict": "Cette personne est déjà assignée à une autre chambre pour ces dates",
+    "checkingConflict": "Vérification de la disponibilité...",
     "empty": "Aucune attribution",
-    "emptyDescription": "Assignez les participants aux chambres"
+    "emptyDescription": "Assignez les participants aux chambres",
+    "showMore": "+{{count}} de plus",
+    "deleteConfirmTitle": "Supprimer l'attribution ?",
+    "deleteConfirm": "Voulez-vous vraiment supprimer cette attribution ? Cette action est irréversible."
   },
   "transports": {
     "title": "Transports",

@@ -2457,9 +2457,32 @@ interface TripCardProps {
 - Show conflict warnings
 
 **Acceptance Criteria**:
-- [ ] Assignments display correctly
-- [ ] Date ranges are formatted
-- [ ] Conflicts are highlighted
+- [x] Assignments display correctly
+- [x] Date ranges are formatted
+- [x] Conflicts are highlighted
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/rooms/components/RoomAssignmentSection.tsx` with ~900 lines
+- Three memoized subcomponents: AssignmentItem, AssignmentFormDialog, RoomAssignmentSection
+- Features:
+  - Displays list of persons assigned to a room with date ranges (using PersonBadge)
+  - Add new assignment via modal dialog with person selector and DateRangePicker
+  - Edit existing assignments with pre-filled form
+  - Delete assignments with ConfirmDialog confirmation
+  - Real-time conflict checking during add/edit (async with debouncing pattern)
+  - Empty state with dashed border and helpful message
+  - Loading state with Loader2 spinner
+  - Compact variant (max 3 visible, expandable) and expanded variant
+- Full accessibility: ARIA attributes, keyboard navigation, screen reader support
+- Comprehensive i18n support with 10 new translation keys added
+- Added to barrel export in `src/features/rooms/index.ts`
+- Triple code review applied (Grade: B+/B/A-):
+  - Code Quality: Fixed duplicate usePersonContext() call, removed unused assignmentConflicts Map
+  - Error Analysis: Added error re-throw in handleConfirmDelete, reset isCheckingConflict on dialog open
+  - Performance: Consolidated context calls, removed dead code
+- Build passes, TypeScript strict mode compliant
 
 ---
 
