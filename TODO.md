@@ -1362,8 +1362,22 @@ export default i18n;
 Create the equivalent English translations for all keys defined in the French file.
 
 **Acceptance Criteria**:
-- [ ] All keys from French file have English equivalents
-- [ ] Translations are natural English (not word-for-word)
+- [x] All keys from French file have English equivalents
+- [x] Translations are natural English (not word-for-word)
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/locales/en/translation.json` with 155 lines, ~3.5KB
+- Exact structure match with French file (122 keys)
+- Natural idiomatic English translations (not word-for-word)
+- Terminology: "Guest" instead of "Participant" (more natural for vacation house context)
+- Pluralization: `beds_zero` ("No beds"), `beds` ("{{count}} bed"), `beds_plural` ("{{count}} beds")
+- Interpolation: `{{count}}` preserved correctly
+- English-appropriate examples: Cornwall, King's Cross Station, Sarah, Train 8541
+- Triple code review: no critical or important issues found
+- Consistent friendly but professional tone
+- Build passes, valid JSON syntax
 
 ---
 

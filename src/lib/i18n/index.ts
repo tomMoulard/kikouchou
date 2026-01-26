@@ -75,26 +75,21 @@ export const DEFAULT_LANGUAGE: Language = 'fr';
 export const LANGUAGE_STORAGE_KEY = 'i18nextLng';
 
 // ============================================================================
-// Placeholder Translations
+// Translation Resources
 // ============================================================================
 
 /**
- * Placeholder translation resources.
+ * Translation resources imported from JSON files.
  *
  * @remarks
- * These empty objects serve as placeholders until the actual translation
- * JSON files are created in subsequent tasks (3.2 and 3.3).
+ * These files contain all UI strings for their respective languages.
+ * The JSON files are statically imported and bundled with the application.
  *
- * Once translation files are created, replace these imports with:
- * ```typescript
- * import en from '@/locales/en/translation.json';
- * import fr from '@/locales/fr/translation.json';
- * ```
- *
- * @todo Replace with actual translation file imports after Tasks 3.2 and 3.3
+ * @see {@link src/locales/en/translation.json} English translations
+ * @see {@link src/locales/fr/translation.json} French translations
  */
-const enTranslations: Record<string, unknown> = {};
-const frTranslations: Record<string, unknown> = {};
+import enTranslations from '@/locales/en/translation.json';
+import frTranslations from '@/locales/fr/translation.json';
 
 // ============================================================================
 // Type Definitions

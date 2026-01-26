@@ -1,0 +1,154 @@
+{
+  "app": {
+    "name": "Kikoushou",
+    "tagline": "Organize your vacation with friends"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "close": "Close",
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "confirm": "Confirm",
+    "back": "Back",
+    "search": "Search",
+    "noResults": "No results",
+    "required": "Required"
+  },
+  "nav": {
+    "calendar": "Calendar",
+    "rooms": "Rooms",
+    "persons": "Guests",
+    "transports": "Transport",
+    "settings": "Settings",
+    "share": "Share"
+  },
+  "trips": {
+    "title": "My trips",
+    "new": "New trip",
+    "edit": "Edit trip",
+    "name": "Trip name",
+    "namePlaceholder": "e.g. Summer vacation 2024",
+    "location": "Location",
+    "locationPlaceholder": "e.g. Beach house, Cornwall",
+    "startDate": "Start date",
+    "endDate": "End date",
+    "deleteConfirm": "Are you sure you want to delete this trip? This action cannot be undone.",
+    "empty": "No trips",
+    "emptyDescription": "Create your first trip to get started"
+  },
+  "rooms": {
+    "title": "Rooms",
+    "new": "New room",
+    "edit": "Edit room",
+    "name": "Room name",
+    "namePlaceholder": "e.g. Master bedroom",
+    "capacity": "Number of beds",
+    "description": "Description",
+    "descriptionPlaceholder": "Optional notes...",
+    "deleteConfirm": "Are you sure you want to delete this room?",
+    "empty": "No rooms",
+    "emptyDescription": "Add the rooms in your accommodation",
+    "beds_zero": "No beds",
+    "beds": "{{count}} bed",
+    "beds_plural": "{{count}} beds",
+    "occupied": "Occupied",
+    "available": "Available"
+  },
+  "persons": {
+    "title": "Guests",
+    "new": "New guest",
+    "edit": "Edit guest",
+    "name": "Name",
+    "namePlaceholder": "e.g. Sarah",
+    "color": "Color",
+    "deleteConfirm": "Are you sure you want to delete this guest?",
+    "empty": "No guests",
+    "emptyDescription": "Add the people joining the trip"
+  },
+  "assignments": {
+    "title": "Room assignments",
+    "assign": "Assign a room",
+    "room": "Room",
+    "person": "Guest",
+    "period": "Period",
+    "conflict": "This person is already assigned to another room for these dates",
+    "empty": "No assignments",
+    "emptyDescription": "Assign guests to rooms"
+  },
+  "transports": {
+    "title": "Transport",
+    "arrivals": "Arrivals",
+    "departures": "Departures",
+    "new": "New transport",
+    "edit": "Edit transport",
+    "type": "Type",
+    "arrival": "Arrival",
+    "departure": "Departure",
+    "datetime": "Date and time",
+    "location": "Location",
+    "locationPlaceholder": "e.g. King's Cross Station",
+    "mode": "Transport mode",
+    "modes": {
+      "train": "Train",
+      "plane": "Plane",
+      "car": "Car",
+      "bus": "Bus",
+      "other": "Other"
+    },
+    "number": "Number",
+    "numberPlaceholder": "e.g. Train 8541",
+    "driver": "Driver",
+    "driverPlaceholder": "Who will pick up/drop off?",
+    "needsPickup": "Needs pickup",
+    "notes": "Notes",
+    "notesPlaceholder": "Additional information...",
+    "deleteConfirm": "Are you sure you want to delete this transport?",
+    "empty": "No transport",
+    "emptyDescription": "Add arrivals and departures for guests",
+    "upcomingPickups": "Upcoming pickups"
+  },
+  "calendar": {
+    "title": "Calendar",
+    "today": "Today",
+    "month": "Month",
+    "week": "Week",
+    "noAssignments": "No assignments for this period"
+  },
+  "sharing": {
+    "title": "Share trip",
+    "description": "Share this link with your friends so they can view the trip",
+    "link": "Share link",
+    "copy": "Copy link",
+    "copied": "Link copied!",
+    "qrCode": "QR Code",
+    "scanToView": "Scan to view the trip",
+    "import": "Import a trip",
+    "importDescription": "Enter the share code or scan a QR code"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "languages": {
+      "fr": "Français",
+      "en": "English"
+    },
+    "about": "About",
+    "version": "Version"
+  },
+  "errors": {
+    "generic": "An error occurred",
+    "notFound": "Page not found",
+    "tripNotFound": "Trip not found",
+    "loadingFailed": "Failed to load",
+    "saveFailed": "Failed to save",
+    "deleteFailed": "Failed to delete"
+  },
+  "pwa": {
+    "install": "Install app",
+    "installDescription": "Install Kikoushou on your device for quick access"
+  }
+}
