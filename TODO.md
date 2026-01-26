@@ -1048,8 +1048,23 @@ interface TransportContextValue {
 ```
 
 **Acceptance Criteria**:
-- [ ] Arrivals and departures are filtered correctly
-- [ ] Upcoming pickups are sorted by datetime
+- [x] Arrivals and departures are filtered correctly
+- [x] Upcoming pickups are sorted by datetime
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Integrated with TripContext via `useTripContext()` hook
+- Uses compound index `[tripId+datetime]` for efficient sorted queries
+- Stable array reference via `useRef` + `useEffect` (not during render)
+- O(1) lookup via `transportsByPersonMapRef` Map for `getTransportsByPerson`
+- Transport ownership validation in `updateTransport`/`deleteTransport` with in-memory cache fast path
+- Computed filtered arrays: `arrivals`, `departures`, `upcomingPickups` via useMemo
+- Clear refs on trip change to prevent stale cross-trip data
+- Dependencies use `currentTripId` primitive instead of object to prevent stale closures
+- Functional state update for error clearing to avoid `error` in callback dependencies
+- Triple code review applied: fixed `areTransportsEqual` missing properties, added error state clearing on trip change
+- Known issue (documented): `upcomingPickups` captures `now` once in useMemo; consider adding time-based refresh interval for long-running sessions
 
 ---
 
