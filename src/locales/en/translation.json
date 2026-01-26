@@ -18,7 +18,8 @@
     "noResults": "No results",
     "required": "Required",
     "retry": "Retry",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "actions": "Actions"
   },
   "nav": {
     "calendar": "Calendar",
@@ -128,6 +129,8 @@
     "notes": "Notes",
     "notesPlaceholder": "Additional information...",
     "deleteConfirm": "Are you sure you want to delete this transport?",
+    "deleteConfirmTitle": "Delete transport?",
+    "deleteSuccess": "Transport deleted successfully",
     "empty": "No transport",
     "emptyDescription": "Add arrivals and departures for guests",
     "upcomingPickups": "Upcoming pickups"

@@ -18,7 +18,8 @@
     "noResults": "Aucun résultat",
     "required": "Requis",
     "retry": "Réessayer",
-    "unknown": "Inconnu"
+    "unknown": "Inconnu",
+    "actions": "Actions"
   },
   "nav": {
     "calendar": "Calendrier",
@@ -128,6 +129,8 @@
     "notes": "Notes",
     "notesPlaceholder": "Informations complémentaires...",
     "deleteConfirm": "Voulez-vous vraiment supprimer ce transport ?",
+    "deleteConfirmTitle": "Supprimer le transport ?",
+    "deleteSuccess": "Transport supprimé avec succès",
     "empty": "Aucun transport",
     "emptyDescription": "Ajoutez les arrivées et départs des participants",
     "upcomingPickups": "Prochains transports à prévoir"

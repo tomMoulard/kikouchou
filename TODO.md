@@ -2688,8 +2688,8 @@ interface CalendarEventProps {
 - Accessible with proper `aria-label` attributes
 
 **Acceptance Criteria**:
-- [ ] Navigation works
-- [ ] Month names are localized
+- [x] Navigation works
+- [x] Month names are localized
 
 ---
 
@@ -2702,7 +2702,16 @@ interface CalendarEventProps {
 - `src/features/calendar/routes.tsx`
 
 **Acceptance Criteria**:
-- [ ] All calendar components are exported
+- [x] All calendar components are exported
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Implemented as part of Task 9.1
+- Created `src/features/calendar/index.ts` with exports for CalendarPage and types
+- Created `src/features/calendar/routes.tsx` with lazy-loaded route configuration
+- Routes registered for `/trips/:tripId/calendar` and `/trips/:tripId` (default view)
+- Phase 9 (Calendar View Feature) is now COMPLETE
 
 ---
 
@@ -2725,9 +2734,39 @@ interface CalendarEventProps {
 - Empty state per tab
 
 **Acceptance Criteria**:
-- [ ] Tabs switch correctly
-- [ ] Transports sorted by datetime
-- [ ] All details display
+- [x] Tabs switch correctly
+- [x] Transports sorted by datetime
+- [x] All details display
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/transports/pages/TransportListPage.tsx` with ~750 lines
+- Tabbed interface using shadcn/ui Tabs component (Arrivals/Departures)
+- Transports displayed as cards in responsive grid (1/2/3 columns)
+- TransportCard memoized subcomponent displays:
+  - Type icon (ArrowDownToLine/ArrowUpFromLine) color-coded (green/orange)
+  - PersonBadge for traveler
+  - Pickup badge (amber outline) when needsPickup is true
+  - Date/time, location, transport mode icon + number
+  - Driver (if assigned) with PersonBadge
+  - Notes (truncated to 2 lines)
+  - Dropdown menu with Edit/Delete actions
+- Empty state per tab with Plane icon
+- FAB on mobile, header button on desktop for "Add Transport"
+- Delete confirmation via ConfirmDialog with toast notifications
+- Navigation guards: useRef to prevent double-clicks, tripId validation
+- Full accessibility: ARIA labels, keyboard navigation, proper roles
+- O(1) person lookups via Map for performance
+- Triple code review applied:
+  - Added toast notifications for delete success/failure
+  - Fixed aria-label on dropdown trigger (was "Edit", now "Actions")
+  - Added navigation guard for handleEdit
+  - Removed dual loading state (rely on ConfirmDialog internal state)
+- Created `src/features/transports/routes.tsx` with lazy loading
+- Created `src/features/transports/index.ts` barrel export
+- Added i18n keys: `common.actions`, `transports.deleteConfirmTitle`, `transports.deleteSuccess`
+- Build passes, TypeScript strict mode compliant
 
 ---
 
