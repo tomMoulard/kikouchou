@@ -636,7 +636,7 @@ export const DEFAULT_PERSON_COLORS = [
  */
 export function getDefaultPersonColor(index: number): HexColor {
   const safeIndex = Math.abs(index) % DEFAULT_PERSON_COLORS.length;
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+   
   return DEFAULT_PERSON_COLORS[safeIndex]!;
 }
 

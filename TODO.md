@@ -1849,9 +1849,25 @@ interface TripFormProps {
 - End date must be on or after start date
 
 **Acceptance Criteria**:
-- [ ] Form validates correctly
-- [ ] Edit mode pre-fills values
-- [ ] Submit calls onSubmit with data
+- [x] Form validates correctly
+- [x] Edit mode pre-fills values
+- [x] Submit calls onSubmit with data
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/trips/components/TripForm.tsx` with controlled form inputs
+- Date pickers using shadcn/ui Calendar + Popover with locale support
+- Validation on blur (name) and submit (all fields)
+- Edit mode syncs form state when trip.id changes via useEffect
+- End date calendar disables dates before start date
+- Full accessibility: aria-invalid, aria-describedby, role="alert", aria-busy
+- Triple code review applied:
+  - Fixed memory leak: Added isMountedRef to prevent state updates after unmount
+  - Fixed race condition: Added isSubmittingRef for synchronous double-submit guard
+  - Fixed trip prop sync: Added useEffect to reset form when trip.id changes
+  - Removed unnecessary handleCancel wrapper
+  - Used functional state updates in callbacks to avoid error state dependencies
 
 ---
 
@@ -1869,9 +1885,26 @@ interface TripFormProps {
 - Show toast on success/error
 
 **Acceptance Criteria**:
-- [ ] Form submits correctly
-- [ ] Navigation works after creation
-- [ ] Error handling works
+- [x] Form submits correctly
+- [x] Navigation works after creation
+- [x] Error handling works
+
+**Status**: COMPLETED (2026-01-26)
+
+**Notes**:
+- Created `src/features/trips/pages/TripCreatePage.tsx` with ~160 lines
+- Uses TripForm component for form UI and validation
+- Shows toast notifications via Sonner on success/error with translation fallbacks
+- Navigates to `/trips/${newTrip.id}/calendar` on successful creation
+- Navigates to `/trips` on cancel
+- Implements double-submission prevention with `isSubmittingRef`
+- Implements unmount safety with `isMountedRef` to prevent memory leaks
+- Triple code review applied (Grade: A- from all reviewers):
+  - Fixed null check: Added defensive check for `newTrip.id` before navigation
+  - Fixed error toast: Added fallback text for missing translation key resilience
+- Uses PageHeader with backLink for consistent navigation
+- Wraps TripForm in Card for visual consistency
+- Build passes, TypeScript strict mode compliant
 
 ---
 
