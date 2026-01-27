@@ -4120,11 +4120,36 @@ describe('reorderRooms', () => {
 ```
 
 **Acceptance Criteria**:
-- [ ] All CRUD operations tested
-- [ ] Ordering logic tested
-- [ ] Cascade delete tested
+- [x] All CRUD operations tested
+- [x] Ordering logic tested
+- [x] Cascade delete tested
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-01-27)
+
+**Notes**:
+- Created `src/lib/db/repositories/__tests__/room-repository.test.ts` with 34 comprehensive tests
+- Test categories:
+  - `createRoom` (8 tests): auto-order starting at 0, sequential order, gap handling, unique IDs, tripId association, persistence, all fields, optional fields
+  - `getRoomsByTripId` (4 tests): sorted by order ascending, non-existent trip, empty trip, trip isolation
+  - `getRoomById` (3 tests): found, not found, correct room with multiple
+  - `updateRoom` (4 tests): update properties, partial updates, not found error, no modify other rooms
+  - `deleteRoom` (5 tests): basic delete, cascade delete assignments, assignment isolation, no assignments case, idempotent
+  - `reorderRooms` (6 tests): reorder correctly, ownership validation, invalid IDs, empty array, partial list with unchanged verification, atomicity on error
+  - `getRoomCount` (4 tests): correct count, zero rooms, non-existent trip, trip isolation
+- Coverage: **100% statements, 100% branches, 100% functions, 100% lines** for `room-repository.ts`
+- **Bug discovered and fixed**: Tests exposed missing `roomId` index in `roomAssignments` table needed for `deleteRoom` cascade delete. Added index to database schema.
+- Key test patterns:
+  - Test data factory `createTestRoomData()` with overrides
+  - Helper function `createTestTrip()` for parent entity creation
+  - Removed redundant beforeEach/afterEach (handled by global setup.ts) - 13% performance improvement
+  - Direct database queries for verification (db.rooms.count(), db.roomAssignments.toArray())
+  - Transaction atomicity verification with error message validation
+- Triple code review applied:
+  - Code Quality: Updated partial room list test to verify unchanged room's order
+  - Error Analysis: Added specific error message validation to atomicity test
+  - Performance: Removed redundant beforeEach/afterEach hooks (~67ms vs ~77ms)
+- Execution time: ~67ms for 34 tests (~2ms per test)
+- Build passes, TypeScript strict mode compliant
 
 ---
 

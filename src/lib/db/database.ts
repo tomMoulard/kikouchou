@@ -120,9 +120,9 @@ export class KikoushouDatabase extends Dexie {
       persons: 'id, tripId, [tripId+name]',
 
       // Room assignments: compound indexes for efficient trip-scoped queries
-      // Redundant single-column indexes removed (covered by compounds)
+      // roomId index needed for cascade delete in room-repository
       roomAssignments:
-        'id, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+        'id, roomId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
 
       // Transports: compound indexes for efficient trip-scoped queries
       // [tripId+type] kept for filtering arrivals/departures
