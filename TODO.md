@@ -4048,12 +4048,35 @@ describe('deleteTrip', () => {
 ```
 
 **Acceptance Criteria**:
-- [ ] All CRUD operations tested
-- [ ] Cascade delete verified
-- [ ] Collision handling tested
-- [ ] 90%+ coverage
+- [x] All CRUD operations tested
+- [x] Cascade delete verified
+- [x] Collision handling tested
+- [x] 90%+ coverage (achieved 100%)
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-01-27)
+
+**Notes**:
+- Created `src/lib/db/repositories/__tests__/trip-repository.test.ts` with 32 comprehensive tests
+- Test categories:
+  - `createTrip` (8 tests): field population, unique IDs, timestamps, persistence, optional fields, collision retry (success and failure), non-ConstraintError handling
+  - `getAllTrips` (4 tests): empty array, sorted by startDate descending, single trip, same start date handling
+  - `getTripById` (3 tests): found, not found, multiple trips
+  - `getTripByShareId` (3 tests): found, not found, multiple trips
+  - `updateTrip` (5 tests): field updates, timestamp behavior, non-existent trip error, field preservation, date updates
+  - `deleteTrip` (9 tests): basic delete, cascade delete for rooms/persons/assignments/transports individually and all together, trip isolation verification, no related entities, idempotent behavior
+- Coverage: **100% statements, 100% branches, 100% functions, 100% lines** for `trip-repository.ts`
+- Key test patterns:
+  - Test data factory `createValidTripData()` with overrides for flexible test data
+  - Parallel table clearing in `beforeEach` for test isolation
+  - Mocking `createShareId` from `@/lib/db/utils` for collision testing
+  - Mocked `Date.now()` for timestamp tests (replaced setTimeout with mocked time)
+  - Direct database access via `db.*.count()` for cascade delete verification
+- Triple code review applied:
+  - Code Quality: Added non-ConstraintError test for 100% branch coverage
+  - Error Analysis: Added retry count verification, documented collision test coverage
+  - Performance: Replaced 10ms setTimeout with mocked time (~10% faster tests)
+- Execution time: ~73-93ms for 32 tests (~2.5ms per test)
+- Build passes, TypeScript strict mode compliant
 
 ---
 
