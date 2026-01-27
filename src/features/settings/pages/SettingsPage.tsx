@@ -39,7 +39,7 @@ import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage } from '@/lib/i
  * Application version from package.json.
  * In a real app, this would be injected at build time.
  */
-const APP_VERSION = '0.1.0',
+const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? 'devel';
 
 // ============================================================================
 // Sub-Components
@@ -49,7 +49,7 @@ const APP_VERSION = '0.1.0',
  * Language selector component.
  * Allows switching between supported languages.
  */
- LanguageSelector = memo((): ReactElement => {
+const LanguageSelector = memo((): ReactElement => {
   const { t } = useTranslation(),
    currentLanguage = getCurrentLanguage(),
 
