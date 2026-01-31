@@ -5279,22 +5279,30 @@ To avoid collisions and simplify development:
 ### Dependency Graph
 
 ```
-16.1 (OSM Picker) ─────────┬──▶ 16.5 (Trip: use OSM)
-                           └──▶ 16.14 (Transport: use OSM)
+BUG-1 (Assignment date) ───────▶ (CRITICAL: fix before any assignment-related work)
+BUG-2 (Timezone display) ──────▶ (CRITICAL: fix before transport calendar display work)
 
-16.2 (DateRangePicker) ────────▶ 16.5 (Trip: use new picker)
+16.1 (OSM Picker) ─────────┬──▶ 16.5 (Trip: use OSM)
+                           └──▶ 16.15 (Transport: use OSM)
+
+16.2 (DateRangePicker) ────┬──▶ 16.5 (Trip: use new picker)
+                           └──▶ 16.17 (Guest: stay dates use picker)
 
 16.3 (Trip Description) ───────▶ 16.5 (Trip: description UI)
 
 16.4 (Side Panel) ─────────────▶ (no dependencies, can start early)
 
-16.6, 16.7 (Calendar) ─────────▶ (depend on existing calendar, parallel OK)
+16.6, 16.7 (Calendar) ─────────▶ 16.18 (Calendar: event detail view)
 
 16.8, 16.9, 16.10 (Rooms) ─────▶ (16.10 drag-drop is complex, do last)
 
 16.11 (Guest Icons) ───────────▶ (parallel with 16.7, shares icon logic)
 
-16.12, 16.13, 16.14 (Transport)▶ (sequential within group, 16.14 uses 16.1)
+16.12, 16.13, 16.14 (Transport)▶ (sequential within group)
+
+16.17 (Guest Stay Dates) ──────▶ (depends on 16.2 DateRangePicker)
+
+16.18 (Calendar Event Detail) ─▶ (depends on existing calendar, parallel with 16.6/16.7)
 ```
 
 ---
@@ -6153,7 +6161,7 @@ const showNeedsPickupBadge = transport.needsPickup && !transport.driverId;
 
 ### 16.16 Phase 16 Integration Tests
 
-**Description**: Create integration tests covering the new UX flows.
+**Description**: Create integration tests covering the new UX flows and bug fixes.
 
 **File**: `e2e/phase16-ux-improvements.spec.ts`
 
@@ -6167,7 +6175,9 @@ const showNeedsPickupBadge = transport.needsPickup && !transport.driverId;
 2. **Calendar Multi-Day Events**:
    - Create multi-day assignment
    - Verify event spans visually
-   - Click event to edit
+   - Click event to see detail view (16.18)
+   - Edit from detail view works
+   - Delete from detail view works
 
 3. **Room Assignment Drag-Drop**:
    - See unassigned guests
@@ -6179,19 +6189,39 @@ const showNeedsPickupBadge = transport.needsPickup && !transport.driverId;
    - Verify chronological order
    - Verify past transports at end
 
+5. **Guest Stay Dates (16.17)**:
+   - Create guest with stay dates
+   - Verify dates saved correctly
+   - Verify room assignment prompt appears
+
+6. **Bug Fix: Assignment Dates (BUG-1)**:
+   - Create assignment from day A to B
+   - Verify stored as A to B (not A to B+1)
+   - Verify displayed correctly on calendar
+
+7. **Bug Fix: Timezone Display (BUG-2)**:
+   - Create transport at time H in UTC+1
+   - Verify displayed as H (not H-1) in calendar
+   - Verify displayed as H (not H-1) in transport list
+
 **Acceptance Criteria**:
 - [ ] All UX flows work end-to-end
 - [ ] No regressions in existing functionality
+- [ ] Bug fixes verified with explicit test cases
 
 **Status**: PENDING
 
-**Depends on**: All Phase 16 tasks
+**Depends on**: All Phase 16 tasks + BUG-1 + BUG-2
 
 ---
 
 ### Phase 16 Recommended Implementation Order
 
 Based on dependencies and complexity:
+
+**Sprint 0 (Critical Bug Fixes - Do First)**:
+- BUG-1 - Room assignment end date off-by-one (HIGH priority - core functionality broken)
+- BUG-2 - Transport time timezone display issue (HIGH priority - incorrect data display)
 
 **Sprint 1 (Foundation)**:
 1. 16.1 - LocationPicker (shared, reused by 16.5 and 16.15)
@@ -6209,15 +6239,269 @@ Based on dependencies and complexity:
 **Sprint 3 (Calendar & Guest UX)**:
 10. 16.7 - TransportIcon component + Calendar transport details
 11. 16.6 - Calendar multi-day event spanning
-12. 16.11 - Guest view transport icons (depends on 16.7)
+12. 16.18 - Calendar event detail view (click to expand) - **NEW from human review**
+13. 16.11 - Guest view transport icons (depends on 16.7)
+14. 16.17 - Guest stay dates on creation - **NEW from human review**
 
 **Sprint 4 (Rooms UX)**:
-13. 16.8 - Unassigned guests indicator
-14. 16.9 - Room icons
-15. 16.10 - Drag-and-drop assignments (depends on 16.8)
+15. 16.8 - Unassigned guests indicator
+16. 16.9 - Room icons
+17. 16.10 - Drag-and-drop assignments (depends on 16.8)
 
 **Sprint 5 (Testing)**:
-16. 16.16 - Integration tests
+18. 16.16 - Integration tests (update to include new 16.17, 16.18, and bug fixes)
+
+---
+
+### 16.17 Guest Stay Dates on Creation
+
+**Description**: Add the ability to set guest stay duration/dates when creating or editing a guest. Currently, there is no way to specify when a guest will arrive and leave directly from the guest form.
+
+**File**: `src/features/persons/components/PersonForm.tsx` (modify)
+**File**: `src/features/persons/components/PersonDialog.tsx` (modify)
+**File**: `src/types/index.ts` (extend PersonFormData)
+
+**Requirements**:
+- Add optional "Stay dates" section to the person form
+- Use DateRangePicker component for date selection
+- Constrain dates to trip date range
+- Auto-create room assignment prompt after guest creation (optional UX enhancement)
+- Update PersonFormData interface to include optional stay dates
+- If stay dates provided, can optionally auto-create transport entries
+
+**Data Model Change** (optional stay dates, doesn't modify Person entity):
+```typescript
+interface PersonFormData {
+  // ... existing fields
+  stayStartDate?: string;  // NEW: Optional stay start date
+  stayEndDate?: string;    // NEW: Optional stay end date
+}
+```
+
+**Behavior Flow**:
+```
+1. User clicks "Add Guest"
+2. Form shows: Name, Color, and new "Stay Dates" section
+3. User optionally selects arrival/departure dates
+4. On save:
+   - Person is created
+   - If dates provided, prompt: "Assign [Name] to a room for these dates?"
+   - If yes → open RoomAssignment dialog pre-filled with guest and dates
+```
+
+**Test Cases** (`src/features/persons/components/__tests__/PersonForm.test.tsx`):
+- Form renders DateRangePicker for stay dates
+- Stay dates are optional (can submit without them)
+- DateRangePicker constrained to trip date range
+- Stay dates included in form submission data
+- Edit mode pre-fills stay dates if available (from transports)
+
+**Acceptance Criteria**:
+- [ ] DateRangePicker added to PersonForm
+- [ ] Stay dates are optional
+- [ ] Dates constrained to trip range
+- [ ] Post-creation room assignment prompt (optional UX)
+- [ ] Tests pass (80%+ coverage)
+
+**Status**: PENDING
+
+---
+
+### 16.18 Calendar Event Detail View (Click to Expand)
+
+**Description**: Add the ability to click on a calendar event (room assignment or transport) to see a detailed popup/dialog with full information.
+
+**File**: `src/features/calendar/pages/CalendarPage.tsx` (modify)
+**File**: `src/features/calendar/components/EventDetailDialog.tsx` (new)
+
+**Requirements**:
+
+**For Room Assignment Events**:
+- Click opens detail dialog showing:
+  - Guest name (with color badge)
+  - Room name (with icon if 16.9 implemented)
+  - Full date range (start → end)
+  - Duration (X nights)
+  - Edit button → opens assignment edit dialog
+  - Delete button → confirms and deletes assignment
+
+**For Transport Events**:
+- Click opens detail dialog showing:
+  - Guest name (with color badge)
+  - Transport type (Arrival/Departure) with icon
+  - Full datetime (date + time)
+  - Location
+  - Transport mode and number (if set)
+  - Driver (if assigned)
+  - Pickup status
+  - Notes (if any)
+  - Edit button → opens transport edit dialog
+  - Delete button → confirms and deletes transport
+
+**Event Detail Dialog Component**:
+```typescript
+interface EventDetailDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  event: CalendarEventData | null;  // Union of assignment or transport
+  onEdit: () => void;
+  onDelete: () => void;
+}
+```
+
+**Visual Design**:
+```
+┌─────────────────────────────────────┐
+│ Room Assignment              [X]    │
+│ ─────────────────────────────────── │
+│ 👤 [Alice]                          │
+│ 🛏️ Master Bedroom                  │
+│ 📅 Jan 5 → Jan 10, 2026            │
+│ ⏱️ 5 nights                         │
+│ ─────────────────────────────────── │
+│ [Edit]                    [Delete]  │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│ Arrival                      [X]    │
+│ ─────────────────────────────────── │
+│ 👤 [Alice]                          │
+│ ✈️ Plane - AF1234                   │
+│ 📅 Jan 5, 2026 at 14:30            │
+│ 📍 Paris CDG Airport                │
+│ 🚗 Driver: Pierre                   │
+│ 📝 Terminal 2E, gate B42            │
+│ ─────────────────────────────────── │
+│ [Edit]                    [Delete]  │
+└─────────────────────────────────────┘
+```
+
+**Test Cases** (`src/features/calendar/components/__tests__/EventDetailDialog.test.tsx`):
+- Dialog opens when event clicked
+- Shows correct info for room assignment
+- Shows correct info for transport
+- Edit button opens appropriate edit dialog
+- Delete button shows confirmation
+- Dialog closes on action completion
+- Keyboard accessible (Escape to close)
+
+**Acceptance Criteria**:
+- [ ] Click on room assignment event shows detail dialog
+- [ ] Click on transport event shows detail dialog
+- [ ] All relevant information displayed
+- [ ] Edit and Delete actions work
+- [ ] Tests pass (80%+ coverage)
+
+**Status**: PENDING
+
+---
+
+## Bug Fixes (Human Review 2026-02)
+
+This section tracks bugs identified during human review that need to be fixed.
+
+---
+
+### BUG-1: Room Assignment End Date Off-By-One
+
+**Description**: When assigning a guest to a room, if the guest arrives on day A and leaves on day B, they are automatically assigned from A to B+1 instead of A to B.
+
+**Severity**: HIGH - Affects core room assignment functionality
+
+**Steps to Reproduce**:
+1. Create a trip
+2. Create a guest "Foo"
+3. Add arrival transport for Foo on day A
+4. Add departure transport for Foo on day B
+5. Assign Foo to a room (with auto-filled dates from transport)
+6. Observe: Assignment shows A to B+1 instead of A to B
+
+**Expected Behavior**: Room assignment should be from arrival date to departure date (A to B inclusive)
+
+**Actual Behavior**: Room assignment is from arrival date to departure date + 1 day (A to B+1)
+
+**Root Cause Investigation**:
+- Check `RoomAssignmentSection.tsx` - how are default dates calculated from transports?
+- Check `AssignmentFormDialog` - how is date range picker initialized?
+- Check if this is a display issue or a data storage issue
+- Check date-fns usage for off-by-one errors (e.g., `addDays` vs `endOfDay`)
+
+**Files to Investigate**:
+- `src/features/rooms/components/RoomAssignmentSection.tsx`
+- `src/lib/db/repositories/assignment-repository.ts`
+- `src/components/shared/DateRangePicker.tsx`
+
+**Test Cases to Add**:
+- `src/lib/db/repositories/__tests__/assignment-repository.test.ts`:
+  - Assignment with dates A to B stores exactly A to B
+  - No off-by-one on date boundaries
+- `src/features/rooms/components/__tests__/RoomAssignmentSection.test.tsx`:
+  - Default dates from transport are correct
+  - Saved assignment has correct end date
+
+**Acceptance Criteria**:
+- [ ] Root cause identified
+- [ ] Fix implemented
+- [ ] Assignment from A to B stored as A to B (not A to B+1)
+- [ ] Regression tests added
+- [ ] All existing tests pass
+
+**Status**: PENDING
+
+---
+
+### BUG-2: Transport Time Display Timezone Issue
+
+**Description**: When the user is in UTC+1 timezone and sets a transport time to hour H, it is displayed as H-1 in the calendar view.
+
+**Severity**: HIGH - Affects core transport display functionality
+
+**Steps to Reproduce**:
+1. Be in UTC+1 timezone (e.g., Paris time)
+2. Create a transport with time H (e.g., 14:00)
+3. View the transport in the calendar
+4. Observe: Time shows H-1 (e.g., 13:00) instead of H (14:00)
+
+**Expected Behavior**: Transport time should display the same time that was entered, regardless of timezone
+
+**Actual Behavior**: Transport time displays H-1 in UTC+1 timezone
+
+**Root Cause Investigation**:
+- Check how `datetime` field is stored in Transport entity (ISO string)
+- Check how datetime is parsed when displaying (are we using UTC vs local?)
+- Check CalendarPage transport display code
+- Check if issue is in storage (UTC conversion) or display (timezone handling)
+
+**Key Question**: Is the datetime stored as UTC or local time?
+- If stored as UTC but displayed as UTC → shows 1 hour earlier in UTC+1
+- Should either store as local OR convert to local when displaying
+
+**Files to Investigate**:
+- `src/features/calendar/pages/CalendarPage.tsx` - transport display
+- `src/features/transports/components/TransportForm.tsx` - datetime input handling
+- `src/lib/db/utils.ts` - `toISODateTimeString` and `parseISODateTimeString`
+- `src/features/transports/pages/TransportListPage.tsx` - compare display logic
+
+**Possible Fixes**:
+1. **Store as local time**: Change storage format to preserve local time
+2. **Display with timezone**: Use `toLocaleTimeString()` or date-fns `format` with timezone
+3. **Store timezone offset**: Store both datetime and timezone offset
+
+**Test Cases to Add**:
+- Transport time stored matches input time
+- Transport time displayed matches stored time
+- Works correctly in UTC+0, UTC+1, UTC-5 timezones
+- Crossing midnight (23:00 UTC+1 = 22:00 UTC)
+
+**Acceptance Criteria**:
+- [ ] Root cause identified
+- [ ] Fix implemented
+- [ ] Time H displays as H (not H-1 or H+1)
+- [ ] Works across different timezones
+- [ ] Regression tests added
+- [ ] All existing tests pass
+
+**Status**: PENDING
 
 ---
 
