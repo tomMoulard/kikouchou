@@ -547,7 +547,7 @@ export class KikoushouDatabase extends Dexie {
 
   constructor() {
     super('kikoushou');
-    
+
     this.version(1).stores({
       trips: 'id, shareId, startDate, createdAt',
       rooms: 'id, tripId, order',
@@ -702,7 +702,7 @@ export async function deletePerson(id: string): Promise<void>
 **Default colors palette** to assign automatically:
 ```typescript
 const COLORS = [
-  '#ef4444', '#f97316', '#eab308', '#22c55e', 
+  '#ef4444', '#f97316', '#eab308', '#22c55e',
   '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899'
 ];
 ```
@@ -739,10 +739,10 @@ export async function deleteAssignment(id: string): Promise<void>
 
 // Check for conflicts (person already assigned to another room for overlapping dates)
 export async function checkAssignmentConflict(
-  tripId: string, 
-  personId: string, 
-  startDate: string, 
-  endDate: string, 
+  tripId: string,
+  personId: string,
+  startDate: string,
+  endDate: string,
   excludeId?: string
 ): Promise<boolean>
 ```
@@ -4218,7 +4218,7 @@ describe('checkAssignmentConflict', () => {
   it('returns false when no existing assignments');
   it('returns false when dates do not overlap');
   it('returns false when person has no other assignments');
-  
+
   // Conflict cases
   it('returns true when new assignment fully overlaps existing');
   it('returns true when new assignment partially overlaps start');
@@ -4226,7 +4226,7 @@ describe('checkAssignmentConflict', () => {
   it('returns true when new assignment is contained within existing');
   it('returns true when new assignment contains existing');
   it('returns true when assignments share single boundary date');
-  
+
   // Edge cases
   it('excludes specified assignment ID from check (edit mode)');
   it('only checks assignments for same person');
@@ -4335,13 +4335,13 @@ describe('TripForm', () => {
     it('submits form with valid data');
     it('disables submit button during submission');
   });
-  
+
   describe('Edit Mode', () => {
     it('pre-fills form with trip data');
     it('updates form when trip prop changes');
     it('submits with updated data');
   });
-  
+
   describe('Validation', () => {
     it('shows error for empty name on blur');
     it('shows error when end date before start date');
@@ -4819,6 +4819,277 @@ coverage: {
 - [ ] Coverage reports uploaded to Codecov
 
 **Status**: PENDING
+
+---
+
+## Code Review Findings (2026-01-27)
+
+Comprehensive code review conducted using triple-agent analysis (Code Quality, Error Analysis, Performance). The project demonstrates professional-level code quality with excellent TypeScript usage, consistent patterns, and thoughtful architecture.
+
+### Critical Issues (Must Fix)
+
+#### CR-1: Missing Index Utilization in `checkAssignmentConflict`
+**Location**: `src/lib/db/repositories/assignment-repository.ts:213-217`
+**Identified by**: Quality + Performance Reviewers
+
+**Problem**: The conflict check queries by `tripId` then uses JavaScript `filter()` for `personId`, ignoring the compound index `[tripId+personId]`.
+
+**Impact**: O(n) complexity instead of O(log n). With 100+ assignments, every conflict check becomes slow.
+
+```typescript
+// Current - O(n) filter
+.where('tripId').equals(tripId).filter((a) => a.personId === personId)
+
+// Fix - O(log n) index lookup
+.where('[tripId+personId]').equals([tripId, personId])
+```
+
+**Status**: PENDING
+
+---
+
+#### CR-2: Race Condition in Context Ownership Validation
+**Location**: All contexts (RoomContext, AssignmentContext, PersonContext, TransportContext)
+**Identified by**: Quality + Error Analyzers
+
+**Problem**: The validation pattern reads from cache, then DB, then performs modification. Between validation and modification, another operation could alter the data.
+
+**Fix**: Wrap validation and mutation in a Dexie transaction:
+```typescript
+await db.transaction('rw', db.rooms, async () => {
+  const room = await db.rooms.get(id);
+  if (!room || room.tripId !== tripId) throw new Error(...);
+  await db.rooms.update(id, data);
+});
+```
+
+**Status**: PENDING
+
+---
+
+#### CR-3: `upcomingPickups` Computed with Stale "Now" Value
+**Location**: `src/contexts/TransportContext.tsx:352-357`
+**Identified by**: Error Analyzer
+
+**Problem**: `new Date().toISOString()` is computed once when `transports` changes, becoming stale immediately. Transports in the past still show as "upcoming".
+
+**Fix**: Add a timer to periodically refresh the "now" value (e.g., every minute).
+
+**Status**: PENDING
+
+---
+
+#### CR-4: PersonContext Callbacks Depend on `error` State
+**Location**: `src/contexts/PersonContext.tsx:304-374`
+**Identified by**: Error + Quality Reviewers
+
+**Problem**: CRUD callbacks include `error` in dependency arrays, causing unnecessary recreation on every error state change.
+
+**Fix**: Use functional update pattern like other contexts:
+```typescript
+setError((prev) => (prev === null ? prev : null));
+```
+
+**Status**: PENDING
+
+---
+
+### Important Improvements (Should Fix)
+
+#### CR-5: Duplicated `wrapAndSetError` Utility Function
+**Location**: RoomContext.tsx, PersonContext.tsx, AssignmentContext.tsx, TransportContext.tsx
+**Issue**: DRY violation - same function copied in 4 files.
+**Fix**: Extract to `src/contexts/utils.ts`.
+
+**Status**: PENDING
+
+---
+
+#### CR-6: Duplicated Array Equality Functions
+**Location**: All context files (areRoomsEqual, arePersonsEqual, areAssignmentsEqual, areTransportsEqual)
+**Issue**: Similar structure with different property comparisons.
+**Fix**: Create generic utility or use library like `fast-deep-equal`.
+
+**Status**: PENDING
+
+---
+
+#### CR-7: Missing Validation for Assignment Dates
+**Location**: `src/lib/db/repositories/assignment-repository.ts` - `createAssignment`
+**Issue**: No validation that `startDate <= endDate` or dates fall within trip range.
+**Fix**: Add validation before persisting.
+
+**Status**: PENDING
+
+---
+
+#### CR-8: Error State Not Cleared on Trip Change
+**Location**: PersonContext, RoomContext, AssignmentContext
+**Issue**: When `currentTripId` changes, data is cleared but error state persists (stale errors shown).
+**Fix**: Add `setError(null)` to the trip change cleanup effect.
+
+**Status**: PENDING
+
+---
+
+#### CR-9: Triple Filtering in TransportContext
+**Location**: `src/contexts/TransportContext.tsx:339-357`
+**Issue**: Three separate `useMemo` filters iterate the full transports array (3× O(n)).
+**Fix**: Single-pass classification:
+```typescript
+const { arrivals, departures, upcomingPickups } = useMemo(() => {
+  const arrivals: Transport[] = [];
+  const departures: Transport[] = [];
+  const upcomingPickups: Transport[] = [];
+  for (const t of transports) {
+    if (t.type === 'arrival') arrivals.push(t);
+    else departures.push(t);
+    if (t.needsPickup && t.datetime >= now) upcomingPickups.push(t);
+  }
+  return { arrivals, departures, upcomingPickups };
+}, [transports]);
+```
+
+**Status**: PENDING
+
+---
+
+#### CR-10: `createRoom()` O(n) Query for Max Order
+**Location**: `src/lib/db/repositories/room-repository.ts:32-52`
+**Issue**: Fetches ALL rooms just to find the maximum order value.
+**Fix**: Use `last()` with compound index:
+```typescript
+const lastRoom = await db.rooms
+  .where('[tripId+order]')
+  .between([tripId, 0], [tripId, Infinity])
+  .last();
+const nextOrder = lastRoom ? lastRoom.order + 1 : 0;
+```
+
+**Status**: PENDING
+
+---
+
+#### CR-11: `getAssignmentsForDate()` Full Table Scan
+**Location**: `src/lib/db/repositories/assignment-repository.ts:253-262`
+**Issue**: Uses JavaScript `filter()` to find assignments overlapping a date.
+**Fix**: Use `[tripId+startDate]` range query to pre-filter.
+
+**Status**: PENDING
+
+---
+
+#### CR-12: Missing `driverId` Index for Person Delete
+**Location**: `src/lib/db/database.ts:129`, `src/lib/db/repositories/person-repository.ts:163-166`
+**Issue**: `deletePerson` queries transports by `driverId`, but schema lacks this index (full table scan).
+**Fix**: Add `driverId` index to transports schema.
+
+**Status**: PENDING
+
+---
+
+#### CR-13: `areRoomsEqual` Incomplete Comparison
+**Location**: `src/contexts/RoomContext.tsx:127-133`
+**Issue**: Only compares `id` and `order`, not `name`, `capacity`, or `description`. UI won't re-render on property changes.
+**Fix**: Include all mutable properties in comparison.
+
+**Status**: PENDING
+
+---
+
+### Minor Suggestions (Nice to Have)
+
+#### CR-14: CalendarPage Has Many Responsibilities
+**Location**: `src/features/calendar/pages/CalendarPage.tsx` (1000+ lines)
+**Suggestion**: Split into smaller components:
+- `features/calendar/components/CalendarHeader.tsx`
+- `features/calendar/components/CalendarDay.tsx`
+- `features/calendar/components/CalendarEvent.tsx`
+
+**Status**: PENDING
+
+---
+
+#### CR-15: Regex Variable Naming Confusion
+**Location**: `src/lib/db/utils.ts:175-188`
+**Issue**: Variable order doesn't match documentation order (confusing).
+**Suggestion**: Reorder to match documentation flow.
+
+**Status**: PENDING
+
+---
+
+#### CR-16: `today` Value Never Updates in CalendarPage
+**Location**: `src/features/calendar/pages/CalendarPage.tsx:805`
+**Issue**: "Today" captured once on mount, never updates for overnight sessions.
+**Suggestion**: Add midnight refresh timer.
+
+**Status**: PENDING
+
+---
+
+#### CR-17: Weak Type Aliases for ISODateString and HexColor
+**Location**: `src/types/index.ts:49,61`
+**Issue**: Type aliases to `string` provide no compile-time safety.
+**Suggestion**: Consider branded types for these as well.
+
+**Status**: PENDING
+
+---
+
+#### CR-18: Context Re-render Cascade from `currentTrip`
+**Location**: `src/contexts/TripContext.tsx:172-179`
+**Issue**: When any trip is updated, all consumers re-render even if current trip unchanged.
+**Suggestion**: Add referential equality check for `currentTrip`.
+
+**Status**: PENDING
+
+---
+
+### Scalability Analysis
+
+| Data Size | Expected Behavior | Main Concerns |
+|-----------|-------------------|---------------|
+| 10 assignments | Excellent (<5ms) | None |
+| 50 assignments | Good | Context rebuilds noticeable |
+| 100 assignments | Acceptable | `checkAssignmentConflict` becomes slow |
+| 500 assignments | Degraded (~200ms) | Multiple slow operations compound |
+| 1000+ assignments | Poor (visible lag) | Need virtualization and pagination |
+
+---
+
+### Positive Aspects Noted
+
+1. **Excellent TypeScript Usage**: Branded types for IDs provide strong type safety
+2. **Comprehensive Documentation**: JSDoc comments are thorough with examples
+3. **Consistent Architecture**: Repository + Context + Live Queries is cohesive
+4. **Proper Error Handling**: Errors caught, wrapped, and surfaced appropriately
+5. **Performance Optimizations**: O(1) Map lookups, extensive memoization
+6. **Accessibility**: ARIA labels, keyboard navigation in calendar
+7. **Transaction Safety**: Cascade deletes use atomic transactions
+8. **Internationalization**: i18next with proper fallbacks
+9. **Lazy Loading**: Route-level code splitting implemented
+10. **Clean Barrel Exports**: Convenient imports while maintaining boundaries
+
+---
+
+### Recommended Fix Priority
+
+#### Priority 1 (Immediate)
+- [ ] CR-1: Use `[tripId+personId]` compound index in `checkAssignmentConflict()`
+- [ ] CR-10: Use `last()` instead of `toArray().reduce()` in `createRoom()`
+- [ ] CR-4: Fix PersonContext callback dependencies
+
+#### Priority 2 (Short-term)
+- [ ] CR-2: Wrap ownership validation + mutation in transactions
+- [ ] CR-5: Extract duplicated utility functions
+- [ ] CR-7: Add validation for assignment date ranges
+- [ ] CR-3: Fix `upcomingPickups` stale timestamp issue
+
+#### Priority 3 (Medium-term)
+- [ ] CR-9: Consolidate TransportContext triple filter
+- [ ] CR-12: Add `driverId` index to schema
+- [ ] CR-13: Complete `areRoomsEqual` comparison
 
 ---
 

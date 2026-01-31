@@ -33,12 +33,12 @@ export async function createRoom(
   tripId: TripId,
   data: RoomFormData,
 ): Promise<Room> {
-  // Get the next order value (max + 1, or 0 if no rooms exist)
-  const existingRooms = await db.rooms.where('tripId').equals(tripId).toArray(),
-   maxOrder = existingRooms.reduce(
-    (max, room) => Math.max(max, room.order),
-    -1,
-  ),
+  // Get the next order value using last() on compound index (O(log n) instead of O(n))
+  const lastRoom = await db.rooms
+    .where('[tripId+order]')
+    .between([tripId, 0], [tripId, Infinity])
+    .last(),
+   maxOrder = lastRoom?.order ?? -1,
 
    room: Room = {
     id: createRoomId(),

@@ -209,11 +209,10 @@ export async function checkAssignmentConflict(
   endDate: string,
   excludeId?: RoomAssignmentId,
 ): Promise<boolean> {
-  // Get all assignments for this person in this trip
+  // Get all assignments for this person in this trip using compound index
   const assignments = await db.roomAssignments
-    .where('tripId')
-    .equals(tripId)
-    .filter((a) => a.personId === personId)
+    .where('[tripId+personId]')
+    .equals([tripId, personId])
     .toArray();
 
   // Check for overlapping date ranges

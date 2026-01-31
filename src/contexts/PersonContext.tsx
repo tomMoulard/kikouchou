@@ -309,10 +309,8 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
         throw new Error('Cannot create person: no trip selected');
       }
 
-      // Clear error only if there was one (avoid unnecessary renders)
-      if (error !== null) {
-        setError(null);
-      }
+      // Clear error using functional update (avoids dependency on error state)
+      setError((prev) => (prev === null ? prev : null));
 
       try {
         return await repositoryCreatePerson(tripId, data);
@@ -320,7 +318,7 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
         throw wrapAndSetError(err, 'Failed to create person', setError);
       }
     },
-    [currentTripId, error],
+    [currentTripId],
   ),
 
   /**
@@ -333,9 +331,8 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
         throw new Error('Cannot update person: no trip selected');
       }
 
-      if (error !== null) {
-        setError(null);
-      }
+      // Clear error using functional update (avoids dependency on error state)
+      setError((prev) => (prev === null ? prev : null));
 
       try {
         // Verify person belongs to current trip before updating
@@ -345,7 +342,7 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
         throw wrapAndSetError(err, 'Failed to update person', setError);
       }
     },
-    [currentTripId, error, validatePersonOwnership],
+    [currentTripId, validatePersonOwnership],
   ),
 
   /**
@@ -358,9 +355,8 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
         throw new Error('Cannot delete person: no trip selected');
       }
 
-      if (error !== null) {
-        setError(null);
-      }
+      // Clear error using functional update (avoids dependency on error state)
+      setError((prev) => (prev === null ? prev : null));
 
       try {
         // Verify person belongs to current trip before deleting
@@ -370,7 +366,7 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
         throw wrapAndSetError(err, 'Failed to delete person', setError);
       }
     },
-    [currentTripId, error, validatePersonOwnership],
+    [currentTripId, validatePersonOwnership],
   ),
 
   /**
