@@ -5142,6 +5142,882 @@ Before considering the MVP complete, verify (with as much test as possible) the 
 
 ---
 
+## Phase 16: UX Improvements (Human Review Feedback)
+
+> This phase addresses UX/UI improvements identified during human review. Tasks are ordered to build shared components first, then data model changes, and finally feature-specific UI enhancements.
+
+### Implementation Order Strategy
+
+To avoid collisions and simplify development:
+1. **Shared Components First**: Build reusable components before features that need them
+2. **Data Model Changes Early**: Update Trip schema before UI that depends on new fields
+3. **Independent Features in Parallel**: Features that don't share dependencies can be developed simultaneously
+4. **Test Coverage Required**: Each task must include unit/integration tests for changed functionality
+
+### Dependency Graph
+
+```
+16.1 (OSM Picker) ─────────┬──▶ 16.5 (Trip: use OSM)
+                           └──▶ 16.14 (Transport: use OSM)
+
+16.2 (DateRangePicker) ────────▶ 16.5 (Trip: use new picker)
+
+16.3 (Trip Description) ───────▶ 16.5 (Trip: description UI)
+
+16.4 (Side Panel) ─────────────▶ (no dependencies, can start early)
+
+16.6, 16.7 (Calendar) ─────────▶ (depend on existing calendar, parallel OK)
+
+16.8, 16.9, 16.10 (Rooms) ─────▶ (16.10 drag-drop is complex, do last)
+
+16.11 (Guest Icons) ───────────▶ (parallel with 16.7, shares icon logic)
+
+16.12, 16.13, 16.14 (Transport)▶ (sequential within group, 16.14 uses 16.1)
+```
+
+---
+
+### 16.1 OpenStreetMap Location Picker Component
+
+**Description**: Create a shared location picker component using OpenStreetMap Nominatim API for place search with autocomplete suggestions.
+
+**File**: `src/components/shared/LocationPicker.tsx`
+
+**Requirements**:
+- Text input with debounced search (300ms)
+- Dropdown list of search results from Nominatim API
+- Display: place name, type, address preview
+- Click to select location
+- Keyboard navigation (arrow keys, Enter to select)
+- Show selected location with small static map preview (optional)
+- Clear button to reset selection
+- Accessible (ARIA combobox pattern)
+
+**API**: `https://nominatim.openstreetmap.org/search?format=json&q={query}&limit=5`
+
+**Props Interface**:
+```typescript
+interface LocationPickerProps {
+  value: string;
+  onChange: (location: string, coordinates?: { lat: number; lon: number }) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
+}
+```
+
+**Test Cases** (`src/components/shared/__tests__/LocationPicker.test.tsx`):
+- Renders input with placeholder
+- Debounces search requests (300ms)
+- Shows dropdown with results
+- Selects location on click
+- Keyboard navigation (up/down/enter/escape)
+- Clears selection on clear button
+- Shows loading state during search
+- Handles API errors gracefully
+- Respects disabled state
+
+**Acceptance Criteria**:
+- [ ] Nominatim API integration works
+- [ ] Autocomplete suggestions appear
+- [ ] Selection updates parent component
+- [ ] Keyboard accessible
+- [ ] Tests pass (80%+ coverage)
+
+**Status**: PENDING
+
+---
+
+### 16.2 Date Range Picker Redesign
+
+**Description**: Redesign the DateRangePicker component to use a single calendar view where the first click selects the start date and the second click selects the end date (similar to flights.google.com).
+
+**File**: `src/components/shared/DateRangePicker.tsx` (modify existing)
+
+**Requirements**:
+- Single calendar view (not two separate pickers)
+- First click: select start date, highlight it
+- Second click: select end date, show range highlight between dates
+- If second click is before first click, swap dates automatically
+- Visual: range highlight between selected dates
+- Clear/reset button to start over
+- Show "Select start date" → "Select end date" prompts
+- Mobile-friendly touch targets
+
+**Behavior Flow**:
+```
+Initial: "Select start date"
+Click Jan 5: Start = Jan 5, prompt "Select end date", Jan 5 highlighted
+Click Jan 10: End = Jan 10, range Jan 5-10 highlighted, picker closes
+Click Jan 3 (before start): Swap → Start = Jan 3, End = Jan 5
+```
+
+**Test Cases** (`src/components/shared/__tests__/DateRangePicker.test.tsx`):
+- First click sets start date
+- Second click sets end date
+- Range highlight shows between dates
+- Clicking before start date swaps dates
+- Clear button resets selection
+- Closes popover on complete selection
+- Respects minDate/maxDate constraints
+- Shows correct prompt text at each stage
+- Keyboard navigation works
+
+**Acceptance Criteria**:
+- [ ] Two-click selection works
+- [ ] Range highlight displays correctly
+- [ ] Automatic date swapping works
+- [ ] Tests pass (80%+ coverage)
+
+**Status**: PENDING
+
+---
+
+### 16.3 Trip Description Field
+
+**Description**: Add a description field to trips for storing instructions, tricount links, or other notes.
+
+**Files to modify**:
+- `src/types/index.ts` - Add `description?: string` to Trip interface
+- `src/lib/db/database.ts` - Add migration for schema v2
+- `src/features/trips/components/TripForm.tsx` - Add textarea field
+- `src/locales/*/translation.json` - Add translation keys
+
+**Data Model Change**:
+```typescript
+interface Trip {
+  // ... existing fields
+  description?: string;  // NEW: Optional trip description/notes
+}
+
+interface TripFormData {
+  // ... existing fields
+  description?: string;  // NEW
+}
+```
+
+**Database Migration** (version 2):
+```typescript
+this.version(2).stores({
+  // Same schema, description is optional field (no index needed)
+}).upgrade(tx => {
+  // No data migration needed for optional field
+});
+```
+
+**Form Field**:
+- Textarea with 3-4 rows
+- Label: "Description" / "Description"
+- Placeholder: "Instructions, tricount link, notes..." / "Instructions, lien tricount, notes..."
+- Character limit: 1000 (soft limit with counter)
+
+**Test Cases**:
+- `src/lib/db/repositories/__tests__/trip-repository.test.ts`:
+  - Creates trip with description
+  - Updates trip description
+  - Description persists after read
+- `src/features/trips/components/__tests__/TripForm.test.tsx`:
+  - Renders description textarea
+  - Pre-fills description in edit mode
+  - Submits description with form data
+
+**Acceptance Criteria**:
+- [ ] Trip model includes description field
+- [ ] Database migration works
+- [ ] TripForm shows description textarea
+- [ ] Description saves and loads correctly
+- [ ] Tests pass
+
+**Status**: PENDING
+
+---
+
+### 16.4 Side Panel Conditional Navigation
+
+**Description**: Update the side panel/navigation to show different content based on whether a trip is selected.
+
+**File**: `src/components/shared/Layout.tsx` (modify existing)
+
+**Requirements**:
+
+**When NO trip is selected**:
+- Show only:
+  - "My Trips" link (always visible, active)
+  - "Settings" link (always visible)
+
+**When a trip IS selected**:
+- Show:
+  - "My Trips" link (to go back to trip list)
+  - Trip info section:
+    - Trip name
+    - Trip dates
+    - Trip location (if set)
+  - Trip navigation:
+    - Calendar
+    - Rooms
+    - Guests
+    - Transport
+  - "Settings" link (always at bottom)
+
+**Visual Structure**:
+```
+[No Trip Selected]        [Trip Selected]
+┌──────────────────┐     ┌──────────────────┐
+│ My Trips  (active)│     │ My Trips         │
+│                  │     │ ─────────────────│
+│                  │     │ 🏠 Beach House   │
+│                  │     │ Jan 5 - Jan 12   │
+│                  │     │ 📍 Brittany      │
+│                  │     │ ─────────────────│
+│                  │     │ 📅 Calendar      │
+│                  │     │ 🛏️ Rooms         │
+│                  │     │ 👥 Guests        │
+│                  │     │ 🚗 Transport     │
+│ ─────────────────│     │ ─────────────────│
+│ ⚙️ Settings      │     │ ⚙️ Settings      │
+└──────────────────┘     └──────────────────┘
+```
+
+**Test Cases** (`src/components/shared/__tests__/Layout.test.tsx`):
+- No trip selected: shows only My Trips and Settings
+- Trip selected: shows trip info section
+- Trip selected: shows all navigation links
+- Settings always visible
+- Navigation links use correct routes
+- Active link is highlighted
+
+**Acceptance Criteria**:
+- [ ] Conditional navigation based on trip selection
+- [ ] Trip info displays when selected
+- [ ] Settings always accessible
+- [ ] Tests pass (80%+ coverage)
+
+**Status**: PENDING
+
+---
+
+### 16.5 My Trips View Enhancements
+
+**Description**: Enhance the trip list view to show attendees and a small map preview.
+
+**File**: `src/features/trips/pages/TripListPage.tsx` (modify)
+**File**: `src/features/trips/components/TripCard.tsx` (modify)
+
+**Requirements**:
+
+**Attendees Display**:
+- Show list of persons attending the trip (PersonBadge components)
+- Maximum 4-5 visible, "+N more" for overflow
+- Empty state: "No guests yet"
+
+**Map Preview**:
+- Small static map showing trip location (if coordinates available)
+- Use OpenStreetMap static tiles or Leaflet with disabled interaction
+- Size: ~120x80px thumbnail
+- Fallback: location icon + text if no coordinates
+
+**Trip Card Layout**:
+```
+┌─────────────────────────────────────────┐
+│ Beach House 2026                    ... │
+│ 📍 Brittany, France                     │
+│ Jan 5 - Jan 12, 2026                    │
+│ ─────────────────────────────────────── │
+│ 👥 [Alice] [Bob] [Carol] +2 more        │
+│ ─────────────────────────────────────── │
+│ ┌──────────┐                            │
+│ │  🗺️ map  │  Trip description preview │
+│ └──────────┘  if available...          │
+└─────────────────────────────────────────┘
+```
+
+**Dependencies**: 
+- 16.1 (LocationPicker) for coordinates storage
+- 16.3 (Trip Description) for description preview
+
+**Data Model Addition** (extend 16.3 migration):
+```typescript
+interface Trip {
+  // ... existing fields
+  coordinates?: { lat: number; lon: number };  // NEW: For map preview
+}
+```
+
+**Test Cases**:
+- `src/features/trips/components/__tests__/TripCard.test.tsx`:
+  - Renders attendees list
+  - Shows "+N more" for overflow
+  - Shows map preview when coordinates available
+  - Shows fallback when no coordinates
+  - Shows description preview (truncated)
+
+**Acceptance Criteria**:
+- [ ] Attendees display on trip cards
+- [ ] Map preview displays (when coordinates available)
+- [ ] Description preview shows (when available)
+- [ ] Uses new LocationPicker for trip creation
+- [ ] Uses new DateRangePicker for date selection
+- [ ] Tests pass
+
+**Status**: PENDING
+
+**Depends on**: 16.1, 16.2, 16.3
+
+---
+
+### 16.6 Calendar Multi-Day Event Spanning
+
+**Description**: Modify calendar to show multi-day room assignments as single spanning events instead of repeating the event name each day.
+
+**File**: `src/features/calendar/pages/CalendarPage.tsx` (modify)
+
+**Current Behavior** (bad):
+```
+|01/01|02/01|03/01|04/01|05/01|
+|[foo]|[foo]|[foo]|     |     |
+```
+
+**Desired Behavior** (better):
+```
+|01/01|02/01|03/01|04/01|05/01|
+|[foo─────────────]|     |     |
+```
+
+**Requirements**:
+- Event spans across all days it occupies
+- Event name shows only on first day (or centered)
+- Visual continuity: rounded corners only on start/end, straight edges in middle
+- Events on same row when possible (stack when overlapping)
+- Click anywhere on event opens edit dialog
+
+**Technical Approach**:
+- Track event "slots" per day for stacking
+- Render event once with CSS grid column span
+- Handle month boundaries (event continues into next month)
+
+**CSS Approach**:
+```css
+.event-start { border-radius: 4px 0 0 4px; }
+.event-middle { border-radius: 0; }
+.event-end { border-radius: 0 4px 4px 0; }
+.event-single-day { border-radius: 4px; }
+```
+
+**Test Cases**:
+- Single-day event renders normally
+- Multi-day event spans correct columns
+- Event shows name only once (not repeated)
+- Clicking any part of event opens editor
+- Events stack when overlapping dates
+- Month boundary handling
+
+**Acceptance Criteria**:
+- [ ] Multi-day events span visually
+- [ ] No repeated event names
+- [ ] Proper visual styling (rounded corners)
+- [ ] Click behavior works throughout event
+- [ ] Tests pass
+
+**Status**: PENDING
+
+---
+
+### 16.7 Calendar Transport Icons and Details
+
+**Description**: Update calendar to show arrival/departure events with transport type icons and additional details.
+
+**File**: `src/features/calendar/pages/CalendarPage.tsx` (modify)
+
+**Current**: Shows generic arrival/departure markers
+
+**Desired Format**: `<icon> <time> <guest> - <place> [<driver>]`
+
+**Transport Icons**:
+- ✈️ Plane (`Plane` from lucide-react)
+- 🚂 Train (`Train`)
+- 🚗 Car (`Car`)
+- 🚌 Bus (`Bus`)
+- 🚶 Other (`User`)
+
+**Example Displays**:
+```
+✈️ 14:30 Alice - CDG
+🚂 18:15 Bob - Gare Montparnasse (Pierre)
+🚗 10:00 Carol - Home
+```
+
+**Requirements**:
+- Icon matches `transportMode` field
+- Time from `datetime` field
+- Guest name from person
+- Location from `location` field
+- Driver name in parentheses if assigned
+- Arrivals: green tint, Departures: orange tint
+
+**Shared Icon Component** (for reuse in 16.11):
+```typescript
+// src/components/shared/TransportIcon.tsx
+interface TransportIconProps {
+  mode: TransportMode;
+  className?: string;
+}
+```
+
+**Test Cases**:
+- Correct icon for each transport mode
+- Time displays correctly
+- Location shows
+- Driver shows when assigned
+- Driver hidden when not assigned
+- Arrival/departure color coding
+
+**Acceptance Criteria**:
+- [ ] Transport type icons display correctly
+- [ ] Time and location show
+- [ ] Driver shows when assigned
+- [ ] Color coding for arrival/departure
+- [ ] Tests pass
+
+**Status**: PENDING
+
+---
+
+### 16.8 Rooms View - Unassigned Guests Indicator
+
+**Description**: Show which guests don't have a room assigned for the trip dates.
+
+**File**: `src/features/rooms/pages/RoomListPage.tsx` (modify)
+
+**Requirements**:
+- Section at top: "Guests without rooms"
+- List guests who have no room assignment during their stay
+- Consider guest's arrival/departure dates
+- Show dates they need a room
+- Empty state: "All guests have rooms assigned" ✓
+
+**Logic**:
+```typescript
+// For each person in trip:
+// 1. Get their arrival date (earliest arrival transport) and departure date (latest departure)
+// 2. Get their room assignments
+// 3. If any day between arrival-departure has no assignment → unassigned
+```
+
+**Display**:
+```
+┌──────────────────────────────────────┐
+│ ⚠️ Guests without rooms (2)          │
+│ ─────────────────────────────────────│
+│ [Alice] Jan 5-8 needs room           │
+│ [Bob]   Jan 7-10 needs room          │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│ ✓ All guests have rooms assigned     │
+└──────────────────────────────────────┘
+```
+
+**Test Cases**:
+- Shows guests with no assignments
+- Considers arrival/departure dates
+- Shows specific dates needed
+- Shows success state when all assigned
+- Updates when assignments change
+
+**Acceptance Criteria**:
+- [ ] Unassigned guests section displays
+- [ ] Date calculation is accurate
+- [ ] Success state when all assigned
+- [ ] Tests pass
+
+**Status**: PENDING
+
+---
+
+### 16.9 Room Icons Selection
+
+**Description**: Allow users to select an icon for each room to help identify it across views.
+
+**Files**:
+- `src/types/index.ts` - Add `icon?: RoomIcon` to Room interface
+- `src/lib/db/database.ts` - Schema migration
+- `src/features/rooms/components/RoomForm.tsx` - Add icon picker
+- `src/components/shared/RoomIconPicker.tsx` - New component
+
+**Available Icons** (from lucide-react):
+```typescript
+type RoomIcon = 
+  | 'bed-double'      // Default bedroom
+  | 'bed-single'      // Single bed room
+  | 'bath'            // Bathroom
+  | 'sofa'            // Living room
+  | 'tent'            // Tent/outdoor
+  | 'caravan'         // Mobile home
+  | 'warehouse'       // Garage/storage
+  | 'home'            // General room
+  | 'door-open'       // Entryway
+  | 'baby'            // Kids room
+  | 'armchair';       // Lounge
+```
+
+**Display in Views**:
+- Room cards show icon next to name
+- Calendar events show room icon
+- Room assignment section shows icon
+
+**RoomIconPicker Component**:
+```typescript
+interface RoomIconPickerProps {
+  value: RoomIcon;
+  onChange: (icon: RoomIcon) => void;
+  disabled?: boolean;
+}
+```
+
+**Test Cases**:
+- Icon picker renders all options
+- Selection updates room
+- Icon displays on room card
+- Icon displays in calendar
+- Default icon when none selected
+
+**Acceptance Criteria**:
+- [ ] Room icon field in data model
+- [ ] Icon picker in room form
+- [ ] Icons display across views
+- [ ] Tests pass
+
+**Status**: PENDING
+
+---
+
+### 16.10 Drag-and-Drop Room Assignments
+
+**Description**: Enable drag-and-drop for easier room assignments.
+
+**Files**:
+- `src/features/rooms/pages/RoomListPage.tsx` (modify)
+- `src/features/rooms/components/DraggableGuest.tsx` (new)
+- `src/features/rooms/components/DroppableRoom.tsx` (new)
+
+**Library**: `@dnd-kit/core` + `@dnd-kit/sortable` (recommended for accessibility)
+
+**Requirements**:
+- Drag guests from "Unassigned" section (16.8) to room cards
+- Drop on room to create assignment
+- Show drop zone highlight on hover
+- Date range picker appears after drop to set dates
+- Can also drag between rooms to reassign
+- Keyboard accessible (dnd-kit provides this)
+
+**Behavior Flow**:
+```
+1. User drags "Alice" from unassigned list
+2. Room cards highlight as valid drop targets
+3. User drops on "Master Bedroom"
+4. Dialog opens: "Assign Alice to Master Bedroom"
+   - DateRangePicker pre-filled with Alice's stay dates
+   - Confirm creates assignment
+5. Alice moves from unassigned to Master Bedroom occupants
+```
+
+**Test Cases**:
+- Drag from unassigned to room works
+- Drop triggers assignment dialog
+- Assignment created with correct data
+- Drag between rooms works
+- Keyboard drag-and-drop works
+- Conflict detection on drop
+
+**Acceptance Criteria**:
+- [ ] Drag-and-drop interaction works
+- [ ] Assignment dialog appears on drop
+- [ ] Keyboard accessible
+- [ ] Conflict detection works
+- [ ] Tests pass
+
+**Status**: PENDING
+
+**Depends on**: 16.8 (Unassigned guests indicator)
+
+---
+
+### 16.11 Guest View - Transport Type Icons
+
+**Description**: Update guest/person cards to show transport type icons matching the transport mode.
+
+**File**: `src/features/persons/components/PersonCard.tsx` (modify)
+**Uses**: `src/components/shared/TransportIcon.tsx` (from 16.7)
+
+**Requirements**:
+- Arrival info shows transport icon + time + location
+- Departure info shows transport icon + time + location
+- Reuse TransportIcon component from 16.7
+
+**Display**:
+```
+┌──────────────────────────────────────┐
+│ 🟢 Alice                         ... │
+│ ─────────────────────────────────────│
+│ ✈️ Arrives: Jan 5, 14:30 - CDG       │
+│ 🚂 Departs: Jan 12, 10:00 - Gare     │
+└──────────────────────────────────────┘
+```
+
+**Test Cases**:
+- Arrival icon matches transport mode
+- Departure icon matches transport mode
+- Falls back to generic icon for "other"
+- Handles missing transport gracefully
+
+**Acceptance Criteria**:
+- [ ] Transport icons display correctly
+- [ ] Time and location show
+- [ ] Tests pass
+
+**Status**: PENDING
+
+**Depends on**: 16.7 (TransportIcon component)
+
+---
+
+### 16.12 Transport View - Remove Tabs (Single List)
+
+**Description**: Replace tabbed arrivals/departures view with a single chronological list.
+
+**File**: `src/features/transports/pages/TransportListPage.tsx` (modify)
+
+**Current**: Two tabs (Arrivals | Departures)
+
+**Desired**: Single list sorted by datetime with visual type indicator
+
+**Requirements**:
+- Single chronological list (no tabs)
+- Clear visual distinction between arrivals (green) and departures (orange)
+- Group by date with date headers
+- Arrival/departure icon + badge
+
+**Display**:
+```
+January 5, 2026
+┌──────────────────────────────────────┐
+│ ↓ ARRIVAL  ✈️ 14:30                  │
+│ [Alice] - CDG                        │
+│ Needs pickup                         │
+└──────────────────────────────────────┘
+┌──────────────────────────────────────┐
+│ ↓ ARRIVAL  🚂 18:15                  │
+│ [Bob] - Gare Montparnasse            │
+│ Driver: Pierre                       │
+└──────────────────────────────────────┘
+
+January 12, 2026
+┌──────────────────────────────────────┐
+│ ↑ DEPARTURE  🚂 10:00                │
+│ [Bob] - Gare Montparnasse            │
+└──────────────────────────────────────┘
+```
+
+**Test Cases**:
+- All transports in single list
+- Sorted by datetime
+- Date headers display
+- Arrival/departure visually distinct
+- No tabs in UI
+
+**Acceptance Criteria**:
+- [ ] Single list view (no tabs)
+- [ ] Chronological sorting
+- [ ] Date grouping with headers
+- [ ] Clear arrival/departure distinction
+- [ ] Tests pass
+
+**Status**: PENDING
+
+---
+
+### 16.13 Transport View - Smart "Needs Pickup" Tag
+
+**Description**: Show "needs pickup" badge only when pickup is needed AND no driver is assigned.
+
+**File**: `src/features/transports/pages/TransportListPage.tsx` (modify)
+
+**Current**: Shows "needs pickup" when `needsPickup: true`
+
+**Desired**: Shows "needs pickup" ONLY when `needsPickup: true` AND `driverId` is null/undefined
+
+**Logic**:
+```typescript
+const showNeedsPickupBadge = transport.needsPickup && !transport.driverId;
+```
+
+**Visual States**:
+- `needsPickup: false` → No badge
+- `needsPickup: true, driverId: null` → ⚠️ "Needs pickup" (amber badge)
+- `needsPickup: true, driverId: "..."` → ✓ "Driver: [Name]" (green badge)
+
+**Test Cases**:
+- Badge hidden when needsPickup false
+- Badge shown when needsPickup true and no driver
+- Badge hidden when driver assigned
+- Driver name displays when assigned
+
+**Acceptance Criteria**:
+- [ ] Smart badge logic implemented
+- [ ] Visual distinction for resolved vs unresolved
+- [ ] Tests pass
+
+**Status**: PENDING
+
+---
+
+### 16.14 Transport View - Past Transport Handling
+
+**Description**: Style past transports differently and move them to the end of the list.
+
+**File**: `src/features/transports/pages/TransportListPage.tsx` (modify)
+
+**Requirements**:
+- Past transports (datetime < now) shown with strikethrough/dimmed styling
+- Past transports grouped at the end under "Past" section
+- Collapsible past section (default collapsed)
+- Show count: "Past transports (5)"
+
+**Sort Order**:
+1. Upcoming transports (chronological)
+2. Past transports (reverse chronological - most recent first)
+
+**Display**:
+```
+[Upcoming transports...]
+
+──────────────────────────────────
+▼ Past transports (3)
+──────────────────────────────────
+┌──────────────────────────────────────┐
+│ ̶↓̶ ̶A̶R̶R̶I̶V̶A̶L̶  ̶✈̶️ ̶J̶a̶n̶ ̶3̶,̶ ̶1̶4̶:̶3̶0̶         │ (dimmed)
+│ ̶[̶A̶l̶i̶c̶e̶]̶ ̶-̶ ̶C̶D̶G̶                       │
+└──────────────────────────────────────┘
+```
+
+**Test Cases**:
+- Past transports identified correctly
+- Past transports styled differently
+- Past transports at end of list
+- Collapsible section works
+- Count displays correctly
+
+**Acceptance Criteria**:
+- [ ] Past transports visually distinct (strikethrough/dim)
+- [ ] Past transports grouped at end
+- [ ] Collapsible section
+- [ ] Tests pass
+
+**Status**: PENDING
+
+---
+
+### 16.15 Transport Form - OpenStreetMap Location
+
+**Description**: Use LocationPicker component for transport location field.
+
+**File**: `src/features/transports/components/TransportForm.tsx` (modify)
+**Uses**: `src/components/shared/LocationPicker.tsx` (from 16.1)
+
+**Requirements**:
+- Replace text input with LocationPicker
+- Store selected location name in `location` field
+- Optionally store coordinates for map display (future)
+- Maintain backward compatibility with existing text locations
+
+**Test Cases**:
+- LocationPicker renders in form
+- Selection updates location field
+- Existing text locations still display
+- Form submits correctly
+
+**Acceptance Criteria**:
+- [ ] LocationPicker integrated
+- [ ] Location selection works
+- [ ] Backward compatible
+- [ ] Tests pass
+
+**Status**: PENDING
+
+**Depends on**: 16.1 (LocationPicker component)
+
+---
+
+### 16.16 Phase 16 Integration Tests
+
+**Description**: Create integration tests covering the new UX flows.
+
+**File**: `e2e/phase16-ux-improvements.spec.ts`
+
+**Test Scenarios**:
+1. **Trip Creation with New UI**:
+   - Use LocationPicker to select location
+   - Use new DateRangePicker with two-click selection
+   - Add description
+   - Verify trip card shows map and attendees
+
+2. **Calendar Multi-Day Events**:
+   - Create multi-day assignment
+   - Verify event spans visually
+   - Click event to edit
+
+3. **Room Assignment Drag-Drop**:
+   - See unassigned guests
+   - Drag guest to room
+   - Verify assignment created
+
+4. **Transport Single List**:
+   - Verify no tabs
+   - Verify chronological order
+   - Verify past transports at end
+
+**Acceptance Criteria**:
+- [ ] All UX flows work end-to-end
+- [ ] No regressions in existing functionality
+
+**Status**: PENDING
+
+**Depends on**: All Phase 16 tasks
+
+---
+
+### Phase 16 Recommended Implementation Order
+
+Based on dependencies and complexity:
+
+**Sprint 1 (Foundation)**:
+1. 16.1 - LocationPicker (shared, reused by 16.5 and 16.15)
+2. 16.2 - DateRangePicker redesign
+3. 16.3 - Trip description field (data model)
+4. 16.4 - Side panel conditional navigation
+
+**Sprint 2 (Trip & Transport UX)**:
+5. 16.5 - My Trips view enhancements (depends on 16.1, 16.2, 16.3)
+6. 16.12 - Transport single list (remove tabs)
+7. 16.13 - Smart needs pickup tag
+8. 16.14 - Past transport handling
+9. 16.15 - Transport OSM location (depends on 16.1)
+
+**Sprint 3 (Calendar & Guest UX)**:
+10. 16.7 - TransportIcon component + Calendar transport details
+11. 16.6 - Calendar multi-day event spanning
+12. 16.11 - Guest view transport icons (depends on 16.7)
+
+**Sprint 4 (Rooms UX)**:
+13. 16.8 - Unassigned guests indicator
+14. 16.9 - Room icons
+15. 16.10 - Drag-and-drop assignments (depends on 16.8)
+
+**Sprint 5 (Testing)**:
+16. 16.16 - Integration tests
+
+---
+
 ## Future Enhancements (Post-MVP)
 
 These features are **NOT** part of the MVP but are documented for future reference:
