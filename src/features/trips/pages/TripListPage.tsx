@@ -5,18 +5,19 @@
  * @module features/trips/pages/TripListPage
  */
 
-import { type KeyboardEvent, memo, useCallback, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { type Locale, format, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
-import { Calendar, Luggage, MapPin, Plus } from 'lucide-react';
+import { Calendar, Luggage, MapPin, Plus, Users } from 'lucide-react';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
+import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -26,11 +27,15 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import type { Trip } from '@/types';
+import { getPersonsByTripId } from '@/lib/db';
+import type { Person, Trip, TripId } from '@/types';
 
 // ============================================================================
 // Type Definitions
 // ============================================================================
+
+/** Maximum number of person badges to show before "+N more" */
+const MAX_VISIBLE_PERSONS = 4;
 
 /**
  * Props for the TripCard component.
@@ -38,6 +43,8 @@ import type { Trip } from '@/types';
 interface TripCardProps {
   /** The trip to display */
   readonly trip: Trip;
+  /** Persons attending this trip */
+  readonly persons: readonly Person[];
   /** Callback when the trip is selected */
   readonly onSelect: (trip: Trip) => void;
   /** Whether the card interaction is currently disabled */
@@ -110,13 +117,25 @@ function getDateLocale(lang: string): Locale {
  */
 const TripCard = memo(({
   trip,
+  persons,
   onSelect,
   isDisabled = false,
   locale,
 }: TripCardProps) => {
-  const dateRange = useMemo(
+  const { t } = useTranslation(),
+   dateRange = useMemo(
     () => formatDateRange(trip.startDate, trip.endDate, locale),
     [trip.startDate, trip.endDate, locale],
+  ),
+
+  // Persons to show vs overflow count
+   visiblePersons = useMemo(
+    () => persons.slice(0, MAX_VISIBLE_PERSONS),
+    [persons],
+  ),
+   overflowCount = useMemo(
+    () => Math.max(0, persons.length - MAX_VISIBLE_PERSONS),
+    [persons],
   ),
 
   // Handle keyboard activation (Enter or Space)
@@ -153,7 +172,7 @@ const TripCard = memo(({
         isDisabled && 'opacity-50 cursor-not-allowed',
       )}
     >
-      <CardHeader>
+      <CardHeader className="pb-2">
         <CardTitle
           className="text-lg truncate"
           title={trip.name}
@@ -169,10 +188,32 @@ const TripCard = memo(({
           </CardDescription>
         )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        {/* Date range */}
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Calendar className="size-4 shrink-0" aria-hidden="true" />
           <span>{dateRange}</span>
+        </div>
+
+        {/* Attendees */}
+        <div className="flex items-center gap-1.5">
+          <Users className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          {persons.length === 0 ? (
+            <span className="text-sm text-muted-foreground italic">
+              {t('trips.noGuests', 'No guests yet')}
+            </span>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {visiblePersons.map((person) => (
+                <PersonBadge key={person.id} person={person} size="sm" />
+              ))}
+              {overflowCount > 0 && (
+                <span className="text-xs text-muted-foreground px-1.5 py-0.5 bg-muted rounded-full">
+                  +{overflowCount}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -206,8 +247,39 @@ const TripListPage = memo(() => {
    isNavigatingRef = useRef(false),
    [isNavigating, setIsNavigating] = useState(false),
 
+  // Persons per trip (map of tripId -> persons)
+   [personsByTrip, setPersonsByTrip] = useState<Map<TripId, Person[]>>(new Map()),
+
   // Get locale based on current language, reactive to language changes
-   locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
+   locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+
+  // Fetch persons for all trips when trips change
+  useEffect(() => {
+    async function loadPersons() {
+      if (trips.length === 0) {
+        setPersonsByTrip(new Map());
+        return;
+      }
+
+      const newMap = new Map<TripId, Person[]>();
+      await Promise.all(
+        trips.map(async (trip) => {
+          try {
+            const persons = await getPersonsByTripId(trip.id);
+            newMap.set(trip.id, persons);
+          } catch {
+            // If fetch fails, just show empty array
+            newMap.set(trip.id, []);
+          }
+        }),
+      );
+      setPersonsByTrip(newMap);
+    }
+
+    loadPersons();
+  }, [trips]);
+
+  const
 
   /**
    * Handles trip selection: sets current trip and navigates to calendar.
@@ -337,6 +409,7 @@ const TripListPage = memo(() => {
           <div key={trip.id} role="listitem">
             <TripCard
               trip={trip}
+              persons={personsByTrip.get(trip.id) ?? []}
               onSelect={handleTripSelect}
               isDisabled={isNavigating}
               locale={locale}

@@ -33,7 +33,7 @@ import { useTranslation } from 'react-i18next';
 import { eachDayOfInterval, format, isAfter, isValid } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
 import type { Matcher, DateRange as RdpDateRange } from 'react-day-picker';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -287,7 +287,12 @@ const DateRangePicker = memo(({
 
   // Accessible label for the trigger button
   // Simple computation - no need for useMemo overhead
-   accessibleLabel = ariaLabel ?? t('dateRangePicker.ariaLabel', 'Date range picker');
+   accessibleLabel = ariaLabel ?? t('dateRangePicker.ariaLabel', 'Date range picker'),
+
+  // Handle clear button click - resets selection
+   handleClear = useCallback(() => {
+    onChange(undefined);
+  }, [onChange]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -328,14 +333,31 @@ const DateRangePicker = memo(({
           modifiersClassNames={modifiersClassNames}
           initialFocus
         />
-        {bookedDates.length > 0 && (
-          <div className="flex items-center gap-2 px-3 pb-3 text-xs text-muted-foreground">
-            <span className="relative flex h-4 w-4 items-center justify-center">
-              <span className="absolute h-1 w-1 rounded-full bg-destructive opacity-70" />
-            </span>
-            <span>{t('dateRangePicker.alreadyBooked', 'Already assigned')}</span>
-          </div>
-        )}
+        {/* Footer with booked indicator and clear button */}
+        <div className="flex items-center justify-between px-3 pb-3">
+          {bookedDates.length > 0 ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="relative flex h-4 w-4 items-center justify-center">
+                <span className="absolute h-1 w-1 rounded-full bg-destructive opacity-70" />
+              </span>
+              <span>{t('dateRangePicker.alreadyBooked', 'Already assigned')}</span>
+            </div>
+          ) : (
+            <div />
+          )}
+          {hasSelection && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClear}
+              className="h-7 px-2 text-xs"
+              aria-label={t('dateRangePicker.clear', 'Clear selection')}
+            >
+              <X className="h-3 w-3 mr-1" aria-hidden="true" />
+              {t('dateRangePicker.clear', 'Clear')}
+            </Button>
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   );

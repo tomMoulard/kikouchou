@@ -18,7 +18,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { format, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
-import { MoreHorizontal, Pencil, Plane, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 import {
   Card,
@@ -34,8 +34,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { TransportIcon } from '@/components/shared/TransportIcon';
 import { cn } from '@/lib/utils';
-import type { Person } from '@/types';
+import type { Person, TransportMode } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -49,11 +50,13 @@ export interface TransportSummary {
   readonly arrival: {
     readonly datetime: string;
     readonly location: string;
+    readonly transportMode?: TransportMode;
   } | null;
   /** Departure transport info, if any */
   readonly departure: {
     readonly datetime: string;
     readonly location: string;
+    readonly transportMode?: TransportMode;
   } | null;
 }
 
@@ -83,22 +86,25 @@ export interface PersonCardProps {
 
 /**
  * Safely formats a datetime string for display.
- * Returns formatted date or empty string on error.
+ * Returns formatted date and time or empty strings on error.
  *
  * @param datetime - ISO datetime string
  * @param locale - date-fns locale object
- * @returns Formatted date string (e.g., "15 Jul")
+ * @returns Object with formatted date (e.g., "15 Jul") and time (e.g., "14:30")
  */
-function formatTransportDate(
+function formatTransportDatetime(
   datetime: string,
   locale: typeof fr | typeof enUS,
-): string {
+): { date: string; time: string } {
   try {
     const date = parseISO(datetime);
-    if (isNaN(date.getTime())) {return '';}
-    return format(date, 'd MMM', { locale });
+    if (isNaN(date.getTime())) {return { date: '', time: '' };}
+    return {
+      date: format(date, 'd MMM', { locale }),
+      time: format(date, 'HH:mm', { locale }),
+    };
   } catch {
-    return '';
+    return { date: '', time: '' };
   }
 }
 
@@ -180,15 +186,15 @@ const PersonCard = memo(({
    ariaLabel = useMemo(() => {
     const parts = [person.name];
     if (transportSummary.arrival) {
-      const arrivalDate = formatTransportDate(transportSummary.arrival.datetime, dateLocale);
-      if (arrivalDate) {
-        parts.push(`${t('transports.arrival')}: ${arrivalDate}`);
+      const { date, time } = formatTransportDatetime(transportSummary.arrival.datetime, dateLocale);
+      if (date) {
+        parts.push(`${t('transports.arrival')}: ${date} ${time}`);
       }
     }
     if (transportSummary.departure) {
-      const departureDate = formatTransportDate(transportSummary.departure.datetime, dateLocale);
-      if (departureDate) {
-        parts.push(`${t('transports.departure')}: ${departureDate}`);
+      const { date, time } = formatTransportDatetime(transportSummary.departure.datetime, dateLocale);
+      if (date) {
+        parts.push(`${t('transports.departure')}: ${date} ${time}`);
       }
     }
     return parts.join(', ');
@@ -348,30 +354,42 @@ const PersonCard = memo(({
           {hasTransportInfo ? (
             <div className="space-y-2 text-sm text-muted-foreground">
               {/* Arrival info */}
-              {transportSummary.arrival && (
-                <div className="flex items-center gap-2">
-                  <Plane className="size-4 shrink-0" aria-hidden="true" />
-                  <span className="font-medium text-foreground">
-                    {formatTransportDate(transportSummary.arrival.datetime, dateLocale)}
-                  </span>
-                  <span className="truncate" title={transportSummary.arrival.location}>
-                    {transportSummary.arrival.location}
-                  </span>
-                </div>
-              )}
+              {transportSummary.arrival && (() => {
+                const { date, time } = formatTransportDatetime(transportSummary.arrival.datetime, dateLocale);
+                return (
+                  <div className="flex items-center gap-2">
+                    <TransportIcon
+                      mode={transportSummary.arrival.transportMode ?? 'other'}
+                      className="size-4 shrink-0 text-green-600"
+                    />
+                    <span className="font-medium text-foreground">
+                      {date}, {time}
+                    </span>
+                    <span className="truncate" title={transportSummary.arrival.location}>
+                      {transportSummary.arrival.location}
+                    </span>
+                  </div>
+                );
+              })()}
 
               {/* Departure info */}
-              {transportSummary.departure && (
-                <div className="flex items-center gap-2">
-                  <Plane className="size-4 shrink-0 rotate-45" aria-hidden="true" />
-                  <span className="font-medium text-foreground">
-                    {formatTransportDate(transportSummary.departure.datetime, dateLocale)}
-                  </span>
-                  <span className="truncate" title={transportSummary.departure.location}>
-                    {transportSummary.departure.location}
-                  </span>
-                </div>
-              )}
+              {transportSummary.departure && (() => {
+                const { date, time } = formatTransportDatetime(transportSummary.departure.datetime, dateLocale);
+                return (
+                  <div className="flex items-center gap-2">
+                    <TransportIcon
+                      mode={transportSummary.departure.transportMode ?? 'other'}
+                      className="size-4 shrink-0 text-orange-600"
+                    />
+                    <span className="font-medium text-foreground">
+                      {date}, {time}
+                    </span>
+                    <span className="truncate" title={transportSummary.departure.location}>
+                      {transportSummary.departure.location}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground italic">

@@ -23,6 +23,7 @@ import { CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import {
   Popover,
@@ -31,6 +32,13 @@ import {
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { Trip, TripFormData } from '@/types';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Maximum character limit for trip description */
+const DESCRIPTION_MAX_LENGTH = 1000;
 
 // ============================================================================
 // Type Definitions
@@ -153,6 +161,7 @@ const TripForm = memo(({
       location: trip?.location ?? '',
       startDate: trip?.startDate ?? '',
       endDate: trip?.endDate ?? '',
+      description: trip?.description ?? '',
     }),
     [trip],
   ),
@@ -161,6 +170,7 @@ const TripForm = memo(({
    [location, setLocation] = useState(initialValues.location),
    [startDate, setStartDate] = useState(initialValues.startDate),
    [endDate, setEndDate] = useState(initialValues.endDate),
+   [description, setDescription] = useState(initialValues.description),
 
   // Validation errors
    [errors, setErrors] = useState<FormErrors>({}),
@@ -184,6 +194,7 @@ const TripForm = memo(({
     setLocation(trip?.location ?? '');
     setStartDate(trip?.startDate ?? '');
     setEndDate(trip?.endDate ?? '');
+    setDescription(trip?.description ?? '');
     setErrors({});
     setSubmitError(null);
   }, [trip?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on trip.id change
@@ -308,6 +319,16 @@ const TripForm = memo(({
   ),
 
   /**
+   * Handles description textarea change.
+   */
+   handleDescriptionChange = useCallback(
+    (e: ChangeEvent<HTMLTextAreaElement>) => {
+      setDescription(e.target.value);
+    },
+    [],
+  ),
+
+  /**
    * Handles start date selection.
    * Uses functional update to avoid dependency on error state.
    */
@@ -383,6 +404,7 @@ const TripForm = memo(({
           location: location.trim() || undefined,
           startDate,
           endDate,
+          description: description.trim() || undefined,
         });
         // Success - parent component handles navigation
       } catch (error) {
@@ -399,7 +421,7 @@ const TripForm = memo(({
         }
       }
     },
-    [validateForm, onSubmit, name, location, startDate, endDate, t],
+    [validateForm, onSubmit, name, location, startDate, endDate, description, t],
   );
 
   // ============================================================================
@@ -448,6 +470,24 @@ const TripForm = memo(({
           placeholder={t('trips.locationPlaceholder')}
           disabled={isSubmitting}
         />
+      </div>
+
+      {/* Description Field */}
+      <div className="space-y-2">
+        <Label htmlFor="trip-description">{t('trips.description')}</Label>
+        <Textarea
+          id="trip-description"
+          value={description}
+          onChange={handleDescriptionChange}
+          placeholder={t('trips.descriptionPlaceholder')}
+          disabled={isSubmitting}
+          rows={4}
+          maxLength={DESCRIPTION_MAX_LENGTH}
+          className="resize-none"
+        />
+        <p className="text-xs text-muted-foreground text-right">
+          {description.length}/{DESCRIPTION_MAX_LENGTH}
+        </p>
       </div>
 
       {/* Date Fields - Side by side on larger screens */}

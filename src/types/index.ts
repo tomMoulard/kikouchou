@@ -199,6 +199,23 @@ export interface Trip extends Identifiable, WithTimestamps {
    * Shorter than regular IDs for convenience (10 characters).
    */
   readonly shareId: ShareId;
+
+  /**
+   * Optional description or notes for the trip.
+   * Can include instructions, links (e.g., tricount), or other useful information.
+   * @example "Instructions: Check-in after 3pm. Tricount: https://tricount.com/..."
+   */
+  description?: string;
+
+  /**
+   * Optional GPS coordinates for the trip location.
+   * Used for displaying map previews on trip cards.
+   * @example { lat: 48.8566, lon: 2.3522 }
+   */
+  coordinates?: {
+    readonly lat: number;
+    readonly lon: number;
+  };
 }
 
 /**
@@ -482,6 +499,13 @@ export interface TripFormData {
   startDate: ISODateString;
   /** End date in ISO format (YYYY-MM-DD) */
   endDate: ISODateString;
+  /** Optional description or notes for the trip */
+  description?: string;
+  /** Optional GPS coordinates for the trip location */
+  coordinates?: {
+    readonly lat: number;
+    readonly lon: number;
+  };
 }
 
 /**

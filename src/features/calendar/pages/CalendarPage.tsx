@@ -48,8 +48,6 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
-  PlaneLanding,
-  PlaneTakeoff,
 } from 'lucide-react';
 
 import { useTripContext } from '@/contexts/TripContext';
@@ -61,6 +59,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
+import { TransportIcon } from '@/components/shared/TransportIcon';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type {
@@ -408,8 +407,18 @@ CalendarEvent.displayName = 'CalendarEvent';
 // ============================================================================
 
 /**
+ * Formats a datetime string to show just the time (HH:mm).
+ */
+function formatTime(datetime: string): string {
+  // datetime is ISO format: YYYY-MM-DDTHH:mm:ss or YYYY-MM-DDTHH:mm
+  const timePart = datetime.split('T')[1];
+  if (!timePart) return '';
+  return timePart.substring(0, 5); // HH:mm
+}
+
+/**
  * Transport indicator pill displayed within a calendar day.
- * Shows arrival (green) or departure (orange) with person name.
+ * Shows arrival (green) or departure (orange) with transport icon, time, person, and location.
  */
 const TransportIndicator = memo(({
   transport,
@@ -418,10 +427,17 @@ const TransportIndicator = memo(({
   const { t } = useTranslation(),
 
    isArrival = type === 'arrival',
-   Icon = isArrival ? PlaneLanding : PlaneTakeoff,
+   time = formatTime(transport.transport.datetime),
+   location = transport.transport.location,
+   transportMode = transport.transport.transportMode ?? 'other',
+   
+   // Build title for accessibility
    ariaLabel = isArrival
     ? t('calendar.personArriving', '{{name}} arriving', { name: transport.personName })
-    : t('calendar.personDeparting', '{{name}} departing', { name: transport.personName });
+    : t('calendar.personDeparting', '{{name}} departing', { name: transport.personName }),
+   
+   // Full tooltip with all details
+   tooltipText = `${time} ${transport.personName}${location ? ` - ${location}` : ''}`;
 
   return (
     <div
@@ -432,16 +448,23 @@ const TransportIndicator = memo(({
           ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800'
           : 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800',
       )}
-      title={ariaLabel}
+      title={tooltipText}
       aria-label={ariaLabel}
     >
-      <Icon className="size-3 shrink-0" aria-hidden="true" />
+      <TransportIcon 
+        mode={transportMode} 
+        className="size-3" 
+      />
+      <span className="font-medium">{time}</span>
       <span
         className="size-2 rounded-full shrink-0"
         style={{ backgroundColor: transport.color }}
         aria-hidden="true"
       />
       <span className="truncate">{transport.personName}</span>
+      {location && (
+        <span className="truncate text-[10px] opacity-75">- {location}</span>
+      )}
     </div>
   );
 });

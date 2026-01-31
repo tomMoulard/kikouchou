@@ -45,12 +45,15 @@
     "locationPlaceholder": "Ex : Maison de vacances, Bretagne",
     "startDate": "Date de début",
     "endDate": "Date de fin",
+    "description": "Description",
+    "descriptionPlaceholder": "Instructions, lien tricount, notes...",
     "deleteConfirm": "Voulez-vous vraiment supprimer ce voyage ? Cette action est irréversible.",
     "empty": "Aucun voyage",
     "emptyDescription": "Créez votre premier voyage pour commencer",
     "created": "Voyage créé avec succès",
     "updated": "Voyage mis à jour avec succès",
-    "deleted": "Voyage supprimé avec succès"
+    "deleted": "Voyage supprimé avec succès",
+    "noGuests": "Aucun invité"
   },
   "rooms": {
     "title": "Chambres",
@@ -59,7 +62,7 @@
     "edit": "Modifier la chambre",
     "editDescription": "Modifiez les informations de la chambre ci-dessous.",
     "name": "Nom de la chambre",
-    "namePlaceholder": "Ex : Chambre parentale",
+    "namePlaceholder": "ex. Chambre parentale",
     "capacity": "Nombre de lits",
     "description": "Description",
     "descriptionPlaceholder": "Notes optionnelles...",
@@ -69,12 +72,15 @@
     "createSuccess": "Chambre créée avec succès",
     "updateSuccess": "Chambre mise à jour avec succès",
     "empty": "Aucune chambre",
-    "emptyDescription": "Ajoutez les chambres de votre logement",
+    "emptyDescription": "Ajoutez les chambres de votre hébergement",
     "beds_zero": "Aucun lit",
     "beds": "{{count}} lit",
     "beds_plural": "{{count}} lits",
     "occupied": "Occupée",
-    "available": "Disponible"
+    "available": "Disponible",
+    "unassignedGuests": "Invités sans chambre",
+    "allGuestsAssigned": "Tous les invités ont une chambre",
+    "needsRoom": "a besoin d'une chambre"
   },
   "persons": {
     "title": "Participants",
@@ -154,7 +160,8 @@
     "updateSuccess": "Transport mis à jour avec succès",
     "empty": "Aucun transport",
     "emptyDescription": "Ajoutez les arrivées et départs des participants",
-    "upcomingPickups": "Prochains transports à prévoir"
+    "upcomingPickups": "Prochains transports à prévoir",
+    "pastTransports": "Transports passés"
   },
   "upcomingPickups": {
     "empty": "Aucun transport à venir prévu.",
@@ -248,7 +255,17 @@
     "placeholder": "Sélectionner une période",
     "ariaLabel": "Sélecteur de période",
     "calendarDialog": "Sélectionner une période",
-    "selectEndDate": "{{date}} → sélectionner la fin"
+    "selectEndDate": "{{date}} → sélectionner la fin",
+    "clear": "Effacer",
+    "alreadyBooked": "Déjà assigné"
+  },
+  "locationPicker": {
+    "placeholder": "Rechercher un lieu...",
+    "ariaLabel": "Recherche de lieu",
+    "clear": "Effacer le lieu",
+    "resultsLabel": "Résultats de recherche",
+    "noResults": "Aucun lieu trouvé",
+    "searchError": "La recherche a échoué. Veuillez réessayer."
   },
   "colors": {
     "red": "Rouge",

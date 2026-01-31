@@ -27,22 +27,27 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { DoorOpen, Plus } from 'lucide-react';
+import { format, parseISO, eachDayOfInterval } from 'date-fns';
+import { type Locale, enUS, fr } from 'date-fns/locale';
+import { AlertTriangle, CheckCircle, DoorOpen, Plus } from 'lucide-react';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { useRoomContext } from '@/contexts/RoomContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
+import { useTransportContext } from '@/contexts/TransportContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
+import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
 import { RoomDialog } from '@/features/rooms/components/RoomDialog';
 import { RoomAssignmentSection } from '@/features/rooms/components/RoomAssignmentSection';
-import type { Person, Room, RoomId } from '@/types';
+import type { Person, PersonId, Room, RoomAssignment, RoomId, Transport } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -56,6 +61,135 @@ interface RoomWithOccupancy {
   readonly room: Room;
   /** Current occupants (persons assigned today) */
   readonly currentOccupants: readonly Person[];
+}
+
+/**
+ * Guest with unassigned dates information.
+ */
+interface UnassignedGuest {
+  /** The person */
+  readonly person: Person;
+  /** First date they need a room (arrival date) */
+  readonly startDate: string;
+  /** Last date they need a room (day before departure) */
+  readonly endDate: string;
+  /** Dates without room assignment (ISO strings) */
+  readonly unassignedDates: readonly string[];
+}
+
+/**
+ * Gets the date-fns locale based on language code.
+ */
+function getDateLocale(language: string): Locale {
+  return language === 'fr' ? fr : enUS;
+}
+
+/**
+ * Calculates unassigned dates for a person based on their transports and room assignments.
+ * 
+ * @param personId - The person's ID
+ * @param arrivals - All arrival transports in the trip
+ * @param departures - All departure transports in the trip
+ * @param assignments - All room assignments in the trip
+ * @returns Array of ISO date strings where the person needs a room but has no assignment
+ */
+function calculateUnassignedDates(
+  personId: PersonId,
+  arrivals: readonly Transport[],
+  departures: readonly Transport[],
+  assignments: readonly RoomAssignment[],
+): { startDate: string; endDate: string; unassignedDates: string[] } | null {
+  // Get person's arrival and departure transports
+  const personArrivals = arrivals.filter((t) => t.personId === personId);
+  const personDepartures = departures.filter((t) => t.personId === personId);
+
+  // If no transports, person doesn't need a room (they're not traveling)
+  if (personArrivals.length === 0 && personDepartures.length === 0) {
+    return null;
+  }
+
+  // Find earliest arrival date and latest departure date
+  // Transport datetime is ISO format: YYYY-MM-DDTHH:mm:ss
+  let arrivalDate: string | null = null;
+  let departureDate: string | null = null;
+
+  for (const arrival of personArrivals) {
+    const date = arrival.datetime.substring(0, 10);
+    if (!arrivalDate || date < arrivalDate) {
+      arrivalDate = date;
+    }
+  }
+
+  for (const departure of personDepartures) {
+    const date = departure.datetime.substring(0, 10);
+    if (!departureDate || date > departureDate) {
+      departureDate = date;
+    }
+  }
+
+  // If no arrival, use trip start? For now, skip if no arrival
+  if (!arrivalDate) {
+    return null;
+  }
+
+  // If no departure, use trip end? For now, skip if no departure
+  if (!departureDate) {
+    return null;
+  }
+
+  // Generate all dates person needs a room (arrival night to day before departure)
+  // Person arrives on arrivalDate, sleeps that night
+  // Person departs on departureDate morning, so last night is (departureDate - 1)
+  const start = parseISO(arrivalDate);
+  const end = parseISO(departureDate);
+  
+  // If departure is same day as arrival, no nights stayed
+  if (arrivalDate >= departureDate) {
+    return null;
+  }
+
+  // Get all nights the person needs a room (arrival date to day before departure)
+  // Using check-in/check-out model: they sleep from arrivalDate to departureDate-1
+  const lastNight = new Date(end);
+  lastNight.setDate(lastNight.getDate() - 1);
+  
+  const datesNeeded = eachDayOfInterval({ start, end: lastNight }).map(
+    (d) => format(d, 'yyyy-MM-dd'),
+  );
+
+  // Get person's room assignments
+  const personAssignments = assignments.filter((a) => a.personId === personId);
+
+  // Build set of dates covered by assignments
+  const coveredDates = new Set<string>();
+  for (const assignment of personAssignments) {
+    const assignmentStart = parseISO(assignment.startDate);
+    const assignmentEnd = parseISO(assignment.endDate);
+    
+    // Assignment covers nights from startDate to endDate-1 (check-out model)
+    const lastCoveredNight = new Date(assignmentEnd);
+    lastCoveredNight.setDate(lastCoveredNight.getDate() - 1);
+    
+    if (assignmentStart <= lastCoveredNight) {
+      const coveredNights = eachDayOfInterval({ start: assignmentStart, end: lastCoveredNight });
+      for (const night of coveredNights) {
+        coveredDates.add(format(night, 'yyyy-MM-dd'));
+      }
+    }
+  }
+
+  // Find unassigned dates
+  const unassignedDates = datesNeeded.filter((date) => !coveredDates.has(date));
+
+  if (unassignedDates.length === 0) {
+    return null;
+  }
+
+  return {
+    startDate: arrivalDate,
+    endDate: departureDate,
+    unassignedDates,
+  };
 }
 
 // ============================================================================
@@ -119,7 +253,7 @@ function formatToISODate(date: Date): string {
  * ```
  */
 const RoomListPage = memo((): ReactElement => {
-  const { t } = useTranslation(),
+  const { t, i18n } = useTranslation(),
    navigate = useNavigate(),
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
 
@@ -131,8 +265,9 @@ const RoomListPage = memo((): ReactElement => {
     error: roomsError,
     deleteRoom,
   } = useRoomContext(),
-   { getAssignmentsByRoom } = useAssignmentContext(),
-   { getPersonById } = usePersonContext(),
+   { assignments, getAssignmentsByRoom } = useAssignmentContext(),
+   { persons, getPersonById } = usePersonContext(),
+   { arrivals, departures, isLoading: isTransportsLoading } = useTransportContext(),
 
   // Track if we're currently performing an action to prevent double-clicks
    isActionInProgressRef = useRef(false),
@@ -146,7 +281,10 @@ const RoomListPage = memo((): ReactElement => {
    [expandedRoomId, setExpandedRoomId] = useState<RoomId | undefined>(undefined),
 
   // Combined loading state
-   isLoading = isTripLoading || isRoomsLoading;
+   isLoading = isTripLoading || isRoomsLoading || isTransportsLoading,
+
+  // Date locale for formatting
+   dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -188,6 +326,29 @@ const RoomListPage = memo((): ReactElement => {
         currentOccupants,
       };
     }), [rooms, getAssignmentsByRoom, getPersonById, todayStr]),
+
+  // Calculate guests without room assignments
+   unassignedGuests = useMemo((): readonly UnassignedGuest[] => {
+    const result: UnassignedGuest[] = [];
+    
+    for (const person of persons) {
+      const unassignedInfo = calculateUnassignedDates(
+        person.id,
+        arrivals,
+        departures,
+        assignments,
+      );
+      
+      if (unassignedInfo) {
+        result.push({
+          person,
+          ...unassignedInfo,
+        });
+      }
+    }
+    
+    return result;
+  }, [persons, arrivals, departures, assignments]),
 
   // ============================================================================
   // Event Handlers
@@ -381,6 +542,54 @@ const RoomListPage = memo((): ReactElement => {
         backLink={`/trips/${tripIdFromUrl}/calendar`}
         action={headerAction}
       />
+
+      {/* Unassigned guests section */}
+      {persons.length > 0 && (
+        <Card className={cn(
+          'mb-6',
+          unassignedGuests.length > 0 
+            ? 'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20' 
+            : 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20',
+        )}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              {unassignedGuests.length > 0 ? (
+                <>
+                  <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                  <span className="text-amber-800 dark:text-amber-200">
+                    {t('rooms.unassignedGuests', 'Guests without rooms')} ({unassignedGuests.length})
+                  </span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="size-4 text-green-600 dark:text-green-400" aria-hidden="true" />
+                  <span className="text-green-800 dark:text-green-200">
+                    {t('rooms.allGuestsAssigned', 'All guests have rooms assigned')}
+                  </span>
+                </>
+              )}
+            </CardTitle>
+          </CardHeader>
+          {unassignedGuests.length > 0 && (
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {unassignedGuests.map(({ person, startDate, endDate }) => {
+                  const formattedStart = format(parseISO(startDate), 'MMM d', { locale: dateLocale });
+                  const formattedEnd = format(parseISO(endDate), 'MMM d', { locale: dateLocale });
+                  return (
+                    <div key={person.id} className="flex items-center gap-2 flex-wrap">
+                      <PersonBadge person={person} size="sm" />
+                      <span className="text-sm text-muted-foreground">
+                        {formattedStart} - {formattedEnd} {t('rooms.needsRoom', 'needs room')}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* Room grid */}
       <div

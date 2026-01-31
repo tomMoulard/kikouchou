@@ -19,15 +19,15 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useTripContext } from '@/contexts/TripContext';
+import { areArraysEqual, wrapAndSetError } from '@/contexts/utils';
 import { db } from '@/lib/db/database';
 import {
-  getRoomById,
   createRoom as repositoryCreateRoom,
-  deleteRoom as repositoryDeleteRoom,
+  deleteRoomWithOwnershipCheck,
   reorderRooms as repositoryReorderRooms,
-  updateRoom as repositoryUpdateRoom,
+  updateRoomWithOwnershipCheck,
 } from '@/lib/db';
-import type { Room, RoomFormData, RoomId, TripId } from '@/types';
+import type { Room, RoomFormData, RoomId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -107,30 +107,22 @@ interface RoomProviderProps {
 // ============================================================================
 
 /**
- * Wraps an unknown error in an Error object and sets it in state.
+ * Comparison function for Room objects.
+ * Compares all mutable properties to ensure refs are updated when any room property is modified.
  */
-function wrapAndSetError(
-  err: unknown,
-  fallbackMessage: string,
-  setError: (e: Error) => void,
-): Error {
-  const wrappedError =
-    err instanceof Error ? err : new Error(fallbackMessage);
-  setError(wrappedError);
-  return wrappedError;
-}
+const compareRooms = (a: Room, b: Room): boolean =>
+  a.id === b.id &&
+  a.order === b.order &&
+  a.name === b.name &&
+  a.capacity === b.capacity &&
+  a.description === b.description;
 
 /**
- * Compares two room arrays for equality based on IDs and order.
- * Used to maintain stable array references.
+ * Compares two room arrays for equality based on IDs and all mutable properties.
+ * Uses the generic areArraysEqual utility with Room-specific comparison.
  */
-function areRoomsEqual(a: Room[], b: Room[]): boolean {
-  if (a.length !== b.length) {return false;}
-  return a.every(
-    (room, index) =>
-      room.id === b[index]?.id && room.order === b[index]?.order,
-  );
-}
+const areRoomsEqual = (a: Room[], b: Room[]): boolean =>
+  areArraysEqual(a, b, compareRooms);
 
 // ============================================================================
 // Context Creation
@@ -229,10 +221,11 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
   // State to hold stable rooms (replacing ref for render-safe access)
    [rooms, setRooms] = useState<Room[]>([]);
 
-  // Clear state when trip changes to prevent stale cross-trip data
+  // Clear state and error when trip changes to prevent stale cross-trip data
   useEffect(() => {
     setRooms([]);
     roomsRef.current = [];
+    setError(null); // CR-8: Clear error state on trip change
   }, [currentTripId]);
 
   // Update stable array reference via useEffect (not during render)
@@ -247,25 +240,6 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
 
   // Use rooms from state (render-safe)
   const
-
-  /**
-   * Validates that a room exists and belongs to the current trip.
-   */
-   validateRoomOwnership = useCallback(
-    async (roomId: RoomId, tripId: TripId): Promise<Room> => {
-      const room = await getRoomById(roomId);
-      if (!room) {
-        throw new Error(`Room with ID "${roomId}" not found`);
-      }
-      if (room.tripId !== tripId) {
-        throw new Error(
-          'Cannot modify room: room does not belong to current trip',
-        );
-      }
-      return room;
-    },
-    [],
-  ),
 
   /**
    * Creates a new room in the current trip.
@@ -291,7 +265,8 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
   ),
 
   /**
-   * Updates an existing room after validating ownership.
+   * Updates an existing room with ownership validation.
+   * Uses transactional operation to prevent TOCTOU race condition (CR-2).
    */
    updateRoom = useCallback(
     async (id: RoomId, data: Partial<RoomFormData>): Promise<void> => {
@@ -303,18 +278,18 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
       setError((prev) => (prev === null ? prev : null));
 
       try {
-        // Verify room belongs to current trip before updating
-        await validateRoomOwnership(id, tripId);
-        await repositoryUpdateRoom(id, data);
+        // CR-2: Use transactional function that combines validation + mutation atomically
+        await updateRoomWithOwnershipCheck(id, tripId, data);
       } catch (err) {
         throw wrapAndSetError(err, 'Failed to update room', setError);
       }
     },
-    [currentTripId, validateRoomOwnership],
+    [currentTripId],
   ),
 
   /**
-   * Deletes a room after validating ownership.
+   * Deletes a room with ownership validation.
+   * Uses transactional operation to prevent TOCTOU race condition (CR-2).
    */
    deleteRoom = useCallback(
     async (id: RoomId): Promise<void> => {
@@ -326,14 +301,13 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
       setError((prev) => (prev === null ? prev : null));
 
       try {
-        // Verify room belongs to current trip before deleting
-        await validateRoomOwnership(id, tripId);
-        await repositoryDeleteRoom(id);
+        // CR-2: Use transactional function that combines validation + deletion atomically
+        await deleteRoomWithOwnershipCheck(id, tripId);
       } catch (err) {
         throw wrapAndSetError(err, 'Failed to delete room', setError);
       }
     },
-    [currentTripId, validateRoomOwnership],
+    [currentTripId],
   ),
 
   /**

@@ -16,6 +16,7 @@ import {
   Home,
   type LucideIcon,
   Luggage,
+  MapPin,
   Menu,
   Settings,
   Users,
@@ -24,6 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useTripContext } from '@/contexts/TripContext';
 import { Button } from '@/components/ui/button';
+import type { Trip } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -64,19 +66,40 @@ interface LayoutProps {
 // ============================================================================
 
 /**
- * Navigation items configuration.
- * Defines the main navigation structure used in both mobile and desktop nav.
- *
- * Trip-scoped routes (calendar, rooms, persons, transports) require a tripId.
- * Non-trip-scoped routes (trips list, settings) work without a tripId.
+ * Navigation items that require a trip to be selected.
  */
-const NAV_ITEMS: readonly NavItem[] = [
+const TRIP_NAV_ITEMS: readonly NavItem[] = [
   { labelKey: 'nav.calendar', pathSuffix: 'calendar', icon: Calendar, requiresTrip: true },
   { labelKey: 'nav.rooms', pathSuffix: 'rooms', icon: Home, requiresTrip: true },
   { labelKey: 'nav.persons', pathSuffix: 'persons', icon: Users, requiresTrip: true },
   { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
+] as const;
+
+/**
+ * Navigation items that don't require a trip (always visible).
+ */
+const GLOBAL_NAV_ITEMS: readonly NavItem[] = [
   { labelKey: 'trips.title', pathSuffix: '', icon: Luggage, requiresTrip: false },
-  { labelKey: 'nav.settings', pathSuffix: 'settings', icon: Settings, requiresTrip: false },
+] as const;
+
+/**
+ * Settings navigation item (always at bottom).
+ */
+const SETTINGS_NAV_ITEM: NavItem = {
+  labelKey: 'nav.settings',
+  pathSuffix: 'settings',
+  icon: Settings,
+  requiresTrip: false,
+};
+
+/**
+ * All navigation items combined for mobile nav.
+ * Mobile always shows all items (trip items disabled when no trip).
+ */
+const ALL_NAV_ITEMS: readonly NavItem[] = [
+  ...TRIP_NAV_ITEMS,
+  ...GLOBAL_NAV_ITEMS,
+  SETTINGS_NAV_ITEM,
 ] as const;
 
 /**
@@ -162,7 +185,7 @@ const Header = memo(({
       aria-label={t('nav.main', 'Main navigation')}
     >
       <ul className="flex h-16 items-center justify-around">
-        {NAV_ITEMS.map((item) => {
+        {ALL_NAV_ITEMS.map((item) => {
           const path = buildNavPath(item, tripId),
            isDisabled = item.requiresTrip && !tripId;
 
@@ -198,21 +221,135 @@ const Header = memo(({
       </ul>
     </nav>
   );
-}),
+});
+
+/**
+ * Formats date range for display.
+ * @param startDate - Start date in ISO format
+ * @param endDate - End date in ISO format
+ * @returns Formatted date range string
+ */
+function formatDateRange(startDate: string, endDate: string): string {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  
+  return `${start.toLocaleDateString(undefined, options)} - ${end.toLocaleDateString(undefined, options)}`;
+}
+
+/**
+ * Trip info section displayed in the sidebar when a trip is selected.
+ */
+const TripInfoSection = memo(({
+  trip,
+  isCollapsed,
+}: {
+  readonly trip: Trip;
+  readonly isCollapsed: boolean;
+}): React.ReactElement => {
+  const dateRange = useMemo(
+    () => formatDateRange(trip.startDate, trip.endDate),
+    [trip.startDate, trip.endDate],
+  );
+
+  if (isCollapsed) {
+    // When collapsed, show minimal trip indicator
+    return (
+      <div
+        className="px-2 py-3 border-b"
+        title={`${trip.name}\n${dateRange}${trip.location ? `\n${trip.location}` : ''}`}
+      >
+        <div className="flex justify-center">
+          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+            <Luggage className="h-4 w-4 text-primary" aria-hidden="true" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-3 py-3 border-b" data-testid="trip-info-section">
+      <div className="space-y-1">
+        <h2 className="font-semibold text-sm truncate" title={trip.name}>
+          {trip.name}
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          {dateRange}
+        </p>
+        {trip.location && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="truncate" title={trip.location}>{trip.location}</span>
+          </p>
+        )}
+      </div>
+    </div>
+  );
+});
+
+/**
+ * Renders a navigation link item.
+ */
+const NavLinkItem = memo(({
+  item,
+  tripId,
+  isCollapsed,
+}: {
+  readonly item: NavItem;
+  readonly tripId: string | null;
+  readonly isCollapsed: boolean;
+}): React.ReactElement => {
+  const { t } = useTranslation();
+  const path = buildNavPath(item, tripId);
+  const isDisabled = item.requiresTrip && !tripId;
+
+  return (
+    <li>
+      <NavLink
+        to={path}
+        className={({ isActive }) =>
+          cn(
+            'flex items-center gap-3 rounded-lg px-3 py-2 transition-colors',
+            'hover:bg-accent hover:text-accent-foreground',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            isActive
+              ? 'bg-accent text-accent-foreground font-medium'
+              : 'text-muted-foreground',
+            isCollapsed && 'justify-center px-2',
+            isDisabled && 'opacity-50 pointer-events-none',
+          )
+        }
+        title={isCollapsed ? t(item.labelKey) : undefined}
+        aria-disabled={isDisabled}
+      >
+        <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+        {!isCollapsed && (
+          <span className="truncate">{t(item.labelKey)}</span>
+        )}
+      </NavLink>
+    </li>
+  );
+});
 
 /**
  * Desktop sidebar navigation.
- * Collapsible sidebar visible only on desktop.
+ * Shows conditional content based on whether a trip is selected:
+ * - No trip: Only "My Trips" and "Settings"
+ * - Trip selected: Trip info + Calendar/Rooms/Guests/Transport + "My Trips" + "Settings"
+ * 
  * Memoized to prevent unnecessary re-renders on route changes.
  */
- DesktopSidebar = memo(({
+const DesktopSidebar = memo(({
   isCollapsed,
   onToggle,
   tripId,
+  trip,
 }: {
   readonly isCollapsed: boolean;
   readonly onToggle: () => void;
   readonly tripId: string | null;
+  readonly trip: Trip | null;
 }): React.ReactElement => {
   const { t } = useTranslation();
 
@@ -224,40 +361,52 @@ const Header = memo(({
       )}
       aria-label={t('nav.main', 'Main navigation')}
     >
-      {/* Navigation items */}
-      <nav className="flex-1 overflow-y-auto py-4">
+      {/* My Trips link - always at top */}
+      <nav className="py-2">
         <ul className="space-y-1 px-2">
-          {NAV_ITEMS.map((item) => {
-            const path = buildNavPath(item, tripId),
-             isDisabled = item.requiresTrip && !tripId;
+          {GLOBAL_NAV_ITEMS.map((item) => (
+            <NavLinkItem
+              key={item.pathSuffix || 'trips'}
+              item={item}
+              tripId={tripId}
+              isCollapsed={isCollapsed}
+            />
+          ))}
+        </ul>
+      </nav>
 
-            return (
-              <li key={item.pathSuffix || 'trips'}>
-                <NavLink
-                  to={path}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-2 transition-colors',
-                      'hover:bg-accent hover:text-accent-foreground',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      isActive
-                        ? 'bg-accent text-accent-foreground font-medium'
-                        : 'text-muted-foreground',
-                      isCollapsed && 'justify-center px-2',
-                      isDisabled && 'opacity-50 pointer-events-none',
-                    )
-                  }
-                  title={isCollapsed ? t(item.labelKey) : undefined}
-                  aria-disabled={isDisabled}
-                >
-                  <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                  {!isCollapsed && (
-                    <span className="truncate">{t(item.labelKey)}</span>
-                  )}
-                </NavLink>
-              </li>
-            );
-          })}
+      {/* Trip info section - only shown when trip is selected */}
+      {trip && (
+        <TripInfoSection trip={trip} isCollapsed={isCollapsed} />
+      )}
+
+      {/* Trip navigation items - only shown when trip is selected */}
+      {trip && (
+        <nav className="flex-1 overflow-y-auto py-2">
+          <ul className="space-y-1 px-2">
+            {TRIP_NAV_ITEMS.map((item) => (
+              <NavLinkItem
+                key={item.pathSuffix}
+                item={item}
+                tripId={tripId}
+                isCollapsed={isCollapsed}
+              />
+            ))}
+          </ul>
+        </nav>
+      )}
+
+      {/* Spacer when no trip */}
+      {!trip && <div className="flex-1" />}
+
+      {/* Settings - always at bottom */}
+      <nav className="border-t py-2">
+        <ul className="px-2">
+          <NavLinkItem
+            item={SETTINGS_NAV_ITEM}
+            tripId={tripId}
+            isCollapsed={isCollapsed}
+          />
         </ul>
       </nav>
 
@@ -360,6 +509,7 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
         isCollapsed={isSidebarCollapsed}
         onToggle={toggleSidebar}
         tripId={tripId}
+        trip={currentTrip}
       />
 
       {/* Main content area */}

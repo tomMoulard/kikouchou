@@ -192,3 +192,76 @@ export async function reorderRooms(
 export async function getRoomCount(tripId: TripId): Promise<number> {
   return db.rooms.where('tripId').equals(tripId).count();
 }
+
+// ============================================================================
+// Transactional Operations with Ownership Validation (CR-2 fix)
+// ============================================================================
+
+/**
+ * Updates a room with ownership validation in a single transaction.
+ * Prevents TOCTOU race condition by combining validation and mutation atomically.
+ *
+ * @param id - The room's unique identifier
+ * @param tripId - The expected trip ID for ownership validation
+ * @param data - Partial room form data to update
+ * @throws {Error} If room not found or doesn't belong to the specified trip
+ *
+ * @example
+ * ```typescript
+ * await updateRoomWithOwnershipCheck(roomId, currentTripId, { name: 'New Name' });
+ * ```
+ */
+export async function updateRoomWithOwnershipCheck(
+  id: RoomId,
+  tripId: TripId,
+  data: Partial<RoomFormData>,
+): Promise<void> {
+  await db.transaction('rw', db.rooms, async () => {
+    const room = await db.rooms.get(id);
+
+    if (!room) {
+      throw new Error(`Room with ID "${id}" not found`);
+    }
+    if (room.tripId !== tripId) {
+      throw new Error('Cannot update room: room does not belong to current trip');
+    }
+
+    await db.rooms.update(id, data);
+  });
+}
+
+/**
+ * Deletes a room with ownership validation in a single transaction.
+ * Prevents TOCTOU race condition by combining validation and deletion atomically.
+ * Also deletes associated room assignments.
+ *
+ * @param id - The room's unique identifier
+ * @param tripId - The expected trip ID for ownership validation
+ * @throws {Error} If room not found or doesn't belong to the specified trip
+ *
+ * @example
+ * ```typescript
+ * await deleteRoomWithOwnershipCheck(roomId, currentTripId);
+ * ```
+ */
+export async function deleteRoomWithOwnershipCheck(
+  id: RoomId,
+  tripId: TripId,
+): Promise<void> {
+  await db.transaction('rw', [db.rooms, db.roomAssignments], async () => {
+    const room = await db.rooms.get(id);
+
+    if (!room) {
+      throw new Error(`Room with ID "${id}" not found`);
+    }
+    if (room.tripId !== tripId) {
+      throw new Error('Cannot delete room: room does not belong to current trip');
+    }
+
+    // Delete room assignments for this room
+    await db.roomAssignments.where('roomId').equals(id).delete();
+
+    // Delete the room itself
+    await db.rooms.delete(id);
+  });
+}

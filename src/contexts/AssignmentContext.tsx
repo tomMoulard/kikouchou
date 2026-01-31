@@ -19,13 +19,13 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useTripContext } from '@/contexts/TripContext';
+import { areArraysEqual, wrapAndSetError } from '@/contexts/utils';
 import { db } from '@/lib/db/database';
 import {
   checkAssignmentConflict as repositoryCheckAssignmentConflict,
   createAssignment as repositoryCreateAssignment,
-  deleteAssignment as repositoryDeleteAssignment,
-  getAssignmentById as repositoryGetAssignmentById,
-  updateAssignment as repositoryUpdateAssignment,
+  deleteAssignmentWithOwnershipCheck,
+  updateAssignmentWithOwnershipCheck,
 } from '@/lib/db';
 import type {
   ISODateString,
@@ -34,7 +34,6 @@ import type {
   RoomAssignmentFormData,
   RoomAssignmentId,
   RoomId,
-  TripId,
 } from '@/types';
 
 // ============================================================================
@@ -146,38 +145,22 @@ interface AssignmentProviderProps {
 // ============================================================================
 
 /**
- * Wraps an unknown error in an Error object and sets it in state.
+ * Comparison function for RoomAssignment objects.
+ * Compares all mutable properties for equality checking.
  */
-function wrapAndSetError(
-  err: unknown,
-  fallbackMessage: string,
-  setError: (e: Error) => void,
-): Error {
-  const wrappedError =
-    err instanceof Error ? err : new Error(fallbackMessage);
-  setError(wrappedError);
-  return wrappedError;
-}
+const compareAssignments = (a: RoomAssignment, b: RoomAssignment): boolean =>
+  a.id === b.id &&
+  a.roomId === b.roomId &&
+  a.personId === b.personId &&
+  a.startDate === b.startDate &&
+  a.endDate === b.endDate;
 
 /**
  * Compares two assignment arrays for equality based on IDs and properties.
- * Used to maintain stable array references.
+ * Uses the generic areArraysEqual utility with Assignment-specific comparison.
  */
-function areAssignmentsEqual(a: RoomAssignment[], b: RoomAssignment[]): boolean {
-  // Fast path: same reference means no change
-  if (a === b) {return true;}
-  if (a.length !== b.length) {return false;}
-  return a.every((assignment, index) => {
-    const other = b[index];
-    return (
-      assignment.id === other?.id &&
-      assignment.roomId === other?.roomId &&
-      assignment.personId === other?.personId &&
-      assignment.startDate === other?.startDate &&
-      assignment.endDate === other?.endDate
-    );
-  });
-}
+const areAssignmentsEqual = (a: RoomAssignment[], b: RoomAssignment[]): boolean =>
+  areArraysEqual(a, b, compareAssignments);
 
 /**
  * Builds lookup maps for O(1) access by room and person ID.
@@ -331,13 +314,14 @@ export function AssignmentProvider({
     [assignmentsQuery]
   );
 
-  // Clear state when trip changes to prevent stale cross-trip data
+  // Clear state and error when trip changes to prevent stale cross-trip data
   useEffect(() => {
     setAssignments([]);
     assignmentsRef.current = [];
     assignmentsMapRef.current = new Map();
     assignmentsByRoomMapRef.current = new Map();
     assignmentsByPersonMapRef.current = new Map();
+    setError(null); // CR-8: Clear error state on trip change
   }, [currentTripId]);
 
   // Update stable array reference and Maps via useEffect (not during render)
@@ -358,41 +342,6 @@ export function AssignmentProvider({
 
   // Use assignments from state (render-safe)
   const
-
-  /**
-   * Validates that an assignment exists and belongs to the current trip.
-   * Uses in-memory cache first, falls back to DB for authoritative check.
-   */
-   validateAssignmentOwnership = useCallback(
-    async (
-      assignmentId: RoomAssignmentId,
-      tripId: TripId,
-    ): Promise<RoomAssignment> => {
-      // Fast path: check in-memory cache first
-      const cachedAssignment = assignmentsMapRef.current.get(assignmentId);
-      if (cachedAssignment) {
-        if (cachedAssignment.tripId !== tripId) {
-          throw new Error(
-            'Cannot modify assignment: assignment does not belong to current trip',
-          );
-        }
-        return cachedAssignment;
-      }
-
-      // Fallback: DB query for assignments not yet in cache
-      const assignment = await repositoryGetAssignmentById(assignmentId);
-      if (!assignment) {
-        throw new Error(`Assignment with ID "${assignmentId}" not found`);
-      }
-      if (assignment.tripId !== tripId) {
-        throw new Error(
-          'Cannot modify assignment: assignment does not belong to current trip',
-        );
-      }
-      return assignment;
-    },
-    [],
-  ),
 
   /**
    * Creates a new room assignment in the current trip.
@@ -418,7 +367,8 @@ export function AssignmentProvider({
   ),
 
   /**
-   * Updates an existing assignment after validating ownership.
+   * Updates an existing assignment with ownership validation.
+   * Uses transactional operation to prevent TOCTOU race condition (CR-2).
    */
    updateAssignment = useCallback(
     async (
@@ -433,18 +383,18 @@ export function AssignmentProvider({
       setError((prev) => (prev === null ? prev : null));
 
       try {
-        // Verify assignment belongs to current trip before updating
-        await validateAssignmentOwnership(id, tripId);
-        await repositoryUpdateAssignment(id, data);
+        // CR-2: Use transactional function that combines validation + mutation atomically
+        await updateAssignmentWithOwnershipCheck(id, tripId, data);
       } catch (err) {
         throw wrapAndSetError(err, 'Failed to update assignment', setError);
       }
     },
-    [currentTripId, validateAssignmentOwnership],
+    [currentTripId],
   ),
 
   /**
-   * Deletes an assignment after validating ownership.
+   * Deletes an assignment with ownership validation.
+   * Uses transactional operation to prevent TOCTOU race condition (CR-2).
    */
    deleteAssignment = useCallback(
     async (id: RoomAssignmentId): Promise<void> => {
@@ -456,14 +406,13 @@ export function AssignmentProvider({
       setError((prev) => (prev === null ? prev : null));
 
       try {
-        // Verify assignment belongs to current trip before deleting
-        await validateAssignmentOwnership(id, tripId);
-        await repositoryDeleteAssignment(id);
+        // CR-2: Use transactional function that combines validation + deletion atomically
+        await deleteAssignmentWithOwnershipCheck(id, tripId);
       } catch (err) {
         throw wrapAndSetError(err, 'Failed to delete assignment', setError);
       }
     },
-    [currentTripId, validateAssignmentOwnership],
+    [currentTripId],
   ),
 
   /**

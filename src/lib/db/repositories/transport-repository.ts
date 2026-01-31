@@ -290,3 +290,71 @@ export async function getTransportsByDriverId(
 
   return transports.sort((a, b) => a.datetime.localeCompare(b.datetime));
 }
+
+// ============================================================================
+// Transactional Operations with Ownership Validation (CR-2 fix)
+// ============================================================================
+
+/**
+ * Updates a transport with ownership validation in a single transaction.
+ * Prevents TOCTOU race condition by combining validation and mutation atomically.
+ *
+ * @param id - The transport's unique identifier
+ * @param tripId - The expected trip ID for ownership validation
+ * @param data - Partial transport form data to update
+ * @throws {Error} If transport not found or doesn't belong to the specified trip
+ *
+ * @example
+ * ```typescript
+ * await updateTransportWithOwnershipCheck(transportId, currentTripId, { location: 'New Location' });
+ * ```
+ */
+export async function updateTransportWithOwnershipCheck(
+  id: TransportId,
+  tripId: TripId,
+  data: Partial<TransportFormData>,
+): Promise<void> {
+  await db.transaction('rw', db.transports, async () => {
+    const transport = await db.transports.get(id);
+
+    if (!transport) {
+      throw new Error(`Transport with ID "${id}" not found`);
+    }
+    if (transport.tripId !== tripId) {
+      throw new Error('Cannot update transport: transport does not belong to current trip');
+    }
+
+    await db.transports.update(id, data);
+  });
+}
+
+/**
+ * Deletes a transport with ownership validation in a single transaction.
+ * Prevents TOCTOU race condition by combining validation and deletion atomically.
+ *
+ * @param id - The transport's unique identifier
+ * @param tripId - The expected trip ID for ownership validation
+ * @throws {Error} If transport not found or doesn't belong to the specified trip
+ *
+ * @example
+ * ```typescript
+ * await deleteTransportWithOwnershipCheck(transportId, currentTripId);
+ * ```
+ */
+export async function deleteTransportWithOwnershipCheck(
+  id: TransportId,
+  tripId: TripId,
+): Promise<void> {
+  await db.transaction('rw', db.transports, async () => {
+    const transport = await db.transports.get(id);
+
+    if (!transport) {
+      throw new Error(`Transport with ID "${id}" not found`);
+    }
+    if (transport.tripId !== tripId) {
+      throw new Error('Cannot delete transport: transport does not belong to current trip');
+    }
+
+    await db.transports.delete(id);
+  });
+}

@@ -10,6 +10,7 @@
 import { db } from '@/lib/db/database';
 import { createRoomAssignmentId } from '@/lib/db/utils';
 import type {
+  ISODateString,
   PersonId,
   RoomAssignment,
   RoomAssignmentFormData,
@@ -17,6 +18,25 @@ import type {
   RoomId,
   TripId,
 } from '@/types';
+
+// ============================================================================
+// Validation Utilities
+// ============================================================================
+
+/**
+ * Validates that an assignment's date range is valid (startDate <= endDate).
+ *
+ * @param startDate - The start date (YYYY-MM-DD)
+ * @param endDate - The end date (YYYY-MM-DD)
+ * @throws {Error} If startDate is after endDate
+ */
+function validateDateRange(startDate: ISODateString, endDate: ISODateString): void {
+  if (startDate > endDate) {
+    throw new Error(
+      `Invalid date range: start date (${startDate}) must be on or before end date (${endDate})`,
+    );
+  }
+}
 
 /**
  * Creates a new room assignment in the database.
@@ -39,6 +59,9 @@ export async function createAssignment(
   tripId: TripId,
   data: RoomAssignmentFormData,
 ): Promise<RoomAssignment> {
+  // Validate date range before creating
+  validateDateRange(data.startDate, data.endDate);
+
   const assignment: RoomAssignment = {
     id: createRoomAssignmentId(),
     tripId,
@@ -148,6 +171,17 @@ export async function updateAssignment(
   id: RoomAssignmentId,
   data: Partial<RoomAssignmentFormData>,
 ): Promise<void> {
+  // If updating dates, validate the resulting date range
+  if (data.startDate !== undefined || data.endDate !== undefined) {
+    const assignment = await db.roomAssignments.get(id);
+    if (!assignment) {
+      throw new Error(`Assignment with id "${id}" not found`);
+    }
+    const finalStartDate = data.startDate ?? assignment.startDate;
+    const finalEndDate = data.endDate ?? assignment.endDate;
+    validateDateRange(finalStartDate, finalEndDate);
+  }
+
   const updatedCount = await db.roomAssignments.update(id, data);
 
   if (updatedCount === 0) {
@@ -273,4 +307,80 @@ export async function getAssignmentsForDate(
  */
 export async function getAssignmentCount(tripId: TripId): Promise<number> {
   return db.roomAssignments.where('tripId').equals(tripId).count();
+}
+
+// ============================================================================
+// Transactional Operations with Ownership Validation (CR-2 fix)
+// ============================================================================
+
+/**
+ * Updates an assignment with ownership validation in a single transaction.
+ * Prevents TOCTOU race condition by combining validation and mutation atomically.
+ *
+ * @param id - The assignment's unique identifier
+ * @param tripId - The expected trip ID for ownership validation
+ * @param data - Partial assignment form data to update
+ * @throws {Error} If assignment not found or doesn't belong to the specified trip
+ *
+ * @example
+ * ```typescript
+ * await updateAssignmentWithOwnershipCheck(assignmentId, currentTripId, {
+ *   startDate: '2024-07-15',
+ *   endDate: '2024-07-20',
+ * });
+ * ```
+ */
+export async function updateAssignmentWithOwnershipCheck(
+  id: RoomAssignmentId,
+  tripId: TripId,
+  data: Partial<RoomAssignmentFormData>,
+): Promise<void> {
+  await db.transaction('rw', db.roomAssignments, async () => {
+    const assignment = await db.roomAssignments.get(id);
+
+    if (!assignment) {
+      throw new Error(`Assignment with ID "${id}" not found`);
+    }
+    if (assignment.tripId !== tripId) {
+      throw new Error('Cannot update assignment: assignment does not belong to current trip');
+    }
+
+    // Validate the resulting date range after partial update
+    const finalStartDate = data.startDate ?? assignment.startDate;
+    const finalEndDate = data.endDate ?? assignment.endDate;
+    validateDateRange(finalStartDate, finalEndDate);
+
+    await db.roomAssignments.update(id, data);
+  });
+}
+
+/**
+ * Deletes an assignment with ownership validation in a single transaction.
+ * Prevents TOCTOU race condition by combining validation and deletion atomically.
+ *
+ * @param id - The assignment's unique identifier
+ * @param tripId - The expected trip ID for ownership validation
+ * @throws {Error} If assignment not found or doesn't belong to the specified trip
+ *
+ * @example
+ * ```typescript
+ * await deleteAssignmentWithOwnershipCheck(assignmentId, currentTripId);
+ * ```
+ */
+export async function deleteAssignmentWithOwnershipCheck(
+  id: RoomAssignmentId,
+  tripId: TripId,
+): Promise<void> {
+  await db.transaction('rw', db.roomAssignments, async () => {
+    const assignment = await db.roomAssignments.get(id);
+
+    if (!assignment) {
+      throw new Error(`Assignment with ID "${id}" not found`);
+    }
+    if (assignment.tripId !== tripId) {
+      throw new Error('Cannot delete assignment: assignment does not belong to current trip');
+    }
+
+    await db.roomAssignments.delete(id);
+  });
 }

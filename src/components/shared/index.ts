@@ -67,9 +67,15 @@ export type { ColorPickerProps } from './ColorPicker';
 export { DateRangePicker } from './DateRangePicker';
 export type { DateRangePickerProps, DateRange } from './DateRangePicker';
 
+export { LocationPicker } from './LocationPicker';
+export type { LocationPickerProps, Coordinates } from './LocationPicker';
+
 // ============================================================================
 // Display Components
 // ============================================================================
 
 export { PersonBadge } from './PersonBadge';
 export type { PersonBadgeProps } from './PersonBadge';
+
+export { TransportIcon } from './TransportIcon';
+export type { TransportIconProps } from './TransportIcon';

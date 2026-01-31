@@ -10,7 +10,7 @@
 import Dexie, { type Table } from 'dexie';
 
 /** Current database schema version */
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 import type {
   AppSettings,
   Person,
@@ -109,7 +109,25 @@ export class KikoushouDatabase extends Dexie {
      * Optimization: Single-column indexes that are the first element of compound
      * indexes are omitted (compound indexes can serve those queries).
      */
-    this.version(DB_VERSION).stores({
+    this.version(1).stores({
+      trips: 'id, &shareId, startDate, createdAt',
+      rooms: 'id, [tripId+order]',
+      persons: 'id, tripId, [tripId+name]',
+      roomAssignments:
+        'id, roomId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+      transports: 'id, [tripId+datetime], [tripId+personId], [tripId+type]',
+      settings: 'id',
+    });
+
+    /**
+     * Schema Version 2 - Add indexes for cascade delete operations
+     *
+     * Added:
+     * - personId index on roomAssignments (for deletePerson cascade delete)
+     * - personId index on transports (for deletePerson cascade delete)
+     * - driverId index on transports (for deletePerson driverId cleanup)
+     */
+    this.version(2).stores({
       // Trips: &shareId enforces uniqueness for sharing feature
       trips: 'id, &shareId, startDate, createdAt',
 
@@ -120,13 +138,16 @@ export class KikoushouDatabase extends Dexie {
       persons: 'id, tripId, [tripId+name]',
 
       // Room assignments: compound indexes for efficient trip-scoped queries
-      // roomId index needed for cascade delete in room-repository
+      // roomId index for cascade delete in room-repository
+      // personId index for cascade delete in person-repository
       roomAssignments:
-        'id, roomId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+        'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
 
       // Transports: compound indexes for efficient trip-scoped queries
       // [tripId+type] kept for filtering arrivals/departures
-      transports: 'id, [tripId+datetime], [tripId+personId], [tripId+type]',
+      // personId index for cascade delete in person-repository
+      // driverId index for clearing driver references in person-repository
+      transports: 'id, personId, driverId, [tripId+datetime], [tripId+personId], [tripId+type]',
 
       // Settings: singleton key-value store
       settings: 'id',

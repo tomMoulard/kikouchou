@@ -1,15 +1,17 @@
 /**
  * @fileoverview Transport List Page - Displays arrivals and departures for a trip.
- * Shows transports in a tabbed interface with chronological ordering.
+ * Shows transports in a single chronological list grouped by date.
  *
  * Route: /trips/:tripId/transports
  *
  * Features:
- * - Tabbed interface for Arrivals/Departures
+ * - Single chronological list (no tabs)
+ * - Date grouping with date headers
+ * - Clear visual distinction between arrivals (green) and departures (orange)
  * - Transport cards with person badge, datetime, location, mode, and pickup indicator
  * - Edit/delete actions via dropdown menu
  * - Add transport action (FAB on mobile, header button on desktop)
- * - Empty state per tab
+ * - Empty state when no transports
  * - Responsive design
  *
  * @module features/transports/pages/TransportListPage
@@ -35,9 +37,12 @@ import {
   ArrowUpFromLine,
   Bus,
   Car,
+  ChevronDown,
+  ChevronRight,
   CircleDot,
   Clock,
   Edit,
+  History,
   MapPin,
   MoreVertical,
   Plane,
@@ -63,12 +68,6 @@ import {
   CardContent,
   CardHeader,
 } from '@/components/ui/card';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -101,14 +100,32 @@ interface TransportCardProps {
   readonly dateLocale: typeof fr | typeof enUS;
   /** Whether actions are disabled */
   readonly isActionsDisabled?: boolean;
+  /** Whether this transport is in the past */
+  readonly isPast?: boolean;
+}
+
+/**
+ * A group of transports for a single date.
+ */
+interface DateGroup {
+  /** Date key (YYYY-MM-DD format) */
+  readonly dateKey: string;
+  /** Formatted date for display */
+  readonly displayDate: string;
+  /** Transports for this date, sorted by time */
+  readonly transports: readonly Transport[];
 }
 
 /**
  * Props for the TransportList component.
  */
 interface TransportListProps {
-  /** Array of transports to display */
-  readonly transports: readonly Transport[];
+  /** Array of date groups for upcoming transports */
+  readonly upcomingDateGroups: readonly DateGroup[];
+  /** Array of date groups for past transports */
+  readonly pastDateGroups: readonly DateGroup[];
+  /** Total count of past transports */
+  readonly pastCount: number;
   /** Map of person ID to Person object */
   readonly personsMap: Map<PersonId, Person>;
   /** Callback when edit is clicked */
@@ -117,7 +134,7 @@ interface TransportListProps {
   readonly onDelete: (transportId: TransportId) => void;
   /** Date locale for formatting */
   readonly dateLocale: typeof fr | typeof enUS;
-  /** Accessible label for the list (e.g., "Arrivals" or "Departures") */
+  /** Accessible label for the list */
   readonly listLabel: string;
   /** Empty state message */
   readonly emptyTitle: string;
@@ -189,6 +206,98 @@ function formatTransportDatetime(
   }
 }
 
+/**
+ * Extracts the date key (YYYY-MM-DD) from a datetime string.
+ *
+ * @param datetime - ISO datetime string
+ * @returns Date key string or empty string on error
+ */
+function getDateKey(datetime: string): string {
+  try {
+    const parsedDate = parseISO(datetime);
+    if (isNaN(parsedDate.getTime())) {return '';}
+    return format(parsedDate, 'yyyy-MM-dd');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Formats a date key for display as a date header.
+ *
+ * @param dateKey - Date key in YYYY-MM-DD format
+ * @param locale - date-fns locale object
+ * @returns Formatted date string (e.g., "Monday, January 5, 2026")
+ */
+function formatDateHeader(dateKey: string, locale: typeof fr | typeof enUS): string {
+  try {
+    const parsedDate = parseISO(dateKey);
+    if (isNaN(parsedDate.getTime())) {return dateKey;}
+    return format(parsedDate, 'EEEE, MMMM d, yyyy', { locale });
+  } catch {
+    return dateKey;
+  }
+}
+
+/**
+ * Checks if a transport is in the past.
+ *
+ * @param datetime - ISO datetime string
+ * @returns True if the transport datetime is before now
+ */
+function isTransportPast(datetime: string): boolean {
+  try {
+    const parsedDate = parseISO(datetime);
+    if (isNaN(parsedDate.getTime())) {return false;}
+    return parsedDate < new Date();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Groups transports by date, sorted chronologically.
+ *
+ * @param transports - Array of transports to group
+ * @param locale - date-fns locale for date formatting
+ * @returns Array of date groups, each containing transports for that date
+ */
+function groupTransportsByDate(
+  transports: readonly Transport[],
+  locale: typeof fr | typeof enUS,
+): DateGroup[] {
+  // Create a map of date key to transports
+  const groupsMap = new Map<string, Transport[]>();
+  
+  for (const transport of transports) {
+    const dateKey = getDateKey(transport.datetime);
+    if (!dateKey) {continue;}
+    
+    const existing = groupsMap.get(dateKey);
+    if (existing) {
+      existing.push(transport);
+    } else {
+      groupsMap.set(dateKey, [transport]);
+    }
+  }
+  
+  // Sort transports within each group by time
+  for (const transports of groupsMap.values()) {
+    transports.sort((a, b) => a.datetime.localeCompare(b.datetime));
+  }
+  
+  // Convert to array and sort by date key (chronological)
+  const groups: DateGroup[] = Array.from(groupsMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([dateKey, transports]) => ({
+      dateKey,
+      displayDate: formatDateHeader(dateKey, locale),
+      transports,
+    }));
+  
+  return groups;
+}
+
 // ============================================================================
 // TransportCard Component
 // ============================================================================
@@ -204,6 +313,7 @@ const TransportCard = memo(({
   onDelete,
   dateLocale,
   isActionsDisabled = false,
+  isPast = false,
 }: TransportCardProps): ReactElement => {
   const { t } = useTranslation(),
 
@@ -243,6 +353,9 @@ const TransportCard = memo(({
     [handleEdit],
   ),
 
+  // Smart pickup logic: show "needs pickup" only when needsPickup=true AND no driver assigned
+   showNeedsPickupBadge = transport.needsPickup && !transport.driverId,
+
   // Build aria-label for accessibility
    ariaLabel = useMemo(() => {
     const parts = [
@@ -252,11 +365,14 @@ const TransportCard = memo(({
       time,
       transport.location,
     ];
-    if (transport.needsPickup) {
+    if (showNeedsPickupBadge) {
       parts.push(t('transports.needsPickup'));
     }
+    if (driver) {
+      parts.push(`${t('transports.driver')}: ${driver.name}`);
+    }
     return parts.filter(Boolean).join(', ');
-  }, [transport, person, date, time, t]);
+  }, [transport, person, driver, date, time, t, showNeedsPickupBadge]);
 
   return (
     <Card
@@ -268,6 +384,8 @@ const TransportCard = memo(({
         'transition-all duration-200',
         'hover:shadow-md hover:border-primary/20',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        // Past transport styling - dimmed appearance
+        isPast && 'opacity-60',
       )}
     >
       <CardHeader className="pb-2">
@@ -288,13 +406,22 @@ const TransportCard = memo(({
                 {t('common.unknown')}
               </Badge>
             )}
-            {/* Pickup indicator */}
-            {transport.needsPickup && (
+            {/* Smart pickup indicator: show "needs pickup" only when no driver assigned */}
+            {showNeedsPickupBadge && (
               <Badge
                 variant="outline"
                 className="shrink-0 border-amber-500 text-amber-600 bg-amber-50 dark:bg-amber-950/30"
               >
                 {t('transports.needsPickup')}
+              </Badge>
+            )}
+            {/* Show driver badge when driver is assigned (pickup resolved) */}
+            {driver && transport.needsPickup && (
+              <Badge
+                variant="outline"
+                className="shrink-0 border-green-500 text-green-600 bg-green-50 dark:bg-green-950/30"
+              >
+                {t('transports.driver')}: {driver.name}
               </Badge>
             )}
           </div>
@@ -360,8 +487,8 @@ const TransportCard = memo(({
           </div>
         )}
 
-        {/* Driver */}
-        {driver && (
+        {/* Driver - only show in content if not already shown in badge (badge shown when needsPickup is true) */}
+        {driver && !transport.needsPickup && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <User className="size-4 shrink-0" aria-hidden="true" />
             <span>{t('transports.driver')}:</span>
@@ -383,48 +510,61 @@ const TransportCard = memo(({
 TransportCard.displayName = 'TransportCard';
 
 // ============================================================================
-// TransportList Component
+// DateGroupSection Component
 // ============================================================================
 
 /**
- * List of transport cards with empty state handling.
+ * Props for the DateGroupSection component.
  */
-const TransportList = memo(({
-  transports,
+interface DateGroupSectionProps {
+  /** The date group to render */
+  readonly group: DateGroup;
+  /** Map of person ID to Person object */
+  readonly personsMap: Map<PersonId, Person>;
+  /** Callback when edit is clicked */
+  readonly onEdit: (transportId: TransportId) => void;
+  /** Callback when delete is clicked */
+  readonly onDelete: (transportId: TransportId) => void;
+  /** Date locale for formatting */
+  readonly dateLocale: typeof fr | typeof enUS;
+  /** Whether actions are disabled */
+  readonly isActionsDisabled?: boolean;
+  /** Whether transports in this group are past */
+  readonly isPast?: boolean;
+}
+
+/**
+ * Renders a single date group with its transports.
+ */
+const DateGroupSection = memo(({
+  group,
   personsMap,
   onEdit,
   onDelete,
   dateLocale,
-  listLabel,
-  emptyTitle,
-  emptyDescription,
   isActionsDisabled = false,
-}: TransportListProps): ReactElement => {
-  // Render empty state if no transports
-  if (transports.length === 0) {
-    return (
-      <div className="flex items-center justify-center min-h-[200px]">
-        <EmptyState
-          icon={Plane}
-          title={emptyTitle}
-          description={emptyDescription}
-        />
-      </div>
-    );
-  }
-
-  return (
+  isPast = false,
+}: DateGroupSectionProps): ReactElement => (
+  <section key={group.dateKey} aria-labelledby={`date-header-${group.dateKey}`}>
+    {/* Date header */}
+    <h2
+      id={`date-header-${group.dateKey}`}
+      className={cn(
+        'text-sm font-semibold uppercase tracking-wide mb-3 px-1',
+        isPast ? 'text-muted-foreground/60' : 'text-muted-foreground',
+      )}
+    >
+      {group.displayDate}
+    </h2>
+    
+    {/* Transports grid for this date */}
     <div
-      role="list"
-      aria-label={listLabel}
       className={cn(
         'grid gap-4',
         'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-        // Extra bottom padding for FAB on mobile
-        'pb-20 sm:pb-4',
       )}
     >
-      {transports.map((transport) => {
+      {group.transports.map((transport) => {
         const person = personsMap.get(transport.personId),
          driver = transport.driverId
           ? personsMap.get(transport.driverId)
@@ -440,10 +580,128 @@ const TransportList = memo(({
               onDelete={onDelete}
               dateLocale={dateLocale}
               isActionsDisabled={isActionsDisabled}
+              isPast={isPast}
             />
           </div>
         );
       })}
+    </div>
+  </section>
+));
+
+DateGroupSection.displayName = 'DateGroupSection';
+
+// ============================================================================
+// TransportList Component
+// ============================================================================
+
+/**
+ * List of transport cards grouped by date with date headers.
+ * Includes collapsible section for past transports.
+ */
+const TransportList = memo(({
+  upcomingDateGroups,
+  pastDateGroups,
+  pastCount,
+  personsMap,
+  onEdit,
+  onDelete,
+  dateLocale,
+  listLabel,
+  emptyTitle,
+  emptyDescription,
+  isActionsDisabled = false,
+}: TransportListProps): ReactElement => {
+  const { t } = useTranslation();
+  
+  // State for past transports collapsible section
+  const [isPastExpanded, setIsPastExpanded] = useState(false);
+  
+  // Toggle past section visibility
+  const togglePastSection = useCallback(() => {
+    setIsPastExpanded((prev) => !prev);
+  }, []);
+
+  // Render empty state if no transports at all
+  if (upcomingDateGroups.length === 0 && pastDateGroups.length === 0) {
+    return (
+      <div className="flex items-center justify-center min-h-[200px]">
+        <EmptyState
+          icon={Plane}
+          title={emptyTitle}
+          description={emptyDescription}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      role="list"
+      aria-label={listLabel}
+      className="space-y-6 pb-20 sm:pb-4"
+    >
+      {/* Upcoming transports */}
+      {upcomingDateGroups.map((group) => (
+        <DateGroupSection
+          key={group.dateKey}
+          group={group}
+          personsMap={personsMap}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          dateLocale={dateLocale}
+          isActionsDisabled={isActionsDisabled}
+          isPast={false}
+        />
+      ))}
+
+      {/* Past transports - collapsible section */}
+      {pastCount > 0 && (
+        <div className="border-t pt-4 mt-6">
+          {/* Past section toggle button */}
+          <button
+            type="button"
+            onClick={togglePastSection}
+            className={cn(
+              'flex items-center gap-2 w-full text-left',
+              'text-sm font-semibold text-muted-foreground',
+              'hover:text-foreground transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md',
+              'py-2 px-1',
+            )}
+            aria-expanded={isPastExpanded}
+            aria-controls="past-transports-section"
+          >
+            {isPastExpanded ? (
+              <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+            ) : (
+              <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
+            )}
+            <History className="size-4 shrink-0" aria-hidden="true" />
+            <span>
+              {t('transports.pastTransports', 'Past transports')} ({pastCount})
+            </span>
+          </button>
+
+          {/* Past transports content - shown when expanded */}
+          {isPastExpanded && (
+            <div id="past-transports-section" className="mt-4 space-y-6">
+              {pastDateGroups.map((group) => (
+                <DateGroupSection
+                  key={group.dateKey}
+                  group={group}
+                  personsMap={personsMap}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  dateLocale={dateLocale}
+                  isActionsDisabled={isActionsDisabled}
+                  isPast={true}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 });
@@ -456,7 +714,7 @@ TransportList.displayName = 'TransportList';
 
 /**
  * Main transport list page component.
- * Displays arrivals and departures in a tabbed interface.
+ * Displays arrivals and departures in a single chronological list grouped by date.
  *
  * @example
  * ```tsx
@@ -481,7 +739,6 @@ const TransportListPage = memo((): ReactElement => {
   } = useTransportContext(),
 
   // Local state
-   [activeTab, setActiveTab] = useState<'arrivals' | 'departures'>('arrivals'),
    [transportToDelete, setTransportToDelete] = useState<TransportId | null>(null),
 
   // Dialog state for create/edit transport
@@ -505,7 +762,40 @@ const TransportListPage = memo((): ReactElement => {
       map.set(person.id, person);
     }
     return map;
-  }, [persons]);
+  }, [persons]),
+
+  // Combine arrivals and departures into a single list
+   allTransports = useMemo(() => [...arrivals, ...departures], [arrivals, departures]),
+
+  // Separate upcoming and past transports
+   { upcomingTransports, pastTransports } = useMemo(() => {
+    const upcoming: Transport[] = [];
+    const past: Transport[] = [];
+    
+    for (const transport of allTransports) {
+      if (isTransportPast(transport.datetime)) {
+        past.push(transport);
+      } else {
+        upcoming.push(transport);
+      }
+    }
+    
+    return { upcomingTransports: upcoming, pastTransports: past };
+  }, [allTransports]),
+
+  // Group upcoming transports by date (chronological)
+   upcomingDateGroups = useMemo(
+    () => groupTransportsByDate(upcomingTransports, dateLocale),
+    [upcomingTransports, dateLocale],
+  ),
+
+  // Group past transports by date (reverse chronological - most recent first)
+   pastDateGroups = useMemo(
+    () => groupTransportsByDate(pastTransports, dateLocale).reverse(),
+    [pastTransports, dateLocale],
+  ),
+
+   pastCount = pastTransports.length;
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -578,9 +868,9 @@ const TransportListPage = memo((): ReactElement => {
    */
    handleAddTransport = useCallback(() => {
     setEditingTransportId(undefined); // Clear editing transport ID for create mode
-    setDefaultTransportType(activeTab === 'arrivals' ? 'arrival' : 'departure');
+    setDefaultTransportType('arrival'); // Default to arrival for new transports
     setIsDialogOpen(true);
-  }, [activeTab]),
+  }, []),
 
   /**
    * Handles back navigation.
@@ -678,7 +968,7 @@ const TransportListPage = memo((): ReactElement => {
   }
 
   // ============================================================================
-  // Render: Main Content with Tabs
+  // Render: Main Content - Single Chronological List
   // ============================================================================
 
   return (
@@ -689,61 +979,33 @@ const TransportListPage = memo((): ReactElement => {
         action={headerAction}
       />
 
-      {/* Tabs for Arrivals/Departures */}
-      <Tabs
-        value={activeTab}
-        onValueChange={(value) => setActiveTab(value as 'arrivals' | 'departures')}
-        className="w-full"
-      >
-        <TabsList className="w-full grid grid-cols-2">
-          <TabsTrigger value="arrivals" className="gap-2">
-            <ArrowDownToLine className="size-4" aria-hidden="true" />
-            {t('transports.arrivals')}
-            {arrivals.length > 0 && (
-              <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-                {arrivals.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="departures" className="gap-2">
-            <ArrowUpFromLine className="size-4" aria-hidden="true" />
-            {t('transports.departures')}
-            {departures.length > 0 && (
-              <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-xs">
-                {departures.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-        </TabsList>
+      {/* Transport count summary */}
+      {allTransports.length > 0 && (
+        <div className="flex items-center gap-4 mb-6 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <ArrowDownToLine className="size-4 text-green-600" aria-hidden="true" />
+            <span>{arrivals.length} {t('transports.arrivals').toLowerCase()}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <ArrowUpFromLine className="size-4 text-orange-600" aria-hidden="true" />
+            <span>{departures.length} {t('transports.departures').toLowerCase()}</span>
+          </div>
+        </div>
+      )}
 
-        {/* Arrivals Tab Content */}
-        <TabsContent value="arrivals" className="mt-6">
-          <TransportList
-            transports={arrivals}
-            personsMap={personsMap}
-            onEdit={handleEdit}
-            onDelete={handleDeleteClick}
-            dateLocale={dateLocale}
-            listLabel={t('transports.arrivals')}
-            emptyTitle={t('transports.empty')}
-            emptyDescription={t('transports.emptyDescription')}
-          />
-        </TabsContent>
-
-        {/* Departures Tab Content */}
-        <TabsContent value="departures" className="mt-6">
-          <TransportList
-            transports={departures}
-            personsMap={personsMap}
-            onEdit={handleEdit}
-            onDelete={handleDeleteClick}
-            dateLocale={dateLocale}
-            listLabel={t('transports.departures')}
-            emptyTitle={t('transports.empty')}
-            emptyDescription={t('transports.emptyDescription')}
-          />
-        </TabsContent>
-      </Tabs>
+      {/* Single chronological list grouped by date with collapsible past section */}
+      <TransportList
+        upcomingDateGroups={upcomingDateGroups}
+        pastDateGroups={pastDateGroups}
+        pastCount={pastCount}
+        personsMap={personsMap}
+        onEdit={handleEdit}
+        onDelete={handleDeleteClick}
+        dateLocale={dateLocale}
+        listLabel={t('transports.title')}
+        emptyTitle={t('transports.empty')}
+        emptyDescription={t('transports.emptyDescription')}
+      />
 
       {/* Floating Action Button for mobile */}
       <Button

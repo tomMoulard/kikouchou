@@ -29,7 +29,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { format, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
-import { Plane, Plus, Users } from 'lucide-react';
+import { Plus, Users } from 'lucide-react';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
@@ -46,8 +46,9 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { TransportIcon } from '@/components/shared/TransportIcon';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
-import type { Person, PersonId } from '@/types';
+import type { Person, PersonId, TransportMode } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -61,11 +62,13 @@ interface TransportSummary {
   readonly arrival: {
     readonly datetime: string;
     readonly location: string;
+    readonly transportMode?: TransportMode;
   } | null;
   /** Departure transport info, if any */
   readonly departure: {
     readonly datetime: string;
     readonly location: string;
+    readonly transportMode?: TransportMode;
   } | null;
 }
 
@@ -101,22 +104,25 @@ function getDateLocale(language: string): typeof fr | typeof enUS {
 
 /**
  * Safely formats a datetime string for display.
- * Returns formatted date or empty string on error.
+ * Returns formatted date and time or empty strings on error.
  *
  * @param datetime - ISO datetime string
  * @param locale - date-fns locale object
- * @returns Formatted date string (e.g., "15 Jul")
+ * @returns Object with formatted date (e.g., "15 Jul") and time (e.g., "14:30")
  */
-function formatTransportDate(
+function formatTransportDatetime(
   datetime: string,
   locale: typeof fr | typeof enUS,
-): string {
+): { date: string; time: string } {
   try {
     const date = parseISO(datetime);
-    if (isNaN(date.getTime())) {return '';}
-    return format(date, 'd MMM', { locale });
+    if (isNaN(date.getTime())) {return { date: '', time: '' };}
+    return {
+      date: format(date, 'd MMM', { locale }),
+      time: format(date, 'HH:mm', { locale }),
+    };
   } catch {
-    return '';
+    return { date: '', time: '' };
   }
 }
 
@@ -159,10 +165,12 @@ const PersonCard = memo(({
    ariaLabel = useMemo(() => {
     const parts = [person.name];
     if (transportSummary.arrival) {
-      parts.push(`${t('transports.arrival')}: ${formatTransportDate(transportSummary.arrival.datetime, dateLocale)}`);
+      const { date, time } = formatTransportDatetime(transportSummary.arrival.datetime, dateLocale);
+      parts.push(`${t('transports.arrival')}: ${date} ${time}`);
     }
     if (transportSummary.departure) {
-      parts.push(`${t('transports.departure')}: ${formatTransportDate(transportSummary.departure.datetime, dateLocale)}`);
+      const { date, time } = formatTransportDatetime(transportSummary.departure.datetime, dateLocale);
+      parts.push(`${t('transports.departure')}: ${date} ${time}`);
     }
     return parts.join(', ');
   }, [person.name, transportSummary, dateLocale, t]),
@@ -202,30 +210,42 @@ const PersonCard = memo(({
         {hasTransportInfo ? (
           <div className="space-y-2 text-sm text-muted-foreground">
             {/* Arrival info */}
-            {transportSummary.arrival && (
-              <div className="flex items-center gap-2">
-                <Plane className="size-4 shrink-0" aria-hidden="true" />
-                <span className="font-medium text-foreground">
-                  {formatTransportDate(transportSummary.arrival.datetime, dateLocale)}
-                </span>
-                <span className="truncate" title={transportSummary.arrival.location}>
-                  {transportSummary.arrival.location}
-                </span>
-              </div>
-            )}
+            {transportSummary.arrival && (() => {
+              const { date, time } = formatTransportDatetime(transportSummary.arrival.datetime, dateLocale);
+              return (
+                <div className="flex items-center gap-2">
+                  <TransportIcon
+                    mode={transportSummary.arrival.transportMode ?? 'other'}
+                    className="size-4 shrink-0 text-green-600"
+                  />
+                  <span className="font-medium text-foreground">
+                    {date}, {time}
+                  </span>
+                  <span className="truncate" title={transportSummary.arrival.location}>
+                    {transportSummary.arrival.location}
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* Departure info */}
-            {transportSummary.departure && (
-              <div className="flex items-center gap-2">
-                <Plane className="size-4 shrink-0 rotate-45" aria-hidden="true" />
-                <span className="font-medium text-foreground">
-                  {formatTransportDate(transportSummary.departure.datetime, dateLocale)}
-                </span>
-                <span className="truncate" title={transportSummary.departure.location}>
-                  {transportSummary.departure.location}
-                </span>
-              </div>
-            )}
+            {transportSummary.departure && (() => {
+              const { date, time } = formatTransportDatetime(transportSummary.departure.datetime, dateLocale);
+              return (
+                <div className="flex items-center gap-2">
+                  <TransportIcon
+                    mode={transportSummary.departure.transportMode ?? 'other'}
+                    className="size-4 shrink-0 text-orange-600"
+                  />
+                  <span className="font-medium text-foreground">
+                    {date}, {time}
+                  </span>
+                  <span className="truncate" title={transportSummary.departure.location}>
+                    {transportSummary.departure.location}
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground italic">
@@ -298,8 +318,8 @@ const PersonListPage = memo((): ReactElement => {
       const transports = getTransportsByPerson(person.id);
 
       // Single-pass algorithm to find earliest arrival and latest departure
-      let earliestArrival: { datetime: string; location: string } | null = null,
-       latestDeparture: { datetime: string; location: string } | null = null;
+      let earliestArrival: { datetime: string; location: string; transportMode?: TransportMode } | null = null,
+       latestDeparture: { datetime: string; location: string; transportMode?: TransportMode } | null = null;
 
       for (const transport of transports) {
         if (transport.type === 'arrival') {
@@ -307,6 +327,7 @@ const PersonListPage = memo((): ReactElement => {
             earliestArrival = {
               datetime: transport.datetime,
               location: transport.location,
+              transportMode: transport.transportMode,
             };
           }
         } else {
@@ -315,6 +336,7 @@ const PersonListPage = memo((): ReactElement => {
             latestDeparture = {
               datetime: transport.datetime,
               location: transport.location,
+              transportMode: transport.transportMode,
             };
           }
         }

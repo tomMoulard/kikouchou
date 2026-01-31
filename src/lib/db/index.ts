@@ -68,6 +68,9 @@ export {
   deleteRoom,
   reorderRooms,
   getRoomCount,
+  // Transactional operations with ownership validation (CR-2)
+  updateRoomWithOwnershipCheck,
+  deleteRoomWithOwnershipCheck,
 } from './repositories/room-repository';
 
 // Person repository
@@ -80,6 +83,9 @@ export {
   deletePerson,
   getPersonCount,
   searchPersonsByName,
+  // Transactional operations with ownership validation (CR-2)
+  updatePersonWithOwnershipCheck,
+  deletePersonWithOwnershipCheck,
 } from './repositories/person-repository';
 
 // Room assignment repository
@@ -94,6 +100,9 @@ export {
   checkAssignmentConflict,
   getAssignmentsForDate,
   getAssignmentCount,
+  // Transactional operations with ownership validation (CR-2)
+  updateAssignmentWithOwnershipCheck,
+  deleteAssignmentWithOwnershipCheck,
 } from './repositories/assignment-repository';
 
 // Transport repository
@@ -110,6 +119,9 @@ export {
   getTransportsForDate,
   getTransportCount,
   getTransportsByDriverId,
+  // Transactional operations with ownership validation (CR-2)
+  updateTransportWithOwnershipCheck,
+  deleteTransportWithOwnershipCheck,
 } from './repositories/transport-repository';
 
 // Settings repository

@@ -19,19 +19,18 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useTripContext } from '@/contexts/TripContext';
+import { areArraysEqual, wrapAndSetError } from '@/contexts/utils';
 import { db } from '@/lib/db/database';
 import {
   createTransport as repositoryCreateTransport,
-  deleteTransport as repositoryDeleteTransport,
-  getTransportById as repositoryGetTransportById,
-  updateTransport as repositoryUpdateTransport,
+  deleteTransportWithOwnershipCheck,
+  updateTransportWithOwnershipCheck,
 } from '@/lib/db';
 import type {
   PersonId,
   Transport,
   TransportFormData,
   TransportId,
-  TripId,
 } from '@/types';
 
 // ============================================================================
@@ -133,49 +132,28 @@ interface TransportProviderProps {
 // ============================================================================
 
 /**
- * Wraps an unknown error in an Error object and sets it in state.
+ * Comparison function for Transport objects.
+ * Compares all mutable properties to ensure refs are updated when any transport property is modified.
  */
-function wrapAndSetError(
-  err: unknown,
-  fallbackMessage: string,
-  setError: (e: Error) => void,
-): Error {
-  const wrappedError =
-    err instanceof Error ? err : new Error(fallbackMessage);
-  setError(wrappedError);
-  return wrappedError;
-}
+const compareTransports = (a: Transport, b: Transport): boolean =>
+  a.id === b.id &&
+  a.tripId === b.tripId &&
+  a.type === b.type &&
+  a.datetime === b.datetime &&
+  a.personId === b.personId &&
+  a.needsPickup === b.needsPickup &&
+  a.driverId === b.driverId &&
+  a.location === b.location &&
+  a.transportMode === b.transportMode &&
+  a.transportNumber === b.transportNumber &&
+  a.notes === b.notes;
 
 /**
  * Compares two transport arrays for equality based on IDs and all mutable properties.
- * Used to maintain stable array references.
- *
- * @remarks
- * Compares all properties that could change via update operations to ensure
- * refs are updated when any transport property is modified.
+ * Uses the generic areArraysEqual utility with Transport-specific comparison.
  */
-function areTransportsEqual(a: Transport[], b: Transport[]): boolean {
-  // Fast path: same reference means no change
-  if (a === b) {return true;}
-  if (a.length !== b.length) {return false;}
-  return a.every((transport, index) => {
-    const other = b[index];
-    if (!other) {return false;}
-    return (
-      transport.id === other.id &&
-      transport.tripId === other.tripId &&
-      transport.type === other.type &&
-      transport.datetime === other.datetime &&
-      transport.personId === other.personId &&
-      transport.needsPickup === other.needsPickup &&
-      transport.driverId === other.driverId &&
-      transport.location === other.location &&
-      transport.transportMode === other.transportMode &&
-      transport.transportNumber === other.transportNumber &&
-      transport.notes === other.notes
-    );
-  });
-}
+const areTransportsEqual = (a: Transport[], b: Transport[]): boolean =>
+  areArraysEqual(a, b, compareTransports);
 
 /**
  * Builds lookup map for O(1) access by person ID.
@@ -307,7 +285,22 @@ export function TransportProvider({
    rawTransports = useMemo(() => transportsQuery ?? [], [transportsQuery]),
 
   // State to hold stable transports (replacing ref for render-safe access)
-   [transports, setTransports] = useState<Transport[]>([]);
+   [transports, setTransports] = useState<Transport[]>([]),
+
+  // CR-3: State for current timestamp, refreshed every minute to keep upcomingPickups fresh
+   [currentTimestamp, setCurrentTimestamp] = useState<string>(
+    () => new Date().toISOString(),
+  );
+
+  // CR-3: Refresh current timestamp every minute to keep upcomingPickups accurate
+  useEffect(() => {
+    const REFRESH_INTERVAL_MS = 60_000; // 1 minute
+    const intervalId = setInterval(() => {
+      setCurrentTimestamp(new Date().toISOString());
+    }, REFRESH_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   // Clear refs, state, and error when trip changes to prevent stale cross-trip data
   useEffect(() => {
@@ -333,63 +326,36 @@ export function TransportProvider({
   }, [rawTransports]);
 
   // Use transports from state (render-safe)
-  const
+  // CR-9: Single-pass classification instead of triple filter (3x O(n) → 1x O(n))
+  const { arrivals, departures, upcomingPickups } = useMemo(() => {
+    const arrivalsArr: Transport[] = [];
+    const departuresArr: Transport[] = [];
+    const upcomingPickupsArr: Transport[] = [];
 
-  // Compute arrivals - transports where type === 'arrival'
-   arrivals = useMemo(
-    () => transports.filter((t) => t.type === 'arrival'),
-    [transports],
-  ),
-
-  // Compute departures - transports where type === 'departure'
-   departures = useMemo(
-    () => transports.filter((t) => t.type === 'departure'),
-    [transports],
-  ),
-
-  // Compute upcoming pickups - transports that need pickup and are in the future
-  // Note: ISO string comparison works correctly for datetime ordering
-   upcomingPickups = useMemo(() => {
-    const now = new Date().toISOString();
-    return transports
-      .filter((t) => t.needsPickup && t.datetime >= now)
-      .sort((a, b) => a.datetime.localeCompare(b.datetime));
-  }, [transports]),
-
-  /**
-   * Validates that a transport exists and belongs to the current trip.
-   * Uses in-memory cache first, falls back to DB for authoritative check.
-   */
-   validateTransportOwnership = useCallback(
-    async (
-      transportId: TransportId,
-      tripId: TripId,
-    ): Promise<Transport> => {
-      // Fast path: check in-memory cache first
-      const cachedTransport = transportsMapRef.current.get(transportId);
-      if (cachedTransport) {
-        if (cachedTransport.tripId !== tripId) {
-          throw new Error(
-            'Cannot modify transport: transport does not belong to current trip',
-          );
-        }
-        return cachedTransport;
+    for (const transport of transports) {
+      // Classify by type
+      if (transport.type === 'arrival') {
+        arrivalsArr.push(transport);
+      } else {
+        departuresArr.push(transport);
       }
 
-      // Fallback: DB query for transports not yet in cache
-      const transport = await repositoryGetTransportById(transportId);
-      if (!transport) {
-        throw new Error(`Transport with ID "${transportId}" not found`);
+      // Check for upcoming pickups (uses refreshed currentTimestamp from CR-3)
+      if (transport.needsPickup && transport.datetime >= currentTimestamp) {
+        upcomingPickupsArr.push(transport);
       }
-      if (transport.tripId !== tripId) {
-        throw new Error(
-          'Cannot modify transport: transport does not belong to current trip',
-        );
-      }
-      return transport;
-    },
-    [],
-  ),
+    }
+
+    // upcomingPickups are already sorted by datetime due to index [tripId+datetime]
+    // but filter may have introduced non-contiguous items, so sort to ensure order
+    upcomingPickupsArr.sort((a, b) => a.datetime.localeCompare(b.datetime));
+
+    return {
+      arrivals: arrivalsArr,
+      departures: departuresArr,
+      upcomingPickups: upcomingPickupsArr,
+    };
+  }, [transports, currentTimestamp]),
 
   /**
    * Creates a new transport in the current trip.
@@ -416,6 +382,7 @@ export function TransportProvider({
 
   /**
    * Updates an existing transport after validating ownership.
+   * Uses transactional ownership check to prevent TOCTOU race conditions.
    */
    updateTransport = useCallback(
     async (
@@ -430,18 +397,18 @@ export function TransportProvider({
       setError((prev) => (prev === null ? prev : null));
 
       try {
-        // Verify transport belongs to current trip before updating
-        await validateTransportOwnership(id, tripId);
-        await repositoryUpdateTransport(id, data);
+        // Transactional ownership check + update (prevents TOCTOU race)
+        await updateTransportWithOwnershipCheck(id, tripId, data);
       } catch (err) {
         throw wrapAndSetError(err, 'Failed to update transport', setError);
       }
     },
-    [currentTripId, validateTransportOwnership],
+    [currentTripId],
   ),
 
   /**
    * Deletes a transport after validating ownership.
+   * Uses transactional ownership check to prevent TOCTOU race conditions.
    */
    deleteTransport = useCallback(
     async (id: TransportId): Promise<void> => {
@@ -453,14 +420,13 @@ export function TransportProvider({
       setError((prev) => (prev === null ? prev : null));
 
       try {
-        // Verify transport belongs to current trip before deleting
-        await validateTransportOwnership(id, tripId);
-        await repositoryDeleteTransport(id);
+        // Transactional ownership check + delete (prevents TOCTOU race)
+        await deleteTransportWithOwnershipCheck(id, tripId);
       } catch (err) {
         throw wrapAndSetError(err, 'Failed to delete transport', setError);
       }
     },
-    [currentTripId, validateTransportOwnership],
+    [currentTripId],
   ),
 
   /**

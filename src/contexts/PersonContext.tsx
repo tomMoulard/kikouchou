@@ -19,14 +19,14 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useTripContext } from '@/contexts/TripContext';
+import { areArraysEqual, wrapAndSetError } from '@/contexts/utils';
 import { db } from '@/lib/db/database';
 import {
   createPerson as repositoryCreatePerson,
-  deletePerson as repositoryDeletePerson,
-  getPersonById as repositoryGetPersonById,
-  updatePerson as repositoryUpdatePerson,
+  deletePersonWithOwnershipCheck,
+  updatePersonWithOwnershipCheck,
 } from '@/lib/db';
-import type { Person, PersonFormData, PersonId, TripId } from '@/types';
+import type { Person, PersonFormData, PersonId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -106,40 +106,18 @@ interface PersonProviderProps {
 // ============================================================================
 
 /**
- * Wraps an unknown error in an Error object and sets it in state.
+ * Comparison function for Person objects.
+ * Compares id, name, and color (tripId is same for all persons in filtered array).
  */
-function wrapAndSetError(
-  err: unknown,
-  fallbackMessage: string,
-  setError: (e: Error) => void,
-): Error {
-  const wrappedError =
-    err instanceof Error ? err : new Error(fallbackMessage);
-  setError(wrappedError);
-  return wrappedError;
-}
+const comparePersons = (a: Person, b: Person): boolean =>
+  a.id === b.id && a.name === b.name && a.color === b.color;
 
 /**
- * Compares two person arrays for equality based on IDs and properties.
- * Used to maintain stable array references.
- *
- * @remarks
- * Only compares id, name, and color since tripId is the same for all
- * persons in the array (filtered by current trip).
+ * Compares two person arrays for equality based on IDs and mutable properties.
+ * Uses the generic areArraysEqual utility with Person-specific comparison.
  */
-function arePersonsEqual(a: Person[], b: Person[]): boolean {
-  // Fast path: same reference means no change
-  if (a === b) {return true;}
-  if (a.length !== b.length) {return false;}
-  return a.every((person, index) => {
-    const other = b[index];
-    return (
-      person.id === other?.id &&
-      person.name === other?.name &&
-      person.color === other?.color
-    );
-  });
-}
+const arePersonsEqual = (a: Person[], b: Person[]): boolean =>
+  areArraysEqual(a, b, comparePersons);
 
 // ============================================================================
 // Context Creation
@@ -244,11 +222,12 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
   // State to hold stable persons (replacing ref for render-safe access)
    [persons, setPersons] = useState<Person[]>([]);
 
-  // Clear state when trip changes to prevent stale cross-trip data
+  // Clear state and error when trip changes to prevent stale cross-trip data
   useEffect(() => {
     setPersons([]);
     personsRef.current = [];
     personsMapRef.current = new Map();
+    setError(null); // CR-8: Clear error state on trip change
   }, [currentTripId]);
 
   // Update stable array reference via useEffect (not during render)
@@ -265,38 +244,6 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
 
   // Use persons from state (render-safe)
   const
-
-  /**
-   * Validates that a person exists and belongs to the current trip.
-   * Uses in-memory lookup first, falls back to DB for authoritative check.
-   */
-   validatePersonOwnership = useCallback(
-    async (personId: PersonId, tripId: TripId): Promise<Person> => {
-      // Fast path: check in-memory cache first
-      const cachedPerson = personsMapRef.current.get(personId);
-      if (cachedPerson) {
-        if (cachedPerson.tripId !== tripId) {
-          throw new Error(
-            'Cannot modify person: person does not belong to current trip',
-          );
-        }
-        return cachedPerson;
-      }
-
-      // Fallback: DB query for persons not yet in cache
-      const person = await repositoryGetPersonById(personId);
-      if (!person) {
-        throw new Error(`Person with ID "${personId}" not found`);
-      }
-      if (person.tripId !== tripId) {
-        throw new Error(
-          'Cannot modify person: person does not belong to current trip',
-        );
-      }
-      return person;
-    },
-    [],
-  ),
 
   /**
    * Creates a new person in the current trip.
@@ -322,7 +269,8 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
   ),
 
   /**
-   * Updates an existing person after validating ownership.
+   * Updates an existing person with ownership validation.
+   * Uses transactional operation to prevent TOCTOU race condition (CR-2).
    */
    updatePerson = useCallback(
     async (id: PersonId, data: Partial<PersonFormData>): Promise<void> => {
@@ -335,18 +283,18 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
       setError((prev) => (prev === null ? prev : null));
 
       try {
-        // Verify person belongs to current trip before updating
-        await validatePersonOwnership(id, tripId);
-        await repositoryUpdatePerson(id, data);
+        // CR-2: Use transactional function that combines validation + mutation atomically
+        await updatePersonWithOwnershipCheck(id, tripId, data);
       } catch (err) {
         throw wrapAndSetError(err, 'Failed to update person', setError);
       }
     },
-    [currentTripId, validatePersonOwnership],
+    [currentTripId],
   ),
 
   /**
-   * Deletes a person after validating ownership.
+   * Deletes a person with ownership validation.
+   * Uses transactional operation to prevent TOCTOU race condition (CR-2).
    */
    deletePerson = useCallback(
     async (id: PersonId): Promise<void> => {
@@ -359,14 +307,13 @@ export function PersonProvider({ children }: PersonProviderProps): ReactElement 
       setError((prev) => (prev === null ? prev : null));
 
       try {
-        // Verify person belongs to current trip before deleting
-        await validatePersonOwnership(id, tripId);
-        await repositoryDeletePerson(id);
+        // CR-2: Use transactional function that combines validation + deletion atomically
+        await deletePersonWithOwnershipCheck(id, tripId);
       } catch (err) {
         throw wrapAndSetError(err, 'Failed to delete person', setError);
       }
     },
-    [currentTripId, validatePersonOwnership],
+    [currentTripId],
   ),
 
   /**

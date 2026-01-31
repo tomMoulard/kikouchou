@@ -213,3 +213,92 @@ export async function searchPersonsByName(
     .filter((person) => person.name.toLowerCase().includes(lowerQuery))
     .toArray();
 }
+
+// ============================================================================
+// Transactional Operations with Ownership Validation (CR-2 fix)
+// ============================================================================
+
+/**
+ * Updates a person with ownership validation in a single transaction.
+ * Prevents TOCTOU race condition by combining validation and mutation atomically.
+ *
+ * @param id - The person's unique identifier
+ * @param tripId - The expected trip ID for ownership validation
+ * @param data - Partial person form data to update
+ * @throws {Error} If person not found or doesn't belong to the specified trip
+ *
+ * @example
+ * ```typescript
+ * await updatePersonWithOwnershipCheck(personId, currentTripId, { name: 'New Name' });
+ * ```
+ */
+export async function updatePersonWithOwnershipCheck(
+  id: PersonId,
+  tripId: TripId,
+  data: Partial<PersonFormData>,
+): Promise<void> {
+  await db.transaction('rw', db.persons, async () => {
+    const person = await db.persons.get(id);
+
+    if (!person) {
+      throw new Error(`Person with ID "${id}" not found`);
+    }
+    if (person.tripId !== tripId) {
+      throw new Error('Cannot update person: person does not belong to current trip');
+    }
+
+    await db.persons.update(id, data);
+  });
+}
+
+/**
+ * Deletes a person with ownership validation in a single transaction.
+ * Prevents TOCTOU race condition by combining validation and deletion atomically.
+ * Also deletes associated room assignments and transports.
+ *
+ * @param id - The person's unique identifier
+ * @param tripId - The expected trip ID for ownership validation
+ * @throws {Error} If person not found or doesn't belong to the specified trip
+ *
+ * @example
+ * ```typescript
+ * await deletePersonWithOwnershipCheck(personId, currentTripId);
+ * ```
+ */
+export async function deletePersonWithOwnershipCheck(
+  id: PersonId,
+  tripId: TripId,
+): Promise<void> {
+  await db.transaction(
+    'rw',
+    [db.persons, db.roomAssignments, db.transports],
+    async () => {
+      const person = await db.persons.get(id);
+
+      if (!person) {
+        throw new Error(`Person with ID "${id}" not found`);
+      }
+      if (person.tripId !== tripId) {
+        throw new Error('Cannot delete person: person does not belong to current trip');
+      }
+
+      // Delete related records in parallel
+      await Promise.all([
+        // Delete room assignments for this person
+        db.roomAssignments.where('personId').equals(id).delete(),
+
+        // Delete transports for this person
+        db.transports.where('personId').equals(id).delete(),
+
+        // Clear driverId references where this person was the driver
+        db.transports
+          .where('driverId')
+          .equals(id)
+          .modify({ driverId: undefined }),
+      ]);
+
+      // Delete the person
+      await db.persons.delete(id);
+    },
+  );
+}
