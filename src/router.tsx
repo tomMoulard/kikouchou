@@ -84,7 +84,7 @@ function ErrorPage(): ReactElement {
   },
 
    handleGoHome = (): void => {
-    window.location.href = '/trips';
+    window.location.href = import.meta.env.BASE_URL + 'trips';
   };
 
   return (
@@ -245,13 +245,19 @@ const settingsRoute: RouteObject = {
  * }
  * ```
  */
-export const router = createBrowserRouter([
-  // Public routes (outside Layout)
-  publicRoutes,
+export const router = createBrowserRouter(
+  [
+    // Public routes (outside Layout)
+    publicRoutes,
 
-  // Main application routes (with Layout)
-  appRoutes,
-]);
+    // Main application routes (with Layout)
+    appRoutes,
+  ],
+  {
+    // Use Vite's BASE_URL for GitHub Pages deployment
+    basename: import.meta.env.BASE_URL,
+  },
+);
 
 // ============================================================================
 // Type Exports

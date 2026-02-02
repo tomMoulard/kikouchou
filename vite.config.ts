@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Base URL for deployment - set to repo name for GitHub Pages
+const base = process.env.GITHUB_ACTIONS ? '/kikoushou/' : '/'
+
 /**
  * Manual chunk splitting strategy to keep bundles under 500KB
  * Groups dependencies by functionality for optimal caching
@@ -36,9 +39,7 @@ function manualChunks(id: string): string | undefined {
 
 // https://vite.dev/config/
 export default defineConfig({
-  // For GitHub Pages: set to repo name (e.g., '/kikoushou/')
-  // For custom domain or root deployment: use '/'
-  base: process.env.GITHUB_ACTIONS ? '/kikoushou/' : '/',
+  base,
   plugins: [
     tailwindcss(),
     react(),
@@ -52,16 +53,16 @@ export default defineConfig({
         theme_color: '#0f172a',
         background_color: '#ffffff',
         display: 'standalone',
-        start_url: '/',
+        start_url: base,
         icons: [
           {
-            src: '/icons/icon.svg',
+            src: 'icons/icon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'any',
           },
           {
-            src: '/icons/icon-maskable.svg',
+            src: 'icons/icon-maskable.svg',
             sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'maskable',
