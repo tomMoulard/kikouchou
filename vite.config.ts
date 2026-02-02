@@ -36,6 +36,9 @@ function manualChunks(id: string): string | undefined {
 
 // https://vite.dev/config/
 export default defineConfig({
+  // For GitHub Pages: set to repo name (e.g., '/kikoushou/')
+  // For custom domain or root deployment: use '/'
+  base: process.env.GITHUB_ACTIONS ? '/kikoushou/' : '/',
   plugins: [
     tailwindcss(),
     react(),
