@@ -21,8 +21,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { RoomIconPicker } from '@/components/shared/RoomIconPicker';
 import { cn } from '@/lib/utils';
-import type { Room, RoomFormData } from '@/types';
+import type { Room, RoomFormData, RoomIcon } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -111,6 +112,7 @@ const DEFAULT_CAPACITY = 1,
    [name, setName] = useState(room?.name ?? ''),
    [capacity, setCapacity] = useState<number>(room?.capacity ?? DEFAULT_CAPACITY),
    [description, setDescription] = useState(room?.description ?? ''),
+   [icon, setIcon] = useState<RoomIcon | undefined>(room?.icon),
 
   // Validation errors
    [errors, setErrors] = useState<FormErrors>({}),
@@ -137,6 +139,7 @@ const DEFAULT_CAPACITY = 1,
     setName(room?.name ?? '');
     setCapacity(room?.capacity ?? DEFAULT_CAPACITY);
     setDescription(room?.description ?? '');
+    setIcon(room?.icon);
     setErrors({});
     setSubmitError(null);
   }, [room?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on room.id change
@@ -271,6 +274,13 @@ const DEFAULT_CAPACITY = 1,
   ),
 
   /**
+   * Handles icon selection change.
+   */
+   handleIconChange = useCallback((newIcon: RoomIcon) => {
+    setIcon(newIcon);
+  }, []),
+
+  /**
    * Handles form submission.
    * Uses refs for synchronous guard (prevents race condition) and unmount safety.
    */
@@ -293,6 +303,7 @@ const DEFAULT_CAPACITY = 1,
           name: name.trim(),
           capacity,
           description: description.trim() || undefined,
+          icon,
         });
         // Success - parent component handles navigation
       } catch (error) {
@@ -309,7 +320,7 @@ const DEFAULT_CAPACITY = 1,
         }
       }
     },
-    [validateForm, onSubmit, name, capacity, description, t],
+    [validateForm, onSubmit, name, capacity, description, icon, t],
   );
 
   // ============================================================================
@@ -346,6 +357,14 @@ const DEFAULT_CAPACITY = 1,
           </p>
         )}
       </div>
+
+      {/* Icon Field */}
+      <RoomIconPicker
+        id="room-icon"
+        value={icon}
+        onChange={handleIconChange}
+        disabled={isSubmitting}
+      />
 
       {/* Capacity Field */}
       <div className="space-y-2">

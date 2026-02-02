@@ -10,7 +10,7 @@
 import Dexie, { type Table } from 'dexie';
 
 /** Current database schema version */
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 import type {
   AppSettings,
   Person,
@@ -150,6 +150,25 @@ export class KikoushouDatabase extends Dexie {
       transports: 'id, personId, driverId, [tripId+datetime], [tripId+personId], [tripId+type]',
 
       // Settings: singleton key-value store
+      settings: 'id',
+    });
+
+    /**
+     * Schema Version 3 - Add room icon field
+     *
+     * Added:
+     * - icon field on rooms (optional, for visual identification)
+     *
+     * Note: No data migration needed - field is optional and defaults to 'bed-double' in UI
+     */
+    this.version(3).stores({
+      // Schema unchanged - icon field doesn't require indexing
+      trips: 'id, &shareId, startDate, createdAt',
+      rooms: 'id, [tripId+order]',
+      persons: 'id, tripId, [tripId+name]',
+      roomAssignments:
+        'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+      transports: 'id, personId, driverId, [tripId+datetime], [tripId+personId], [tripId+type]',
       settings: 'id',
     });
   }

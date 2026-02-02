@@ -16,7 +16,8 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BedDouble, ChevronDown, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
+import { ChevronDown, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
+import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
 
 import {
   Card,
@@ -154,6 +155,9 @@ const RoomCard = memo(({
       ].join(', '),
     [room.name, room.capacity, occupancyCount, occupancyStatusText, t]
   ),
+
+  // Get the room icon component based on room.icon field
+   RoomIconComponent = getRoomIconComponent(room.icon),
 
   // Determine if card should be interactive (has onClick handler)
    isInteractive = Boolean(onClick) && !isDisabled,
@@ -294,7 +298,7 @@ const RoomCard = memo(({
               {room.name}
             </CardTitle>
             <Badge variant="outline" className="shrink-0">
-              <BedDouble className="size-3 mr-1" aria-hidden="true" />
+              <RoomIconComponent className="size-3 mr-1" aria-hidden="true" />
               {room.capacity}
             </Badge>
           </div>

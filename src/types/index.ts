@@ -81,6 +81,28 @@ export type TransportType = 'arrival' | 'departure';
 export type TransportMode = 'train' | 'plane' | 'car' | 'bus' | 'other';
 
 /**
+ * Room icon type for visual identification across views.
+ * Icons are from lucide-react library.
+ */
+export type RoomIcon =
+  | 'bed-double'   // Default bedroom
+  | 'bed-single'   // Single bed room
+  | 'bath'         // Bathroom
+  | 'sofa'         // Living room
+  | 'tent'         // Tent/outdoor
+  | 'caravan'      // Mobile home
+  | 'warehouse'    // Garage/storage
+  | 'home'         // General room
+  | 'door-open'    // Entryway
+  | 'baby'         // Kids room
+  | 'armchair';    // Lounge
+
+/**
+ * Default room icon when none is selected.
+ */
+export const DEFAULT_ROOM_ICON: RoomIcon = 'bed-double';
+
+/**
  * Supported application languages.
  */
 export type Language = 'en' | 'fr';
@@ -266,6 +288,14 @@ export interface Room extends Identifiable, TripScoped {
    * Lower numbers appear first. Must be a non-negative integer.
    */
   order: number;
+
+  /**
+   * Optional icon for visual identification.
+   * Defaults to 'bed-double' when not specified.
+   * @see {@link RoomIcon}
+   * @example "bed-double"
+   */
+  icon?: RoomIcon;
 }
 
 /**
@@ -304,6 +334,20 @@ export interface Person extends Identifiable, TripScoped {
    * @example "#ef4444"
    */
   color: HexColor;
+
+  /**
+   * Optional stay start date (ISO format, YYYY-MM-DD).
+   * When the person is expected to arrive at the trip.
+   * @example "2024-07-15"
+   */
+  stayStartDate?: ISODateString;
+
+  /**
+   * Optional stay end date (ISO format, YYYY-MM-DD).
+   * When the person is expected to leave the trip.
+   * @example "2024-07-22"
+   */
+  stayEndDate?: ISODateString;
 }
 
 /**
@@ -521,6 +565,8 @@ export interface RoomFormData {
   capacity: number;
   /** Optional description or notes */
   description?: string;
+  /** Optional icon for visual identification */
+  icon?: RoomIcon;
 }
 
 /**
@@ -534,6 +580,10 @@ export interface PersonFormData {
   name: string;
   /** Hex color code for calendar display */
   color: HexColor;
+  /** Optional stay start date (ISO format, YYYY-MM-DD) */
+  stayStartDate?: ISODateString;
+  /** Optional stay end date (ISO format, YYYY-MM-DD) */
+  stayEndDate?: ISODateString;
 }
 
 /**

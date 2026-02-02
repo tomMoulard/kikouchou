@@ -66,6 +66,7 @@ import type {
   RoomAssignmentId,
   RoomId,
 } from '@/types';
+import { toISODateString } from '@/lib/db/utils';
 
 // ============================================================================
 // Type Definitions
@@ -170,12 +171,7 @@ function formatDateRange(
   return `${startStr} - ${endStr}`;
 }
 
-/**
- * Converts a Date to ISO date string (YYYY-MM-DD).
- */
-function toISODateString(date: Date): ISODateString {
-  return format(date, 'yyyy-MM-dd');
-}
+
 
 // ============================================================================
 // AssignmentItem Subcomponent

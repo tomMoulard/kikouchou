@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { LocationPicker } from '@/components/shared/LocationPicker';
 import type {
   Person,
   PersonId,
@@ -425,29 +426,6 @@ const TransportForm = memo(({
   }, [formState.datetime, validateDatetime]),
 
   /**
-   * Handles location input change.
-   */
-   handleLocationChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const {value} = e.target;
-      setFormState((prev) => ({ ...prev, location: value }));
-      // Clear error when user types
-      setErrors((prev) => (prev.location ? { ...prev, location: undefined } : prev));
-    },
-    [],
-  ),
-
-  /**
-   * Handles location input blur for validation.
-   */
-   handleLocationBlur = useCallback(() => {
-    const error = validateLocation(formState.location);
-    if (error) {
-      setErrors((prev) => ({ ...prev, location: error }));
-    }
-  }, [formState.location, validateLocation]),
-
-  /**
    * Handles transport mode select change.
    */
    handleTransportModeChange = useCallback((value: string) => {
@@ -659,21 +637,23 @@ const TransportForm = memo(({
         )}
       </div>
 
-      {/* Location Field */}
+      {/* Location Field - OpenStreetMap LocationPicker */}
       <div className="space-y-2">
         <Label htmlFor="transport-location">
           {t('transports.location')}
           <span className="text-destructive ml-1" aria-hidden="true">*</span>
         </Label>
-        <Input
+        <LocationPicker
           id="transport-location"
-          type="text"
           value={formState.location}
-          onChange={handleLocationChange}
-          onBlur={handleLocationBlur}
+          onChange={(location) => {
+            setFormState((prev) => ({ ...prev, location }));
+            // Clear error when user selects a location
+            setErrors((prev) => (prev.location ? { ...prev, location: undefined } : prev));
+          }}
           placeholder={t('transports.locationPlaceholder')}
-          aria-invalid={Boolean(errors.location)}
-          aria-describedby={errors.location ? 'transport-location-error' : undefined}
+          hasError={Boolean(errors.location)}
+          aria-label={t('transports.location')}
           disabled={isSubmitting}
         />
         {errors.location && (

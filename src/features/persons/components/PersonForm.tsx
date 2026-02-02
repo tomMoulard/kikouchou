@@ -22,6 +22,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
+import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
+import { useTripContext } from '@/contexts/TripContext';
+import { parseISO, format } from 'date-fns';
 import type { Person, PersonFormData } from '@/types';
 
 // ============================================================================
@@ -96,6 +99,7 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
   onCancel,
 }: PersonFormProps) => {
   const { t } = useTranslation(),
+   { currentTrip } = useTripContext(),
 
   // ============================================================================
   // Form State
@@ -104,6 +108,15 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
   // Form field values
    [name, setName] = useState(person?.name ?? ''),
    [color, setColor] = useState(person?.color ?? DEFAULT_COLOR),
+   [stayDates, setStayDates] = useState<DateRange | undefined>(() => {
+    if (person?.stayStartDate && person?.stayEndDate) {
+      return {
+        from: parseISO(person.stayStartDate),
+        to: parseISO(person.stayEndDate),
+      };
+    }
+    return undefined;
+  }),
 
   // Validation errors
    [errors, setErrors] = useState<FormErrors>({}),
@@ -130,6 +143,15 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
   useEffect(() => {
     setName(person?.name ?? '');
     setColor(person?.color ?? DEFAULT_COLOR);
+    // Sync stay dates from person
+    if (person?.stayStartDate && person?.stayEndDate) {
+      setStayDates({
+        from: parseISO(person.stayStartDate),
+        to: parseISO(person.stayEndDate),
+      });
+    } else {
+      setStayDates(undefined);
+    }
     // Use callback to avoid creating new object if already empty
     setErrors((prev) => (Object.keys(prev).length === 0 ? prev : {}));
     setSubmitError((prev) => (prev === null ? prev : null));
@@ -206,6 +228,19 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
   }, []),
 
   /**
+   * Handles stay date range selection.
+   */
+   handleStayDatesChange = useCallback((range: DateRange | undefined) => {
+    setStayDates(range);
+  }, []),
+
+  /**
+   * Trip date constraints for the date picker.
+   */
+   tripStartDate = currentTrip?.startDate ? parseISO(currentTrip.startDate) : undefined,
+   tripEndDate = currentTrip?.endDate ? parseISO(currentTrip.endDate) : undefined,
+
+  /**
    * Handles form submission.
    * Uses refs for synchronous guard (prevents race condition) and unmount safety.
    */
@@ -227,6 +262,8 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
         await onSubmit({
           name: name.trim(),
           color,
+          stayStartDate: stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : undefined,
+          stayEndDate: stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : undefined,
         });
         // Success - parent component handles navigation
       } catch (error) {
@@ -243,7 +280,7 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
         }
       }
     },
-    [validateForm, onSubmit, name, color, t],
+    [validateForm, onSubmit, name, color, stayDates, t],
   );
 
   // ============================================================================
@@ -291,6 +328,24 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
           label={t('persons.color')}
         />
       </div>
+
+      {/* Stay Dates Field (Optional) */}
+      {currentTrip && (
+        <div className="space-y-2">
+          <Label>{t('persons.stayDates', 'Stay dates')} <span className="text-muted-foreground text-xs">({t('common.optional', 'optional')})</span></Label>
+          <DateRangePicker
+            value={stayDates}
+            onChange={handleStayDatesChange}
+            minDate={tripStartDate}
+            maxDate={tripEndDate}
+            placeholder={t('persons.stayDatesPlaceholder', 'Select arrival and departure dates')}
+            disabled={isSubmitting}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t('persons.stayDatesHint', 'When will this guest be at the trip?')}
+          </p>
+        </div>
+      )}
 
       {/* Submission Error */}
       {submitError && (

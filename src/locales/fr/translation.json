@@ -21,7 +21,8 @@
     "unknown": "Inconnu",
     "actions": "Actions",
     "menu": "Menu",
-    "openMenu": "Ouvrir le menu"
+    "openMenu": "Ouvrir le menu",
+    "optional": "facultatif"
   },
   "nav": {
     "calendar": "Calendrier",
@@ -80,7 +81,21 @@
     "available": "Disponible",
     "unassignedGuests": "Invités sans chambre",
     "allGuestsAssigned": "Tous les invités ont une chambre",
-    "needsRoom": "a besoin d'une chambre"
+    "needsRoom": "a besoin d'une chambre",
+    "icon": "Icône de la chambre",
+    "icons": {
+      "bedDouble": "Lit double",
+      "bedSingle": "Lit simple",
+      "bath": "Salle de bain",
+      "sofa": "Salon",
+      "tent": "Tente",
+      "caravan": "Caravane",
+      "warehouse": "Rangement",
+      "home": "Maison",
+      "doorOpen": "Entrée",
+      "baby": "Chambre enfant",
+      "armchair": "Fauteuil"
+    }
   },
   "persons": {
     "title": "Participants",
@@ -89,6 +104,9 @@
     "name": "Nom",
     "namePlaceholder": "Ex : Marie",
     "color": "Couleur",
+    "stayDates": "Dates de séjour",
+    "stayDatesPlaceholder": "Sélectionner les dates d'arrivée et de départ",
+    "stayDatesHint": "Quand ce participant sera-t-il présent ?",
     "deleteConfirm": "Voulez-vous vraiment supprimer ce participant ?",
     "deleteConfirmTitle": "Supprimer le participant ?",
     "newDescription": "Remplissez les informations pour ajouter un nouveau participant.",
@@ -180,7 +198,10 @@
     "nextMonth": "Mois suivant",
     "monthView": "Calendrier mensuel",
     "personArriving": "Arrivée de {{name}}",
-    "personDeparting": "Départ de {{name}}"
+    "personDeparting": "Départ de {{name}}",
+    "eventDetails": "Détails de l'événement",
+    "nights": "{{count}} nuit",
+    "nights_plural": "{{count}} nuits"
   },
   "sharing": {
     "title": "Partager le voyage",

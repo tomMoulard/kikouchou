@@ -27,6 +27,7 @@ import {
 } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import {
   addMonths,
   eachDayOfInterval,
@@ -62,6 +63,11 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { TransportIcon } from '@/components/shared/TransportIcon';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import {
+  EventDetailDialog,
+  type AssignmentEventData,
+  type CalendarEventData,
+} from '@/features/calendar/components/EventDetailDialog';
 import type {
   HexColor,
   Person,
@@ -70,10 +76,20 @@ import type {
   Transport,
   TransportType,
 } from '@/types';
+import { toISODateString } from '@/lib/db/utils';
 
 // ============================================================================
 // Type Definitions
 // ============================================================================
+
+/**
+ * Segment position within a multi-day event span.
+ * - 'start': First day of the event (show label, rounded left corners)
+ * - 'middle': Interior day (no label, no rounded corners)
+ * - 'end': Last day of the event (no label, rounded right corners)
+ * - 'single': Single-day event (show label, fully rounded)
+ */
+type SegmentPosition = 'start' | 'middle' | 'end' | 'single';
 
 /**
  * Enriched assignment data for calendar display.
@@ -91,6 +107,20 @@ interface CalendarEvent {
   readonly color: HexColor;
   /** Text color for contrast */
   readonly textColor: 'white' | 'black';
+  /** Position of this segment within the event span */
+  readonly segmentPosition: SegmentPosition;
+  /** Vertical slot index for stacking overlapping events (0 = top) */
+  readonly slotIndex: number;
+  /** Unique identifier for the event span (assignment ID) */
+  readonly spanId: string;
+  /** Total number of days this event spans */
+  readonly totalDays: number;
+  /** Day index within the week row (0-6, used for week boundary detection) */
+  readonly dayOfWeek: number;
+  /** Whether this segment is at the start of a week row (visual start) */
+  readonly isRowStart: boolean;
+  /** Whether this segment is at the end of a week row (visual end) */
+  readonly isRowEnd: boolean;
 }
 
 /**
@@ -215,12 +245,7 @@ function getContrastTextColor(bgColor: HexColor): 'white' | 'black' {
   return luminance < 0.179 ? 'white' : 'black';
 }
 
-/**
- * Formats a Date to ISO date string (YYYY-MM-DD).
- */
-function toISODateString(date: Date): string {
-  return format(date, 'yyyy-MM-dd');
-}
+
 
 /**
  * Checks if a date falls within an assignment's date range.
@@ -356,7 +381,47 @@ CalendarDayHeader.displayName = 'CalendarDayHeader';
 // ============================================================================
 
 /**
+ * Get the CSS classes for segment border radius based on position.
+ * Handles both logical segment position (start/middle/end/single) and
+ * visual row boundaries (week breaks require rounded corners).
+ */
+function getSegmentBorderRadiusClasses(
+  segmentPosition: SegmentPosition,
+  isRowStart: boolean,
+  isRowEnd: boolean,
+): string {
+  // Single-day event: fully rounded
+  if (segmentPosition === 'single') {
+    return 'rounded';
+  }
+
+  // For multi-day events, we need to consider both logical position and row boundaries
+  // A 'middle' segment that's at row start needs rounded left corners
+  // A 'middle' segment that's at row end needs rounded right corners
+
+  const isLogicalStart = segmentPosition === 'start',
+   isLogicalEnd = segmentPosition === 'end',
+  
+  // Rounded left corner if: logical start OR visual row start (week boundary)
+   needsRoundedLeft = isLogicalStart || isRowStart,
+  // Rounded right corner if: logical end OR visual row end (week boundary)
+   needsRoundedRight = isLogicalEnd || isRowEnd;
+
+  if (needsRoundedLeft && needsRoundedRight) {
+    return 'rounded';
+  }
+  if (needsRoundedLeft) {
+    return 'rounded-l';
+  }
+  if (needsRoundedRight) {
+    return 'rounded-r';
+  }
+  return 'rounded-none';
+}
+
+/**
  * Single event pill displayed within a calendar day.
+ * Supports multi-day spanning with proper segment styling.
  */
 const CalendarEvent = memo(({
   event,
@@ -374,7 +439,27 @@ const CalendarEvent = memo(({
       }
     },
     [onClick, event.assignment],
-  );
+  ),
+
+  // Determine if we should show the label
+  // Show on: single-day events, start of span, or start of a new row (week continuation)
+   showLabel = event.segmentPosition === 'single' || 
+               event.segmentPosition === 'start' ||
+               (event.isRowStart && event.segmentPosition !== 'end'),
+
+  // Get border radius classes based on segment position and row boundaries
+   borderRadiusClasses = getSegmentBorderRadiusClasses(
+     event.segmentPosition,
+     event.isRowStart && event.segmentPosition !== 'start',
+     event.isRowEnd && event.segmentPosition !== 'end',
+   ),
+
+  // Determine left/right margins for visual spacing at boundaries
+  // Add margin on interior boundaries to create visual gap between adjacent events
+   marginClasses = cn(
+     // Left margin only if NOT at row start and NOT logical start
+     event.segmentPosition !== 'start' && !event.isRowStart && '-ml-px',
+   );
 
   return (
     <button
@@ -382,11 +467,13 @@ const CalendarEvent = memo(({
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       className={cn(
-        'w-full text-left text-xs rounded px-1.5 py-1 md:px-1 md:py-0.5 truncate',
+        'w-full text-left text-xs px-1.5 py-1 md:px-1 md:py-0.5 truncate',
         'min-h-[28px] md:min-h-0',
         'transition-opacity hover:opacity-80',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
         'cursor-pointer',
+        borderRadiusClasses,
+        marginClasses,
       )}
       style={{
         backgroundColor: event.color,
@@ -395,7 +482,7 @@ const CalendarEvent = memo(({
       title={event.label}
       aria-label={event.label}
     >
-      {event.label}
+      {showLabel ? event.label : '\u00A0'}
     </button>
   );
 });
@@ -407,13 +494,21 @@ CalendarEvent.displayName = 'CalendarEvent';
 // ============================================================================
 
 /**
- * Formats a datetime string to show just the time (HH:mm).
+ * Formats a datetime string to show just the time (HH:mm) in local timezone.
+ * 
+ * @param datetime - ISO datetime string (e.g., "2024-01-10T13:00:00.000Z")
+ * @returns Time string in HH:mm format (local timezone)
  */
 function formatTime(datetime: string): string {
-  // datetime is ISO format: YYYY-MM-DDTHH:mm:ss or YYYY-MM-DDTHH:mm
-  const timePart = datetime.split('T')[1];
-  if (!timePart) return '';
-  return timePart.substring(0, 5); // HH:mm
+  try {
+    // Parse ISO datetime to Date object (preserves UTC instant)
+    const date = parseISO(datetime);
+    if (isNaN(date.getTime())) return '';
+    // Format in local timezone using date-fns format
+    return format(date, 'HH:mm');
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -475,8 +570,12 @@ TransportIndicator.displayName = 'TransportIndicator';
 // CalendarDay Subcomponent
 // ============================================================================
 
+/** Maximum number of visible event slots before showing "+N more" */
+const MAX_VISIBLE_EVENT_SLOTS = 3;
+
 /**
  * Single day cell in the calendar grid.
+ * Events are rendered in slot-based positions to support multi-day spanning.
  */
 const CalendarDay = memo(({
   date,
@@ -491,15 +590,52 @@ const CalendarDay = memo(({
   const dayNumber = format(date, 'd', { locale: dateLocale }),
    dateLabel = format(date, 'PPPP', { locale: dateLocale }),
 
-  // Limit visible items (events + transports) to prevent overflow
-   maxVisibleItems = 3,
-   totalItems = events.length + transports.length,
+  // Calculate max slot index for the slot indices array (memoized, no spread operator)
+   maxSlotIndex = useMemo(() => {
+     if (events.length === 0) {return -1;}
+     let max = -1;
+     for (const e of events) {
+       if (e.slotIndex > max) {max = e.slotIndex;}
+     }
+     return max;
+   }, [events]),
 
-  // Prioritize showing transports first (arrivals/departures are time-sensitive)
-   visibleTransports = transports.slice(0, maxVisibleItems),
-   remainingSlots = Math.max(0, maxVisibleItems - visibleTransports.length),
-   visibleEvents = events.slice(0, remainingSlots),
-   hiddenCount = totalItems - visibleTransports.length - visibleEvents.length;
+  // Limit visible items
+   maxVisibleTransports = 2,
+   visibleTransports = transports.slice(0, maxVisibleTransports),
+   hiddenTransportCount = transports.length - visibleTransports.length,
+
+  // For events, we show up to MAX_VISIBLE_EVENT_SLOTS slots
+  // Events in higher slots get hidden (events are already sorted by slotIndex)
+   visibleEvents = useMemo(() => {
+     const visible: CalendarEvent[] = [];
+     for (const e of events) {
+       if (e.slotIndex >= MAX_VISIBLE_EVENT_SLOTS) {break;} // Early exit since sorted
+       visible.push(e);
+     }
+     return visible;
+   }, [events]),
+   hiddenEventCount = events.length - visibleEvents.length,
+   totalHiddenCount = hiddenTransportCount + hiddenEventCount,
+
+  // Build an array of slot indices to render (including empty slots for alignment)
+   slotIndices = useMemo(() => {
+     const indices: (number | null)[] = [];
+     const maxSlot = Math.min(maxSlotIndex, MAX_VISIBLE_EVENT_SLOTS - 1);
+     for (let i = 0; i <= maxSlot; i++) {
+       indices.push(i);
+     }
+     return indices;
+   }, [maxSlotIndex]),
+
+  // Map slot index to event for quick lookup
+   eventsBySlot = useMemo(() => {
+     const map = new Map<number, CalendarEvent>();
+     for (const event of visibleEvents) {
+       map.set(event.slotIndex, event);
+     }
+     return map;
+   }, [visibleEvents]);
 
   return (
     <div
@@ -526,8 +662,9 @@ const CalendarDay = memo(({
         </span>
       </div>
 
-      {/* Transports (arrivals/departures) */}
-      <div className="flex-1 space-y-0.5 overflow-hidden">
+      {/* Content area with events and transports */}
+      <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
+        {/* Transports (arrivals/departures) - shown at top */}
         {visibleTransports.map((transport) => (
           <TransportIndicator
             key={transport.transport.id}
@@ -536,17 +673,36 @@ const CalendarDay = memo(({
           />
         ))}
 
-        {/* Room assignment events */}
-        {visibleEvents.map((event) => (
-          <CalendarEvent
-            key={event.assignment.id}
-            event={event}
-            onClick={onEventClick}
-          />
-        ))}
-        {hiddenCount > 0 && (
+        {/* Room assignment events - slot-based positioning */}
+        {slotIndices.map((slotIndex) => {
+          if (slotIndex === null) {return null;}
+          const event = eventsBySlot.get(slotIndex);
+          
+          if (event) {
+            return (
+              <CalendarEvent
+                key={`${event.spanId}-${slotIndex}`}
+                event={event}
+                onClick={onEventClick}
+              />
+            );
+          }
+          
+          // Render empty placeholder for this slot to maintain alignment
+          // This happens when an event occupies this slot on adjacent days but not this day
+          return (
+            <div 
+              key={`empty-${slotIndex}`} 
+              className="h-[28px] md:h-[24px]"
+              aria-hidden="true"
+            />
+          );
+        })}
+
+        {/* Hidden items indicator */}
+        {totalHiddenCount > 0 && (
           <div className="text-xs text-muted-foreground text-center">
-            +{hiddenCount}
+            +{totalHiddenCount}
           </div>
         )}
       </div>
@@ -576,7 +732,7 @@ const CalendarPage = memo((): ReactElement => {
   // Context hooks
    { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
    { rooms, isLoading: isRoomsLoading, error: roomsError } = useRoomContext(),
-   { assignments, isLoading: isAssignmentsLoading, error: assignmentsError } = useAssignmentContext(),
+   { assignments, isLoading: isAssignmentsLoading, error: assignmentsError, deleteAssignment } = useAssignmentContext(),
    { getPersonById, isLoading: isPersonsLoading, error: personsError } = usePersonContext(),
    { arrivals, departures, isLoading: isTransportsLoading, error: transportsError } = useTransportContext(),
 
@@ -585,7 +741,11 @@ const CalendarPage = memo((): ReactElement => {
    [currentMonth, setCurrentMonth] = useState<Date>(() => startOfMonth(new Date())),
 
   // Track if user has manually navigated to avoid overwriting their selection
-   hasUserNavigatedRef = useRef(false);
+   hasUserNavigatedRef = useRef(false),
+
+  // Event detail dialog state
+   [selectedEvent, setSelectedEvent] = useState<CalendarEventData | null>(null),
+   [isEventDialogOpen, setIsEventDialogOpen] = useState(false);
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -650,8 +810,12 @@ const CalendarPage = memo((): ReactElement => {
   // This ensures stable dependency and avoids recalculation on language change
    unknownLabel = t('common.unknown'),
 
-  // Build calendar events from assignments
-  // Optimized algorithm: O(assignments × avgAssignmentLength) instead of O(assignments × calendarDays)
+  // Build calendar events from assignments with multi-day spanning support
+  // Algorithm:
+  // 1. First pass: identify all valid assignments and their date ranges
+  // 2. Sort by start date for consistent slot allocation
+  // 3. Greedy slot allocation: assign each event to the lowest available slot
+  // 4. Second pass: create per-day events with segment position metadata
    eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
 
@@ -672,6 +836,22 @@ const CalendarPage = memo((): ReactElement => {
     const calendarStartStr = toISODateString(firstDay),
      calendarEndStr = toISODateString(lastDay);
 
+    // ===== PHASE 1: Identify valid assignments and their visible ranges =====
+    interface SpanInfo {
+      assignment: RoomAssignment;
+      person: Person | undefined;
+      room: Room | undefined;
+      label: string;
+      color: string;
+      textColor: 'white' | 'black';
+      effectiveStart: Date;
+      effectiveEnd: Date;
+      totalDays: number;
+      spanId: string;
+    }
+
+    const spans: SpanInfo[] = [];
+
     for (const assignment of assignments) {
       // Skip assignments completely outside visible calendar range
       if (assignment.endDate < calendarStartStr || assignment.startDate > calendarEndStr) {
@@ -690,15 +870,6 @@ const CalendarPage = memo((): ReactElement => {
        color = (person?.color && person.color.length >= 4) ? person.color : '#6b7280',
        textColor = getContrastTextColor(color),
 
-       event: CalendarEvent = {
-        assignment,
-        person,
-        room,
-        label,
-        color,
-        textColor,
-      },
-
       // Parse assignment dates to determine the actual range to iterate
        assignmentStart = parseISO(assignment.startDate),
        assignmentEnd = parseISO(assignment.endDate);
@@ -712,10 +883,6 @@ const CalendarPage = memo((): ReactElement => {
       // - startDate = check-in day (first night staying)
       // - endDate = check-out day (person leaves, does NOT sleep that night)
       // So we display from startDate to (endDate - 1 day)
-      // 
-      // Example: Check-in Jan 15, Check-out Jan 17
-      // - Person sleeps nights of Jan 15 and Jan 16
-      // - Calendar shows assignment on Jan 15 and Jan 16 only
       const lastNight = subDays(assignmentEnd, 1);
       
       // If check-in and check-out are the same day, skip (no nights stayed)
@@ -726,19 +893,157 @@ const CalendarPage = memo((): ReactElement => {
       // Calculate intersection with visible calendar range
       const effectiveStart = assignmentStart < firstDay ? firstDay : assignmentStart,
        effectiveEnd = lastNight > lastDay ? lastDay : lastNight,
+       totalDays = Math.round((effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-      // Only iterate through days within the assignment range (not all 42 calendar days)
-       assignmentDays = eachDayOfInterval({ start: effectiveStart, end: effectiveEnd });
+      spans.push({
+        assignment,
+        person,
+        room,
+        label,
+        color,
+        textColor,
+        effectiveStart,
+        effectiveEnd,
+        totalDays,
+        spanId: assignment.id,
+      });
+    }
 
-      for (const day of assignmentDays) {
+    // ===== PHASE 2: Greedy slot allocation =====
+    // Time complexity: O(spans × avgSlotChecks × avgSpanDays)
+    // Space complexity: O(calendarDays × maxSlots)
+    
+    /** Maximum slot allocation attempts to prevent infinite loop in pathological cases */
+    const MAX_SLOT_LIMIT = 100;
+
+    // Sort spans by start date, then by duration (longer first for visual stability)
+    spans.sort((a, b) => {
+      const startDiff = a.effectiveStart.getTime() - b.effectiveStart.getTime();
+      if (startDiff !== 0) {return startDiff;}
+      // Longer events first to give them priority for lower slots
+      return b.totalDays - a.totalDays;
+    });
+
+    // Map of spanId -> slot index
+    const slotAssignments = new Map<string, number>();
+    
+    // Track slot occupancy by date: Map<dateKey, Set<slotIndex>>
+    const slotOccupancy = new Map<string, Set<number>>();
+
+    /**
+     * Helper to mark a slot as occupied for all days in a span.
+     * Extracted to reuse for both normal assignment and safety limit fallback.
+     */
+    const markSlotOccupied = (spanDays: readonly Date[], slot: number) => {
+      for (const day of spanDays) {
+        const dateKey = toISODateString(day);
+        let occupiedSlots = slotOccupancy.get(dateKey);
+        if (!occupiedSlots) {
+          occupiedSlots = new Set<number>();
+          slotOccupancy.set(dateKey, occupiedSlots);
+        }
+        occupiedSlots.add(slot);
+      }
+    };
+
+    for (const span of spans) {
+      // Pre-compute days array ONCE per span (performance optimization from review)
+      const spanDays = eachDayOfInterval({ start: span.effectiveStart, end: span.effectiveEnd });
+      
+      // Find the lowest slot that's free for all days of this span
+      let slot = 0,
+       slotFound = false;
+
+      while (!slotFound) {
+        let slotAvailable = true;
+        
+        for (const day of spanDays) {
+          const dateKey = toISODateString(day),
+           occupiedSlots = slotOccupancy.get(dateKey);
+          if (occupiedSlots?.has(slot)) {
+            slotAvailable = false;
+            break;
+          }
+        }
+        
+        if (slotAvailable) {
+          slotFound = true;
+          slotAssignments.set(span.spanId, slot);
+          markSlotOccupied(spanDays, slot);
+        } else {
+          slot++;
+          // Safety limit to prevent infinite loop in pathological cases
+          if (slot > MAX_SLOT_LIMIT) {
+            if (import.meta.env.DEV) {
+              console.warn('Slot allocation exceeded limit for span:', span.spanId);
+            }
+            slotAssignments.set(span.spanId, slot);
+            // Also mark occupancy to prevent other spans from stacking at same slot
+            markSlotOccupied(spanDays, slot);
+            break;
+          }
+        }
+      }
+    }
+
+    // ===== PHASE 3: Create per-day events with segment metadata =====
+    for (const span of spans) {
+      const slotIndex = slotAssignments.get(span.spanId) ?? 0,
+       spanDays = eachDayOfInterval({ start: span.effectiveStart, end: span.effectiveEnd });
+
+      for (let i = 0; i < spanDays.length; i++) {
+        const day = spanDays[i];
+        if (!day) {continue;}
+
         const dateKey = toISODateString(day),
-         existing = map.get(dateKey);
+         dayOfWeek = day.getDay(), // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+         // Week starts Monday (1), ends Sunday (0). Sunday is the visual end of row.
+         isRowStart = dayOfWeek === 1, // Monday
+         isRowEnd = dayOfWeek === 0, // Sunday
+
+        // Determine segment position based on actual position in span
+         isFirst = i === 0,
+         isLast = i === spanDays.length - 1;
+
+        let segmentPosition: SegmentPosition;
+        if (isFirst && isLast) {
+          segmentPosition = 'single';
+        } else if (isFirst) {
+          segmentPosition = 'start';
+        } else if (isLast) {
+          segmentPosition = 'end';
+        } else {
+          segmentPosition = 'middle';
+        }
+
+        const event: CalendarEvent = {
+          assignment: span.assignment,
+          person: span.person,
+          room: span.room,
+          label: span.label,
+          color: span.color as HexColor,
+          textColor: span.textColor,
+          segmentPosition,
+          slotIndex,
+          spanId: span.spanId,
+          totalDays: span.totalDays,
+          dayOfWeek,
+          isRowStart,
+          isRowEnd,
+        };
+
+        const existing = map.get(dateKey);
         if (existing) {
           existing.push(event);
         } else {
           map.set(dateKey, [event]);
         }
       }
+    }
+
+    // Sort events within each day by slotIndex for consistent rendering
+    for (const events of map.values()) {
+      events.sort((a, b) => a.slotIndex - b.slotIndex);
     }
 
     return map;
@@ -856,16 +1161,54 @@ const CalendarPage = memo((): ReactElement => {
   }, []),
 
   /**
-   * Handle event click - opens edit dialog.
-   * TODO: Task 9.x - Implement edit dialog integration when available.
+   * Handle event click - opens event detail dialog.
    *
-   * @param _assignment - The assignment to edit (unused until feature implemented)
+   * @param assignment - The assignment that was clicked
    */
-   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-   handleEventClick = useCallback((_assignment: RoomAssignment) => {
-    // TODO: Task 9.x - Integrate with RoomAssignmentSection's edit dialog
-    // Feature not yet implemented - clicking events will be functional in future task
+   handleEventClick = useCallback((assignment: RoomAssignment) => {
+    const person = getPersonById(assignment.personId);
+    const room = roomsMap.get(assignment.roomId);
+    
+    const eventData: AssignmentEventData = {
+      type: 'assignment',
+      assignment,
+      person,
+      room,
+    };
+    
+    setSelectedEvent(eventData);
+    setIsEventDialogOpen(true);
+  }, [getPersonById, roomsMap]),
+
+  /**
+   * Handle edit from event detail dialog.
+   * Currently just shows a toast - full edit dialog integration is future work.
+   */
+   handleEventEdit = useCallback(() => {
+    // TODO: Open edit dialog for the selected event
+    // For now, just close the dialog
+    toast.info('Edit functionality coming soon');
+    setIsEventDialogOpen(false);
   }, []),
+
+  /**
+   * Handle delete from event detail dialog.
+   */
+   handleEventDelete = useCallback(async () => {
+    if (!selectedEvent) return;
+    
+    if (selectedEvent.type === 'assignment') {
+      try {
+        await deleteAssignment(selectedEvent.assignment.id);
+        toast.success(t('assignments.deleteSuccess', 'Assignment deleted'));
+      } catch (error) {
+        console.error('Failed to delete assignment:', error);
+        toast.error(t('errors.deleteFailed', 'Failed to delete'));
+        throw error;
+      }
+    }
+    // Transport deletion would be handled similarly
+  }, [selectedEvent, deleteAssignment, t]),
 
   // ============================================================================
   // Validate Trip Context
@@ -1003,6 +1346,15 @@ const CalendarPage = memo((): ReactElement => {
           <p>{t('calendar.noAssignments')}</p>
         </div>
       )}
+
+      {/* Event Detail Dialog */}
+      <EventDetailDialog
+        open={isEventDialogOpen}
+        onOpenChange={setIsEventDialogOpen}
+        event={selectedEvent}
+        onEdit={handleEventEdit}
+        onDelete={handleEventDelete}
+      />
     </div>
   );
 });

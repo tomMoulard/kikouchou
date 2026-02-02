@@ -21,7 +21,8 @@
     "unknown": "Unknown",
     "actions": "Actions",
     "menu": "Menu",
-    "openMenu": "Open menu"
+    "openMenu": "Open menu",
+    "optional": "optional"
   },
   "nav": {
     "calendar": "Calendar",
@@ -80,7 +81,21 @@
     "available": "Available",
     "unassignedGuests": "Guests without rooms",
     "allGuestsAssigned": "All guests have rooms assigned",
-    "needsRoom": "needs room"
+    "needsRoom": "needs room",
+    "icon": "Room icon",
+    "icons": {
+      "bedDouble": "Double bed",
+      "bedSingle": "Single bed",
+      "bath": "Bathroom",
+      "sofa": "Living room",
+      "tent": "Tent",
+      "caravan": "Caravan",
+      "warehouse": "Storage",
+      "home": "House",
+      "doorOpen": "Entryway",
+      "baby": "Kids room",
+      "armchair": "Lounge"
+    }
   },
   "persons": {
     "title": "Guests",
@@ -89,6 +104,9 @@
     "name": "Name",
     "namePlaceholder": "e.g. Sarah",
     "color": "Color",
+    "stayDates": "Stay dates",
+    "stayDatesPlaceholder": "Select arrival and departure dates",
+    "stayDatesHint": "When will this guest be at the trip?",
     "deleteConfirm": "Are you sure you want to delete this guest?",
     "deleteConfirmTitle": "Delete guest?",
     "newDescription": "Fill in the details to add a new guest.",
@@ -180,7 +198,10 @@
     "nextMonth": "Next month",
     "monthView": "Month view calendar",
     "personArriving": "{{name}} arriving",
-    "personDeparting": "{{name}} departing"
+    "personDeparting": "{{name}} departing",
+    "eventDetails": "Event details",
+    "nights": "{{count}} night",
+    "nights_plural": "{{count}} nights"
   },
   "sharing": {
     "title": "Share trip",
