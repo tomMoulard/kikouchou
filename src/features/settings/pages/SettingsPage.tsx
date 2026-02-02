@@ -151,7 +151,7 @@ const LanguageSelector = memo((): ReactElement => {
       setShowClearDialog(false);
       
       // Reload the page to reset all state
-      window.location.href = '/trips';
+      window.location.href = import.meta.env.BASE_URL + 'trips';
     } catch (error) {
       console.error('Failed to clear data:', error);
       toast.error(t('settings.clearDataFailed', 'Failed to clear data. Please try again.'));

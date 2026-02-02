@@ -88,7 +88,7 @@ function constructShareUrl(shareId: string): string {
   if (typeof window === 'undefined') {
     return '';
   }
-  return `${window.location.origin}/share/${shareId}`;
+  return `${window.location.origin}${import.meta.env.BASE_URL}share/${shareId}`;
 }
 
 /**
