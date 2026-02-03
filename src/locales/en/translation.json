@@ -286,7 +286,8 @@
     "clear": "Clear location",
     "resultsLabel": "Search results",
     "noResults": "No locations found",
-    "searchError": "Search failed. Please try again."
+    "searchError": "Search failed. Please try again.",
+    "timeoutError": "Search timed out. Please try again."
   },
   "colors": {
     "red": "Red",

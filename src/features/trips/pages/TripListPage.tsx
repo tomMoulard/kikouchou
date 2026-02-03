@@ -27,7 +27,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { getPersonsByTripId } from '@/lib/db';
+import { db } from '@/lib/db/database';
 import type { Person, Trip, TripId } from '@/types';
 
 // ============================================================================
@@ -254,29 +254,60 @@ const TripListPage = memo(() => {
    locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
 
   // Fetch persons for all trips when trips change
+  // Uses batch query for O(1) instead of O(n) queries (PERF-1 fix)
+  // Uses isMounted flag to prevent state updates after unmount (IMP-2 fix)
   useEffect(() => {
+    let isMounted = true;
+
     async function loadPersons() {
       if (trips.length === 0) {
-        setPersonsByTrip(new Map());
+        if (isMounted) {
+          setPersonsByTrip(new Map());
+        }
         return;
       }
 
-      const newMap = new Map<TripId, Person[]>();
-      await Promise.all(
-        trips.map(async (trip) => {
-          try {
-            const persons = await getPersonsByTripId(trip.id);
-            newMap.set(trip.id, persons);
-          } catch {
-            // If fetch fails, just show empty array
-            newMap.set(trip.id, []);
+      try {
+        // Use batch query instead of N+1 individual queries (PERF-1 fix)
+        const allTripIds = trips.map(t => t.id);
+        const allPersons = await db.persons
+          .where('tripId')
+          .anyOf(allTripIds)
+          .toArray();
+
+        // Group persons by tripId
+        const newMap = new Map<TripId, Person[]>();
+        // Initialize all trips with empty arrays
+        for (const tripId of allTripIds) {
+          newMap.set(tripId, []);
+        }
+        // Populate with fetched persons
+        for (const person of allPersons) {
+          const existing = newMap.get(person.tripId);
+          if (existing) {
+            existing.push(person);
           }
-        }),
-      );
-      setPersonsByTrip(newMap);
+        }
+
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setPersonsByTrip(newMap);
+        }
+      } catch (err) {
+        // Log error for debugging (CR-3 fix)
+        console.error('Failed to load persons for trips:', err);
+        // Set empty map on error
+        if (isMounted) {
+          setPersonsByTrip(new Map());
+        }
+      }
     }
 
     loadPersons();
+
+    return () => {
+      isMounted = false;
+    };
   }, [trips]);
 
   const

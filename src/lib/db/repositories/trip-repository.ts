@@ -9,6 +9,7 @@
 
 import Dexie from 'dexie';
 import { db } from '@/lib/db/database';
+import { sanitizeTripData } from '@/lib/db/sanitize';
 import {
   createShareId,
   createTimestamps,
@@ -43,12 +44,14 @@ const MAX_ID_RETRIES = 3;
  * ```
  */
 export async function createTrip(data: TripFormData): Promise<Trip> {
+  // Sanitize input data (trim whitespace, enforce max lengths)
+  const sanitizedData = sanitizeTripData(data);
   let lastError: unknown;
 
   for (let attempt = 0; attempt < MAX_ID_RETRIES; attempt++) {
     const trip: Trip = {
       id: createTripId(),
-      ...data,
+      ...sanitizedData,
       shareId: createShareId(),
       ...createTimestamps(),
     };
@@ -158,9 +161,22 @@ export async function updateTrip(
   id: TripId,
   data: Partial<TripFormData>,
 ): Promise<void> {
+  // Sanitize input data (trim whitespace, enforce max lengths)
+  // Only sanitize text fields that are present in the partial update
+  const sanitizedData: Partial<TripFormData> = { ...data };
+  if (sanitizedData.name !== undefined) {
+    sanitizedData.name = sanitizeTripData({ name: sanitizedData.name }).name;
+  }
+  if (sanitizedData.location !== undefined) {
+    sanitizedData.location = sanitizeTripData({
+      name: '',
+      location: sanitizedData.location,
+    }).location;
+  }
+
   // Use update() return value to check existence atomically (avoids TOCTOU race)
   const updatedCount = await db.trips.update(id, {
-    ...data,
+    ...sanitizedData,
     ...updateTimestamp(),
   });
 

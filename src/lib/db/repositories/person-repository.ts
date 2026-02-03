@@ -8,6 +8,7 @@
  */
 
 import { db } from '@/lib/db/database';
+import { sanitizePersonData } from '@/lib/db/sanitize';
 import { createPersonId } from '@/lib/db/utils';
 import type { Person, PersonFormData, PersonId, TripId } from '@/types';
 import { getDefaultPersonColor } from '@/types';
@@ -31,14 +32,21 @@ export async function createPerson(
   tripId: TripId,
   data: PersonFormData,
 ): Promise<Person> {
-  const person: Person = {
-    id: createPersonId(),
-    tripId,
-    ...data,
-  };
+  // Sanitize input data (trim whitespace, enforce max lengths)
+  const sanitizedData = sanitizePersonData(data);
 
-  await db.persons.add(person);
-  return person;
+  try {
+    const person: Person = {
+      id: createPersonId(),
+      tripId,
+      ...sanitizedData,
+    };
+
+    await db.persons.add(person);
+    return person;
+  } catch (error) {
+    throw new Error(`Failed to create person "${sanitizedData.name}" for trip ${tripId}`, { cause: error });
+  }
 }
 
 /**
@@ -61,10 +69,18 @@ export async function createPersonWithAutoColor(
   tripId: TripId,
   name: string,
 ): Promise<Person> {
-  const existingCount = await db.persons.where('tripId').equals(tripId).count(),
-   color = getDefaultPersonColor(existingCount);
+  try {
+    const existingCount = await db.persons.where('tripId').equals(tripId).count(),
+     color = getDefaultPersonColor(existingCount);
 
-  return createPerson(tripId, { name, color });
+    return createPerson(tripId, { name, color });
+  } catch (error) {
+    // If it's already our wrapped error from createPerson, re-throw as-is
+    if (error instanceof Error && error.message.startsWith('Failed to create person')) {
+      throw error;
+    }
+    throw new Error(`Failed to create person "${name}" with auto color for trip ${tripId}`, { cause: error });
+  }
 }
 
 /**
@@ -121,7 +137,17 @@ export async function updatePerson(
   id: PersonId,
   data: Partial<PersonFormData>,
 ): Promise<void> {
-  const updatedCount = await db.persons.update(id, data);
+  // Sanitize input data (trim whitespace, enforce max lengths)
+  const sanitizedData: Partial<PersonFormData> = { ...data };
+  if (sanitizedData.name !== undefined) {
+    sanitizedData.name = sanitizePersonData({
+      name: sanitizedData.name,
+      color: '#000000',
+    }).name;
+  }
+  // Note: color field is not sanitized (it's a hex color, not free text)
+
+  const updatedCount = await db.persons.update(id, sanitizedData);
 
   if (updatedCount === 0) {
     throw new Error(`Person with id "${id}" not found`);
@@ -147,29 +173,33 @@ export async function updatePerson(
  * ```
  */
 export async function deletePerson(id: PersonId): Promise<void> {
-  await db.transaction(
-    'rw',
-    [db.persons, db.roomAssignments, db.transports],
-    async () => {
-      // Delete related records in parallel
-      await Promise.all([
-        // Delete room assignments for this person
-        db.roomAssignments.where('personId').equals(id).delete(),
+  try {
+    await db.transaction(
+      'rw',
+      [db.persons, db.roomAssignments, db.transports],
+      async () => {
+        // Delete related records in parallel
+        await Promise.all([
+          // Delete room assignments for this person
+          db.roomAssignments.where('personId').equals(id).delete(),
 
-        // Delete transports for this person
-        db.transports.where('personId').equals(id).delete(),
+          // Delete transports for this person
+          db.transports.where('personId').equals(id).delete(),
 
-        // Clear driverId references where this person was the driver
-        db.transports
-          .where('driverId')
-          .equals(id)
-          .modify({ driverId: undefined }),
-      ]);
+          // Clear driverId references where this person was the driver
+          db.transports
+            .where('driverId')
+            .equals(id)
+            .modify({ driverId: undefined }),
+        ]);
 
-      // Delete the person
-      await db.persons.delete(id);
-    },
-  );
+        // Delete the person
+        await db.persons.delete(id);
+      },
+    );
+  } catch (error) {
+    throw new Error(`Failed to delete person ${id}`, { cause: error });
+  }
 }
 
 /**

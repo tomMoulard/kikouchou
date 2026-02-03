@@ -135,3 +135,14 @@ export {
   getLanguage,
   resetSettings,
 } from './repositories/settings-repository';
+
+// Input sanitization utilities
+export {
+  MAX_LENGTHS,
+  sanitizeText,
+  sanitizeOptionalText,
+  sanitizeTripData,
+  sanitizeRoomData,
+  sanitizePersonData,
+  sanitizeTransportData,
+} from './sanitize';

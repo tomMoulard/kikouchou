@@ -197,6 +197,9 @@ export const LocationPicker = memo(function LocationPicker({
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // Add 10 second timeout to fetch (IMP-1 fix)
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     setIsLoading(true);
     setError(null);
 
@@ -212,8 +215,8 @@ export const LocationPicker = memo(function LocationPicker({
         signal: controller.signal,
         headers: {
           'Accept': 'application/json',
-          // Nominatim requires a User-Agent
-          'User-Agent': 'Kikoushou/1.0',
+          // Nominatim requires a User-Agent (with contact info per usage policy)
+          'User-Agent': 'Kikoushou/1.0 (https://github.com/tomMoulard/kikoushou)',
         },
       });
 
@@ -228,7 +231,13 @@ export const LocationPicker = memo(function LocationPicker({
       setHighlightedIndex(-1);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        // Request was cancelled, ignore
+        // Request was cancelled or timed out
+        // If it was a timeout, show a timeout-specific message
+        if (!abortControllerRef.current || abortControllerRef.current === controller) {
+          setError(t('locationPicker.timeoutError', 'Search timed out. Please try again.'));
+          setResults([]);
+          setIsOpen(false);
+        }
         return;
       }
       console.error('Location search error:', err);
@@ -236,6 +245,7 @@ export const LocationPicker = memo(function LocationPicker({
       setResults([]);
       setIsOpen(false);
     } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   }, [t]);

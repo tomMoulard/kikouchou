@@ -286,7 +286,8 @@
     "clear": "Effacer le lieu",
     "resultsLabel": "Résultats de recherche",
     "noResults": "Aucun lieu trouvé",
-    "searchError": "La recherche a échoué. Veuillez réessayer."
+    "searchError": "La recherche a échoué. Veuillez réessayer.",
+    "timeoutError": "La recherche a expiré. Veuillez réessayer."
   },
   "colors": {
     "red": "Rouge",

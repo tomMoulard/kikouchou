@@ -56,6 +56,7 @@ import { useRoomContext } from '@/contexts/RoomContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { useToday } from '@/hooks/useToday';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
@@ -1126,11 +1127,8 @@ const CalendarPage = memo((): ReactElement => {
     return map;
   }, [arrivals, departures, getPersonById, calendarDays, unknownLabel]),
 
-  // Today's date for highlighting
-  // Note: This value is captured on mount. For long-running sessions past midnight,
-  // Users should refresh to get updated "today" highlighting.
-  // Using useMemo with empty deps to match project pattern (see RoomListPage).
-   today = useMemo(() => new Date(), []),
+  // Today's date for highlighting - uses hook that auto-updates at midnight
+  { today } = useToday(),
 
   // ============================================================================
   // Event Handlers

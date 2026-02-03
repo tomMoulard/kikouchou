@@ -8,6 +8,7 @@
  */
 
 import { db } from '@/lib/db/database';
+import { sanitizeTransportData } from '@/lib/db/sanitize';
 import { createTransportId } from '@/lib/db/utils';
 import type {
   PersonId,
@@ -41,14 +42,24 @@ export async function createTransport(
   tripId: TripId,
   data: TransportFormData,
 ): Promise<Transport> {
-  const transport: Transport = {
-    id: createTransportId(),
-    tripId,
-    ...data,
-  };
+  // Sanitize input data (trim whitespace, enforce max lengths)
+  const sanitizedData = sanitizeTransportData(data);
 
-  await db.transports.add(transport);
-  return transport;
+  try {
+    const transport: Transport = {
+      id: createTransportId(),
+      tripId,
+      ...sanitizedData,
+    };
+
+    await db.transports.add(transport);
+    return transport;
+  } catch (error) {
+    throw new Error(
+      `Failed to create ${sanitizedData.type} transport for person ${sanitizedData.personId} at "${sanitizedData.location}"`,
+      { cause: error },
+    );
+  }
 }
 
 /**
@@ -172,7 +183,39 @@ export async function updateTransport(
   id: TransportId,
   data: Partial<TransportFormData>,
 ): Promise<void> {
-  const updatedCount = await db.transports.update(id, data);
+  // Sanitize input data (trim whitespace, enforce max lengths)
+  const sanitizedData: Partial<TransportFormData> = { ...data };
+  if (sanitizedData.location !== undefined) {
+    sanitizedData.location = sanitizeTransportData({
+      location: sanitizedData.location,
+      type: 'arrival',
+      personId: '' as PersonId,
+      datetime: '',
+      needsPickup: false,
+    }).location;
+  }
+  if (sanitizedData.transportNumber !== undefined) {
+    sanitizedData.transportNumber = sanitizeTransportData({
+      location: '',
+      transportNumber: sanitizedData.transportNumber,
+      type: 'arrival',
+      personId: '' as PersonId,
+      datetime: '',
+      needsPickup: false,
+    }).transportNumber;
+  }
+  if (sanitizedData.notes !== undefined) {
+    sanitizedData.notes = sanitizeTransportData({
+      location: '',
+      notes: sanitizedData.notes,
+      type: 'arrival',
+      personId: '' as PersonId,
+      datetime: '',
+      needsPickup: false,
+    }).notes;
+  }
+
+  const updatedCount = await db.transports.update(id, sanitizedData);
 
   if (updatedCount === 0) {
     throw new Error(`Transport with id "${id}" not found`);
@@ -190,7 +233,11 @@ export async function updateTransport(
  * ```
  */
 export async function deleteTransport(id: TransportId): Promise<void> {
-  await db.transports.delete(id);
+  try {
+    await db.transports.delete(id);
+  } catch (error) {
+    throw new Error(`Failed to delete transport ${id}`, { cause: error });
+  }
 }
 
 /**

@@ -13,6 +13,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -24,6 +25,38 @@ import {
   setCurrentTrip as repositorySetCurrentTrip,
 } from '@/lib/db';
 import type { Trip, TripId } from '@/types';
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Compares two trips for deep equality on all mutable fields.
+ * Used to prevent unnecessary re-renders when the trips array changes
+ * but the current trip's data hasn't actually changed.
+ *
+ * @param a - First trip (can be null)
+ * @param b - Second trip (can be null)
+ * @returns True if trips are deeply equal or both null
+ */
+function areTripsEqual(a: Trip | null, b: Trip | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.location === b.location &&
+    a.startDate === b.startDate &&
+    a.endDate === b.endDate &&
+    a.shareId === b.shareId &&
+    a.description === b.description &&
+    a.createdAt === b.createdAt &&
+    a.updatedAt === b.updatedAt &&
+    // Compare coordinates if present
+    a.coordinates?.lat === b.coordinates?.lat &&
+    a.coordinates?.lon === b.coordinates?.lon
+  );
+}
 
 // ============================================================================
 // Type Definitions
@@ -168,14 +201,32 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
   // Extract current trip ID from query result
    currentTripId = queryResult?.currentTripId,
 
+  // Ref to preserve referential equality of currentTrip
+  // This prevents unnecessary re-renders in consumers when other trips change
+   currentTripRef = useRef<Trip | null>(null),
+
   // Derive current trip from trips array and current trip ID
+  // Uses referential equality check to prevent re-renders when trip data hasn't changed
    currentTrip = useMemo((): Trip | null => {
     if (isLoading || currentTripId === undefined || currentTripId === null) {
+      // If we should have no current trip, return null (or preserve null ref)
+      if (currentTripRef.current !== null) {
+        currentTripRef.current = null;
+      }
       return null;
     }
 
-    const found = trips.find((t) => t.id === currentTripId);
-    return found ?? null;
+    const found = trips.find((t) => t.id === currentTripId) ?? null;
+
+    // Preserve referential equality if the trip data hasn't actually changed
+    // This prevents consumers from re-rendering when unrelated trips are updated
+    if (areTripsEqual(currentTripRef.current, found)) {
+      return currentTripRef.current;
+    }
+
+    // Trip data has changed, update the ref and return the new trip
+    currentTripRef.current = found;
+    return found;
   }, [trips, currentTripId, isLoading]);
 
   // Auto-cleanup stale trip references when persisted ID points to deleted trip

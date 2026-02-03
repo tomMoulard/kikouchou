@@ -168,24 +168,34 @@ export const toISODateTimeString = (date: Date): ISODateTimeString => {
 // Regex Patterns for Validation
 // ============================================================================
 
+// ----------------------------------------------------------------------------
+// Date/Time Validation Patterns
+// ----------------------------------------------------------------------------
+
 /**
  * Regex pattern for validating ISO date strings (YYYY-MM-DD).
  * Validates format only - does not verify date validity (e.g., Feb 30).
+ * Example: "2024-07-15"
  */
-const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/,
+const ISO_DATE_REGEX = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
 
 /**
  * Regex pattern for validating ISO datetime strings.
  * Accepts full ISO 8601 format with optional milliseconds and timezone.
+ * Example: "2024-07-15T14:30:00.000Z" or "2024-07-15T14:30:00+02:00"
  */
- ISO_DATETIME_REGEX =
-  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/,
+const ISO_DATETIME_REGEX =
+  /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?$/;
+
+// ----------------------------------------------------------------------------
+// Color Validation Patterns
+// ----------------------------------------------------------------------------
 
 /**
  * Regex pattern for validating 6-digit hex color codes.
  * Accepts format #RRGGBB (case-insensitive).
  */
- ISO_DATE_REGEX = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
+const HEX_COLOR_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
 // ============================================================================
 // Parsing Functions

@@ -62,14 +62,21 @@ export async function createAssignment(
   // Validate date range before creating
   validateDateRange(data.startDate, data.endDate);
 
-  const assignment: RoomAssignment = {
-    id: createRoomAssignmentId(),
-    tripId,
-    ...data,
-  };
+  try {
+    const assignment: RoomAssignment = {
+      id: createRoomAssignmentId(),
+      tripId,
+      ...data,
+    };
 
-  await db.roomAssignments.add(assignment);
-  return assignment;
+    await db.roomAssignments.add(assignment);
+    return assignment;
+  } catch (error) {
+    throw new Error(
+      `Failed to create assignment for person ${data.personId} in room ${data.roomId} (${data.startDate} to ${data.endDate})`,
+      { cause: error },
+    );
+  }
 }
 
 /**
@@ -171,22 +178,22 @@ export async function updateAssignment(
   id: RoomAssignmentId,
   data: Partial<RoomAssignmentFormData>,
 ): Promise<void> {
-  // If updating dates, validate the resulting date range
-  if (data.startDate !== undefined || data.endDate !== undefined) {
+  // Wrap in transaction to prevent TOCTOU race condition (CR-2 fix)
+  await db.transaction('rw', db.roomAssignments, async () => {
     const assignment = await db.roomAssignments.get(id);
     if (!assignment) {
       throw new Error(`Assignment with id "${id}" not found`);
     }
-    const finalStartDate = data.startDate ?? assignment.startDate;
-    const finalEndDate = data.endDate ?? assignment.endDate;
-    validateDateRange(finalStartDate, finalEndDate);
-  }
 
-  const updatedCount = await db.roomAssignments.update(id, data);
+    // If updating dates, validate the resulting date range
+    if (data.startDate !== undefined || data.endDate !== undefined) {
+      const finalStartDate = data.startDate ?? assignment.startDate;
+      const finalEndDate = data.endDate ?? assignment.endDate;
+      validateDateRange(finalStartDate, finalEndDate);
+    }
 
-  if (updatedCount === 0) {
-    throw new Error(`Assignment with id "${id}" not found`);
-  }
+    await db.roomAssignments.update(id, data);
+  });
 }
 
 /**
@@ -200,7 +207,11 @@ export async function updateAssignment(
  * ```
  */
 export async function deleteAssignment(id: RoomAssignmentId): Promise<void> {
-  await db.roomAssignments.delete(id);
+  try {
+    await db.roomAssignments.delete(id);
+  } catch (error) {
+    throw new Error(`Failed to delete assignment ${id}`, { cause: error });
+  }
 }
 
 /**
@@ -274,6 +285,10 @@ export async function checkAssignmentConflict(
  *
  * Useful for getting current room assignments for "today" view.
  *
+ * Uses the [tripId+startDate] compound index to efficiently pre-filter
+ * assignments that have started by the target date, then applies a
+ * client-side filter for endDate >= date. (CR-11 optimization)
+ *
  * @param tripId - The trip ID to search within
  * @param date - The date to check (YYYY-MM-DD)
  * @returns Array of assignments active on the given date
@@ -287,10 +302,12 @@ export async function getAssignmentsForDate(
   tripId: TripId,
   date: string,
 ): Promise<RoomAssignment[]> {
+  // Use compound index to get assignments where startDate <= date
+  // This is more efficient than scanning all trip assignments
   return db.roomAssignments
-    .where('tripId')
-    .equals(tripId)
-    .filter((a) => a.startDate <= date && a.endDate >= date)
+    .where('[tripId+startDate]')
+    .between([tripId, ''], [tripId, date], true, true) // startDate <= date
+    .filter((a) => a.endDate >= date) // Then filter for endDate >= date
     .toArray();
 }
 

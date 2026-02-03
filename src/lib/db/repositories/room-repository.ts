@@ -8,8 +8,25 @@
  */
 
 import { db } from '@/lib/db/database';
+import { sanitizeRoomData } from '@/lib/db/sanitize';
 import { createRoomId } from '@/lib/db/utils';
 import type { Room, RoomFormData, RoomId, TripId } from '@/types';
+
+// ============================================================================
+// Validation Utilities
+// ============================================================================
+
+/**
+ * Validates that a room's capacity is a positive integer.
+ *
+ * @param capacity - The capacity value to validate
+ * @throws {Error} If capacity is not a positive integer
+ */
+function validateCapacity(capacity: number): void {
+  if (capacity < 1 || !Number.isInteger(capacity)) {
+    throw new Error('Room capacity must be a positive integer');
+  }
+}
 
 /**
  * Creates a new room in the database.
@@ -33,22 +50,32 @@ export async function createRoom(
   tripId: TripId,
   data: RoomFormData,
 ): Promise<Room> {
-  // Get the next order value using last() on compound index (O(log n) instead of O(n))
-  const lastRoom = await db.rooms
-    .where('[tripId+order]')
-    .between([tripId, 0], [tripId, Infinity])
-    .last(),
-   maxOrder = lastRoom?.order ?? -1,
+  // Sanitize input data (trim whitespace, enforce max lengths)
+  const sanitizedData = sanitizeRoomData(data);
 
-   room: Room = {
-    id: createRoomId(),
-    tripId,
-    ...data,
-    order: maxOrder + 1,
-  };
+  // Validate capacity (IMP-5 fix)
+  validateCapacity(sanitizedData.capacity);
 
-  await db.rooms.add(room);
-  return room;
+  try {
+    // Get the next order value using last() on compound index (O(log n) instead of O(n))
+    const lastRoom = await db.rooms
+      .where('[tripId+order]')
+      .between([tripId, 0], [tripId, Infinity])
+      .last(),
+     maxOrder = lastRoom?.order ?? -1,
+
+     room: Room = {
+      id: createRoomId(),
+      tripId,
+      ...sanitizedData,
+      order: maxOrder + 1,
+    };
+
+    await db.rooms.add(room);
+    return room;
+  } catch (error) {
+    throw new Error(`Failed to create room "${sanitizedData.name}" for trip ${tripId}`, { cause: error });
+  }
 }
 
 /**
@@ -105,7 +132,28 @@ export async function updateRoom(
   id: RoomId,
   data: Partial<RoomFormData>,
 ): Promise<void> {
-  const updatedCount = await db.rooms.update(id, data);
+  // Sanitize input data (trim whitespace, enforce max lengths)
+  const sanitizedData: Partial<RoomFormData> = { ...data };
+  if (sanitizedData.name !== undefined) {
+    sanitizedData.name = sanitizeRoomData({
+      name: sanitizedData.name,
+      capacity: 1,
+    }).name;
+  }
+  if (sanitizedData.description !== undefined) {
+    sanitizedData.description = sanitizeRoomData({
+      name: '',
+      capacity: 1,
+      description: sanitizedData.description,
+    }).description;
+  }
+
+  // Validate capacity if being updated (IMP-5 fix)
+  if (sanitizedData.capacity !== undefined) {
+    validateCapacity(sanitizedData.capacity);
+  }
+
+  const updatedCount = await db.rooms.update(id, sanitizedData);
 
   if (updatedCount === 0) {
     throw new Error(`Room with id "${id}" not found`);
@@ -127,13 +175,17 @@ export async function updateRoom(
  * ```
  */
 export async function deleteRoom(id: RoomId): Promise<void> {
-  await db.transaction('rw', [db.rooms, db.roomAssignments], async () => {
-    // Delete room assignments for this room
-    await db.roomAssignments.where('roomId').equals(id).delete();
+  try {
+    await db.transaction('rw', [db.rooms, db.roomAssignments], async () => {
+      // Delete room assignments for this room
+      await db.roomAssignments.where('roomId').equals(id).delete();
 
-    // Delete the room itself
-    await db.rooms.delete(id);
-  });
+      // Delete the room itself
+      await db.rooms.delete(id);
+    });
+  } catch (error) {
+    throw new Error(`Failed to delete room ${id}`, { cause: error });
+  }
 }
 
 /**
@@ -156,26 +208,34 @@ export async function reorderRooms(
   tripId: TripId,
   roomIds: RoomId[],
 ): Promise<void> {
-  await db.transaction('rw', db.rooms, async () => {
-    // Validate all rooms exist and belong to the trip
-    const rooms = await db.rooms.where('tripId').equals(tripId).toArray(),
-     roomMap = new Map(rooms.map((r) => [r.id, r]));
+  try {
+    await db.transaction('rw', db.rooms, async () => {
+      // Validate all rooms exist and belong to the trip
+      const rooms = await db.rooms.where('tripId').equals(tripId).toArray(),
+       roomMap = new Map(rooms.map((r) => [r.id, r]));
 
-    for (const roomId of roomIds) {
-      if (!roomMap.has(roomId)) {
-        throw new Error(
-          `Room with id "${roomId}" not found or doesn't belong to trip "${tripId}"`,
-        );
+      for (const roomId of roomIds) {
+        if (!roomMap.has(roomId)) {
+          throw new Error(
+            `Room with id "${roomId}" not found or doesn't belong to trip "${tripId}"`,
+          );
+        }
       }
+
+      // Update order values
+      const updates = roomIds.map((roomId, index) =>
+        db.rooms.update(roomId, { order: index }),
+      );
+
+      await Promise.all(updates);
+    });
+  } catch (error) {
+    // Re-throw validation errors as-is, wrap database errors with context
+    if (error instanceof Error && error.message.includes('not found or doesn\'t belong to trip')) {
+      throw error;
     }
-
-    // Update order values
-    const updates = roomIds.map((roomId, index) =>
-      db.rooms.update(roomId, { order: index }),
-    );
-
-    await Promise.all(updates);
-  });
+    throw new Error(`Failed to reorder rooms for trip ${tripId}`, { cause: error });
+  }
 }
 
 /**
@@ -216,6 +276,11 @@ export async function updateRoomWithOwnershipCheck(
   tripId: TripId,
   data: Partial<RoomFormData>,
 ): Promise<void> {
+  // Validate capacity if being updated (IMP-5 fix)
+  if (data.capacity !== undefined) {
+    validateCapacity(data.capacity);
+  }
+
   await db.transaction('rw', db.rooms, async () => {
     const room = await db.rooms.get(id);
 

@@ -372,4 +372,73 @@ describe('TripContext', () => {
       consoleSpy.mockRestore();
     });
   });
+
+  // ============================================================================
+  // Referential Equality Tests (CR-18)
+  // ============================================================================
+
+  describe('Referential Equality Optimization', () => {
+    it('preserves currentTrip reference when other trips change', async () => {
+      // Create two trips
+      const tripId1 = await createTestTrip('Trip 1');
+      await createTestTrip('Trip 2');
+      await repositorySetCurrentTrip(tripId1);
+
+      const { result } = renderHook(() => useTripContext(), {
+        wrapper: TripContextWrapper,
+      });
+
+      // Wait for initial load
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+        expect(result.current.currentTrip?.id).toBe(tripId1);
+      });
+
+      // Capture the initial currentTrip reference
+      const initialCurrentTrip = result.current.currentTrip;
+
+      // Create a third trip (should update trips array but not currentTrip)
+      await createTestTrip('Trip 3');
+      await waitForLiveQuery(100);
+
+      // Wait for trips array to update
+      await waitFor(() => {
+        expect(result.current.trips).toHaveLength(3);
+      });
+
+      // currentTrip reference should be preserved (same object)
+      expect(result.current.currentTrip).toBe(initialCurrentTrip);
+    });
+
+    it('updates currentTrip reference when current trip data changes', async () => {
+      const tripId = await createTestTrip('Original Name');
+      await repositorySetCurrentTrip(tripId);
+
+      const { result } = renderHook(() => useTripContext(), {
+        wrapper: TripContextWrapper,
+      });
+
+      // Wait for initial load
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+        expect(result.current.currentTrip?.name).toBe('Original Name');
+      });
+
+      // Capture the initial currentTrip reference
+      const initialCurrentTrip = result.current.currentTrip;
+
+      // Update the current trip's data
+      const { updateTrip } = await import('@/lib/db/repositories/trip-repository');
+      await updateTrip(tripId, { name: 'Updated Name' });
+      await waitForLiveQuery(100);
+
+      // Wait for the update to propagate
+      await waitFor(() => {
+        expect(result.current.currentTrip?.name).toBe('Updated Name');
+      });
+
+      // currentTrip reference should be different now (data changed)
+      expect(result.current.currentTrip).not.toBe(initialCurrentTrip);
+    });
+  });
 });
