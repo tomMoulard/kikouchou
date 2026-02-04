@@ -2,6 +2,35 @@
 
 > A PWA application to manage vacation house room assignments and arrivals/departures tracking.
 
+## Current Project Status (Last Updated: 2026-02-04)
+
+| Metric | Status |
+|--------|--------|
+| **Unit/Integration Tests** | 1,074 passing |
+| **E2E Tests** | 178 passing (8 skipped) |
+| **Build** | Passing |
+| **TypeScript** | 0 errors |
+| **ESLint** | 0 warnings |
+
+### Completed Phases
+- Phase 1-15: Core functionality, PWA, Testing
+- Phase 16: UX Improvements (16.1-16.18 complete, including integration tests)
+- Phase 17: CodeRabbit Review Findings (critical issues resolved)
+- Phase 18: Calendar Transport Events (complete)
+- BUG-1: Room assignment date fix (complete)
+- BUG-2: Timezone display fix (complete)
+
+### Remaining Tasks (15 pending)
+| Priority | Task | Description |
+|----------|------|-------------|
+| Low | REVIEW-MIN-1,3,4 | Minor code style improvements |
+| Low | REVIEW-CQ-1,2,3 | Code quality considerations |
+| Monitoring | REVIEW-PERF-3 | Context re-render performance |
+| Documented | REVIEW-SEC-2 | ShareId predictability |
+| Future | Phase 19 (19.1-19.7) | Maps Integration |
+
+---
+
 ## Project Overview
 
 **Kikoushou** helps groups of friends organize their vacation stays by:
@@ -4663,11 +4692,18 @@ describe('Trip Lifecycle', () => {
 ```
 
 **Acceptance Criteria**:
-- [ ] Happy path tested
-- [ ] Data persistence verified
-- [ ] Navigation tested
+- [x] Happy path tested
+- [x] Data persistence verified
+- [x] Navigation tested
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `e2e/trip-lifecycle.spec.ts` with 8 comprehensive tests
+- Tests cover: create from empty state, edit existing trip, delete with confirmation, navigate between trips, data persistence, cancel creation, validation errors, cancel deletion
+- All tests pass on both Desktop Chrome and Mobile Chrome (Pixel 5)
+- Uses helper functions: `selectDate`, `navigateToMonth`, `createTrip`, `getTripCard`
+- Handles date picker navigation for react-day-picker calendar
 
 ---
 
@@ -4691,11 +4727,17 @@ describe('Room Assignment Flow', () => {
 ```
 
 **Acceptance Criteria**:
-- [ ] Full assignment workflow tested
-- [ ] Conflict detection verified
-- [ ] Calendar display verified
+- [x] Full assignment workflow tested
+- [x] Conflict detection verified
+- [x] Calendar display verified
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `e2e/room-assignment.spec.ts` with comprehensive tests
+- Tests cover: add room, add guest, assign person to room, conflict detection, edit assignment, delete assignment
+- Drag-and-drop test skipped (requires specific browser interaction workarounds)
+- All tests pass on both Desktop Chrome and Mobile Chrome
 
 ---
 
@@ -4718,11 +4760,17 @@ describe('Sharing Flow', () => {
 ```
 
 **Acceptance Criteria**:
-- [ ] Link generation tested
-- [ ] Import flow tested
-- [ ] Error handling tested
+- [x] Link generation tested
+- [x] Import flow tested
+- [x] Error handling tested
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `e2e/sharing.spec.ts` with comprehensive tests
+- Tests cover: generate shareable link, import via share link, handle invalid share ID, handle missing shareId, share link persistence after reload
+- Clipboard copy and QR code download tests skipped (require specific browser permissions)
+- All passing tests run on both Desktop Chrome and Mobile Chrome
 
 ---
 
@@ -4746,11 +4794,23 @@ describe('PWA Functionality', () => {
 ```
 
 **Acceptance Criteria**:
-- [ ] Install flow tested
-- [ ] Offline functionality verified
-- [ ] Network status indicator tested
+- [x] Install flow tested
+- [x] Offline functionality verified
+- [x] Network status indicator tested
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `e2e/pwa.spec.ts` with 27 comprehensive tests
+- Test categories:
+  - Service Worker Registration (3 tests): registration, scope, script URL
+  - Offline Capability (4 tests): app shell loads offline, navigation works offline, cached data accessible, uncached routes handling
+  - Manifest Validation (6 tests): JSON validity, required fields, icons, theme colors, app configuration
+  - App Updates (3 tests): auto-update config, update check, controller change event
+  - Precaching (6 tests): workbox cache, HTML/JS/CSS caching, asset coverage, quota
+  - PWA Installation Readiness (4 tests): installability criteria, manifest link, meta tags
+- Touch interactions test skipped (requires specific touch event simulation)
+- All tests pass on both Desktop Chrome and Mobile Chrome
 
 ---
 
@@ -4775,10 +4835,22 @@ describe('Accessibility', () => {
 ```
 
 **Acceptance Criteria**:
-- [ ] No critical a11y violations
-- [ ] WCAG AA compliance verified
+- [x] No critical a11y violations
+- [x] WCAG AA compliance verified
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `e2e/accessibility.spec.ts` with 14 comprehensive tests using @axe-core/playwright
+- Test categories:
+  - Page Accessibility (6 tests): trip list, room list, person list, calendar, transport list, settings pages
+  - Dialog Focus Management (2 tests): person dialog focus trap, confirm dialog focus management
+  - Form Label Associations (1 test): trip form labels
+  - Keyboard Navigation (2 tests): trip cards, navigation links
+  - Dark Mode Accessibility (3 tests): trip list, calendar, settings in dark mode
+  - Empty State Accessibility (1 test): empty trip list
+- Uses axe-core for WCAG 2.1 AA compliance verification
+- All tests pass on both Desktop Chrome and Mobile Chrome
 
 ---
 
@@ -4799,10 +4871,23 @@ describe('Performance', () => {
 ```
 
 **Acceptance Criteria**:
-- [ ] Load time under threshold
-- [ ] No rendering jank with large datasets
+- [x] Load time under threshold
+- [x] No rendering jank with large datasets
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `e2e/performance.spec.ts` with 12 comprehensive tests
+- Test categories:
+  - Initial load performance: page load time, simulated 3G performance
+  - Rendering performance: calendar with 50+ assignments, room list with 20+ rooms, person list with 30+ persons
+  - Memory management: large dataset handling without memory leaks
+  - IndexedDB efficiency: query performance benchmarks
+  - Rapid interaction handling: calendar navigation stress test
+  - Mobile performance: navigation timing, touch interactions
+- Performance metrics measured: LCP, memory usage, long tasks (>50ms), render time
+- All tests pass on both Desktop Chrome and Mobile Chrome
+- Touch interaction test skipped (requires specific event simulation)
 
 ---
 
@@ -5198,11 +5283,21 @@ const nextOrder = lastRoom ? lastRoom.order + 1 : 0;
 ---
 
 #### CR-17: Weak Type Aliases for ISODateString and HexColor
-**Location**: `src/types/index.ts:49,61`
+**Location**: `src/types/index.ts:51,64`
 **Issue**: Type aliases to `string` provide no compile-time safety.
 **Suggestion**: Consider branded types for these as well.
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- `ISODateString` and `HexColor` are already implemented as branded types using `Brand<T>`
+- Helper functions exist in `src/lib/db/utils.ts`:
+  - `toISODateString(date: Date): ISODateString` - creates from Date object
+  - `toISODateStringFromString(value: string): ISODateString` - creates from validated string
+  - `toHexColor(value: string): HexColor` - creates from validated string
+  - `isValidISODateString(str: string): str is ISODateString` - type guard
+  - `isValidHexColor(str: string): str is HexColor` - type guard
+- All 36 type tests pass
 
 ---
 
@@ -6343,13 +6438,25 @@ when needs pickup and no driver, green badge with driver name when pickup is res
    - Verify displayed as H (not H-1) in transport list
 
 **Acceptance Criteria**:
-- [ ] All UX flows work end-to-end
-- [ ] No regressions in existing functionality
-- [ ] Bug fixes verified with explicit test cases
+- [x] All UX flows work end-to-end
+- [x] No regressions in existing functionality
+- [x] Bug fixes verified with explicit test cases
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
 
 **Depends on**: All Phase 16 tasks + BUG-1 + BUG-2
+
+**Notes**:
+- Created `e2e/phase16-ux-improvements.spec.ts` with 38 comprehensive tests (19 per browser)
+- Test coverage includes:
+  - Trip Creation with New UI (description field, location input, date range picker, guest count display)
+  - Calendar Multi-Day Events (spanning display, room names, detail dialog with edit/delete)
+  - Transport Single List (no tabs, date grouping, arrival/departure indicators)
+  - Bug Fix: Assignment Dates (BUG-1) - correct date storage and display
+  - Bug Fix: Timezone Display (BUG-2) - correct time display in list and calendar
+  - Room Assignment Drag-Drop (unassigned guests section, room icons)
+- All 178 E2E tests pass (38 new + 140 existing), 8 skipped for browser-specific features
+- All 1,074 unit/integration tests continue to pass
 
 ---
 
@@ -7247,11 +7354,18 @@ const sanitizedName = name.trim().substring(0, 100);
 4. PWA installation flow
 
 **Acceptance Criteria**:
-- [ ] Created E2E tests for trip lifecycle
-- [ ] Created E2E tests for cascade delete
-- [ ] Created E2E tests for offline mode
+- [x] Created E2E tests for trip lifecycle
+- [x] Created E2E tests for cascade delete
+- [x] Created E2E tests for offline mode
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Trip lifecycle tests: `e2e/trip-lifecycle.spec.ts` - covers create, edit, delete, navigation, persistence
+- Room assignment flow: `e2e/room-assignment.spec.ts` - covers add room, add person, create assignment
+- Cascade delete: covered in trip-lifecycle delete tests (deletes trip and all related data)
+- Offline mode: `e2e/pwa.spec.ts` - covers app shell offline, navigation offline, cached data access
+- All 140 E2E tests pass (8 skipped for browser-specific features)
 
 ---
 
@@ -7266,11 +7380,25 @@ const sanitizedName = name.trim().substring(0, 100);
 - Timezone edge cases
 
 **Acceptance Criteria**:
-- [ ] Added boundary date tests
-- [ ] Added leap year tests
-- [ ] Added timezone tests
+- [x] Added boundary date tests
+- [x] Added leap year tests
+- [x] Added timezone tests
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `src/lib/db/__tests__/date-edge-cases.test.ts` with 83 comprehensive tests (1255 lines)
+- Test categories:
+  - Timezone Boundary Dates: parseISODateString, toISODateTimeString, parseISODateTimeString with various timezone offsets
+  - DST Transitions: US/EU spring forward and fall back dates, assignments spanning DST changes
+  - Year Boundaries: Assignments spanning New Year (Dec 31 → Jan 1), conflict detection across year boundary
+  - Leap Year February 29: Validates 2024-02-29 (leap), 2000-02-29 (century leap), rejects 2023-02-29 (non-leap), 1900-02-29 (century non-leap)
+  - Month Boundaries: 31-day, 30-day, 28-day month ends, assignments spanning month transitions
+  - Date Range Overlaps: Same start/end, containment, boundary conditions, single-day ranges
+  - Invalid Dates: February 30, wrong formats, empty strings, invalid values
+  - Date Comparison Edge Cases: String vs Date comparison, conflict detection consistency
+  - Round-Trip Consistency: Date → ISOString → Date preservation
+- All 83 tests pass
 
 ---
 
@@ -7778,17 +7906,18 @@ interface TransportIndicatorProps {
    - Touch targets adequate size
 
 **Acceptance Criteria**:
-- [ ] All integration tests pass
+- [x] All integration tests pass
 - [x] No regressions in existing calendar functionality
-- [ ] Accessibility verified
+- [x] Accessibility verified
 
-**Status**: PARTIAL - Core functionality complete, integration tests pending
+**Status**: COMPLETED
 
 **Notes**:
 - Core Phase 18 functionality is complete and working
-- Smoke tests pass: TypeScript (0 errors), ESLint (0 warnings), 1029 unit tests pass
-- Integration test file not yet created
-- Manual testing recommended before creating comprehensive integration tests
+- Smoke tests pass: TypeScript (0 errors), ESLint (0 warnings), 1074 tests pass
+- Integration test file created: `src/features/calendar/__tests__/TransportEventDetail.integration.test.tsx`
+- 45 integration tests covering: TransportIndicator (basic rendering, time display, transport mode, click handling, keyboard navigation, accessibility) and EventDetailDialog for transport events (view details, edit flow, delete flow, keyboard navigation, accessibility)
+- All test scenarios from spec implemented and passing
 
 **Depends on**: 18.1-18.6
 
@@ -7820,6 +7949,386 @@ interface TransportIndicatorProps {
 
 ---
 
+## Phase 19: Maps Integration
+
+> This phase adds interactive map features to display trip locations, transport pickup/dropoff points, and provide navigation assistance. Uses OpenStreetMap via Leaflet for an open-source, offline-capable solution.
+
+---
+
+### 19.1 Leaflet Map Component Setup
+
+**Description**: Create a reusable map component using Leaflet and OpenStreetMap tiles.
+
+**Files**:
+- `src/components/shared/MapView.tsx` (new)
+- `src/components/shared/MapMarker.tsx` (new)
+
+**Dependencies to install**:
+```bash
+bun add leaflet react-leaflet
+bun add -D @types/leaflet
+```
+
+**Requirements**:
+- Wrapper component around react-leaflet's `MapContainer`
+- Support for multiple markers with custom icons
+- Popup support on marker click
+- Configurable initial center and zoom
+- Touch-friendly controls for mobile
+- Offline tile caching support (via service worker)
+- Dark/light theme support
+
+**Props Interface**:
+```typescript
+interface MapViewProps {
+  center: [number, number];  // [lat, lng]
+  zoom?: number;
+  markers?: MapMarkerData[];
+  className?: string;
+  onMarkerClick?: (marker: MapMarkerData) => void;
+}
+
+interface MapMarkerData {
+  id: string;
+  position: [number, number];
+  label: string;
+  type?: 'trip' | 'transport' | 'pickup';
+  color?: string;  // For person-colored markers
+}
+```
+
+**Test Cases**:
+- Renders map with correct center and zoom
+- Displays markers at correct positions
+- Marker click triggers callback
+- Handles empty markers array
+- Works on touch devices
+- Accessible (keyboard navigation for markers)
+
+**Acceptance Criteria**:
+- [ ] Leaflet integrated with React
+- [ ] Map renders with OSM tiles
+- [ ] Markers display correctly
+- [ ] Touch controls work on mobile
+- [ ] Tests pass (80%+ coverage)
+
+**Status**: PENDING
+
+---
+
+### 19.2 Trip Location Map Preview
+
+**Description**: Add a map preview to trip cards showing the trip location.
+
+**Files**:
+- `src/features/trips/components/TripCard.tsx` (modify)
+- `src/features/trips/components/TripLocationMap.tsx` (new)
+
+**Requirements**:
+- Small static map thumbnail (~120x80px) on trip cards
+- Shows trip location marker when coordinates available
+- Fallback to location icon + text when no coordinates
+- Click to expand to full interactive map
+- Lazy load map component for performance
+
+**Display on Trip Card**:
+```
+┌─────────────────────────────────────────┐
+│ Beach House 2026                    ... │
+│ 📍 Brittany, France                     │
+│ Jan 5 - Jan 12, 2026                    │
+│ ─────────────────────────────────────── │
+│ ┌──────────┐                            │
+│ │  🗺️ map  │  [Alice] [Bob] +2 more     │
+│ └──────────┘                            │
+└─────────────────────────────────────────┘
+```
+
+**Test Cases**:
+- Map preview renders when coordinates available
+- Fallback displays when no coordinates
+- Click expands to full map view
+- Lazy loading works correctly
+
+**Acceptance Criteria**:
+- [ ] Map preview on trip cards
+- [ ] Graceful fallback for missing coordinates
+- [ ] Expand interaction works
+- [ ] Tests pass
+
+**Status**: PENDING
+
+**Depends on**: 19.1, 16.5 (Trip coordinates field)
+
+---
+
+### 19.3 Transport Locations Map View
+
+**Description**: Add a map view showing all transport pickup/dropoff locations for a trip.
+
+**Files**:
+- `src/features/transports/pages/TransportMapPage.tsx` (new)
+- `src/features/transports/components/TransportMapView.tsx` (new)
+- `src/features/transports/routes.tsx` (modify)
+
+**Route**: `/trips/:tripId/transports/map`
+
+**Requirements**:
+- Full-page map showing all transport locations
+- Markers color-coded by transport type (green for arrivals, orange for departures)
+- Marker popups show transport details (person, time, transport mode)
+- Filter by date range
+- Filter by transport type (arrivals/departures)
+- "Needs pickup" markers highlighted with different icon
+- Route drawing between trip location and transport locations (optional)
+
+**Map Display**:
+```
+┌─────────────────────────────────────────┐
+│ [List] [Map]                    Filters │
+├─────────────────────────────────────────┤
+│                                         │
+│     🏠 Trip location                    │
+│                                         │
+│   ↓ Alice (CDG)                         │
+│              ↑ Bob (Gare)               │
+│                                         │
+│              ↓ Carol (Train)            │
+│                                         │
+└─────────────────────────────────────────┘
+```
+
+**Test Cases**:
+- All transport locations display on map
+- Markers are correctly color-coded
+- Popup shows transport details
+- Filters work correctly
+- Empty state when no transports with coordinates
+
+**Acceptance Criteria**:
+- [ ] Transport map page created
+- [ ] Markers display correctly
+- [ ] Filtering works
+- [ ] Tests pass
+
+**Status**: PENDING
+
+**Depends on**: 19.1, 16.15 (Transport coordinates)
+
+---
+
+### 19.4 Location Picker Map Enhancement
+
+**Description**: Enhance the LocationPicker component (16.1) to show a confirmation map after selection.
+
+**File**: `src/components/shared/LocationPicker.tsx` (modify)
+
+**Requirements**:
+- After selecting a location from autocomplete, show a small map preview
+- Map shows the selected location with a draggable marker
+- User can adjust marker position for fine-tuning
+- Coordinates update when marker dragged
+- "Confirm location" button to finalize selection
+
+**Enhanced Flow**:
+```
+1. User types location name
+2. Autocomplete suggestions appear
+3. User selects "Paris Charles de Gaulle Airport"
+4. Small map appears showing the location
+5. User can drag marker to adjust position
+6. User clicks "Confirm" to finalize
+7. Location and coordinates stored
+```
+
+**Test Cases**:
+- Map preview shows after selection
+- Marker is draggable
+- Coordinates update on drag
+- Confirm saves final coordinates
+- Cancel reverts to text-only input
+
+**Acceptance Criteria**:
+- [ ] Map preview after location selection
+- [ ] Draggable marker for adjustment
+- [ ] Coordinates update correctly
+- [ ] Tests pass
+
+**Status**: PENDING
+
+**Depends on**: 19.1, 16.1 (LocationPicker)
+
+---
+
+### 19.5 Pickup Route Assistance
+
+**Description**: Add a "Get Directions" feature for transport pickups.
+
+**Files**:
+- `src/features/transports/components/DirectionsButton.tsx` (new)
+- `src/features/calendar/components/EventDetailDialog.tsx` (modify)
+
+**Requirements**:
+- "Get Directions" button on transport details
+- Opens device's native maps app (Google Maps, Apple Maps, etc.)
+- Deep link format: `https://www.google.com/maps/dir/?api=1&destination={lat},{lng}`
+- Alternative: OpenStreetMap directions link
+- Show estimated travel time if available
+
+**Display**:
+```
+┌─────────────────────────────────────────┐
+│ ↓ Arrival                               │
+│ ─────────────────────────────────────── │
+│ 👤 [Alice]                              │
+│ ✈️ Plane - AF1234                       │
+│ 📅 January 5, 2026 at 14:30             │
+│ 📍 Paris Charles de Gaulle Airport      │
+│                                         │
+│ [🗺️ Get Directions]                     │
+│ ─────────────────────────────────────── │
+│ [Edit]                    [Delete]      │
+└─────────────────────────────────────────┘
+```
+
+**Test Cases**:
+- Button renders when coordinates available
+- Button hidden when no coordinates
+- Click opens maps app with correct destination
+- Works on mobile and desktop
+
+**Acceptance Criteria**:
+- [ ] Directions button on transport details
+- [ ] Deep link to native maps app
+- [ ] Works cross-platform
+- [ ] Tests pass
+
+**Status**: PENDING
+
+**Depends on**: 19.1, Phase 18 (Transport detail dialog)
+
+---
+
+### 19.6 Offline Map Tiles
+
+**Description**: Enable offline map viewing by caching map tiles in the service worker.
+
+**Files**:
+- `vite.config.ts` (modify PWA config)
+- `src/lib/map/tile-cache.ts` (new)
+
+**Requirements**:
+- Cache map tiles for trip location area
+- Pre-cache tiles at multiple zoom levels (10-16)
+- Cache invalidation strategy (tiles expire after 30 days)
+- Storage quota management (limit to ~50MB)
+- Visual indicator when viewing cached/offline tiles
+
+**Implementation**:
+```typescript
+// Workbox runtime caching for OSM tiles
+runtimeCaching: [{
+  urlPattern: /^https:\/\/tile\.openstreetmap\.org/,
+  handler: 'CacheFirst',
+  options: {
+    cacheName: 'osm-tiles',
+    expiration: {
+      maxEntries: 500,
+      maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+    },
+  },
+}]
+```
+
+**Test Cases**:
+- Tiles cache on first view
+- Cached tiles serve when offline
+- Cache respects quota limits
+- Expiration works correctly
+
+**Acceptance Criteria**:
+- [ ] Map tiles cached via service worker
+- [ ] Offline viewing works
+- [ ] Cache limits respected
+- [ ] Tests pass
+
+**Status**: PENDING
+
+**Depends on**: 19.1, Phase 12 (PWA Configuration)
+
+---
+
+### 19.7 Phase 19 Integration Tests
+
+**Description**: Create integration tests for maps functionality.
+
+**File**: `e2e/maps-integration.spec.ts`
+
+**Test Scenarios**:
+1. **Trip Location Map**:
+   - Create trip with location via LocationPicker
+   - Map preview shows on trip card
+   - Click expands to full map
+   - Coordinates stored correctly
+
+2. **Transport Map View**:
+   - Add transports with locations
+   - Navigate to map view
+   - All markers display correctly
+   - Popups show correct information
+   - Filters work
+
+3. **Directions**:
+   - Open transport detail
+   - Click "Get Directions"
+   - Correct URL opens
+
+4. **Offline Maps**:
+   - View map online (tiles cache)
+   - Go offline
+   - Map still displays cached area
+
+**Acceptance Criteria**:
+- [ ] All integration tests pass
+- [ ] No regressions in existing functionality
+
+**Status**: PENDING
+
+**Depends on**: 19.1-19.6
+
+---
+
+### Phase 19 Implementation Order
+
+```
+19.1 (MapView Setup) ─────────────────────┐
+                                          │
+         ┌────────────────────────────────┼────────────────────────┐
+         │                                │                        │
+         ▼                                ▼                        ▼
+19.2 (Trip Preview)              19.3 (Transport Map)     19.4 (LocationPicker)
+                                          │
+                                          ▼
+                                 19.5 (Directions)
+                                          │
+                                          ▼
+                                 19.6 (Offline Tiles)
+                                          │
+                                          ▼
+                                 19.7 (Integration Tests)
+```
+
+**Estimated Effort**: 12-16 hours total
+- 19.1: 2-3 hours (setup, component, tests)
+- 19.2: 2 hours
+- 19.3: 3-4 hours
+- 19.4: 2 hours
+- 19.5: 1 hour
+- 19.6: 1-2 hours
+- 19.7: 2-3 hours
+
+---
+
 ## Future Enhancements (Post-MVP)
 
 These features are **NOT** part of the MVP but are documented for future reference:
@@ -7834,4 +8343,3 @@ These features are **NOT** part of the MVP but are documented for future referen
 8. **Export to PDF** - Print-friendly trip summary
 9. **Import from Calendar** - Import dates from iCal/Google Calendar
 10. **Weather Integration** - Show weather forecast for trip location
-11. **Maps Integration** - Show trips location on map
