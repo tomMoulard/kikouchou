@@ -7,7 +7,7 @@
     "dev": "vite",
     "prod": "vite --mode production",
     "validate": "bun run test:run && bun run lint && bun run build && bun run generate-icons && bun run test:e2e:run",
-    "build": "tsc -b && VITE_APP_VERSION=$npm_package_version vite build",
+    "build": "tsc -b && VITE_APP_VERSION=${VITE_APP_VERSION:-$npm_package_version} vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "generate-icons": "node scripts/generate-icons.js",
