@@ -49,7 +49,7 @@ const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? 'devel';
  * Language selector component.
  * Allows switching between supported languages.
  */
-const LanguageSelector = memo((): ReactElement => {
+const LanguageSelector = memo(function LanguageSelector(): ReactElement {
   const { t } = useTranslation(),
    currentLanguage = getCurrentLanguage(),
 
@@ -91,13 +91,13 @@ const LanguageSelector = memo((): ReactElement => {
       </CardContent>
     </Card>
   );
-}),
+});
 
 /**
  * About section component.
  * Displays app information and version.
  */
- AboutSection = memo((): ReactElement => {
+const AboutSection = memo(function AboutSection(): ReactElement {
   const { t } = useTranslation();
 
   return (
@@ -128,13 +128,13 @@ const LanguageSelector = memo((): ReactElement => {
       </CardContent>
     </Card>
   );
-}),
+});
 
 /**
  * Data management section component.
  * Allows clearing all app data.
  */
- DataSection = memo((): ReactElement => {
+const DataSection = memo(function DataSection(): ReactElement {
   const { t } = useTranslation(),
    [showClearDialog, setShowClearDialog] = useState(false),
    [isClearing, setIsClearing] = useState(false),
@@ -272,4 +272,4 @@ function SettingsPageComponent(): ReactElement {
  */
 export const SettingsPage = memo(SettingsPageComponent);
 
-SettingsPage.displayName = 'SettingsPage';
+

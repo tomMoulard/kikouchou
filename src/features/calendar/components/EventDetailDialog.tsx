@@ -123,7 +123,7 @@ interface AssignmentDetailsProps {
 /**
  * Displays details for a room assignment event.
  */
-const AssignmentDetails = memo(({ event, dateLocale }: AssignmentDetailsProps) => {
+const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }: AssignmentDetailsProps) {
   const { t } = useTranslation();
   const { assignment, person, room } = event;
 
@@ -138,8 +138,11 @@ const AssignmentDetails = memo(({ event, dateLocale }: AssignmentDetailsProps) =
   const formattedStart = format(startDate, 'PPP', { locale: dateLocale });
   const formattedEnd = format(endDate, 'PPP', { locale: dateLocale });
   
-  // Get room icon component
-  const RoomIconComponent = getRoomIconComponent(room?.icon);
+  // Get room icon element - memoized to prevent re-renders when room doesn't change
+  const roomIconElement = useMemo(() => {
+    const IconComponent = getRoomIconComponent(room?.icon);
+    return <IconComponent className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />;
+  }, [room?.icon]);
 
   return (
     <div className="space-y-4">
@@ -157,7 +160,7 @@ const AssignmentDetails = memo(({ event, dateLocale }: AssignmentDetailsProps) =
 
       {/* Room */}
       <div className="flex items-center gap-3">
-        <RoomIconComponent className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
+        {roomIconElement}
         <span className="text-sm">
           {room?.name ?? t('common.unknown')}
         </span>
@@ -183,8 +186,6 @@ const AssignmentDetails = memo(({ event, dateLocale }: AssignmentDetailsProps) =
   );
 });
 
-AssignmentDetails.displayName = 'AssignmentDetails';
-
 // ============================================================================
 // TransportDetails Subcomponent
 // ============================================================================
@@ -197,7 +198,7 @@ interface TransportDetailsProps {
 /**
  * Displays details for a transport event.
  */
-const TransportDetails = memo(({ event, dateLocale }: TransportDetailsProps) => {
+const TransportDetails = memo(function TransportDetails({ event, dateLocale }: TransportDetailsProps) {
   const { t } = useTranslation();
   const { transport, person, driver } = event;
 
@@ -280,8 +281,6 @@ const TransportDetails = memo(({ event, dateLocale }: TransportDetailsProps) => 
   );
 });
 
-TransportDetails.displayName = 'TransportDetails';
-
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -309,13 +308,13 @@ TransportDetails.displayName = 'TransportDetails';
  * />
  * ```
  */
-const EventDetailDialog = memo(({
+const EventDetailDialog = memo(function EventDetailDialog({
   open,
   onOpenChange,
   event,
   onEdit,
   onDelete,
-}: EventDetailDialogProps) => {
+}: EventDetailDialogProps) {
   const { t, i18n } = useTranslation();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -461,8 +460,6 @@ const EventDetailDialog = memo(({
     </>
   );
 });
-
-EventDetailDialog.displayName = 'EventDetailDialog';
 
 // ============================================================================
 // Exports

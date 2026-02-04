@@ -115,13 +115,13 @@ function getDateLocale(lang: string): Locale {
  * Individual trip card component displaying trip information.
  * Supports click and keyboard interaction for accessibility.
  */
-const TripCard = memo(({
+const TripCard = memo(function TripCard({
   trip,
   persons,
   onSelect,
   isDisabled = false,
   locale,
-}: TripCardProps) => {
+}: TripCardProps) {
   const { t } = useTranslation(),
    dateRange = useMemo(
     () => formatDateRange(trip.startDate, trip.endDate, locale),
@@ -220,8 +220,6 @@ const TripCard = memo(({
   );
 });
 
-TripCard.displayName = 'TripCard';
-
 // ============================================================================
 // TripListPage Component
 // ============================================================================
@@ -236,7 +234,7 @@ TripCard.displayName = 'TripCard';
  * { path: '/trips', element: <TripListPage /> }
  * ```
  */
-const TripListPage = memo(() => {
+const TripListPage = memo(function TripListPage() {
   const { t, i18n } = useTranslation(),
    navigate = useNavigate(),
    { trips, isLoading, error, setCurrentTrip, checkConnection } =
@@ -466,8 +464,6 @@ const TripListPage = memo(() => {
     </div>
   );
 });
-
-TripListPage.displayName = 'TripListPage';
 
 // ============================================================================
 // Exports

@@ -97,11 +97,11 @@ const DEFAULT_CAPACITY = 1,
  * />
  * ```
  */
- RoomForm = memo(({
+ RoomForm = memo(function RoomForm({
   room,
   onSubmit,
   onCancel,
-}: RoomFormProps) => {
+}: RoomFormProps) {
   const { t } = useTranslation(),
 
   // ============================================================================
@@ -442,8 +442,6 @@ const DEFAULT_CAPACITY = 1,
     </form>
   );
 });
-
-RoomForm.displayName = 'RoomForm';
 
 // ============================================================================
 // Exports

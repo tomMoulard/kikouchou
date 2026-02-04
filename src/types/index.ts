@@ -43,10 +43,12 @@ export type ShareId = Brand<'ShareId'>;
 // ============================================================================
 
 /**
- * ISO 8601 date string in YYYY-MM-DD format.
+ * ISO 8601 date string in YYYY-MM-DD format (branded type).
+ * Use `toISODateStringFromString()` to create from a validated string,
+ * or `toISODateString()` to create from a Date object.
  * @example "2024-07-15"
  */
-export type ISODateString = string;
+export type ISODateString = Brand<'ISODateString'>;
 
 /**
  * ISO 8601 datetime string with timezone.
@@ -55,10 +57,11 @@ export type ISODateString = string;
 export type ISODateTimeString = string;
 
 /**
- * Hexadecimal color string.
- * @example "#ef4444" or "#f00"
+ * Hexadecimal color string (branded type).
+ * Use `toHexColor()` to create from a validated string.
+ * @example "#ef4444"
  */
-export type HexColor = string;
+export type HexColor = Brand<'HexColor'>;
 
 /**
  * Unix timestamp in milliseconds.
@@ -690,17 +693,18 @@ export type TripUpdate = Readonly<Pick<Trip, 'id'>> &
 /**
  * Default color palette for person assignment.
  * Used when automatically assigning colors to new persons.
+ * These are pre-validated hex colors cast to the branded type.
  */
-export const DEFAULT_PERSON_COLORS = [
-  '#ef4444', // Red
-  '#f97316', // Orange
-  '#eab308', // Yellow
-  '#22c55e', // Green
-  '#14b8a6', // Teal
-  '#3b82f6', // Blue
-  '#8b5cf6', // Violet
-  '#ec4899', // Pink
-] as const satisfies readonly HexColor[];
+export const DEFAULT_PERSON_COLORS: readonly HexColor[] = [
+  '#ef4444' as HexColor, // Red
+  '#f97316' as HexColor, // Orange
+  '#eab308' as HexColor, // Yellow
+  '#22c55e' as HexColor, // Green
+  '#14b8a6' as HexColor, // Teal
+  '#3b82f6' as HexColor, // Blue
+  '#8b5cf6' as HexColor, // Violet
+  '#ec4899' as HexColor, // Pink
+];
 
 /**
  * Gets a default person color by index, cycling through the palette.
@@ -710,7 +714,7 @@ export const DEFAULT_PERSON_COLORS = [
  */
 export function getDefaultPersonColor(index: number): HexColor {
   const safeIndex = Math.abs(index) % DEFAULT_PERSON_COLORS.length;
-   
+
   return DEFAULT_PERSON_COLORS[safeIndex]!;
 }
 

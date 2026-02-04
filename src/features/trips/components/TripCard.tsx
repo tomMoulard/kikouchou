@@ -151,13 +151,13 @@ interface TripCardProps {
  * />
  * ```
  */
-const TripCard = memo(({
+const TripCard = memo(function TripCard({
   trip,
   onClick,
   onEdit,
   onDelete,
   isDisabled = false,
-}: TripCardProps) => {
+}: TripCardProps) {
   const { t, i18n } = useTranslation(),
 
   // Get locale based on current language
@@ -300,8 +300,6 @@ const TripCard = memo(({
     </Card>
   );
 });
-
-TripCard.displayName = 'TripCard';
 
 // ============================================================================
 // Exports

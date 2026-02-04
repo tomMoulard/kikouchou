@@ -22,6 +22,7 @@ import { createAssignment } from '@/lib/db/repositories/assignment-repository';
 import { createTransport } from '@/lib/db/repositories/transport-repository';
 import * as dbUtils from '@/lib/db/utils';
 import type { TripFormData, TripId, ShareId } from '@/types';
+import { isoDate, hexColor } from '@/test/utils';
 
 // ============================================================================
 // Test Data Factories
@@ -34,8 +35,8 @@ function createValidTripData(overrides?: Partial<TripFormData>): TripFormData {
   return {
     name: 'Test Trip',
     location: 'Beach House, Brittany',
-    startDate: '2024-07-15',
-    endDate: '2024-07-22',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-22'),
     ...overrides,
   };
 }
@@ -121,8 +122,8 @@ describe('createTrip', () => {
   it('creates trip without optional location', async () => {
     const data: TripFormData = {
       name: 'Trip Without Location',
-      startDate: '2024-08-01',
-      endDate: '2024-08-05',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
     };
 
     const trip = await createTrip(data);
@@ -190,9 +191,9 @@ describe('getAllTrips', () => {
 
   it('returns trips sorted by startDate descending', async () => {
     // Create trips with different start dates (out of order)
-    await createTrip(createValidTripData({ name: 'Middle', startDate: '2024-06-01' }));
-    await createTrip(createValidTripData({ name: 'Earliest', startDate: '2024-01-15' }));
-    await createTrip(createValidTripData({ name: 'Latest', startDate: '2024-12-01' }));
+    await createTrip(createValidTripData({ name: 'Middle', startDate: isoDate('2024-06-01') }));
+    await createTrip(createValidTripData({ name: 'Earliest', startDate: isoDate('2024-01-15') }));
+    await createTrip(createValidTripData({ name: 'Latest', startDate: isoDate('2024-12-01') }));
 
     const trips = await getAllTrips();
 
@@ -213,8 +214,8 @@ describe('getAllTrips', () => {
   });
 
   it('handles trips with same start date', async () => {
-    await createTrip(createValidTripData({ name: 'Trip A', startDate: '2024-07-01' }));
-    await createTrip(createValidTripData({ name: 'Trip B', startDate: '2024-07-01' }));
+    await createTrip(createValidTripData({ name: 'Trip A', startDate: isoDate('2024-07-01') }));
+    await createTrip(createValidTripData({ name: 'Trip B', startDate: isoDate('2024-07-01') }));
 
     const trips = await getAllTrips();
 
@@ -346,8 +347,8 @@ describe('updateTrip', () => {
       createValidTripData({
         name: 'Original',
         location: 'Original Location',
-        startDate: '2024-01-01',
-        endDate: '2024-01-10',
+        startDate: isoDate('2024-01-01'),
+        endDate: isoDate('2024-01-10'),
       })
     );
 
@@ -365,8 +366,8 @@ describe('updateTrip', () => {
     const trip = await createTrip(createValidTripData());
 
     await updateTrip(trip.id, {
-      startDate: '2025-01-01',
-      endDate: '2025-01-15',
+      startDate: isoDate('2025-01-01'),
+      endDate: isoDate('2025-01-15'),
     });
 
     const updated = await getTripById(trip.id);
@@ -405,8 +406,8 @@ describe('deleteTrip', () => {
 
   it('cascade deletes associated persons', async () => {
     const trip = await createTrip(createValidTripData());
-    await createPerson(trip.id, { name: 'Alice', color: '#ef4444' });
-    await createPerson(trip.id, { name: 'Bob', color: '#3b82f6' });
+    await createPerson(trip.id, { name: 'Alice', color: hexColor('#ef4444') });
+    await createPerson(trip.id, { name: 'Bob', color: hexColor('#3b82f6') });
 
     // Verify persons exist
     expect(await db.persons.count()).toBe(2);
@@ -420,12 +421,12 @@ describe('deleteTrip', () => {
   it('cascade deletes associated assignments', async () => {
     const trip = await createTrip(createValidTripData());
     const room = await createRoom(trip.id, { name: 'Room 1', capacity: 2 });
-    const person = await createPerson(trip.id, { name: 'Alice', color: '#ef4444' });
+    const person = await createPerson(trip.id, { name: 'Alice', color: hexColor('#ef4444') });
     await createAssignment(trip.id, {
       roomId: room.id,
       personId: person.id,
-      startDate: '2024-07-15',
-      endDate: '2024-07-20',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-20'),
     });
 
     // Verify assignment exists
@@ -439,7 +440,7 @@ describe('deleteTrip', () => {
 
   it('cascade deletes associated transports', async () => {
     const trip = await createTrip(createValidTripData());
-    const person = await createPerson(trip.id, { name: 'Alice', color: '#ef4444' });
+    const person = await createPerson(trip.id, { name: 'Alice', color: hexColor('#ef4444') });
     await createTransport(trip.id, {
       personId: person.id,
       type: 'arrival',
@@ -462,21 +463,21 @@ describe('deleteTrip', () => {
     const trip = await createTrip(createValidTripData());
     const room1 = await createRoom(trip.id, { name: 'Room 1', capacity: 2 });
     const room2 = await createRoom(trip.id, { name: 'Room 2', capacity: 3 });
-    const person1 = await createPerson(trip.id, { name: 'Alice', color: '#ef4444' });
-    const person2 = await createPerson(trip.id, { name: 'Bob', color: '#3b82f6' });
+    const person1 = await createPerson(trip.id, { name: 'Alice', color: hexColor('#ef4444') });
+    const person2 = await createPerson(trip.id, { name: 'Bob', color: hexColor('#3b82f6') });
 
     // Create multiple assignments
     await createAssignment(trip.id, {
       roomId: room1.id,
       personId: person1.id,
-      startDate: '2024-07-15',
-      endDate: '2024-07-18',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-18'),
     });
     await createAssignment(trip.id, {
       roomId: room2.id,
       personId: person2.id,
-      startDate: '2024-07-15',
-      endDate: '2024-07-22',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-22'),
     });
 
     // Create multiple transports
@@ -522,8 +523,8 @@ describe('deleteTrip', () => {
     await createRoom(trip1.id, { name: 'Room for Trip 1', capacity: 2 });
     await createRoom(trip2.id, { name: 'Room for Trip 2', capacity: 2 });
 
-    const person1 = await createPerson(trip1.id, { name: 'Person 1', color: '#ef4444' });
-    const person2 = await createPerson(trip2.id, { name: 'Person 2', color: '#3b82f6' });
+    const person1 = await createPerson(trip1.id, { name: 'Person 1', color: hexColor('#ef4444') });
+    const person2 = await createPerson(trip2.id, { name: 'Person 2', color: hexColor('#3b82f6') });
 
     await createTransport(trip1.id, {
       personId: person1.id,

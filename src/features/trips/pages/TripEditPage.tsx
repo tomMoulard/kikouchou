@@ -350,5 +350,4 @@ function TripEditPageComponent(): ReactElement {
  * Memoized Trip Edit Page component.
  */
 export const TripEditPage = memo(TripEditPageComponent);
-
 TripEditPage.displayName = 'TripEditPage';

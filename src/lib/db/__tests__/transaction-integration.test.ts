@@ -35,6 +35,7 @@ import {
 } from '@/lib/db/repositories/assignment-repository';
 import { createTransport } from '@/lib/db/repositories/transport-repository';
 import type { TripId, RoomId, PersonId } from '@/types';
+import { isoDate, hexColor } from '@/test/utils';
 
 // ============================================================================
 // Test Data Factories
@@ -43,8 +44,8 @@ import type { TripId, RoomId, PersonId } from '@/types';
 async function createTestTrip(name = 'Test Trip'): Promise<TripId> {
   const trip = await createTrip({
     name,
-    startDate: '2024-07-15',
-    endDate: '2024-07-22',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-22'),
   });
   return trip.id;
 }
@@ -55,7 +56,7 @@ async function createTestRoom(tripId: TripId, name = 'Test Room'): Promise<RoomI
 }
 
 async function createTestPerson(tripId: TripId, name = 'Test Person'): Promise<PersonId> {
-  const person = await createPerson(tripId, { name, color: '#ef4444' });
+  const person = await createPerson(tripId, { name, color: hexColor('#ef4444') });
   return person.id;
 }
 
@@ -74,8 +75,8 @@ describe('Cascade Delete Atomicity', () => {
       await createAssignment(tripId, {
         roomId,
         personId,
-        startDate: '2024-07-15',
-        endDate: '2024-07-18',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-18'),
       });
       
       await createTransport(tripId, {
@@ -165,14 +166,14 @@ describe('Cascade Delete Atomicity', () => {
       await createAssignment(tripId, {
         roomId,
         personId,
-        startDate: '2024-07-15',
-        endDate: '2024-07-16',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-16'),
       });
       await createAssignment(tripId, {
         roomId,
         personId,
-        startDate: '2024-07-17',
-        endDate: '2024-07-18',
+        startDate: isoDate('2024-07-17'),
+        endDate: isoDate('2024-07-18'),
       });
 
       expect(await db.rooms.count()).toBe(1);
@@ -193,14 +194,14 @@ describe('Cascade Delete Atomicity', () => {
       await createAssignment(tripId, {
         roomId: room1Id,
         personId,
-        startDate: '2024-07-15',
-        endDate: '2024-07-16',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-16'),
       });
       await createAssignment(tripId, {
         roomId: room2Id,
         personId,
-        startDate: '2024-07-17',
-        endDate: '2024-07-18',
+        startDate: isoDate('2024-07-17'),
+        endDate: isoDate('2024-07-18'),
       });
 
       expect(await db.roomAssignments.count()).toBe(2);
@@ -224,8 +225,8 @@ describe('Cascade Delete Atomicity', () => {
       await createAssignment(tripId, {
         roomId,
         personId,
-        startDate: '2024-07-15',
-        endDate: '2024-07-18',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-18'),
       });
       
       await createTransport(tripId, {
@@ -322,8 +323,8 @@ describe('Ownership Validation in Transactions', () => {
     const assignment = await createAssignment(trip1Id, {
       roomId,
       personId,
-      startDate: '2024-07-15',
-      endDate: '2024-07-18',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-18'),
     });
 
     // Attempt to delete with wrong tripId
@@ -349,8 +350,8 @@ describe('Transaction Rollback on Failure', () => {
     const assignment = await createAssignment(tripId, {
       roomId,
       personId,
-      startDate: '2024-07-15',
-      endDate: '2024-07-18',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-18'),
     });
 
     // Store original values
@@ -359,8 +360,8 @@ describe('Transaction Rollback on Failure', () => {
     // Attempt to update with invalid date range (endDate before startDate)
     await expect(
       updateAssignment(assignment.id, {
-        startDate: '2024-07-20', // After original endDate
-        endDate: '2024-07-18',  // Before new startDate
+        startDate: isoDate('2024-07-20'), // After original endDate
+        endDate: isoDate('2024-07-18'),  // Before new startDate
       })
     ).rejects.toThrow('Invalid date range');
 
@@ -457,8 +458,8 @@ describe('Data Integrity', () => {
     await createAssignment(tripId, {
       roomId,
       personId,
-      startDate: '2024-07-15',
-      endDate: '2024-07-18',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-18'),
     });
 
     // Verify both exist
@@ -491,8 +492,8 @@ describe('Data Integrity', () => {
     await createAssignment(trip1Id, {
       roomId: room1,
       personId: person1,
-      startDate: '2024-07-15',
-      endDate: '2024-07-18',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-18'),
     });
 
     // Attempt to delete room from wrong trip should fail
@@ -546,8 +547,8 @@ describe('Edge Cases', () => {
         await createAssignment(tripId, {
           roomId,
           personId,
-          startDate: `2024-07-${15 + (i % 7)}`,
-          endDate: `2024-07-${16 + (i % 7)}`,
+          startDate: isoDate(`2024-07-${15 + (i % 7)}`),
+          endDate: isoDate(`2024-07-${16 + (i % 7)}`),
         });
       }
     }

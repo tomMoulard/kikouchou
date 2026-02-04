@@ -160,7 +160,7 @@ function getInitials(name: string): string {
  * />
  * ```
  */
-const PersonCard = memo(({
+const PersonCard = memo(function PersonCard({
   person,
   transportSummary,
   dateLocale,
@@ -168,7 +168,7 @@ const PersonCard = memo(({
   onClick,
   onEdit,
   onDelete,
-}: PersonCardProps) => {
+}: PersonCardProps) {
   const { t } = useTranslation(),
 
   // State for delete confirmation dialog
@@ -412,8 +412,6 @@ const PersonCard = memo(({
     </>
   );
 });
-
-PersonCard.displayName = 'PersonCard';
 
 // ============================================================================
 // Exports

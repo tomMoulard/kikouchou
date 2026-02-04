@@ -31,6 +31,7 @@ import type {
   RoomId,
   TripId,
 } from '@/types';
+import { isoDate, hexColor } from '@/test/utils';
 
 // ============================================================================
 // Test Data Factories
@@ -42,8 +43,8 @@ import type {
 async function createTestTrip(name = 'Test Trip'): Promise<TripId> {
   const trip = await createTrip({
     name,
-    startDate: '2024-07-15',
-    endDate: '2024-07-30',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-30'),
   });
   return trip.id;
 }
@@ -66,7 +67,7 @@ async function createTestPerson(
   tripId: TripId,
   name = 'Test Person'
 ): Promise<PersonId> {
-  const person = await createPerson(tripId, { name, color: '#ef4444' });
+  const person = await createPerson(tripId, { name, color: hexColor('#ef4444') });
   return person.id;
 }
 
@@ -81,8 +82,8 @@ function createTestAssignmentData(
   return {
     roomId,
     personId,
-    startDate: '2024-07-15',
-    endDate: '2024-07-20',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-20'),
     ...overrides,
   };
 }
@@ -108,8 +109,8 @@ describe('createAssignment', () => {
     const assignment = await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-16',
-        endDate: '2024-07-19',
+        startDate: isoDate('2024-07-16'),
+        endDate: isoDate('2024-07-19'),
       })
     );
 
@@ -128,15 +129,15 @@ describe('createAssignment', () => {
     const assignment1 = await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-17',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-17'),
       })
     );
     const assignment2 = await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-18',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-18'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -188,8 +189,8 @@ describe('createAssignment', () => {
       createAssignment(tripId, {
         roomId,
         personId,
-        startDate: '2024-07-20', // After endDate
-        endDate: '2024-07-15',
+        startDate: isoDate('2024-07-20'), // After endDate
+        endDate: isoDate('2024-07-15'),
       })
     ).rejects.toThrow('Invalid date range: start date (2024-07-20) must be on or before end date (2024-07-15)');
   });
@@ -202,8 +203,8 @@ describe('createAssignment', () => {
     const assignment = await createAssignment(tripId, {
       roomId,
       personId,
-      startDate: '2024-07-20',
-      endDate: '2024-07-20', // Same as start date
+      startDate: isoDate('2024-07-20'),
+      endDate: isoDate('2024-07-20'), // Same as start date
     });
 
     expect(assignment.startDate).toBe('2024-07-20');
@@ -225,15 +226,15 @@ describe('getAssignmentsByTripId', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person1, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-17',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-17'),
       })
     );
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person2, {
-        startDate: '2024-07-18',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-18'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -295,22 +296,22 @@ describe('getAssignmentsByRoomId', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person2, {
-        startDate: '2024-07-20',
-        endDate: '2024-07-22',
+        startDate: isoDate('2024-07-20'),
+        endDate: isoDate('2024-07-22'),
       })
     );
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person1, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-17',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-17'),
       })
     );
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person3, {
-        startDate: '2024-07-18',
-        endDate: '2024-07-19',
+        startDate: isoDate('2024-07-18'),
+        endDate: isoDate('2024-07-19'),
       })
     );
 
@@ -340,15 +341,15 @@ describe('getAssignmentsByRoomId', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(room1, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-17',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-17'),
       })
     );
     await createAssignment(
       tripId,
       createTestAssignmentData(room2, personId, {
-        startDate: '2024-07-18',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-18'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -377,15 +378,15 @@ describe('getAssignmentsByPersonId', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(room2, personId, {
-        startDate: '2024-07-20',
-        endDate: '2024-07-22',
+        startDate: isoDate('2024-07-20'),
+        endDate: isoDate('2024-07-22'),
       })
     );
     await createAssignment(
       tripId,
       createTestAssignmentData(room1, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-17',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-17'),
       })
     );
 
@@ -414,15 +415,15 @@ describe('getAssignmentsByPersonId', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person1, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-17',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-17'),
       })
     );
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person2, {
-        startDate: '2024-07-18',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-18'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -481,14 +482,14 @@ describe('updateAssignment', () => {
     const assignment = await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
     await updateAssignment(assignment.id, {
-      startDate: '2024-07-16',
-      endDate: '2024-07-22',
+      startDate: isoDate('2024-07-16'),
+      endDate: isoDate('2024-07-22'),
     });
 
     const updated = await getAssignmentById(assignment.id);
@@ -504,13 +505,13 @@ describe('updateAssignment', () => {
     const assignment = await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
     // Only update endDate
-    await updateAssignment(assignment.id, { endDate: '2024-07-22' });
+    await updateAssignment(assignment.id, { endDate: isoDate('2024-07-22') });
 
     const updated = await getAssignmentById(assignment.id);
     expect(updated?.startDate).toBe('2024-07-15'); // Unchanged
@@ -538,7 +539,7 @@ describe('updateAssignment', () => {
     const nonExistentId = 'assignment_does_not_exist' as RoomAssignmentId;
 
     await expect(
-      updateAssignment(nonExistentId, { startDate: '2024-07-16' })
+      updateAssignment(nonExistentId, { startDate: isoDate('2024-07-16') })
     ).rejects.toThrow(`Assignment with id "${nonExistentId}" not found`);
   });
 
@@ -550,14 +551,14 @@ describe('updateAssignment', () => {
     const assignment = await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
     // Try to update startDate to after the current endDate
     await expect(
-      updateAssignment(assignment.id, { startDate: '2024-07-25' })
+      updateAssignment(assignment.id, { startDate: isoDate('2024-07-25') })
     ).rejects.toThrow('Invalid date range');
   });
 
@@ -569,14 +570,14 @@ describe('updateAssignment', () => {
     const assignment = await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
     // Try to update endDate to before the current startDate
     await expect(
-      updateAssignment(assignment.id, { endDate: '2024-07-10' })
+      updateAssignment(assignment.id, { endDate: isoDate('2024-07-10') })
     ).rejects.toThrow('Invalid date range');
   });
 
@@ -588,15 +589,15 @@ describe('updateAssignment', () => {
     const assignment = await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
     // Update both dates together
     await updateAssignment(assignment.id, {
-      startDate: '2024-07-25',
-      endDate: '2024-07-30',
+      startDate: isoDate('2024-07-25'),
+      endDate: isoDate('2024-07-30'),
     });
 
     const updated = await getAssignmentById(assignment.id);
@@ -643,15 +644,15 @@ describe('deleteAssignment', () => {
     const assignment1 = await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person1, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-17',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-17'),
       })
     );
     const assignment2 = await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person2, {
-        startDate: '2024-07-18',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-18'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -695,8 +696,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-20',
-          endDate: '2024-07-25',
+          startDate: isoDate('2024-07-20'),
+          endDate: isoDate('2024-07-25'),
         })
       );
 
@@ -720,8 +721,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-19',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-19'),
         })
       );
 
@@ -746,8 +747,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, person1, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-20',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-20'),
         })
       );
 
@@ -777,8 +778,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-17',
-          endDate: '2024-07-19',
+          startDate: isoDate('2024-07-17'),
+          endDate: isoDate('2024-07-19'),
         })
       );
 
@@ -802,8 +803,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-18',
-          endDate: '2024-07-22',
+          startDate: isoDate('2024-07-18'),
+          endDate: isoDate('2024-07-22'),
         })
       );
 
@@ -827,8 +828,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-19',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-19'),
         })
       );
 
@@ -852,8 +853,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-25',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-25'),
         })
       );
 
@@ -877,8 +878,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-18',
-          endDate: '2024-07-20',
+          startDate: isoDate('2024-07-18'),
+          endDate: isoDate('2024-07-20'),
         })
       );
 
@@ -902,8 +903,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-19',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-19'),
         })
       );
 
@@ -927,8 +928,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-20',
-          endDate: '2024-07-25',
+          startDate: isoDate('2024-07-20'),
+          endDate: isoDate('2024-07-25'),
         })
       );
 
@@ -952,8 +953,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-20',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-20'),
         })
       );
 
@@ -983,8 +984,8 @@ describe('checkAssignmentConflict', () => {
       const existingAssignment = await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-20',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-20'),
         })
       );
 
@@ -1010,15 +1011,15 @@ describe('checkAssignmentConflict', () => {
       const assignment1 = await createAssignment(
         tripId,
         createTestAssignmentData(room1, personId, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-20',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-20'),
         })
       );
       await createAssignment(
         tripId,
         createTestAssignmentData(room2, personId, {
-          startDate: '2024-07-22',
-          endDate: '2024-07-25',
+          startDate: isoDate('2024-07-22'),
+          endDate: isoDate('2024-07-25'),
         })
       );
 
@@ -1047,8 +1048,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, person1, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-20',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-20'),
         })
       );
 
@@ -1073,8 +1074,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, person1, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-20',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-20'),
         })
       );
 
@@ -1101,8 +1102,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId1,
         createTestAssignmentData(room1, person1, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-20',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-20'),
         })
       );
 
@@ -1127,15 +1128,15 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(room1, personId, {
-          startDate: '2024-07-15',
-          endDate: '2024-07-17',
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-17'),
         })
       );
       await createAssignment(
         tripId,
         createTestAssignmentData(room2, personId, {
-          startDate: '2024-07-22',
-          endDate: '2024-07-25',
+          startDate: isoDate('2024-07-22'),
+          endDate: isoDate('2024-07-25'),
         })
       );
 
@@ -1185,8 +1186,8 @@ describe('checkAssignmentConflict', () => {
       await createAssignment(
         tripId,
         createTestAssignmentData(roomId, personId, {
-          startDate: '2024-07-17',
-          endDate: '2024-07-17',
+          startDate: isoDate('2024-07-17'),
+          endDate: isoDate('2024-07-17'),
         })
       );
 
@@ -1242,8 +1243,8 @@ describe('getAssignmentsForDate', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -1260,8 +1261,8 @@ describe('getAssignmentsForDate', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -1278,8 +1279,8 @@ describe('getAssignmentsForDate', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -1296,8 +1297,8 @@ describe('getAssignmentsForDate', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -1314,8 +1315,8 @@ describe('getAssignmentsForDate', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, personId, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -1333,15 +1334,15 @@ describe('getAssignmentsForDate', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person1, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person2, {
-        startDate: '2024-07-17',
-        endDate: '2024-07-22',
+        startDate: isoDate('2024-07-17'),
+        endDate: isoDate('2024-07-22'),
       })
     );
 
@@ -1361,15 +1362,15 @@ describe('getAssignmentsForDate', () => {
     await createAssignment(
       tripId1,
       createTestAssignmentData(room1, person1, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
     await createAssignment(
       tripId2,
       createTestAssignmentData(room2, person2, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -1394,15 +1395,15 @@ describe('getAssignmentCount', () => {
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person1, {
-        startDate: '2024-07-15',
-        endDate: '2024-07-17',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-17'),
       })
     );
     await createAssignment(
       tripId,
       createTestAssignmentData(roomId, person2, {
-        startDate: '2024-07-18',
-        endDate: '2024-07-20',
+        startDate: isoDate('2024-07-18'),
+        endDate: isoDate('2024-07-20'),
       })
     );
 
@@ -1437,8 +1438,8 @@ describe('getAssignmentCount', () => {
 
     await createAssignment(tripId1, createTestAssignmentData(room1, person1));
     await createAssignment(tripId1, createTestAssignmentData(room1, person1, {
-      startDate: '2024-07-21',
-      endDate: '2024-07-25',
+      startDate: isoDate('2024-07-21'),
+      endDate: isoDate('2024-07-25'),
     }));
     await createAssignment(tripId2, createTestAssignmentData(room2, person2));
 

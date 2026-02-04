@@ -13,6 +13,7 @@ import type { ReactNode } from 'react';
 
 import { Layout } from '../Layout';
 import type { Trip } from '@/types';
+import { isoDate } from '@/test/utils';
 
 // ============================================================================
 // Mock Data
@@ -22,8 +23,8 @@ const mockTrip: Trip = {
   id: 'trip-123' as Trip['id'],
   name: 'Beach House Vacation',
   location: 'Brittany, France',
-  startDate: '2024-07-15',
-  endDate: '2024-07-22',
+  startDate: isoDate('2024-07-15'),
+  endDate: isoDate('2024-07-22'),
   shareId: 'abc123' as Trip['shareId'],
   createdAt: Date.now(),
   updatedAt: Date.now(),
@@ -32,8 +33,8 @@ const mockTrip: Trip = {
 const mockTripNoLocation: Trip = {
   id: 'trip-456' as Trip['id'],
   name: 'Mountain Retreat',
-  startDate: '2024-08-01',
-  endDate: '2024-08-10',
+  startDate: isoDate('2024-08-01'),
+  endDate: isoDate('2024-08-10'),
   shareId: 'def456' as Trip['shareId'],
   createdAt: Date.now(),
   updatedAt: Date.now(),

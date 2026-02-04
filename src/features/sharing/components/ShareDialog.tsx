@@ -160,10 +160,10 @@ function downloadQrCode(canvasId: string, filename: string): boolean {
  * <ShareDialog open={isOpen} onOpenChange={setIsOpen} />
  * ```
  */
-const ShareDialog = memo(({
+const ShareDialog = memo(function ShareDialog({
   open,
   onOpenChange,
-}: ShareDialogProps): ReactElement => {
+}: ShareDialogProps): ReactElement {
   const { t } = useTranslation(),
    { currentTrip } = useTripContext(),
 
@@ -425,8 +425,6 @@ const ShareDialog = memo(({
     </Dialog>
   );
 });
-
-ShareDialog.displayName = 'ShareDialog';
 
 // ============================================================================
 // Exports

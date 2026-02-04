@@ -154,5 +154,4 @@ function TripCreatePageComponent(): ReactElement {
  * Memoized Trip Create Page component.
  */
 export const TripCreatePage = memo(TripCreatePageComponent);
-
 TripCreatePage.displayName = 'TripCreatePage';

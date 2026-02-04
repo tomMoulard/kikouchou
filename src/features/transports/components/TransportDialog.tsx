@@ -80,12 +80,12 @@ export interface TransportDialogProps {
  * />
  * ```
  */
-const TransportDialog = memo(({
+const TransportDialog = memo(function TransportDialog({
   transportId,
   open,
   onOpenChange,
   defaultType,
-}: TransportDialogProps) => {
+}: TransportDialogProps) {
   const { t } = useTranslation(),
    { transports, createTransport, updateTransport } = useTransportContext(),
    { persons } = usePersonContext(),
@@ -257,8 +257,6 @@ const TransportDialog = memo(({
     </Dialog>
   );
 });
-
-TransportDialog.displayName = 'TransportDialog';
 
 // ============================================================================
 // Exports

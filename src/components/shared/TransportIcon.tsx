@@ -58,11 +58,11 @@ const TRANSPORT_ICONS = {
  * <TransportIcon mode="plane" className="size-5 text-blue-500" />
  * ```
  */
-const TransportIcon = memo(({
+const TransportIcon = memo(function TransportIcon({
   mode,
   className,
   'aria-label': ariaLabel,
-}: TransportIconProps): React.ReactElement => {
+}: TransportIconProps): React.ReactElement {
   const Icon = TRANSPORT_ICONS[mode] ?? TRANSPORT_ICONS.other;
 
   return (
@@ -73,8 +73,6 @@ const TransportIcon = memo(({
     />
   );
 });
-
-TransportIcon.displayName = 'TransportIcon';
 
 // ============================================================================
 // Exports

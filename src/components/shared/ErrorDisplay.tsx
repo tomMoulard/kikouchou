@@ -118,7 +118,7 @@ export interface ErrorDisplayProps {
  * />
  * ```
  */
-export const ErrorDisplay = memo(({
+export const ErrorDisplay = memo(function ErrorDisplay({
   error,
   title,
   onRetry,
@@ -128,7 +128,7 @@ export const ErrorDisplay = memo(({
   children,
   size = 'default',
   showMessage = true,
-}: ErrorDisplayProps) => {
+}: ErrorDisplayProps) {
   const { t } = useTranslation(),
 
    isCompact = size === 'compact';
@@ -211,5 +211,3 @@ export const ErrorDisplay = memo(({
     </div>
   );
 });
-
-ErrorDisplay.displayName = 'ErrorDisplay';

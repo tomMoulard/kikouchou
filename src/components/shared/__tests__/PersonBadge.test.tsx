@@ -12,6 +12,7 @@ import userEvent from '@testing-library/user-event';
 
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import type { Person, PersonId, TripId } from '@/types';
+import { hexColor } from '@/test/utils';
 
 // ============================================================================
 // Test Data Factories
@@ -25,7 +26,7 @@ function createTestPerson(overrides?: Partial<Person>): Person {
     id: 'person-1' as PersonId,
     tripId: 'trip-1' as TripId,
     name: 'Test Person',
-    color: '#3b82f6', // Blue
+    color: hexColor('#3b82f6'), // Blue
     ...overrides,
   };
 }
@@ -50,7 +51,7 @@ describe('PersonBadge Rendering', () => {
   });
 
   it('applies background color from person', () => {
-    const person = createTestPerson({ color: '#ef4444' });
+    const person = createTestPerson({ color: hexColor('#ef4444') });
 
     render(<PersonBadge person={person} />);
 
@@ -401,7 +402,7 @@ describe('PersonBadge WCAG AA Compliance', () => {
 
 describe('PersonBadge Prop Patterns', () => {
   it('prefers Person object over individual props', () => {
-    const person = createTestPerson({ name: 'From Person', color: '#ff0000' });
+    const person = createTestPerson({ name: 'From Person', color: hexColor('#ff0000') });
 
     // TypeScript would prevent this, but testing defensive behavior
     render(<PersonBadge person={person} />);

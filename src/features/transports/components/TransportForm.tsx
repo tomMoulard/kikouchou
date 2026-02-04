@@ -221,13 +221,13 @@ function isValidDatetime(datetime: string): boolean {
  * />
  * ```
  */
-const TransportForm = memo(({
+const TransportForm = memo(function TransportForm({
   transport,
   persons,
   defaultType,
   onSubmit,
   onCancel,
-}: TransportFormProps) => {
+}: TransportFormProps) {
   const { t } = useTranslation(),
 
   // ============================================================================
@@ -800,8 +800,6 @@ const TransportForm = memo(({
     </form>
   );
 });
-
-TransportForm.displayName = 'TransportForm';
 
 // ============================================================================
 // Exports

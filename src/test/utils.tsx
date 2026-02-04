@@ -226,10 +226,11 @@ export async function createTestTrip(data: {
 }): Promise<import('@/types').TripId> {
   try {
     const { createTrip } = await import('@/lib/db/repositories/trip-repository');
+    const { toISODateStringFromString } = await import('@/lib/db/utils');
     const trip = await createTrip({
       name: data.name,
-      startDate: data.startDate,
-      endDate: data.endDate ?? data.startDate,
+      startDate: toISODateStringFromString(data.startDate),
+      endDate: toISODateStringFromString(data.endDate ?? data.startDate),
       location: data.location,
     });
     return trip.id;
@@ -254,9 +255,10 @@ export async function createTestPerson(
 ): Promise<import('@/types').PersonId> {
   try {
     const { createPerson } = await import('@/lib/db/repositories/person-repository');
+    const { toHexColor } = await import('@/lib/db/utils');
     const person = await createPerson(tripId, {
       name: data.name,
-      color: data.color ?? '#3b82f6',
+      color: toHexColor(data.color ?? '#3b82f6'),
     });
     return person.id;
   } catch (error) {
@@ -294,6 +296,47 @@ export async function createTestRoom(
 }
 
 // ============================================================================
+// Branded Type Test Helpers
+// ============================================================================
+
+import type { HexColor, ISODateString } from '@/types';
+
+/**
+ * Creates an ISODateString for use in tests.
+ * This is a type-safe way to create test fixtures with branded types.
+ *
+ * @param value - A valid YYYY-MM-DD string
+ * @returns Branded ISODateString
+ * @example
+ * ```tsx
+ * const trip = {
+ *   startDate: isoDate('2024-07-15'),
+ *   endDate: isoDate('2024-07-20'),
+ * };
+ * ```
+ */
+export function isoDate(value: string): ISODateString {
+  return value as ISODateString;
+}
+
+/**
+ * Creates a HexColor for use in tests.
+ * This is a type-safe way to create test fixtures with branded types.
+ *
+ * @param value - A valid #RRGGBB string
+ * @returns Branded HexColor
+ * @example
+ * ```tsx
+ * const person = {
+ *   color: hexColor('#ef4444'),
+ * };
+ * ```
+ */
+export function hexColor(value: string): HexColor {
+  return value as HexColor;
+}
+
+// ============================================================================
 // Re-exports
 // ============================================================================
 
@@ -303,3 +346,6 @@ export * from '@testing-library/react';
 
 // Re-export userEvent for user interaction simulation
 export { userEvent };
+
+// Re-export branded type helpers from utils for convenience
+export { toISODateStringFromString, toHexColor } from '@/lib/db/utils';

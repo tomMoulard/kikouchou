@@ -21,7 +21,8 @@ import { PersonProvider } from '@/contexts/PersonContext';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createRoom } from '@/lib/db/repositories/room-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
-import type { PersonId, RoomId, TripId, ISODateString, RoomAssignment } from '@/types';
+import type { PersonId, RoomId, RoomAssignmentId, TripId, ISODateString, RoomAssignment } from '@/types';
+import { isoDate, hexColor } from '@/test/utils';
 
 // ============================================================================
 // Test Helpers
@@ -57,8 +58,8 @@ function useCombinedContexts() {
 async function createTestTripData(name = 'Test Trip'): Promise<TripId> {
   const trip = await createTrip({
     name,
-    startDate: '2024-07-15',
-    endDate: '2024-07-30',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-30'),
   });
   return trip.id;
 }
@@ -75,7 +76,7 @@ async function createTestRoom(tripId: TripId, name = 'Test Room'): Promise<RoomI
  * Helper to create a test person.
  */
 async function createTestPerson(tripId: TripId, name = 'Test Person'): Promise<PersonId> {
-  const person = await createPerson(tripId, { name, color: '#ef4444' });
+  const person = await createPerson(tripId, { name, color: hexColor('#ef4444') });
   return person.id;
 }
 
@@ -237,7 +238,7 @@ describe('AssignmentContext', () => {
 
       await expect(
         act(async () => {
-          await result.current.updateAssignment('assignment_123' as any, {
+          await result.current.updateAssignment('assignment_123' as RoomAssignmentId, {
             endDate: '2024-07-25' as ISODateString,
           });
         })
@@ -303,7 +304,7 @@ describe('AssignmentContext', () => {
 
       await expect(
         act(async () => {
-          await result.current.deleteAssignment('assignment_123' as any);
+          await result.current.deleteAssignment('assignment_123' as RoomAssignmentId);
         })
       ).rejects.toThrow('no trip selected');
     });

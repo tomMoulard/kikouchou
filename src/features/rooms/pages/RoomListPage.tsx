@@ -10,6 +10,7 @@
  * - Add room action (FAB on mobile, header button on desktop)
  * - Empty state for trips with no rooms
  * - Edit/Delete actions via RoomCard dropdown menu
+ * - Drag-and-drop room assignments from unassigned guests
  *
  * @module features/rooms/pages/RoomListPage
  * @see TripListPage.tsx for reference implementation pattern
@@ -29,7 +30,17 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { format, parseISO, eachDayOfInterval } from 'date-fns';
 import { type Locale, enUS, fr } from 'date-fns/locale';
-import { AlertTriangle, CheckCircle, DoorOpen, Plus } from 'lucide-react';
+import { AlertTriangle, CheckCircle, DoorOpen, GripVertical, Plus } from 'lucide-react';
+import {
+  DndContext,
+  type DragEndEvent,
+  DragOverlay,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragStartEvent,
+} from '@dnd-kit/core';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { useRoomContext } from '@/contexts/RoomContext';
@@ -47,6 +58,9 @@ import { cn } from '@/lib/utils';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
 import { RoomDialog } from '@/features/rooms/components/RoomDialog';
 import { RoomAssignmentSection } from '@/features/rooms/components/RoomAssignmentSection';
+import { DraggableGuest, type DraggableGuestData } from '@/features/rooms/components/DraggableGuest';
+import { DroppableRoom, type DroppableRoomData } from '@/features/rooms/components/DroppableRoom';
+import { QuickAssignmentDialog } from '@/features/rooms/components/QuickAssignmentDialog';
 import type { Person, PersonId, Room, RoomAssignment, RoomId, Transport } from '@/types';
 
 // ============================================================================
@@ -252,7 +266,7 @@ function formatToISODate(date: Date): string {
  * { path: '/trips/:tripId/rooms', element: <RoomListPage /> }
  * ```
  */
-const RoomListPage = memo((): ReactElement => {
+const RoomListPage = memo(function RoomListPage(): ReactElement {
   const { t, i18n } = useTranslation(),
    navigate = useNavigate(),
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
@@ -280,11 +294,41 @@ const RoomListPage = memo((): ReactElement => {
   // Track which room is expanded to show assignments
    [expandedRoomId, setExpandedRoomId] = useState<RoomId | undefined>(undefined),
 
+  // Drag-and-drop state
+   [activeDragPerson, setActiveDragPerson] = useState<Person | null>(null),
+   [quickAssignDialogOpen, setQuickAssignDialogOpen] = useState(false),
+   [quickAssignData, setQuickAssignData] = useState<{
+     person: Person | null;
+     roomId: RoomId | null;
+     startDate: string;
+     endDate: string;
+   }>({
+     person: null,
+     roomId: null,
+     startDate: '',
+     endDate: '',
+   }),
+
   // Combined loading state
    isLoading = isTripLoading || isRoomsLoading || isTransportsLoading,
 
   // Date locale for formatting
-   dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+   dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
+
+  // DnD sensors - require a minimum drag distance before activating
+   sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 8, // 8px minimum drag distance
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200, // 200ms hold before drag starts on touch
+        tolerance: 5, // 5px movement tolerance
+      },
+    }),
+  );
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -420,6 +464,68 @@ const RoomListPage = memo((): ReactElement => {
     }
   }, []),
 
+  /**
+   * Handles start of drag operation.
+   */
+   handleDragStart = useCallback((event: DragStartEvent) => {
+    const { active } = event;
+    const data = active.data.current as DraggableGuestData | undefined;
+    
+    if (data?.person) {
+      setActiveDragPerson(data.person);
+    }
+  }, []),
+
+  /**
+   * Handles end of drag operation.
+   */
+   handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    // Clear active drag state
+    setActiveDragPerson(null);
+    
+    // If no drop target, do nothing
+    if (!over) return;
+    
+    // Get the dragged guest data
+    const guestData = active.data.current as DraggableGuestData | undefined;
+    const roomData = over.data.current as DroppableRoomData | undefined;
+    
+    if (!guestData?.person || !roomData?.roomId) return;
+    
+    // Open quick assignment dialog
+    setQuickAssignData({
+      person: guestData.person,
+      roomId: roomData.roomId,
+      startDate: guestData.startDate,
+      endDate: guestData.endDate,
+    });
+    setQuickAssignDialogOpen(true);
+  }, []),
+
+  /**
+   * Handles drag cancel.
+   */
+   handleDragCancel = useCallback(() => {
+    setActiveDragPerson(null);
+  }, []),
+
+  /**
+   * Handles quick assignment dialog close.
+   */
+   handleQuickAssignDialogClose = useCallback((open: boolean) => {
+    setQuickAssignDialogOpen(open);
+    if (!open) {
+      setQuickAssignData({
+        person: null,
+        roomId: null,
+        startDate: '',
+        endDate: '',
+      });
+    }
+  }, []),
+
   // ============================================================================
   // Header Action (desktop button)
   // ============================================================================
@@ -536,12 +642,18 @@ const RoomListPage = memo((): ReactElement => {
   // ============================================================================
 
   return (
-    <div className="container max-w-4xl py-6 md:py-8">
-      <PageHeader
-        title={t('rooms.title')}
-        backLink={`/trips/${tripIdFromUrl}/calendar`}
-        action={headerAction}
-      />
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      <div className="container max-w-4xl py-6 md:py-8">
+        <PageHeader
+          title={t('rooms.title')}
+          backLink={`/trips/${tripIdFromUrl}/calendar`}
+          action={headerAction}
+        />
 
       {/* Unassigned guests section */}
       {persons.length > 0 && (
@@ -578,7 +690,15 @@ const RoomListPage = memo((): ReactElement => {
                   const formattedEnd = format(parseISO(endDate), 'MMM d', { locale: dateLocale });
                   return (
                     <div key={person.id} className="flex items-center gap-2 flex-wrap">
-                      <PersonBadge person={person} size="sm" />
+                      <div className="flex items-center gap-1">
+                        <GripVertical className="size-4 text-muted-foreground/50" aria-hidden="true" />
+                        <DraggableGuest
+                          person={person}
+                          startDate={startDate}
+                          endDate={endDate}
+                          size="sm"
+                        />
+                      </div>
                       <span className="text-sm text-muted-foreground">
                         {formattedStart} - {formattedEnd} {t('rooms.needsRoom', 'needs room')}
                       </span>
@@ -586,6 +706,10 @@ const RoomListPage = memo((): ReactElement => {
                   );
                 })}
               </div>
+              <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
+                <GripVertical className="size-3" aria-hidden="true" />
+                {t('rooms.dragHint', 'Drag a guest to a room below to assign')}
+              </p>
             </CardContent>
           )}
         </Card>
@@ -604,21 +728,23 @@ const RoomListPage = memo((): ReactElement => {
       >
         {roomsWithOccupancy.map(({ room, currentOccupants }) => (
           <div key={room.id} role="listitem">
-            <RoomCard
-              room={room}
-              occupants={currentOccupants}
-              onClick={handleRoomClick}
-              onEdit={handleRoomEdit}
-              onDelete={handleRoomDelete}
-              isDisabled={isActionInProgress}
-              isExpanded={expandedRoomId === room.id}
-              expandedContent={
-                <RoomAssignmentSection
-                  roomId={room.id}
-                  variant="compact"
-                />
-              }
-            />
+            <DroppableRoom roomId={room.id}>
+              <RoomCard
+                room={room}
+                occupants={currentOccupants}
+                onClick={handleRoomClick}
+                onEdit={handleRoomEdit}
+                onDelete={handleRoomDelete}
+                isDisabled={isActionInProgress}
+                isExpanded={expandedRoomId === room.id}
+                expandedContent={
+                  <RoomAssignmentSection
+                    roomId={room.id}
+                    variant="compact"
+                  />
+                }
+              />
+            </DroppableRoom>
           </div>
         ))}
       </div>
@@ -644,11 +770,29 @@ const RoomListPage = memo((): ReactElement => {
         open={isDialogOpen}
         onOpenChange={handleDialogOpenChange}
       />
+
+      {/* Quick Assignment Dialog (for drag-drop) */}
+      <QuickAssignmentDialog
+        open={quickAssignDialogOpen}
+        onOpenChange={handleQuickAssignDialogClose}
+        person={quickAssignData.person}
+        roomId={quickAssignData.roomId}
+        suggestedStartDate={quickAssignData.startDate}
+        suggestedEndDate={quickAssignData.endDate}
+      />
     </div>
+
+    {/* Drag Overlay - shows dragged item while dragging */}
+    <DragOverlay>
+      {activeDragPerson && (
+        <div className="opacity-80 shadow-lg">
+          <PersonBadge person={activeDragPerson} size="sm" />
+        </div>
+      )}
+    </DragOverlay>
+  </DndContext>
   );
 });
-
-RoomListPage.displayName = 'RoomListPage';
 
 // ============================================================================
 // Exports

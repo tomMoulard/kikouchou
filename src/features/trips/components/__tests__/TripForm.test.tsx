@@ -12,6 +12,7 @@ import userEvent from '@testing-library/user-event';
 
 import { TripForm } from '@/features/trips/components/TripForm';
 import type { Trip, TripId, ShareId } from '@/types';
+import { isoDate } from '@/test/utils';
 
 // ============================================================================
 // Test Data Factories
@@ -25,8 +26,8 @@ function createTestTrip(overrides?: Partial<Trip>): Trip {
     id: 'trip-1' as TripId,
     name: 'Beach Vacation',
     location: 'Brittany, France',
-    startDate: '2024-07-15',
-    endDate: '2024-07-22',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-22'),
     shareId: 'share-123' as ShareId,
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -155,8 +156,8 @@ describe('TripForm Validation', () => {
 
     // Create trip with end date before start date
     const invalidTrip = createTestTrip({
-      startDate: '2024-07-22',
-      endDate: '2024-07-15', // Before start
+      startDate: isoDate('2024-07-22'),
+      endDate: isoDate('2024-07-15'), // Before start
     });
 
     render(<TripForm trip={invalidTrip} onSubmit={onSubmit} onCancel={onCancel} />);
@@ -193,8 +194,8 @@ describe('TripForm Submission', () => {
     expect(onSubmit).toHaveBeenCalledWith({
       name: 'Beach Vacation',
       location: 'Brittany, France',
-      startDate: '2024-07-15',
-      endDate: '2024-07-22',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-22'),
     });
   });
 

@@ -380,5 +380,4 @@ function ShareImportPageComponent(): ReactElement {
  * Memoized Share Import Page component.
  */
 export const ShareImportPage = memo(ShareImportPageComponent);
-
 ShareImportPage.displayName = 'ShareImportPage';

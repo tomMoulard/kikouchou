@@ -180,7 +180,7 @@ function formatDateRange(
 /**
  * Displays a single assignment with person badge, date range, and actions.
  */
-const AssignmentItem = memo(({
+const AssignmentItem = memo(function AssignmentItem({
   assignment,
   person,
   hasConflict,
@@ -188,7 +188,7 @@ const AssignmentItem = memo(({
   isDisabled,
   onEdit,
   onDelete,
-}: AssignmentItemProps): ReactElement => {
+}: AssignmentItemProps): ReactElement {
   const { t } = useTranslation(),
 
   // Event handlers with propagation control
@@ -300,8 +300,6 @@ const AssignmentItem = memo(({
   );
 });
 
-AssignmentItem.displayName = 'AssignmentItem';
-
 // ============================================================================
 // AssignmentFormDialog Subcomponent
 // ============================================================================
@@ -309,7 +307,7 @@ AssignmentItem.displayName = 'AssignmentItem';
 /**
  * Dialog for creating or editing a room assignment.
  */
-const AssignmentFormDialog = memo(({
+const AssignmentFormDialog = memo(function AssignmentFormDialog({
   open,
   onOpenChange,
   roomId,
@@ -321,7 +319,7 @@ const AssignmentFormDialog = memo(({
   checkConflict,
   getPersonTransportDates,
   existingAssignments,
-}: AssignmentFormDialogProps): ReactElement => {
+}: AssignmentFormDialogProps): ReactElement {
   const { t } = useTranslation(),
 
   // Form state
@@ -623,8 +621,6 @@ const AssignmentFormDialog = memo(({
   );
 });
 
-AssignmentFormDialog.displayName = 'AssignmentFormDialog';
-
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -650,12 +646,12 @@ AssignmentFormDialog.displayName = 'AssignmentFormDialog';
  * />
  * ```
  */
-export const RoomAssignmentSection = memo(({
+export const RoomAssignmentSection = memo(function RoomAssignmentSection({
   roomId,
   variant = 'compact',
   className,
   onAssignmentChange,
-}: RoomAssignmentSectionProps): ReactElement => {
+}: RoomAssignmentSectionProps): ReactElement {
   const { t, i18n } = useTranslation(),
    { currentTrip } = useTripContext(),
    { persons, isLoading: isPersonsLoading, getPersonById } = usePersonContext(),
@@ -986,8 +982,6 @@ export const RoomAssignmentSection = memo(({
     </section>
   );
 });
-
-RoomAssignmentSection.displayName = 'RoomAssignmentSection';
 
 // ============================================================================
 // Exports

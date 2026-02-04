@@ -148,5 +148,4 @@ function OfflineIndicatorComponent({
  * Memoized Offline Indicator component.
  */
 export const OfflineIndicator = memo(OfflineIndicatorComponent);
-
 OfflineIndicator.displayName = 'OfflineIndicator';

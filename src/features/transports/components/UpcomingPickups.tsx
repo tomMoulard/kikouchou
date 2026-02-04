@@ -132,11 +132,11 @@ function formatRelativeTime(
 /**
  * Individual pickup item displaying transport details.
  */
-const PickupItem = memo(({
+const PickupItem = memo(function PickupItem({
   transport,
   person,
   dateLocale,
-}: PickupItemProps): ReactElement => {
+}: PickupItemProps): ReactElement {
   const { t } = useTranslation(),
 
   // Format the relative time
@@ -202,8 +202,6 @@ const PickupItem = memo(({
   );
 });
 
-PickupItem.displayName = 'PickupItem';
-
 // ============================================================================
 // UpcomingPickups Component
 // ============================================================================
@@ -236,10 +234,10 @@ PickupItem.displayName = 'PickupItem';
  * <UpcomingPickups className="mt-4" />
  * ```
  */
-const UpcomingPickups = memo(({
+const UpcomingPickups = memo(function UpcomingPickups({
   initialDisplayCount = INITIAL_DISPLAY_COUNT,
   className,
-}: UpcomingPickupsProps): ReactElement => {
+}: UpcomingPickupsProps): ReactElement {
   const { t, i18n } = useTranslation(),
    { upcomingPickups } = useTransportContext(),
    { persons } = usePersonContext(),
@@ -353,8 +351,6 @@ const UpcomingPickups = memo(({
     </Card>
   );
 });
-
-UpcomingPickups.displayName = 'UpcomingPickups';
 
 // ============================================================================
 // Exports

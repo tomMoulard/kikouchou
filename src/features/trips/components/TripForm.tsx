@@ -31,6 +31,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { toISODateStringFromString } from '@/lib/db/utils';
 import type { Trip, TripFormData } from '@/types';
 
 // ============================================================================
@@ -142,11 +143,11 @@ function formatToISO(date: Date | undefined): string {
  * />
  * ```
  */
-const TripForm = memo(({
+const TripForm = memo(function TripForm({
   trip,
   onSubmit,
   onCancel,
-}: TripFormProps) => {
+}: TripFormProps) {
   const { t, i18n } = useTranslation(),
    locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
 
@@ -168,8 +169,9 @@ const TripForm = memo(({
 
    [name, setName] = useState(initialValues.name),
    [location, setLocation] = useState(initialValues.location),
-   [startDate, setStartDate] = useState(initialValues.startDate),
-   [endDate, setEndDate] = useState(initialValues.endDate),
+   // Date state is stored as string internally, converted to ISODateString on submit
+   [startDate, setStartDate] = useState<string>(initialValues.startDate),
+   [endDate, setEndDate] = useState<string>(initialValues.endDate),
    [description, setDescription] = useState(initialValues.description),
 
   // Validation errors
@@ -402,8 +404,8 @@ const TripForm = memo(({
         await onSubmit({
           name: name.trim(),
           location: location.trim() || undefined,
-          startDate,
-          endDate,
+          startDate: toISODateStringFromString(startDate),
+          endDate: toISODateStringFromString(endDate),
           description: description.trim() || undefined,
         });
         // Success - parent component handles navigation
@@ -627,8 +629,6 @@ const TripForm = memo(({
     </form>
   );
 });
-
-TripForm.displayName = 'TripForm';
 
 // ============================================================================
 // Exports

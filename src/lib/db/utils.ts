@@ -311,6 +311,48 @@ export const isValidHexColor = (str: string): str is HexColor =>
   HEX_COLOR_REGEX.test(str);
 
 // ============================================================================
+// Branded Type Conversion Functions
+// ============================================================================
+
+/**
+ * Converts a string to a branded ISODateString after validation.
+ * Use this when you have a string that should be treated as an ISO date.
+ * @param value - String to convert (must be in YYYY-MM-DD format)
+ * @returns Branded ISODateString
+ * @throws Error if the string is not a valid ISO date string
+ * @example
+ * const dateStr = toISODateStringFromString('2024-07-15');
+ * // dateStr is typed as ISODateString
+ */
+export const toISODateStringFromString = (value: string): ISODateString => {
+  if (!isValidISODateString(value)) {
+    throw new Error(
+      `Invalid ISO date string: "${value}". Expected format: YYYY-MM-DD`,
+    );
+  }
+  return value;
+};
+
+/**
+ * Converts a string to a branded HexColor after validation.
+ * Use this when you have a string that should be treated as a hex color.
+ * @param value - String to convert (must be in #RRGGBB format)
+ * @returns Branded HexColor
+ * @throws Error if the string is not a valid hex color
+ * @example
+ * const color = toHexColor('#ef4444');
+ * // color is typed as HexColor
+ */
+export const toHexColor = (value: string): HexColor => {
+  if (!isValidHexColor(value)) {
+    throw new Error(
+      `Invalid hex color: "${value}". Expected format: #RRGGBB`,
+    );
+  }
+  return value;
+};
+
+// ============================================================================
 // Database Record Helpers
 // ============================================================================
 

@@ -142,13 +142,13 @@ export function getRoomIconLabelKey(icon: RoomIcon): string {
  * />
  * ```
  */
-const RoomIconPicker = memo(({
+const RoomIconPicker = memo(function RoomIconPicker({
   value,
   onChange,
   disabled = false,
   className,
   id,
-}: RoomIconPickerProps) => {
+}: RoomIconPickerProps) {
   const { t } = useTranslation();
   const generatedId = useId();
   const pickerId = id ?? generatedId;
@@ -276,8 +276,6 @@ const RoomIconPicker = memo(({
     </div>
   );
 });
-
-RoomIconPicker.displayName = 'RoomIconPicker';
 
 // ============================================================================
 // Exports

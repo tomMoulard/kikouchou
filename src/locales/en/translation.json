@@ -197,6 +197,7 @@
     "previousMonth": "Previous month",
     "nextMonth": "Next month",
     "monthView": "Month view calendar",
+    "scrollableCalendar": "Scrollable calendar",
     "personArriving": "{{name}} arriving",
     "personDeparting": "{{name}} departing",
     "eventDetails": "Event details",

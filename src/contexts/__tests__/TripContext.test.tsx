@@ -19,6 +19,7 @@ import { TripProvider, useTripContext } from '@/contexts/TripContext';
 import { createTrip, getTripById, deleteTrip } from '@/lib/db/repositories/trip-repository';
 import { setCurrentTrip as repositorySetCurrentTrip } from '@/lib/db/repositories/settings-repository';
 import type { TripId } from '@/types';
+import { isoDate } from '@/test/utils';
 
 // ============================================================================
 // Test Helpers
@@ -37,8 +38,8 @@ function TripContextWrapper({ children }: { children: ReactNode }) {
 async function createTestTrip(name = 'Test Trip'): Promise<TripId> {
   const trip = await createTrip({
     name,
-    startDate: '2024-07-15',
-    endDate: '2024-07-30',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-30'),
   });
   return trip.id;
 }
@@ -116,13 +117,13 @@ describe('TripContext', () => {
       // Create trips with different dates
       await createTrip({
         name: 'Early Trip',
-        startDate: '2024-01-15',
-        endDate: '2024-01-20',
+        startDate: isoDate('2024-01-15'),
+        endDate: isoDate('2024-01-20'),
       });
       await createTrip({
         name: 'Late Trip',
-        startDate: '2024-12-15',
-        endDate: '2024-12-20',
+        startDate: isoDate('2024-12-15'),
+        endDate: isoDate('2024-12-20'),
       });
 
       const { result } = renderHook(() => useTripContext(), {

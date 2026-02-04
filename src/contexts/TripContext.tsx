@@ -13,7 +13,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -201,33 +200,30 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
   // Extract current trip ID from query result
    currentTripId = queryResult?.currentTripId,
 
-  // Ref to preserve referential equality of currentTrip
+  // State to preserve referential equality of currentTrip
   // This prevents unnecessary re-renders in consumers when other trips change
-   currentTripRef = useRef<Trip | null>(null),
+   [prevCurrentTrip, setPrevCurrentTrip] = useState<Trip | null>(null),
 
   // Derive current trip from trips array and current trip ID
-  // Uses referential equality check to prevent re-renders when trip data hasn't changed
-   currentTrip = useMemo((): Trip | null => {
+   currentTripCandidate = useMemo((): Trip | null => {
     if (isLoading || currentTripId === undefined || currentTripId === null) {
-      // If we should have no current trip, return null (or preserve null ref)
-      if (currentTripRef.current !== null) {
-        currentTripRef.current = null;
-      }
       return null;
     }
+    return trips.find((t) => t.id === currentTripId) ?? null;
+  }, [trips, currentTripId, isLoading]),
 
-    const found = trips.find((t) => t.id === currentTripId) ?? null;
+  // Preserve referential equality if the trip data hasn't actually changed
+  // This prevents consumers from re-rendering when unrelated trips are updated
+   currentTrip = areTripsEqual(prevCurrentTrip, currentTripCandidate)
+    ? prevCurrentTrip
+    : currentTripCandidate;
 
-    // Preserve referential equality if the trip data hasn't actually changed
-    // This prevents consumers from re-rendering when unrelated trips are updated
-    if (areTripsEqual(currentTripRef.current, found)) {
-      return currentTripRef.current;
+  // Sync the previous trip state when the current trip actually changes
+  useEffect(() => {
+    if (!areTripsEqual(prevCurrentTrip, currentTripCandidate)) {
+      setPrevCurrentTrip(currentTripCandidate);
     }
-
-    // Trip data has changed, update the ref and return the new trip
-    currentTripRef.current = found;
-    return found;
-  }, [trips, currentTripId, isLoading]);
+  }, [prevCurrentTrip, currentTripCandidate]);
 
   // Auto-cleanup stale trip references when persisted ID points to deleted trip
   useEffect(() => {

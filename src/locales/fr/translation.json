@@ -197,6 +197,7 @@
     "previousMonth": "Mois précédent",
     "nextMonth": "Mois suivant",
     "monthView": "Calendrier mensuel",
+    "scrollableCalendar": "Calendrier défilable",
     "personArriving": "Arrivée de {{name}}",
     "personDeparting": "Départ de {{name}}",
     "eventDetails": "Détails de l'événement",

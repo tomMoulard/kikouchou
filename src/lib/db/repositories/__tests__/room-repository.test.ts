@@ -21,6 +21,7 @@ import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import { createAssignment } from '@/lib/db/repositories/assignment-repository';
 import type { RoomFormData, RoomId, TripId } from '@/types';
+import { isoDate, hexColor } from '@/test/utils';
 
 // ============================================================================
 // Test Data Factories
@@ -44,8 +45,8 @@ function createTestRoomData(overrides?: Partial<RoomFormData>): RoomFormData {
 async function createTestTrip(name = 'Test Trip'): Promise<TripId> {
   const trip = await createTrip({
     name,
-    startDate: '2024-07-15',
-    endDate: '2024-07-22',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-22'),
   });
   return trip.id;
 }
@@ -342,14 +343,14 @@ describe('deleteRoom', () => {
   it('cascade deletes room assignments', async () => {
     const tripId = await createTestTrip();
     const room = await createRoom(tripId, createTestRoomData());
-    const person = await createPerson(tripId, { name: 'Alice', color: '#ef4444' });
+    const person = await createPerson(tripId, { name: 'Alice', color: hexColor('#ef4444') });
 
     // Create room assignment
     await createAssignment(tripId, {
       roomId: room.id,
       personId: person.id,
-      startDate: '2024-07-15',
-      endDate: '2024-07-20',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-20'),
     });
 
     // Verify assignment exists
@@ -372,20 +373,20 @@ describe('deleteRoom', () => {
     const tripId = await createTestTrip();
     const room1 = await createRoom(tripId, createTestRoomData({ name: 'Room 1' }));
     const room2 = await createRoom(tripId, createTestRoomData({ name: 'Room 2' }));
-    const person = await createPerson(tripId, { name: 'Alice', color: '#ef4444' });
+    const person = await createPerson(tripId, { name: 'Alice', color: hexColor('#ef4444') });
 
     // Create assignment for each room
     await createAssignment(tripId, {
       roomId: room1.id,
       personId: person.id,
-      startDate: '2024-07-15',
-      endDate: '2024-07-17',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-17'),
     });
     await createAssignment(tripId, {
       roomId: room2.id,
       personId: person.id,
-      startDate: '2024-07-18',
-      endDate: '2024-07-20',
+      startDate: isoDate('2024-07-18'),
+      endDate: isoDate('2024-07-20'),
     });
 
     expect(await db.roomAssignments.count()).toBe(2);

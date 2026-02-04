@@ -25,6 +25,7 @@ import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
 import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
 import { useTripContext } from '@/contexts/TripContext';
 import { parseISO, format } from 'date-fns';
+import { toHexColor, toISODateStringFromString } from '@/lib/db/utils';
 import type { Person, PersonFormData } from '@/types';
 
 // ============================================================================
@@ -93,11 +94,11 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
  * />
  * ```
  */
- PersonForm = memo(({
+ PersonForm = memo(function PersonForm({
   person,
   onSubmit,
   onCancel,
-}: PersonFormProps) => {
+}: PersonFormProps) {
   const { t } = useTranslation(),
    { currentTrip } = useTripContext(),
 
@@ -107,7 +108,8 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
 
   // Form field values
    [name, setName] = useState(person?.name ?? ''),
-   [color, setColor] = useState(person?.color ?? DEFAULT_COLOR),
+   // Color state is stored as string internally, converted to HexColor on submit
+   [color, setColor] = useState<string>(person?.color ?? DEFAULT_COLOR),
    [stayDates, setStayDates] = useState<DateRange | undefined>(() => {
     if (person?.stayStartDate && person?.stayEndDate) {
       return {
@@ -259,11 +261,15 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
       setSubmitError(null);
 
       try {
+        // Format dates and convert to branded types
+        const formattedStartDate = stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : undefined;
+        const formattedEndDate = stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : undefined;
+
         await onSubmit({
           name: name.trim(),
-          color,
-          stayStartDate: stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : undefined,
-          stayEndDate: stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : undefined,
+          color: toHexColor(color),
+          stayStartDate: formattedStartDate ? toISODateStringFromString(formattedStartDate) : undefined,
+          stayEndDate: formattedEndDate ? toISODateStringFromString(formattedEndDate) : undefined,
         });
         // Success - parent component handles navigation
       } catch (error) {
@@ -378,8 +384,6 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
     </form>
   );
 });
-
-PersonForm.displayName = 'PersonForm';
 
 // ============================================================================
 // Exports

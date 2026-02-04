@@ -21,6 +21,7 @@ import {
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import type { TripId } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
+import { isoDate } from '@/test/utils';
 
 // ============================================================================
 // Test Data Factories
@@ -32,8 +33,8 @@ import { DEFAULT_SETTINGS } from '@/types';
 async function createTestTrip(name = 'Test Trip'): Promise<TripId> {
   const trip = await createTrip({
     name,
-    startDate: '2024-07-15',
-    endDate: '2024-07-22',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-22'),
   });
   return trip.id;
 }

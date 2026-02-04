@@ -524,8 +524,4 @@ export const LocationPicker = memo(function LocationPicker({
   );
 });
 
-// ============================================================================
-// Display Name
-// ============================================================================
 
-LocationPicker.displayName = 'LocationPicker';

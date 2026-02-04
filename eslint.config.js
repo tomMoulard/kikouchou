@@ -40,6 +40,7 @@ export default defineConfig([
     files: [
       '**/DateRangePicker.tsx',
       '**/CalendarPage.tsx',
+      '**/EventDetailDialog.tsx',
       '**/PersonCard.tsx',
       '**/RoomCard.tsx',
       '**/RoomListPage.tsx',

@@ -305,7 +305,7 @@ function groupTransportsByDate(
 /**
  * Individual transport card displaying transport details with actions.
  */
-const TransportCard = memo(({
+const TransportCard = memo(function TransportCard({
   transport,
   person,
   driver,
@@ -314,7 +314,7 @@ const TransportCard = memo(({
   dateLocale,
   isActionsDisabled = false,
   isPast = false,
-}: TransportCardProps): ReactElement => {
+}: TransportCardProps): ReactElement {
   const { t } = useTranslation(),
 
   // Format datetime for display
@@ -507,8 +507,6 @@ const TransportCard = memo(({
   );
 });
 
-TransportCard.displayName = 'TransportCard';
-
 // ============================================================================
 // DateGroupSection Component
 // ============================================================================
@@ -536,7 +534,7 @@ interface DateGroupSectionProps {
 /**
  * Renders a single date group with its transports.
  */
-const DateGroupSection = memo(({
+const DateGroupSection = memo(function DateGroupSection({
   group,
   personsMap,
   onEdit,
@@ -544,8 +542,9 @@ const DateGroupSection = memo(({
   dateLocale,
   isActionsDisabled = false,
   isPast = false,
-}: DateGroupSectionProps): ReactElement => (
-  <section key={group.dateKey} aria-labelledby={`date-header-${group.dateKey}`}>
+}: DateGroupSectionProps): ReactElement {
+  return (
+    <section key={group.dateKey} aria-labelledby={`date-header-${group.dateKey}`}>
     {/* Date header */}
     <h2
       id={`date-header-${group.dateKey}`}
@@ -587,9 +586,8 @@ const DateGroupSection = memo(({
       })}
     </div>
   </section>
-));
-
-DateGroupSection.displayName = 'DateGroupSection';
+  );
+});
 
 // ============================================================================
 // TransportList Component
@@ -599,7 +597,7 @@ DateGroupSection.displayName = 'DateGroupSection';
  * List of transport cards grouped by date with date headers.
  * Includes collapsible section for past transports.
  */
-const TransportList = memo(({
+const TransportList = memo(function TransportList({
   upcomingDateGroups,
   pastDateGroups,
   pastCount,
@@ -611,7 +609,7 @@ const TransportList = memo(({
   emptyTitle,
   emptyDescription,
   isActionsDisabled = false,
-}: TransportListProps): ReactElement => {
+}: TransportListProps): ReactElement {
   const { t } = useTranslation();
   
   // State for past transports collapsible section
@@ -706,8 +704,6 @@ const TransportList = memo(({
   );
 });
 
-TransportList.displayName = 'TransportList';
-
 // ============================================================================
 // TransportListPage Component
 // ============================================================================
@@ -722,7 +718,7 @@ TransportList.displayName = 'TransportList';
  * { path: '/trips/:tripId/transports', element: <TransportListPage /> }
  * ```
  */
-const TransportListPage = memo((): ReactElement => {
+const TransportListPage = memo(function TransportListPage(): ReactElement {
   const { t, i18n } = useTranslation(),
    navigate = useNavigate(),
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
@@ -1043,8 +1039,6 @@ const TransportListPage = memo((): ReactElement => {
     </div>
   );
 });
-
-TransportListPage.displayName = 'TransportListPage';
 
 // ============================================================================
 // Exports

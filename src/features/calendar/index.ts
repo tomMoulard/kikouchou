@@ -10,13 +10,48 @@
 // ============================================================================
 
 export { CalendarPage, default as CalendarPageDefault } from './pages/CalendarPage';
+
+// ============================================================================
+// Types
+// ============================================================================
+
 export type {
   CalendarEvent,
+  CalendarTransport,
   CalendarHeaderProps,
   CalendarDayHeaderProps,
   CalendarDayProps,
   CalendarEventProps,
-} from './pages/CalendarPage';
+  TransportIndicatorProps,
+  SegmentPosition,
+} from './types';
+
+// ============================================================================
+// Components
+// ============================================================================
+
+export {
+  CalendarHeader,
+  CalendarDayHeader,
+  CalendarDay,
+  CalendarEventPill,
+  TransportIndicator,
+} from './components';
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
+export {
+  getDateLocale,
+  getLuminance,
+  getContrastTextColor,
+  getSegmentBorderRadiusClasses,
+  formatTime,
+  EMPTY_EVENTS,
+  EMPTY_TRANSPORTS,
+  MAX_VISIBLE_EVENT_SLOTS,
+} from './utils/calendar-utils';
 
 // ============================================================================
 // Routes

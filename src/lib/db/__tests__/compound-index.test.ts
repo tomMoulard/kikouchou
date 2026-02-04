@@ -36,6 +36,7 @@ import type {
   Transport,
   TripId,
 } from '@/types';
+import { isoDate, hexColor } from '@/test/utils';
 
 // ============================================================================
 // Test Data Factories
@@ -45,8 +46,8 @@ function createTestTrip(overrides?: Partial<Trip>): Trip {
   return {
     id: createTripId(),
     name: 'Test Trip',
-    startDate: '2024-07-15',
-    endDate: '2024-07-22',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-22'),
     shareId: createShareId(),
     ...createTimestamps(),
     ...overrides,
@@ -68,7 +69,7 @@ function createTestPerson(tripId: TripId, index: number): Person {
     id: createPersonId(),
     tripId,
     name: `Person ${index}`,
-    color: '#ef4444',
+    color: hexColor('#ef4444'),
   };
 }
 
@@ -83,8 +84,8 @@ function createTestAssignment(
     tripId,
     roomId: roomId as RoomAssignment['roomId'],
     personId: personId as RoomAssignment['personId'],
-    startDate: `2024-07-${15 + dayOffset}`,
-    endDate: `2024-07-${16 + dayOffset}`,
+    startDate: isoDate(`2024-07-${15 + dayOffset}`),
+    endDate: isoDate(`2024-07-${16 + dayOffset}`),
   };
 }
 

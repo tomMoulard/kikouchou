@@ -76,11 +76,11 @@ export interface PersonDialogProps {
  * />
  * ```
  */
-const PersonDialog = memo(({
+const PersonDialog = memo(function PersonDialog({
   personId,
   open,
   onOpenChange,
-}: PersonDialogProps) => {
+}: PersonDialogProps) {
   const { t } = useTranslation(),
    { persons, createPerson, updatePerson } = usePersonContext(),
 
@@ -248,8 +248,6 @@ const PersonDialog = memo(({
     </Dialog>
   );
 });
-
-PersonDialog.displayName = 'PersonDialog';
 
 // ============================================================================
 // Exports

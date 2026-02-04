@@ -24,6 +24,7 @@ import { createAssignment } from '@/lib/db/repositories/assignment-repository';
 import { createTransport } from '@/lib/db/repositories/transport-repository';
 import type { PersonFormData, PersonId, TripId } from '@/types';
 import { DEFAULT_PERSON_COLORS } from '@/types';
+import { isoDate, hexColor } from '@/test/utils';
 
 // ============================================================================
 // Test Data Factories
@@ -35,7 +36,7 @@ import { DEFAULT_PERSON_COLORS } from '@/types';
 function createTestPersonData(overrides?: Partial<PersonFormData>): PersonFormData {
   return {
     name: 'Test Person',
-    color: '#ef4444',
+    color: hexColor('#ef4444'),
     ...overrides,
   };
 }
@@ -46,8 +47,8 @@ function createTestPersonData(overrides?: Partial<PersonFormData>): PersonFormDa
 async function createTestTrip(name = 'Test Trip'): Promise<TripId> {
   const trip = await createTrip({
     name,
-    startDate: '2024-07-15',
-    endDate: '2024-07-22',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-22'),
   });
   return trip.id;
 }
@@ -69,7 +70,7 @@ describe('createPerson', () => {
     const tripId = await createTestTrip();
     const data = createTestPersonData({
       name: 'Marie',
-      color: '#3b82f6',
+      color: hexColor('#3b82f6'),
     });
 
     const person = await createPerson(tripId, data);
@@ -183,9 +184,9 @@ describe('createPersonWithAutoColor', () => {
     const tripId = await createTestTrip();
 
     // Create 3 persons manually with arbitrary colors
-    await createPerson(tripId, { name: 'Manual 1', color: '#000000' });
-    await createPerson(tripId, { name: 'Manual 2', color: '#111111' });
-    await createPerson(tripId, { name: 'Manual 3', color: '#222222' });
+    await createPerson(tripId, { name: 'Manual 1', color: hexColor('#000000') });
+    await createPerson(tripId, { name: 'Manual 2', color: hexColor('#111111') });
+    await createPerson(tripId, { name: 'Manual 3', color: hexColor('#222222') });
 
     // Auto-color person should get 4th color (index 3)
     const autoPerson = await createPersonWithAutoColor(tripId, 'Auto Person');
@@ -314,7 +315,7 @@ describe('updatePerson', () => {
     const tripId = await createTestTrip();
     const person = await createPerson(tripId, createTestPersonData({ name: 'Original' }));
 
-    await updatePerson(person.id, { name: 'Updated', color: '#22c55e' });
+    await updatePerson(person.id, { name: 'Updated', color: hexColor('#22c55e') });
 
     const updated = await getPersonById(person.id);
     expect(updated?.name).toBe('Updated');
@@ -327,7 +328,7 @@ describe('updatePerson', () => {
       tripId,
       createTestPersonData({
         name: 'Original Name',
-        color: '#ef4444',
+        color: hexColor('#ef4444'),
       })
     );
 
@@ -345,12 +346,12 @@ describe('updatePerson', () => {
       tripId,
       createTestPersonData({
         name: 'Original Name',
-        color: '#ef4444',
+        color: hexColor('#ef4444'),
       })
     );
 
     // Only update color
-    await updatePerson(person.id, { color: '#3b82f6' });
+    await updatePerson(person.id, { color: hexColor('#3b82f6') });
 
     const updated = await getPersonById(person.id);
     expect(updated?.name).toBe('Original Name'); // Unchanged
@@ -406,8 +407,8 @@ describe('deletePerson', () => {
     await createAssignment(tripId, {
       roomId: room.id,
       personId: person.id,
-      startDate: '2024-07-15',
-      endDate: '2024-07-20',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-20'),
     });
 
     // Verify assignment exists
@@ -490,14 +491,14 @@ describe('deletePerson', () => {
     await createAssignment(tripId, {
       roomId: room1.id,
       personId: person.id,
-      startDate: '2024-07-15',
-      endDate: '2024-07-17',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-17'),
     });
     await createAssignment(tripId, {
       roomId: room2.id,
       personId: person.id,
-      startDate: '2024-07-18',
-      endDate: '2024-07-20',
+      startDate: isoDate('2024-07-18'),
+      endDate: isoDate('2024-07-20'),
     });
 
     // Create multiple transports
@@ -538,14 +539,14 @@ describe('deletePerson', () => {
     await createAssignment(tripId, {
       roomId: room.id,
       personId: person1.id,
-      startDate: '2024-07-15',
-      endDate: '2024-07-17',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-17'),
     });
     await createAssignment(tripId, {
       roomId: room.id,
       personId: person2.id,
-      startDate: '2024-07-15',
-      endDate: '2024-07-17',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-17'),
     });
     await createTransport(tripId, {
       personId: person1.id,

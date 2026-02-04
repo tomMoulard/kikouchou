@@ -116,7 +116,7 @@ function getOccupancyBadgeVariant(
  * />
  * ```
  */
-const RoomCard = memo(({
+const RoomCard = memo(function RoomCard({
   room,
   occupants,
   isDisabled = false,
@@ -125,7 +125,7 @@ const RoomCard = memo(({
   onEdit,
   onDelete,
   expandedContent,
-}: RoomCardProps) => {
+}: RoomCardProps) {
   const { t } = useTranslation(),
 
   // State for delete confirmation dialog
@@ -373,8 +373,6 @@ const RoomCard = memo(({
     </>
   );
 });
-
-RoomCard.displayName = 'RoomCard';
 
 // ============================================================================
 // Exports

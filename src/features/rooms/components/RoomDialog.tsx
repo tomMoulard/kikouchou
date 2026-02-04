@@ -75,11 +75,11 @@ export interface RoomDialogProps {
  * />
  * ```
  */
-const RoomDialog = memo(({
+const RoomDialog = memo(function RoomDialog({
   roomId,
   open,
   onOpenChange,
-}: RoomDialogProps) => {
+}: RoomDialogProps) {
   const { t } = useTranslation(),
    { rooms, createRoom, updateRoom } = useRoomContext(),
 
@@ -248,8 +248,6 @@ const RoomDialog = memo(({
     </Dialog>
   );
 });
-
-RoomDialog.displayName = 'RoomDialog';
 
 // ============================================================================
 // Exports

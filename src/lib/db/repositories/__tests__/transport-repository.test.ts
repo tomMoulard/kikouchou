@@ -25,7 +25,7 @@ import {
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import type { PersonId, TransportFormData, TransportId, TripId } from '@/types';
-
+import { isoDate, hexColor } from '@/test/utils';
 // ============================================================================
 // Test Data Factories
 // ============================================================================
@@ -53,8 +53,8 @@ function createTestTransportData(
 async function createTestTrip(name = 'Test Trip'): Promise<TripId> {
   const trip = await createTrip({
     name,
-    startDate: '2024-07-15',
-    endDate: '2024-07-22',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-22'),
   });
   return trip.id;
 }
@@ -65,7 +65,7 @@ async function createTestTrip(name = 'Test Trip'): Promise<TripId> {
 async function createTestPerson(tripId: TripId, name = 'Test Person'): Promise<PersonId> {
   const person = await createPerson(tripId, {
     name,
-    color: '#ef4444',
+    color: hexColor('#ef4444'),
   });
   return person.id;
 }

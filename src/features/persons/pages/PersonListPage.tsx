@@ -133,13 +133,13 @@ function formatTransportDatetime(
 /**
  * Individual person card displaying name, color, and transport summary.
  */
-const PersonCard = memo(({
+const PersonCard = memo(function PersonCard({
   person,
   transportSummary,
   onClick,
   isDisabled = false,
   dateLocale,
-}: PersonCardProps): ReactElement => {
+}: PersonCardProps): ReactElement {
   const { t } = useTranslation(),
 
   // Handle keyboard activation (Enter or Space)
@@ -257,8 +257,6 @@ const PersonCard = memo(({
   );
 });
 
-PersonCard.displayName = 'PersonCard';
-
 // ============================================================================
 // PersonListPage Component
 // ============================================================================
@@ -273,7 +271,7 @@ PersonCard.displayName = 'PersonCard';
  * { path: '/trips/:tripId/persons', element: <PersonListPage /> }
  * ```
  */
-const PersonListPage = memo((): ReactElement => {
+const PersonListPage = memo(function PersonListPage(): ReactElement {
   const { t, i18n } = useTranslation(),
    navigate = useNavigate(),
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
@@ -562,8 +560,6 @@ const PersonListPage = memo((): ReactElement => {
     </div>
   );
 });
-
-PersonListPage.displayName = 'PersonListPage';
 
 // ============================================================================
 // Exports
