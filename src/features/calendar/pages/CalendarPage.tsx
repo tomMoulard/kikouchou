@@ -56,7 +56,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { toISODateString } from '@/lib/db/utils';
-import type { HexColor, Room, RoomAssignment } from '@/types';
+import type { HexColor, Room, RoomAssignment, TransportId } from '@/types';
 
 // Import extracted components
 import {
@@ -65,8 +65,12 @@ import {
   CalendarDay,
   EventDetailDialog,
   type AssignmentEventData,
+  type TransportEventData,
   type CalendarEventData,
 } from '../components';
+
+// Import TransportDialog for editing transports
+import { TransportDialog } from '@/features/transports';
 
 // Import types and utilities
 import type { CalendarEvent, CalendarTransport, SegmentPosition } from '../types';
@@ -109,6 +113,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     departures,
     isLoading: isTransportsLoading,
     error: transportsError,
+    deleteTransport,
   } = useTransportContext();
 
   // Local state for current viewing month
@@ -121,6 +126,10 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // Event detail dialog state
   const [selectedEvent, setSelectedEvent] = useState<CalendarEventData | null>(null);
   const [isEventDialogOpen, setIsEventDialogOpen] = useState(false);
+
+  // Transport edit dialog state
+  const [isTransportDialogOpen, setIsTransportDialogOpen] = useState(false);
+  const [selectedTransportId, setSelectedTransportId] = useState<TransportId | undefined>();
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -508,10 +517,40 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     [getPersonById, roomsMap],
   );
 
+  const handleTransportClick = useCallback(
+    (calTransport: CalendarTransport) => {
+      // Look up driver person if driverId exists
+      const driver = calTransport.transport.driverId
+        ? getPersonById(calTransport.transport.driverId)
+        : undefined;
+
+      const eventData: TransportEventData = {
+        type: 'transport',
+        transport: calTransport.transport,
+        person: calTransport.person,
+        driver,
+      };
+
+      setSelectedEvent(eventData);
+      setIsEventDialogOpen(true);
+    },
+    [getPersonById],
+  );
+
   const handleEventEdit = useCallback(() => {
-    toast.info('Edit functionality coming soon');
-    setIsEventDialogOpen(false);
-  }, []);
+    if (!selectedEvent) return;
+
+    if (selectedEvent.type === 'transport') {
+      // Close the detail dialog and open the transport edit dialog
+      setIsEventDialogOpen(false);
+      setSelectedTransportId(selectedEvent.transport.id);
+      setIsTransportDialogOpen(true);
+    } else {
+      // Assignment edit - not yet implemented
+      toast.info('Edit functionality coming soon');
+      setIsEventDialogOpen(false);
+    }
+  }, [selectedEvent]);
 
   const handleEventDelete = useCallback(async () => {
     if (!selectedEvent) return;
@@ -525,8 +564,24 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         toast.error(t('errors.deleteFailed', 'Failed to delete'));
         throw error;
       }
+    } else if (selectedEvent.type === 'transport') {
+      try {
+        await deleteTransport(selectedEvent.transport.id);
+        toast.success(t('calendar.transportDeleted', 'Transport deleted successfully'));
+      } catch (error) {
+        console.error('Failed to delete transport:', error);
+        toast.error(t('errors.deleteFailed', 'Failed to delete'));
+        throw error;
+      }
     }
-  }, [selectedEvent, deleteAssignment, t]);
+  }, [selectedEvent, deleteAssignment, deleteTransport, t]);
+
+  const handleTransportDialogClose = useCallback((open: boolean) => {
+    setIsTransportDialogOpen(open);
+    if (!open) {
+      setSelectedTransportId(undefined);
+    }
+  }, []);
 
   // Validate Trip Context
   const tripMismatch = useMemo(() => {
@@ -643,6 +698,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
                   isWithinTrip={isWithinTrip}
                   dateLocale={dateLocale}
                   onEventClick={handleEventClick}
+                  onTransportClick={handleTransportClick}
                 />
               );
             })}
@@ -664,6 +720,13 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         event={selectedEvent}
         onEdit={handleEventEdit}
         onDelete={handleEventDelete}
+      />
+
+      {/* Transport Edit Dialog */}
+      <TransportDialog
+        open={isTransportDialogOpen}
+        onOpenChange={handleTransportDialogClose}
+        transportId={selectedTransportId}
       />
     </div>
   );

@@ -26,6 +26,7 @@ const CalendarDay = memo(function CalendarDay({
   isWithinTrip,
   dateLocale,
   onEventClick,
+  onTransportClick,
 }: CalendarDayProps): ReactElement {
   const dayNumber = format(date, 'd', { locale: dateLocale });
   const dateLabel = format(date, 'PPPP', { locale: dateLocale });
@@ -117,6 +118,7 @@ const CalendarDay = memo(function CalendarDay({
             key={transport.transport.id}
             transport={transport}
             type={transport.transport.type}
+            onClick={onTransportClick}
           />
         ))}
 

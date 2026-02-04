@@ -202,7 +202,9 @@
     "personDeparting": "Départ de {{name}}",
     "eventDetails": "Détails de l'événement",
     "nights": "{{count}} nuit",
-    "nights_plural": "{{count}} nuits"
+    "nights_plural": "{{count}} nuits",
+    "viewTransportDetails": "Voir les détails de {{type}} de {{name}}",
+    "transportDeleted": "Transport supprimé avec succès"
   },
   "sharing": {
     "title": "Partager le voyage",

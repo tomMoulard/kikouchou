@@ -108,6 +108,8 @@ export interface CalendarDayProps {
   readonly isWithinTrip: boolean;
   readonly dateLocale: Locale;
   readonly onEventClick: (assignment: RoomAssignment) => void;
+  /** Callback when a transport event is clicked */
+  readonly onTransportClick?: (transport: CalendarTransport) => void;
 }
 
 /**
@@ -124,4 +126,6 @@ export interface CalendarEventProps {
 export interface TransportIndicatorProps {
   readonly transport: CalendarTransport;
   readonly type: TransportType;
+  /** Callback when the transport is clicked */
+  readonly onClick?: (transport: CalendarTransport) => void;
 }
