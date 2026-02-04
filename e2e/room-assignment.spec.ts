@@ -296,129 +296,6 @@ async function createAssignmentViaDB(
 }
 
 /**
- * Navigates the calendar to a specific month/year.
- * Uses the calendar's navigation buttons to reach the target month.
- *
- * @param page - Playwright page object
- * @param targetDate - Target date to navigate to
- * @param calendar - Locator for the calendar element (optional, defaults to first visible calendar)
- */
-async function navigateToMonth(
-  page: Page,
-  targetDate: Date,
-  calendar?: ReturnType<Page['locator']>,
-): Promise<void> {
-  // Use provided calendar or find first visible one
-  const calendarLocator = calendar ?? page.locator('[data-slot="calendar"]').first();
-
-  // Wait for calendar to be visible first
-  await calendarLocator.waitFor({ state: 'visible', timeout: 5000 });
-
-  // Get the currently displayed month from the calendar caption
-  const maxAttempts = 24; // Safety limit (2 years of navigation)
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    // Check if we're on the right month by looking at the caption
-    const captionText = await calendarLocator.locator('.rdp-month_caption').textContent();
-
-    if (captionText) {
-      const targetMonth = targetDate.toLocaleString('default', { month: 'long' });
-      const targetYear = targetDate.getFullYear().toString();
-
-      // Check if caption contains both the target month and year
-      if (captionText.includes(targetMonth) && captionText.includes(targetYear)) {
-        return; // We're on the correct month
-      }
-
-      // Also check French month names
-      const frenchMonths = [
-        'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-        'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
-      ];
-      const frenchTargetMonth = frenchMonths[targetDate.getMonth()];
-      if (
-        frenchTargetMonth &&
-        captionText.toLowerCase().includes(frenchTargetMonth) &&
-        captionText.includes(targetYear)
-      ) {
-        return;
-      }
-
-      // Determine direction: check if we need to go forward or backward
-      const currentMonthMatch = captionText.match(/(\w+)\s*(\d{4})/);
-
-      if (currentMonthMatch) {
-        const [, monthName, yearStr] = currentMonthMatch;
-        const currentYear = parseInt(yearStr ?? '2024', 10);
-
-        // Convert month name to index (0-11)
-        const monthNames = [
-          'January', 'February', 'March', 'April', 'May', 'June',
-          'July', 'August', 'September', 'October', 'November', 'December',
-          ...frenchMonths,
-        ];
-        const lowerMonthName = (monthName ?? '').toLowerCase();
-        let currentMonth = monthNames.findIndex((m) =>
-          lowerMonthName.startsWith(m.toLowerCase().slice(0, 3)),
-        );
-        if (currentMonth >= 12) {
-          currentMonth = currentMonth - 12; // Adjust for French months
-        }
-
-        if (currentMonth >= 0) {
-          const currentDateValue = currentYear * 12 + currentMonth;
-          const targetDateValue = targetDate.getFullYear() * 12 + targetDate.getMonth();
-
-          if (targetDateValue > currentDateValue) {
-            // Go forward - find the next button within this calendar
-            await calendarLocator.locator('button.rdp-button_next').click();
-          } else if (targetDateValue < currentDateValue) {
-            // Go backward
-            await calendarLocator.locator('button.rdp-button_previous').click();
-          } else {
-            // Same month, we're done
-            return;
-          }
-          await page.waitForTimeout(50); // Brief wait for animation
-          continue;
-        }
-      }
-    }
-
-    // Fallback: just try clicking next
-    await calendarLocator.locator('button.rdp-button_next').click();
-    await page.waitForTimeout(50);
-  }
-}
-
-/**
- * Selects a date in the shadcn/ui Calendar popover.
- *
- * @param page - Playwright page object
- * @param dateString - ISO date string (YYYY-MM-DD)
- */
-async function selectDate(page: Page, dateString: string): Promise<void> {
-  const targetDate = new Date(dateString + 'T12:00:00'); // Avoid timezone issues
-
-  // First, navigate to the correct month if needed
-  await navigateToMonth(page, targetDate);
-
-  // Get the day number
-  const day = targetDate.getDate();
-
-  // Wait for calendar to be visible
-  await page.locator('[data-slot="calendar"]').waitFor({ state: 'visible' });
-
-  // Find the day button
-  const dayButton = page
-    .locator('[data-slot="calendar"] button')
-    .filter({ hasText: new RegExp(`^${day}$`) })
-    .first();
-
-  await dayButton.click();
-}
-
-/**
  * Navigates to the rooms page for a given trip.
  */
 async function navigateToRooms(page: Page, tripId: string): Promise<void> {
@@ -549,68 +426,6 @@ async function openRoomAssignments(page: Page, roomName: string): Promise<void> 
   await expect(page.getByText(/assignments|affectations/i).first()).toBeVisible({ timeout: 5000 });
 }
 
-/**
- * Creates a room assignment using the assignment dialog.
- */
-async function createAssignment(
-  page: Page,
-  personName: string,
-  startDay: number,
-  endDay: number
-): Promise<void> {
-  // Click add assignment button (the + button in the assignment section)
-  // Look for button with Plus icon in the assignment section
-  const addButton = page.locator('section, [aria-label*="assignment"]').getByRole('button').filter({
-    has: page.locator('svg')
-  }).first();
-
-  await addButton.click();
-
-  // Wait for dialog
-  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
-
-  // Select person from dropdown (id="person-select")
-  const personSelect = page.locator('#person-select');
-  await personSelect.click();
-
-  // Find and click the person option
-  await page.getByRole('option', { name: new RegExp(personName, 'i') }).click();
-
-  // Set date range using DateRangePicker
-  // The DateRangePicker uses a Popover with Calendar
-  const dateRangePicker = page.getByRole('dialog').locator('button').filter({ has: page.locator('svg.lucide-calendar') }).first();
-  await dateRangePicker.click();
-
-  // Wait for calendar to appear
-  await page.waitForSelector('[data-slot="calendar"]', { state: 'visible' });
-
-  // Navigate to March 2026
-  await navigateToMonth(page, new Date('2026-03-01T12:00:00'));
-
-  // Click start day
-  await page.locator('[data-slot="calendar"] button').filter({ hasText: new RegExp(`^${startDay}$`) }).first().click();
-
-  // Click end day (calendar should stay open for range selection)
-  await page.locator('[data-slot="calendar"] button').filter({ hasText: new RegExp(`^${endDay}$`) }).first().click();
-
-  // The popover should auto-close when range is complete
-  // Wait a moment for potential auto-close
-  await page.waitForTimeout(300);
-
-  // If popover is still open, close it with Escape
-  const calendarGrid = page.locator('[data-slot="calendar"]');
-  if (await calendarGrid.isVisible()) {
-    await page.keyboard.press('Escape');
-  }
-
-  // Submit the assignment
-  const submitButton = page.getByRole('dialog').getByRole('button', { name: /add|ajouter/i }).last();
-  await submitButton.click();
-
-  // Wait for dialog to close
-  await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5000 });
-}
-
 // ============================================================================
 // Test Suite: Room Assignment Flow
 // ============================================================================
@@ -717,7 +532,8 @@ test.describe('Room Assignment Flow', () => {
     });
     const person1Id = await createPersonViaDB(page, tripId, { name: TEST_DATA.person.name });
     const person2Name = 'Bob Conflicting';
-    const person2Id = await createPersonViaDB(page, tripId, { name: person2Name });
+    // person2Id is created but not directly used - the person is referenced by name in UI
+    await createPersonViaDB(page, tripId, { name: person2Name });
 
     // Create first assignment via IndexedDB (days 2-5) for person1
     await createAssignmentViaDB(

@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'coverage', 'playwright-report', 'test-results']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
@@ -86,6 +86,23 @@ export default defineConfig([
   // Disable fast refresh warning for TripCard (exports utility functions)
   {
     files: ['**/TripCard.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  // Disable fast refresh warning for components that export utilities/types alongside
+  {
+    files: [
+      '**/RoomIconPicker.tsx',
+      '**/EventDetailDialog.tsx',
+    ],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  // Disable fast refresh warning for test utilities (not subject to HMR)
+  {
+    files: ['**/test/**/*.tsx', '**/test/**/*.ts', '**/*.test.tsx', '**/*.test.ts'],
     rules: {
       'react-refresh/only-export-components': 'off',
     },

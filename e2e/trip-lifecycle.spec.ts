@@ -17,52 +17,6 @@ import { expect, test, type Page } from '@playwright/test';
 // ============================================================================
 
 /**
- * Clears all trip data to ensure a clean state before each test.
- * This uses the app's database API rather than deleting IndexedDB entirely,
- * which avoids issues with database connections.
- */
-async function clearAllData(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    // Access the Dexie database and clear all tables
-    // This is safer than deleting the entire IndexedDB database
-    const dbRequest = indexedDB.open('kikoushou');
-    return new Promise<void>((resolve, reject) => {
-      dbRequest.onerror = () => reject(dbRequest.error);
-      dbRequest.onsuccess = async () => {
-        const db = dbRequest.result;
-        const storeNames = Array.from(db.objectStoreNames);
-
-        if (storeNames.length === 0) {
-          db.close();
-          resolve();
-          return;
-        }
-
-        const transaction = db.transaction(storeNames, 'readwrite');
-
-        transaction.oncomplete = () => {
-          db.close();
-          resolve();
-        };
-        transaction.onerror = () => {
-          db.close();
-          reject(transaction.error);
-        };
-
-        // Clear all stores
-        for (const storeName of storeNames) {
-          transaction.objectStore(storeName).clear();
-        }
-      };
-      dbRequest.onupgradeneeded = () => {
-        // Database doesn't exist yet, nothing to clear
-        resolve();
-      };
-    });
-  });
-}
-
-/**
  * Test data for creating trips.
  */
 const TEST_TRIP = {
