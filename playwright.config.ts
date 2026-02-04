@@ -51,7 +51,9 @@ export default defineConfig({
 
   /* Run production build preview server before starting the tests */
   webServer: {
-    command: 'bun run build && bun run preview',
+    // In CI, we already have the build artifact, so just run preview
+    // Locally, build first then preview
+    command: process.env.CI ? 'bun run preview' : 'bun run build && bun run preview',
     url: 'http://localhost:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
