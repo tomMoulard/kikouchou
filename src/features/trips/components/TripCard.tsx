@@ -8,6 +8,8 @@
 import {
   type KeyboardEvent,
   type MouseEvent,
+  Suspense,
+  lazy,
   memo,
   useCallback,
   useMemo,
@@ -16,6 +18,13 @@ import { useTranslation } from 'react-i18next';
 import { type Locale, format, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
 import { Calendar, MapPin, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+
+// Lazy load the map component for performance
+const TripLocationMap = lazy(() =>
+  import('./TripLocationMap').then((module) => ({
+    default: module.TripLocationMap,
+  }))
+);
 
 import {
   Card,
@@ -291,11 +300,31 @@ const TripCard = memo(function TripCard({
           </CardDescription>
         )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Calendar className="size-4 shrink-0" aria-hidden="true" />
           <span>{dateRange}</span>
         </div>
+
+        {/* Map Preview - only shown when coordinates are available */}
+        {trip.coordinates && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <Suspense
+              fallback={
+                <div className="h-20 w-full rounded-md bg-muted animate-pulse" />
+              }
+            >
+              <TripLocationMap
+                location={trip.location ?? trip.name}
+                coordinates={trip.coordinates}
+                previewHeight={80}
+              />
+            </Suspense>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

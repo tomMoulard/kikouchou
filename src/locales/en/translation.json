@@ -179,7 +179,14 @@
     "empty": "No transport",
     "emptyDescription": "Add arrivals and departures for guests",
     "upcomingPickups": "Upcoming pickups",
-    "pastTransports": "Past transports"
+    "pastTransports": "Past transports",
+    "mapView": "Map view",
+    "listView": "List view",
+    "noLocations": "No locations to display",
+    "noLocationsDescription": "Add transport locations with coordinates to see them on the map.",
+    "backToList": "Back to list",
+    "locationsCount": "{{count}} location(s)",
+    "mapAriaLabel": "Map showing transport locations"
   },
   "upcomingPickups": {
     "empty": "No upcoming pickups scheduled.",
@@ -290,7 +297,9 @@
     "resultsLabel": "Search results",
     "noResults": "No locations found",
     "searchError": "Search failed. Please try again.",
-    "timeoutError": "Search timed out. Please try again."
+    "timeoutError": "Search timed out. Please try again.",
+    "dragToAdjust": "Drag marker or click to adjust location",
+    "confirmLocation": "Confirm"
   },
   "colors": {
     "red": "Red",
@@ -306,5 +315,34 @@
     "violet": "Violet",
     "pink": "Pink",
     "custom": "Custom color"
+  },
+  "map": {
+    "ariaLabel": "Interactive map",
+    "loading": "Loading map...",
+    "markerLabel": "{{type}} marker at {{label}}",
+    "markerCount": "{{count}} location(s) on map",
+    "markerCount_zero": "No locations on map",
+    "markerCount_one": "1 location on map",
+    "markerCount_other": "{{count}} locations on map",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "attribution": "Map data",
+    "openPopup": "Open details for {{label}}",
+    "closePopup": "Close details",
+    "getDirections": "Get directions",
+    "tripMarker": "Trip location",
+    "transportMarker": "Transport location",
+    "pickupMarker": "Pickup point",
+    "expandMap": "View location on map: {{location}}",
+    "tripPreview": "Trip location preview",
+    "tripLocation": "Trip location: {{location}}",
+    "cachedTiles": "Using cached tiles",
+    "offlineAvailable": "Available offline",
+    "downloadForOffline": "Download for offline",
+    "downloading": "Downloading tiles...",
+    "downloadComplete": "Download complete",
+    "downloadFailed": "Download failed",
+    "tilesCount": "{{count}} tiles",
+    "cacheSize": "Cache size: {{size}}"
   }
 }

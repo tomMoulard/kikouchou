@@ -461,6 +461,16 @@ export interface Transport extends Identifiable, TripScoped {
   location: string;
 
   /**
+   * Optional GPS coordinates for the transport location.
+   * Used for displaying transport locations on maps.
+   * @example { lat: 48.8566, lon: 2.3522 }
+   */
+  coordinates?: {
+    readonly lat: number;
+    readonly lon: number;
+  };
+
+  /**
    * Mode of transportation.
    * @example "train"
    */
@@ -621,6 +631,11 @@ export interface TransportFormData {
   datetime: ISODateTimeString;
   /** Location name (station, airport, etc.) */
   location: string;
+  /** Optional GPS coordinates for the transport location */
+  coordinates?: {
+    readonly lat: number;
+    readonly lon: number;
+  };
   /** Mode of transportation */
   transportMode?: TransportMode;
   /** Train/flight number or other identifier */

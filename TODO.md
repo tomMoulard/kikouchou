@@ -17,17 +17,17 @@
 - Phase 16: UX Improvements (16.1-16.18 complete, including integration tests)
 - Phase 17: CodeRabbit Review Findings (critical issues resolved)
 - Phase 18: Calendar Transport Events (complete)
+- Phase 19: Maps Integration (19.1-19.7 complete)
 - BUG-1: Room assignment date fix (complete)
 - BUG-2: Timezone display fix (complete)
 
-### Remaining Tasks (15 pending)
+### Remaining Tasks (8 pending)
 | Priority | Task | Description |
 |----------|------|-------------|
 | Low | REVIEW-MIN-1,3,4 | Minor code style improvements |
 | Low | REVIEW-CQ-1,2,3 | Code quality considerations |
 | Monitoring | REVIEW-PERF-3 | Context re-render performance |
 | Documented | REVIEW-SEC-2 | ShareId predictability |
-| Future | Phase 19 (19.1-19.7) | Maps Integration |
 
 ---
 
@@ -8006,13 +8006,22 @@ interface MapMarkerData {
 - Accessible (keyboard navigation for markers)
 
 **Acceptance Criteria**:
-- [ ] Leaflet integrated with React
-- [ ] Map renders with OSM tiles
-- [ ] Markers display correctly
-- [ ] Touch controls work on mobile
-- [ ] Tests pass (80%+ coverage)
+- [x] Leaflet integrated with React
+- [x] Map renders with OSM tiles
+- [x] Markers display correctly
+- [x] Touch controls work on mobile
+- [x] Tests pass (80%+ coverage)
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Installed `leaflet`, `react-leaflet`, `@types/leaflet` dependencies
+- Created `MapView.tsx` with configurable center, zoom, and markers
+- Created `MapMarker.tsx` with custom styled markers and popup support
+- Marker types: `trip`, `transport`, `pickup`, `default` with distinct colors
+- Color sanitization to prevent XSS via color prop
+- Full accessibility with keyboard navigation and ARIA attributes
+- Unit tests in `MapView.test.tsx` and `MapMarker.test.tsx`
 
 ---
 
@@ -8051,12 +8060,19 @@ interface MapMarkerData {
 - Lazy loading works correctly
 
 **Acceptance Criteria**:
-- [ ] Map preview on trip cards
-- [ ] Graceful fallback for missing coordinates
-- [ ] Expand interaction works
-- [ ] Tests pass
+- [x] Map preview on trip cards
+- [x] Graceful fallback for missing coordinates
+- [x] Expand interaction works
+- [x] Tests pass
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `TripLocationMap.tsx` for map preview display
+- Modified `TripCard.tsx` to show map preview when coordinates available
+- Fallback to location icon + text when no coordinates
+- Lazy loading map component for performance
+- Unit tests in `TripLocationMap.test.tsx` and `TripCard.test.tsx`
 
 **Depends on**: 19.1, 16.5 (Trip coordinates field)
 
@@ -8106,12 +8122,20 @@ interface MapMarkerData {
 - Empty state when no transports with coordinates
 
 **Acceptance Criteria**:
-- [ ] Transport map page created
-- [ ] Markers display correctly
-- [ ] Filtering works
-- [ ] Tests pass
+- [x] Transport map page created
+- [x] Markers display correctly
+- [x] Filtering works
+- [x] Tests pass
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `TransportMapPage.tsx` at `/trips/:tripId/transports/map` route
+- Modified `TransportListPage.tsx` to add map view toggle button
+- Updated `routes.tsx` with new transport map route
+- Markers color-coded by transport type (arrivals/departures)
+- Popup shows transport details (person, time, mode)
+- Filter by date range and transport type supported
 
 **Depends on**: 19.1, 16.15 (Transport coordinates)
 
@@ -8149,12 +8173,20 @@ interface MapMarkerData {
 - Cancel reverts to text-only input
 
 **Acceptance Criteria**:
-- [ ] Map preview after location selection
-- [ ] Draggable marker for adjustment
-- [ ] Coordinates update correctly
-- [ ] Tests pass
+- [x] Map preview after location selection
+- [x] Draggable marker for adjustment
+- [x] Coordinates update correctly
+- [x] Tests pass
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Enhanced `LocationPicker.tsx` with `DraggableMapPreview` component
+- After selecting a location, shows map preview with draggable marker
+- User can click map or drag marker to fine-tune position
+- "Confirm" and "Cancel" buttons for finalizing selection
+- Coordinates update in real-time on drag
+- Updated `LocationPicker.test.tsx` with new test cases
 
 **Depends on**: 19.1, 16.1 (LocationPicker)
 
@@ -8198,12 +8230,20 @@ interface MapMarkerData {
 - Works on mobile and desktop
 
 **Acceptance Criteria**:
-- [ ] Directions button on transport details
-- [ ] Deep link to native maps app
-- [ ] Works cross-platform
-- [ ] Tests pass
+- [x] Directions button on transport details
+- [x] Deep link to native maps app
+- [x] Works cross-platform
+- [x] Tests pass
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `DirectionsButton.tsx` component with platform-aware deep links
+- Modified `EventDetailDialog.tsx` to include directions button
+- Updated `TransportForm.tsx` for better location handling
+- Supports Google Maps, Apple Maps, and OpenStreetMap links
+- Detects platform (iOS/Android/Desktop) for optimal experience
+- Unit tests in `DirectionsButton.test.tsx`
 
 **Depends on**: 19.1, Phase 18 (Transport detail dialog)
 
@@ -8247,12 +8287,20 @@ runtimeCaching: [{
 - Expiration works correctly
 
 **Acceptance Criteria**:
-- [ ] Map tiles cached via service worker
-- [ ] Offline viewing works
-- [ ] Cache limits respected
-- [ ] Tests pass
+- [x] Map tiles cached via service worker
+- [x] Offline viewing works
+- [x] Cache limits respected
+- [x] Tests pass
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `src/lib/map/tile-cache.ts` for OSM tile caching
+- Updated `vite.config.ts` with Workbox runtime caching for OSM tiles
+- Created `MapOfflineIndicator.tsx` to show offline status on maps
+- Tiles cached with CacheFirst strategy, max 500 entries, 30-day expiration
+- Nominatim geocoding responses also cached for offline location search
+- Unit tests in `tile-cache.test.ts`
 
 **Depends on**: 19.1, Phase 12 (PWA Configuration)
 
@@ -8289,10 +8337,16 @@ runtimeCaching: [{
    - Map still displays cached area
 
 **Acceptance Criteria**:
-- [ ] All integration tests pass
-- [ ] No regressions in existing functionality
+- [x] All integration tests pass
+- [x] No regressions in existing functionality
 
-**Status**: PENDING
+**Status**: COMPLETED (2026-02-04)
+
+**Notes**:
+- Created `e2e/maps-integration.spec.ts` with comprehensive E2E tests
+- Test coverage for: Trip Location Map, Transport Map View, Directions Button, Offline Map Tiles, Map Accessibility, Map Error Handling
+- 653 lines of E2E test code covering all maps functionality
+- Tests verify offline behavior, keyboard navigation, and graceful error handling
 
 **Depends on**: 19.1-19.6
 

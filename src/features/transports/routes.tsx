@@ -25,6 +25,16 @@ const TransportListPage = lazy(() =>
   })),
 );
 
+/**
+ * Lazy-loaded TransportMapPage component.
+ * Uses React.lazy for code splitting and optimal bundle size.
+ */
+const TransportMapPage = lazy(() =>
+  import('./pages/TransportMapPage').then((module) => ({
+    default: module.TransportMapPage,
+  })),
+);
+
 // ============================================================================
 // Route Wrapper Components
 // ============================================================================
@@ -55,6 +65,7 @@ function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>)
  *
  * Routes:
  * - `/trips/:tripId/transports` - Transport list page with tabs for arrivals/departures
+ * - `/trips/:tripId/transports/map` - Transport map view showing all locations
  *
  * @example
  * ```tsx
@@ -71,6 +82,10 @@ export const transportRoutes: RouteObject[] = [
   {
     path: 'trips/:tripId/transports',
     element: withSuspense(TransportListPage),
+  },
+  {
+    path: 'trips/:tripId/transports/map',
+    element: withSuspense(TransportMapPage),
   },
 ];
 

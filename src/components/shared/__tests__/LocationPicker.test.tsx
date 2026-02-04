@@ -245,7 +245,7 @@ describe('LocationPicker', () => {
   // ============================================================================
 
   describe('Selection', () => {
-    it('selects location on click', async () => {
+    it('selects location on click and shows map preview', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       render(<LocationPicker value="" onChange={mockOnChange} />);
 
@@ -260,6 +260,33 @@ describe('LocationPicker', () => {
 
       const firstOption = screen.getAllByRole('option')[0];
       fireEvent.mouseDown(firstOption!);
+
+      // Map preview should be shown, onChange not called yet
+      expect(mockOnChange).not.toHaveBeenCalled();
+
+      // Input should show the selected location name
+      expect(input).toHaveValue('Paris, Île-de-France, France');
+    });
+
+    it('calls onChange after confirming selection', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LocationPicker value="" onChange={mockOnChange} />);
+
+      const input = screen.getByRole('combobox');
+      await user.type(input, 'Paris');
+
+      vi.advanceTimersByTime(350);
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      const firstOption = screen.getAllByRole('option')[0];
+      fireEvent.mouseDown(firstOption!);
+
+      // Click the confirm button
+      const confirmButton = await screen.findByRole('button', { name: /confirm/i });
+      await user.click(confirmButton);
 
       expect(mockOnChange).toHaveBeenCalledWith(
         'Paris, Île-de-France, France',
@@ -363,7 +390,7 @@ describe('LocationPicker', () => {
       expect(firstOption).toHaveAttribute('aria-selected', 'true');
     });
 
-    it('selects with Enter', async () => {
+    it('selects with Enter and shows map preview', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       render(<LocationPicker value="" onChange={mockOnChange} />);
 
@@ -377,6 +404,16 @@ describe('LocationPicker', () => {
       });
 
       await user.keyboard('{ArrowDown}{Enter}');
+
+      // Map preview should be shown, onChange not called yet
+      expect(mockOnChange).not.toHaveBeenCalled();
+
+      // Input should show the selected location name
+      expect(input).toHaveValue('Paris, Île-de-France, France');
+
+      // Click the confirm button to finalize selection
+      const confirmButton = await screen.findByRole('button', { name: /confirm/i });
+      await user.click(confirmButton);
 
       expect(mockOnChange).toHaveBeenCalledWith(
         'Paris, Île-de-France, France',

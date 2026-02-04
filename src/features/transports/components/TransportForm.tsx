@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { LocationPicker } from '@/components/shared/LocationPicker';
+import { LocationPicker, type Coordinates } from '@/components/shared/LocationPicker';
 import type {
   Person,
   PersonId,
@@ -80,6 +80,7 @@ interface FormState {
   type: TransportType;
   datetime: string;
   location: string;
+  coordinates: Coordinates | undefined;
   transportMode: TransportMode | '';
   transportNumber: string;
   driverId: PersonId | '';
@@ -121,6 +122,7 @@ function getInitialFormState(
     type: transport?.type ?? defaultType ?? 'arrival',
     datetime: transport?.datetime ? formatDatetimeLocal(transport.datetime) : '',
     location: transport?.location ?? '',
+    coordinates: transport?.coordinates,
     transportMode: transport?.transportMode ?? '',
     transportNumber: transport?.transportNumber ?? '',
     driverId: transport?.driverId ?? '',
@@ -492,6 +494,7 @@ const TransportForm = memo(function TransportForm({
           type: formState.type,
           datetime: toISODatetime(formState.datetime),
           location: formState.location.trim(),
+          coordinates: formState.coordinates,
           transportMode: formState.transportMode || undefined,
           transportNumber: formState.transportNumber.trim() || undefined,
           driverId: formState.driverId || undefined,
@@ -646,8 +649,8 @@ const TransportForm = memo(function TransportForm({
         <LocationPicker
           id="transport-location"
           value={formState.location}
-          onChange={(location) => {
-            setFormState((prev) => ({ ...prev, location }));
+          onChange={(location, coordinates) => {
+            setFormState((prev) => ({ ...prev, location, coordinates }));
             // Clear error when user selects a location
             setErrors((prev) => (prev.location ? { ...prev, location: undefined } : prev));
           }}

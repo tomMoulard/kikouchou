@@ -79,3 +79,13 @@ export type { PersonBadgeProps } from './PersonBadge';
 
 export { TransportIcon } from './TransportIcon';
 export type { TransportIconProps } from './TransportIcon';
+
+// ============================================================================
+// Map Components
+// ============================================================================
+
+export { MapView } from './MapView';
+export type { MapViewProps, MapViewRef, MapMarkerData, MapMarkerType } from './MapView';
+
+export { MapMarker } from './MapMarker';
+export type { MapMarkerProps } from './MapMarker';

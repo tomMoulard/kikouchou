@@ -43,6 +43,7 @@ import {
   Clock,
   Edit,
   History,
+  Map as MapIcon,
   MapPin,
   MoreVertical,
   Plane,
@@ -876,6 +877,13 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   }, [navigate, tripIdFromUrl]),
 
   /**
+   * Handles navigation to map view.
+   */
+   handleOpenMap = useCallback(() => {
+    navigate(`/trips/${tripIdFromUrl}/transports/map`);
+  }, [navigate, tripIdFromUrl]),
+
+  /**
    * Handles dialog close - resets editing state.
    */
    handleDialogOpenChange = useCallback((open: boolean) => {
@@ -886,17 +894,23 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   }, []),
 
   // ============================================================================
-  // Header Action (desktop button)
+  // Header Action (desktop buttons)
   // ============================================================================
 
    headerAction = useMemo(
     () => (
-      <Button onClick={handleAddTransport} className="hidden sm:flex">
-        <Plus className="size-4 mr-2" aria-hidden="true" />
-        {t('transports.new')}
-      </Button>
+      <div className="hidden sm:flex items-center gap-2">
+        <Button variant="outline" onClick={handleOpenMap}>
+          <MapIcon className="size-4 mr-2" aria-hidden="true" />
+          {t('transports.mapView', 'Map view')}
+        </Button>
+        <Button onClick={handleAddTransport}>
+          <Plus className="size-4 mr-2" aria-hidden="true" />
+          {t('transports.new')}
+        </Button>
+      </div>
     ),
-    [handleAddTransport, t],
+    [handleAddTransport, handleOpenMap, t],
   );
 
   // ============================================================================

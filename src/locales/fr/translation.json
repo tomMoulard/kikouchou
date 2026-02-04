@@ -179,7 +179,14 @@
     "empty": "Aucun transport",
     "emptyDescription": "Ajoutez les arrivées et départs des participants",
     "upcomingPickups": "Prochains transports à prévoir",
-    "pastTransports": "Transports passés"
+    "pastTransports": "Transports passés",
+    "mapView": "Vue carte",
+    "listView": "Vue liste",
+    "noLocations": "Aucun lieu à afficher",
+    "noLocationsDescription": "Ajoutez des lieux de transport avec coordonnées pour les voir sur la carte.",
+    "backToList": "Retour à la liste",
+    "locationsCount": "{{count}} lieu(x)",
+    "mapAriaLabel": "Carte montrant les lieux de transport"
   },
   "upcomingPickups": {
     "empty": "Aucun transport à venir prévu.",
@@ -290,7 +297,9 @@
     "resultsLabel": "Résultats de recherche",
     "noResults": "Aucun lieu trouvé",
     "searchError": "La recherche a échoué. Veuillez réessayer.",
-    "timeoutError": "La recherche a expiré. Veuillez réessayer."
+    "timeoutError": "La recherche a expiré. Veuillez réessayer.",
+    "dragToAdjust": "Glissez le marqueur ou cliquez pour ajuster",
+    "confirmLocation": "Confirmer"
   },
   "colors": {
     "red": "Rouge",
@@ -306,5 +315,34 @@
     "violet": "Violet",
     "pink": "Rose",
     "custom": "Couleur personnalisée"
+  },
+  "map": {
+    "ariaLabel": "Carte interactive",
+    "loading": "Chargement de la carte...",
+    "markerLabel": "Marqueur {{type}} à {{label}}",
+    "markerCount": "{{count}} emplacement(s) sur la carte",
+    "markerCount_zero": "Aucun emplacement sur la carte",
+    "markerCount_one": "1 emplacement sur la carte",
+    "markerCount_other": "{{count}} emplacements sur la carte",
+    "zoomIn": "Zoom avant",
+    "zoomOut": "Zoom arrière",
+    "attribution": "Données cartographiques",
+    "openPopup": "Ouvrir les détails de {{label}}",
+    "closePopup": "Fermer les détails",
+    "getDirections": "Obtenir l'itinéraire",
+    "tripMarker": "Lieu du voyage",
+    "transportMarker": "Lieu de transport",
+    "pickupMarker": "Point de prise en charge",
+    "expandMap": "Voir l'emplacement sur la carte : {{location}}",
+    "tripPreview": "Aperçu du lieu du voyage",
+    "tripLocation": "Lieu du voyage : {{location}}",
+    "cachedTiles": "Utilisation des tuiles en cache",
+    "offlineAvailable": "Disponible hors ligne",
+    "downloadForOffline": "Télécharger pour hors ligne",
+    "downloading": "Téléchargement des tuiles...",
+    "downloadComplete": "Téléchargement terminé",
+    "downloadFailed": "Échec du téléchargement",
+    "tilesCount": "{{count}} tuiles",
+    "cacheSize": "Taille du cache : {{size}}"
   }
 }

@@ -34,6 +34,7 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 import { TransportIcon } from '@/components/shared/TransportIcon';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
+import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
 import type {
   Person,
   Room,
@@ -251,6 +252,17 @@ const TransportDetails = memo(function TransportDetails({ event, dateLocale }: T
           <MapPin className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
           <span className="text-sm">{transport.location}</span>
         </div>
+      )}
+
+      {/* Get Directions */}
+      {transport.coordinates && (
+        <DirectionsButton
+          coordinates={transport.coordinates}
+          locationName={transport.location}
+          variant="outline"
+          size="sm"
+          className="w-full"
+        />
       )}
 
       {/* Driver */}
