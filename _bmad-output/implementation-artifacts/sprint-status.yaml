@@ -43,7 +43,7 @@ development_status:
   # Epic 1: UX Polish & Friction Reduction
   epic-1: in-progress
   1-1-remove-unused-dependencies-and-align-code-patterns: done
-  1-2-visual-warmth-and-empty-state-improvements: backlog
+  1-2-visual-warmth-and-empty-state-improvements: done
   1-3-mobile-ux-friction-audit-and-fixes: backlog
   1-4-smart-room-assignment-flow: backlog
   1-5-pickup-coordination-visibility: backlog
