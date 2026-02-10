@@ -28,3 +28,4 @@ playwright-report/
 test-results/
 public/icons/
 public/favicon.ico
+.opencode
