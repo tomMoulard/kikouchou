@@ -84,6 +84,16 @@
     "allGuestsAssigned": "Tous les invités ont une chambre",
     "needsRoom": "a besoin d'une chambre",
     "icon": "Icône de la chambre",
+    "spotsTaken": "{{occupied}} sur {{capacity}} places prises",
+    "spotsOpen_one": "{{count}} place libre",
+    "spotsOpen_other": "{{count}} places libres",
+    "full": "Complet",
+    "claimRoom": "Choisir cette chambre",
+    "roomJustFilled": "Cette chambre vient de se remplir ! Essayez-en une autre",
+    "allRoomsFull": "Toutes les chambres sont complètes pour ces dates",
+    "capacityWarning": "Cette chambre risque d'être surchargée pour certaines de ces dates",
+    "filterDates": "Afficher la disponibilité pour les dates",
+    "dragHint": "Glissez un participant sur une chambre ci-dessous pour l'assigner",
     "icons": {
       "bedDouble": "Lit double",
       "bedSingle": "Lit simple",
@@ -139,7 +149,9 @@
     "createSuccess": "Attribution créée",
     "updateSuccess": "Attribution mise à jour",
     "deleteSuccess": "Attribution supprimée",
-    "autofilledFromTransport": "Dates pré-remplies à partir des transports"
+    "autofilledFromTransport": "Dates pré-remplies à partir des transports",
+    "quickAssign": "Attribuer une chambre",
+    "quickAssignDescription": "Confirmez les dates pour cette attribution de chambre."
   },
   "transports": {
     "title": "Transports",

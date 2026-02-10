@@ -55,8 +55,10 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { type DateRange, DateRangePicker } from '@/components/shared/DateRangePicker';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
+import { useRoomContext } from '@/contexts/RoomContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { calculatePeakOccupancy } from '@/features/rooms/utils/capacity-utils';
 import { cn } from '@/lib/utils';
 import type {
   ISODateString,
@@ -132,11 +134,11 @@ interface AssignmentFormDialogProps {
   readonly getPersonTransportDates?: (personId: PersonId) => PersonTransportDates;
   /** Existing assignments for this room (to show as booked in calendar) */
   readonly existingAssignments?: readonly RoomAssignment[];
+  /** Room capacity for capacity check */
+  readonly roomCapacity?: number;
 }
 
-// ============================================================================
-// Utility Functions
-// ============================================================================
+// Utility functions (isDateInStayRange, calculatePeakOccupancy) imported from capacity-utils
 
 /**
  * Gets the date-fns locale based on the i18n language.
@@ -320,6 +322,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   checkConflict,
   getPersonTransportDates,
   existingAssignments,
+  roomCapacity,
 }: AssignmentFormDialogProps): ReactElement {
   const { t } = useTranslation();
 
@@ -327,6 +330,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | ''>('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [conflictError, setConflictError] = useState<string | undefined>(undefined);
+  const [capacityWarning, setCapacityWarning] = useState<string | undefined>(undefined);
   const [isCheckingConflict, setIsCheckingConflict] = useState(false);
   const [wasAutoFilled, setWasAutoFilled] = useState(false);
 
@@ -352,6 +356,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
         setWasAutoFilled(false);
       }
       setConflictError(undefined);
+      setCapacityWarning(undefined);
       setIsCheckingConflict(false); // Reset checking state to prevent stale results
     }
   }, [open, existingAssignment]);
@@ -364,15 +369,29 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
     };
   }, []);
 
-  // Check for conflicts when person or dates change
+  // Check for conflicts and capacity when person or dates change
   useEffect(() => {
     if (!selectedPersonId || !dateRange?.from || !dateRange?.to) {
       setConflictError(undefined);
+      setCapacityWarning(undefined);
       return;
     }
 
     const startDate = toISODateString(dateRange.from);
     const endDate = toISODateString(dateRange.to);
+
+    // Check capacity (soft enforcement - warning only)
+    if (roomCapacity !== undefined && existingAssignments) {
+      // Filter out the current assignment being edited (if any)
+      const otherAssignments = existingAssignment
+        ? existingAssignments.filter((a) => a.id !== existingAssignment.id)
+        : existingAssignments;
+      const peak = calculatePeakOccupancy(otherAssignments, startDate, endDate);
+      // Adding 1 for the proposed assignment
+      setCapacityWarning(
+        (peak + 1) > roomCapacity ? t('rooms.capacityWarning') : undefined,
+      );
+    }
 
     let cancelled = false;
     setIsCheckingConflict(true);
@@ -403,7 +422,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
     return () => {
       cancelled = true;
     };
-  }, [selectedPersonId, dateRange, checkConflict, existingAssignment?.id, t]);
+  }, [selectedPersonId, dateRange, checkConflict, existingAssignment, existingAssignments, roomCapacity, t]);
 
   // Form validation
   const isFormValid = useMemo(() => (
@@ -574,6 +593,17 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
             </p>
           </div>
 
+          {/* Capacity warning (soft enforcement) */}
+          {capacityWarning && (
+            <div
+              className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-800 dark:text-amber-200"
+              role="alert"
+            >
+              <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+              <span>{capacityWarning}</span>
+            </div>
+          )}
+
           {/* Conflict warning */}
           {conflictError && (
             <div
@@ -651,6 +681,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
   const { t, i18n } = useTranslation();
   const { currentTrip } = useTripContext();
   const { persons, isLoading: isPersonsLoading, getPersonById } = usePersonContext();
+  const { rooms } = useRoomContext();
   const {
     getAssignmentsByRoom,
     createAssignment,
@@ -731,6 +762,12 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
       return { arrivalDate, departureDate };
     },
     [getTransportsByPerson],
+  );
+
+  // Get room capacity for capacity checks
+  const currentRoom = useMemo(
+    () => rooms.find((r) => r.id === roomId),
+    [rooms, roomId],
   );
 
   // Loading state
@@ -963,6 +1000,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
         checkConflict={checkConflict}
         getPersonTransportDates={getPersonTransportDates}
         existingAssignments={assignments}
+        roomCapacity={currentRoom?.capacity}
       />
 
       {/* Delete Confirmation Dialog */}

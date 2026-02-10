@@ -52,6 +52,12 @@ export interface RoomCardProps {
   readonly room: Room;
   /** Current occupants (persons assigned for today's date) */
   readonly occupants: readonly Person[];
+  /** Peak occupancy across the selected date range */
+  readonly peakOccupancy: number;
+  /** Available spots (capacity - peakOccupancy) */
+  readonly availableSpots: number;
+  /** Whether the room is at or over capacity */
+  readonly isFull: boolean;
   /** Whether the card interaction is currently disabled */
   readonly isDisabled?: boolean;
   /** Whether the card is currently expanded (controlled mode) */
@@ -62,6 +68,8 @@ export interface RoomCardProps {
   readonly onEdit: (room: Room) => void;
   /** Callback when Delete is confirmed. Can be async. */
   readonly onDelete: (room: Room) => void | Promise<void>;
+  /** Callback when "Claim this room" is clicked */
+  readonly onClaim?: (room: Room) => void;
   /** Content to render when expanded (typically RoomAssignmentSection) */
   readonly expandedContent?: ReactNode;
 }
@@ -69,22 +77,6 @@ export interface RoomCardProps {
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Determines the badge variant based on occupancy status.
- *
- * @param occupancyCount - Current number of occupants
- * @param capacity - Room capacity
- * @returns Badge variant: 'secondary' (empty), 'default' (under), 'destructive' (at/over)
- */
-function getOccupancyBadgeVariant(
-  occupancyCount: number,
-  capacity: number,
-): 'secondary' | 'default' | 'destructive' {
-  if (occupancyCount === 0) {return 'secondary';}
-  if (occupancyCount >= capacity) {return 'destructive';}
-  return 'default';
-}
 
 // ============================================================================
 // Component
@@ -119,11 +111,15 @@ function getOccupancyBadgeVariant(
 const RoomCard = memo(function RoomCard({
   room,
   occupants,
+  peakOccupancy,
+  availableSpots,
+  isFull,
   isDisabled = false,
   isExpanded = false,
   onClick,
   onEdit,
   onDelete,
+  onClaim,
   expandedContent,
 }: RoomCardProps) {
   const { t } = useTranslation(),
@@ -135,15 +131,15 @@ const RoomCard = memo(function RoomCard({
   // Derived Values
   // ============================================================================
 
-   occupancyCount = occupants.length,
+  // Capacity progress ratio (0-1, capped at 1)
+   capacityRatio = room.capacity > 0 ? Math.min(peakOccupancy / room.capacity, 1) : 0,
 
-  // Determine occupancy badge variant (trivial O(1) computation - no memoization needed)
-   occupancyVariant = getOccupancyBadgeVariant(occupancyCount, room.capacity),
-
-  // Occupancy status text
-   occupancyStatusText = occupancyCount === 0
-    ? t('rooms.available')
-    : t('rooms.occupied'),
+  // Progress bar color based on capacity usage
+   progressColor = capacityRatio >= 1
+    ? 'bg-red-500 dark:bg-red-400'
+    : capacityRatio >= 0.5
+      ? 'bg-amber-500 dark:bg-amber-400'
+      : 'bg-emerald-500 dark:bg-emerald-400',
 
   // Build aria-label for screen readers
    ariaLabel = useMemo(
@@ -151,9 +147,9 @@ const RoomCard = memo(function RoomCard({
       [
         room.name,
         t('rooms.beds', { count: room.capacity }),
-        `${occupancyCount}/${room.capacity} ${occupancyStatusText.toLowerCase()}`,
+        t('rooms.spotsTaken', { occupied: peakOccupancy, capacity: room.capacity }),
       ].join(', '),
-    [room.name, room.capacity, occupancyCount, occupancyStatusText, t]
+    [room.name, room.capacity, peakOccupancy, t]
   ),
 
   // Get the room icon component based on room.icon field
@@ -255,6 +251,7 @@ const RoomCard = memo(function RoomCard({
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           ],
           isDisabled && 'opacity-50 cursor-not-allowed',
+          isFull && 'opacity-75 bg-muted/30',
         )}
       >
         {/* Dropdown Menu - positioned absolutely in top-right corner */}
@@ -309,17 +306,40 @@ const RoomCard = memo(function RoomCard({
           )}
         </CardHeader>
 
-        {/* Card Content - Occupancy status and occupants */}
+        {/* Card Content - Capacity indicator and occupants */}
         <CardContent className="pb-2">
-          {/* Occupancy Status */}
-          <div className="flex items-center gap-2 mb-3">
-            <Users className="size-4 text-muted-foreground" aria-hidden="true" />
-            <Badge variant={occupancyVariant}>
-              {occupancyCount} / {room.capacity}
-            </Badge>
-            <span className="text-sm text-muted-foreground">
-              {occupancyStatusText}
-            </span>
+          {/* Visual Capacity Progress Bar */}
+          <div className="mb-3">
+            <div className="flex items-center gap-2 mb-1.5">
+              <Users className="size-4 text-muted-foreground" aria-hidden="true" />
+              <span className="text-sm text-muted-foreground">
+                {t('rooms.spotsTaken', { occupied: peakOccupancy, capacity: room.capacity })}
+              </span>
+              {isFull && (
+                <Badge variant="destructive" className="text-xs">
+                  {t('rooms.full')}
+                </Badge>
+              )}
+            </div>
+            {/* Progress bar */}
+            <div
+              className="h-2 w-full rounded-full bg-muted overflow-hidden"
+              role="progressbar"
+              aria-valuenow={peakOccupancy}
+              aria-valuemin={0}
+              aria-valuemax={room.capacity}
+              aria-label={t('rooms.spotsTaken', { occupied: peakOccupancy, capacity: room.capacity })}
+            >
+              <div
+                className={cn('h-full rounded-full transition-all duration-300', progressColor)}
+                style={{ width: `${capacityRatio * 100}%` }}
+              />
+            </div>
+            {availableSpots > 0 && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                {t('rooms.spotsOpen', { count: availableSpots })}
+              </p>
+            )}
           </div>
 
           {/* Current Occupants */}
@@ -329,6 +349,22 @@ const RoomCard = memo(function RoomCard({
                 <PersonBadge key={person.id} person={person} size="sm" />
               ))}
             </div>
+          )}
+
+          {/* Claim this room button */}
+          {availableSpots > 0 && onClaim && (
+            <Button
+              variant="default"
+              size="sm"
+              className="w-full mt-3 h-11 md:h-8"
+              disabled={isDisabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClaim(room);
+              }}
+            >
+              {t('rooms.claimRoom')}
+            </Button>
           )}
         </CardContent>
 

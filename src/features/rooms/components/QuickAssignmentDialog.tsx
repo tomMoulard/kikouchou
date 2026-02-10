@@ -30,19 +30,31 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { type DateRange, DateRangePicker } from '@/components/shared/DateRangePicker';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
+import { usePersonContext } from '@/contexts/PersonContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useRoomContext } from '@/contexts/RoomContext';
+import { calculatePeakOccupancy } from '@/features/rooms/utils/capacity-utils';
 import { toISODateString } from '@/lib/db/utils';
 import type {
   ISODateString,
   Person,
+  PersonId,
   RoomAssignmentFormData,
   RoomId,
 } from '@/types';
+
+// Utility functions (isDateInStayRange, calculatePeakOccupancy) imported from capacity-utils
 
 // ============================================================================
 // Type Definitions
@@ -102,11 +114,14 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
   const { t } = useTranslation();
   const { currentTrip } = useTripContext();
   const { rooms } = useRoomContext();
+  const { persons } = usePersonContext();
   const { createAssignment, checkConflict, getAssignmentsByRoom } = useAssignmentContext();
 
   // Form state
+  const [selectedPersonId, setSelectedPersonId] = useState<PersonId | ''>('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [conflictError, setConflictError] = useState<string | undefined>(undefined);
+  const [capacityWarning, setCapacityWarning] = useState<string | undefined>(undefined);
   const [isCheckingConflict, setIsCheckingConflict] = useState(false);
 
   // Refs for async safety (conflict checks still need mount tracking)
@@ -145,9 +160,24 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     }));
   }, [existingAssignments]);
 
+  // The effective person: either pre-selected (drag-drop) or chosen (claim flow)
+  const effectivePerson = useMemo(() => {
+    if (person) {return person;}
+    if (selectedPersonId) {
+      return persons.find((p) => p.id === selectedPersonId) ?? null;
+    }
+    return null;
+  }, [person, selectedPersonId, persons]);
+
   // Initialize form when dialog opens
   useEffect(() => {
-    if (open && person && roomId) {
+    if (open && roomId) {
+      // Pre-fill person if provided (drag-drop flow)
+      if (person) {
+        setSelectedPersonId(person.id);
+      } else {
+        setSelectedPersonId('');
+      }
       // Pre-fill dates from suggested dates
       if (suggestedStartDate && suggestedEndDate) {
         setDateRange({
@@ -158,6 +188,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
         setDateRange(undefined);
       }
       setConflictError(undefined);
+      setCapacityWarning(undefined);
       setIsCheckingConflict(false);
     }
   }, [open, person, roomId, suggestedStartDate, suggestedEndDate]);
@@ -170,20 +201,31 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     };
   }, []);
 
-  // Check for conflicts when dates change
+  // Check for conflicts and capacity when person/dates change
   useEffect(() => {
-    if (!person || !dateRange?.from || !dateRange?.to) {
+    if (!effectivePerson || !dateRange?.from || !dateRange?.to) {
       setConflictError(undefined);
+      setCapacityWarning(undefined);
       return;
     }
 
     const startDate = toISODateString(dateRange.from) as ISODateString;
     const endDate = toISODateString(dateRange.to) as ISODateString;
 
+    // Check capacity
+    if (roomId && room) {
+      const roomAssignments = getAssignmentsByRoom(roomId);
+      const peak = calculatePeakOccupancy(roomAssignments, startDate, endDate);
+      // Adding 1 for the proposed assignment
+      setCapacityWarning(
+        (peak + 1) > room.capacity ? t('rooms.capacityWarning') : undefined,
+      );
+    }
+
     let cancelled = false;
     setIsCheckingConflict(true);
 
-    checkConflict(person.id, startDate, endDate)
+    checkConflict(effectivePerson.id, startDate, endDate)
       .then((hasConflict) => {
         if (!cancelled && isMountedRef.current) {
           setConflictError(hasConflict ? t('assignments.conflict') : undefined);
@@ -203,17 +245,17 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     return () => {
       cancelled = true;
     };
-  }, [person, dateRange, checkConflict, t]);
+  }, [effectivePerson, dateRange, checkConflict, roomId, room, getAssignmentsByRoom, t]);
 
   // Form validation
   const isFormValid = useMemo(
     () =>
-      person !== null &&
+      effectivePerson !== null &&
       roomId !== null &&
       dateRange?.from !== undefined &&
       dateRange?.to !== undefined &&
       !conflictError,
-    [person, roomId, dateRange, conflictError],
+    [effectivePerson, roomId, dateRange, conflictError],
   );
 
   // Submission handler via useFormSubmission hook
@@ -230,11 +272,11 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
   // Handle form submission
   const handleSubmit = useCallback(async () => {
     if (!isFormValid) return;
-    if (!person || !roomId || !dateRange?.from || !dateRange?.to) return;
+    if (!effectivePerson || !roomId || !dateRange?.from || !dateRange?.to) return;
 
     const data: RoomAssignmentFormData = {
       roomId,
-      personId: person.id,
+      personId: effectivePerson.id,
       startDate: toISODateString(dateRange.from),
       endDate: toISODateString(dateRange.to),
     };
@@ -244,7 +286,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     } catch {
       // Error handled by hook - keep dialog open for retry
     }
-  }, [isFormValid, person, roomId, dateRange, doSubmit]);
+  }, [isFormValid, effectivePerson, roomId, dateRange, doSubmit]);
 
   // Prevent closing during submission
   const handleOpenChange = useCallback(
@@ -255,8 +297,8 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     [isSubmitting, onOpenChange],
   );
 
-  // Don't render if no person or room
-  if (!person || !room) {
+  // Don't render if no room
+  if (!room) {
     return null;
   }
 
@@ -269,7 +311,9 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
       >
         <DialogHeader>
           <DialogTitle>
-            {t('assignments.quickAssign', 'Assign to room')}
+            {person
+              ? t('assignments.quickAssign', 'Assign to room')
+              : t('rooms.claimRoom')}
           </DialogTitle>
           <DialogDescription>
             {t(
@@ -280,13 +324,52 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          {/* Guest display (read-only) */}
-          <div className="grid gap-2">
-            <Label>{t('assignments.person')}</Label>
-            <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
-              <PersonBadge person={person} size="default" />
+          {/* Guest display: read-only if pre-selected (drag-drop), selector if claim flow */}
+          {person ? (
+            <div className="grid gap-2">
+              <Label>{t('assignments.person')}</Label>
+              <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
+                <PersonBadge person={person} size="default" />
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="grid gap-2">
+              <Label htmlFor="claim-person-select">{t('assignments.person')}</Label>
+              <Select
+                value={selectedPersonId}
+                onValueChange={(value) => setSelectedPersonId(value as PersonId)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger
+                  id="claim-person-select"
+                  className="w-full"
+                  aria-label={t('assignments.person')}
+                >
+                  <SelectValue placeholder={t('assignments.selectPerson', 'Select a guest')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {persons.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      {t('persons.empty')}
+                    </div>
+                  ) : (
+                    persons.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="size-3 rounded-full shrink-0"
+                            style={{ backgroundColor: p.color }}
+                            aria-hidden="true"
+                          />
+                          {p.name}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Room display (read-only) */}
           <div className="grid gap-2">
@@ -315,6 +398,17 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
               )}
             </p>
           </div>
+
+          {/* Capacity warning */}
+          {capacityWarning && (
+            <div
+              className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-800 dark:text-amber-200"
+              role="alert"
+            >
+              <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+              <span>{capacityWarning}</span>
+            </div>
+          )}
 
           {/* Conflict warning */}
           {conflictError && (

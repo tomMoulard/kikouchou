@@ -84,6 +84,16 @@
     "allGuestsAssigned": "All guests have rooms assigned",
     "needsRoom": "needs room",
     "icon": "Room icon",
+    "spotsTaken": "{{occupied}} of {{capacity}} spots taken",
+    "spotsOpen_one": "{{count}} spot open",
+    "spotsOpen_other": "{{count}} spots open",
+    "full": "Full",
+    "claimRoom": "Claim this room",
+    "roomJustFilled": "This room just filled up! Try another one",
+    "allRoomsFull": "All rooms are full for these dates",
+    "capacityWarning": "This room may be over capacity for some of these dates",
+    "filterDates": "Show availability for dates",
+    "dragHint": "Drag a guest to a room below to assign",
     "icons": {
       "bedDouble": "Double bed",
       "bedSingle": "Single bed",
@@ -139,7 +149,9 @@
     "createSuccess": "Room assignment created",
     "updateSuccess": "Room assignment updated",
     "deleteSuccess": "Room assignment removed",
-    "autofilledFromTransport": "Dates pre-filled from transport schedule"
+    "autofilledFromTransport": "Dates pre-filled from transport schedule",
+    "quickAssign": "Assign to room",
+    "quickAssignDescription": "Confirm the dates for this room assignment."
   },
   "transports": {
     "title": "Transport",

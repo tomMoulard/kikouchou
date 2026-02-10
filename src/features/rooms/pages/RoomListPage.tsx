@@ -47,6 +47,7 @@ import { useRoomContext } from '@/contexts/RoomContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { useToday } from '@/hooks';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
@@ -61,6 +62,8 @@ import { RoomAssignmentSection } from '@/features/rooms/components/RoomAssignmen
 import { DraggableGuest, type DraggableGuestData } from '@/features/rooms/components/DraggableGuest';
 import { DroppableRoom, type DroppableRoomData } from '@/features/rooms/components/DroppableRoom';
 import { QuickAssignmentDialog } from '@/features/rooms/components/QuickAssignmentDialog';
+import { type DateRange as PickerDateRange, DateRangePicker } from '@/components/shared/DateRangePicker';
+import { isDateInStayRange, calculatePeakOccupancy } from '@/features/rooms/utils/capacity-utils';
 import type { Person, PersonId, Room, RoomAssignment, RoomId, Transport } from '@/types';
 
 // ============================================================================
@@ -75,6 +78,12 @@ interface RoomWithOccupancy {
   readonly room: Room;
   /** Current occupants (persons assigned today) */
   readonly currentOccupants: readonly Person[];
+  /** Peak occupancy across the selected date range */
+  readonly peakOccupancy: number;
+  /** Available spots (capacity - peakOccupancy) */
+  readonly availableSpots: number;
+  /** Whether the room is at or over capacity */
+  readonly isFull: boolean;
 }
 
 /**
@@ -210,33 +219,7 @@ function calculateUnassignedDates(
 // Utility Functions
 // ============================================================================
 
-/**
- * Checks if a reference date falls within a room assignment's stay period.
- * Uses the "check-in / check-out" model:
- * - startDate = check-in day (first night)
- * - endDate = check-out day (person leaves, NOT a stay night)
- * 
- * ISO date strings (YYYY-MM-DD) sort lexicographically, making this efficient.
- *
- * @param startDate - Check-in date in ISO format (YYYY-MM-DD)
- * @param endDate - Check-out date in ISO format (YYYY-MM-DD)
- * @param referenceDate - Reference date in ISO format (YYYY-MM-DD)
- * @returns True if referenceDate is a night the person is staying (check-in <= ref < check-out)
- */
-function isDateInStayRange(
-  startDate: string,
-  endDate: string,
-  referenceDate: string,
-): boolean {
-  // Validate inputs are non-empty strings
-  if (!startDate || !endDate || !referenceDate) {
-    return false;
-  }
-
-  // Person stays from check-in (inclusive) to check-out (exclusive)
-  // Example: check-in Jan 15, check-out Jan 17 → stays nights of Jan 15, Jan 16
-  return startDate <= referenceDate && referenceDate < endDate;
-}
+// isDateInStayRange and calculatePeakOccupancy imported from @/features/rooms/utils/capacity-utils
 
 /**
  * Formats a Date object to ISO date string (YYYY-MM-DD).
@@ -287,6 +270,9 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
    isActionInProgressRef = useRef(false),
    [isActionInProgress] = useState(false),
 
+  // Date range filter for capacity calculation
+   [selectedDateRange, setSelectedDateRange] = useState<PickerDateRange | undefined>(undefined),
+
   // Dialog state for create/edit room
    [isDialogOpen, setIsDialogOpen] = useState(false),
    [editingRoomId, setEditingRoomId] = useState<RoomId | undefined>(undefined),
@@ -308,6 +294,34 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
      startDate: '',
      endDate: '',
    }),
+
+  // Trip date constraints for DateRangePicker
+   tripStartDate = useMemo(
+    () => (currentTrip?.startDate ? parseISO(currentTrip.startDate) : undefined),
+    [currentTrip?.startDate],
+  ),
+   tripEndDate = useMemo(
+    () => (currentTrip?.endDate ? parseISO(currentTrip.endDate) : undefined),
+    [currentTrip?.endDate],
+  ),
+
+  // Effective date range for capacity calculation (defaults to full trip range)
+   effectiveDateRange = useMemo(() => {
+    if (selectedDateRange?.from && selectedDateRange?.to) {
+      return {
+        startDate: formatToISODate(selectedDateRange.from),
+        endDate: formatToISODate(selectedDateRange.to),
+      };
+    }
+    // Default to full trip date range
+    if (currentTrip?.startDate && currentTrip?.endDate) {
+      return {
+        startDate: currentTrip.startDate,
+        endDate: currentTrip.endDate,
+      };
+    }
+    return null;
+  }, [selectedDateRange, currentTrip?.startDate, currentTrip?.endDate]),
 
   // Combined loading state
    isLoading = isTripLoading || isRoomsLoading || isTransportsLoading,
@@ -345,18 +359,17 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     return tripIdFromUrl !== currentTrip.id;
   }, [tripIdFromUrl, currentTrip]),
 
-  // Calculate today's date as ISO string (YYYY-MM-DD)
-  // Note: This value is captured on mount. For long-running sessions past midnight,
-  // Users should refresh to get updated occupancy data.
-   todayStr = useMemo(() => formatToISODate(new Date()), []),
+  // Today's date - auto-updates at midnight via useToday hook
+   { today: todayDate } = useToday(),
+   todayStr = useMemo(() => formatToISODate(todayDate), [todayDate]),
 
   // Calculate rooms with occupancy data
    roomsWithOccupancy = useMemo((): readonly RoomWithOccupancy[] => rooms.map((room) => {
       // Get all assignments for this room
-      const assignments = getAssignmentsByRoom(room.id),
+      const roomAssignments = getAssignmentsByRoom(room.id),
 
-      // Filter to assignments active today
-       activeAssignments = assignments.filter((assignment) =>
+      // Filter to assignments active today (for current occupants display)
+       activeAssignments = roomAssignments.filter((assignment) =>
         isDateInStayRange(assignment.startDate, assignment.endDate, todayStr),
       ),
 
@@ -365,11 +378,33 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         .map((assignment) => getPersonById(assignment.personId))
         .filter((person): person is Person => person !== undefined);
 
+      // Calculate peak occupancy for the selected date range
+      const peakOccupancy = effectiveDateRange
+        ? calculatePeakOccupancy(
+            roomAssignments,
+            effectiveDateRange.startDate,
+            effectiveDateRange.endDate,
+          )
+        : currentOccupants.length;
+
+      const availableSpots = Math.max(0, room.capacity - peakOccupancy);
+      const isFull = peakOccupancy >= room.capacity;
+
       return {
         room,
         currentOccupants,
+        peakOccupancy,
+        availableSpots,
+        isFull,
       };
-    }), [rooms, getAssignmentsByRoom, getPersonById, todayStr]),
+    }), [rooms, getAssignmentsByRoom, getPersonById, todayStr, effectiveDateRange]),
+
+  // Sort rooms: available first (by room.order), then full rooms (by room.order)
+   sortedRoomsWithOccupancy = useMemo(() => {
+    const available = roomsWithOccupancy.filter((r) => !r.isFull);
+    const full = roomsWithOccupancy.filter((r) => r.isFull);
+    return [...available, ...full];
+  }, [roomsWithOccupancy]),
 
   // Calculate guests without room assignments
    unassignedGuests = useMemo((): readonly UnassignedGuest[] => {
@@ -526,6 +561,33 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     }
   }, []),
 
+  /**
+   * Handles "Claim this room" button click.
+   * Opens the QuickAssignmentDialog with the room pre-selected.
+   */
+   handleClaimRoom = useCallback((room: Room) => {
+    // Re-check capacity at click time (room may have filled between render and click)
+    const roomAssignments = getAssignmentsByRoom(room.id);
+    const startDate = effectiveDateRange?.startDate ?? currentTrip?.startDate ?? '';
+    const endDate = effectiveDateRange?.endDate ?? currentTrip?.endDate ?? '';
+
+    if (startDate && endDate) {
+      const peak = calculatePeakOccupancy(roomAssignments, startDate, endDate);
+      if (peak >= room.capacity) {
+        toast.error(t('rooms.roomJustFilled'));
+        return;
+      }
+    }
+
+    setQuickAssignData({
+      person: null, // Person will be selected in the dialog
+      roomId: room.id,
+      startDate,
+      endDate,
+    });
+    setQuickAssignDialogOpen(true);
+  }, [effectiveDateRange, currentTrip?.startDate, currentTrip?.endDate, getAssignmentsByRoom, t]),
+
   // ============================================================================
   // Header Action (desktop button)
   // ============================================================================
@@ -655,6 +717,22 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           action={headerAction}
         />
 
+      {/* Date range filter for room availability */}
+      {rooms.length > 0 && currentTrip && (
+        <div className="mb-4">
+          <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
+            {t('rooms.filterDates')}
+          </label>
+          <DateRangePicker
+            value={selectedDateRange}
+            onChange={setSelectedDateRange}
+            minDate={tripStartDate}
+            maxDate={tripEndDate}
+            aria-label={t('rooms.filterDates')}
+          />
+        </div>
+      )}
+
       {/* Unassigned guests section */}
       {persons.length > 0 && (
         <Card className={cn(
@@ -715,6 +793,15 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         </Card>
       )}
 
+      {/* All rooms full message */}
+      {sortedRoomsWithOccupancy.length > 0 && sortedRoomsWithOccupancy.every((r) => r.isFull) && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20 p-4 text-center">
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            {t('rooms.allRoomsFull')}
+          </p>
+        </div>
+      )}
+
       {/* Room grid */}
       <div
         role="list"
@@ -726,15 +813,19 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           'pb-20 sm:pb-4',
         )}
       >
-        {roomsWithOccupancy.map(({ room, currentOccupants }) => (
+        {sortedRoomsWithOccupancy.map(({ room, currentOccupants, peakOccupancy, availableSpots, isFull }) => (
           <div key={room.id} role="listitem">
             <DroppableRoom roomId={room.id}>
               <RoomCard
                 room={room}
                 occupants={currentOccupants}
+                peakOccupancy={peakOccupancy}
+                availableSpots={availableSpots}
+                isFull={isFull}
                 onClick={handleRoomClick}
                 onEdit={handleRoomEdit}
                 onDelete={handleRoomDelete}
+                onClaim={handleClaimRoom}
                 isDisabled={isActionInProgress}
                 isExpanded={expandedRoomId === room.id}
                 expandedContent={
