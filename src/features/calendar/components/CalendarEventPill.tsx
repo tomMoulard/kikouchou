@@ -60,7 +60,7 @@ const CalendarEventPill = memo(function CalendarEventPill({
       onKeyDown={handleKeyDown}
       className={cn(
         'w-full text-left text-xs px-1.5 py-1 md:px-1 md:py-0.5 truncate',
-        'min-h-[28px] md:min-h-0',
+        'min-h-[44px] md:min-h-0',
         'transition-opacity hover:opacity-80',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
         'cursor-pointer',

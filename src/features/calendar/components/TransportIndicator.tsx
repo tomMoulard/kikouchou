@@ -70,7 +70,7 @@ const TransportIndicator = memo(function TransportIndicator({
   // Common class names for the indicator
   const indicatorClasses = cn(
     'flex items-center gap-1 text-xs rounded px-1.5 py-0.5 truncate',
-    'border min-h-[28px] md:min-h-0', // Touch-friendly height on mobile
+    'border min-h-[44px] md:min-h-0', // Touch-friendly height on mobile
     isArrival
       ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-400 dark:border-green-800'
       : 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-800',

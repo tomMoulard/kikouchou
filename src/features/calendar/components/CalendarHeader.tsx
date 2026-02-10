@@ -42,7 +42,7 @@ const CalendarHeader = memo(function CalendarHeader({
           size="icon"
           onClick={onPrevMonth}
           aria-label={t('calendar.previousMonth', 'Previous month')}
-          className="size-10 md:size-8"
+          className="size-11 md:size-8"
         >
           <ChevronLeft className="size-5 md:size-4" aria-hidden="true" />
         </Button>
@@ -51,7 +51,7 @@ const CalendarHeader = memo(function CalendarHeader({
           size="icon"
           onClick={onNextMonth}
           aria-label={t('calendar.nextMonth', 'Next month')}
-          className="size-10 md:size-8"
+          className="size-11 md:size-8"
         >
           <ChevronRight className="size-5 md:size-4" aria-hidden="true" />
         </Button>
@@ -76,7 +76,7 @@ const CalendarHeader = memo(function CalendarHeader({
         size="icon"
         onClick={onToday}
         aria-label={t('calendar.today')}
-        className="size-8 sm:hidden"
+        className="size-11 sm:hidden"
       >
         <CalendarIcon className="size-4" aria-hidden="true" />
       </Button>

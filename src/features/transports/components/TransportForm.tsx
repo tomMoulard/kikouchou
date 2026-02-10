@@ -675,6 +675,7 @@ const TransportForm = memo(function TransportForm({
         <Input
           id="transport-number"
           type="text"
+          inputMode="text"
           value={formState.transportNumber}
           onChange={handleTransportNumberChange}
           placeholder={t('transports.numberPlaceholder')}

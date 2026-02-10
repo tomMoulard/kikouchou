@@ -6,7 +6,7 @@
  */
 
 import { type ReactNode, memo, useCallback, useMemo, useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Calendar,
@@ -18,6 +18,7 @@ import {
   Luggage,
   MapPin,
   Menu,
+  MoreHorizontal,
   Settings,
   Users,
 } from 'lucide-react';
@@ -25,6 +26,13 @@ import {
 import { cn } from '@/lib/utils';
 import { useTripContext } from '@/contexts/TripContext';
 import { Button } from '@/components/ui/button';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import type { Trip } from '@/types';
 
 // ============================================================================
@@ -93,13 +101,23 @@ const SETTINGS_NAV_ITEM: NavItem = {
 };
 
 /**
- * All navigation items combined for mobile nav.
- * Mobile always shows all items (trip items disabled when no trip).
+ * Primary mobile bottom nav items (max 4 for UX: 3 trip items + "More").
+ * Calendar, Rooms, Transports are directly accessible.
+ * Persons, Trips, Settings are inside the "More" sheet.
  */
-const ALL_NAV_ITEMS: readonly NavItem[] = [
-  ...TRIP_NAV_ITEMS,
-  ...GLOBAL_NAV_ITEMS,
-  SETTINGS_NAV_ITEM,
+const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] = [
+  { labelKey: 'nav.calendar', pathSuffix: 'calendar', icon: Calendar, requiresTrip: true },
+  { labelKey: 'nav.rooms', pathSuffix: 'rooms', icon: Home, requiresTrip: true },
+  { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
+] as const;
+
+/**
+ * Items shown inside the "More" sheet on mobile.
+ */
+const MOBILE_MORE_NAV_ITEMS: readonly NavItem[] = [
+  { labelKey: 'nav.persons', pathSuffix: 'persons', icon: Users, requiresTrip: true },
+  { labelKey: 'trips.title', pathSuffix: '', icon: Luggage, requiresTrip: false },
+  { labelKey: 'nav.settings', pathSuffix: 'settings', icon: Settings, requiresTrip: false },
 ] as const;
 
 /**
@@ -174,52 +192,120 @@ const Header = memo(({
 /**
  * Mobile bottom navigation bar.
  * Fixed at the bottom of the screen, visible only on mobile.
+ * Shows 3 primary items + a "More" button that opens a bottom sheet.
  * Memoized to prevent unnecessary re-renders on route changes.
  */
  MobileNav = memo(({ tripId }: NavProps): React.ReactElement => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+
+  const handleMoreItemClick = useCallback((path: string) => {
+    setIsMoreOpen(false);
+    navigate(path);
+  }, [navigate]);
 
   return (
-    <nav
-      className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background md:hidden"
-      aria-label={t('nav.main', 'Main navigation')}
-    >
-      <ul className="flex h-16 items-center justify-around">
-        {ALL_NAV_ITEMS.map((item) => {
-          const path = buildNavPath(item, tripId),
-           isDisabled = item.requiresTrip && !tripId;
+    <>
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background md:hidden"
+        aria-label={t('nav.main', 'Main navigation')}
+      >
+        <ul className="flex h-16 items-center justify-around">
+          {MOBILE_PRIMARY_NAV_ITEMS.map((item) => {
+            const path = buildNavPath(item, tripId),
+             isDisabled = item.requiresTrip && !tripId;
 
-          return (
-            <li key={item.pathSuffix || 'trips'} className="flex-1">
-              <NavLink
-                to={path}
-                className={({ isActive }) =>
-                  cn(
-                    'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors',
-                    'hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    isActive
-                      ? 'text-primary font-medium'
-                      : 'text-muted-foreground',
-                    isDisabled && 'opacity-50 pointer-events-none',
-                  )
-                }
-                aria-disabled={isDisabled}
-              >
-                {({ isActive }) => (
-                  <>
-                    <item.icon
-                      className={cn('h-5 w-5', isActive && 'text-primary')}
-                      aria-hidden="true"
-                    />
-                    <span>{t(item.labelKey)}</span>
-                  </>
-                )}
-              </NavLink>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+            return (
+              <li key={item.pathSuffix} className="flex-1">
+                <NavLink
+                  to={path}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors',
+                      'hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      isActive
+                        ? 'text-primary font-medium'
+                        : 'text-muted-foreground',
+                      isDisabled && 'opacity-50 pointer-events-none',
+                    )
+                  }
+                  aria-disabled={isDisabled}
+                >
+                  {({ isActive }) => (
+                    <>
+                      <item.icon
+                        className={cn('h-5 w-5', isActive && 'text-primary')}
+                        aria-hidden="true"
+                      />
+                      <span>{t(item.labelKey)}</span>
+                    </>
+                  )}
+                </NavLink>
+              </li>
+            );
+          })}
+
+          {/* "More" button */}
+          <li className="flex-1">
+            <button
+              type="button"
+              onClick={() => setIsMoreOpen(true)}
+              className={cn(
+                'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors w-full',
+                'hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                isMoreOpen ? 'text-primary font-medium' : 'text-muted-foreground',
+              )}
+              aria-label={t('nav.more', 'More')}
+              aria-expanded={isMoreOpen}
+            >
+              <MoreHorizontal className={cn('h-5 w-5', isMoreOpen && 'text-primary')} aria-hidden="true" />
+              <span>{t('nav.more', 'More')}</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
+
+      {/* "More" bottom sheet */}
+      <Sheet open={isMoreOpen} onOpenChange={setIsMoreOpen}>
+        <SheetContent side="bottom" showCloseButton={false} className="pb-20">
+          <SheetHeader>
+            <SheetTitle>{t('nav.more', 'More')}</SheetTitle>
+            <SheetDescription className="sr-only">
+              {t('nav.main', 'Main navigation')}
+            </SheetDescription>
+          </SheetHeader>
+          <nav aria-label={t('nav.more', 'More')}>
+            <ul className="space-y-1">
+              {MOBILE_MORE_NAV_ITEMS.map((item) => {
+                const path = buildNavPath(item, tripId);
+                const isDisabled = item.requiresTrip && !tripId;
+
+                return (
+                  <li key={item.pathSuffix || 'trips'}>
+                    <button
+                      type="button"
+                      onClick={() => handleMoreItemClick(path)}
+                      disabled={isDisabled}
+                      className={cn(
+                        'flex items-center gap-3 w-full rounded-lg px-3 py-3 text-sm transition-colors',
+                        'hover:bg-accent hover:text-accent-foreground',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        'text-foreground',
+                        isDisabled && 'opacity-50 cursor-not-allowed',
+                      )}
+                    >
+                      <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                      <span>{t(item.labelKey)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 });
 

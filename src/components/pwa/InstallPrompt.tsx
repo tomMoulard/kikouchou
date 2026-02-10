@@ -283,7 +283,7 @@ function InstallPromptComponent({
                   size="sm"
                   onClick={handleInstall}
                   disabled={isInstalling}
-                  className="flex-1 sm:flex-none"
+                  className="flex-1 sm:flex-none h-11 md:h-8"
                 >
                   {isInstalling
                     ? t('common.loading', 'Loading...')
@@ -294,6 +294,7 @@ function InstallPromptComponent({
                   size="sm"
                   onClick={handleDismiss}
                   disabled={isInstalling}
+                  className="h-11 md:h-8"
                 >
                   {t('pwa.notNow', 'Not now')}
                 </Button>
@@ -304,7 +305,7 @@ function InstallPromptComponent({
             <Button
               variant="ghost"
               size="icon"
-              className="shrink-0 -mt-1 -mr-1 size-8"
+              className="shrink-0 -mt-1 -mr-1 size-11 md:size-8"
               onClick={handleDismiss}
               disabled={isInstalling}
               aria-label={t('common.close', 'Close')}

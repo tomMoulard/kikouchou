@@ -393,7 +393,7 @@ const EventDetailDialog = memo(function EventDetailDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {isTransportEvent(event) && (
@@ -433,7 +433,7 @@ const EventDetailDialog = memo(function EventDetailDialog({
               variant="outline"
               size="sm"
               onClick={handleEditClick}
-              className="flex-1 sm:flex-none"
+              className="flex-1 sm:flex-none h-11 md:h-8"
             >
               <Pencil className="size-4 mr-2" aria-hidden="true" />
               {t('common.edit')}
@@ -442,7 +442,7 @@ const EventDetailDialog = memo(function EventDetailDialog({
               variant="destructive"
               size="sm"
               onClick={handleDeleteClick}
-              className="flex-1 sm:flex-none"
+              className="flex-1 sm:flex-none h-11 md:h-8"
             >
               <Trash2 className="size-4 mr-2" aria-hidden="true" />
               {t('common.delete')}

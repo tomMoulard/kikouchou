@@ -349,6 +349,7 @@ const RoomForm = memo(function RoomForm({
         <Input
           id="room-capacity"
           type="number"
+          inputMode="numeric"
           min={MIN_CAPACITY}
           value={capacity}
           onChange={handleCapacityChange}

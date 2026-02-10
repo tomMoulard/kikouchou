@@ -350,7 +350,7 @@ const DateRangePicker = memo(({
               variant="ghost"
               size="sm"
               onClick={handleClear}
-              className="h-7 px-2 text-xs"
+              className="h-9 px-2 text-xs md:h-7"
               aria-label={t('dateRangePicker.clear', 'Clear selection')}
             >
               <X className="h-3 w-3 mr-1" aria-hidden="true" />

@@ -277,7 +277,7 @@ const AssignmentItem = memo(function AssignmentItem({
         <Button
           variant="ghost"
           size="icon"
-          className="size-9 md:size-7"
+          className="size-11 md:size-7"
           disabled={isDisabled}
           onClick={handleEditClick}
           onKeyDown={handleEditKeyDown}
@@ -288,7 +288,7 @@ const AssignmentItem = memo(function AssignmentItem({
         <Button
           variant="ghost"
           size="icon"
-          className="size-9 md:size-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+          className="size-11 md:size-7 text-destructive hover:text-destructive hover:bg-destructive/10"
           disabled={isDisabled}
           onClick={handleDeleteClick}
           onKeyDown={handleDeleteKeyDown}
@@ -493,7 +493,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="sm:max-w-[425px]"
+        className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto"
         onPointerDownOutside={(e) => isSubmitting && e.preventDefault()}
         onEscapeKeyDown={(e) => isSubmitting && e.preventDefault()}
       >

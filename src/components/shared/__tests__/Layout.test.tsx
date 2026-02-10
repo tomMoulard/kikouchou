@@ -194,17 +194,19 @@ describe('Layout', () => {
       expect(screen.getByText('trips.empty')).toBeInTheDocument();
     });
 
-    it('mobile nav shows all items but trip items are disabled', () => {
+    it('mobile nav shows primary items and More button, trip items are disabled', () => {
       renderLayout();
 
       const mobileNav = getMobileNav();
       expect(mobileNav).toBeInTheDocument();
 
-      // Get all nav links in mobile nav
+      // Get all nav links in mobile nav (3 primary items: Calendar, Rooms, Transports)
       const navLinks = within(mobileNav as HTMLElement).getAllByRole('link');
-      
-      // Should have 6 links: Calendar, Rooms, Persons, Transports, Trips, Settings
-      expect(navLinks).toHaveLength(6);
+      expect(navLinks).toHaveLength(3);
+
+      // "More" button should be present
+      const moreButton = within(mobileNav as HTMLElement).getByText('nav.more');
+      expect(moreButton).toBeInTheDocument();
 
       // Trip-specific links should be disabled (aria-disabled)
       const calendarLink = within(mobileNav as HTMLElement).getByText('nav.calendar').closest('a');
@@ -337,6 +339,7 @@ describe('Layout', () => {
       renderLayout();
 
       const mobileNav = getMobileNav();
+      // Calendar is a primary mobile nav item
       const calendarLink = within(mobileNav as HTMLElement).getByText('nav.calendar').closest('a');
       expect(calendarLink).toHaveAttribute('aria-disabled', 'false');
     });
@@ -439,8 +442,8 @@ describe('Layout', () => {
         .getAllByRole('link')
         .filter((link) => link.getAttribute('aria-disabled') === 'true');
 
-      // Should have 4 disabled links (Calendar, Rooms, Persons, Transports)
-      expect(disabledLinks).toHaveLength(4);
+      // Should have 3 disabled links (Calendar, Rooms, Transports) — primary mobile items
+      expect(disabledLinks).toHaveLength(3);
     });
 
     it('collapse button has appropriate aria-label', () => {
