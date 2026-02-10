@@ -77,6 +77,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
+import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
 import type { Person, PersonId, Transport, TransportId, TransportMode, TransportType } from '@/types';
 
 // ============================================================================
@@ -730,6 +731,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
    {
     arrivals,
     departures,
+    upcomingPickups,
     isLoading: isTransportsLoading,
     error: transportsError,
     deleteTransport,
@@ -792,7 +794,13 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     [pastTransports, dateLocale],
   ),
 
-   pastCount = pastTransports.length;
+   pastCount = pastTransports.length,
+
+  // Check if there are any pickups (assigned or unassigned) to show the UpcomingPickups section
+   hasAnyPickups = useMemo(
+    () => upcomingPickups.some((t) => t.needsPickup),
+    [upcomingPickups],
+  );
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -1000,6 +1008,13 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
             <ArrowUpFromLine className="size-4 text-orange-600" aria-hidden="true" />
             <span>{departures.length} {t('transports.departures').toLowerCase()}</span>
           </div>
+        </div>
+      )}
+
+      {/* Pickup alerts section - shown when any pickups exist (component handles empty state internally) */}
+      {hasAnyPickups && (
+        <div className="mb-6 p-4 rounded-xl border-2 border-amber-200 bg-amber-50/20 dark:border-amber-800 dark:bg-amber-950/10">
+          <UpcomingPickups />
         </div>
       )}
 

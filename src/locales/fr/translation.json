@@ -208,6 +208,20 @@
     "showMore": "Afficher {{count}} de plus",
     "showLess": "Afficher moins"
   },
+  "pickups": {
+    "volunteerDrive": "Je conduis",
+    "volunteerSuccess": "C'est noté ! Merci pour le coup de main",
+    "selectDriver": "Qui conduit ?",
+    "selectDriverDescription": "Choisissez qui va chercher {{name}}",
+    "combinedTrip": "Trajet combiné",
+    "combinedTripHint": "Ces arrivées sont à la même gare — combinez en un seul trajet !",
+    "stationWindow": "{{station}} — {{startTime}}-{{endTime}}",
+    "allCovered": "Tous les trajets sont couverts ! Personne n'a besoin qu'on vienne le chercher.",
+    "needsDriver": "Cherche conducteur",
+    "unassignedCount_one": "{{count}} arrivée a besoin d'un conducteur",
+    "unassignedCount_other": "{{count}} arrivées ont besoin d'un conducteur",
+    "overdue": "En retard"
+  },
   "calendar": {
     "title": "Calendrier",
     "today": "Aujourd'hui",

@@ -208,6 +208,20 @@
     "showMore": "Show {{count}} more",
     "showLess": "Show less"
   },
+  "pickups": {
+    "volunteerDrive": "Volunteer to drive",
+    "volunteerSuccess": "You're the driver! Thanks for helping out",
+    "selectDriver": "Who's driving?",
+    "selectDriverDescription": "Select the person who will pick up {{name}}",
+    "combinedTrip": "Combined trip",
+    "combinedTripHint": "These pickups are at the same station — combine into one trip!",
+    "stationWindow": "{{station}} — {{startTime}}-{{endTime}}",
+    "allCovered": "All pickups are covered! No one needs a ride right now.",
+    "needsDriver": "Needs a driver",
+    "unassignedCount_one": "{{count}} pickup needs a driver",
+    "unassignedCount_other": "{{count}} pickups need a driver",
+    "overdue": "Overdue"
+  },
   "calendar": {
     "title": "Calendar",
     "today": "Today",
