@@ -341,7 +341,7 @@ describe('Layout', () => {
       const mobileNav = getMobileNav();
       // Calendar is a primary mobile nav item
       const calendarLink = within(mobileNav as HTMLElement).getByText('nav.calendar').closest('a');
-      expect(calendarLink).toHaveAttribute('aria-disabled', 'false');
+      expect(calendarLink).not.toHaveAttribute('aria-disabled');
     });
   });
 

@@ -6,7 +6,7 @@
  */
 
 import { type ReactNode, memo, useCallback, useMemo, useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Calendar,
@@ -104,21 +104,20 @@ const SETTINGS_NAV_ITEM: NavItem = {
  * Primary mobile bottom nav items (max 4 for UX: 3 trip items + "More").
  * Calendar, Rooms, Transports are directly accessible.
  * Persons, Trips, Settings are inside the "More" sheet.
+ * Derived from canonical arrays to avoid duplication.
  */
-const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] = [
-  { labelKey: 'nav.calendar', pathSuffix: 'calendar', icon: Calendar, requiresTrip: true },
-  { labelKey: 'nav.rooms', pathSuffix: 'rooms', icon: Home, requiresTrip: true },
-  { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
-] as const;
+const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] =
+  TRIP_NAV_ITEMS.filter((item) => item.pathSuffix !== 'persons');
 
 /**
  * Items shown inside the "More" sheet on mobile.
+ * Derived from canonical arrays to avoid duplication.
  */
 const MOBILE_MORE_NAV_ITEMS: readonly NavItem[] = [
-  { labelKey: 'nav.persons', pathSuffix: 'persons', icon: Users, requiresTrip: true },
-  { labelKey: 'trips.title', pathSuffix: '', icon: Luggage, requiresTrip: false },
-  { labelKey: 'nav.settings', pathSuffix: 'settings', icon: Settings, requiresTrip: false },
-] as const;
+  TRIP_NAV_ITEMS.find((item) => item.pathSuffix === 'persons')!,
+  ...GLOBAL_NAV_ITEMS,
+  SETTINGS_NAV_ITEM,
+];
 
 /**
  * Builds the navigation path for a nav item.
@@ -198,12 +197,22 @@ const Header = memo(({
  MobileNav = memo(({ tripId }: NavProps): React.ReactElement => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
 
   const handleMoreItemClick = useCallback((path: string) => {
     setIsMoreOpen(false);
-    navigate(path);
+    // Defer navigation to let Sheet exit animation start before route change
+    requestAnimationFrame(() => navigate(path));
   }, [navigate]);
+
+  // Check if any "More" item's route is currently active
+  const isMoreItemActive = useMemo(() => {
+    return MOBILE_MORE_NAV_ITEMS.some((item) => {
+      const path = buildNavPath(item, tripId);
+      return location.pathname === path || location.pathname.startsWith(path + '/');
+    });
+  }, [tripId, location.pathname]);
 
   return (
     <>
@@ -220,6 +229,8 @@ const Header = memo(({
               <li key={item.pathSuffix} className="flex-1">
                 <NavLink
                   to={path}
+                  onClick={(e) => { if (isDisabled) e.preventDefault(); }}
+                  tabIndex={isDisabled ? -1 : undefined}
                   className={({ isActive }) =>
                     cn(
                       'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors',
@@ -230,7 +241,7 @@ const Header = memo(({
                       isDisabled && 'opacity-50 pointer-events-none',
                     )
                   }
-                  aria-disabled={isDisabled}
+                  aria-disabled={isDisabled || undefined}
                 >
                   {({ isActive }) => (
                     <>
@@ -246,7 +257,7 @@ const Header = memo(({
             );
           })}
 
-          {/* "More" button */}
+          {/* "More" button - highlights when a More item's route is active */}
           <li className="flex-1">
             <button
               type="button"
@@ -254,12 +265,12 @@ const Header = memo(({
               className={cn(
                 'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors w-full',
                 'hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                isMoreOpen ? 'text-primary font-medium' : 'text-muted-foreground',
+                isMoreOpen || isMoreItemActive ? 'text-primary font-medium' : 'text-muted-foreground',
               )}
               aria-label={t('nav.more', 'More')}
               aria-expanded={isMoreOpen}
             >
-              <MoreHorizontal className={cn('h-5 w-5', isMoreOpen && 'text-primary')} aria-hidden="true" />
+              <MoreHorizontal className={cn('h-5 w-5', (isMoreOpen || isMoreItemActive) && 'text-primary')} aria-hidden="true" />
               <span>{t('nav.more', 'More')}</span>
             </button>
           </li>
@@ -268,6 +279,7 @@ const Header = memo(({
 
       {/* "More" bottom sheet */}
       <Sheet open={isMoreOpen} onOpenChange={setIsMoreOpen}>
+        {/* pb-20 accounts for h-16 bottom nav + safe area buffer */}
         <SheetContent side="bottom" showCloseButton={false} className="pb-20">
           <SheetHeader>
             <SheetTitle>{t('nav.more', 'More')}</SheetTitle>
@@ -280,6 +292,7 @@ const Header = memo(({
               {MOBILE_MORE_NAV_ITEMS.map((item) => {
                 const path = buildNavPath(item, tripId);
                 const isDisabled = item.requiresTrip && !tripId;
+                const isActive = location.pathname === path || location.pathname.startsWith(path + '/');
 
                 return (
                   <li key={item.pathSuffix || 'trips'}>
@@ -288,14 +301,16 @@ const Header = memo(({
                       onClick={() => handleMoreItemClick(path)}
                       disabled={isDisabled}
                       className={cn(
-                        'flex items-center gap-3 w-full rounded-lg px-3 py-3 text-sm transition-colors',
+                        'flex items-center gap-3 w-full rounded-lg px-3 py-3 text-sm min-h-[44px] transition-colors',
                         'hover:bg-accent hover:text-accent-foreground',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        'text-foreground',
+                        isActive
+                          ? 'bg-accent text-accent-foreground font-medium'
+                          : 'text-foreground',
                         isDisabled && 'opacity-50 cursor-not-allowed',
                       )}
                     >
-                      <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                      <item.icon className={cn('h-5 w-5 shrink-0', isActive && 'text-primary')} aria-hidden="true" />
                       <span>{t(item.labelKey)}</span>
                     </button>
                   </li>
@@ -308,6 +323,9 @@ const Header = memo(({
     </>
   );
 });
+
+Header.displayName = 'Header';
+MobileNav.displayName = 'MobileNav';
 
 /**
  * Formats date range for display.
@@ -374,6 +392,8 @@ const TripInfoSection = memo(({
   );
 });
 
+TripInfoSection.displayName = 'TripInfoSection';
+
 /**
  * Renders a navigation link item.
  */
@@ -394,6 +414,8 @@ const NavLinkItem = memo(({
     <li>
       <NavLink
         to={path}
+        onClick={(e) => { if (isDisabled) e.preventDefault(); }}
+        tabIndex={isDisabled ? -1 : undefined}
         className={({ isActive }) =>
           cn(
             'flex items-center gap-3 rounded-lg px-3 py-2 transition-colors',
@@ -407,7 +429,7 @@ const NavLinkItem = memo(({
           )
         }
         title={isCollapsed ? t(item.labelKey) : undefined}
-        aria-disabled={isDisabled}
+        aria-disabled={isDisabled || undefined}
       >
         <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
         {!isCollapsed && (
@@ -417,6 +439,8 @@ const NavLinkItem = memo(({
     </li>
   );
 });
+
+NavLinkItem.displayName = 'NavLinkItem';
 
 /**
  * Desktop sidebar navigation.
@@ -522,6 +546,8 @@ const DesktopSidebar = memo(({
     </aside>
   );
 });
+
+DesktopSidebar.displayName = 'DesktopSidebar';
 
 // ============================================================================
 // Main Component

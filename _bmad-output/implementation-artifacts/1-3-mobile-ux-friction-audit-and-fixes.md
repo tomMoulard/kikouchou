@@ -1,6 +1,6 @@
 # Story 1.3: Mobile UX Friction Audit and Fixes
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -212,9 +212,25 @@ No debug issues encountered. All changes were CSS class modifications and compon
 - **Task 4 (Dialog overflow):** Applied `max-h-[90vh] overflow-y-auto` consistently to RoomDialog, PersonDialog, ShareDialog, EventDetailDialog, AssignmentFormDialog (in RoomAssignmentSection), and QuickAssignmentDialog. TransportDialog already had this pattern — verified it still works.
 - **Task 5 (Validation):** Build passes, TypeScript clean, lint has 29 pre-existing errors (no new ones), all 1265 tests pass.
 
+### Senior Developer Review (AI)
+
+**Reviewer:** tom (AI-assisted) | **Date:** 2026-02-10 | **Outcome:** Approved with fixes applied
+
+**Findings (resolved):**
+- **H-1/H-2 (FIXED):** Task 3.2 (`inputMode="text"` on TransportForm) was implemented in initial commit but reverted in code review fix commit. Re-applied the change to match story requirements.
+- **M-1 (FIXED):** AC#3 was only partially satisfied (1 of 2 inputMode changes). Fixed by re-adding `inputMode="text"` to TransportForm.
+- **M-2 (FIXED):** "More" sheet items in mobile nav had no active route indication. Added `useLocation` to detect current route and highlight active items in both the "More" button and the sheet contents.
+- **M-3 (ACCEPTED):** Navigation ordering (Calendar, Rooms, Transports as primary; Persons, Trips, Settings in "More") is a reasonable middle ground between UX-4's recommendation of 2-3 contextual views and the need for 4 directly accessible items. The Trips link being in "More" may add friction for trip-switching on mobile, but this is acceptable for MVP since most guests access a single trip via shared link.
+
+**Remaining notes (informational):**
+- L-1: EventDetailDialog/RoomDialog null-event fallback paths missing `overflow-y-auto` -- acceptable since these states have minimal content.
+- L-2: `requestAnimationFrame` for More sheet navigation could be replaced with a more robust approach in future.
+- L-3: Desktop sidebar shows all 4 trip nav items while mobile shows 3+More -- intentional progressive disclosure pattern.
+
 ### Change Log
 
 - 2026-02-10: Story 1.3 implementation — Mobile UX friction audit and fixes (touch targets, navigation, inputMode, dialog overflow)
+- 2026-02-10: Code review fixes — Re-applied `inputMode="text"` to TransportForm, added active route indication to mobile "More" sheet
 
 ### File List
 
