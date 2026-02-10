@@ -12,6 +12,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -39,6 +40,8 @@ interface RoomFormProps {
   readonly onSubmit: (data: RoomFormData) => Promise<void>;
   /** Callback when cancel button is clicked. */
   readonly onCancel: () => void;
+  /** Callback when form dirty state changes (for unsaved changes guard). */
+  readonly onDirtyChange?: (isDirty: boolean) => void;
 }
 
 /**
@@ -101,6 +104,7 @@ const RoomForm = memo(function RoomForm({
   room,
   onSubmit,
   onCancel,
+  onDirtyChange,
 }: RoomFormProps) {
   const { t } = useTranslation();
 
@@ -113,6 +117,21 @@ const RoomForm = memo(function RoomForm({
   const [capacity, setCapacity] = useState<number>(room?.capacity ?? DEFAULT_CAPACITY);
   const [description, setDescription] = useState(room?.description ?? '');
   const [icon, setIcon] = useState<RoomIcon | undefined>(room?.icon);
+
+  // Compute dirty state
+  const isDirty = useMemo(
+    () =>
+      name !== (room?.name ?? '') ||
+      capacity !== (room?.capacity ?? DEFAULT_CAPACITY) ||
+      description !== (room?.description ?? '') ||
+      icon !== room?.icon,
+    [name, capacity, description, icon, room],
+  );
+
+  // Notify parent of dirty state changes
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   // Validation errors
   const [errors, setErrors] = useState<FormErrors>({});

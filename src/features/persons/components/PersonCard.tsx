@@ -403,8 +403,8 @@ const PersonCard = memo(function PersonCard({
       <ConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={handleDeleteDialogOpenChange}
-        title={t('persons.deleteConfirmTitle', 'Delete participant?')}
-        description={t('persons.deleteConfirm', 'Do you really want to delete this participant?')}
+        title={t('confirm.deletePerson')}
+        description={t('confirm.deletePersonDescription')}
         confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={handleConfirmDelete}

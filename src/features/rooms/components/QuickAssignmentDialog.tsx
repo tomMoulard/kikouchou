@@ -30,6 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import {
   Select,
   SelectContent,
@@ -123,6 +124,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
   const [conflictError, setConflictError] = useState<string | undefined>(undefined);
   const [capacityWarning, setCapacityWarning] = useState<string | undefined>(undefined);
   const [isCheckingConflict, setIsCheckingConflict] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // Refs for async safety (conflict checks still need mount tracking)
   const isMountedRef = useRef(true);
@@ -190,6 +192,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
       setConflictError(undefined);
       setCapacityWarning(undefined);
       setIsCheckingConflict(false);
+      setShowDiscardConfirm(false);
     }
   }, [open, person, roomId, suggestedStartDate, suggestedEndDate]);
 
@@ -200,6 +203,30 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
       isMountedRef.current = false;
     };
   }, []);
+
+  // Compute dirty state: has user changed anything from the pre-filled values?
+  const isDirty = useMemo(() => {
+    // Person changed from pre-filled (drag-drop flow) or selected in claim flow
+    const initialPersonId = person?.id ?? '';
+    if (selectedPersonId !== initialPersonId) {return true;}
+
+    // Date range changed from suggested dates
+    if (suggestedStartDate && suggestedEndDate) {
+      const suggestedFrom = parseISO(suggestedStartDate);
+      const suggestedTo = parseISO(suggestedEndDate);
+      if (
+        dateRange?.from?.getTime() !== suggestedFrom.getTime() ||
+        dateRange?.to?.getTime() !== suggestedTo.getTime()
+      ) {
+        return true;
+      }
+    } else if (dateRange?.from || dateRange?.to) {
+      // No suggested dates but user selected some
+      return true;
+    }
+
+    return false;
+  }, [selectedPersonId, dateRange, person, suggestedStartDate, suggestedEndDate]);
 
   // Check for conflicts and capacity when person/dates change
   useEffect(() => {
@@ -288,14 +315,35 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     }
   }, [isFormValid, effectivePerson, roomId, dateRange, doSubmit]);
 
-  // Prevent closing during submission
+  // Prevent closing during submission and guard dirty state
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
       if (isSubmitting && !newOpen) return;
+      if (!newOpen && isDirty) {
+        setShowDiscardConfirm(true);
+        return;
+      }
       onOpenChange(newOpen);
     },
-    [isSubmitting, onOpenChange],
+    [isSubmitting, isDirty, onOpenChange],
   );
+
+  /**
+   * Handles discard confirmation — user chose to discard changes.
+   */
+  const handleDiscardConfirm = useCallback(() => {
+    setShowDiscardConfirm(false);
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  /**
+   * Handles discard cancel — user chose to keep editing.
+   */
+  const handleDiscardCancel = useCallback((newOpen: boolean) => {
+    if (!newOpen) {
+      setShowDiscardConfirm(false);
+    }
+  }, []);
 
   // Don't render if no room
   if (!room) {
@@ -303,153 +351,167 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto"
-        onPointerDownOutside={(e) => isSubmitting && e.preventDefault()}
-        onEscapeKeyDown={(e) => isSubmitting && e.preventDefault()}
-      >
-        <DialogHeader>
-          <DialogTitle>
-            {person
-              ? t('assignments.quickAssign', 'Assign to room')
-              : t('rooms.claimRoom')}
-          </DialogTitle>
-          <DialogDescription>
-            {t(
-              'assignments.quickAssignDescription',
-              'Confirm the dates for this room assignment.',
-            )}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent
+          className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => isSubmitting && e.preventDefault()}
+          onEscapeKeyDown={(e) => isSubmitting && e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {person
+                ? t('assignments.quickAssign', 'Assign to room')
+                : t('rooms.claimRoom')}
+            </DialogTitle>
+            <DialogDescription>
+              {t(
+                'assignments.quickAssignDescription',
+                'Confirm the dates for this room assignment.',
+              )}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          {/* Guest display: read-only if pre-selected (drag-drop), selector if claim flow */}
-          {person ? (
+          <div className="grid gap-4 py-4">
+            {/* Guest display: read-only if pre-selected (drag-drop), selector if claim flow */}
+            {person ? (
+              <div className="grid gap-2">
+                <Label>{t('assignments.person')}</Label>
+                <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
+                  <PersonBadge person={person} size="default" />
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label htmlFor="claim-person-select">{t('assignments.person')}</Label>
+                <Select
+                  value={selectedPersonId}
+                  onValueChange={(value) => setSelectedPersonId(value as PersonId)}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger
+                    id="claim-person-select"
+                    className="w-full"
+                    aria-label={t('assignments.person')}
+                  >
+                    <SelectValue placeholder={t('assignments.selectPerson', 'Select a guest')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {persons.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        {t('persons.empty')}
+                      </div>
+                    ) : (
+                      persons.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="size-3 rounded-full shrink-0"
+                              style={{ backgroundColor: p.color }}
+                              aria-hidden="true"
+                            />
+                            {p.name}
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Room display (read-only) */}
             <div className="grid gap-2">
-              <Label>{t('assignments.person')}</Label>
-              <div className="flex items-center gap-2 p-2 rounded-md border bg-muted/50">
-                <PersonBadge person={person} size="default" />
+              <Label>{t('assignments.room')}</Label>
+              <div className="p-2 rounded-md border bg-muted/50 text-sm">
+                {room.name}
               </div>
             </div>
-          ) : (
+
+            {/* Date range picker */}
             <div className="grid gap-2">
-              <Label htmlFor="claim-person-select">{t('assignments.person')}</Label>
-              <Select
-                value={selectedPersonId}
-                onValueChange={(value) => setSelectedPersonId(value as PersonId)}
+              <Label>{t('assignments.period')}</Label>
+              <DateRangePicker
+                value={dateRange}
+                onChange={setDateRange}
+                minDate={tripStartDate}
+                maxDate={tripEndDate}
                 disabled={isSubmitting}
+                aria-label={t('assignments.period')}
+                bookedRanges={bookedRanges}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  'assignments.periodHint',
+                  'Guest stays from check-in night until check-out morning',
+                )}
+              </p>
+            </div>
+
+            {/* Capacity warning */}
+            {capacityWarning && (
+              <div
+                className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-800 dark:text-amber-200"
+                role="alert"
               >
-                <SelectTrigger
-                  id="claim-person-select"
-                  className="w-full"
-                  aria-label={t('assignments.person')}
-                >
-                  <SelectValue placeholder={t('assignments.selectPerson', 'Select a guest')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {persons.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground text-center">
-                      {t('persons.empty')}
-                    </div>
-                  ) : (
-                    persons.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="size-3 rounded-full shrink-0"
-                            style={{ backgroundColor: p.color }}
-                            aria-hidden="true"
-                          />
-                          {p.name}
-                        </div>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Room display (read-only) */}
-          <div className="grid gap-2">
-            <Label>{t('assignments.room')}</Label>
-            <div className="p-2 rounded-md border bg-muted/50 text-sm">
-              {room.name}
-            </div>
-          </div>
-
-          {/* Date range picker */}
-          <div className="grid gap-2">
-            <Label>{t('assignments.period')}</Label>
-            <DateRangePicker
-              value={dateRange}
-              onChange={setDateRange}
-              minDate={tripStartDate}
-              maxDate={tripEndDate}
-              disabled={isSubmitting}
-              aria-label={t('assignments.period')}
-              bookedRanges={bookedRanges}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t(
-                'assignments.periodHint',
-                'Guest stays from check-in night until check-out morning',
-              )}
-            </p>
-          </div>
-
-          {/* Capacity warning */}
-          {capacityWarning && (
-            <div
-              className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-800 dark:text-amber-200"
-              role="alert"
-            >
-              <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-              <span>{capacityWarning}</span>
-            </div>
-          )}
-
-          {/* Conflict warning */}
-          {conflictError && (
-            <div
-              className="flex items-center gap-2 rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
-              role="alert"
-            >
-              <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-              <span>{conflictError}</span>
-            </div>
-          )}
-
-          {/* Checking conflict indicator */}
-          {isCheckingConflict && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              <span>{t('assignments.checkingConflict', 'Checking availability...')}</span>
-            </div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isSubmitting}
-          >
-            {t('common.cancel')}
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!isFormValid || isSubmitting || isCheckingConflict}
-          >
-            {isSubmitting && (
-              <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+                <span>{capacityWarning}</span>
+              </div>
             )}
-            {t('common.add')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+
+            {/* Conflict warning */}
+            {conflictError && (
+              <div
+                className="flex items-center gap-2 rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
+                role="alert"
+              >
+                <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+                <span>{conflictError}</span>
+              </div>
+            )}
+
+            {/* Checking conflict indicator */}
+            {isCheckingConflict && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden="true" />
+                <span>{t('assignments.checkingConflict', 'Checking availability...')}</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => handleOpenChange(false)}
+              disabled={isSubmitting}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={!isFormValid || isSubmitting || isCheckingConflict}
+            >
+              {isSubmitting && (
+                <Loader2 className="mr-2 size-4 motion-safe:animate-spin" aria-hidden="true" />
+              )}
+              {t('common.add')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Discard changes confirmation */}
+      <ConfirmDialog
+        open={showDiscardConfirm}
+        onOpenChange={handleDiscardCancel}
+        title={t('unsaved.discardChanges')}
+        description={t('unsaved.discardDescription')}
+        confirmLabel={t('unsaved.discard')}
+        cancelLabel={t('unsaved.keepEditing')}
+        onConfirm={handleDiscardConfirm}
+        variant="default"
+      />
+    </>
   );
 });
 

@@ -55,6 +55,8 @@ interface TripFormProps {
   readonly onSubmit: (data: TripFormData) => Promise<void>;
   /** Callback when cancel button is clicked. */
   readonly onCancel: () => void;
+  /** Callback when form dirty state changes (for unsaved changes guard). */
+  readonly onDirtyChange?: (isDirty: boolean) => void;
 }
 
 /**
@@ -147,6 +149,7 @@ const TripForm = memo(function TripForm({
   trip,
   onSubmit,
   onCancel,
+  onDirtyChange,
 }: TripFormProps) {
   const { t, i18n } = useTranslation();
   const locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
@@ -173,6 +176,22 @@ const TripForm = memo(function TripForm({
   const [startDate, setStartDate] = useState<string>(initialValues.startDate);
   const [endDate, setEndDate] = useState<string>(initialValues.endDate);
   const [description, setDescription] = useState(initialValues.description);
+
+  // Compute dirty state: any field differs from initial values
+  const isDirty = useMemo(
+    () =>
+      name !== initialValues.name ||
+      location !== initialValues.location ||
+      startDate !== initialValues.startDate ||
+      endDate !== initialValues.endDate ||
+      description !== initialValues.description,
+    [name, location, startDate, endDate, description, initialValues],
+  );
+
+  // Notify parent of dirty state changes
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   // Validation errors
   const [errors, setErrors] = useState<FormErrors>({});

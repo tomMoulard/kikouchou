@@ -20,5 +20,11 @@ export {
   type UseFormSubmissionReturn,
 } from './useFormSubmission';
 
+// Unsaved changes guard
+export {
+  useUnsavedChanges,
+  type UseUnsavedChangesReturn,
+} from './useUnsavedChanges';
+
 // Date/time utilities
 export { useToday, getMsUntilMidnight, type UseTodayResult } from './useToday';

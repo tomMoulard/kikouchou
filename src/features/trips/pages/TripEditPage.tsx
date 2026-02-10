@@ -16,13 +16,14 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { useFormSubmission } from '@/hooks';
+import { useUnsavedChanges } from '@/hooks';
 import { Trash2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TripForm } from '@/features/trips/components/TripForm';
@@ -66,6 +67,17 @@ function TripEditPageComponent(): ReactElement {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+
+  // ============================================================================
+  // Unsaved Changes Guard
+  // ============================================================================
+
+  const { isBlocked, proceed, reset, skipNextBlock } = useUnsavedChanges(isDirty);
+
+  const handleDirtyChange = useCallback((dirty: boolean) => {
+    setIsDirty(dirty);
+  }, []);
 
   // ============================================================================
   // Refs for Async Operation Safety
@@ -154,13 +166,21 @@ function TripEditPageComponent(): ReactElement {
   // ============================================================================
 
   /**
-   * Submission handler via useFormSubmission hook.
+   * Submission handler for form updates.
+   * TripForm handles its own useFormSubmission internally — this is the
+   * business logic callback passed as onSubmit.
    */
-  const { handleSubmit: doSubmit } = useFormSubmission<TripFormData>(
-    async (data) => {
+  const handleSubmit = useCallback(
+    async (data: TripFormData): Promise<void> => {
       if (!tripId) return;
 
       await updateTrip(tripId as TripId, data);
+
+      // Reset dirty state and skip blocker before navigation.
+      // skipNextBlock() prevents the blocker from firing if setIsDirty(false)
+      // hasn't re-rendered yet when navigate() executes.
+      setIsDirty(false);
+      skipNextBlock();
 
       // Show success toast with fallback for missing translation key
       toast.success(t('trips.updated', 'Trip updated successfully'));
@@ -168,25 +188,18 @@ function TripEditPageComponent(): ReactElement {
       // Navigate to the trip's calendar
       navigate(`/trips/${tripId}/calendar`);
     },
-  );
-
-  /**
-   * Handles form submission — delegates to doSubmit from useFormSubmission.
-   * The hook already handles errors and re-throws for the form to react to.
-   */
-  const handleSubmit = useCallback(
-    async (data: TripFormData): Promise<void> => {
-      await doSubmit(data);
-    },
-    [doSubmit],
+    [tripId, navigate, skipNextBlock, t],
   );
 
   /**
    * Handles cancel action by navigating back to trips list.
+   * Reset dirty state first so the unsaved changes dialog doesn't appear.
    */
   const handleCancel = useCallback(() => {
+    setIsDirty(false);
+    skipNextBlock();
     navigate('/trips');
-  }, [navigate]);
+  }, [navigate, skipNextBlock]);
 
   /**
    * Handles trip deletion with confirmation.
@@ -211,6 +224,9 @@ function TripEditPageComponent(): ReactElement {
       // Show success toast
       toast.success(t('trips.deleted', 'Trip deleted successfully'));
 
+      // Skip blocker before navigation (form may still have dirty state)
+      skipNextBlock();
+
       // Navigate to trips list
       navigate('/trips');
     } catch (error) {
@@ -229,7 +245,7 @@ function TripEditPageComponent(): ReactElement {
     } finally {
       isDeletingRef.current = false;
     }
-  }, [navigate, t, tripId]);
+  }, [navigate, skipNextBlock, t, tripId]);
 
   /**
    * Handles opening the delete confirmation dialog.
@@ -300,22 +316,21 @@ function TripEditPageComponent(): ReactElement {
 
       <Card>
         <CardContent className="pt-6">
-          <TripForm trip={trip} onSubmit={handleSubmit} onCancel={handleCancel} />
+          <TripForm trip={trip} onSubmit={handleSubmit} onCancel={handleCancel} onDirtyChange={handleDirtyChange} />
         </CardContent>
       </Card>
 
       <ConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={handleDeleteDialogOpenChange}
-        title={t('common.delete')}
-        description={t(
-          'trips.deleteConfirm',
-          'Are you sure you want to delete this trip? This action cannot be undone.',
-        )}
+        title={t('confirm.deleteTrip')}
+        description={t('confirm.deleteTripDescription')}
         confirmLabel={t('common.delete')}
         onConfirm={handleDelete}
         variant="destructive"
       />
+
+      <UnsavedChangesDialog open={isBlocked} onStay={reset} onLeave={proceed} />
     </div>
   );
 }

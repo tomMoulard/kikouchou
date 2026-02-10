@@ -1051,8 +1051,8 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       <ConfirmDialog
         open={transportToDelete !== null}
         onOpenChange={handleCancelDelete}
-        title={t('transports.deleteConfirmTitle', 'Delete transport?')}
-        description={t('transports.deleteConfirm')}
+        title={t('confirm.deleteTransport')}
+        description={t('confirm.deleteTransportDescription')}
         confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={handleConfirmDelete}

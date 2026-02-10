@@ -9,7 +9,9 @@
 import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
+  useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -21,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { PersonForm } from '@/features/persons/components/PersonForm';
 import type { Person, PersonFormData, PersonId } from '@/types';
@@ -81,6 +84,20 @@ const PersonDialog = memo(function PersonDialog({
   const { t } = useTranslation();
   const { persons, createPerson, updatePerson } = usePersonContext();
 
+  // Dirty-state tracking for close guard
+  const [isDirty, setIsDirty] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // Reset dirty state when dialog opens (prevents stale state from previous session)
+  /* eslint-disable react-hooks/set-state-in-effect -- Intentional reset on dialog open */
+  useEffect(() => {
+    if (open) {
+      setIsDirty(false);
+      setShowDiscardConfirm(false);
+    }
+  }, [open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   // ============================================================================
   // Derived Values
   // ============================================================================
@@ -136,21 +153,48 @@ const PersonDialog = memo(function PersonDialog({
 
   /**
    * Handles form cancel action.
-   * Closes the dialog.
+   * If form is dirty, show discard confirmation; otherwise close directly.
    */
   const handleCancel = useCallback(() => {
+    if (isDirty) {
+      setShowDiscardConfirm(true);
+      return;
+    }
+    onOpenChange(false);
+  }, [isDirty, onOpenChange]);
+
+  /**
+   * Handles dialog open state change.
+   * Intercepts close attempts when form is dirty.
+   */
+  const handleOpenChange = useCallback(
+    (newOpen: boolean) => {
+      if (!newOpen && isDirty) {
+        setShowDiscardConfirm(true);
+        return;
+      }
+      onOpenChange(newOpen);
+    },
+    [isDirty, onOpenChange],
+  );
+
+  /**
+   * Handles discard confirmation — user chose to discard changes.
+   */
+  const handleDiscardConfirm = useCallback(() => {
+    setShowDiscardConfirm(false);
+    setIsDirty(false);
     onOpenChange(false);
   }, [onOpenChange]);
 
   /**
-   * Handles dialog open state change.
+   * Handles discard cancel — user chose to keep editing.
    */
-  const handleOpenChange = useCallback(
-    (newOpen: boolean) => {
-      onOpenChange(newOpen);
-    },
-    [onOpenChange],
-  );
+  const handleDiscardCancel = useCallback((newOpen: boolean) => {
+    if (!newOpen) {
+      setShowDiscardConfirm(false);
+    }
+  }, []);
 
   // ============================================================================
   // Render
@@ -175,20 +219,35 @@ const PersonDialog = memo(function PersonDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
-          <DialogDescription>{dialogDescription}</DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{dialogTitle}</DialogTitle>
+            <DialogDescription>{dialogDescription}</DialogDescription>
+          </DialogHeader>
 
-        <PersonForm
-          person={person}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-        />
-      </DialogContent>
-    </Dialog>
+          <PersonForm
+            person={person}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            onDirtyChange={setIsDirty}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Discard changes confirmation */}
+      <ConfirmDialog
+        open={showDiscardConfirm}
+        onOpenChange={handleDiscardCancel}
+        title={t('unsaved.discardChanges')}
+        description={t('unsaved.discardDescription')}
+        confirmLabel={t('unsaved.discard')}
+        cancelLabel={t('unsaved.keepEditing')}
+        onConfirm={handleDiscardConfirm}
+        variant="default"
+      />
+    </>
   );
 });
 

@@ -13,6 +13,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -42,6 +43,8 @@ interface PersonFormProps {
   readonly onSubmit: (data: PersonFormData) => Promise<void>;
   /** Callback when cancel button is clicked. */
   readonly onCancel: () => void;
+  /** Callback when form dirty state changes (for unsaved changes guard). */
+  readonly onDirtyChange?: (isDirty: boolean) => void;
 }
 
 /**
@@ -98,6 +101,7 @@ const PersonForm = memo(function PersonForm({
   person,
   onSubmit,
   onCancel,
+  onDirtyChange,
 }: PersonFormProps) {
   const { t } = useTranslation();
   const { currentTrip } = useTripContext();
@@ -119,6 +123,22 @@ const PersonForm = memo(function PersonForm({
     }
     return undefined;
   });
+
+  // Compute dirty state: compare current values against initial (person prop)
+  const isDirty = useMemo(
+    () =>
+      name !== (person?.name ?? '') ||
+      color !== (person?.color ?? DEFAULT_COLOR) ||
+      // Compare stay dates by formatted string
+      (stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : '') !== (person?.stayStartDate ?? '') ||
+      (stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : '') !== (person?.stayEndDate ?? ''),
+    [name, color, stayDates, person],
+  );
+
+  // Notify parent of dirty state changes
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   // Validation errors
   const [errors, setErrors] = useState<FormErrors>({});

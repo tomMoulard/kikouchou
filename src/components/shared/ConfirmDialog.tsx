@@ -112,7 +112,7 @@ interface ConfirmDialogProps {
  * />
  * ```
  */
-const ConfirmDialog = memo(({
+const ConfirmDialog = memo(function ConfirmDialog({
   open,
   onOpenChange,
   title,
@@ -122,7 +122,7 @@ const ConfirmDialog = memo(({
   onConfirm,
   variant = 'default',
   className,
-}: ConfirmDialogProps): React.ReactElement => {
+}: ConfirmDialogProps): React.ReactElement {
   const { t } = useTranslation(),
    [isLoading, setIsLoading] = useState(false),
 
@@ -194,6 +194,7 @@ const ConfirmDialog = memo(({
           <Button
             type="button"
             variant="outline"
+            className="h-11 md:h-9"
             onClick={() => handleOpenChange(false)}
             disabled={isLoading}
           >
@@ -204,13 +205,14 @@ const ConfirmDialog = memo(({
           <Button
             type="button"
             variant={variant}
+            className="h-11 md:h-9"
             onClick={handleConfirm}
             disabled={isLoading}
           >
             {isLoading ? (
               <>
                 <Loader2
-                  className="mr-2 size-4 animate-spin"
+                  className="mr-2 size-4 motion-safe:animate-spin"
                   aria-hidden="true"
                 />
                 {resolvedConfirmLabel}

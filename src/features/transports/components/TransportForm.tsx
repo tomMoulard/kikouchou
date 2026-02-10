@@ -60,6 +60,8 @@ interface TransportFormProps {
   readonly onSubmit: (data: TransportFormData) => Promise<void>;
   /** Callback when cancel button is clicked. */
   readonly onCancel: () => void;
+  /** Callback when form dirty state changes (for unsaved changes guard). */
+  readonly onDirtyChange?: (isDirty: boolean) => void;
 }
 
 /**
@@ -229,6 +231,7 @@ const TransportForm = memo(function TransportForm({
   defaultType,
   onSubmit,
   onCancel,
+  onDirtyChange,
 }: TransportFormProps) {
   const { t } = useTranslation();
 
@@ -243,6 +246,35 @@ const TransportForm = memo(function TransportForm({
 
   // Validation errors
   const [errors, setErrors] = useState<FormErrors>({});
+
+  // Compute initial values for dirty comparison
+  const initialFormState = useMemo(
+    () => getInitialFormState(transport, defaultType),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only recompute on transport.id change
+    [transport?.id, defaultType],
+  );
+
+  // Compute dirty state
+  const isDirty = useMemo(
+    () =>
+      formState.personId !== initialFormState.personId ||
+      formState.type !== initialFormState.type ||
+      formState.datetime !== initialFormState.datetime ||
+      formState.location !== initialFormState.location ||
+      formState.transportMode !== initialFormState.transportMode ||
+      formState.transportNumber !== initialFormState.transportNumber ||
+      formState.driverId !== initialFormState.driverId ||
+      formState.needsPickup !== initialFormState.needsPickup ||
+      formState.notes !== initialFormState.notes ||
+      formState.coordinates?.lat !== initialFormState.coordinates?.lat ||
+      formState.coordinates?.lon !== initialFormState.coordinates?.lon,
+    [formState, initialFormState],
+  );
+
+  // Notify parent of dirty state changes
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   // Submission state (handled by useFormSubmission hook below)
 

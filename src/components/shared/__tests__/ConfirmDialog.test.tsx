@@ -272,8 +272,8 @@ describe('ConfirmDialog Loading State', () => {
 
     await user.click(screen.getByRole('button', { name: 'Confirm' }));
 
-    // Loading spinner should be visible
-    const spinner = document.querySelector('.animate-spin');
+    // Loading spinner should be visible (uses motion-safe:animate-spin for NFR12 compliance)
+    const spinner = document.querySelector('.motion-safe\\:animate-spin');
     expect(spinner).toBeInTheDocument();
   });
 
@@ -523,7 +523,7 @@ describe('ConfirmDialog Accessibility', () => {
 
     await user.click(screen.getByRole('button', { name: 'Confirm' }));
 
-    const spinner = document.querySelector('.animate-spin');
+    const spinner = document.querySelector('.motion-safe\\:animate-spin');
     expect(spinner).toHaveAttribute('aria-hidden', 'true');
   });
 });

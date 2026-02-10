@@ -282,6 +282,30 @@
     "dataCleared": "Toutes les données ont été supprimées",
     "clearDataFailed": "Échec de la suppression des données. Veuillez réessayer."
   },
+  "confirm": {
+    "deleteTrip": "Supprimer ce voyage ?",
+    "deleteTripDescription": "Cela supprimera définitivement le voyage ainsi que toutes ses chambres, participants, transports et attributions.",
+    "deleteRoom": "Supprimer cette chambre ?",
+    "deleteRoomDescription": "Cela supprimera la chambre et toutes les attributions des participants.",
+    "deletePerson": "Retirer ce participant ?",
+    "deletePersonDescription": "Cela supprimera le participant ainsi que toutes ses attributions de chambre et ses transports.",
+    "deleteTransport": "Supprimer ce transport ?",
+    "deleteTransportDescription": "Ce transport sera définitivement supprimé.",
+    "removeAssignment": "Retirer cette attribution ?",
+    "removeAssignmentDescription": "Le participant sera désattribué de cette chambre pour les dates sélectionnées.",
+    "clearAllData": "Effacer toutes les données ?",
+    "clearAllDataDescription": "Cela effacera définitivement tous les voyages, chambres, participants, transports et paramètres de cet appareil. Cette action est irréversible."
+  },
+  "unsaved": {
+    "title": "Modifications non enregistrées",
+    "description": "Vos modifications seront perdues si vous quittez cette page.",
+    "leave": "Quitter",
+    "stay": "Rester",
+    "discardChanges": "Abandonner les modifications ?",
+    "discardDescription": "Vous avez des modifications non enregistrées. Fermer sans sauvegarder ?",
+    "discard": "Abandonner",
+    "keepEditing": "Continuer"
+  },
   "validation": {
     "invalidDate": "Date invalide",
     "capacityMin": "Minimum {{min}} lit"

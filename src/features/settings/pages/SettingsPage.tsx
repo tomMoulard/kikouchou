@@ -202,11 +202,8 @@ const DataSection = memo(function DataSection(): ReactElement {
       <ConfirmDialog
         open={showClearDialog}
         onOpenChange={handleOpenChange}
-        title={t('settings.clearDataConfirmTitle', 'Clear All Data?')}
-        description={t(
-          'settings.clearDataConfirmDescription',
-          'This will permanently delete all your trips, rooms, persons, and transport information. This action cannot be undone.',
-        )}
+        title={t('confirm.clearAllData')}
+        description={t('confirm.clearAllDataDescription')}
         confirmLabel={t('settings.clearData', 'Clear All Data')}
         variant="destructive"
         onConfirm={handleClearData}

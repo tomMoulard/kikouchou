@@ -740,7 +740,7 @@ describe('EventDetailDialog - Transport Events', () => {
 
       // Confirmation dialog should open
       await waitFor(() => {
-        expect(screen.getByText('transports.deleteConfirmTitle')).toBeInTheDocument();
+        expect(screen.getByText('confirm.deleteTransport')).toBeInTheDocument();
       });
     });
 
@@ -764,7 +764,7 @@ describe('EventDetailDialog - Transport Events', () => {
       await user.click(screen.getByRole('button', { name: /common\.delete/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('transports.deleteConfirm')).toBeInTheDocument();
+        expect(screen.getByText('confirm.deleteTransportDescription')).toBeInTheDocument();
       });
     });
 
@@ -790,7 +790,7 @@ describe('EventDetailDialog - Transport Events', () => {
 
       // Wait for confirmation dialog
       await waitFor(() => {
-        expect(screen.getByText('transports.deleteConfirmTitle')).toBeInTheDocument();
+        expect(screen.getByText('confirm.deleteTransport')).toBeInTheDocument();
       });
 
       // Find all dialogs and get the confirmation dialog
@@ -827,7 +827,7 @@ describe('EventDetailDialog - Transport Events', () => {
       await user.click(screen.getByRole('button', { name: /common\.delete/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('transports.deleteConfirmTitle')).toBeInTheDocument();
+        expect(screen.getByText('confirm.deleteTransport')).toBeInTheDocument();
       });
 
       // Get confirmation dialog
@@ -865,7 +865,7 @@ describe('EventDetailDialog - Transport Events', () => {
       await user.click(screen.getByRole('button', { name: /common\.delete/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('transports.deleteConfirmTitle')).toBeInTheDocument();
+        expect(screen.getByText('confirm.deleteTransport')).toBeInTheDocument();
       });
 
       // Get confirmation dialog
@@ -906,7 +906,7 @@ describe('EventDetailDialog - Transport Events', () => {
       await user.click(screen.getByRole('button', { name: /common\.delete/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('transports.deleteConfirmTitle')).toBeInTheDocument();
+        expect(screen.getByText('confirm.deleteTransport')).toBeInTheDocument();
       });
 
       // Get confirmation dialog
@@ -1081,8 +1081,8 @@ describe('EventDetailDialog - Assignment Events', () => {
     await user.click(screen.getByRole('button', { name: /common\.delete/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('assignments.deleteConfirmTitle')).toBeInTheDocument();
-      expect(screen.getByText('assignments.deleteConfirm')).toBeInTheDocument();
+      expect(screen.getByText('confirm.removeAssignment')).toBeInTheDocument();
+      expect(screen.getByText('confirm.removeAssignmentDescription')).toBeInTheDocument();
     });
   });
 });

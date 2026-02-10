@@ -333,6 +333,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   const [capacityWarning, setCapacityWarning] = useState<string | undefined>(undefined);
   const [isCheckingConflict, setIsCheckingConflict] = useState(false);
   const [wasAutoFilled, setWasAutoFilled] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // Refs for async safety (conflict checks still need mount tracking)
   const isMountedRef = useRef(true);
@@ -368,6 +369,26 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
       isMountedRef.current = false;
     };
   }, []);
+
+  // Compute dirty state: compare current values against initial
+  const isDirty = useMemo(() => {
+    if (existingAssignment) {
+      // Edit mode: compare against existing assignment values
+      if ((selectedPersonId as string) !== existingAssignment.personId) {return true;}
+      if (!dateRange?.from || !dateRange?.to) {return true;} // Missing dates means changed
+      const initialFrom = parseISO(existingAssignment.startDate);
+      const initialTo = parseISO(existingAssignment.endDate);
+      if (
+        dateRange.from.getTime() !== initialFrom.getTime() ||
+        dateRange.to.getTime() !== initialTo.getTime()
+      ) {
+        return true;
+      }
+      return false;
+    }
+    // Create mode: dirty if user has entered any data
+    return selectedPersonId !== '' || dateRange?.from !== undefined || dateRange?.to !== undefined;
+  }, [selectedPersonId, dateRange, existingAssignment]);
 
   // Check for conflicts and capacity when person or dates change
   useEffect(() => {
@@ -461,14 +482,35 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
     }
   }, [isFormValid, selectedPersonId, dateRange, roomId, doSubmit]);
 
-  // Prevent closing during submission
+  // Prevent closing during submission and guard dirty state
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
       if (isSubmitting && !newOpen) {return;}
+      if (!newOpen && isDirty) {
+        setShowDiscardConfirm(true);
+        return;
+      }
       onOpenChange(newOpen);
     },
-    [isSubmitting, onOpenChange],
+    [isSubmitting, isDirty, onOpenChange],
   );
+
+  /**
+   * Handles discard confirmation — user chose to discard changes.
+   */
+  const handleDiscardConfirm = useCallback(() => {
+    setShowDiscardConfirm(false);
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  /**
+   * Handles discard cancel — user chose to keep editing.
+   */
+  const handleDiscardCancel = useCallback((newOpen: boolean) => {
+    if (!newOpen) {
+      setShowDiscardConfirm(false);
+    }
+  }, []);
 
   // Handle person selection with transport dates autofill
   const handlePersonChange = useCallback((value: string) => {
@@ -510,140 +552,154 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   }, [existingAssignments, existingAssignment?.id]);
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto"
-        onPointerDownOutside={(e) => isSubmitting && e.preventDefault()}
-        onEscapeKeyDown={(e) => isSubmitting && e.preventDefault()}
-      >
-        <DialogHeader>
-          <DialogTitle>
-            {isEditMode
-              ? t('assignments.editAssignment', 'Edit assignment')
-              : t('assignments.assign')}
-          </DialogTitle>
-          <DialogDescription>
-            {isEditMode
-              ? t('assignments.editDescription', 'Modify the assignment details below.')
-              : t('assignments.assignDescription', 'Select a guest and date range for this room.')}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent
+          className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => isSubmitting && e.preventDefault()}
+          onEscapeKeyDown={(e) => isSubmitting && e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {isEditMode
+                ? t('assignments.editAssignment', 'Edit assignment')
+                : t('assignments.assign')}
+            </DialogTitle>
+            <DialogDescription>
+              {isEditMode
+                ? t('assignments.editDescription', 'Modify the assignment details below.')
+                : t('assignments.assignDescription', 'Select a guest and date range for this room.')}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="grid gap-4 py-4">
-          {/* Person selector */}
-          <div className="grid gap-2">
-            <Label htmlFor="person-select">{t('assignments.person')}</Label>
-            <Select
-              value={selectedPersonId}
-              onValueChange={handlePersonChange}
-              disabled={isSubmitting}
-            >
-              <SelectTrigger
-                id="person-select"
-                className="w-full"
-                aria-label={t('assignments.person')}
+          <div className="grid gap-4 py-4">
+            {/* Person selector */}
+            <div className="grid gap-2">
+              <Label htmlFor="person-select">{t('assignments.person')}</Label>
+              <Select
+                value={selectedPersonId}
+                onValueChange={handlePersonChange}
+                disabled={isSubmitting}
               >
-                <SelectValue placeholder={t('assignments.selectPerson', 'Select a guest')} />
-              </SelectTrigger>
-              <SelectContent>
-                {persons.length === 0 ? (
-                  <div className="p-2 text-sm text-muted-foreground text-center">
-                    {t('persons.empty')}
-                  </div>
-                ) : (
-                  persons.map((person) => (
-                    <SelectItem key={person.id} value={person.id}>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="size-3 rounded-full shrink-0"
-                          style={{ backgroundColor: person.color }}
-                          aria-hidden="true"
-                        />
-                        {person.name}
-                      </div>
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Date range picker */}
-          <div className="grid gap-2">
-            <Label>{t('assignments.period')}</Label>
-            <DateRangePicker
-              value={dateRange}
-              onChange={(range) => {
-                setDateRange(range);
-                // Clear autofill indicator when user manually changes dates
-                if (wasAutoFilled) {setWasAutoFilled(false);}
-              }}
-              minDate={tripStartDate}
-              maxDate={tripEndDate}
-              disabled={isSubmitting}
-              aria-label={t('assignments.period')}
-              bookedRanges={bookedRanges}
-            />
-            {/* Hint about check-in/check-out model */}
-            <p className="text-xs text-muted-foreground">
-              {wasAutoFilled 
-                ? t('assignments.autofilledFromTransport', 'Dates pre-filled from transport schedule')
-                : t('assignments.periodHint', 'Guest stays from check-in night until check-out morning')
-              }
-            </p>
-          </div>
-
-          {/* Capacity warning (soft enforcement) */}
-          {capacityWarning && (
-            <div
-              className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-800 dark:text-amber-200"
-              role="alert"
-            >
-              <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-              <span>{capacityWarning}</span>
+                <SelectTrigger
+                  id="person-select"
+                  className="w-full"
+                  aria-label={t('assignments.person')}
+                >
+                  <SelectValue placeholder={t('assignments.selectPerson', 'Select a guest')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {persons.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">
+                      {t('persons.empty')}
+                    </div>
+                  ) : (
+                    persons.map((person) => (
+                      <SelectItem key={person.id} value={person.id}>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="size-3 rounded-full shrink-0"
+                            style={{ backgroundColor: person.color }}
+                            aria-hidden="true"
+                          />
+                          {person.name}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
             </div>
-          )}
 
-          {/* Conflict warning */}
-          {conflictError && (
-            <div
-              className="flex items-center gap-2 rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
-              role="alert"
-            >
-              <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-              <span>{conflictError}</span>
+            {/* Date range picker */}
+            <div className="grid gap-2">
+              <Label>{t('assignments.period')}</Label>
+              <DateRangePicker
+                value={dateRange}
+                onChange={(range) => {
+                  setDateRange(range);
+                  // Clear autofill indicator when user manually changes dates
+                  if (wasAutoFilled) {setWasAutoFilled(false);}
+                }}
+                minDate={tripStartDate}
+                maxDate={tripEndDate}
+                disabled={isSubmitting}
+                aria-label={t('assignments.period')}
+                bookedRanges={bookedRanges}
+              />
+              {/* Hint about check-in/check-out model */}
+              <p className="text-xs text-muted-foreground">
+                {wasAutoFilled 
+                  ? t('assignments.autofilledFromTransport', 'Dates pre-filled from transport schedule')
+                  : t('assignments.periodHint', 'Guest stays from check-in night until check-out morning')
+                }
+              </p>
             </div>
-          )}
 
-          {/* Checking conflict indicator */}
-          {isCheckingConflict && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              <span>{t('assignments.checkingConflict', 'Checking availability...')}</span>
-            </div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={isSubmitting}
-          >
-            {t('common.cancel')}
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!isFormValid || isSubmitting || isCheckingConflict}
-          >
-            {isSubmitting && (
-              <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+            {/* Capacity warning (soft enforcement) */}
+            {capacityWarning && (
+              <div
+                className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-800 dark:text-amber-200"
+                role="alert"
+              >
+                <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+                <span>{capacityWarning}</span>
+              </div>
             )}
-            {isEditMode ? t('common.save') : t('common.add')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+
+            {/* Conflict warning */}
+            {conflictError && (
+              <div
+                className="flex items-center gap-2 rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
+                role="alert"
+              >
+                <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+                <span>{conflictError}</span>
+              </div>
+            )}
+
+            {/* Checking conflict indicator */}
+            {isCheckingConflict && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 motion-safe:animate-spin" aria-hidden="true" />
+                <span>{t('assignments.checkingConflict', 'Checking availability...')}</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => handleOpenChange(false)}
+              disabled={isSubmitting}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={!isFormValid || isSubmitting || isCheckingConflict}
+            >
+              {isSubmitting && (
+                <Loader2 className="mr-2 size-4 motion-safe:animate-spin" aria-hidden="true" />
+              )}
+              {isEditMode ? t('common.save') : t('common.add')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Discard changes confirmation */}
+      <ConfirmDialog
+        open={showDiscardConfirm}
+        onOpenChange={handleDiscardCancel}
+        title={t('unsaved.discardChanges')}
+        description={t('unsaved.discardDescription')}
+        confirmLabel={t('unsaved.discard')}
+        cancelLabel={t('unsaved.keepEditing')}
+        onConfirm={handleDiscardConfirm}
+        variant="default"
+      />
+    </>
   );
 });
 
@@ -909,7 +965,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
         role="status"
         aria-busy="true"
       >
-        <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden="true" />
+        <Loader2 className="size-5 motion-safe:animate-spin text-muted-foreground" aria-hidden="true" />
         <span className="sr-only">{t('common.loading')}</span>
       </div>
     );
@@ -1007,11 +1063,8 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
       <ConfirmDialog
         open={Boolean(deletingAssignment)}
         onOpenChange={handleDeleteDialogClose}
-        title={t('assignments.deleteConfirmTitle', 'Delete assignment?')}
-        description={t(
-          'assignments.deleteConfirm',
-          'Are you sure you want to delete this assignment? This action cannot be undone.',
-        )}
+        title={t('confirm.removeAssignment')}
+        description={t('confirm.removeAssignmentDescription')}
         confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={handleConfirmDelete}

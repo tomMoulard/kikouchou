@@ -457,13 +457,13 @@ const EventDetailDialog = memo(function EventDetailDialog({
         onOpenChange={handleDeleteDialogOpenChange}
         title={
           isAssignmentEvent(event)
-            ? t('assignments.deleteConfirmTitle', 'Delete assignment?')
-            : t('transports.deleteConfirmTitle', 'Delete transport?')
+            ? t('confirm.removeAssignment')
+            : t('confirm.deleteTransport')
         }
         description={
           isAssignmentEvent(event)
-            ? t('assignments.deleteConfirm', 'Are you sure you want to delete this assignment?')
-            : t('transports.deleteConfirm', 'Are you sure you want to delete this transport?')
+            ? t('confirm.removeAssignmentDescription')
+            : t('confirm.deleteTransportDescription')
         }
         confirmLabel={t('common.delete')}
         variant="destructive"

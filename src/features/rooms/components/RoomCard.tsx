@@ -400,8 +400,8 @@ const RoomCard = memo(function RoomCard({
       <ConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={handleDeleteDialogOpenChange}
-        title={t('rooms.deleteConfirmTitle', 'Delete room?')}
-        description={t('rooms.deleteConfirm', 'Are you sure you want to delete this room? This action cannot be undone.')}
+        title={t('confirm.deleteRoom')}
+        description={t('confirm.deleteRoomDescription')}
         confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={handleConfirmDelete}

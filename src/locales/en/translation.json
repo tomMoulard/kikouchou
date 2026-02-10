@@ -282,6 +282,30 @@
     "dataCleared": "All data has been cleared",
     "clearDataFailed": "Failed to clear data. Please try again."
   },
+  "confirm": {
+    "deleteTrip": "Delete this trip?",
+    "deleteTripDescription": "This will permanently delete the trip and all its rooms, participants, transports, and room assignments.",
+    "deleteRoom": "Delete this room?",
+    "deleteRoomDescription": "This will remove the room and all guest assignments for this room.",
+    "deletePerson": "Remove this participant?",
+    "deletePersonDescription": "This will remove the participant and all their room assignments and transport records.",
+    "deleteTransport": "Delete this transport?",
+    "deleteTransportDescription": "This transport record will be permanently deleted.",
+    "removeAssignment": "Remove this room assignment?",
+    "removeAssignmentDescription": "The guest will be unassigned from this room for the selected dates.",
+    "clearAllData": "Clear all application data?",
+    "clearAllDataDescription": "This will permanently erase all trips, rooms, participants, transports, and settings from this device. This cannot be undone."
+  },
+  "unsaved": {
+    "title": "Unsaved changes",
+    "description": "You have unsaved changes that will be lost if you leave this page.",
+    "leave": "Leave",
+    "stay": "Stay",
+    "discardChanges": "Discard changes?",
+    "discardDescription": "You have unsaved changes. Close without saving?",
+    "discard": "Discard",
+    "keepEditing": "Keep editing"
+  },
   "validation": {
     "invalidDate": "Invalid date",
     "capacityMin": "Minimum {{min}} bed"

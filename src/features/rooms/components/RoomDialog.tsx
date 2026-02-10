@@ -8,7 +8,9 @@
 import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
+  useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -20,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useRoomContext } from '@/contexts/RoomContext';
 import { RoomForm } from '@/features/rooms/components/RoomForm';
 import type { Room, RoomFormData, RoomId } from '@/types';
@@ -80,6 +83,20 @@ const RoomDialog = memo(function RoomDialog({
   const { t } = useTranslation();
   const { rooms, createRoom, updateRoom } = useRoomContext();
 
+  // Dirty-state tracking for close guard
+  const [isDirty, setIsDirty] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // Reset dirty state when dialog opens (prevents stale state from previous session)
+  /* eslint-disable react-hooks/set-state-in-effect -- Intentional reset on dialog open */
+  useEffect(() => {
+    if (open) {
+      setIsDirty(false);
+      setShowDiscardConfirm(false);
+    }
+  }, [open]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   // ============================================================================
   // Derived Values
   // ============================================================================
@@ -135,21 +152,48 @@ const RoomDialog = memo(function RoomDialog({
 
   /**
    * Handles form cancel action.
-   * Closes the dialog.
+   * If form is dirty, show discard confirmation; otherwise close directly.
    */
   const handleCancel = useCallback(() => {
+    if (isDirty) {
+      setShowDiscardConfirm(true);
+      return;
+    }
+    onOpenChange(false);
+  }, [isDirty, onOpenChange]);
+
+  /**
+   * Handles dialog open state change.
+   * Intercepts close attempts when form is dirty.
+   */
+  const handleOpenChange = useCallback(
+    (newOpen: boolean) => {
+      if (!newOpen && isDirty) {
+        setShowDiscardConfirm(true);
+        return;
+      }
+      onOpenChange(newOpen);
+    },
+    [isDirty, onOpenChange],
+  );
+
+  /**
+   * Handles discard confirmation — user chose to discard changes.
+   */
+  const handleDiscardConfirm = useCallback(() => {
+    setShowDiscardConfirm(false);
+    setIsDirty(false);
     onOpenChange(false);
   }, [onOpenChange]);
 
   /**
-   * Handles dialog open state change.
+   * Handles discard cancel — user chose to keep editing.
    */
-  const handleOpenChange = useCallback(
-    (newOpen: boolean) => {
-      onOpenChange(newOpen);
-    },
-    [onOpenChange],
-  );
+  const handleDiscardCancel = useCallback((newOpen: boolean) => {
+    if (!newOpen) {
+      setShowDiscardConfirm(false);
+    }
+  }, []);
 
   // ============================================================================
   // Render
@@ -159,7 +203,6 @@ const RoomDialog = memo(function RoomDialog({
   // This can happen briefly during loading or if roomId is invalid
   if (isEditMode && !room && open) {
     // Show error and close dialog
-    // Use useEffect to avoid calling toast during render
     return (
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-md">
@@ -175,20 +218,35 @@ const RoomDialog = memo(function RoomDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
-          <DialogDescription>{dialogDescription}</DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{dialogTitle}</DialogTitle>
+            <DialogDescription>{dialogDescription}</DialogDescription>
+          </DialogHeader>
 
-        <RoomForm
-          room={room}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-        />
-      </DialogContent>
-    </Dialog>
+          <RoomForm
+            room={room}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            onDirtyChange={setIsDirty}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Discard changes confirmation */}
+      <ConfirmDialog
+        open={showDiscardConfirm}
+        onOpenChange={handleDiscardCancel}
+        title={t('unsaved.discardChanges')}
+        description={t('unsaved.discardDescription')}
+        confirmLabel={t('unsaved.discard')}
+        cancelLabel={t('unsaved.keepEditing')}
+        onConfirm={handleDiscardConfirm}
+        variant="default"
+      />
+    </>
   );
 });
 
