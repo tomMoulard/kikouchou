@@ -8,10 +8,7 @@
 import {
   memo,
   useCallback,
-  useEffect,
   useMemo,
-  useRef,
-  useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -80,33 +77,8 @@ const RoomDialog = memo(function RoomDialog({
   open,
   onOpenChange,
 }: RoomDialogProps) {
-  const { t } = useTranslation(),
-   { rooms, createRoom, updateRoom } = useRoomContext(),
-
-  // Track mounted state to prevent state updates after unmount
-   isMountedRef = useRef(true),
-
-  // Synchronous guard for double-submission prevention
-   isSubmittingRef = useRef(false),
-
-  // Submission loading state for UI
-   [isSubmitting, setIsSubmitting] = useState(false);
-
-  // ============================================================================
-  // Lifecycle Effects
-  // ============================================================================
-
-  // Cleanup on unmount
-  useEffect(() => () => {
-      isMountedRef.current = false;
-    }, []);
-
-  // Reset submission state when dialog closes
-  useEffect(() => {
-    if (!open) {
-      setIsSubmitting(false);
-    }
-  }, [open]);
+  const { t } = useTranslation();
+  const { rooms, createRoom, updateRoom } = useRoomContext();
 
   // ============================================================================
   // Derived Values
@@ -115,97 +87,68 @@ const RoomDialog = memo(function RoomDialog({
   /**
    * Determines if the dialog is in edit mode.
    */
-  const isEditMode = Boolean(roomId),
+  const isEditMode = Boolean(roomId);
 
   /**
    * Find the room from context for edit mode.
    * Returns undefined if roomId is not provided or room not found.
    */
-   room = useMemo((): Room | undefined => {
+  const room = useMemo((): Room | undefined => {
     if (!roomId) {return undefined;}
     return rooms.find((r) => r.id === roomId);
-  }, [roomId, rooms]),
+  }, [roomId, rooms]);
 
   /**
    * Dialog title based on mode.
    */
-   dialogTitle = isEditMode ? t('rooms.edit') : t('rooms.new'),
+  const dialogTitle = isEditMode ? t('rooms.edit') : t('rooms.new');
 
   /**
    * Dialog description for accessibility.
    */
-   dialogDescription = isEditMode
+  const dialogDescription = isEditMode
     ? t('rooms.editDescription', 'Modify the room details below.')
-    : t('rooms.newDescription', 'Fill in the details to create a new room.'),
+    : t('rooms.newDescription', 'Fill in the details to create a new room.');
 
   // ============================================================================
   // Event Handlers
   // ============================================================================
 
   /**
-   * Handles form submission.
-   * Creates or updates the room based on mode, shows toast, and closes dialog on success.
+   * Handles form submission — creates or updates room.
+   * Passes raw async function directly to RoomForm which manages
+   * its own submission state via useFormSubmission hook.
    */
-   handleSubmit = useCallback(
+  const handleSubmit = useCallback(
     async (data: RoomFormData) => {
-      // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) {return;}
-
-      isSubmittingRef.current = true;
-      setIsSubmitting(true);
-
-      try {
-        if (isEditMode && roomId) {
-          // Edit mode - update existing room
-          // Use roomId directly instead of room.id to avoid stale closure issues
-          await updateRoom(roomId, data);
-          toast.success(t('rooms.updateSuccess', 'Room updated successfully'));
-        } else {
-          // Create mode - create new room
-          await createRoom(data);
-          toast.success(t('rooms.createSuccess', 'Room created successfully'));
-        }
-        // Always close dialog on success, regardless of mount state
-        onOpenChange(false);
-      } catch (error) {
-        console.error('Failed to save room:', error);
-        if (isMountedRef.current) {
-          toast.error(t('errors.saveFailed', 'Failed to save room'));
-        }
-        // Don't close dialog on error - allow user to retry
-        // Re-throw to let RoomForm handle the error state
-        throw error;
-      } finally {
-        isSubmittingRef.current = false;
-        if (isMountedRef.current) {
-          setIsSubmitting(false);
-        }
+      if (isEditMode && roomId) {
+        await updateRoom(roomId, data);
+        toast.success(t('rooms.updateSuccess', 'Room updated successfully'));
+      } else {
+        await createRoom(data);
+        toast.success(t('rooms.createSuccess', 'Room created successfully'));
       }
+      onOpenChange(false);
     },
     [isEditMode, roomId, updateRoom, createRoom, t, onOpenChange],
-  ),
+  );
 
   /**
    * Handles form cancel action.
-   * Closes the dialog if not currently submitting.
+   * Closes the dialog.
    */
-   handleCancel = useCallback(() => {
-    if (!isSubmitting) {
-      onOpenChange(false);
-    }
-  }, [isSubmitting, onOpenChange]),
+  const handleCancel = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
 
   /**
    * Handles dialog open state change.
-   * Prevents closing during submission.
    */
-   handleOpenChange = useCallback(
+  const handleOpenChange = useCallback(
     (newOpen: boolean) => {
-      // Prevent closing while submitting
-      if (!newOpen && isSubmitting) {return;}
       onOpenChange(newOpen);
     },
-    [isSubmitting, onOpenChange],
+    [onOpenChange],
   );
 
   // ============================================================================

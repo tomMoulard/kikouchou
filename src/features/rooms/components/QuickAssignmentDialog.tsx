@@ -16,6 +16,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { useFormSubmission } from '@/hooks';
 import { parseISO } from 'date-fns';
 
 import { AlertTriangle, Loader2 } from 'lucide-react';
@@ -88,7 +89,7 @@ export interface QuickAssignmentDialogProps {
  * />
  * ```
  */
-const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAssignmentDialogProps): ReactElement {
+const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAssignmentDialogProps): ReactElement | null {
   const {
     open,
     onOpenChange,
@@ -105,13 +106,11 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
 
   // Form state
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [conflictError, setConflictError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [conflictError, setConflictError] = useState<string | undefined>(undefined);
   const [isCheckingConflict, setIsCheckingConflict] = useState(false);
 
-  // Refs for async safety
+  // Refs for async safety (conflict checks still need mount tracking)
   const isMountedRef = useRef(true);
-  const isSubmittingRef = useRef(false);
 
   // Get the target room
   const room = useMemo(
@@ -158,8 +157,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
       } else {
         setDateRange(undefined);
       }
-      setConflictError(null);
-      setIsSubmitting(false);
+      setConflictError(undefined);
       setIsCheckingConflict(false);
     }
   }, [open, person, roomId, suggestedStartDate, suggestedEndDate]);
@@ -175,7 +173,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
   // Check for conflicts when dates change
   useEffect(() => {
     if (!person || !dateRange?.from || !dateRange?.to) {
-      setConflictError(null);
+      setConflictError(undefined);
       return;
     }
 
@@ -188,12 +186,12 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     checkConflict(person.id, startDate, endDate)
       .then((hasConflict) => {
         if (!cancelled && isMountedRef.current) {
-          setConflictError(hasConflict ? t('assignments.conflict') : null);
+          setConflictError(hasConflict ? t('assignments.conflict') : undefined);
         }
       })
       .catch(() => {
         if (!cancelled && isMountedRef.current) {
-          setConflictError(null);
+          setConflictError(undefined);
         }
       })
       .finally(() => {
@@ -218,39 +216,35 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     [person, roomId, dateRange, conflictError],
   );
 
-  // Handle form submission
-  const handleSubmit = useCallback(async () => {
-    if (isSubmittingRef.current || !isFormValid) return;
-    if (!person || !roomId || !dateRange?.from || !dateRange?.to) return;
-
-    isSubmittingRef.current = true;
-    setIsSubmitting(true);
-
-    try {
-      const data: RoomAssignmentFormData = {
-        roomId,
-        personId: person.id,
-        startDate: toISODateString(dateRange.from),
-        endDate: toISODateString(dateRange.to),
-      };
-
+  // Submission handler via useFormSubmission hook
+  const { isSubmitting, handleSubmit: doSubmit } = useFormSubmission<RoomAssignmentFormData>(
+    async (data) => {
       await createAssignment(data);
-
       if (isMountedRef.current) {
         toast.success(t('assignments.createSuccess', 'Assignment created successfully'));
         onOpenChange(false);
       }
-    } catch (error) {
-      console.error('Failed to create assignment:', error);
-      toast.error(t('errors.saveFailed', 'Failed to save'));
-      // Keep dialog open for retry
-    } finally {
-      if (isMountedRef.current) {
-        setIsSubmitting(false);
-      }
-      isSubmittingRef.current = false;
+    },
+  );
+
+  // Handle form submission
+  const handleSubmit = useCallback(async () => {
+    if (!isFormValid) return;
+    if (!person || !roomId || !dateRange?.from || !dateRange?.to) return;
+
+    const data: RoomAssignmentFormData = {
+      roomId,
+      personId: person.id,
+      startDate: toISODateString(dateRange.from),
+      endDate: toISODateString(dateRange.to),
+    };
+
+    try {
+      await doSubmit(data);
+    } catch {
+      // Error handled by hook - keep dialog open for retry
     }
-  }, [isFormValid, person, roomId, dateRange, createAssignment, onOpenChange, t]);
+  }, [isFormValid, person, roomId, dateRange, doSubmit]);
 
   // Prevent closing during submission
   const handleOpenChange = useCallback(
@@ -263,7 +257,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
 
   // Don't render if no person or room
   if (!person || !room) {
-    return <></>;
+    return null;
   }
 
   return (

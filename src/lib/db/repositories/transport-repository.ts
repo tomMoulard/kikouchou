@@ -167,6 +167,9 @@ export async function getTransportById(
 /**
  * Updates an existing transport with partial data.
  *
+ * @deprecated Use {@link updateTransportWithOwnershipCheck} instead.
+ * This function will be removed in a future version.
+ *
  * @param id - The transport's unique identifier
  * @param data - Partial transport form data to update
  * @throws {Error} If the transport with the given ID does not exist
@@ -224,6 +227,9 @@ export async function updateTransport(
 
 /**
  * Deletes a transport.
+ *
+ * @deprecated Use {@link deleteTransportWithOwnershipCheck} instead.
+ * This function will be removed in a future version.
  *
  * @param id - The transport's unique identifier
  *

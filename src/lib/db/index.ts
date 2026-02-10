@@ -64,7 +64,9 @@ export {
   createRoom,
   getRoomsByTripId,
   getRoomById,
+  /** @deprecated Use updateRoomWithOwnershipCheck instead */
   updateRoom,
+  /** @deprecated Use deleteRoomWithOwnershipCheck instead */
   deleteRoom,
   reorderRooms,
   getRoomCount,
@@ -79,7 +81,9 @@ export {
   createPersonWithAutoColor,
   getPersonsByTripId,
   getPersonById,
+  /** @deprecated Use updatePersonWithOwnershipCheck instead */
   updatePerson,
+  /** @deprecated Use deletePersonWithOwnershipCheck instead */
   deletePerson,
   getPersonCount,
   searchPersonsByName,
@@ -95,7 +99,9 @@ export {
   getAssignmentsByRoomId,
   getAssignmentsByPersonId,
   getAssignmentById,
+  /** @deprecated Use updateAssignmentWithOwnershipCheck instead */
   updateAssignment,
+  /** @deprecated Use deleteAssignmentWithOwnershipCheck instead */
   deleteAssignment,
   checkAssignmentConflict,
   getAssignmentsForDate,
@@ -113,7 +119,9 @@ export {
   getArrivals,
   getDepartures,
   getTransportById,
+  /** @deprecated Use updateTransportWithOwnershipCheck instead */
   updateTransport,
+  /** @deprecated Use deleteTransportWithOwnershipCheck instead */
   deleteTransport,
   getUpcomingPickups,
   getTransportsForDate,

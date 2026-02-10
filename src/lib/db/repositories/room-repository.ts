@@ -119,6 +119,9 @@ export async function getRoomById(id: RoomId): Promise<Room | undefined> {
  *
  * Only the provided fields in `data` are updated.
  *
+ * @deprecated Use {@link updateRoomWithOwnershipCheck} instead.
+ * This function will be removed in a future version.
+ *
  * @param id - The room's unique identifier
  * @param data - Partial room form data to update
  * @throws {Error} If the room with the given ID does not exist
@@ -165,6 +168,9 @@ export async function updateRoom(
  *
  * Uses a transaction to ensure atomicity. If any deletion fails,
  * the entire operation is rolled back.
+ *
+ * @deprecated Use {@link deleteRoomWithOwnershipCheck} instead.
+ * This function will be removed in a future version.
  *
  * @param id - The room's unique identifier
  *

@@ -13,5 +13,12 @@ export {
   type UseInstallPromptResult,
 } from './useInstallPrompt';
 
+// Form submission
+export {
+  useFormSubmission,
+  type UseFormSubmissionOptions,
+  type UseFormSubmissionReturn,
+} from './useFormSubmission';
+
 // Date/time utilities
 export { useToday, getMsUntilMidnight, type UseTodayResult } from './useToday';

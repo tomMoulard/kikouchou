@@ -12,10 +12,10 @@ import {
   memo,
   useCallback,
   useEffect,
-  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFormSubmission } from '@/hooks';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,12 +56,12 @@ interface FormErrors {
 /**
  * Default capacity for new rooms.
  */
-const DEFAULT_CAPACITY = 1,
+const DEFAULT_CAPACITY = 1;
 
 /**
  * Minimum allowed capacity for a room.
  */
- MIN_CAPACITY = 1,
+const MIN_CAPACITY = 1;
 
 // ============================================================================
 // Component
@@ -97,42 +97,29 @@ const DEFAULT_CAPACITY = 1,
  * />
  * ```
  */
- RoomForm = memo(function RoomForm({
+const RoomForm = memo(function RoomForm({
   room,
   onSubmit,
   onCancel,
 }: RoomFormProps) {
-  const { t } = useTranslation(),
+  const { t } = useTranslation();
 
   // ============================================================================
   // Form State
   // ============================================================================
 
   // Form field values
-   [name, setName] = useState(room?.name ?? ''),
-   [capacity, setCapacity] = useState<number>(room?.capacity ?? DEFAULT_CAPACITY),
-   [description, setDescription] = useState(room?.description ?? ''),
-   [icon, setIcon] = useState<RoomIcon | undefined>(room?.icon),
+  const [name, setName] = useState(room?.name ?? '');
+  const [capacity, setCapacity] = useState<number>(room?.capacity ?? DEFAULT_CAPACITY);
+  const [description, setDescription] = useState(room?.description ?? '');
+  const [icon, setIcon] = useState<RoomIcon | undefined>(room?.icon);
 
   // Validation errors
-   [errors, setErrors] = useState<FormErrors>({}),
-
-  // Submission state
-   [isSubmitting, setIsSubmitting] = useState(false),
-   [submitError, setSubmitError] = useState<string | null>(null),
-
-  // Refs for preventing race conditions and memory leaks
-   isSubmittingRef = useRef(false),
-   isMountedRef = useRef(true);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   // ============================================================================
   // Lifecycle Effects
   // ============================================================================
-
-  // Cleanup on unmount
-  useEffect(() => () => {
-      isMountedRef.current = false;
-    }, []);
 
   // Sync form state when room prop changes (for edit mode navigation)
   useEffect(() => {
@@ -141,7 +128,6 @@ const DEFAULT_CAPACITY = 1,
     setDescription(room?.description ?? '');
     setIcon(room?.icon);
     setErrors({});
-    setSubmitError(null);
   }, [room?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on room.id change
 
   // ============================================================================
@@ -160,12 +146,12 @@ const DEFAULT_CAPACITY = 1,
       return undefined;
     },
     [t],
-  ),
+  );
 
   /**
    * Validates the capacity field.
    */
-   validateCapacity = useCallback(
+  const validateCapacity = useCallback(
     (value: number): string | undefined => {
       if (!Number.isInteger(value) || value < MIN_CAPACITY) {
         return t('validation.capacityMin', { min: MIN_CAPACITY, defaultValue: `Minimum ${MIN_CAPACITY} bed` });
@@ -173,17 +159,17 @@ const DEFAULT_CAPACITY = 1,
       return undefined;
     },
     [t],
-  ),
+  );
 
   /**
    * Validates all form fields.
    * Returns true if valid, false otherwise.
    */
-   validateForm = useCallback((): boolean => {
-    const newErrors: FormErrors = {},
+  const validateForm = useCallback((): boolean => {
+    const newErrors: FormErrors = {};
 
     // Validate name
-     nameError = validateName(name);
+    const nameError = validateName(name);
     if (nameError) {
       newErrors.name = nameError;
     }
@@ -196,7 +182,7 @@ const DEFAULT_CAPACITY = 1,
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [name, capacity, validateName, validateCapacity]),
+  }, [name, capacity, validateName, validateCapacity]);
 
   // ============================================================================
   // Event Handlers
@@ -206,7 +192,7 @@ const DEFAULT_CAPACITY = 1,
    * Handles name input change.
    * Uses functional update to avoid dependency on error state.
    */
-   handleNameChange = useCallback(
+  const handleNameChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const {value} = e.target;
       setName(value);
@@ -214,23 +200,23 @@ const DEFAULT_CAPACITY = 1,
       setErrors((prev) => (prev.name ? { ...prev, name: undefined } : prev));
     },
     [],
-  ),
+  );
 
   /**
    * Handles name input blur for validation.
    */
-   handleNameBlur = useCallback(() => {
+  const handleNameBlur = useCallback(() => {
     const error = validateName(name);
     if (error) {
       setErrors((prev) => ({ ...prev, name: error }));
     }
-  }, [name, validateName]),
+  }, [name, validateName]);
 
   /**
    * Handles capacity input change.
    * Allows user to type freely, validation happens on blur and submit.
    */
-   handleCapacityChange = useCallback(
+  const handleCapacityChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const rawValue = e.target.value;
       
@@ -250,77 +236,65 @@ const DEFAULT_CAPACITY = 1,
       setErrors((prev) => (prev.capacity ? { ...prev, capacity: undefined } : prev));
     },
     [],
-  ),
+  );
 
   /**
    * Handles capacity input blur for validation.
    * Ensures value is valid and shows error if not.
    */
-   handleCapacityBlur = useCallback(() => {
+  const handleCapacityBlur = useCallback(() => {
     const error = validateCapacity(capacity);
     if (error) {
       setErrors((prev) => ({ ...prev, capacity: error }));
     }
-  }, [capacity, validateCapacity]),
+  }, [capacity, validateCapacity]);
 
   /**
    * Handles description textarea change.
    */
-   handleDescriptionChange = useCallback(
+  const handleDescriptionChange = useCallback(
     (e: ChangeEvent<HTMLTextAreaElement>) => {
       setDescription(e.target.value);
     },
     [],
-  ),
+  );
 
   /**
    * Handles icon selection change.
    */
-   handleIconChange = useCallback((newIcon: RoomIcon) => {
+  const handleIconChange = useCallback((newIcon: RoomIcon) => {
     setIcon(newIcon);
-  }, []),
+  }, []);
 
   /**
-   * Handles form submission.
-   * Uses refs for synchronous guard (prevents race condition) and unmount safety.
+   * Submission handler via useFormSubmission hook.
    */
-   handleSubmit = useCallback(
+  const { isSubmitting, submitError, handleSubmit: doSubmit } = useFormSubmission<RoomFormData>(
+    onSubmit,
+  );
+
+  /**
+   * Handles form submission with validation and data building.
+   */
+  const handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-
-      // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) {return;}
 
       // Validate form
       if (!validateForm()) {return;}
 
-      isSubmittingRef.current = true;
-      setIsSubmitting(true);
-      setSubmitError(null);
-
       try {
-        await onSubmit({
+        await doSubmit({
           name: name.trim(),
           capacity,
           description: description.trim() || undefined,
           icon,
         });
-        // Success - parent component handles navigation
-      } catch (error) {
-        console.error('Failed to save room:', error);
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setSubmitError(t('errors.saveFailed'));
-        }
-      } finally {
-        isSubmittingRef.current = false;
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setIsSubmitting(false);
-        }
+      } catch {
+        // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, onSubmit, name, capacity, description, icon, t],
+    [validateForm, doSubmit, name, capacity, description, icon],
   );
 
   // ============================================================================

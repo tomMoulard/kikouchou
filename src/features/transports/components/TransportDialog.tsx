@@ -8,10 +8,7 @@
 import {
   memo,
   useCallback,
-  useEffect,
   useMemo,
-  useRef,
-  useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -86,35 +83,9 @@ const TransportDialog = memo(function TransportDialog({
   onOpenChange,
   defaultType,
 }: TransportDialogProps) {
-  const { t } = useTranslation(),
-   { transports, createTransport, updateTransport } = useTransportContext(),
-   { persons } = usePersonContext(),
-
-  // Track mounted state to prevent state updates after unmount
-   isMountedRef = useRef(true),
-
-  // Synchronous guard for double-submission prevention
-   isSubmittingRef = useRef(false),
-
-  // Submission loading state for UI
-   [isSubmitting, setIsSubmitting] = useState(false);
-
-  // ============================================================================
-  // Lifecycle Effects
-  // ============================================================================
-
-  // Cleanup on unmount
-  useEffect(() => () => {
-      isMountedRef.current = false;
-    }, []);
-
-  // Reset submission state when dialog closes
-  useEffect(() => {
-    if (!open) {
-      setIsSubmitting(false);
-      isSubmittingRef.current = false;
-    }
-  }, [open]);
+  const { t } = useTranslation();
+  const { transports, createTransport, updateTransport } = useTransportContext();
+  const { persons } = usePersonContext();
 
   // ============================================================================
   // Derived Values
@@ -123,97 +94,72 @@ const TransportDialog = memo(function TransportDialog({
   /**
    * Determines if the dialog is in edit mode.
    */
-  const isEditMode = Boolean(transportId),
+  const isEditMode = Boolean(transportId);
 
   /**
    * Find the transport from context for edit mode.
    * Returns undefined if transportId is not provided or transport not found.
    */
-   transport = useMemo((): Transport | undefined => {
+  const transport = useMemo((): Transport | undefined => {
     if (!transportId) {return undefined;}
     return transports.find((t) => t.id === transportId);
-  }, [transportId, transports]),
+  }, [transportId, transports]);
 
   /**
    * Dialog title based on mode.
    */
-   dialogTitle = isEditMode ? t('transports.edit') : t('transports.new'),
+  const dialogTitle = isEditMode ? t('transports.edit') : t('transports.new');
 
   /**
    * Dialog description for accessibility.
    */
-   dialogDescription = isEditMode
+  const dialogDescription = isEditMode
     ? t('transports.editDescription', 'Modify the transport details below.')
-    : t('transports.newDescription', 'Fill in the details to add a new transport.'),
+    : t('transports.newDescription', 'Fill in the details to add a new transport.');
 
   // ============================================================================
   // Event Handlers
   // ============================================================================
 
   /**
-   * Handles form submission.
-   * Creates or updates the transport based on mode, shows toast, and closes dialog on success.
+   * Handles form submission — creates or updates transport.
+   * Passes raw async function directly to TransportForm which manages
+   * its own submission state via useFormSubmission hook.
    */
-   handleSubmit = useCallback(
+  const handleSubmit = useCallback(
     async (data: TransportFormData) => {
-      // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) {return;}
-
-      isSubmittingRef.current = true;
-      setIsSubmitting(true);
-
-      try {
-        // Use transportId directly for the check to avoid race conditions with isEditMode boolean
-        if (transportId) {
-          // Edit mode - update existing transport
-          await updateTransport(transportId, data);
-          toast.success(t('transports.updateSuccess', 'Transport updated successfully'));
-        } else {
-          // Create mode - create new transport
-          await createTransport(data);
-          toast.success(t('transports.createSuccess', 'Transport created successfully'));
-        }
-        // Always close dialog on success, regardless of mount state
-        onOpenChange(false);
-      } catch (error) {
-        console.error('Failed to save transport:', error);
-        if (isMountedRef.current) {
-          toast.error(t('errors.saveFailed', 'Failed to save transport'));
-        }
-        // Don't close dialog on error - allow user to retry
-        // Re-throw to let TransportForm handle the error state
-        throw error;
-      } finally {
-        isSubmittingRef.current = false;
-        if (isMountedRef.current) {
-          setIsSubmitting(false);
-        }
+      // Use transportId directly for the check to avoid race conditions with isEditMode boolean
+      if (transportId) {
+        // Edit mode - update existing transport
+        await updateTransport(transportId, data);
+        toast.success(t('transports.updateSuccess', 'Transport updated successfully'));
+      } else {
+        // Create mode - create new transport
+        await createTransport(data);
+        toast.success(t('transports.createSuccess', 'Transport created successfully'));
       }
+      // Always close dialog on success, regardless of mount state
+      onOpenChange(false);
     },
     [transportId, updateTransport, createTransport, t, onOpenChange],
-  ),
+  );
 
   /**
    * Handles form cancel action.
-   * Closes the dialog if not currently submitting.
+   * Closes the dialog.
    */
-   handleCancel = useCallback(() => {
-    if (!isSubmitting) {
-      onOpenChange(false);
-    }
-  }, [isSubmitting, onOpenChange]),
+  const handleCancel = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
 
   /**
    * Handles dialog open state change.
-   * Prevents closing during submission.
    */
-   handleOpenChange = useCallback(
+  const handleOpenChange = useCallback(
     (newOpen: boolean) => {
-      // Prevent closing while submitting
-      if (!newOpen && isSubmitting) {return;}
       onOpenChange(newOpen);
     },
-    [isSubmitting, onOpenChange],
+    [onOpenChange],
   );
 
   // ============================================================================

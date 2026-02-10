@@ -162,6 +162,9 @@ export async function getAssignmentById(
 /**
  * Updates an existing assignment with partial data.
  *
+ * @deprecated Use {@link updateAssignmentWithOwnershipCheck} instead.
+ * This function will be removed in a future version.
+ *
  * @param id - The assignment's unique identifier
  * @param data - Partial assignment form data to update
  * @throws {Error} If the assignment with the given ID does not exist
@@ -198,6 +201,9 @@ export async function updateAssignment(
 
 /**
  * Deletes a room assignment.
+ *
+ * @deprecated Use {@link deleteAssignmentWithOwnershipCheck} instead.
+ * This function will be removed in a future version.
  *
  * @param id - The assignment's unique identifier
  *

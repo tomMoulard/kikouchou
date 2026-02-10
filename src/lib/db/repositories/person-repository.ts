@@ -123,6 +123,9 @@ export async function getPersonById(id: PersonId): Promise<Person | undefined> {
  *
  * Only the provided fields in `data` are updated.
  *
+ * @deprecated Use {@link updatePersonWithOwnershipCheck} instead.
+ * This function will be removed in a future version.
+ *
  * @param id - The person's unique identifier
  * @param data - Partial person form data to update
  * @throws {Error} If the person with the given ID does not exist
@@ -163,6 +166,9 @@ export async function updatePerson(
  * - The person record itself
  *
  * Also clears driverId references in transports where this person was the driver.
+ *
+ * @deprecated Use {@link deletePersonWithOwnershipCheck} instead.
+ * This function will be removed in a future version.
  *
  * @param id - The person's unique identifier
  *

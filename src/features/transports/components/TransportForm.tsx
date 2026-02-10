@@ -13,11 +13,11 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format, parseISO } from 'date-fns';
+import { useFormSubmission } from '@/hooks';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,12 +95,12 @@ interface FormState {
 /**
  * Available transport modes.
  */
-const TRANSPORT_MODES: TransportMode[] = ['train', 'plane', 'car', 'bus', 'other'],
+const TRANSPORT_MODES: TransportMode[] = ['train', 'plane', 'car', 'bus', 'other'];
 
 /**
  * Special value for "no selection" in select dropdowns.
  */
- NO_SELECTION = '__none__';
+const NO_SELECTION = '__none__';
 
 // ============================================================================
 // Helper Functions
@@ -230,27 +230,21 @@ const TransportForm = memo(function TransportForm({
   onSubmit,
   onCancel,
 }: TransportFormProps) {
-  const { t } = useTranslation(),
+  const { t } = useTranslation();
 
   // ============================================================================
   // Form State
   // ============================================================================
 
   // Form field values
-   [formState, setFormState] = useState<FormState>(() =>
+  const [formState, setFormState] = useState<FormState>(() =>
     getInitialFormState(transport, defaultType),
-  ),
+  );
 
   // Validation errors
-   [errors, setErrors] = useState<FormErrors>({}),
+  const [errors, setErrors] = useState<FormErrors>({});
 
-  // Submission state
-   [isSubmitting, setIsSubmitting] = useState(false),
-   [submitError, setSubmitError] = useState<string | null>(null),
-
-  // Refs for preventing race conditions and memory leaks
-   isSubmittingRef = useRef(false),
-   isMountedRef = useRef(true),
+  // Submission state (handled by useFormSubmission hook below)
 
   // ============================================================================
   // Derived State
@@ -259,15 +253,15 @@ const TransportForm = memo(function TransportForm({
   /**
    * Filter driver options to exclude the currently selected person.
    */
-   driverOptions = useMemo(() => {
+  const driverOptions = useMemo(() => {
     if (!formState.personId) {return persons;}
     return persons.filter((p) => p.id !== formState.personId);
-  }, [persons, formState.personId]),
+  }, [persons, formState.personId]);
 
   /**
    * Check if the selected person still exists.
    */
-   selectedPersonExists = useMemo(() => {
+  const selectedPersonExists = useMemo(() => {
     if (!formState.personId) {return true;} // No selection is valid for showing placeholder
     return persons.some((p) => p.id === formState.personId);
   }, [persons, formState.personId]);
@@ -276,16 +270,10 @@ const TransportForm = memo(function TransportForm({
   // Lifecycle Effects
   // ============================================================================
 
-  // Cleanup on unmount
-  useEffect(() => () => {
-      isMountedRef.current = false;
-    }, []);
-
   // Sync form state when transport prop changes (for edit mode navigation)
   useEffect(() => {
     setFormState(getInitialFormState(transport, defaultType));
     setErrors({});
-    setSubmitError(null);
   }, [transport?.id, defaultType]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on transport.id change
 
   // Clear driver if it matches the newly selected person
@@ -314,12 +302,12 @@ const TransportForm = memo(function TransportForm({
       return undefined;
     },
     [t, persons],
-  ),
+  );
 
   /**
    * Validates the datetime field.
    */
-   validateDatetime = useCallback(
+  const validateDatetime = useCallback(
     (value: string): string | undefined => {
       if (!value) {
         return t('common.required');
@@ -330,12 +318,12 @@ const TransportForm = memo(function TransportForm({
       return undefined;
     },
     [t],
-  ),
+  );
 
   /**
    * Validates the location field.
    */
-   validateLocation = useCallback(
+  const validateLocation = useCallback(
     (value: string): string | undefined => {
       const trimmed = value.trim();
       if (!trimmed) {
@@ -344,24 +332,24 @@ const TransportForm = memo(function TransportForm({
       return undefined;
     },
     [t],
-  ),
+  );
 
   /**
    * Validates all form fields.
    * Returns true if valid, false otherwise.
    */
-   validateForm = useCallback((): boolean => {
-    const newErrors: FormErrors = {},
+  const validateForm = useCallback((): boolean => {
+    const newErrors: FormErrors = {};
 
     // Validate personId
-     personIdError = validatePersonId(formState.personId);
+    const personIdError = validatePersonId(formState.personId);
     if (personIdError) {
       newErrors.personId = personIdError;
     }
 
     // Validate datetime (convert to ISO for validation)
-    const isoDatetime = toISODatetime(formState.datetime),
-     datetimeError = validateDatetime(isoDatetime);
+    const isoDatetime = toISODatetime(formState.datetime);
+    const datetimeError = validateDatetime(isoDatetime);
     if (datetimeError) {
       newErrors.datetime = datetimeError;
     }
@@ -374,7 +362,7 @@ const TransportForm = memo(function TransportForm({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [formState, validatePersonId, validateDatetime, validateLocation]),
+  }, [formState, validatePersonId, validateDatetime, validateLocation]);
 
   // ============================================================================
   // Event Handlers
@@ -383,17 +371,17 @@ const TransportForm = memo(function TransportForm({
   /**
    * Handles type radio button change.
    */
-   handleTypeChange = useCallback((value: string) => {
+  const handleTypeChange = useCallback((value: string) => {
     setFormState((prev) => ({
       ...prev,
       type: value as TransportType,
     }));
-  }, []),
+  }, []);
 
   /**
    * Handles person select change.
    */
-   handlePersonChange = useCallback(
+  const handlePersonChange = useCallback(
     (value: string) => {
       const personId = value === NO_SELECTION ? '' : (value as PersonId);
       setFormState((prev) => ({ ...prev, personId }));
@@ -401,12 +389,12 @@ const TransportForm = memo(function TransportForm({
       setErrors((prev) => (prev.personId ? { ...prev, personId: undefined } : prev));
     },
     [],
-  ),
+  );
 
   /**
    * Handles datetime input change.
    */
-   handleDatetimeChange = useCallback(
+  const handleDatetimeChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const {value} = e.target;
       setFormState((prev) => ({ ...prev, datetime: value }));
@@ -414,111 +402,100 @@ const TransportForm = memo(function TransportForm({
       setErrors((prev) => (prev.datetime ? { ...prev, datetime: undefined } : prev));
     },
     [],
-  ),
+  );
 
   /**
    * Handles datetime input blur for validation.
    */
-   handleDatetimeBlur = useCallback(() => {
-    const isoDatetime = toISODatetime(formState.datetime),
-     error = validateDatetime(isoDatetime);
+  const handleDatetimeBlur = useCallback(() => {
+    const isoDatetime = toISODatetime(formState.datetime);
+    const error = validateDatetime(isoDatetime);
     if (error) {
       setErrors((prev) => ({ ...prev, datetime: error }));
     }
-  }, [formState.datetime, validateDatetime]),
+  }, [formState.datetime, validateDatetime]);
 
   /**
    * Handles transport mode select change.
    */
-   handleTransportModeChange = useCallback((value: string) => {
+  const handleTransportModeChange = useCallback((value: string) => {
     const mode = value === NO_SELECTION ? '' : (value as TransportMode);
     setFormState((prev) => ({ ...prev, transportMode: mode }));
-  }, []),
+  }, []);
 
   /**
    * Handles transport number input change.
    */
-   handleTransportNumberChange = useCallback(
+  const handleTransportNumberChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       setFormState((prev) => ({ ...prev, transportNumber: e.target.value }));
     },
     [],
-  ),
+  );
 
   /**
    * Handles driver select change.
    */
-   handleDriverChange = useCallback((value: string) => {
+  const handleDriverChange = useCallback((value: string) => {
     const driverId = value === NO_SELECTION ? '' : (value as PersonId);
     setFormState((prev) => ({ ...prev, driverId }));
-  }, []),
+  }, []);
 
   /**
    * Handles needs pickup switch change.
    */
-   handleNeedsPickupChange = useCallback((checked: boolean) => {
+  const handleNeedsPickupChange = useCallback((checked: boolean) => {
     setFormState((prev) => ({ ...prev, needsPickup: checked }));
-  }, []),
+  }, []);
 
   /**
    * Handles notes textarea change.
    */
-   handleNotesChange = useCallback(
+  const handleNotesChange = useCallback(
     (e: ChangeEvent<HTMLTextAreaElement>) => {
       setFormState((prev) => ({ ...prev, notes: e.target.value }));
     },
     [],
-  ),
+  );
 
   /**
-   * Handles form submission.
+   * Submission handler via useFormSubmission hook.
    */
-   handleSubmit = useCallback(
+  const { isSubmitting, submitError, handleSubmit: doSubmit } = useFormSubmission<TransportFormData>(
+    onSubmit,
+  );
+
+  /**
+   * Handles form submission with validation and data building.
+   */
+  const handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-
-      // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) {return;}
 
       // Validate form
       if (!validateForm()) {return;}
 
-      isSubmittingRef.current = true;
-      setIsSubmitting(true);
-      setSubmitError(null);
+      // Build form data with proper types
+      const data: TransportFormData = {
+        personId: formState.personId as PersonId,
+        type: formState.type,
+        datetime: toISODatetime(formState.datetime),
+        location: formState.location.trim(),
+        coordinates: formState.coordinates,
+        transportMode: formState.transportMode || undefined,
+        transportNumber: formState.transportNumber.trim() || undefined,
+        driverId: formState.driverId || undefined,
+        needsPickup: formState.needsPickup,
+        notes: formState.notes.trim() || undefined,
+      };
 
       try {
-        // Build form data with proper types
-        const data: TransportFormData = {
-          personId: formState.personId as PersonId,
-          type: formState.type,
-          datetime: toISODatetime(formState.datetime),
-          location: formState.location.trim(),
-          coordinates: formState.coordinates,
-          transportMode: formState.transportMode || undefined,
-          transportNumber: formState.transportNumber.trim() || undefined,
-          driverId: formState.driverId || undefined,
-          needsPickup: formState.needsPickup,
-          notes: formState.notes.trim() || undefined,
-        };
-
-        await onSubmit(data);
-        // Success - parent component handles navigation
-      } catch (error) {
-        console.error('Failed to save transport:', error);
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setSubmitError(t('errors.saveFailed'));
-        }
-      } finally {
-        isSubmittingRef.current = false;
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setIsSubmitting(false);
-        }
+        await doSubmit(data);
+      } catch {
+        // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, onSubmit, formState, t],
+    [validateForm, doSubmit, formState],
   );
 
   // ============================================================================

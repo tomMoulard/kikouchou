@@ -12,10 +12,10 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFormSubmission } from '@/hooks';
 import { type Locale, format, isBefore, isValid, parseISO, startOfDay } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
 import { CalendarIcon } from 'lucide-react';
@@ -73,12 +73,12 @@ interface FormErrors {
 /**
  * Date format for ISO string output (YYYY-MM-DD).
  */
-const DISPLAY_DATE_FORMAT = 'PPP',
+const DISPLAY_DATE_FORMAT = 'PPP';
 
 /**
  * Date format for display (localized).
  */
- ISO_DATE_FORMAT = 'yyyy-MM-dd';
+const ISO_DATE_FORMAT = 'yyyy-MM-dd';
 
 // ============================================================================
 // Utility Functions
@@ -148,15 +148,15 @@ const TripForm = memo(function TripForm({
   onSubmit,
   onCancel,
 }: TripFormProps) {
-  const { t, i18n } = useTranslation(),
-   locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
+  const { t, i18n } = useTranslation();
+  const locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
 
   // ============================================================================
   // Form State
   // ============================================================================
 
   // Initialize form values from trip prop (edit mode) or empty (create mode)
-   initialValues = useMemo(
+  const initialValues = useMemo(
     () => ({
       name: trip?.name ?? '',
       location: trip?.location ?? '',
@@ -165,30 +165,17 @@ const TripForm = memo(function TripForm({
       description: trip?.description ?? '',
     }),
     [trip],
-  ),
+  );
 
-   [name, setName] = useState(initialValues.name),
-   [location, setLocation] = useState(initialValues.location),
-   // Date state is stored as string internally, converted to ISODateString on submit
-   [startDate, setStartDate] = useState<string>(initialValues.startDate),
-   [endDate, setEndDate] = useState<string>(initialValues.endDate),
-   [description, setDescription] = useState(initialValues.description),
+  const [name, setName] = useState(initialValues.name);
+  const [location, setLocation] = useState(initialValues.location);
+  // Date state is stored as string internally, converted to ISODateString on submit
+  const [startDate, setStartDate] = useState<string>(initialValues.startDate);
+  const [endDate, setEndDate] = useState<string>(initialValues.endDate);
+  const [description, setDescription] = useState(initialValues.description);
 
   // Validation errors
-   [errors, setErrors] = useState<FormErrors>({}),
-
-  // Submission state
-   [isSubmitting, setIsSubmitting] = useState(false),
-   [submitError, setSubmitError] = useState<string | null>(null),
-
-  // Refs for preventing race conditions and memory leaks
-   isSubmittingRef = useRef(false),
-   isMountedRef = useRef(true);
-
-  // Cleanup on unmount
-  useEffect(() => () => {
-      isMountedRef.current = false;
-    }, []);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   // Sync form state when trip prop changes (for edit mode navigation)
   useEffect(() => {
@@ -198,16 +185,15 @@ const TripForm = memo(function TripForm({
     setEndDate(trip?.endDate ?? '');
     setDescription(trip?.description ?? '');
     setErrors({});
-    setSubmitError(null);
   }, [trip?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on trip.id change
 
   // Date picker popover state
-  const [isStartDateOpen, setIsStartDateOpen] = useState(false),
-   [isEndDateOpen, setIsEndDateOpen] = useState(false),
+  const [isStartDateOpen, setIsStartDateOpen] = useState(false);
+  const [isEndDateOpen, setIsEndDateOpen] = useState(false);
 
   // Parse dates for Calendar component
-   startDateValue = useMemo(() => parseDate(startDate), [startDate]),
-   endDateValue = useMemo(() => parseDate(endDate), [endDate]),
+  const startDateValue = useMemo(() => parseDate(startDate), [startDate]);
+  const endDateValue = useMemo(() => parseDate(endDate), [endDate]);
 
   // ============================================================================
   // Validation
@@ -216,7 +202,7 @@ const TripForm = memo(function TripForm({
   /**
    * Validates the name field.
    */
-   validateName = useCallback(
+  const validateName = useCallback(
     (value: string): string | undefined => {
       const trimmed = value.trim();
       if (!trimmed) {
@@ -225,17 +211,17 @@ const TripForm = memo(function TripForm({
       return undefined;
     },
     [t],
-  ),
+  );
 
   /**
    * Validates the end date against start date.
    */
-   validateEndDate = useCallback(
+  const validateEndDate = useCallback(
     (start: string, end: string): string | undefined => {
       if (!start || !end) {return undefined;}
 
-      const startParsed = parseDate(start),
-       endParsed = parseDate(end);
+      const startParsed = parseDate(start);
+      const endParsed = parseDate(end);
 
       if (!startParsed || !endParsed) {return undefined;}
 
@@ -247,17 +233,17 @@ const TripForm = memo(function TripForm({
       return undefined;
     },
     [t],
-  ),
+  );
 
   /**
    * Validates all form fields.
    * Returns true if valid, false otherwise.
    */
-   validateForm = useCallback((): boolean => {
-    const newErrors: FormErrors = {},
+  const validateForm = useCallback((): boolean => {
+    const newErrors: FormErrors = {};
 
     // Validate name
-     nameError = validateName(name);
+    const nameError = validateName(name);
     if (nameError) {
       newErrors.name = nameError;
     }
@@ -280,7 +266,7 @@ const TripForm = memo(function TripForm({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [name, startDate, endDate, validateName, validateEndDate, t]),
+  }, [name, startDate, endDate, validateName, validateEndDate, t]);
 
   // ============================================================================
   // Event Handlers
@@ -290,7 +276,7 @@ const TripForm = memo(function TripForm({
    * Handles name input change.
    * Uses functional update to avoid dependency on error state.
    */
-   handleNameChange = useCallback(
+  const handleNameChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const {value} = e.target;
       setName(value);
@@ -298,43 +284,43 @@ const TripForm = memo(function TripForm({
       setErrors((prev) => (prev.name ? { ...prev, name: undefined } : prev));
     },
     [],
-  ),
+  );
 
   /**
    * Handles name input blur for validation.
    */
-   handleNameBlur = useCallback(() => {
+  const handleNameBlur = useCallback(() => {
     const error = validateName(name);
     if (error) {
       setErrors((prev) => ({ ...prev, name: error }));
     }
-  }, [name, validateName]),
+  }, [name, validateName]);
 
   /**
    * Handles location input change.
    */
-   handleLocationChange = useCallback(
+  const handleLocationChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       setLocation(e.target.value);
     },
     [],
-  ),
+  );
 
   /**
    * Handles description textarea change.
    */
-   handleDescriptionChange = useCallback(
+  const handleDescriptionChange = useCallback(
     (e: ChangeEvent<HTMLTextAreaElement>) => {
       setDescription(e.target.value);
     },
     [],
-  ),
+  );
 
   /**
    * Handles start date selection.
    * Uses functional update to avoid dependency on error state.
    */
-   handleStartDateSelect = useCallback(
+  const handleStartDateSelect = useCallback(
     (date: Date | undefined) => {
       const isoDate = formatToISO(date);
       setStartDate(isoDate);
@@ -356,13 +342,13 @@ const TripForm = memo(function TripForm({
       });
     },
     [endDate, validateEndDate],
-  ),
+  );
 
   /**
    * Handles end date selection.
    * Uses functional update to avoid dependency on error state.
    */
-   handleEndDateSelect = useCallback(
+  const handleEndDateSelect = useCallback(
     (date: Date | undefined) => {
       const isoDate = formatToISO(date);
       setEndDate(isoDate);
@@ -380,50 +366,38 @@ const TripForm = memo(function TripForm({
       });
     },
     [startDate, validateEndDate],
-  ),
+  );
 
   /**
-   * Handles form submission.
-   * Uses refs for synchronous guard (prevents race condition) and unmount safety.
+   * Submission handler via useFormSubmission hook.
    */
-   handleSubmit = useCallback(
+  const { isSubmitting, submitError, handleSubmit: doSubmit } = useFormSubmission<TripFormData>(
+    onSubmit,
+  );
+
+  /**
+   * Handles form submission with validation and data building.
+   */
+  const handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-
-      // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) {return;}
 
       // Validate form
       if (!validateForm()) {return;}
 
-      isSubmittingRef.current = true;
-      setIsSubmitting(true);
-      setSubmitError(null);
-
       try {
-        await onSubmit({
+        await doSubmit({
           name: name.trim(),
           location: location.trim() || undefined,
           startDate: toISODateStringFromString(startDate),
           endDate: toISODateStringFromString(endDate),
           description: description.trim() || undefined,
         });
-        // Success - parent component handles navigation
-      } catch (error) {
-        console.error('Failed to save trip:', error);
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setSubmitError(t('errors.saveFailed'));
-        }
-      } finally {
-        isSubmittingRef.current = false;
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setIsSubmitting(false);
-        }
+      } catch {
+        // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, onSubmit, name, location, startDate, endDate, description, t],
+    [validateForm, doSubmit, name, location, startDate, endDate, description],
   );
 
   // ============================================================================

@@ -5,10 +5,11 @@
  * @module features/trips/pages/TripCreatePage
  */
 
-import { type ReactElement, memo, useCallback, useEffect, useRef } from 'react';
+import { type ReactElement, memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { useFormSubmission } from '@/hooks';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,93 +40,44 @@ import type { TripFormData } from '@/types';
  * ```
  */
 function TripCreatePageComponent(): ReactElement {
-  const navigate = useNavigate(),
-   { t } = useTranslation(),
+  const navigate = useNavigate();
+  const { t } = useTranslation();
 
   // ============================================================================
-  // Refs for Async Operation Safety
-  // ============================================================================
-
-  /**
-   * Tracks whether the component is still mounted.
-   * Used to prevent state updates and navigation after unmount.
-   */
-   isMountedRef = useRef(true),
-
-  /**
-   * Guards against double-submission during async operations.
-   * Synchronous check prevents race conditions between rapid clicks.
-   */
-   isSubmittingRef = useRef(false);
-
-  // ============================================================================
-  // Effects
+  // Submission via useFormSubmission hook
   // ============================================================================
 
   /**
-   * Cleanup effect to track component unmount.
+   * Submission handler that creates the trip and navigates on success.
    */
-  useEffect(() => () => {
-      isMountedRef.current = false;
-    }, []);
+  const { submitError, handleSubmit } = useFormSubmission<TripFormData>(
+    async (data) => {
+      const newTrip = await createTrip(data);
+
+      // Validate trip was created with valid ID (defensive check for database quirks)
+      if (!newTrip?.id) {
+        throw new Error('Trip creation failed: missing trip ID');
+      }
+
+      // Set the new trip as the current trip so CalendarPage can display it
+      await setCurrentTrip(newTrip.id);
+
+      // Show success toast with fallback for missing translation key
+      toast.success(t('trips.created', 'Trip created successfully'));
+
+      // Navigate to the new trip's calendar
+      navigate(`/trips/${newTrip.id}/calendar`);
+    },
+  );
 
   // ============================================================================
   // Event Handlers
   // ============================================================================
 
   /**
-   * Handles form submission by creating the trip and navigating on success.
-   * Includes guards for double-submission and unmount safety.
-   */
-  const handleSubmit = useCallback(
-    async (data: TripFormData): Promise<void> => {
-      // Prevent double-submission
-      if (isSubmittingRef.current) {
-        return;
-      }
-
-      isSubmittingRef.current = true;
-
-      try {
-        const newTrip = await createTrip(data);
-
-        // Validate trip was created with valid ID (defensive check for database quirks)
-        if (!newTrip?.id) {
-          throw new Error('Trip creation failed: missing trip ID');
-        }
-
-        // Set the new trip as the current trip so CalendarPage can display it
-        await setCurrentTrip(newTrip.id);
-
-        // Show success toast with fallback for missing translation key
-        toast.success(t('trips.created', 'Trip created successfully'));
-
-        // Navigate to the new trip's calendar
-        // Note: We intentionally navigate even if component is unmounting,
-        // As the trip was successfully created and the user expects to see it
-        navigate(`/trips/${newTrip.id}/calendar`);
-      } catch (error) {
-        // Log error for debugging
-        console.error('Failed to create trip:', error);
-
-        // Only show toast if component is still mounted
-        if (isMountedRef.current) {
-          toast.error(t('errors.saveFailed', 'Failed to save. Please try again.'));
-        }
-
-        // Re-throw to let TripForm handle its internal error state
-        throw error;
-      } finally {
-        isSubmittingRef.current = false;
-      }
-    },
-    [navigate, t],
-  ),
-
-  /**
    * Handles cancel action by navigating back to trips list.
    */
-   handleCancel = useCallback(() => {
+  const handleCancel = useCallback(() => {
     navigate('/trips');
   }, [navigate]);
 
@@ -139,6 +91,14 @@ function TripCreatePageComponent(): ReactElement {
 
       <Card>
         <CardContent className="pt-6">
+          {submitError && (
+            <div
+              className="rounded-md bg-destructive/10 p-3 text-sm text-destructive mb-4"
+              role="alert"
+            >
+              {submitError}
+            </div>
+          )}
           <TripForm onSubmit={handleSubmit} onCancel={handleCancel} />
         </CardContent>
       </Card>

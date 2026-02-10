@@ -16,6 +16,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { useFormSubmission } from '@/hooks';
 import { Trash2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -53,18 +54,18 @@ import type { Trip, TripFormData, TripId } from '@/types';
  * ```
  */
 function TripEditPageComponent(): ReactElement {
-  const navigate = useNavigate(),
-   { t } = useTranslation(),
-   { tripId } = useParams<{ tripId: string }>(),
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { tripId } = useParams<{ tripId: string }>();
 
   // ============================================================================
   // State
   // ============================================================================
 
-   [trip, setTrip] = useState<Trip | null>(null),
-   [isLoading, setIsLoading] = useState(true),
-   [loadError, setLoadError] = useState<Error | null>(null),
-   [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false),
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<Error | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   // ============================================================================
   // Refs for Async Operation Safety
@@ -74,17 +75,12 @@ function TripEditPageComponent(): ReactElement {
    * Tracks whether the component is still mounted.
    * Used to prevent state updates and navigation after unmount.
    */
-   isMountedRef = useRef(true),
-
-  /**
-   * Guards against double-submission during update operations.
-   */
-   isSubmittingRef = useRef(false),
+  const isMountedRef = useRef(true);
 
   /**
    * Guards against double-click during delete operations.
    */
-   isDeletingRef = useRef(false);
+  const isDeletingRef = useRef(false);
 
   // ============================================================================
   // Effects
@@ -158,63 +154,45 @@ function TripEditPageComponent(): ReactElement {
   // ============================================================================
 
   /**
-   * Handles form submission by updating the trip.
-   * Includes guards for double-submission and unmount safety.
+   * Submission handler via useFormSubmission hook.
+   */
+  const { handleSubmit: doSubmit } = useFormSubmission<TripFormData>(
+    async (data) => {
+      if (!tripId) return;
+
+      await updateTrip(tripId as TripId, data);
+
+      // Show success toast with fallback for missing translation key
+      toast.success(t('trips.updated', 'Trip updated successfully'));
+
+      // Navigate to the trip's calendar
+      navigate(`/trips/${tripId}/calendar`);
+    },
+  );
+
+  /**
+   * Handles form submission — delegates to doSubmit from useFormSubmission.
+   * The hook already handles errors and re-throws for the form to react to.
    */
   const handleSubmit = useCallback(
     async (data: TripFormData): Promise<void> => {
-      // Prevent double-submission
-      if (isSubmittingRef.current || !tripId) {
-        return;
-      }
-
-      isSubmittingRef.current = true;
-
-      try {
-        await updateTrip(tripId as TripId, data);
-
-        // Only proceed if component is still mounted
-        if (!isMountedRef.current) {
-          return;
-        }
-
-        // Show success toast with fallback for missing translation key
-        toast.success(t('trips.updated', 'Trip updated successfully'));
-
-        // Navigate to the trip's calendar
-        navigate(`/trips/${tripId}/calendar`);
-      } catch (error) {
-        // Log error for debugging
-        console.error('Failed to update trip:', error);
-
-        // Only show toast if component is still mounted
-        if (isMountedRef.current) {
-          toast.error(
-            t('errors.saveFailed', 'Failed to save. Please try again.'),
-          );
-        }
-
-        // Re-throw to let TripForm handle its internal error state
-        throw error;
-      } finally {
-        isSubmittingRef.current = false;
-      }
+      await doSubmit(data);
     },
-    [navigate, t, tripId],
-  ),
+    [doSubmit],
+  );
 
   /**
    * Handles cancel action by navigating back to trips list.
    */
-   handleCancel = useCallback(() => {
+  const handleCancel = useCallback(() => {
     navigate('/trips');
-  }, [navigate]),
+  }, [navigate]);
 
   /**
    * Handles trip deletion with confirmation.
    * Called by ConfirmDialog on confirm.
    */
-   handleDelete = useCallback(async (): Promise<void> => {
+  const handleDelete = useCallback(async (): Promise<void> => {
     // Prevent double-click during deletion
     if (isDeletingRef.current || !tripId) {
       return;
@@ -251,26 +229,26 @@ function TripEditPageComponent(): ReactElement {
     } finally {
       isDeletingRef.current = false;
     }
-  }, [navigate, t, tripId]),
+  }, [navigate, t, tripId]);
 
   /**
    * Handles opening the delete confirmation dialog.
    */
-   handleOpenDeleteDialog = useCallback(() => {
+  const handleOpenDeleteDialog = useCallback(() => {
     setIsDeleteDialogOpen(true);
-  }, []),
+  }, []);
 
   /**
    * Handles delete dialog open state changes.
    */
-   handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
     setIsDeleteDialogOpen(open);
-  }, []),
+  }, []);
 
   /**
    * Handles navigation back to trips list from error state.
    */
-   handleBackToTrips = useCallback(() => {
+  const handleBackToTrips = useCallback(() => {
     navigate('/trips');
   }, [navigate]);
 

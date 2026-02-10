@@ -58,12 +58,16 @@ export default defineConfig({
         '**/*.spec.{ts,tsx}',
       ],
 
-      // Coverage thresholds (can be adjusted as test suite grows)
+      // Coverage thresholds (Story 1.1 AC#4: raised from 70% to 80%)
+      // NOTE: Actual coverage is ~34%. Enforcement is intentionally deferred to Epic 3
+      // (Story 3-4: Test Coverage and CI Quality Gates). The threshold documents the
+      // target goal. CI should NOT run `bun run test:coverage` until Epic 3 raises
+      // actual coverage to meet this threshold.
       thresholds: {
-        statements: 70,
-        branches: 70,
-        functions: 70,
-        lines: 70,
+        statements: 80,
+        branches: 80,
+        functions: 80,
+        lines: 80,
       },
     },
 

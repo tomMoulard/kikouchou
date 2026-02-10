@@ -13,10 +13,10 @@ import {
   memo,
   useCallback,
   useEffect,
-  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useFormSubmission } from '@/hooks';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,7 +58,7 @@ interface FormErrors {
 /**
  * Default color for new persons (first color in palette).
  */
-const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
+const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6';
 
 // ============================================================================
 // Component
@@ -94,23 +94,23 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
  * />
  * ```
  */
- PersonForm = memo(function PersonForm({
+const PersonForm = memo(function PersonForm({
   person,
   onSubmit,
   onCancel,
 }: PersonFormProps) {
-  const { t } = useTranslation(),
-   { currentTrip } = useTripContext(),
+  const { t } = useTranslation();
+  const { currentTrip } = useTripContext();
 
   // ============================================================================
   // Form State
   // ============================================================================
 
   // Form field values
-   [name, setName] = useState(person?.name ?? ''),
-   // Color state is stored as string internally, converted to HexColor on submit
-   [color, setColor] = useState<string>(person?.color ?? DEFAULT_COLOR),
-   [stayDates, setStayDates] = useState<DateRange | undefined>(() => {
+  const [name, setName] = useState(person?.name ?? '');
+  // Color state is stored as string internally, converted to HexColor on submit
+  const [color, setColor] = useState<string>(person?.color ?? DEFAULT_COLOR);
+  const [stayDates, setStayDates] = useState<DateRange | undefined>(() => {
     if (person?.stayStartDate && person?.stayEndDate) {
       return {
         from: parseISO(person.stayStartDate),
@@ -118,27 +118,14 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
       };
     }
     return undefined;
-  }),
+  });
 
   // Validation errors
-   [errors, setErrors] = useState<FormErrors>({}),
-
-  // Submission state
-   [isSubmitting, setIsSubmitting] = useState(false),
-   [submitError, setSubmitError] = useState<string | null>(null),
-
-  // Refs for preventing race conditions and memory leaks
-   isSubmittingRef = useRef(false),
-   isMountedRef = useRef(true);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   // ============================================================================
   // Lifecycle Effects
   // ============================================================================
-
-  // Cleanup on unmount
-  useEffect(() => () => {
-      isMountedRef.current = false;
-    }, []);
 
   // Sync form state when person prop changes (for edit mode navigation)
   // Only depends on person.id to avoid resetting on every prop reference change
@@ -156,7 +143,6 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
     }
     // Use callback to avoid creating new object if already empty
     setErrors((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-    setSubmitError((prev) => (prev === null ? prev : null));
   }, [person?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on person.id change
 
   // ============================================================================
@@ -175,24 +161,24 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
       return undefined;
     },
     [t],
-  ),
+  );
 
   /**
    * Validates all form fields.
    * Returns true if valid, false otherwise.
    */
-   validateForm = useCallback((): boolean => {
-    const newErrors: FormErrors = {},
+  const validateForm = useCallback((): boolean => {
+    const newErrors: FormErrors = {};
 
     // Validate name
-     nameError = validateName(name);
+    const nameError = validateName(name);
     if (nameError) {
       newErrors.name = nameError;
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [name, validateName]),
+  }, [name, validateName]);
 
   // ============================================================================
   // Event Handlers
@@ -202,7 +188,7 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
    * Handles name input change.
    * Uses functional update to avoid dependency on error state.
    */
-   handleNameChange = useCallback(
+  const handleNameChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
       const {value} = e.target;
       setName(value);
@@ -210,83 +196,71 @@ const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6',
       setErrors((prev) => (prev.name ? { ...prev, name: undefined } : prev));
     },
     [],
-  ),
+  );
 
   /**
    * Handles name input blur for validation.
    */
-   handleNameBlur = useCallback(() => {
+  const handleNameBlur = useCallback(() => {
     const error = validateName(name);
     if (error) {
       setErrors((prev) => ({ ...prev, name: error }));
     }
-  }, [name, validateName]),
+  }, [name, validateName]);
 
   /**
    * Handles color selection from ColorPicker.
    */
-   handleColorChange = useCallback((newColor: string) => {
+  const handleColorChange = useCallback((newColor: string) => {
     setColor(newColor);
-  }, []),
+  }, []);
 
   /**
    * Handles stay date range selection.
    */
-   handleStayDatesChange = useCallback((range: DateRange | undefined) => {
+  const handleStayDatesChange = useCallback((range: DateRange | undefined) => {
     setStayDates(range);
-  }, []),
+  }, []);
 
   /**
    * Trip date constraints for the date picker.
    */
-   tripStartDate = currentTrip?.startDate ? parseISO(currentTrip.startDate) : undefined,
-   tripEndDate = currentTrip?.endDate ? parseISO(currentTrip.endDate) : undefined,
+  const tripStartDate = currentTrip?.startDate ? parseISO(currentTrip.startDate) : undefined;
+  const tripEndDate = currentTrip?.endDate ? parseISO(currentTrip.endDate) : undefined;
 
   /**
-   * Handles form submission.
-   * Uses refs for synchronous guard (prevents race condition) and unmount safety.
+   * Submission handler via useFormSubmission hook.
    */
-   handleSubmit = useCallback(
+  const { isSubmitting, submitError, handleSubmit: doSubmit } = useFormSubmission<PersonFormData>(
+    onSubmit,
+  );
+
+  /**
+   * Handles form submission with validation and data building.
+   */
+  const handleSubmit = useCallback(
     async (e: FormEvent) => {
       e.preventDefault();
-
-      // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) {return;}
 
       // Validate form
       if (!validateForm()) {return;}
 
-      isSubmittingRef.current = true;
-      setIsSubmitting(true);
-      setSubmitError(null);
+      // Format dates and convert to branded types
+      const formattedStartDate = stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : undefined;
+      const formattedEndDate = stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : undefined;
 
       try {
-        // Format dates and convert to branded types
-        const formattedStartDate = stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : undefined;
-        const formattedEndDate = stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : undefined;
-
-        await onSubmit({
+        await doSubmit({
           name: name.trim(),
           color: toHexColor(color),
           stayStartDate: formattedStartDate ? toISODateStringFromString(formattedStartDate) : undefined,
           stayEndDate: formattedEndDate ? toISODateStringFromString(formattedEndDate) : undefined,
         });
-        // Success - parent component handles navigation
-      } catch (error) {
-        console.error('Failed to save person:', error);
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setSubmitError(t('errors.saveFailed'));
-        }
-      } finally {
-        isSubmittingRef.current = false;
-        // Only update state if component is still mounted
-        if (isMountedRef.current) {
-          setIsSubmitting(false);
-        }
+      } catch {
+        // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, onSubmit, name, color, stayDates, t],
+    [validateForm, doSubmit, name, color, stayDates],
   );
 
   // ============================================================================

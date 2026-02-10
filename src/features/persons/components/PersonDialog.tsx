@@ -9,10 +9,7 @@
 import {
   memo,
   useCallback,
-  useEffect,
   useMemo,
-  useRef,
-  useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -81,33 +78,8 @@ const PersonDialog = memo(function PersonDialog({
   open,
   onOpenChange,
 }: PersonDialogProps) {
-  const { t } = useTranslation(),
-   { persons, createPerson, updatePerson } = usePersonContext(),
-
-  // Track mounted state to prevent state updates after unmount
-   isMountedRef = useRef(true),
-
-  // Synchronous guard for double-submission prevention
-   isSubmittingRef = useRef(false),
-
-  // Submission loading state for UI
-   [isSubmitting, setIsSubmitting] = useState(false);
-
-  // ============================================================================
-  // Lifecycle Effects
-  // ============================================================================
-
-  // Cleanup on unmount
-  useEffect(() => () => {
-      isMountedRef.current = false;
-    }, []);
-
-  // Reset submission state when dialog closes
-  useEffect(() => {
-    if (!open) {
-      setIsSubmitting(false);
-    }
-  }, [open]);
+  const { t } = useTranslation();
+  const { persons, createPerson, updatePerson } = usePersonContext();
 
   // ============================================================================
   // Derived Values
@@ -116,97 +88,68 @@ const PersonDialog = memo(function PersonDialog({
   /**
    * Determines if the dialog is in edit mode.
    */
-  const isEditMode = Boolean(personId),
+  const isEditMode = Boolean(personId);
 
   /**
    * Find the person from context for edit mode.
    * Returns undefined if personId is not provided or person not found.
    */
-   person = useMemo((): Person | undefined => {
+  const person = useMemo((): Person | undefined => {
     if (!personId) {return undefined;}
     return persons.find((p) => p.id === personId);
-  }, [personId, persons]),
+  }, [personId, persons]);
 
   /**
    * Dialog title based on mode.
    */
-   dialogTitle = isEditMode ? t('persons.edit') : t('persons.new'),
+  const dialogTitle = isEditMode ? t('persons.edit') : t('persons.new');
 
   /**
    * Dialog description for accessibility.
    */
-   dialogDescription = isEditMode
+  const dialogDescription = isEditMode
     ? t('persons.editDescription', 'Modify the participant details below.')
-    : t('persons.newDescription', 'Fill in the details to add a new participant.'),
+    : t('persons.newDescription', 'Fill in the details to add a new participant.');
 
   // ============================================================================
   // Event Handlers
   // ============================================================================
 
   /**
-   * Handles form submission.
-   * Creates or updates the person based on mode, shows toast, and closes dialog on success.
+   * Handles form submission — creates or updates person.
+   * Passes raw async function directly to PersonForm which manages
+   * its own submission state via useFormSubmission hook.
    */
-   handleSubmit = useCallback(
+  const handleSubmit = useCallback(
     async (data: PersonFormData) => {
-      // Prevent double submission using ref for synchronous check
-      if (isSubmittingRef.current) {return;}
-
-      isSubmittingRef.current = true;
-      setIsSubmitting(true);
-
-      try {
-        if (isEditMode && personId) {
-          // Edit mode - update existing person
-          // Use personId directly instead of person.id to avoid stale closure issues
-          await updatePerson(personId, data);
-          toast.success(t('persons.updateSuccess', 'Participant updated successfully'));
-        } else {
-          // Create mode - create new person
-          await createPerson(data);
-          toast.success(t('persons.createSuccess', 'Participant added successfully'));
-        }
-        // Always close dialog on success, regardless of mount state
-        onOpenChange(false);
-      } catch (error) {
-        console.error('Failed to save person:', error);
-        if (isMountedRef.current) {
-          toast.error(t('errors.saveFailed', 'Failed to save'));
-        }
-        // Don't close dialog on error - allow user to retry
-        // Re-throw to let PersonForm handle the error state
-        throw error;
-      } finally {
-        isSubmittingRef.current = false;
-        if (isMountedRef.current) {
-          setIsSubmitting(false);
-        }
+      if (isEditMode && personId) {
+        await updatePerson(personId, data);
+        toast.success(t('persons.updateSuccess', 'Participant updated successfully'));
+      } else {
+        await createPerson(data);
+        toast.success(t('persons.createSuccess', 'Participant added successfully'));
       }
+      onOpenChange(false);
     },
     [isEditMode, personId, updatePerson, createPerson, t, onOpenChange],
-  ),
+  );
 
   /**
    * Handles form cancel action.
-   * Closes the dialog if not currently submitting.
+   * Closes the dialog.
    */
-   handleCancel = useCallback(() => {
-    if (!isSubmitting) {
-      onOpenChange(false);
-    }
-  }, [isSubmitting, onOpenChange]),
+  const handleCancel = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
 
   /**
    * Handles dialog open state change.
-   * Prevents closing during submission.
    */
-   handleOpenChange = useCallback(
+  const handleOpenChange = useCallback(
     (newOpen: boolean) => {
-      // Prevent closing while submitting
-      if (!newOpen && isSubmitting) {return;}
       onOpenChange(newOpen);
     },
-    [isSubmitting, onOpenChange],
+    [onOpenChange],
   );
 
   // ============================================================================
