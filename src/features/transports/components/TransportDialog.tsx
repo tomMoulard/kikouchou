@@ -13,7 +13,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
+import { useOfflineAwareToast } from '@/hooks';
 
 import {
   Dialog,
@@ -89,6 +89,7 @@ const TransportDialog = memo(function TransportDialog({
   const { t } = useTranslation();
   const { transports, createTransport, updateTransport } = useTransportContext();
   const { persons } = usePersonContext();
+  const { successToast } = useOfflineAwareToast();
 
   // Dirty-state tracking for close guard
   const [isDirty, setIsDirty] = useState(false);
@@ -149,16 +150,16 @@ const TransportDialog = memo(function TransportDialog({
       if (transportId) {
         // Edit mode - update existing transport
         await updateTransport(transportId, data);
-        toast.success(t('transports.updateSuccess', 'Transport updated successfully'));
+        successToast(t('transports.updateSuccess', 'Transport updated successfully'));
       } else {
         // Create mode - create new transport
         await createTransport(data);
-        toast.success(t('transports.createSuccess', 'Transport created successfully'));
+        successToast(t('transports.createSuccess', 'Transport created successfully'));
       }
       // Always close dialog on success, regardless of mount state
       onOpenChange(false);
     },
-    [transportId, updateTransport, createTransport, t, onOpenChange],
+    [transportId, updateTransport, createTransport, t, onOpenChange, successToast],
   );
 
   /**

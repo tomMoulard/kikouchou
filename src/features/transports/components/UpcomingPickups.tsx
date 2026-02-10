@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { format, formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { useOfflineAwareToast } from '@/hooks';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -436,6 +437,7 @@ const UpcomingPickups = memo(function UpcomingPickups({
   const { t, i18n } = useTranslation();
   const { upcomingPickups, updateTransport } = useTransportContext();
   const { persons } = usePersonContext();
+  const { successToast } = useOfflineAwareToast();
 
   // Dialog state
   const [driverDialogOpen, setDriverDialogOpen] = useState(false);
@@ -494,7 +496,7 @@ const UpcomingPickups = memo(function UpcomingPickups({
 
         await updateTransport(transportId, { driverId });
 
-        toast.success(t('pickups.volunteerSuccess'));
+        successToast(t('pickups.volunteerSuccess'));
 
         // Show driver name briefly, then remove from resolving
         setTimeout(() => {
@@ -514,7 +516,7 @@ const UpcomingPickups = memo(function UpcomingPickups({
         });
       }
     },
-    [updateTransport, personsMap, t],
+    [updateTransport, personsMap, t, successToast],
   );
 
   // Check if there are any pickups at all (assigned or unassigned)

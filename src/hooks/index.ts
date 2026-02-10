@@ -26,5 +26,11 @@ export {
   type UseUnsavedChangesReturn,
 } from './useUnsavedChanges';
 
+// Offline-aware toast
+export {
+  useOfflineAwareToast,
+  type UseOfflineAwareToastReturn,
+} from './useOfflineAwareToast';
+
 // Date/time utilities
 export { useToday, getMsUntilMidnight, type UseTodayResult } from './useToday';

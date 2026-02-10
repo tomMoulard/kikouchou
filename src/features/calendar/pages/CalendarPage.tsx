@@ -28,6 +28,7 @@ import {
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { useOfflineAwareToast } from '@/hooks';
 import {
   addMonths,
   eachDayOfInterval,
@@ -97,6 +98,7 @@ import {
 const CalendarPage = memo(function CalendarPage(): ReactElement {
   const { t, i18n } = useTranslation();
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
+  const { successToast } = useOfflineAwareToast();
 
   // Context hooks
   const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
@@ -558,7 +560,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     if (selectedEvent.type === 'assignment') {
       try {
         await deleteAssignment(selectedEvent.assignment.id);
-        toast.success(t('assignments.deleteSuccess', 'Assignment deleted'));
+        successToast(t('assignments.deleteSuccess', 'Assignment deleted'));
       } catch (error) {
         console.error('Failed to delete assignment:', error);
         toast.error(t('errors.deleteFailed', 'Failed to delete'));
@@ -567,14 +569,14 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     } else if (selectedEvent.type === 'transport') {
       try {
         await deleteTransport(selectedEvent.transport.id);
-        toast.success(t('calendar.transportDeleted', 'Transport deleted successfully'));
+        successToast(t('calendar.transportDeleted', 'Transport deleted successfully'));
       } catch (error) {
         console.error('Failed to delete transport:', error);
         toast.error(t('errors.deleteFailed', 'Failed to delete'));
         throw error;
       }
     }
-  }, [selectedEvent, deleteAssignment, deleteTransport, t]);
+  }, [selectedEvent, deleteAssignment, deleteTransport, t, successToast]);
 
   const handleTransportDialogClose = useCallback((open: boolean) => {
     setIsTransportDialogOpen(open);

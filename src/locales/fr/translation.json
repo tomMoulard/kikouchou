@@ -331,7 +331,10 @@
     "installFailed": "L'installation a échoué. Veuillez réessayer.",
     "installPromptRegion": "Invite d'installation de l'application",
     "offline": "Vous êtes hors ligne",
-    "backOnline": "Connexion rétablie"
+    "backOnline": "Connexion rétablie",
+    "savedLocally": "Enregistré sur cet appareil",
+    "offlineDescription": "Vos modifications sont enregistrées localement et l'application fonctionne normalement",
+    "connectionRestored": "Connexion rétablie"
   },
   "dateRangePicker": {
     "placeholder": "Sélectionner une période",

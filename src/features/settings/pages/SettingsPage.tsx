@@ -9,6 +9,7 @@ import { type ReactElement, memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Globe, Info, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useOfflineAwareToast } from '@/hooks';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -56,6 +57,8 @@ const LanguageSelector = memo(function LanguageSelector(): ReactElement {
    handleLanguageChange = useCallback((value: string): void => {
     if (value === 'fr' || value === 'en') {
       void changeLanguage(value);
+      // Language change is stored in localStorage (not IndexedDB),
+      // so use standard toast instead of offline-aware toast
       toast.success(t('settings.languageChanged', 'Language changed'));
     }
   }, [t]);
@@ -136,6 +139,7 @@ const AboutSection = memo(function AboutSection(): ReactElement {
  */
 const DataSection = memo(function DataSection(): ReactElement {
   const { t } = useTranslation(),
+   { successToast: dataSuccessToast } = useOfflineAwareToast(),
    [showClearDialog, setShowClearDialog] = useState(false),
    [isClearing, setIsClearing] = useState(false),
 
@@ -147,7 +151,7 @@ const DataSection = memo(function DataSection(): ReactElement {
       // Recreate it (Dexie will recreate on next access)
       await db.open();
       
-      toast.success(t('settings.dataCleared', 'All data has been cleared'));
+      dataSuccessToast(t('settings.dataCleared', 'All data has been cleared'));
       setShowClearDialog(false);
       
       // Reload the page to reset all state
@@ -158,7 +162,7 @@ const DataSection = memo(function DataSection(): ReactElement {
     } finally {
       setIsClearing(false);
     }
-  }, [t]),
+  }, [t, dataSuccessToast]),
 
    handleOpenChange = useCallback((open: boolean): void => {
     if (!isClearing) {

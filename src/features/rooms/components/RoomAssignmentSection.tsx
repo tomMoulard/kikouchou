@@ -17,7 +17,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useFormSubmission } from '@/hooks';
+import { useFormSubmission, useOfflineAwareToast } from '@/hooks';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { format, isValid, parseISO } from 'date-fns';
@@ -735,6 +735,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
   onAssignmentChange,
 }: RoomAssignmentSectionProps): ReactElement {
   const { t, i18n } = useTranslation();
+  const { successToast } = useOfflineAwareToast();
   const { currentTrip } = useTripContext();
   const { persons, isLoading: isPersonsLoading, getPersonById } = usePersonContext();
   const { rooms } = useRoomContext();
@@ -883,10 +884,10 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
       try {
         if (editingAssignment) {
           await updateAssignment(editingAssignment.id, data);
-          toast.success(t('assignments.updateSuccess'));
+          successToast(t('assignments.updateSuccess'));
         } else {
           await createAssignment(data);
-          toast.success(t('assignments.createSuccess'));
+          successToast(t('assignments.createSuccess'));
         }
 
         if (isMountedRef.current) {
@@ -901,7 +902,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
         }
       }
     },
-    [editingAssignment, updateAssignment, createAssignment, onAssignmentChange, t],
+    [editingAssignment, updateAssignment, createAssignment, onAssignmentChange, t, successToast],
   );
 
   /**
@@ -915,7 +916,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
 
     try {
       await deleteAssignment(deletingAssignment.id);
-      toast.success(t('assignments.deleteSuccess'));
+      successToast(t('assignments.deleteSuccess'));
 
       if (isMountedRef.current) {
         setDeletingAssignment(undefined);
@@ -930,7 +931,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
         setIsOperationPending(false);
       }
     }
-  }, [deletingAssignment, deleteAssignment, onAssignmentChange, t]);
+  }, [deletingAssignment, deleteAssignment, onAssignmentChange, t, successToast]);
 
   /**
    * Closes the delete confirmation dialog.

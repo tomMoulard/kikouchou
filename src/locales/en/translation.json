@@ -331,7 +331,10 @@
     "installFailed": "Installation failed. Please try again.",
     "installPromptRegion": "App installation prompt",
     "offline": "You are offline",
-    "backOnline": "Back online"
+    "backOnline": "Back online",
+    "savedLocally": "Saved on this device",
+    "offlineDescription": "Your changes are saved locally and the app works normally",
+    "connectionRestored": "Connection restored"
   },
   "dateRangePicker": {
     "placeholder": "Select date range",

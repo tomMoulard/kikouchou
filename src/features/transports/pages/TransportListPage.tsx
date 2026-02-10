@@ -30,6 +30,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { useOfflineAwareToast } from '@/hooks';
 import { format, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
 import {
@@ -726,6 +727,8 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
 
   // Context hooks
+   { successToast } = useOfflineAwareToast(),
+
    { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
    { persons, isLoading: isPersonsLoading } = usePersonContext(),
    {
@@ -850,14 +853,14 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     try {
       await deleteTransport(transportToDelete);
       setTransportToDelete(null);
-      toast.success(t('transports.deleteSuccess', 'Transport deleted successfully'));
+      successToast(t('transports.deleteSuccess', 'Transport deleted successfully'));
     } catch (error) {
       // Log for debugging, show user-friendly error via toast
       console.error('Failed to delete transport:', error);
       toast.error(t('errors.deleteFailed', 'Failed to delete'));
       throw error; // Re-throw to keep dialog open for retry
     }
-  }, [transportToDelete, deleteTransport, t]),
+  }, [transportToDelete, deleteTransport, t, successToast]),
 
   /**
    * Closes delete confirmation dialog.

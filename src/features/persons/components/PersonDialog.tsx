@@ -14,7 +14,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
+import { useOfflineAwareToast } from '@/hooks';
 
 import {
   Dialog,
@@ -83,6 +83,7 @@ const PersonDialog = memo(function PersonDialog({
 }: PersonDialogProps) {
   const { t } = useTranslation();
   const { persons, createPerson, updatePerson } = usePersonContext();
+  const { successToast } = useOfflineAwareToast();
 
   // Dirty-state tracking for close guard
   const [isDirty, setIsDirty] = useState(false);
@@ -141,14 +142,14 @@ const PersonDialog = memo(function PersonDialog({
     async (data: PersonFormData) => {
       if (isEditMode && personId) {
         await updatePerson(personId, data);
-        toast.success(t('persons.updateSuccess', 'Participant updated successfully'));
+        successToast(t('persons.updateSuccess', 'Participant updated successfully'));
       } else {
         await createPerson(data);
-        toast.success(t('persons.createSuccess', 'Participant added successfully'));
+        successToast(t('persons.createSuccess', 'Participant added successfully'));
       }
       onOpenChange(false);
     },
-    [isEditMode, personId, updatePerson, createPerson, t, onOpenChange],
+    [isEditMode, personId, updatePerson, createPerson, t, onOpenChange, successToast],
   );
 
   /**

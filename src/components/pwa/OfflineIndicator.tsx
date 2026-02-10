@@ -1,6 +1,8 @@
 /**
  * @fileoverview Offline Indicator component.
- * Displays a subtle banner when the app is offline.
+ * Displays a non-intrusive banner below the header when the app is offline.
+ * Uses warm amber styling (not destructive red) to reassure users at rural
+ * vacation houses that offline is expected and the app works normally.
  *
  * @module components/pwa/OfflineIndicator
  */
@@ -9,7 +11,6 @@ import { type ReactElement, memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, WifiOff } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { cn } from '@/lib/utils';
 
@@ -33,12 +34,13 @@ export interface OfflineIndicatorProps {
  * Offline Indicator component.
  *
  * Features:
- * - Displays a subtle banner at the top of the screen when offline
- * - Shows "back online" message briefly when connectivity is restored
- * - Non-intrusive fixed positioning that doesn't block interaction
- * - Smooth enter/exit animations
+ * - Displays a warm amber banner below the header when offline
+ * - Shows reassuring "back online" message briefly when connectivity is restored
+ * - Positioned at top-14 to clear the 56px sticky header
+ * - Non-intrusive — does NOT block any interactive elements
+ * - Smooth enter/exit animations with motion-safe prefix (NFR12)
  * - Fully accessible with ARIA live region for screen readers
- * - Automatic dismissal when back online
+ * - Automatic dismissal when back online after brief confirmation
  *
  * @param props - Component props
  * @returns The offline indicator element or null if online
@@ -66,10 +68,12 @@ function OfflineIndicatorComponent({
   // State
   // ============================================================================
 
-  /**
-   * Whether the indicator is visible (for enter/exit animations).
-   */
-   [isVisible, setIsVisible] = useState(false);
+   /**
+    * Whether the indicator is visible (for enter/exit animations).
+    * Initialize based on current online status to avoid a brief flash
+    * where the indicator is absent on the first render when offline.
+    */
+   [isVisible, setIsVisible] = useState(!isOnline || hasRecentlyChanged);
 
 
 
@@ -104,38 +108,63 @@ function OfflineIndicatorComponent({
   return (
     <div
       className={cn(
-        'fixed top-0 inset-x-0 z-50 flex justify-center p-2',
-        // Animation classes
-        'transition-transform duration-300 ease-out',
-        isVisible ? 'translate-y-0' : '-translate-y-full',
+        // Position below the sticky header (h-14 = 56px) to avoid overlap
+        'fixed top-14 inset-x-0 z-50 flex justify-center px-4 py-2',
+        // Animation classes — motion-safe prefix for NFR12 compliance
+        'motion-safe:transition-all motion-safe:duration-300 motion-safe:ease-out',
+        isVisible
+          ? 'translate-y-0 opacity-100'
+          : '-translate-y-full opacity-0',
         className,
       )}
       role="status"
       aria-live="polite"
       aria-atomic="true"
     >
-      <Badge
-        variant={isOffline ? 'destructive' : 'default'}
+      <div
         className={cn(
-          'flex items-center gap-2 px-3 py-1.5 text-sm font-medium shadow-lg',
-          // Smooth color transition
-          'transition-colors duration-300',
-          // "Back online" variant styling
-          !isOffline && 'bg-green-600 hover:bg-green-600 text-white',
+          'flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shadow-lg',
+          // Smooth color transition with motion-safe prefix
+          'motion-safe:transition-colors motion-safe:duration-300',
+          isOffline
+            ? // Warm amber styling — offline is NOT an error, it's expected
+              'bg-amber-50 text-amber-900 border border-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:border-amber-800'
+            : // Green "back online" styling with smooth appearance
+              'bg-green-50 text-green-900 border border-green-200 dark:bg-green-950 dark:text-green-100 dark:border-green-800',
         )}
       >
         {isOffline ? (
           <>
-            <WifiOff className="size-4" aria-hidden="true" />
-            <span>{t('pwa.offline', 'You are offline')}</span>
+            <WifiOff
+              className={cn(
+                'size-4 shrink-0 text-amber-600 dark:text-amber-400',
+                // Subtle pulse animation for gentle attention
+                'motion-safe:animate-pulse',
+              )}
+              aria-hidden="true"
+            />
+            <div className="flex flex-col">
+              <span>{t('pwa.offline', 'You are offline')}</span>
+              <span className="text-xs font-normal text-amber-700 dark:text-amber-300">
+                {t(
+                  'pwa.offlineDescription',
+                  'Your changes are saved locally and the app works normally',
+                )}
+              </span>
+            </div>
           </>
         ) : (
           <>
-            <CheckCircle2 className="size-4" aria-hidden="true" />
-            <span>{t('pwa.backOnline', 'Back online')}</span>
+            <CheckCircle2
+              className="size-4 shrink-0 text-green-600 dark:text-green-400"
+              aria-hidden="true"
+            />
+            <span>
+              {t('pwa.connectionRestored', 'Connection restored')}
+            </span>
           </>
         )}
-      </Badge>
+      </div>
     </div>
   );
 }

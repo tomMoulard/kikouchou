@@ -28,6 +28,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { useOfflineAwareToast } from '@/hooks';
 import { format, parseISO, eachDayOfInterval } from 'date-fns';
 import { type Locale, enUS, fr } from 'date-fns/locale';
 import { AlertTriangle, CheckCircle, DoorOpen, GripVertical, Plus } from 'lucide-react';
@@ -255,6 +256,8 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
 
   // Context hooks
+   { successToast } = useOfflineAwareToast(),
+
    { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
    {
     rooms,
@@ -464,14 +467,14 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     async (room: Room) => {
       try {
         await deleteRoom(room.id);
-        toast.success(t('rooms.deleteSuccess', 'Room deleted successfully'));
+        successToast(t('rooms.deleteSuccess', 'Room deleted successfully'));
       } catch (error) {
         console.error('Failed to delete room:', error);
         toast.error(t('errors.deleteFailed', 'Failed to delete room'));
         throw error; // Re-throw to keep ConfirmDialog open for retry
       }
     },
-    [deleteRoom, t],
+    [deleteRoom, t, successToast],
   ),
 
   /**

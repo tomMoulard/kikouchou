@@ -13,7 +13,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
+import { useOfflineAwareToast } from '@/hooks';
 
 import {
   Dialog,
@@ -82,6 +82,7 @@ const RoomDialog = memo(function RoomDialog({
 }: RoomDialogProps) {
   const { t } = useTranslation();
   const { rooms, createRoom, updateRoom } = useRoomContext();
+  const { successToast } = useOfflineAwareToast();
 
   // Dirty-state tracking for close guard
   const [isDirty, setIsDirty] = useState(false);
@@ -140,14 +141,14 @@ const RoomDialog = memo(function RoomDialog({
     async (data: RoomFormData) => {
       if (isEditMode && roomId) {
         await updateRoom(roomId, data);
-        toast.success(t('rooms.updateSuccess', 'Room updated successfully'));
+        successToast(t('rooms.updateSuccess', 'Room updated successfully'));
       } else {
         await createRoom(data);
-        toast.success(t('rooms.createSuccess', 'Room created successfully'));
+        successToast(t('rooms.createSuccess', 'Room created successfully'));
       }
       onOpenChange(false);
     },
-    [isEditMode, roomId, updateRoom, createRoom, t, onOpenChange],
+    [isEditMode, roomId, updateRoom, createRoom, t, onOpenChange, successToast],
   );
 
   /**
