@@ -58,7 +58,7 @@ export interface OfflineIndicatorProps {
  * }
  * ```
  */
-function OfflineIndicatorComponent({
+export const OfflineIndicator = memo(function OfflineIndicator({
   className,
 }: OfflineIndicatorProps): ReactElement | null {
   const { t } = useTranslation(),
@@ -167,14 +167,4 @@ function OfflineIndicatorComponent({
       </div>
     </div>
   );
-}
-
-// ============================================================================
-// Exports
-// ============================================================================
-
-/**
- * Memoized Offline Indicator component.
- */
-export const OfflineIndicator = memo(OfflineIndicatorComponent);
-OfflineIndicator.displayName = 'OfflineIndicator';
+});

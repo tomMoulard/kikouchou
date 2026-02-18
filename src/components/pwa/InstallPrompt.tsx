@@ -120,7 +120,7 @@ function storeDismissal(): void {
  * }
  * ```
  */
-function InstallPromptComponent({
+export const InstallPrompt = memo(function InstallPrompt({
   className,
 }: InstallPromptProps): ReactElement | null {
   const { t } = useTranslation(),
@@ -317,15 +317,4 @@ function InstallPromptComponent({
       </Card>
     </div>
   );
-}
-
-// ============================================================================
-// Exports
-// ============================================================================
-
-/**
- * Memoized Install Prompt component.
- */
-export const InstallPrompt = memo(InstallPromptComponent);
-
-InstallPrompt.displayName = 'InstallPrompt';
+});

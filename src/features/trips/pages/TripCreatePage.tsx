@@ -40,7 +40,7 @@ import type { TripFormData } from '@/types';
  * <Route path="/trips/new" element={<TripCreatePage />} />
  * ```
  */
-function TripCreatePageComponent(): ReactElement {
+export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
@@ -122,14 +122,4 @@ function TripCreatePageComponent(): ReactElement {
       <UnsavedChangesDialog open={isBlocked} onStay={reset} onLeave={proceed} />
     </div>
   );
-}
-
-// ============================================================================
-// Exports
-// ============================================================================
-
-/**
- * Memoized Trip Create Page component.
- */
-export const TripCreatePage = memo(TripCreatePageComponent);
-TripCreatePage.displayName = 'TripCreatePage';
+});

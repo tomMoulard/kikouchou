@@ -151,13 +151,13 @@ function buildNavPath(item: NavItem, tripId: string | null): string {
  * Header component displaying the app name and current trip.
  * Memoized to prevent unnecessary re-renders on route changes.
  */
-const Header = memo(({
+const Header = memo(function Header({
   tripName,
   onMenuClick,
 }: {
   readonly tripName: string | null;
   readonly onMenuClick?: () => void;
-}): React.ReactElement => {
+}): React.ReactElement {
   const { t } = useTranslation();
 
   return (
@@ -186,7 +186,7 @@ const Header = memo(({
       </span>
     </header>
   );
-}),
+});
 
 /**
  * Mobile bottom navigation bar.
@@ -194,7 +194,7 @@ const Header = memo(({
  * Shows 3 primary items + a "More" button that opens a bottom sheet.
  * Memoized to prevent unnecessary re-renders on route changes.
  */
- MobileNav = memo(({ tripId }: NavProps): React.ReactElement => {
+const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElement {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -324,9 +324,6 @@ const Header = memo(({
   );
 });
 
-Header.displayName = 'Header';
-MobileNav.displayName = 'MobileNav';
-
 /**
  * Formats date range for display.
  * @param startDate - Start date in ISO format
@@ -344,13 +341,13 @@ function formatDateRange(startDate: string, endDate: string): string {
 /**
  * Trip info section displayed in the sidebar when a trip is selected.
  */
-const TripInfoSection = memo(({
+const TripInfoSection = memo(function TripInfoSection({
   trip,
   isCollapsed,
 }: {
   readonly trip: Trip;
   readonly isCollapsed: boolean;
-}): React.ReactElement => {
+}): React.ReactElement {
   const dateRange = useMemo(
     () => formatDateRange(trip.startDate, trip.endDate),
     [trip.startDate, trip.endDate],
@@ -392,12 +389,10 @@ const TripInfoSection = memo(({
   );
 });
 
-TripInfoSection.displayName = 'TripInfoSection';
-
 /**
  * Renders a navigation link item.
  */
-const NavLinkItem = memo(({
+const NavLinkItem = memo(function NavLinkItem({
   item,
   tripId,
   isCollapsed,
@@ -405,7 +400,7 @@ const NavLinkItem = memo(({
   readonly item: NavItem;
   readonly tripId: string | null;
   readonly isCollapsed: boolean;
-}): React.ReactElement => {
+}): React.ReactElement {
   const { t } = useTranslation();
   const path = buildNavPath(item, tripId);
   const isDisabled = item.requiresTrip && !tripId;
@@ -440,8 +435,6 @@ const NavLinkItem = memo(({
   );
 });
 
-NavLinkItem.displayName = 'NavLinkItem';
-
 /**
  * Desktop sidebar navigation.
  * Shows conditional content based on whether a trip is selected:
@@ -450,7 +443,7 @@ NavLinkItem.displayName = 'NavLinkItem';
  * 
  * Memoized to prevent unnecessary re-renders on route changes.
  */
-const DesktopSidebar = memo(({
+const DesktopSidebar = memo(function DesktopSidebar({
   isCollapsed,
   onToggle,
   tripId,
@@ -460,7 +453,7 @@ const DesktopSidebar = memo(({
   readonly onToggle: () => void;
   readonly tripId: string | null;
   readonly trip: Trip | null;
-}): React.ReactElement => {
+}): React.ReactElement {
   const { t } = useTranslation();
 
   return (
@@ -546,8 +539,6 @@ const DesktopSidebar = memo(({
     </aside>
   );
 });
-
-DesktopSidebar.displayName = 'DesktopSidebar';
 
 // ============================================================================
 // Main Component

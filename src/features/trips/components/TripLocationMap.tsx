@@ -74,7 +74,7 @@ export const TripLocationMap = memo(function TripLocationMap({
   coordinates,
   className,
   previewHeight = DEFAULT_PREVIEW_HEIGHT,
-}: TripLocationMapProps) {
+}: TripLocationMapProps): React.ReactElement {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -204,5 +204,3 @@ export const TripLocationMap = memo(function TripLocationMap({
     </>
   );
 });
-
-TripLocationMap.displayName = 'TripLocationMap';

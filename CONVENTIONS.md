@@ -79,22 +79,19 @@ Use `memo()` for components that:
 - Are rendered in lists
 - Perform expensive rendering operations
 
+**Preferred pattern:** Use a named function inside `memo()` to get automatic `displayName`:
+
 ```typescript
+// Good - named function inside memo (preferred)
+export const TripCard = memo(function TripCard({ trip, onSelect }: TripCardProps) {
+  // Component implementation
+});
+
+// Also acceptable - arrow function with explicit displayName
 const TripCard = memo(({ trip, onSelect }: TripCardProps) => {
   // Component implementation
 });
-```
-
-### displayName Assignment
-
-Always assign `displayName` to memoized components for better debugging:
-
-```typescript
-const TripForm = memo(({ trip, onSubmit, onCancel }: TripFormProps) => {
-  // Component implementation
-});
-
-TripForm.displayName = 'TripForm';
+TripCard.displayName = 'TripCard';
 ```
 
 ### Props Interface Naming
@@ -139,19 +136,43 @@ const SOME_CONSTANT = 'value';
 // Component
 // ============================================================================
 
-const Component = memo(({ ... }: ComponentProps) => {
+export const Component = memo(function Component({ ... }: ComponentProps) {
   // Implementation
 });
-
-Component.displayName = 'Component';
 
 // ============================================================================
 // Exports
 // ============================================================================
 
-export { Component };
 export type { ComponentProps };
 ```
+
+---
+
+## Variable Declarations
+
+### `const` Declaration Style
+
+- For multi-variable destructuring from a single source (like a hook), use a chained declaration on one line if it's short, or multi-line if it's long.
+
+  ```typescript
+  const { t, i18n } = useTranslation();
+  
+  const {
+    trips,
+    isLoading,
+    error,
+    setCurrentTrip,
+    checkConnection,
+   } = useTripContext();
+  ```
+
+- For single variable assignments, use separate `const` statements.
+
+  ```typescript
+  const navigate = useNavigate();
+  const someValue = computeSomething();
+  ```
 
 ---
 
@@ -210,7 +231,7 @@ function TripList() {
 Use `useCallback` for event handlers and `useMemo` for computed values to prevent unnecessary re-renders:
 
 ```typescript
-const Component = memo(({ onSave }: Props) => {
+const Component = memo(function Component({ onSave }: Props) {
   const [data, setData] = useState(initialData);
 
   // Stable callback reference
@@ -423,6 +444,35 @@ export interface TripFormData {
   description?: string;
 }
 ```
+
+---
+
+## Security
+
+### ShareId Security and Threat Model
+
+The `shareId` system provides URL-based access to trip data without authentication.
+
+**Architecture:**
+- `shareId` is generated using `nanoid(10)` providing ~59 bits of entropy
+- Collision detection with `MAX_ID_RETRIES=3` and unique Dexie index `&shareId`
+- Efficient lookup via `getTripByShareId()` repository function
+
+**Threat Model:**
+- **Primary Risk:** Unauthorized access via ID guessing or enumeration
+- **Mitigation:** Cryptographically random IDs make brute-force computationally infeasible
+- **URL Leak Vectors:** Browser history, referrer headers, server logs (mitigated by static hosting)
+- **Scope:** Read-only access; no modification or deletion capability via share URLs
+
+**Accepted Risk (MVP):**
+For the current offline-first, static-hosted application without user authentication, this level of security is acceptable. The data is not considered highly sensitive, and the convenience of easy sharing outweighs the low risk of a data breach via ID guessing.
+
+**Future Options:**
+1. **Authenticated Sharing:** Require user authentication and explicit permission grants
+2. **Short-lived URLs:** Generate share links that expire after a configurable time
+3. **Password Protection:** Require a password to view a shared trip
+4. **Revocation:** Allow trip owners to invalidate existing share links
+5. **Longer IDs:** Increase `nanoid` length for additional entropy (breaking change)
 
 ---
 

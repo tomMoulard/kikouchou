@@ -5,224 +5,26 @@
  * @module features/trips/pages/TripListPage
  */
 
-import { type KeyboardEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { type Locale, format, parseISO } from 'date-fns';
-import { enUS, fr } from 'date-fns/locale';
-import { Calendar, Luggage, MapPin, Plus, Users } from 'lucide-react';
+import { Luggage, Plus } from 'lucide-react';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/db/database';
 import type { Person, Trip, TripId } from '@/types';
-
-// ============================================================================
-// Type Definitions
-// ============================================================================
-
-/** Maximum number of person badges to show before "+N more" */
-const MAX_VISIBLE_PERSONS = 4;
-
-/**
- * Props for the TripCard component.
- */
-interface TripCardProps {
-  /** The trip to display */
-  readonly trip: Trip;
-  /** Persons attending this trip */
-  readonly persons: readonly Person[];
-  /** Callback when the trip is selected */
-  readonly onSelect: (trip: Trip) => void;
-  /** Whether the card interaction is currently disabled */
-  readonly isDisabled?: boolean;
-  /** Date-fns locale for date formatting */
-  readonly locale: Locale;
-}
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Formats a date range for display.
- * Handles same month and different month cases for cleaner output.
- *
- * @param startDate - Start date in ISO format (YYYY-MM-DD)
- * @param endDate - End date in ISO format (YYYY-MM-DD)
- * @param locale - date-fns locale object
- * @returns Formatted date range string
- *
- * @example
- * // Same month
- * formatDateRange('2024-07-15', '2024-07-22', fr) // "15 - 22 juil. 2024"
- *
- * // Different months
- * formatDateRange('2024-07-28', '2024-08-05', fr) // "28 juil. - 5 août 2024"
- */
-function formatDateRange(
-  startDate: string,
-  endDate: string,
-  locale: Locale,
-): string {
-  try {
-    const start = parseISO(startDate),
-     end = parseISO(endDate),
-
-    // Check if dates are in the same month and year
-     sameMonth =
-      start.getMonth() === end.getMonth() &&
-      start.getFullYear() === end.getFullYear();
-
-    if (sameMonth) {
-      // Same month: "15 - 22 juil. 2024"
-      return `${format(start, 'd', { locale })} - ${format(end, 'd MMM yyyy', { locale })}`;
-    }
-
-    // Different months: "28 juil. - 5 août 2024"
-    return `${format(start, 'd MMM', { locale })} - ${format(end, 'd MMM yyyy', { locale })}`;
-  } catch {
-    // Fallback to raw ISO strings if parsing fails
-    return `${startDate} - ${endDate}`;
-  }
-}
-
-/**
- * Gets the date-fns locale based on a language code.
- */
-function getDateLocale(lang: string): Locale {
-  return lang === 'fr' ? fr : enUS;
-}
-
-// ============================================================================
-// TripCard Component
-// ============================================================================
-
-/**
- * Individual trip card component displaying trip information.
- * Supports click and keyboard interaction for accessibility.
- */
-const TripCard = memo(function TripCard({
-  trip,
-  persons,
-  onSelect,
-  isDisabled = false,
-  locale,
-}: TripCardProps) {
-  const { t } = useTranslation(),
-   dateRange = useMemo(
-    () => formatDateRange(trip.startDate, trip.endDate, locale),
-    [trip.startDate, trip.endDate, locale],
-  ),
-
-  // Persons to show vs overflow count
-   visiblePersons = useMemo(
-    () => persons.slice(0, MAX_VISIBLE_PERSONS),
-    [persons],
-  ),
-   overflowCount = useMemo(
-    () => Math.max(0, persons.length - MAX_VISIBLE_PERSONS),
-    [persons],
-  ),
-
-  // Handle keyboard activation (Enter or Space)
-   handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (isDisabled) {return;}
-
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        onSelect(trip);
-      }
-    },
-    [trip, onSelect, isDisabled],
-  ),
-
-  // Handle click
-   handleClick = useCallback(() => {
-    if (isDisabled) {return;}
-    onSelect(trip);
-  }, [trip, onSelect, isDisabled]);
-
-  return (
-    <Card
-      role="button"
-      tabIndex={isDisabled ? -1 : 0}
-      aria-label={`${trip.name}${trip.location ? `, ${trip.location}` : ''}, ${dateRange}`}
-      aria-disabled={isDisabled}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      className={cn(
-        'cursor-pointer transition-all duration-200',
-        'hover:shadow-md hover:border-primary/20',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        isDisabled && 'opacity-50 cursor-not-allowed',
-      )}
-    >
-      <CardHeader className="pb-2">
-        <CardTitle
-          className="text-lg truncate"
-          title={trip.name}
-        >
-          {trip.name}
-        </CardTitle>
-        {trip.location && (
-          <CardDescription className="flex items-center gap-1.5 truncate">
-            <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
-            <span className="truncate" title={trip.location}>
-              {trip.location}
-            </span>
-          </CardDescription>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {/* Date range */}
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Calendar className="size-4 shrink-0" aria-hidden="true" />
-          <span>{dateRange}</span>
-        </div>
-
-        {/* Attendees */}
-        <div className="flex items-center gap-1.5">
-          <Users className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          {persons.length === 0 ? (
-            <span className="text-sm text-muted-foreground italic">
-              {t('trips.noGuests', 'No guests yet')}
-            </span>
-          ) : (
-            <div className="flex flex-wrap gap-1">
-              {visiblePersons.map((person) => (
-                <PersonBadge key={person.id} person={person} size="sm" />
-              ))}
-              {overflowCount > 0 && (
-                <span className="text-xs text-muted-foreground px-1.5 py-0.5 bg-muted rounded-full">
-                  +{overflowCount}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-});
+import { TripCard } from '../components/TripCard';
 
 // ============================================================================
 // TripListPage Component
 // ============================================================================
+
 
 /**
  * Main trip list page component.
@@ -235,21 +37,20 @@ const TripCard = memo(function TripCard({
  * ```
  */
 const TripListPage = memo(function TripListPage() {
-  const { t, i18n } = useTranslation(),
-   navigate = useNavigate(),
-   { trips, isLoading, error, setCurrentTrip, checkConnection } =
-    useTripContext(),
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { trips, isLoading, error, setCurrentTrip, checkConnection } =
+    useTripContext();
 
   // Track if we're currently navigating to prevent double-clicks
   // Using ref for guard check to avoid stale closure issues
-   isNavigatingRef = useRef(false),
-   [isNavigating, setIsNavigating] = useState(false),
+  const isNavigatingRef = useRef(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // Persons per trip (map of tripId -> persons)
-   [personsByTrip, setPersonsByTrip] = useState<Map<TripId, Person[]>>(new Map()),
-
-  // Get locale based on current language, reactive to language changes
-   locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+  const [personsByTrip, setPersonsByTrip] = useState<Map<TripId, Person[]>>(
+    new Map(),
+  );
 
   // Fetch persons for all trips when trips change
   // Uses batch query for O(1) instead of O(n) queries (PERF-1 fix)
@@ -267,7 +68,7 @@ const TripListPage = memo(function TripListPage() {
 
       try {
         // Use batch query instead of N+1 individual queries (PERF-1 fix)
-        const allTripIds = trips.map(t => t.id);
+        const allTripIds = trips.map((t) => t.id);
         const allPersons = await db.persons
           .where('tripId')
           .anyOf(allTripIds)
@@ -308,15 +109,12 @@ const TripListPage = memo(function TripListPage() {
     };
   }, [trips]);
 
-  const
-
-  /**
-   * Handles trip selection: sets current trip and navigates to calendar.
-   */
-   handleTripSelect = useCallback(
+  const handleTripSelect = useCallback(
     async (trip: Trip) => {
       // Use ref for guard to prevent stale closure issues
-      if (isNavigatingRef.current) {return;}
+      if (isNavigatingRef.current) {
+        return;
+      }
 
       isNavigatingRef.current = true;
       setIsNavigating(true);
@@ -333,28 +131,20 @@ const TripListPage = memo(function TripListPage() {
       }
     },
     [setCurrentTrip, navigate],
-  ),
+  );
 
-  /**
-   * Handles create button click - navigates to trip creation form.
-   */
-   handleCreateClick = useCallback(() => {
+  const handleCreateClick = useCallback(() => {
     navigate('/trips/new');
-  }, [navigate]),
+  }, [navigate]);
 
-  /**
-   * Handles retry when there's an error.
-   */
-   handleRetry = useCallback(async () => {
+  const handleRetry = useCallback(async () => {
     try {
       await checkConnection();
     } catch {
       // Error is captured in context
     }
-  }, [checkConnection]),
-
-  // Create button for header action (desktop)
-   headerAction = useMemo(
+  }, [checkConnection]);
+  const headerAction = useMemo(
     () => (
       <Button onClick={handleCreateClick} className="hidden sm:flex">
         <Plus className="size-4 mr-2" aria-hidden="true" />
@@ -439,9 +229,8 @@ const TripListPage = memo(function TripListPage() {
             <TripCard
               trip={trip}
               persons={personsByTrip.get(trip.id) ?? []}
-              onSelect={handleTripSelect}
+              onClick={handleTripSelect}
               isDisabled={isNavigating}
-              locale={locale}
             />
           </div>
         ))}
@@ -470,4 +259,5 @@ const TripListPage = memo(function TripListPage() {
 // ============================================================================
 
 export { TripListPage };
-export default TripListPage;
+
+

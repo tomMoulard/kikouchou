@@ -17,7 +17,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { type Locale, format, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
-import { Calendar, MapPin, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Calendar, MapPin, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
 
 // Lazy load the map component for performance
 const TripLocationMap = lazy(() =>
@@ -41,11 +41,14 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { Trip } from '@/types';
+import type { Person, Trip } from '@/types';
+import { PersonBadge } from '@/components/shared/PersonBadge';
 
 // ============================================================================
 // Utility Functions
 // ============================================================================
+const MAX_VISIBLE_PERSONS = 4;
+
 
 /**
  * Gets the date-fns locale object for the given language code.
@@ -124,13 +127,14 @@ interface TripCardProps {
   /** The trip to display */
   readonly trip: Trip;
   /** Callback when the card is clicked (not the menu) */
-  readonly onClick: () => void;
+  readonly onClick: (trip: Trip) => void;
   /** Callback when Edit is selected from the menu */
-  readonly onEdit: () => void;
+  readonly onEdit?: () => void;
   /** Callback when Delete is selected from the menu */
-  readonly onDelete: () => void;
-  /** Whether the card interaction is currently disabled */
+  readonly onDelete?: () => void;
+  /** Whether the card interaction is currently disabled    */
   readonly isDisabled?: boolean;
+  readonly persons: readonly Person[];
 }
 
 // ============================================================================
@@ -166,17 +170,27 @@ const TripCard = memo(function TripCard({
   onEdit,
   onDelete,
   isDisabled = false,
+  persons,
 }: TripCardProps) {
   const { t, i18n } = useTranslation(),
 
   // Get locale based on current language
    locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
+   visiblePersons = useMemo(
+    () => persons.slice(0, MAX_VISIBLE_PERSONS),
+    [persons],
+  ),
+   overflowCount = useMemo(
+    () => Math.max(0, persons.length - MAX_VISIBLE_PERSONS),
+    [persons],
+  ),
 
   // Format the date range
    dateRange = useMemo(
     () => formatDateRange(trip.startDate, trip.endDate, locale),
     [trip.startDate, trip.endDate, locale],
   ),
+
 
   // Build aria-label for screen readers
    ariaLabel = useMemo(() => {
@@ -197,8 +211,8 @@ const TripCard = memo(function TripCard({
    */
    handleCardClick = useCallback(() => {
     if (isDisabled) {return;}
-    onClick();
-  }, [onClick, isDisabled]),
+    onClick(trip);
+  }, [onClick, isDisabled, trip]),
 
   /**
    * Handles keyboard activation (Enter or Space) on the card.
@@ -209,10 +223,10 @@ const TripCard = memo(function TripCard({
 
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        onClick();
+        onClick(trip);
       }
     },
-    [onClick, isDisabled],
+    [onClick, isDisabled, trip],
   ),
 
   /**
@@ -226,14 +240,14 @@ const TripCard = memo(function TripCard({
    * Handles Edit menu item click.
    */
    handleEditClick = useCallback(() => {
-    onEdit();
+    onEdit?.();
   }, [onEdit]),
 
   /**
    * Handles Delete menu item click.
    */
    handleDeleteClick = useCallback(() => {
-    onDelete();
+    onDelete?.();
   }, [onDelete]);
 
   // ============================================================================
@@ -261,6 +275,7 @@ const TripCard = memo(function TripCard({
         onClick={handleMenuTriggerClick}
         onKeyDown={(e) => e.stopPropagation()}
       >
+        {onEdit && onDelete && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -284,6 +299,7 @@ const TripCard = memo(function TripCard({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
       </div>
 
       {/* Card Content */}
@@ -304,6 +320,27 @@ const TripCard = memo(function TripCard({
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Calendar className="size-4 shrink-0" aria-hidden="true" />
           <span>{dateRange}</span>
+        </div>
+
+        {/* Attendees */}
+        <div className="flex items-center gap-1.5">
+          <Users className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          {persons.length === 0 ? (
+            <span className="text-sm text-muted-foreground italic">
+              {t('trips.noGuests', 'No guests yet')}
+            </span>
+          ) : (
+            <div className="flex flex-wrap gap-1">
+              {visiblePersons.map((person) => (
+                <PersonBadge key={person.id} person={person} size="sm" />
+              ))}
+              {overflowCount > 0 && (
+                <span className="text-xs text-muted-foreground px-1.5 py-0.5 bg-muted rounded-full">
+                  +{overflowCount}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Map Preview - only shown when coordinates are available */}
