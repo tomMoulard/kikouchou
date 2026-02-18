@@ -268,7 +268,10 @@ describe('MapMarker Types', () => {
 // ============================================================================
 
 describe('MapMarker Memoization', () => {
-  it('has displayName set', () => {
-    expect(MapMarker.displayName).toBe('MapMarker');
+  it('is wrapped in memo', () => {
+    // memo() returns a MemoExoticComponent, which has $$typeof symbol
+    // Named function inside memo provides DevTools debugging support
+    expect(typeof MapMarker).toBe('object');
+    expect(MapMarker.$$typeof).toBeDefined();
   });
 });

@@ -87,6 +87,7 @@ describe('TripCard Basic Rendering', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -101,6 +102,7 @@ describe('TripCard Basic Rendering', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -115,6 +117,7 @@ describe('TripCard Basic Rendering', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -130,6 +133,7 @@ describe('TripCard Basic Rendering', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -144,6 +148,7 @@ describe('TripCard Basic Rendering', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -158,6 +163,7 @@ describe('TripCard Basic Rendering', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -183,6 +189,7 @@ describe('TripCard Click Handlers', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={onClick}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -203,6 +210,7 @@ describe('TripCard Click Handlers', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={onClick}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -224,6 +232,7 @@ describe('TripCard Click Handlers', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={onClick}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -245,6 +254,7 @@ describe('TripCard Click Handlers', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={onClick}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -269,6 +279,7 @@ describe('TripCard Menu', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -285,6 +296,7 @@ describe('TripCard Menu', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -302,12 +314,13 @@ describe('TripCard Menu', () => {
 
   it('calls onEdit when Edit menu item is clicked', async () => {
     const user = userEvent.setup();
-    const onEdit = vi.fn();
+const onEdit = vi.fn();
     const trip = createTestTrip();
 
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={onEdit}
         onDelete={vi.fn()}
@@ -325,12 +338,13 @@ describe('TripCard Menu', () => {
 
   it('calls onDelete when Delete menu item is clicked', async () => {
     const user = userEvent.setup();
-    const onDelete = vi.fn();
+const onDelete = vi.fn();
     const trip = createTestTrip();
 
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={onDelete}
@@ -354,6 +368,7 @@ describe('TripCard Menu', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={onClick}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -377,6 +392,7 @@ describe('TripCard Disabled State', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -393,6 +409,7 @@ describe('TripCard Disabled State', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -409,6 +426,7 @@ describe('TripCard Disabled State', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -425,6 +443,7 @@ describe('TripCard Disabled State', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -460,6 +479,7 @@ describe('TripCard Map Preview', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -478,6 +498,7 @@ describe('TripCard Map Preview', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -502,6 +523,7 @@ describe('TripCard Map Preview', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={onClick}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -529,6 +551,7 @@ describe('TripCard Map Preview', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -563,6 +586,7 @@ describe('TripCard Map Preview', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -591,12 +615,13 @@ describe('TripCard Accessibility', () => {
     render(
       <div>
         <button>Before</button>
-        <TripCard
-          trip={trip}
-          onClick={vi.fn()}
-          onEdit={vi.fn()}
-          onDelete={vi.fn()}
-        />
+<TripCard
+        trip={trip}
+        persons={[]}
+        onClick={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />
         <button>After</button>
       </div>
     );
@@ -614,6 +639,7 @@ describe('TripCard Accessibility', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}
@@ -632,6 +658,7 @@ describe('TripCard Accessibility', () => {
     render(
       <TripCard
         trip={trip}
+        persons={[]}
         onClick={vi.fn()}
         onEdit={vi.fn()}
         onDelete={vi.fn()}

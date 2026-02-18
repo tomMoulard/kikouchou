@@ -119,7 +119,7 @@ function formatDateRange(
  * <Route path="/share/:shareId" element={<ShareImportPage />} />
  * ```
  */
-function ShareImportPageComponent(): ReactElement {
+export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
   const navigate = useNavigate(),
    { t, i18n } = useTranslation(),
    { shareId } = useParams<ShareImportParams>(),
@@ -370,14 +370,4 @@ function ShareImportPageComponent(): ReactElement {
       </Card>
     </div>
   );
-}
-
-// ============================================================================
-// Exports
-// ============================================================================
-
-/**
- * Memoized Share Import Page component.
- */
-export const ShareImportPage = memo(ShareImportPageComponent);
-ShareImportPage.displayName = 'ShareImportPage';
+});

@@ -54,7 +54,7 @@ import type { Trip, TripFormData, TripId } from '@/types';
  * <Route path="/trips/:tripId/edit" element={<TripEditPage />} />
  * ```
  */
-function TripEditPageComponent(): ReactElement {
+export const TripEditPage = memo(function TripEditPage(): ReactElement {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { tripId } = useParams<{ tripId: string }>();
@@ -333,14 +333,4 @@ function TripEditPageComponent(): ReactElement {
       <UnsavedChangesDialog open={isBlocked} onStay={reset} onLeave={proceed} />
     </div>
   );
-}
-
-// ============================================================================
-// Exports
-// ============================================================================
-
-/**
- * Memoized Trip Edit Page component.
- */
-export const TripEditPage = memo(TripEditPageComponent);
-TripEditPage.displayName = 'TripEditPage';
+});

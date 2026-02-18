@@ -202,7 +202,7 @@ export const MapMarker = memo(function MapMarker({
   marker,
   onClick,
   onKeyDown,
-}: MapMarkerProps) {
+}: MapMarkerProps): React.ReactElement | null {
   const { id, position, label, type = 'default', color, popupContent } = marker;
   const [lat, lon] = position;
 
@@ -274,5 +274,3 @@ export const MapMarker = memo(function MapMarker({
     </Marker>
   );
 });
-
-MapMarker.displayName = 'MapMarker';

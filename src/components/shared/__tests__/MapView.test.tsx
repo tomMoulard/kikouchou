@@ -339,11 +339,14 @@ describe('MapView Height', () => {
 });
 
 // ============================================================================
-// Display Name Tests
+// Memoization Tests
 // ============================================================================
 
-describe('MapView Display Name', () => {
-  it('has displayName set', () => {
-    expect(MapView.displayName).toBe('MapView');
+describe('MapView Memoization', () => {
+  it('is wrapped in memo', () => {
+    // memo(forwardRef(...)) returns a MemoExoticComponent
+    // Named function inside provides DevTools debugging support
+    expect(typeof MapView).toBe('object');
+    expect(MapView.$$typeof).toBeDefined();
   });
 });

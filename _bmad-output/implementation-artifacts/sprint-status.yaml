@@ -49,7 +49,7 @@ development_status:
   1-5-pickup-coordination-visibility: done
   1-6-accidental-edit-protection: done
   1-7-offline-state-confidence-indicators: done
-  1-8-code-review-cleanup-and-remaining-todo-items: backlog
+  1-8-code-review-cleanup-and-remaining-todo-items: review
   epic-1-retrospective: optional
 
   # Epic 2: Guest Onboarding Experience

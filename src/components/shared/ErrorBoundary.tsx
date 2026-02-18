@@ -120,11 +120,24 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
       }
     }
 
-    // Log error in development
+    // Log error in development, and prepare for production reporting
     if (IS_DEVELOPMENT) {
       console.error('ErrorBoundary caught an error:', error);
       console.error('Component stack:', errorInfo.componentStack);
     }
+    // REVIEW-CQ-2: Production Error Reporting Strategy
+    // For the MVP, we are not integrating a third-party error reporting service.
+    // Errors will fail gracefully to the UI but will not be automatically
+    // reported to developers in production. This is an accepted limitation.
+    //
+    // FUTURE: To enable production error reporting, pass an `onError` handler
+    // from the root of the application (e.g., in `App.tsx`) that sends the
+    // `error` and `errorInfo` objects to a service like Sentry, LogRocket,
+    // or an equivalent. The `onError` prop is the designated integration point.
+    // Example:
+    // <ErrorBoundary onError={(err, info) => MyErrorTracking.send(err, info)}>
+    //   ...
+    // </ErrorBoundary>
   }
 
   /**

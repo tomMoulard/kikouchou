@@ -326,7 +326,7 @@ export const MapView = memo(
       onMapReady,
     },
     ref
-  ) {
+  ): React.ReactElement {
     const { t } = useTranslation();
     const mapRef = useRef<LeafletMap | null>(null);
 
@@ -451,8 +451,6 @@ export const MapView = memo(
     );
   })
 );
-
-MapView.displayName = 'MapView';
 
 // Re-export types for convenience
 export type { MapMarkerData, MapMarkerType };
