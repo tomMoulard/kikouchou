@@ -1,7 +1,7 @@
 /**
  * @fileoverview Route configuration for the Sharing feature.
  * Provides lazy-loaded route definitions for shared trip viewing and the
- * onboarding wizard sub-routes (scaffold — full steps come in stories 2.2–2.5).
+ * onboarding wizard sub-routes (identity step implemented; stubs for 2.3–2.5).
  *
  * @module features/sharing/routes
  *
@@ -39,11 +39,21 @@ const ShareImportPage = lazy(() =>
 
 /**
  * Lazy-loaded OnboardingPlaceholderPage component.
- * Stub for wizard steps until stories 2.2–2.5 are implemented.
+ * Stub for wizard steps until stories 2.3–2.5 are implemented.
  */
 const OnboardingPlaceholderPage = lazy(() =>
   import('./pages/OnboardingPlaceholderPage').then((module) => ({
     default: module.OnboardingPlaceholderPage,
+  })),
+);
+
+/**
+ * Lazy-loaded IdentityStepPage component (story 2.2).
+ * Replaces the OnboardingPlaceholderPage for the identity route.
+ */
+const IdentityStepPage = lazy(() =>
+  import('./pages/IdentityStepPage').then((module) => ({
+    default: module.IdentityStepPage,
   })),
 );
 
@@ -76,8 +86,8 @@ function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>)
  * Route configuration for the Sharing feature.
  *
  * Routes:
- * - `/share/:shareId`           — Welcome screen (this story)
- * - `/share/:shareId/identity`  — Step 2: identity selection (story 2.2, stubbed)
+ * - `/share/:shareId`           — Welcome screen (story 2.1)
+ * - `/share/:shareId/identity`  — Step 2: identity selection (story 2.2)
  * - `/share/:shareId/room`      — Step 3: room selection (story 2.3, stubbed)
  * - `/share/:shareId/transport` — Step 4: transport entry (story 2.4, stubbed)
  * - `/share/:shareId/summary`   — Step 5: summary (story 2.5, stubbed)
@@ -103,7 +113,7 @@ export const sharingRoutes: RouteObject[] = [
     children: [
       {
         path: 'identity',
-        element: withSuspense(OnboardingPlaceholderPage),
+        element: withSuspense(IdentityStepPage),
       },
       {
         path: 'room',
