@@ -258,7 +258,14 @@
     "viewTripDescription": "Vous avez été invité(e) à voir ce voyage",
     "notFound": "Ce voyage partagé est introuvable",
     "notFoundDescription": "Le lien a peut-être expiré ou le voyage a été supprimé.",
-    "viewError": "Impossible d'ouvrir le voyage. Veuillez réessayer."
+    "viewError": "Impossible d'ouvrir le voyage. Veuillez réessayer.",
+    "welcome": "Bienvenue dans {{tripName}} !",
+    "welcomeSubtitle": "Vous avez été invité(e) à rejoindre ce voyage",
+    "getStarted": "Commencer",
+    "continueToTrip": "Accéder au voyage",
+    "notFoundWizard": "Ce lien de voyage ne semble pas fonctionner",
+    "notFoundWizardDescription": "Le lien est peut-être incorrect ou le voyage n'existe plus.",
+    "returning": "Bon retour ! Redirection vers le voyage..."
   },
   "settings": {
     "title": "Paramètres",

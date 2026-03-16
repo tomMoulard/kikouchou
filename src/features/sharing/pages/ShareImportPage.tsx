@@ -1,6 +1,7 @@
 /**
- * @fileoverview Share Import Page for viewing shared trips via public URL.
- * Loads trip data from a shareId URL parameter and allows viewing the trip.
+ * @fileoverview Share Import Page — Welcome screen for guests arriving via shared link.
+ * Loads trip data from a shareId URL parameter, detects returning guests, and
+ * either redirects directly to the trip dashboard or shows the welcome CTA.
  *
  * @module features/sharing/pages/ShareImportPage
  *
@@ -20,16 +21,14 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { format, isValid, parseISO } from 'date-fns';
 import { type Locale, enUS, fr } from 'date-fns/locale';
-import { Calendar, ExternalLink, MapPin, Share2 } from 'lucide-react';
+import { Calendar, MapPin, Palmtree } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { LoadingState } from '@/components/shared/LoadingState';
-import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
@@ -48,6 +47,27 @@ export type ShareImportParams = {
   /** The share ID from the URL */
   shareId: string;
 };
+
+/**
+ * Shape of the guest identity stored in localStorage.
+ */
+interface StoredGuestIdentity {
+  personId: string;
+  tripId: string;
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Returns the localStorage key used to persist guest identity across visits.
+ *
+ * @param shareId - The share ID from the URL
+ * @returns The localStorage key string
+ */
+const getGuestStorageKey = (shareId: string): string =>
+  `kikoushou_guest_${shareId}`;
 
 // ============================================================================
 // Helper Functions
@@ -96,20 +116,55 @@ function formatDateRange(
   return `${startStr} - ${endStr}`;
 }
 
+/**
+ * Type guard that validates a parsed JSON value matches StoredGuestIdentity.
+ *
+ * @param obj - The unknown value to validate
+ * @returns True if the value is a valid StoredGuestIdentity
+ */
+function isValidStoredGuestIdentity(obj: unknown): obj is StoredGuestIdentity {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'personId' in obj &&
+    'tripId' in obj &&
+    typeof (obj as StoredGuestIdentity).personId === 'string' &&
+    typeof (obj as StoredGuestIdentity).tripId === 'string'
+  );
+}
+
+/**
+ * Reads a stored guest identity from localStorage.
+ * Returns undefined on parse failure or if nothing is stored.
+ *
+ * @param shareId - The share ID from the URL
+ * @returns The stored guest identity or undefined
+ */
+function getStoredGuestIdentity(shareId: string): StoredGuestIdentity | undefined {
+  try {
+    const raw = localStorage.getItem(getGuestStorageKey(shareId));
+    if (!raw) {return undefined;}
+    const parsed: unknown = JSON.parse(raw);
+    return isValidStoredGuestIdentity(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // ============================================================================
 // Component
 // ============================================================================
 
 /**
- * Page component for viewing a shared trip.
+ * Welcome screen for guests arriving via a shared trip link.
  *
  * Features:
- * - Loads trip data from shareId URL parameter
- * - Shows loading state during fetch
- * - Handles not found gracefully with user-friendly message
- * - Displays trip info: name, location (conditional), date range
- * - "View this trip" button sets current trip and navigates to calendar
- * - Uses isMountedRef pattern for async safety
+ * - Loads trip data from shareId URL parameter using repository functions directly (AR-10)
+ * - Detects returning guests via localStorage and redirects to trip calendar
+ * - Shows warm, vacation-themed welcome card with trip name, date range, and location
+ * - "Get Started" CTA navigates to the onboarding wizard (Step 2: identity)
+ * - Friendly not-found message with no technical jargon
+ * - Uses isMountedRef + cancelled-flag pattern for async safety
  *
  * @returns The share import page element
  *
@@ -176,6 +231,8 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
 
   /**
    * Load trip data when shareId changes.
+   * After loading, checks localStorage for a returning guest identity and
+   * auto-redirects to the trip calendar if found.
    * Uses cancelled flag pattern to prevent stale updates.
    */
   useEffect(() => {
@@ -206,6 +263,30 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
           setNotFound(true);
           setTrip(null);
         } else {
+          // Returning guest detection: check localStorage before rendering the CTA
+          const storedIdentity = getStoredGuestIdentity(shareId);
+          if (storedIdentity?.tripId === data.id) {
+            // Returning guest — skip wizard and go straight to the trip calendar.
+            // Do NOT set isLoading(false) here: trip is still null, which would
+            // briefly flash the "not found" UI before navigation completes.
+            try {
+              await setCurrentTrip(data.id);
+              if (!cancelled && isMountedRef.current) {
+                navigate(`/trips/${data.id}/calendar`);
+              }
+            } catch (error) {
+              console.error('Failed to redirect returning guest:', error);
+              // Fall through: show welcome screen instead of crashing.
+              // Only now is it safe to stop loading (trip is set first).
+              if (!cancelled && isMountedRef.current) {
+                setTrip(data);
+                setNotFound(false);
+                setIsLoading(false);
+              }
+            }
+            return;
+          }
+
           setTrip(data);
           setNotFound(false);
         }
@@ -231,54 +312,43 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [shareId]);
+  }, [shareId, navigate]);
 
   // ============================================================================
   // Event Handlers
   // ============================================================================
 
   /**
-   * Handles viewing the trip by setting it as current and navigating to calendar.
-   * Uses the repository function directly to avoid context dependency issues
-   * and ensure the sharing route works even when mounted outside the main layout.
+   * Handles the "Get Started" CTA — navigates to the identity wizard step.
+   * Uses repository function directly to avoid context dependency issues (AR-10).
    */
-  const handleViewTrip = useCallback(async (): Promise<void> => {
+  const handleGetStarted = useCallback(async (): Promise<void> => {
     if (!trip || isNavigating) {return;}
 
     setIsNavigating(true);
 
     try {
-      // Use repository function directly to set current trip
-      // This avoids TripContext dependency which may not be available on public routes
+      // Set current trip so downstream wizard steps can access it
       await setCurrentTrip(trip.id);
 
       // Only navigate if component is still mounted
       if (isMountedRef.current) {
-        navigate('/calendar');
+        navigate(`/share/${shareId}/identity`);
       }
     } catch (error) {
-      console.error('Failed to set current trip:', error);
+      console.error('Failed to start onboarding:', error);
 
-      // Show user feedback on error
       if (isMountedRef.current) {
         toast.error(
           t('sharing.viewError', 'Failed to open the trip. Please try again.'),
         );
       }
     } finally {
-      // Always reset navigating state if still mounted
       if (isMountedRef.current) {
         setIsNavigating(false);
       }
     }
-  }, [trip, isNavigating, navigate, t]),
-
-  /**
-   * Handles navigation to trips list.
-   */
-   handleGoToTrips = useCallback(() => {
-    navigate('/trips');
-  }, [navigate]);
+  }, [trip, isNavigating, navigate, shareId, t]);
 
   // ============================================================================
   // Render
@@ -289,52 +359,60 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
     return <LoadingState variant="fullPage" />;
   }
 
-  // Not found state
+  // Not found state — friendly message, no technical jargon
   if (notFound || !trip) {
     return (
-      <div className="container max-w-md py-12 md:py-16">
-        <ErrorDisplay
-          title={t('sharing.notFound', 'This shared trip could not be found')}
-          onRetry={() => window.location.reload()}
-          onBack={handleGoToTrips}
-          showMessage={false}
-        >
-          <p className="text-sm text-muted-foreground text-center">
-            {t(
-              'sharing.notFoundDescription',
-              'The link may have expired or the trip may have been deleted.',
-            )}
-          </p>
-        </ErrorDisplay>
+      <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
+        <Card className="w-full max-w-md border-amber-200 text-center shadow-lg">
+          <CardHeader className="pb-2 pt-8">
+            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-amber-100 text-3xl">
+              🔍
+            </div>
+            <CardTitle className="text-xl text-amber-900">
+              {t('sharing.notFoundWizard', 'This trip link doesn\'t seem to work')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-8">
+            <p className="text-sm text-amber-700">
+              {t(
+                'sharing.notFoundWizardDescription',
+                'The link may be incorrect or the trip may no longer exist.',
+              )}
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  // Success state - show trip info
+  // Success state — warm welcome screen
   return (
-    <div className="container max-w-md py-12 md:py-16">
-      <Card>
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-primary/10">
-            <Share2 className="size-6 text-primary" aria-hidden="true" />
+    <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
+      <Card className="w-full max-w-md border-amber-200 shadow-lg">
+        <CardHeader className="pb-4 pt-8 text-center">
+          {/* Warm vacation icon */}
+          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-amber-100">
+            <Palmtree className="size-10 text-amber-600" aria-hidden="true" />
           </div>
-          <CardTitle className="text-xl">{trip.name}</CardTitle>
-          <CardDescription>
-            {t(
-              'sharing.viewTripDescription',
-              "You've been invited to view this trip",
-            )}
-          </CardDescription>
+
+          {/* Trip name — visually prominent */}
+          <CardTitle className="text-2xl font-bold text-amber-900">
+            {t('sharing.welcome', { tripName: trip.name })}
+          </CardTitle>
+
+          <p className="mt-1 text-sm text-amber-700">
+            {t('sharing.welcomeSubtitle', "You've been invited to join this trip")}
+          </p>
         </CardHeader>
 
-        <CardContent className="space-y-4">
-          {/* Trip details */}
-          <div className="space-y-3 rounded-lg bg-muted/50 p-4">
+        <CardContent className="space-y-6 pb-8">
+          {/* Trip details — scannable at a glance */}
+          <div className="space-y-3 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200">
             {/* Location (conditional) */}
             {trip.location && (
-              <div className="flex items-center gap-3 text-sm">
+              <div className="flex items-center gap-3 text-sm text-amber-800">
                 <MapPin
-                  className="size-4 shrink-0 text-muted-foreground"
+                  className="size-4 shrink-0 text-amber-500"
                   aria-hidden="true"
                 />
                 <span>{trip.location}</span>
@@ -342,29 +420,24 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
             )}
 
             {/* Date range */}
-            <div className="flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-3 text-sm text-amber-800">
               <Calendar
-                className="size-4 shrink-0 text-muted-foreground"
+                className="size-4 shrink-0 text-amber-500"
                 aria-hidden="true"
               />
               <span>{formattedDateRange}</span>
             </div>
           </div>
 
-          {/* View trip button */}
+          {/* Get Started — primary CTA, min 44px touch target */}
           <Button
-            className="w-full"
-            onClick={handleViewTrip}
+            className="h-12 w-full bg-amber-500 text-base font-semibold text-white hover:bg-amber-600 focus-visible:ring-2 focus-visible:ring-amber-500"
+            onClick={handleGetStarted}
             disabled={isNavigating}
           >
-            {isNavigating ? (
-              t('common.loading', 'Loading...')
-            ) : (
-              <>
-                <ExternalLink className="mr-2 size-4" aria-hidden="true" />
-                {t('sharing.viewTrip', 'View this trip')}
-              </>
-            )}
+            {isNavigating
+              ? t('common.loading', 'Loading...')
+              : t('sharing.getStarted', 'Get Started')}
           </Button>
         </CardContent>
       </Card>

@@ -1,6 +1,7 @@
 /**
  * @fileoverview Route configuration for the Sharing feature.
- * Provides lazy-loaded route definitions for shared trip viewing.
+ * Provides lazy-loaded route definitions for shared trip viewing and the
+ * onboarding wizard sub-routes (scaffold — full steps come in stories 2.2–2.5).
  *
  * @module features/sharing/routes
  *
@@ -27,12 +28,22 @@ import { LoadingState } from '@/components/shared/LoadingState';
 // ============================================================================
 
 /**
- * Lazy-loaded ShareImportPage component.
+ * Lazy-loaded ShareImportPage component (welcome screen).
  * Uses React.lazy for code splitting and optimal bundle size.
  */
 const ShareImportPage = lazy(() =>
   import('./pages/ShareImportPage').then((module) => ({
     default: module.ShareImportPage,
+  })),
+);
+
+/**
+ * Lazy-loaded OnboardingPlaceholderPage component.
+ * Stub for wizard steps until stories 2.2–2.5 are implemented.
+ */
+const OnboardingPlaceholderPage = lazy(() =>
+  import('./pages/OnboardingPlaceholderPage').then((module) => ({
+    default: module.OnboardingPlaceholderPage,
   })),
 );
 
@@ -65,7 +76,11 @@ function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>)
  * Route configuration for the Sharing feature.
  *
  * Routes:
- * - `/share/:shareId` - Public page to view a shared trip
+ * - `/share/:shareId`           — Welcome screen (this story)
+ * - `/share/:shareId/identity`  — Step 2: identity selection (story 2.2, stubbed)
+ * - `/share/:shareId/room`      — Step 3: room selection (story 2.3, stubbed)
+ * - `/share/:shareId/transport` — Step 4: transport entry (story 2.4, stubbed)
+ * - `/share/:shareId/summary`   — Step 5: summary (story 2.5, stubbed)
  *
  * Note: This route is designed to be used at the root level of the router,
  * not nested under an authenticated layout, as it's a public sharing link.
@@ -85,6 +100,24 @@ export const sharingRoutes: RouteObject[] = [
   {
     path: 'share/:shareId',
     element: withSuspense(ShareImportPage),
+    children: [
+      {
+        path: 'identity',
+        element: withSuspense(OnboardingPlaceholderPage),
+      },
+      {
+        path: 'room',
+        element: withSuspense(OnboardingPlaceholderPage),
+      },
+      {
+        path: 'transport',
+        element: withSuspense(OnboardingPlaceholderPage),
+      },
+      {
+        path: 'summary',
+        element: withSuspense(OnboardingPlaceholderPage),
+      },
+    ],
   },
 ];
 
