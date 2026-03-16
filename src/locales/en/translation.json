@@ -265,7 +265,17 @@
     "continueToTrip": "Continue to trip",
     "notFoundWizard": "This trip link doesn't seem to work",
     "notFoundWizardDescription": "The link may be incorrect or the trip may no longer exist.",
-    "returning": "Welcome back! Taking you to the trip..."
+    "returning": "Welcome back! Taking you to the trip...",
+    "identityTitle": "Who are you?",
+    "identitySubtitle": "Select yourself from the list below",
+    "identityNotOnList": "I'm not on the list",
+    "identityAddMyself": "Add myself",
+    "identityAddName": "Your name",
+    "identityNext": "Next",
+    "identitySelected": "Selected",
+    "identityEmptyList": "No guests yet. Add yourself to get started!",
+    "identityNameRequired": "Please enter your name",
+    "identityAdding": "Adding..."
   },
   "settings": {
     "title": "Settings",

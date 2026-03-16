@@ -265,7 +265,17 @@
     "continueToTrip": "Accéder au voyage",
     "notFoundWizard": "Ce lien de voyage ne semble pas fonctionner",
     "notFoundWizardDescription": "Le lien est peut-être incorrect ou le voyage n'existe plus.",
-    "returning": "Bon retour ! Redirection vers le voyage..."
+    "returning": "Bon retour ! Redirection vers le voyage...",
+    "identityTitle": "Qui êtes-vous ?",
+    "identitySubtitle": "Sélectionnez-vous dans la liste ci-dessous",
+    "identityNotOnList": "Je ne suis pas dans la liste",
+    "identityAddMyself": "M'ajouter",
+    "identityAddName": "Votre prénom",
+    "identityNext": "Suivant",
+    "identitySelected": "Sélectionné",
+    "identityEmptyList": "Aucun participant pour l'instant. Ajoutez-vous pour commencer !",
+    "identityNameRequired": "Veuillez entrer votre prénom",
+    "identityAdding": "Ajout en cours..."
   },
   "settings": {
     "title": "Paramètres",
