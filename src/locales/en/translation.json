@@ -258,7 +258,14 @@
     "viewTripDescription": "You've been invited to view this trip",
     "notFound": "This shared trip could not be found",
     "notFoundDescription": "The link may have expired or the trip may have been deleted.",
-    "viewError": "Failed to open the trip. Please try again."
+    "viewError": "Failed to open the trip. Please try again.",
+    "welcome": "Welcome to {{tripName}}!",
+    "welcomeSubtitle": "You've been invited to join this trip",
+    "getStarted": "Get Started",
+    "continueToTrip": "Continue to trip",
+    "notFoundWizard": "This trip link doesn't seem to work",
+    "notFoundWizardDescription": "The link may be incorrect or the trip may no longer exist.",
+    "returning": "Welcome back! Taking you to the trip..."
   },
   "settings": {
     "title": "Settings",

@@ -26,6 +26,7 @@ export type { ShareDialogProps } from './components/ShareDialog';
 // ============================================================================
 
 export { ShareImportPage } from './pages/ShareImportPage';
+export { OnboardingPlaceholderPage } from './pages/OnboardingPlaceholderPage';
 
 // ============================================================================
 // Routes
