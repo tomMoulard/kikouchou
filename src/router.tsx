@@ -212,8 +212,11 @@ const settingsRoute: RouteObject = {
  * These routes are accessed via shared links and should not show navigation.
  */
  publicRoutes: RouteObject = {
-  path: 'share/:shareId',
-  element: sharingRoutes[0]?.element,
+  // Spread the full sharing route object so that wizard child routes
+  // (identity, room, transport, summary) are registered in the router.
+  // Previously only `element` was copied, which silently dropped the
+  // `children` array and caused sub-routes to never render.
+  ...sharingRoutes[0],
   errorElement: <ErrorPage />,
 };
 

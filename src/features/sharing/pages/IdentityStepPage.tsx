@@ -52,6 +52,8 @@ type IdentityStepParams = {
 
 /**
  * Shape of the guest identity stored in localStorage.
+ * Uses unbranded `string` types intentionally — localStorage serialises to JSON
+ * and the branded `PersonId`/`TripId` brands are for in-memory type safety only.
  */
 interface StoredGuestIdentity {
   personId: string;
@@ -149,6 +151,13 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
   useEffect(() => {
     let cancelled = false;
 
+    // Reset selection state so a stale personId from a previous shareId cannot
+    // be carried forward if the URL param ever changes.
+    setSelectedPersonId(undefined);
+    setTrip(null);
+    setPersons([]);
+    setNotFound(false);
+
     async function loadData(): Promise<void> {
       if (!shareId) {
         if (!cancelled && isMountedRef.current) {
@@ -199,9 +208,16 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
    * Toggles the "Add myself" inline form.
    */
   const handleToggleAddForm = useCallback((): void => {
-    setShowAddForm(prev => !prev);
-    setNameError(undefined);
-    setNewName('');
+    setShowAddForm(prev => {
+      const opening = !prev;
+      if (opening) {
+        // Reset draft only when opening so a user who accidentally closes the
+        // form and re-opens it does not lose in-progress input.
+        setNameError(undefined);
+        setNewName('');
+      }
+      return opening;
+    });
   }, []);
 
   /**
@@ -249,9 +265,10 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
       try {
         localStorage.setItem(getGuestStorageKey(shareId), JSON.stringify(identity));
       } catch {
-        // Non-fatal: if localStorage write fails, continue anyway.
-        // Returning-guest detection in Story 2.1 won't work, but wizard can proceed.
+        // Non-fatal: wizard can still proceed, but returning-guest detection
+        // in Story 2.1 won't work for this session.
         console.warn('Failed to save guest identity to localStorage');
+        toast.error(t('sharing.identityStorageFailed', 'Could not save your identity. You may need to re-select on your next visit.'));
       }
 
       if (isMountedRef.current) {
@@ -262,7 +279,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
         setIsNavigating(false);
       }
     }
-  }, [selectedPersonId, trip, isNavigating, shareId, navigate]);
+  }, [selectedPersonId, trip, isNavigating, shareId, navigate, t]);
 
   // ============================================================================
   // Render
@@ -382,6 +399,12 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
           {(isEmpty || showAddForm) && (
             <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
               <div className="space-y-1">
+                <label
+                  htmlFor="new-person-name"
+                  className="sr-only"
+                >
+                  {t('sharing.identityAddName', 'Your name')}
+                </label>
                 <Input
                   id="new-person-name"
                   type="text"
@@ -397,11 +420,11 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
                     }
                   }}
                   placeholder={t('sharing.identityAddName', 'Your name')}
-                  aria-label={t('sharing.identityAddName', 'Your name')}
-                  aria-invalid={nameError !== undefined}
+                  aria-invalid={nameError !== undefined ? 'true' : 'false'}
                   aria-describedby={nameError !== undefined ? 'name-error' : undefined}
                   className="border-amber-300 bg-white focus-visible:ring-amber-500"
                   autoComplete="given-name"
+                  maxLength={100}
                 />
                 {nameError !== undefined && (
                   <p id="name-error" role="alert" className="text-xs text-destructive">

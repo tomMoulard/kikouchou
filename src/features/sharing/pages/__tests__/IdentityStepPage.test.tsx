@@ -33,6 +33,15 @@ vi.mock('@/lib/db', () => ({
   createPersonWithAutoColor: vi.fn(),
 }));
 
+// Mock sonner so we can assert toast.error calls
+const mockToastError = vi.fn();
+vi.mock('sonner', () => ({
+  toast: {
+    error: (...args: unknown[]) => mockToastError(...args),
+    success: vi.fn(),
+  },
+}));
+
 // i18next is auto-mocked in test/setup.ts: t('key') → 'key', t('key', {x}) → 'key'
 
 // localStorage mock — controlled per test
@@ -473,5 +482,43 @@ describe('IdentityStepPage — 3.7: i18n text nodes use translation keys', () =>
         screen.getByRole('button', { name: 'sharing.identityNotOnList' }),
       ).toBeInTheDocument();
     });
+  });
+});
+
+// ============================================================================
+// F16 — localStorage failure path (warn-and-continue with toast)
+// ============================================================================
+
+describe('IdentityStepPage — F16: localStorage failure shows toast and still navigates', () => {
+  it('shows toast.error and still navigates to room step when localStorage.setItem throws', async () => {
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+    mockGetPersonsByTripId.mockResolvedValue([
+      makePerson({ id: 'p1' as PersonId, name: 'Alice' }),
+    ]);
+
+    // Make localStorage.setItem throw (simulates quota exceeded / private mode)
+    const originalSetItem = window.localStorage.setItem;
+    window.localStorage.setItem = () => {
+      throw new Error('QuotaExceededError');
+    };
+
+    const { user } = renderIdentityStepPage('abc123');
+
+    const aliceButton = await screen.findByRole('button', { name: 'Alice' });
+    await user.click(aliceButton);
+
+    const nextButton = screen.getByRole('button', { name: 'sharing.identityNext' });
+    await user.click(nextButton);
+
+    // Should still navigate despite the storage failure
+    await waitFor(() => {
+      expect(screen.getByTestId('room-page')).toBeInTheDocument();
+    });
+
+    // Should have shown an error toast to inform the user
+    expect(mockToastError).toHaveBeenCalledTimes(1);
+
+    // Restore
+    window.localStorage.setItem = originalSetItem;
   });
 });
