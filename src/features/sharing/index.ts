@@ -28,6 +28,7 @@ export type { ShareDialogProps } from './components/ShareDialog';
 export { ShareImportPage } from './pages/ShareImportPage';
 export { OnboardingPlaceholderPage } from './pages/OnboardingPlaceholderPage';
 export { IdentityStepPage } from './pages/IdentityStepPage';
+export { RoomSelectionStepPage } from './pages/RoomSelectionStepPage';
 
 // ============================================================================
 // Routes

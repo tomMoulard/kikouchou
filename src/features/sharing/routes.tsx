@@ -1,7 +1,7 @@
 /**
  * @fileoverview Route configuration for the Sharing feature.
  * Provides lazy-loaded route definitions for shared trip viewing and the
- * onboarding wizard sub-routes (identity step implemented; stubs for 2.3–2.5).
+ * onboarding wizard sub-routes (identity + room steps implemented; stubs for 2.4–2.5).
  *
  * @module features/sharing/routes
  *
@@ -57,6 +57,16 @@ const IdentityStepPage = lazy(() =>
   })),
 );
 
+/**
+ * Lazy-loaded RoomSelectionStepPage component (story 2.3).
+ * Replaces the OnboardingPlaceholderPage for the room route.
+ */
+const RoomSelectionStepPage = lazy(() =>
+  import('./pages/RoomSelectionStepPage').then((module) => ({
+    default: module.RoomSelectionStepPage,
+  })),
+);
+
 // ============================================================================
 // Route Wrapper Components
 // ============================================================================
@@ -88,7 +98,7 @@ function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>)
  * Routes:
  * - `/share/:shareId`           — Welcome screen (story 2.1)
  * - `/share/:shareId/identity`  — Step 2: identity selection (story 2.2)
- * - `/share/:shareId/room`      — Step 3: room selection (story 2.3, stubbed)
+ * - `/share/:shareId/room`      — Step 3: room selection (story 2.3)
  * - `/share/:shareId/transport` — Step 4: transport entry (story 2.4, stubbed)
  * - `/share/:shareId/summary`   — Step 5: summary (story 2.5, stubbed)
  *
@@ -117,7 +127,7 @@ export const sharingRoutes: RouteObject[] = [
       },
       {
         path: 'room',
-        element: withSuspense(OnboardingPlaceholderPage),
+        element: withSuspense(RoomSelectionStepPage),
       },
       {
         path: 'transport',
