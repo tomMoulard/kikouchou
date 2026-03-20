@@ -67,6 +67,16 @@ const RoomSelectionStepPage = lazy(() =>
   })),
 );
 
+/**
+ * Lazy-loaded TransportEntryStepPage component (story 2.4).
+ * Replaces the OnboardingPlaceholderPage for the transport route.
+ */
+const TransportEntryStepPage = lazy(() =>
+  import('./pages/TransportEntryStepPage').then((module) => ({
+    default: module.TransportEntryStepPage,
+  })),
+);
+
 // ============================================================================
 // Route Wrapper Components
 // ============================================================================
@@ -131,7 +141,7 @@ export const sharingRoutes: RouteObject[] = [
       },
       {
         path: 'transport',
-        element: withSuspense(OnboardingPlaceholderPage),
+        element: withSuspense(TransportEntryStepPage),
       },
       {
         path: 'summary',
