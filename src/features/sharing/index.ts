@@ -29,6 +29,7 @@ export { ShareImportPage } from './pages/ShareImportPage';
 export { OnboardingPlaceholderPage } from './pages/OnboardingPlaceholderPage';
 export { IdentityStepPage } from './pages/IdentityStepPage';
 export { RoomSelectionStepPage } from './pages/RoomSelectionStepPage';
+export { TransportEntryStepPage } from './pages/TransportEntryStepPage';
 
 // ============================================================================
 // Routes
