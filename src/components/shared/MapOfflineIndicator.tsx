@@ -5,7 +5,7 @@
  * @module components/shared/MapOfflineIndicator
  */
 
-import { memo, useEffect, useState } from 'react';
+import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { WifiOff, CloudOff } from 'lucide-react';
 
@@ -56,22 +56,10 @@ export const MapOfflineIndicator = memo(function MapOfflineIndicator({
 }: MapOfflineIndicatorProps) {
   const { t } = useTranslation();
   const { isOnline, hasRecentlyChanged } = useOnlineStatus();
-  const [isVisible, setIsVisible] = useState(!isOnline);
-
-  // Handle visibility with animation
-  useEffect(() => {
-    if (!isOnline) {
-      setIsVisible(true);
-    } else if (hasRecentlyChanged) {
-      // Keep visible briefly when coming back online
-      const timer = setTimeout(() => {
-        setIsVisible(false);
-      }, 2000);
-      return () => clearTimeout(timer);
-    } else {
-      setIsVisible(false);
-    }
-    return undefined;
+  const isVisible = useMemo(() => {
+    if (!isOnline) return true;
+    if (hasRecentlyChanged) return true;
+    return false;
   }, [isOnline, hasRecentlyChanged]);
 
   // Don't render if online and not showing cached mode

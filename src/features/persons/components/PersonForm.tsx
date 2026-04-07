@@ -14,7 +14,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -156,7 +155,7 @@ const PersonForm = memo(function PersonForm({
     return undefined;
   });
 
-  const initialSnapshotRef = useRef<{
+  const [initialSnapshot, setInitialSnapshot] = useState<{
     readonly name: string;
     readonly color: string;
     readonly stayStartDate: string;
@@ -169,17 +168,16 @@ const PersonForm = memo(function PersonForm({
   // Compute dirty state: compare current values against initial (person prop)
   const isDirty = useMemo(
     () => {
-      const snapshot = initialSnapshotRef.current;
-      if (!snapshot) return false;
+      if (!initialSnapshot) return false;
 
       return (
-        name !== snapshot.name ||
-        color !== snapshot.color ||
-        currentStayStart !== snapshot.stayStartDate ||
-        currentStayEnd !== snapshot.stayEndDate
+        name !== initialSnapshot.name ||
+        color !== initialSnapshot.color ||
+        currentStayStart !== initialSnapshot.stayStartDate ||
+        currentStayEnd !== initialSnapshot.stayEndDate
       );
     },
-    [color, currentStayEnd, currentStayStart, name],
+    [color, currentStayEnd, currentStayStart, name, initialSnapshot],
   );
 
   // Notify parent of dirty state changes
@@ -214,12 +212,12 @@ const PersonForm = memo(function PersonForm({
       setStayDates(undefined);
     }
 
-    initialSnapshotRef.current = {
+    setInitialSnapshot({
       name: nextName,
       color: nextColor,
       stayStartDate: person?.stayStartDate ?? '',
       stayEndDate: person?.stayEndDate ?? '',
-    };
+    });
 
     // Use callback to avoid creating new object if already empty
     setErrors((prev) => (Object.keys(prev).length === 0 ? prev : {}));

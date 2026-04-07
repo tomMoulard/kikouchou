@@ -42,6 +42,7 @@ export default defineConfig([
       '**/CalendarPage.tsx',
       '**/EventDetailDialog.tsx',
       '**/PersonCard.tsx',
+      '**/PersonForm.tsx',
       '**/RoomCard.tsx',
       '**/RoomListPage.tsx',
       '**/ShareDialog.tsx',

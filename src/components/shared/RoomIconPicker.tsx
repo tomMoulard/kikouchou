@@ -175,7 +175,7 @@ const RoomIconPicker = memo(function RoomIconPicker({
       const currentIndex = ICON_ORDER.indexOf(currentIcon);
       if (currentIndex === -1) return;
 
-      let nextIndex: number | null = null;
+      let nextIndex: number | undefined;
 
       switch (event.key) {
         case 'ArrowRight':
@@ -201,7 +201,7 @@ const RoomIconPicker = memo(function RoomIconPicker({
       }
 
       // Wrap around if out of bounds
-      if (nextIndex !== null) {
+      if (nextIndex !== undefined) {
         event.preventDefault();
         if (nextIndex < 0) {
           nextIndex = ICON_ORDER.length + nextIndex;

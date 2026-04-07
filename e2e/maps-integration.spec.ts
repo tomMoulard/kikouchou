@@ -27,7 +27,8 @@ const TEST_TRIP_WITH_LOCATION = {
 /**
  * Test coordinates for Paris.
  */
-const PARIS_COORDINATES = {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _PARIS_COORDINATES = {
   lat: 48.8566,
   lon: 2.3522,
 } as const;
@@ -110,7 +111,8 @@ async function createTestTrip(
  * @param tripId - Trip ID
  * @param options - Transport options
  */
-async function createTestTransport(
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _createTestTransport(
   page: Page,
   tripId: string,
   options: {
@@ -183,7 +185,8 @@ async function createTestPerson(page: Page, tripId: string, name: string): Promi
  * @param cacheName - Cache name to check
  * @returns Whether the cache has entries
  */
-async function hasCacheEntries(page: Page, cacheName: string): Promise<boolean> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _hasCacheEntries(page: Page, cacheName: string): Promise<boolean> {
   return await page.evaluate(async (name) => {
     if (!('caches' in window)) {
       return false;
@@ -204,7 +207,8 @@ async function hasCacheEntries(page: Page, cacheName: string): Promise<boolean> 
  * @param page - Playwright page object
  * @returns Whether OSM tiles are cached
  */
-async function hasOsmTilesCached(page: Page): Promise<boolean> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _hasOsmTilesCached(page: Page): Promise<boolean> {
   return await page.evaluate(async () => {
     if (!('caches' in window)) {
       return false;
@@ -232,7 +236,7 @@ test.describe('Trip Location Map', () => {
 
   test('trip card shows map preview when location has coordinates', async ({ page }) => {
     // Create a trip with a known location
-    const tripId = await createTestTrip(page, {
+    await createTestTrip(page, {
       name: TEST_TRIP_WITH_LOCATION.name,
       location: 'Paris, France',
     });
@@ -320,6 +324,7 @@ test.describe('Transport Map View', () => {
     await page.waitForLoadState('networkidle');
 
     // Should show empty state or message about no locations
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const emptyState = page.getByText(/no location|aucun lieu|no transport/i);
 
     // Either empty state or the map should be visible
@@ -504,7 +509,8 @@ test.describe('Offline Map Tiles', () => {
     // Check for offline indicator if present
     const offlineIndicator = page.getByText(/offline|hors ligne/i);
     // Indicator might or might not be visible
-    const indicatorVisible = await offlineIndicator.isVisible().catch(() => false);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _indicatorVisible = await offlineIndicator.isVisible().catch(() => false);
 
     // The app should handle offline gracefully
     const pageContent = await page.content();

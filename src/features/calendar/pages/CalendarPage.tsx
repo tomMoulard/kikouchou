@@ -458,7 +458,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     }
 
     return map;
-  }, [assignments, getPersonById, roomsMap, calendarDays, unknownLabel]);
+  }, [assignments, getPersonById, roomsMap, calendarDays, unknownLabel, tripBoundaries]);
 
   // Build transport events grouped by date
   const transportsByDate = useMemo(() => {

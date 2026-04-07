@@ -77,7 +77,7 @@ function getSidebar() {
  * Gets the mobile navigation element.
  */
 function getMobileNav() {
-  return document.querySelector('nav[aria-label="nav.main"]');
+  return document.querySelector('nav[aria-label="nav.mobileMain"]');
 }
 
 // ============================================================================
@@ -421,7 +421,7 @@ describe('Layout', () => {
       renderLayout();
 
       const mobileNav = getMobileNav();
-      expect(mobileNav).toHaveAttribute('aria-label', 'nav.main');
+      expect(mobileNav).toHaveAttribute('aria-label', 'nav.mobileMain');
     });
 
     it('disabled links have aria-disabled attribute', () => {
