@@ -122,7 +122,6 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | ''>('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [conflictError, setConflictError] = useState<string | undefined>(undefined);
-  const [capacityWarning, setCapacityWarning] = useState<string | undefined>(undefined);
   const [isCheckingConflict, setIsCheckingConflict] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
@@ -136,14 +135,16 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
   );
 
   // Get trip date constraints
+  const tripStartDateStr = currentTrip?.startDate;
   const tripStartDate = useMemo(
-    () => (currentTrip?.startDate ? parseISO(currentTrip.startDate) : undefined),
-    [currentTrip?.startDate],
+    () => (tripStartDateStr ? parseISO(tripStartDateStr) : undefined),
+    [tripStartDateStr],
   );
 
+  const tripEndDateStr = currentTrip?.endDate;
   const tripEndDate = useMemo(
-    () => (currentTrip?.endDate ? parseISO(currentTrip.endDate) : undefined),
-    [currentTrip?.endDate],
+    () => (tripEndDateStr ? parseISO(tripEndDateStr) : undefined),
+    [tripEndDateStr],
   );
 
   // Get existing assignments for this room (for booked ranges display)
@@ -171,30 +172,33 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     return null;
   }, [person, selectedPersonId, persons]);
 
-  // Initialize form when dialog opens
-  useEffect(() => {
-    if (open && roomId) {
-      // Pre-fill person if provided (drag-drop flow)
-      if (person) {
-        setSelectedPersonId(person.id);
-      } else {
-        setSelectedPersonId('');
-      }
-      // Pre-fill dates from suggested dates
-      if (suggestedStartDate && suggestedEndDate) {
-        setDateRange({
-          from: parseISO(suggestedStartDate),
-          to: parseISO(suggestedEndDate),
-        });
-      } else {
-        setDateRange(undefined);
-      }
-      setConflictError(undefined);
-      setCapacityWarning(undefined);
-      setIsCheckingConflict(false);
-      setShowDiscardConfirm(false);
+  // State-based sync: initialize form when dialog opens (render-time, no effect needed)
+  const [prevInitKey, setPrevInitKey] = useState<string | null>(null);
+  const initKey = open && roomId ? `${roomId}-${person?.id ?? ''}-${suggestedStartDate ?? ''}-${suggestedEndDate ?? ''}` : null;
+  if (initKey !== null && prevInitKey !== initKey) {
+    setPrevInitKey(initKey);
+    // Pre-fill person if provided (drag-drop flow)
+    if (person) {
+      setSelectedPersonId(person.id);
+    } else {
+      setSelectedPersonId('');
     }
-  }, [open, person, roomId, suggestedStartDate, suggestedEndDate]);
+    // Pre-fill dates from suggested dates
+    if (suggestedStartDate && suggestedEndDate) {
+      setDateRange({
+        from: parseISO(suggestedStartDate),
+        to: parseISO(suggestedEndDate),
+      });
+    } else {
+      setDateRange(undefined);
+    }
+    setConflictError(undefined);
+    setIsCheckingConflict(false);
+    setShowDiscardConfirm(false);
+  }
+  if (!open && prevInitKey !== null) {
+    setPrevInitKey(null);
+  }
 
   // Mount/unmount tracking
   useEffect(() => {
@@ -228,26 +232,36 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     return false;
   }, [selectedPersonId, dateRange, person, suggestedStartDate, suggestedEndDate]);
 
-  // Check for conflicts and capacity when person/dates change
+  // Compute capacity warning synchronously (derived state, no effect needed)
+  const computedCapacityWarning = useMemo(() => {
+    if (!effectivePerson || !dateRange?.from || !dateRange?.to) return undefined;
+    if (!roomId || !room) return undefined;
+    const startDate = toISODateString(dateRange.from) as ISODateString;
+    const endDate = toISODateString(dateRange.to) as ISODateString;
+    const roomAssignments = getAssignmentsByRoom(roomId);
+    const peak = calculatePeakOccupancy(roomAssignments, startDate, endDate);
+    return (peak + 1) > room.capacity ? t('rooms.capacityWarning') : undefined;
+  }, [effectivePerson, dateRange, roomId, room, getAssignmentsByRoom, t]);
+
+  // Clear conflict error when inputs become invalid (render-time)
+  const hasValidConflictInputs = Boolean(effectivePerson && dateRange?.from && dateRange?.to);
+  const [prevHadValidInputs, setPrevHadValidInputs] = useState(false);
+  if (!hasValidConflictInputs && prevHadValidInputs) {
+    setPrevHadValidInputs(false);
+    setConflictError(undefined);
+  }
+  if (hasValidConflictInputs && !prevHadValidInputs) {
+    setPrevHadValidInputs(true);
+  }
+
+  // Check for conflicts asynchronously when person/dates change
   useEffect(() => {
     if (!effectivePerson || !dateRange?.from || !dateRange?.to) {
-      setConflictError(undefined);
-      setCapacityWarning(undefined);
       return;
     }
 
     const startDate = toISODateString(dateRange.from) as ISODateString;
     const endDate = toISODateString(dateRange.to) as ISODateString;
-
-    // Check capacity
-    if (roomId && room) {
-      const roomAssignments = getAssignmentsByRoom(roomId);
-      const peak = calculatePeakOccupancy(roomAssignments, startDate, endDate);
-      // Adding 1 for the proposed assignment
-      setCapacityWarning(
-        (peak + 1) > room.capacity ? t('rooms.capacityWarning') : undefined,
-      );
-    }
 
     let cancelled = false;
     setIsCheckingConflict(true);
@@ -272,7 +286,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     return () => {
       cancelled = true;
     };
-  }, [effectivePerson, dateRange, checkConflict, roomId, room, getAssignmentsByRoom, t]);
+  }, [effectivePerson, dateRange, checkConflict, t]);
 
   // Form validation
   const isFormValid = useMemo(
@@ -449,13 +463,13 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
             </div>
 
             {/* Capacity warning */}
-            {capacityWarning && (
+            {computedCapacityWarning && (
               <div
                 className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-800 dark:text-amber-200"
                 role="alert"
               >
                 <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-                <span>{capacityWarning}</span>
+                <span>{computedCapacityWarning}</span>
               </div>
             )}
 

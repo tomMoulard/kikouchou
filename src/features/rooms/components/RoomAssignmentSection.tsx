@@ -330,7 +330,6 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | ''>('');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [conflictError, setConflictError] = useState<string | undefined>(undefined);
-  const [capacityWarning, setCapacityWarning] = useState<string | undefined>(undefined);
   const [isCheckingConflict, setIsCheckingConflict] = useState(false);
   const [wasAutoFilled, setWasAutoFilled] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -341,26 +340,29 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   // Edit mode detection
   const isEditMode = Boolean(existingAssignment);
 
-  // Initialize/reset form when dialog opens or assignment changes
-  useEffect(() => {
-    if (open) {
-      if (existingAssignment) {
-        setSelectedPersonId(existingAssignment.personId);
-        setDateRange({
-          from: parseISO(existingAssignment.startDate),
-          to: parseISO(existingAssignment.endDate),
-        });
-        setWasAutoFilled(false);
-      } else {
-        setSelectedPersonId('');
-        setDateRange(undefined);
-        setWasAutoFilled(false);
-      }
-      setConflictError(undefined);
-      setCapacityWarning(undefined);
-      setIsCheckingConflict(false); // Reset checking state to prevent stale results
+  // State-based sync: initialize/reset form when dialog opens or assignment changes (render-time)
+  const [prevInitKey, setPrevInitKey] = useState<string | null>(null);
+  const initKey = open ? `${existingAssignment?.id ?? 'new'}-${open}` : null;
+  if (initKey !== null && prevInitKey !== initKey) {
+    setPrevInitKey(initKey);
+    if (existingAssignment) {
+      setSelectedPersonId(existingAssignment.personId);
+      setDateRange({
+        from: parseISO(existingAssignment.startDate),
+        to: parseISO(existingAssignment.endDate),
+      });
+      setWasAutoFilled(false);
+    } else {
+      setSelectedPersonId('');
+      setDateRange(undefined);
+      setWasAutoFilled(false);
     }
-  }, [open, existingAssignment]);
+    setConflictError(undefined);
+    setIsCheckingConflict(false);
+  }
+  if (!open && prevInitKey !== null) {
+    setPrevInitKey(null);
+  }
 
   // Mount/unmount tracking
   useEffect(() => {
@@ -390,29 +392,39 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
     return selectedPersonId !== '' || dateRange?.from !== undefined || dateRange?.to !== undefined;
   }, [selectedPersonId, dateRange, existingAssignment]);
 
-  // Check for conflicts and capacity when person or dates change
+  // Compute capacity warning synchronously (derived state, no effect needed)
+  const computedCapacityWarning = useMemo(() => {
+    if (!selectedPersonId || !dateRange?.from || !dateRange?.to) return undefined;
+    if (roomCapacity === undefined || !existingAssignments) return undefined;
+    const startDate = toISODateString(dateRange.from);
+    const endDate = toISODateString(dateRange.to);
+    // Filter out the current assignment being edited (if any)
+    const otherAssignments = existingAssignment
+      ? existingAssignments.filter((a) => a.id !== existingAssignment.id)
+      : existingAssignments;
+    const peak = calculatePeakOccupancy(otherAssignments, startDate, endDate);
+    return (peak + 1) > roomCapacity ? t('rooms.capacityWarning') : undefined;
+  }, [selectedPersonId, dateRange, roomCapacity, existingAssignments, existingAssignment, t]);
+
+  // Clear conflict error when inputs become invalid (render-time)
+  const hasValidConflictInputs = Boolean(selectedPersonId && dateRange?.from && dateRange?.to);
+  const [prevHadValidInputs, setPrevHadValidInputs] = useState(false);
+  if (!hasValidConflictInputs && prevHadValidInputs) {
+    setPrevHadValidInputs(false);
+    setConflictError(undefined);
+  }
+  if (hasValidConflictInputs && !prevHadValidInputs) {
+    setPrevHadValidInputs(true);
+  }
+
+  // Check for conflicts asynchronously when person or dates change
   useEffect(() => {
     if (!selectedPersonId || !dateRange?.from || !dateRange?.to) {
-      setConflictError(undefined);
-      setCapacityWarning(undefined);
       return;
     }
 
     const startDate = toISODateString(dateRange.from);
     const endDate = toISODateString(dateRange.to);
-
-    // Check capacity (soft enforcement - warning only)
-    if (roomCapacity !== undefined && existingAssignments) {
-      // Filter out the current assignment being edited (if any)
-      const otherAssignments = existingAssignment
-        ? existingAssignments.filter((a) => a.id !== existingAssignment.id)
-        : existingAssignments;
-      const peak = calculatePeakOccupancy(otherAssignments, startDate, endDate);
-      // Adding 1 for the proposed assignment
-      setCapacityWarning(
-        (peak + 1) > roomCapacity ? t('rooms.capacityWarning') : undefined,
-      );
-    }
 
     let cancelled = false;
     setIsCheckingConflict(true);
@@ -443,7 +455,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
     return () => {
       cancelled = true;
     };
-  }, [selectedPersonId, dateRange, checkConflict, existingAssignment, existingAssignments, roomCapacity, t]);
+  }, [selectedPersonId, dateRange, checkConflict, existingAssignment, t]);
 
   // Form validation
   const isFormValid = useMemo(() => (
@@ -637,13 +649,13 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
             </div>
 
             {/* Capacity warning (soft enforcement) */}
-            {capacityWarning && (
+            {computedCapacityWarning && (
               <div
                 className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-800 dark:text-amber-200"
                 role="alert"
               >
                 <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-                <span>{capacityWarning}</span>
+                <span>{computedCapacityWarning}</span>
               </div>
             )}
 

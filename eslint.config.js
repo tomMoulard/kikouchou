@@ -43,6 +43,8 @@ export default defineConfig([
       '**/EventDetailDialog.tsx',
       '**/PersonCard.tsx',
       '**/PersonForm.tsx',
+      '**/QuickAssignmentDialog.tsx',
+      '**/RoomAssignmentSection.tsx',
       '**/RoomCard.tsx',
       '**/RoomListPage.tsx',
       '**/ShareDialog.tsx',
@@ -94,6 +96,7 @@ export default defineConfig([
   // Disable fast refresh warning for components that export utilities/types alongside
   {
     files: [
+      '**/DirectionsButton.tsx',
       '**/RoomIconPicker.tsx',
       '**/EventDetailDialog.tsx',
     ],
