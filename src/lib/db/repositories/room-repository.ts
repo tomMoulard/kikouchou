@@ -260,6 +260,68 @@ export async function getRoomCount(tripId: TripId): Promise<number> {
 }
 
 // ============================================================================
+// Import / Clone Operations
+// ============================================================================
+
+/**
+ * Clones all rooms from a source trip to a target trip.
+ *
+ * Creates new rooms in the target trip with new IDs, preserving name, capacity,
+ * description, icon, and relative ordering from the source trip.
+ * Existing rooms in the target trip are not affected.
+ *
+ * @param sourceTripId - The trip to clone rooms from
+ * @param targetTripId - The trip to clone rooms into
+ * @returns Array of newly created Room objects
+ *
+ * @example
+ * ```typescript
+ * const clonedRooms = await cloneRoomsToTrip(oldTripId, newTripId);
+ * console.log(`Cloned ${clonedRooms.length} rooms`);
+ * ```
+ */
+export async function cloneRoomsToTrip(
+  sourceTripId: TripId,
+  targetTripId: TripId,
+): Promise<Room[]> {
+  const sourceRooms = await getRoomsByTripId(sourceTripId);
+
+  if (sourceRooms.length === 0) {
+    return [];
+  }
+
+  try {
+    // Get the current max order in the target trip to append after existing rooms
+    const lastTargetRoom = await db.rooms
+      .where('[tripId+order]')
+      .between([targetTripId, 0], [targetTripId, Infinity])
+      .last();
+    const baseOrder = lastTargetRoom ? lastTargetRoom.order + 1 : 0;
+
+    const clonedRooms: Room[] = sourceRooms.map((sourceRoom, index) => ({
+      id: createRoomId(),
+      tripId: targetTripId,
+      name: sourceRoom.name,
+      capacity: sourceRoom.capacity,
+      description: sourceRoom.description,
+      icon: sourceRoom.icon,
+      order: baseOrder + index,
+    }));
+
+    await db.transaction('rw', db.rooms, async () => {
+      await db.rooms.bulkAdd(clonedRooms);
+    });
+
+    return clonedRooms;
+  } catch (error) {
+    throw new Error(
+      `Failed to clone rooms from trip ${sourceTripId} to trip ${targetTripId}`,
+      { cause: error },
+    );
+  }
+}
+
+// ============================================================================
 // Transactional Operations with Ownership Validation (CR-2 fix)
 // ============================================================================
 

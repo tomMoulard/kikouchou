@@ -33,7 +33,12 @@ import {
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { toISODateStringFromString } from '@/lib/db/utils';
-import type { Trip, TripFormData } from '@/types';
+import {
+  LocationAutocomplete,
+  ImportBadge,
+  type TripImportData,
+} from '@/features/trips/components/LocationAutocomplete';
+import type { Trip, TripFormData, TripId } from '@/types';
 
 // ============================================================================
 // Constants
@@ -58,6 +63,8 @@ interface TripFormProps {
   readonly onCancel: () => void;
   /** Callback when form dirty state changes (for unsaved changes guard). */
   readonly onDirtyChange?: (isDirty: boolean) => void;
+  /** Callback when a previous trip is selected for import (passes source trip ID). */
+  readonly onImportSourceChange?: (sourceTripId: TripId | null) => void;
 }
 
 /**
@@ -151,9 +158,21 @@ const TripForm = memo(function TripForm({
   onSubmit,
   onCancel,
   onDirtyChange,
+  onImportSourceChange,
 }: TripFormProps) {
   const { t, i18n } = useTranslation();
   const locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+
+  // ============================================================================
+  // Import State
+  // ============================================================================
+
+  /** Tracks the source trip selected for import (null = no import) */
+  const [importSource, setImportSource] = useState<{
+    readonly tripId: TripId;
+    readonly tripName: string;
+    readonly roomCount: number;
+  } | null>(null);
 
   // ============================================================================
   // Form State
@@ -177,6 +196,7 @@ const TripForm = memo(function TripForm({
   const [startDate, setStartDate] = useState<string>(initialValues.startDate);
   const [endDate, setEndDate] = useState<string>(initialValues.endDate);
   const [description, setDescription] = useState(initialValues.description);
+  const [coordinates, setCoordinates] = useState(trip?.coordinates);
 
   // Compute dirty state: any field differs from initial values
   const isDirty = useMemo(
@@ -207,6 +227,8 @@ const TripForm = memo(function TripForm({
     setStartDate(trip?.startDate ?? '');
     setEndDate(trip?.endDate ?? '');
     setDescription(trip?.description ?? '');
+    setCoordinates(trip?.coordinates);
+    setImportSource(null);
     setErrors({});
   }
 
@@ -320,14 +342,60 @@ const TripForm = memo(function TripForm({
   }, [name, validateName]);
 
   /**
-   * Handles location input change.
+   * Handles location input change from the autocomplete component.
    */
   const handleLocationChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      setLocation(e.target.value);
+    (value: string) => {
+      setLocation(value);
     },
     [],
   );
+
+  /**
+   * Handles importing data from a previously used trip.
+   * Pre-fills location, description, and coordinates; stores import source for room cloning.
+   */
+  const handleImportTrip = useCallback(
+    (data: TripImportData) => {
+      const { trip: sourceTip, rooms } = data;
+
+      // Pre-fill location
+      if (sourceTip.location) {
+        setLocation(sourceTip.location);
+      }
+
+      // Pre-fill description only if current description is empty
+      setDescription((prev) => {
+        if (!prev.trim() && sourceTip.description) {
+          return sourceTip.description;
+        }
+        return prev;
+      });
+
+      // Pre-fill coordinates
+      if (sourceTip.coordinates) {
+        setCoordinates(sourceTip.coordinates);
+      }
+
+      // Store import source info for the badge and for room cloning on submit
+      const source = {
+        tripId: sourceTip.id,
+        tripName: sourceTip.name,
+        roomCount: rooms.length,
+      };
+      setImportSource(source);
+      onImportSourceChange?.(sourceTip.id);
+    },
+    [onImportSourceChange],
+  );
+
+  /**
+   * Handles removing the import selection.
+   */
+  const handleRemoveImport = useCallback(() => {
+    setImportSource(null);
+    onImportSourceChange?.(null);
+  }, [onImportSourceChange]);
 
   /**
    * Handles description textarea change.
@@ -415,12 +483,13 @@ const TripForm = memo(function TripForm({
           startDate: toISODateStringFromString(startDate),
           endDate: toISODateStringFromString(endDate),
           description: description.trim() || undefined,
+          coordinates,
         });
       } catch {
         // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, doSubmit, name, location, startDate, endDate, description],
+    [validateForm, doSubmit, name, location, startDate, endDate, description, coordinates],
   );
 
   // ============================================================================
@@ -458,17 +527,26 @@ const TripForm = memo(function TripForm({
         )}
       </div>
 
-      {/* Location Field */}
+      {/* Location Field with Import Suggestions */}
       <div className="space-y-2">
         <Label htmlFor="trip-location">{t('trips.location')}</Label>
-        <Input
+        <LocationAutocomplete
           id="trip-location"
-          type="text"
           value={location}
           onChange={handleLocationChange}
+          onImportTrip={handleImportTrip}
           placeholder={t('trips.locationPlaceholder')}
           disabled={isSubmitting}
+          excludeTripId={trip?.id}
         />
+        {importSource && (
+          <ImportBadge
+            tripName={importSource.tripName}
+            roomCount={importSource.roomCount}
+            onRemove={handleRemoveImport}
+            disabled={isSubmitting}
+          />
+        )}
       </div>
 
       {/* Description Field */}

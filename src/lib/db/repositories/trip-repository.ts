@@ -207,6 +207,67 @@ export async function updateTrip(
  * // All rooms, persons, assignments, and transports are also deleted
  * ```
  */
+/** Minimum query length for location search */
+const MIN_LOCATION_SEARCH_LENGTH = 2;
+
+/** Maximum number of location suggestions to return */
+const MAX_LOCATION_SUGGESTIONS = 10;
+
+/**
+ * Searches for trips whose location matches the given query string.
+ *
+ * Performs a case-insensitive substring match on the `location` field.
+ * Results are deduplicated by normalized location, returning only the most
+ * recent trip per unique location. Limited to {@link MAX_LOCATION_SUGGESTIONS} results.
+ *
+ * @param query - The search string (minimum 2 characters)
+ * @returns Array of trips matching the query, one per unique location, most recent first
+ *
+ * @example
+ * ```typescript
+ * const trips = await getTripsByLocation('beach');
+ * // Returns the most recent trip at each location containing "beach"
+ * ```
+ */
+export async function getTripsByLocation(query: string): Promise<Trip[]> {
+  const trimmed = query.trim().toLowerCase();
+  if (trimmed.length < MIN_LOCATION_SEARCH_LENGTH) {
+    return [];
+  }
+
+  // Fetch all trips with a location, sorted by startDate descending (most recent first)
+  const allTrips = await db.trips.orderBy('startDate').reverse().toArray();
+
+  // Filter by location match and deduplicate by normalized location
+  const seenLocations = new Set<string>();
+  const results: Trip[] = [];
+
+  for (const trip of allTrips) {
+    if (!trip.location) {
+      continue;
+    }
+
+    const normalizedLocation = trip.location.trim().toLowerCase();
+    if (!normalizedLocation.includes(trimmed)) {
+      continue;
+    }
+
+    // Deduplicate: only keep the first (most recent) trip per unique location
+    if (seenLocations.has(normalizedLocation)) {
+      continue;
+    }
+
+    seenLocations.add(normalizedLocation);
+    results.push(trip);
+
+    if (results.length >= MAX_LOCATION_SUGGESTIONS) {
+      break;
+    }
+  }
+
+  return results;
+}
+
 export async function deleteTrip(id: TripId): Promise<void> {
   await db.transaction(
     'rw',

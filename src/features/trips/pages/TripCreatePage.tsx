@@ -5,7 +5,7 @@
  * @module features/trips/pages/TripCreatePage
  */
 
-import { type ReactElement, memo, useCallback, useState } from 'react';
+import { type ReactElement, memo, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -15,8 +15,8 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { TripForm } from '@/features/trips/components/TripForm';
-import { createTrip, setCurrentTrip } from '@/lib/db';
-import type { TripFormData } from '@/types';
+import { createTrip, setCurrentTrip, cloneRoomsToTrip } from '@/lib/db';
+import type { TripFormData, TripId } from '@/types';
 
 // ============================================================================
 // Component
@@ -50,9 +50,17 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
 
   const [isDirty, setIsDirty] = useState(false);
   const { isBlocked, proceed, reset, skipNextBlock } = useUnsavedChanges(isDirty);
+  const importSourceRef = useRef<TripId | null>(null);
 
   const handleDirtyChange = useCallback((dirty: boolean) => {
     setIsDirty(dirty);
+  }, []);
+
+  /**
+   * Tracks the import source trip ID from TripForm.
+   */
+  const handleImportSourceChange = useCallback((sourceTripId: TripId | null) => {
+    importSourceRef.current = sourceTripId;
   }, []);
 
   // ============================================================================
@@ -73,6 +81,19 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
         throw new Error('Trip creation failed: missing trip ID');
       }
 
+      // Clone rooms from import source if one was selected
+      let didImportRooms = false;
+      if (importSourceRef.current) {
+        try {
+          await cloneRoomsToTrip(importSourceRef.current, newTrip.id);
+          didImportRooms = true;
+        } catch (error) {
+          console.error('Failed to clone rooms from import source:', error);
+          // Trip is created — show warning but don't block navigation
+          toast.error(t('trips.importRoomsFailed', 'Trip created but room import failed'));
+        }
+      }
+
       // Set the new trip as the current trip so CalendarPage can display it
       await setCurrentTrip(newTrip.id);
 
@@ -83,7 +104,11 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
       skipNextBlock();
 
       // Show success toast with fallback for missing translation key
-      toast.success(t('trips.created', 'Trip created successfully'));
+      if (didImportRooms) {
+        toast.success(t('trips.createdWithImport', 'Trip created with rooms imported'));
+      } else if (!importSourceRef.current) {
+        toast.success(t('trips.created', 'Trip created successfully'));
+      }
 
       // Navigate to the new trip's calendar
       navigate(`/trips/${newTrip.id}/calendar`);
@@ -115,7 +140,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
 
       <Card>
         <CardContent className="pt-6">
-          <TripForm onSubmit={handleSubmit} onCancel={handleCancel} onDirtyChange={handleDirtyChange} />
+          <TripForm onSubmit={handleSubmit} onCancel={handleCancel} onDirtyChange={handleDirtyChange} onImportSourceChange={handleImportSourceChange} />
         </CardContent>
       </Card>
 

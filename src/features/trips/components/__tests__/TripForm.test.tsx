@@ -550,3 +550,60 @@ describe('TripForm Input Handling', () => {
     });
   });
 });
+
+// ============================================================================
+// Import Integration Tests
+// ============================================================================
+
+describe('TripForm Import Integration', () => {
+  it('renders location field as combobox (autocomplete)', () => {
+    const onSubmit = vi.fn();
+    const onCancel = vi.fn();
+
+    render(<TripForm onSubmit={onSubmit} onCancel={onCancel} />);
+
+    const locationInput = screen.getByLabelText(/trips\.location/i);
+    expect(locationInput).toHaveAttribute('role', 'combobox');
+    expect(locationInput).toHaveAttribute('aria-autocomplete', 'list');
+  });
+
+  it('accepts onImportSourceChange callback prop', () => {
+    const onSubmit = vi.fn();
+    const onCancel = vi.fn();
+    const onImportSourceChange = vi.fn();
+
+    // Should render without error with the new prop
+    render(
+      <TripForm
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+        onImportSourceChange={onImportSourceChange}
+      />
+    );
+
+    expect(screen.getByLabelText(/trips\.location/i)).toBeInTheDocument();
+  });
+
+  it('includes coordinates in submission when set', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const onCancel = vi.fn();
+
+    const trip = createTestTrip({
+      coordinates: { lat: 48.8566, lon: 2.3522 },
+    });
+
+    render(<TripForm trip={trip} onSubmit={onSubmit} onCancel={onCancel} />);
+
+    const submitButton = screen.getByRole('button', { name: /common\.save/i });
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          coordinates: { lat: 48.8566, lon: 2.3522 },
+        })
+      );
+    });
+  });
+});

@@ -60,7 +60,16 @@
     "created": "Trip created successfully",
     "updated": "Trip updated successfully",
     "deleted": "Trip deleted successfully",
-    "noGuests": "No guests yet"
+    "noGuests": "No guests yet",
+    "importSuggestion": "Previously used location",
+    "importConfirm": "Import from \"{{tripName}}\"?",
+    "importConfirmDescription": "This will pre-fill the location, description, and copy {{roomCount}} room(s) to your new trip.",
+    "importAction": "Import",
+    "importedFrom": "Importing from {{tripName}}",
+    "removeImport": "Remove import",
+    "createdWithImport": "Trip created with rooms imported",
+    "importRoomsFailed": "Trip created but room import failed",
+    "noMatchingLocations": "No matching previous locations"
   },
   "rooms": {
     "title": "Rooms",

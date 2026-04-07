@@ -15,6 +15,7 @@ import {
   getTripByShareId,
   updateTrip,
   deleteTrip,
+  getTripsByLocation,
 } from '@/lib/db/repositories/trip-repository';
 import { createRoom } from '@/lib/db/repositories/room-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
@@ -585,5 +586,93 @@ describe('deleteTrip', () => {
 
     // Deleting non-existent trip should be a no-op
     await expect(deleteTrip(nonExistentId)).resolves.not.toThrow();
+  });
+});
+
+// ============================================================================
+// getTripsByLocation Tests
+// ============================================================================
+
+describe('getTripsByLocation', () => {
+  it('returns trips matching location case-insensitively', async () => {
+    await createTrip(createValidTripData({ name: 'Trip 1', location: 'Beach House, Brittany' }));
+    await createTrip(createValidTripData({ name: 'Trip 2', location: 'Mountain Cabin' }));
+
+    const results = await getTripsByLocation('beach');
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.location).toBe('Beach House, Brittany');
+  });
+
+  it('returns empty array for query shorter than 2 characters', async () => {
+    await createTrip(createValidTripData({ location: 'Beach House' }));
+
+    expect(await getTripsByLocation('')).toHaveLength(0);
+    expect(await getTripsByLocation('B')).toHaveLength(0);
+    expect(await getTripsByLocation(' ')).toHaveLength(0);
+  });
+
+  it('returns empty array when no locations match', async () => {
+    await createTrip(createValidTripData({ location: 'Beach House' }));
+
+    const results = await getTripsByLocation('mountain');
+    expect(results).toHaveLength(0);
+  });
+
+  it('deduplicates results by normalized location', async () => {
+    await createTrip(createValidTripData({
+      name: 'Old Trip',
+      location: 'Beach House, Brittany',
+      startDate: isoDate('2023-07-01'),
+      endDate: isoDate('2023-07-08'),
+    }));
+    await createTrip(createValidTripData({
+      name: 'New Trip',
+      location: 'Beach House, Brittany',
+      startDate: isoDate('2024-07-01'),
+      endDate: isoDate('2024-07-08'),
+    }));
+
+    const results = await getTripsByLocation('beach house');
+
+    // Should return only one result (deduplicated by location)
+    expect(results).toHaveLength(1);
+    // Should return the most recent trip
+    expect(results[0]?.name).toBe('New Trip');
+  });
+
+  it('returns multiple results for different locations', async () => {
+    await createTrip(createValidTripData({ name: 'Trip 1', location: 'Beach House North' }));
+    await createTrip(createValidTripData({ name: 'Trip 2', location: 'Beach House South' }));
+
+    const results = await getTripsByLocation('beach house');
+
+    expect(results).toHaveLength(2);
+  });
+
+  it('skips trips without a location', async () => {
+    await createTrip(createValidTripData({ location: undefined }));
+    await createTrip(createValidTripData({ location: 'Beach House' }));
+
+    const results = await getTripsByLocation('beach');
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.location).toBe('Beach House');
+  });
+
+  it('trims query whitespace', async () => {
+    await createTrip(createValidTripData({ location: 'Beach House' }));
+
+    const results = await getTripsByLocation('  beach  ');
+
+    expect(results).toHaveLength(1);
+  });
+
+  it('performs substring matching', async () => {
+    await createTrip(createValidTripData({ location: 'Grand Beach House, Brittany' }));
+
+    const results = await getTripsByLocation('Beach House');
+
+    expect(results).toHaveLength(1);
   });
 });
