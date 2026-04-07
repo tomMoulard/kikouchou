@@ -25,7 +25,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useOfflineAwareToast } from '@/hooks';
@@ -56,8 +56,15 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toISODateString } from '@/lib/db/utils';
-import type { HexColor, Room, RoomAssignment, TransportId } from '@/types';
+import type {
+  HexColor,
+  ISODateString,
+  Room,
+  RoomAssignment,
+  TransportId,
+} from '@/types';
 
 // Import extracted components
 import {
@@ -65,6 +72,7 @@ import {
   CalendarDayHeader,
   CalendarDay,
   EventDetailDialog,
+  CalendarTimeline,
   type AssignmentEventData,
   type TransportEventData,
   type CalendarEventData,
@@ -98,6 +106,7 @@ import {
 const CalendarPage = memo(function CalendarPage(): ReactElement {
   const { t, i18n } = useTranslation();
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { successToast } = useOfflineAwareToast();
 
   // Context hooks
@@ -109,7 +118,12 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     error: assignmentsError,
     deleteAssignment,
   } = useAssignmentContext();
-  const { getPersonById, isLoading: isPersonsLoading, error: personsError } = usePersonContext();
+  const {
+    persons,
+    getPersonById,
+    isLoading: isPersonsLoading,
+    error: personsError,
+  } = usePersonContext();
   const {
     arrivals,
     departures,
@@ -121,6 +135,26 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // Local state for current viewing month
   // Initialized to today - will sync with trip start date via useEffect when loaded
   const [currentMonth, setCurrentMonth] = useState<Date>(() => startOfMonth(new Date()));
+
+  const currentView = useMemo(() => {
+    const rawView = searchParams.get('view');
+    if (rawView === 'timeline') return 'timeline';
+    // Back-compat with older links
+    if (rawView === 'month') return 'card';
+    return rawView === 'card' ? 'card' : 'timeline';
+  }, [searchParams]);
+
+  const handleViewChange = useCallback(
+    (nextValue: string) => {
+      const nextView = nextValue === 'timeline' ? 'timeline' : 'card';
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('view', nextView);
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
 
   // Track if user has manually navigated to avoid overwriting their selection
   const hasUserNavigatedRef = useRef(false);
@@ -184,7 +218,12 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     if (!isValid(start) || !isValid(end)) {
       return null;
     }
-    return { start, end };
+    // Use the same "nights" model as room assignments: last visible night is endDate - 1.
+    const lastNight = subDays(end, 1);
+    if (lastNight < start) {
+      return null;
+    }
+    return { start, end: lastNight };
   }, [currentTrip]);
 
   // Generate calendar days for the current month view
@@ -218,6 +257,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
 
     const calendarStartStr = toISODateString(firstDay);
     const calendarEndStr = toISODateString(lastDay);
+    const tripStart = tripBoundaries?.start;
+    const tripEnd = tripBoundaries?.end;
 
     // Phase 1: Identify valid assignments and their visible ranges
     interface SpanInfo {
@@ -264,8 +305,19 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         continue;
       }
 
-      const effectiveStart = assignmentStart < firstDay ? firstDay : assignmentStart;
-      const effectiveEnd = lastNight > lastDay ? lastDay : lastNight;
+      // Clamp spans to the visible calendar range AND the trip nights range
+      const effectiveStartCandidate = assignmentStart < firstDay ? firstDay : assignmentStart;
+      const effectiveEndCandidate = lastNight > lastDay ? lastDay : lastNight;
+
+      const effectiveStart =
+        tripStart && effectiveStartCandidate < tripStart ? tripStart : effectiveStartCandidate;
+      const effectiveEnd =
+        tripEnd && effectiveEndCandidate > tripEnd ? tripEnd : effectiveEndCandidate;
+
+      if (effectiveEnd < effectiveStart) {
+        continue;
+      }
+
       const totalDays =
         Math.round((effectiveEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
@@ -481,6 +533,56 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
 
   // Today's date for highlighting
   const { today } = useToday();
+  const dayRefs = useRef(new Map<ISODateString, HTMLDivElement>());
+
+  const calendarWeeks = useMemo(() => {
+    const weeks: Date[][] = [];
+
+    for (let index = 0; index < calendarDays.length; index += 7) {
+      weeks.push(calendarDays.slice(index, index + 7));
+    }
+
+    return weeks;
+  }, [calendarDays]);
+
+  const visibleDateKeys = useMemo(
+    () => calendarDays.map((day) => toISODateString(day)),
+    [calendarDays],
+  );
+
+  const defaultFocusedDateKey = useMemo(() => {
+    if (calendarDays.length === 0) {
+      return null;
+    }
+
+    const todayKey = toISODateString(today);
+    if (visibleDateKeys.includes(todayKey)) {
+      return todayKey;
+    }
+
+    const firstDayInCurrentMonth = calendarDays.find((day) =>
+      isSameMonth(day, currentMonth),
+    );
+
+    if (firstDayInCurrentMonth) {
+      return toISODateString(firstDayInCurrentMonth);
+    }
+
+    return visibleDateKeys[0] ?? null;
+  }, [calendarDays, currentMonth, today, visibleDateKeys]);
+
+  const [focusedDateKey, setFocusedDateKey] = useState<ISODateString | null>(null);
+
+  useEffect(() => {
+    if (defaultFocusedDateKey === null) {
+      setFocusedDateKey(null);
+      return;
+    }
+
+    if (focusedDateKey === null || !visibleDateKeys.includes(focusedDateKey)) {
+      setFocusedDateKey(defaultFocusedDateKey);
+    }
+  }, [defaultFocusedDateKey, focusedDateKey, visibleDateKeys]);
 
   // ============================================================================
   // Event Handlers
@@ -585,6 +687,71 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     }
   }, []);
 
+  const handleDayRef = useCallback(
+    (dateKey: ISODateString, node: HTMLDivElement | null) => {
+      if (node) {
+        dayRefs.current.set(dateKey, node);
+        return;
+      }
+
+      dayRefs.current.delete(dateKey);
+    },
+    [],
+  );
+
+  const focusDay = useCallback((dateKey: ISODateString) => {
+    setFocusedDateKey(dateKey);
+    dayRefs.current.get(dateKey)?.focus();
+  }, []);
+
+  const handleDayFocus = useCallback((dateKey: ISODateString) => {
+    setFocusedDateKey(dateKey);
+  }, []);
+
+  const handleDayKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>, dateKey: ISODateString) => {
+      const currentIndex = visibleDateKeys.indexOf(dateKey);
+      if (currentIndex === -1) {
+        return;
+      }
+
+      let nextIndex: number;
+
+      switch (event.key) {
+        case 'ArrowRight':
+          nextIndex = Math.min(currentIndex + 1, visibleDateKeys.length - 1);
+          break;
+        case 'ArrowLeft':
+          nextIndex = Math.max(currentIndex - 1, 0);
+          break;
+        case 'ArrowDown':
+          nextIndex = Math.min(currentIndex + 7, visibleDateKeys.length - 1);
+          break;
+        case 'ArrowUp':
+          nextIndex = Math.max(currentIndex - 7, 0);
+          break;
+        case 'Home':
+          nextIndex = currentIndex - (currentIndex % 7);
+          break;
+        case 'End': {
+          const rowStart = currentIndex - (currentIndex % 7);
+          nextIndex = Math.min(rowStart + 6, visibleDateKeys.length - 1);
+          break;
+        }
+        default:
+          return;
+      }
+
+      event.preventDefault();
+
+      const nextDateKey = visibleDateKeys[nextIndex];
+      if (nextDateKey) {
+        focusDay(nextDateKey);
+      }
+    },
+    [focusDay, visibleDateKeys],
+  );
+
   // Validate Trip Context
   const tripMismatch = useMemo(() => {
     if (!tripIdFromUrl || !currentTrip) {
@@ -648,68 +815,113 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // Render: Calendar
   // ============================================================================
 
-  const hasAssignments = assignments.length > 0;
+  const hasVisibleCalendarItems = eventsByDate.size > 0 || transportsByDate.size > 0;
 
   return (
     <div className="container max-w-6xl py-6 md:py-8">
       <PageHeader title={t('calendar.title')} description={currentTrip.name} />
 
+      <Tabs value={currentView} onValueChange={handleViewChange} className="mb-4">
+        <TabsList aria-label={t('calendar.view.ariaLabel', 'Calendar view')}>
+          <TabsTrigger value="card">{t('calendar.view.month', 'Month')}</TabsTrigger>
+          <TabsTrigger value="timeline">{t('calendar.view.timeline', 'Timeline')}</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
       {/* Calendar navigation header */}
-      <CalendarHeader
-        currentMonth={currentMonth}
-        onPrevMonth={handlePrevMonth}
-        onNextMonth={handleNextMonth}
-        onToday={handleToday}
-        dateLocale={dateLocale}
-      />
+      {currentView === 'card' && (
+        <CalendarHeader
+          currentMonth={currentMonth}
+          onPrevMonth={handlePrevMonth}
+          onNextMonth={handleNextMonth}
+          onToday={handleToday}
+          dateLocale={dateLocale}
+        />
+      )}
 
-      {/* Calendar grid wrapper with horizontal scroll on mobile */}
-      <div
-        className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0"
-        tabIndex={0}
-        role="region"
-        aria-label={t('calendar.scrollableCalendar', 'Scrollable calendar')}
-      >
-        <div className="min-w-[600px] border rounded-lg overflow-hidden">
-          {/* Day headers */}
-          <CalendarDayHeader dateLocale={dateLocale} />
+      <p id="calendar-keyboard-help" className="sr-only">
+        {t(
+          'calendar.keyboardHelp',
+          'Use the arrow keys to move between days in the calendar grid.',
+        )}
+      </p>
 
-          {/* Calendar grid */}
-          <div
-            className="grid grid-cols-7 gap-px bg-muted"
-            role="grid"
-            aria-label={t('calendar.monthView', 'Month view calendar')}
-          >
-            {calendarDays.map((day) => {
-              const dateKey = toISODateString(day);
-              const events = eventsByDate.get(dateKey) ?? EMPTY_EVENTS;
-              const transports = transportsByDate.get(dateKey) ?? EMPTY_TRANSPORTS;
-              const isCurrentMonth = isSameMonth(day, currentMonth);
-              const isDayToday = isSameDay(day, today);
-              const isWithinTrip =
-                tripBoundaries !== null && isWithinInterval(day, tripBoundaries);
+      {currentView === 'card' ? (
+        // Calendar grid wrapper with horizontal scroll on mobile
+        <div
+          className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0"
+          role="region"
+          aria-label={t('calendar.scrollableCalendar', 'Scrollable calendar')}
+        >
+          <div className="min-w-[600px] border rounded-lg overflow-hidden">
+            <div
+              role="grid"
+              aria-label={t('calendar.monthView', 'Month view calendar')}
+              aria-describedby="calendar-keyboard-help"
+            >
+              {/* Day headers */}
+              <CalendarDayHeader dateLocale={dateLocale} />
 
-              return (
-                <CalendarDay
-                  key={dateKey}
-                  date={day}
-                  events={events}
-                  transports={transports}
-                  isCurrentMonth={isCurrentMonth}
-                  isToday={isDayToday}
-                  isWithinTrip={isWithinTrip}
-                  dateLocale={dateLocale}
-                  onEventClick={handleEventClick}
-                  onTransportClick={handleTransportClick}
-                />
-              );
-            })}
+              {/* Calendar grid body */}
+              <div role="rowgroup">
+                {calendarWeeks.map((week, weekIndex) => (
+                  <div
+                    key={`week-${weekIndex}`}
+                    className="grid grid-cols-7 gap-px bg-muted"
+                    role="row"
+                  >
+                    {week.map((day) => {
+                      const dateKey = toISODateString(day);
+                      const events = eventsByDate.get(dateKey) ?? EMPTY_EVENTS;
+                      const transports = transportsByDate.get(dateKey) ?? EMPTY_TRANSPORTS;
+                      const isCurrentMonth = isSameMonth(day, currentMonth);
+                      const isDayToday = isSameDay(day, today);
+                      const isWithinTrip =
+                        tripBoundaries !== null && isWithinInterval(day, tripBoundaries);
+
+                      return (
+                        <CalendarDay
+                          key={dateKey}
+                          dateKey={dateKey}
+                          date={day}
+                          events={events}
+                          transports={transports}
+                          isCurrentMonth={isCurrentMonth}
+                          isToday={isDayToday}
+                          isWithinTrip={isWithinTrip}
+                          dateLocale={dateLocale}
+                          tabIndex={focusedDateKey === dateKey ? 0 : -1}
+                          onEventClick={handleEventClick}
+                          onTransportClick={handleTransportClick}
+                          onDayFocus={handleDayFocus}
+                          onDayKeyDown={handleDayKeyDown}
+                          dayRef={handleDayRef}
+                        />
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <CalendarTimeline
+          trip={currentTrip}
+          persons={persons}
+          rooms={rooms}
+          assignments={assignments}
+          arrivals={arrivals}
+          departures={departures}
+          dateLocale={dateLocale}
+          today={today}
+          onAssignmentClick={handleEventClick}
+          onTransportClick={handleTransportClick}
+        />
+      )}
 
       {/* Empty state message when no assignments */}
-      {!hasAssignments && (
+      {currentView === 'card' && !hasVisibleCalendarItems && (
         <div className="mt-6 text-center text-muted-foreground">
           <p>{t('calendar.noAssignments')}</p>
         </div>

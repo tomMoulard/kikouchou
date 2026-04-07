@@ -9,6 +9,8 @@ export { CalendarDayHeader } from './CalendarDayHeader';
 export { CalendarDay } from './CalendarDay';
 export { CalendarEventPill } from './CalendarEventPill';
 export { TransportIndicator } from './TransportIndicator';
+export { CalendarTimeline } from './CalendarTimeline';
+export { CalendarTimelineRow } from './CalendarTimelineRow';
 export {
   EventDetailDialog,
   type AssignmentEventData,

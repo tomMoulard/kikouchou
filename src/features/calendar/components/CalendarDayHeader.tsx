@@ -29,17 +29,20 @@ const CalendarDayHeader = memo(function CalendarDayHeader({
   }, [dateLocale]);
 
   return (
-    <div className="grid grid-cols-7 gap-px bg-muted">
-      {dayNames.map((day) => (
-        <div
-          key={day.full}
-          className="bg-background p-2 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider"
-          aria-label={day.full}
-        >
-          <span className="hidden sm:inline">{day.short}</span>
-          <span className="sm:hidden">{day.short.charAt(0)}</span>
-        </div>
-      ))}
+    <div role="rowgroup">
+      <div className="grid grid-cols-7 gap-px bg-muted" role="row">
+        {dayNames.map((day) => (
+          <div
+            key={day.full}
+            className="bg-background p-2 text-center text-xs font-medium text-muted-foreground uppercase tracking-wider"
+            role="columnheader"
+            aria-label={day.full}
+          >
+            <span className="hidden sm:inline">{day.short}</span>
+            <span className="sm:hidden">{day.short.charAt(0)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 });

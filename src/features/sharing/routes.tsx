@@ -1,7 +1,7 @@
 /**
  * @fileoverview Route configuration for the Sharing feature.
  * Provides lazy-loaded route definitions for shared trip viewing and the
- * onboarding wizard sub-routes (identity + room steps implemented; stubs for 2.4–2.5).
+ * onboarding wizard sub-routes (identity, room, transport, summary).
  *
  * @module features/sharing/routes
  *
@@ -38,16 +38,6 @@ const ShareImportPage = lazy(() =>
 );
 
 /**
- * Lazy-loaded OnboardingPlaceholderPage component.
- * Stub for wizard steps until stories 2.3–2.5 are implemented.
- */
-const OnboardingPlaceholderPage = lazy(() =>
-  import('./pages/OnboardingPlaceholderPage').then((module) => ({
-    default: module.OnboardingPlaceholderPage,
-  })),
-);
-
-/**
  * Lazy-loaded IdentityStepPage component (story 2.2).
  * Replaces the OnboardingPlaceholderPage for the identity route.
  */
@@ -74,6 +64,16 @@ const RoomSelectionStepPage = lazy(() =>
 const TransportEntryStepPage = lazy(() =>
   import('./pages/TransportEntryStepPage').then((module) => ({
     default: module.TransportEntryStepPage,
+  })),
+);
+
+/**
+ * Lazy-loaded SummaryStepPage component (story 2.5).
+ * Replaces the OnboardingPlaceholderPage for the summary route.
+ */
+const SummaryStepPage = lazy(() =>
+  import('./pages/SummaryStepPage').then((module) => ({
+    default: module.SummaryStepPage,
   })),
 );
 
@@ -109,8 +109,8 @@ function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>)
  * - `/share/:shareId`           — Welcome screen (story 2.1)
  * - `/share/:shareId/identity`  — Step 2: identity selection (story 2.2)
  * - `/share/:shareId/room`      — Step 3: room selection (story 2.3)
- * - `/share/:shareId/transport` — Step 4: transport entry (story 2.4, stubbed)
- * - `/share/:shareId/summary`   — Step 5: summary (story 2.5, stubbed)
+ * - `/share/:shareId/transport` — Step 4: transport entry (story 2.4)
+ * - `/share/:shareId/summary`   — Step 5: summary & trip entry (story 2.5)
  *
  * Note: This route is designed to be used at the root level of the router,
  * not nested under an authenticated layout, as it's a public sharing link.
@@ -145,7 +145,7 @@ export const sharingRoutes: RouteObject[] = [
       },
       {
         path: 'summary',
-        element: withSuspense(OnboardingPlaceholderPage),
+        element: withSuspense(SummaryStepPage),
       },
     ],
   },

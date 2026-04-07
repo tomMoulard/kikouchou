@@ -14,6 +14,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -25,6 +26,7 @@ import { Label } from '@/components/ui/label';
 import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
 import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
 import { useTripContext } from '@/contexts/TripContext';
+import { usePersonContext } from '@/contexts/PersonContext';
 import { parseISO, format } from 'date-fns';
 import { toHexColor, toISODateStringFromString } from '@/lib/db/utils';
 import type { Person, PersonFormData } from '@/types';
@@ -62,6 +64,23 @@ interface FormErrors {
  * Default color for new persons (first color in palette).
  */
 const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6';
+
+function pickRandomUnusedColor(args: {
+  readonly usedColors: ReadonlySet<string>;
+  readonly palette: readonly string[];
+}): string {
+  const { usedColors, palette } = args;
+  const normalizedUsed = new Set(Array.from(usedColors, (c) => c.toLowerCase()));
+
+  const unused = palette.filter((c) => !normalizedUsed.has(c.toLowerCase()));
+  const pool = unused.length > 0 ? unused : palette;
+  if (pool.length === 0) {
+    return DEFAULT_COLOR;
+  }
+
+  const idx = Math.floor(Math.random() * pool.length);
+  return pool[idx] ?? DEFAULT_COLOR;
+}
 
 // ============================================================================
 // Component
@@ -105,6 +124,16 @@ const PersonForm = memo(function PersonForm({
 }: PersonFormProps) {
   const { t } = useTranslation();
   const { currentTrip } = useTripContext();
+  const { persons } = usePersonContext();
+
+  const usedColors = useMemo(() => {
+    const used = new Set<string>();
+    for (const p of persons) {
+      if (person?.id && p.id === person.id) continue;
+      used.add(p.color);
+    }
+    return used;
+  }, [person?.id, persons]);
 
   // ============================================================================
   // Form State
@@ -113,7 +142,10 @@ const PersonForm = memo(function PersonForm({
   // Form field values
   const [name, setName] = useState(person?.name ?? '');
   // Color state is stored as string internally, converted to HexColor on submit
-  const [color, setColor] = useState<string>(person?.color ?? DEFAULT_COLOR);
+  const [color, setColor] = useState<string>(() => {
+    if (person?.color) return person.color;
+    return pickRandomUnusedColor({ usedColors, palette: DEFAULT_COLORS });
+  });
   const [stayDates, setStayDates] = useState<DateRange | undefined>(() => {
     if (person?.stayStartDate && person?.stayEndDate) {
       return {
@@ -124,15 +156,30 @@ const PersonForm = memo(function PersonForm({
     return undefined;
   });
 
+  const initialSnapshotRef = useRef<{
+    readonly name: string;
+    readonly color: string;
+    readonly stayStartDate: string;
+    readonly stayEndDate: string;
+  } | null>(null);
+
+  const currentStayStart = stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : '';
+  const currentStayEnd = stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : '';
+
   // Compute dirty state: compare current values against initial (person prop)
   const isDirty = useMemo(
-    () =>
-      name !== (person?.name ?? '') ||
-      color !== (person?.color ?? DEFAULT_COLOR) ||
-      // Compare stay dates by formatted string
-      (stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : '') !== (person?.stayStartDate ?? '') ||
-      (stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : '') !== (person?.stayEndDate ?? ''),
-    [name, color, stayDates, person],
+    () => {
+      const snapshot = initialSnapshotRef.current;
+      if (!snapshot) return false;
+
+      return (
+        name !== snapshot.name ||
+        color !== snapshot.color ||
+        currentStayStart !== snapshot.stayStartDate ||
+        currentStayEnd !== snapshot.stayEndDate
+      );
+    },
+    [color, currentStayEnd, currentStayStart, name],
   );
 
   // Notify parent of dirty state changes
@@ -150,8 +197,13 @@ const PersonForm = memo(function PersonForm({
   // Sync form state when person prop changes (for edit mode navigation)
   // Only depends on person.id to avoid resetting on every prop reference change
   useEffect(() => {
-    setName(person?.name ?? '');
-    setColor(person?.color ?? DEFAULT_COLOR);
+    const nextName = person?.name ?? '';
+    const nextColor = person?.color
+      ? person.color
+      : pickRandomUnusedColor({ usedColors, palette: DEFAULT_COLORS });
+
+    setName(nextName);
+    setColor(nextColor);
     // Sync stay dates from person
     if (person?.stayStartDate && person?.stayEndDate) {
       setStayDates({
@@ -161,9 +213,17 @@ const PersonForm = memo(function PersonForm({
     } else {
       setStayDates(undefined);
     }
+
+    initialSnapshotRef.current = {
+      name: nextName,
+      color: nextColor,
+      stayStartDate: person?.stayStartDate ?? '',
+      stayEndDate: person?.stayEndDate ?? '',
+    };
+
     // Use callback to avoid creating new object if already empty
     setErrors((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-  }, [person?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on person.id change
+  }, [person?.id, usedColors]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on person.id change
 
   // ============================================================================
   // Validation

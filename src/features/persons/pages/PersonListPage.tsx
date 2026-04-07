@@ -32,8 +32,11 @@ import { enUS, fr } from 'date-fns/locale';
 import { Plus, Users } from 'lucide-react';
 
 import { useTripContext } from '@/contexts/TripContext';
+import { useRoomContext } from '@/contexts/RoomContext';
+import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { useToday } from '@/hooks';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
@@ -48,6 +51,7 @@ import {
 import { cn } from '@/lib/utils';
 import { TransportIcon } from '@/components/shared/TransportIcon';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
+import { toISODateString } from '@/lib/db/utils';
 import type { Person, PersonId, TransportMode } from '@/types';
 
 // ============================================================================
@@ -80,6 +84,8 @@ interface PersonCardProps {
   readonly person: Person;
   /** Transport summary for the person */
   readonly transportSummary: TransportSummary;
+  /** Room name currently assigned (if any) */
+  readonly roomName?: string;
   /** Callback when the card is clicked */
   readonly onClick: (personId: PersonId) => void;
   /** Whether interaction is disabled */
@@ -136,6 +142,7 @@ function formatTransportDatetime(
 const PersonCard = memo(function PersonCard({
   person,
   transportSummary,
+  roomName,
   onClick,
   isDisabled = false,
   dateLocale,
@@ -207,23 +214,34 @@ const PersonCard = memo(function PersonCard({
       </CardHeader>
 
       <CardContent className="pt-0">
+        {roomName && (
+          <div className="mb-2 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {t('rooms.room', 'Room')}:
+            </span>{' '}
+            <span className="text-muted-foreground">{roomName}</span>
+          </div>
+        )}
+
         {hasTransportInfo ? (
           <div className="space-y-2 text-sm text-muted-foreground">
             {/* Arrival info */}
             {transportSummary.arrival && (() => {
               const { date, time } = formatTransportDatetime(transportSummary.arrival.datetime, dateLocale);
               return (
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2 min-w-0">
                   <TransportIcon
                     mode={transportSummary.arrival.transportMode ?? 'other'}
                     className="size-4 shrink-0 text-green-600"
                   />
-                  <span className="font-medium text-foreground">
-                    {date}, {time}
-                  </span>
-                  <span className="truncate" title={transportSummary.arrival.location}>
-                    {transportSummary.arrival.location}
-                  </span>
+                  <div className="min-w-0">
+                    <div className="font-medium text-foreground tabular-nums">
+                      {date}, {time}
+                    </div>
+                    <div className="text-muted-foreground truncate" title={transportSummary.arrival.location}>
+                      {transportSummary.arrival.location}
+                    </div>
+                  </div>
                 </div>
               );
             })()}
@@ -232,17 +250,19 @@ const PersonCard = memo(function PersonCard({
             {transportSummary.departure && (() => {
               const { date, time } = formatTransportDatetime(transportSummary.departure.datetime, dateLocale);
               return (
-                <div className="flex items-center gap-2">
+                <div className="flex items-start gap-2 min-w-0">
                   <TransportIcon
                     mode={transportSummary.departure.transportMode ?? 'other'}
                     className="size-4 shrink-0 text-orange-600"
                   />
-                  <span className="font-medium text-foreground">
-                    {date}, {time}
-                  </span>
-                  <span className="truncate" title={transportSummary.departure.location}>
-                    {transportSummary.departure.location}
-                  </span>
+                  <div className="min-w-0">
+                    <div className="font-medium text-foreground tabular-nums">
+                      {date}, {time}
+                    </div>
+                    <div className="text-muted-foreground truncate" title={transportSummary.departure.location}>
+                      {transportSummary.departure.location}
+                    </div>
+                  </div>
                 </div>
               );
             })()}
@@ -278,8 +298,11 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
 
   // Context hooks
    { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
+   { rooms, isLoading: isRoomsLoading } = useRoomContext(),
+   { assignments, isLoading: isAssignmentsLoading } = useAssignmentContext(),
    { persons, isLoading: isPersonsLoading, error: personsError } = usePersonContext(),
    { getTransportsByPerson, isLoading: isTransportsLoading } = useTransportContext(),
+   { today } = useToday(),
 
   // Track if we're currently navigating to prevent double-clicks
    isNavigatingRef = useRef(false),
@@ -290,7 +313,8 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
    [editingPersonId, setEditingPersonId] = useState<PersonId | undefined>(undefined),
 
   // Combined loading state (includes transports to avoid "no transport info" flash)
-   isLoading = isTripLoading || isPersonsLoading || isTransportsLoading,
+   isLoading =
+    isTripLoading || isRoomsLoading || isAssignmentsLoading || isPersonsLoading || isTransportsLoading,
 
   // Get date locale based on current language
    dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
@@ -312,7 +336,26 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
 
   // Calculate transport summaries for all persons
   // Uses single-pass O(n) algorithm instead of sort-based O(n log n)
-   personsWithTransports = useMemo(() => persons.map((person) => {
+   personsWithTransports = useMemo(() => {
+      const roomsById = new Map<string, string>(rooms.map((r) => [r.id, r.name]));
+      const todayKey = toISODateString(today);
+
+      const roomNameByPersonId = new Map<string, string>();
+      for (const a of assignments) {
+        // Nights semantics: [startDate, endDate) so endDate is checkout day
+        const isActiveToday = a.startDate <= todayKey && todayKey < a.endDate;
+        if (!isActiveToday) continue;
+
+        const roomName = roomsById.get(a.roomId);
+        if (!roomName) continue;
+
+        // If multiple active rooms today, keep first (rare) to avoid noisy UI.
+        if (!roomNameByPersonId.has(a.personId)) {
+          roomNameByPersonId.set(a.personId, roomName);
+        }
+      }
+
+      return persons.map((person) => {
       const transports = getTransportsByPerson(person.id);
 
       // Single-pass algorithm to find earliest arrival and latest departure
@@ -345,8 +388,10 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
         departure: latestDeparture,
       };
 
-      return { person, transportSummary };
-    }), [persons, getTransportsByPerson]),
+      const roomName = roomNameByPersonId.get(person.id);
+      return { person, transportSummary, roomName };
+    });
+    }, [assignments, getTransportsByPerson, persons, rooms, today]),
 
   // ============================================================================
   // Event Handlers
@@ -523,11 +568,12 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
           'pb-20 sm:pb-4',
         )}
       >
-        {personsWithTransports.map(({ person, transportSummary }) => (
+        {personsWithTransports.map(({ person, transportSummary, roomName }) => (
           <div key={person.id} role="listitem">
             <PersonCard
               person={person}
               transportSummary={transportSummary}
+              roomName={roomName}
               onClick={handlePersonClick}
               isDisabled={isNavigating}
               dateLocale={dateLocale}

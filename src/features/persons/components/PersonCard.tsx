@@ -352,22 +352,25 @@ const PersonCard = memo(function PersonCard({
         {/* Card Content - Transport summary */}
         <CardContent className="pt-0">
           {hasTransportInfo ? (
-            <div className="space-y-2 text-sm text-muted-foreground">
+            <div className="space-y-1 text-sm text-muted-foreground">
               {/* Arrival info */}
               {transportSummary.arrival && (() => {
                 const { date, time } = formatTransportDatetime(transportSummary.arrival.datetime, dateLocale);
+                const fullText = `${date}, ${time} — ${transportSummary.arrival.location}`;
                 return (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-start gap-2 min-w-0" title={fullText} aria-label={fullText}>
                     <TransportIcon
                       mode={transportSummary.arrival.transportMode ?? 'other'}
                       className="size-4 shrink-0 text-green-600"
                     />
-                    <span className="font-medium text-foreground">
-                      {date}, {time}
-                    </span>
-                    <span className="truncate" title={transportSummary.arrival.location}>
-                      {transportSummary.arrival.location}
-                    </span>
+                    <div className="min-w-0">
+                      <div className="font-medium text-foreground tabular-nums">
+                        {date}, {time}
+                      </div>
+                      <div className="text-muted-foreground truncate">
+                        {transportSummary.arrival.location}
+                      </div>
+                    </div>
                   </div>
                 );
               })()}
@@ -375,18 +378,21 @@ const PersonCard = memo(function PersonCard({
               {/* Departure info */}
               {transportSummary.departure && (() => {
                 const { date, time } = formatTransportDatetime(transportSummary.departure.datetime, dateLocale);
+                const fullText = `${date}, ${time} — ${transportSummary.departure.location}`;
                 return (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-start gap-2 min-w-0" title={fullText} aria-label={fullText}>
                     <TransportIcon
                       mode={transportSummary.departure.transportMode ?? 'other'}
                       className="size-4 shrink-0 text-orange-600"
                     />
-                    <span className="font-medium text-foreground">
-                      {date}, {time}
-                    </span>
-                    <span className="truncate" title={transportSummary.departure.location}>
-                      {transportSummary.departure.location}
-                    </span>
+                    <div className="min-w-0">
+                      <div className="font-medium text-foreground tabular-nums">
+                        {date}, {time}
+                      </div>
+                      <div className="text-muted-foreground truncate">
+                        {transportSummary.departure.location}
+                      </div>
+                    </div>
                   </div>
                 );
               })()}

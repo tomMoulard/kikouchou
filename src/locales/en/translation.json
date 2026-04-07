@@ -33,7 +33,12 @@
     "share": "Share",
     "skipToMain": "Skip to main content",
     "main": "Main navigation",
+    "mobileMain": "Mobile navigation",
     "more": "More",
+    "moreNavigation": "More navigation",
+    "tripsNavigation": "Trips navigation",
+    "tripSections": "Trip navigation",
+    "settingsNavigation": "Settings navigation",
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar"
   },
@@ -94,6 +99,16 @@
     "capacityWarning": "This room may be over capacity for some of these dates",
     "filterDates": "Show availability for dates",
     "dragHint": "Drag a guest to a room below to assign",
+    "swapSuccess": "Rooms swapped",
+    "view": {
+      "ariaLabel": "Rooms view",
+      "cards": "Cards",
+      "timeline": "Timeline"
+    },
+    "timeline": {
+      "ariaLabel": "Room occupancy timeline",
+      "rows": "Room rows"
+    },
     "icons": {
       "bedDouble": "Double bed",
       "bedSingle": "Single bed",
@@ -232,13 +247,28 @@
     "nextMonth": "Next month",
     "monthView": "Month view calendar",
     "scrollableCalendar": "Scrollable calendar",
+    "keyboardHelp": "Use the arrow keys to move between days in the calendar grid.",
+    "outsideCurrentMonth": "Outside the current month",
+    "outsideTripDates": "Outside the trip dates",
+    "moreItemsHidden": "{{count}} more items in this day",
     "personArriving": "{{name}} arriving",
     "personDeparting": "{{name}} departing",
     "eventDetails": "Event details",
     "nights": "{{count}} night",
     "nights_plural": "{{count}} nights",
     "viewTransportDetails": "View {{name}}'s {{type}} details",
-    "transportDeleted": "Transport deleted successfully"
+    "transportDeleted": "Transport deleted successfully",
+    "view": {
+      "ariaLabel": "Calendar view",
+      "month": "Month",
+      "timeline": "Timeline"
+    },
+    "timeline": {
+      "ariaLabel": "Timeline calendar",
+      "persons": "Guests",
+      "rows": "Timeline rows",
+      "personRow": "{{name}} timeline"
+    }
   },
   "sharing": {
     "title": "Share trip",
@@ -320,7 +350,22 @@
     "transportAddAnother": "Add another?",
     "transportEmpty": "No travel details yet",
     "transportEnteredCount": "{{count}} transport(s) added",
-    "transportNeedsPickupBadge": "Needs pickup"
+    "transportNeedsPickupBadge": "Needs pickup",
+    "summaryTitle": "You're all set!",
+    "summarySubtitle": "Here's a summary of your trip setup",
+    "summaryIdentityLabel": "Identity",
+    "summaryRoomLabel": "Room",
+    "summaryTransportLabel": "Transport",
+    "summaryChange": "Change",
+    "summaryChangeIdentity": "Change identity",
+    "summaryChangeRoom": "Change room",
+    "summaryChangeTransport": "Change transport",
+    "summaryRoomEmpty": "Not yet assigned",
+    "summaryTransportEmpty": "None added",
+    "summaryUnknown": "Unknown",
+    "summaryEnterTrip": "Let's go!",
+    "summaryEntering": "Entering...",
+    "summaryEnterTripError": "Failed to enter trip. Please try again."
   },
   "settings": {
     "title": "Settings",

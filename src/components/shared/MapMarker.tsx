@@ -6,7 +6,7 @@
  */
 
 import { memo, useCallback, useEffect, useMemo } from 'react';
-import { Marker, Popup } from 'react-leaflet';
+import { Marker, Popup, Tooltip } from 'react-leaflet';
 import { divIcon, type LatLngExpression } from 'leaflet';
 
 // ============================================================================
@@ -34,6 +34,8 @@ export interface MapMarkerData {
   readonly color?: string;
   /** Optional popup content */
   readonly popupContent?: React.ReactNode;
+  /** Optional hover tooltip content (short info) */
+  readonly tooltipContent?: React.ReactNode;
 }
 
 /**
@@ -203,7 +205,7 @@ export const MapMarker = memo(function MapMarker({
   onClick,
   onKeyDown,
 }: MapMarkerProps): React.ReactElement | null {
-  const { id, position, label, type = 'default', color, popupContent } = marker;
+  const { id, position, label, type = 'default', color, popupContent, tooltipContent } = marker;
   const [lat, lon] = position;
 
   // Memoize icon creation to prevent unnecessary recreations
@@ -260,6 +262,13 @@ export const MapMarker = memo(function MapMarker({
       aria-label={label}
       title={label}
     >
+      {tooltipContent && (
+        <Tooltip direction="top" offset={[0, -16]} opacity={1}>
+          <div className="text-xs">
+            {tooltipContent}
+          </div>
+        </Tooltip>
+      )}
       {popupContent && (
         <Popup>
           <div

@@ -284,6 +284,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
   const markers = useMemo((): readonly MapMarkerData[] => {
     return transportsWithCoordinates.map((transport) => {
       const person = personsMap.get(transport.personId);
+      const { date, time } = formatTransportDatetime(transport.datetime, dateLocale);
 
       return {
         id: transport.id,
@@ -293,6 +294,20 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
         type: transport.type === 'arrival' ? 'transport' : 'pickup',
         // Optionally use person color
         color: person?.color,
+        tooltipContent: (
+          <div className="space-y-0.5">
+            <div className="font-medium">
+              {person?.name ?? t('common.unknown')} •{' '}
+              {transport.type === 'arrival' ? t('transports.arrival') : t('transports.departure')}
+            </div>
+            <div className="text-muted-foreground">
+              {date} {time}
+            </div>
+            <div className="text-muted-foreground truncate max-w-[220px]">
+              {transport.location}
+            </div>
+          </div>
+        ),
         popupContent: (
           <TransportPopupContent
             transport={transport}

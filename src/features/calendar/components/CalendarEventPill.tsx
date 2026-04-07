@@ -33,11 +33,12 @@ const CalendarEventPill = memo(function CalendarEventPill({
   );
 
   // Determine if we should show the label
-  // Show on: single-day events, start of span, or start of a new row (week continuation)
+  // Show on: single-day events, start/end of span, or start of a new row (week continuation)
   const showLabel =
     event.segmentPosition === 'single' ||
     event.segmentPosition === 'start' ||
-    (event.isRowStart && event.segmentPosition !== 'end');
+    event.segmentPosition === 'end' ||
+    (event.isRowStart && event.segmentPosition === 'middle');
 
   // Get border radius classes based on segment position and row boundaries
   const borderRadiusClasses = getSegmentBorderRadiusClasses(
@@ -46,11 +47,11 @@ const CalendarEventPill = memo(function CalendarEventPill({
     event.isRowEnd && event.segmentPosition !== 'end',
   );
 
-  // Determine left/right margins for visual spacing at boundaries
-  // Add margin on interior boundaries to create visual gap between adjacent events
+  // Overlap across day cell gaps so multi-day spans look continuous.
+  // The calendar grid uses `gap-px`, which otherwise shows through between segments.
   const marginClasses = cn(
-    // Left margin only if NOT at row start and NOT logical start
     event.segmentPosition !== 'start' && !event.isRowStart && '-ml-px',
+    event.segmentPosition !== 'end' && !event.isRowEnd && '-mr-px',
   );
 
   return (

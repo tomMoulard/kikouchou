@@ -4,8 +4,9 @@
  * @module features/calendar/components/CalendarDay
  */
 
-import { type ReactElement, memo, useMemo } from 'react';
+import { type ReactElement, memo, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import type { CalendarDayProps, CalendarEvent } from '../types';
@@ -18,6 +19,7 @@ import { TransportIndicator } from './TransportIndicator';
  * Events are rendered in slot-based positions to support multi-day spanning.
  */
 const CalendarDay = memo(function CalendarDay({
+  dateKey,
   date,
   events,
   transports,
@@ -25,11 +27,17 @@ const CalendarDay = memo(function CalendarDay({
   isToday,
   isWithinTrip,
   dateLocale,
+  tabIndex,
   onEventClick,
   onTransportClick,
+  onDayFocus,
+  onDayKeyDown,
+  dayRef,
 }: CalendarDayProps): ReactElement {
+  const { t } = useTranslation();
   const dayNumber = format(date, 'd', { locale: dateLocale });
   const dateLabel = format(date, 'PPPP', { locale: dateLocale });
+  const summaryId = `${dateKey}-summary`;
 
   // Calculate max slot index for the slot indices array (memoized, no spread operator)
   const maxSlotIndex = useMemo(() => {
@@ -66,6 +74,32 @@ const CalendarDay = memo(function CalendarDay({
   const hiddenEventCount = events.length - visibleEvents.length;
   const totalHiddenCount = hiddenTransportCount + hiddenEventCount;
 
+  const accessibilitySummary = useMemo(() => {
+    const parts: string[] = [];
+
+    if (isToday) {
+      parts.push(t('calendar.today'));
+    }
+
+    if (!isCurrentMonth) {
+      parts.push(t('calendar.outsideCurrentMonth', 'Outside the current month'));
+    }
+
+    if (isCurrentMonth && !isWithinTrip) {
+      parts.push(t('calendar.outsideTripDates', 'Outside the trip dates'));
+    }
+
+    if (totalHiddenCount > 0) {
+      parts.push(
+        t('calendar.moreItemsHidden', '{{count}} more items in this day', {
+          count: totalHiddenCount,
+        }),
+      );
+    }
+
+    return parts.join('. ');
+  }, [isCurrentMonth, isToday, isWithinTrip, t, totalHiddenCount]);
+
   // Build an array of slot indices to render (including empty slots for alignment)
   const slotIndices = useMemo(() => {
     const indices: (number | null)[] = [];
@@ -85,16 +119,41 @@ const CalendarDay = memo(function CalendarDay({
     return map;
   }, [visibleEvents]);
 
+  const handleFocus = useCallback(() => {
+    onDayFocus?.(dateKey);
+  }, [dateKey, onDayFocus]);
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      onDayKeyDown?.(event, dateKey);
+    },
+    [dateKey, onDayKeyDown],
+  );
+
+  const handleRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      dayRef?.(dateKey, node);
+    },
+    [dateKey, dayRef],
+  );
+
   return (
     <div
+      ref={handleRef}
       className={cn(
         'bg-background min-h-[80px] sm:min-h-[100px] p-1 flex flex-col',
         'border-t border-muted',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
         !isCurrentMonth && 'bg-muted/30',
         !isWithinTrip && isCurrentMonth && 'bg-muted/50',
       )}
+      tabIndex={tabIndex}
       role="gridcell"
       aria-label={dateLabel}
+      aria-current={isToday ? 'date' : undefined}
+      aria-describedby={accessibilitySummary ? summaryId : undefined}
+      onFocus={handleFocus}
+      onKeyDown={handleKeyDown}
     >
       {/* Day number */}
       <div className="flex items-center justify-center mb-1">
@@ -154,9 +213,20 @@ const CalendarDay = memo(function CalendarDay({
         {totalHiddenCount > 0 && (
           <div className="text-xs text-muted-foreground text-center">
             +{totalHiddenCount}
+            <span className="sr-only">
+              {t('calendar.moreItemsHidden', '{{count}} more items in this day', {
+                count: totalHiddenCount,
+              })}
+            </span>
           </div>
         )}
       </div>
+
+      {accessibilitySummary && (
+        <span id={summaryId} className="sr-only">
+          {accessibilitySummary}
+        </span>
+      )}
     </div>
   );
 });

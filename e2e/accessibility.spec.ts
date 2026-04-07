@@ -59,17 +59,9 @@ const ACCEPTABLE_VIOLATIONS = {
    *   The heading level mismatch is a design trade-off.
    *   TODO: Consider using aria-level or refactoring EmptyState component.
    *
-   * landmark-unique: Multiple nav elements exist (sidebar + bottom nav).
-   *   Each nav should have unique aria-label, but current implementation lacks this.
-   *   TODO: Add unique aria-labels to navigation regions.
-   *
    * nested-interactive: Room cards have a dropdown menu button inside a clickable card.
    *   This is a common pattern but violates WCAG. The card should not be role="button".
    *   TODO: Refactor RoomCard to use a link or non-interactive container with explicit buttons.
-   *
-   * aria-required-children, aria-required-parent: Calendar grid uses role="grid" and
-   *   role="gridcell" but doesn't include the required role="row" elements.
-   *   TODO: Fix CalendarPage to use proper ARIA grid structure with rows.
    *
    * color-contrast: Some muted foreground text (e.g., dates outside current month)
    *   has insufficient contrast. This is a design decision for visual de-emphasis.
@@ -77,10 +69,7 @@ const ACCEPTABLE_VIOLATIONS = {
    */
   rules: [
     'heading-order',
-    'landmark-unique',
     'nested-interactive',
-    'aria-required-children',
-    'aria-required-parent',
     'color-contrast',
   ] as string[],
 };
@@ -416,6 +405,35 @@ test.describe('Page Accessibility', () => {
     expect(violations).toEqual([]);
   });
 
+  test('calendar grid supports arrow-key navigation', async ({ page }) => {
+    await setColorScheme(page, 'light');
+    await page.goto('/');
+    const tripId = await setupTripWithData(page);
+
+    await page.goto(`/trips/${tripId}/calendar`);
+    await page.waitForLoadState('networkidle');
+    await waitForLoading(page);
+
+    const firstDay = page.locator('[role="gridcell"]').first();
+    const secondDay = page.locator('[role="gridcell"]').nth(1);
+    const eighthDay = page.locator('[role="gridcell"]').nth(7);
+
+    await firstDay.focus();
+    await expect(firstDay).toBeFocused();
+
+    await page.keyboard.press('ArrowRight');
+    await expect(secondDay).toBeFocused();
+
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('[role="gridcell"]').nth(8)).toBeFocused();
+
+    await page.keyboard.press('ArrowLeft');
+    await expect(eighthDay).toBeFocused();
+
+    await page.keyboard.press('Home');
+    await expect(page.locator('[role="gridcell"]').nth(7)).toBeFocused();
+  });
+
   // --------------------------------------------------------------------------
   // Test 5: Transport list page has no a11y violations
   // --------------------------------------------------------------------------
@@ -650,8 +668,8 @@ test.describe('Keyboard Navigation', () => {
     await page.waitForLoadState('networkidle');
     await waitForLoading(page);
 
-    // Look for the main navigation element (has aria-label="Main navigation")
-    const nav = page.locator('nav[aria-label="Main navigation"]');
+    // Look for the mobile navigation element
+    const nav = page.locator('nav[aria-label="Mobile navigation"]');
     await expect(nav).toBeVisible();
 
     // Get all navigation links

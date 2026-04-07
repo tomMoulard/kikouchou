@@ -171,7 +171,7 @@ const Header = memo(function Header({
           onClick={onMenuClick}
           aria-label={t('common.menu', 'Menu')}
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-5 w-5" aria-hidden="true" />
         </Button>
       )}
 
@@ -218,7 +218,7 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
     <>
       <nav
         className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background md:hidden"
-        aria-label={t('nav.main', 'Main navigation')}
+        aria-label={t('nav.mobileMain', 'Mobile navigation')}
       >
         <ul className="flex h-16 items-center justify-around">
           {MOBILE_PRIMARY_NAV_ITEMS.map((item) => {
@@ -287,7 +287,7 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
               {t('nav.main', 'Main navigation')}
             </SheetDescription>
           </SheetHeader>
-          <nav aria-label={t('nav.more', 'More')}>
+          <nav aria-label={t('nav.moreNavigation', 'More navigation')}>
             <ul className="space-y-1">
               {MOBILE_MORE_NAV_ITEMS.map((item) => {
                 const path = buildNavPath(item, tripId);
@@ -465,7 +465,7 @@ const DesktopSidebar = memo(function DesktopSidebar({
       aria-label={t('nav.main', 'Main navigation')}
     >
       {/* My Trips link - always at top */}
-      <nav className="py-2">
+      <nav className="py-2" aria-label={t('nav.tripsNavigation', 'Trips navigation')}>
         <ul className="space-y-1 px-2">
           {GLOBAL_NAV_ITEMS.map((item) => (
             <NavLinkItem
@@ -485,7 +485,7 @@ const DesktopSidebar = memo(function DesktopSidebar({
 
       {/* Trip navigation items - only shown when trip is selected */}
       {trip && (
-        <nav className="flex-1 overflow-y-auto py-2">
+        <nav className="flex-1 overflow-y-auto py-2" aria-label={t('nav.tripSections', 'Trip navigation')}>
           <ul className="space-y-1 px-2">
             {TRIP_NAV_ITEMS.map((item) => (
               <NavLinkItem
@@ -503,7 +503,7 @@ const DesktopSidebar = memo(function DesktopSidebar({
       {!trip && <div className="flex-1" />}
 
       {/* Settings - always at bottom */}
-      <nav className="border-t py-2">
+      <nav className="border-t py-2" aria-label={t('nav.settingsNavigation', 'Settings navigation')}>
         <ul className="px-2">
           <NavLinkItem
             item={SETTINGS_NAV_ITEM}

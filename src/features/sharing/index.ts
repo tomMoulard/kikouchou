@@ -30,6 +30,7 @@ export { OnboardingPlaceholderPage } from './pages/OnboardingPlaceholderPage';
 export { IdentityStepPage } from './pages/IdentityStepPage';
 export { RoomSelectionStepPage } from './pages/RoomSelectionStepPage';
 export { TransportEntryStepPage } from './pages/TransportEntryStepPage';
+export { SummaryStepPage } from './pages/SummaryStepPage';
 
 // ============================================================================
 // Routes
