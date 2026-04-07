@@ -53,7 +53,8 @@ beforeAll(async () => {
   } catch (error) {
     console.error('Failed to initialize test database:', error);
     throw new Error(
-      `Database initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Database initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error }
     );
   }
 });
@@ -91,7 +92,8 @@ beforeEach(async () => {
   } catch (error) {
     console.error('Failed to reset test database:', error);
     throw new Error(
-      `Database reset failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Database reset failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error }
     );
   }
 });

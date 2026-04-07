@@ -320,7 +320,7 @@ export async function preCacheTiles(
         } else {
           failed++;
         }
-      } catch (error) {
+      } catch {
         // Network error or fetch aborted
         if (signal?.aborted) {
           return {

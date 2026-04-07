@@ -167,7 +167,7 @@ const ColorPicker = memo(({
        currentIndex = selectedIndex >= 0 ? selectedIndex : 0,
        totalColors = colors.length;
 
-      let newIndex: number | null = null;
+      let newIndex: number | undefined;
 
       switch (key) {
         case 'ArrowRight':
@@ -206,7 +206,7 @@ const ColorPicker = memo(({
       event.preventDefault();
 
       // Focus the new button and select the color
-      if (newIndex !== null) {
+      if (newIndex !== undefined) {
         const newButton = buttonsRef.current[newIndex];
         if (newButton) {
           newButton.focus();

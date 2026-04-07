@@ -672,7 +672,8 @@ test.describe('Transport Single List', () => {
     // Look for past transports section or indicator
     // This might be a collapsible section or separate area
     const pastSection = page.getByText(/past|pass[ée]|history|historique/i);
-    const hasPastSection = await pastSection.isVisible().catch(() => false);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _hasPastSection = await pastSection.isVisible().catch(() => false);
 
     // Past section may or may not be visible depending on current date
     // Just verify the page loads correctly
@@ -721,10 +722,10 @@ test.describe('Bug Fix: Assignment Dates (BUG-1)', () => {
 
   test('assignment created via UI has correct dates', async ({ page }) => {
     // Create room and person
-    const roomId = await createTestRoom(page, tripId, TEST_DATA.room.name);
-    const personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
-
-    // Navigate to rooms page
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _roomId = await createTestRoom(page, tripId, TEST_DATA.room.name);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
     await page.goto(`/trips/${tripId}/rooms`);
     await page.waitForLoadState('networkidle');
 
@@ -822,7 +823,8 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     // The time should be displayed in local timezone
     // In UTC+1, 13:00 UTC = 14:00 local
     // We can't know the test runner's timezone, so just verify a time is shown
-    const timePattern = /\d{1,2}:\d{2}/;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _timePattern = /\d{1,2}:\d{2}/;
     const timeElement = page.locator('text=/\\d{1,2}:\\d{2}/').first();
 
     await expect(timeElement).toBeVisible({ timeout: 5000 });
@@ -870,7 +872,8 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
 
   test('round-trip: entered time matches displayed time', async ({ page }) => {
     // Create person
-    const personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
 
     // Navigate to transports
     await page.goto(`/trips/${tripId}/transports`);

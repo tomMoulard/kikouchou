@@ -24,7 +24,6 @@ import { GripVertical } from 'lucide-react';
 
 const DAY_WIDTH_PX = 44;
 const LANE_HEIGHT_PX = 28;
-const ROOM_COL_PX = 200;
 const ROOM_COL_PX_COMPACT = 140;
 
 // ============================================================================

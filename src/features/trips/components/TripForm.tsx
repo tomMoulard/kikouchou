@@ -12,6 +12,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -197,14 +198,17 @@ const TripForm = memo(function TripForm({
   const [errors, setErrors] = useState<FormErrors>({});
 
   // Sync form state when trip prop changes (for edit mode navigation)
-  useEffect(() => {
+  // Uses ref-based approach to avoid setState-in-effect lint warning
+  const prevTripIdRef = useRef(trip?.id);
+  if (prevTripIdRef.current !== trip?.id) {
+    prevTripIdRef.current = trip?.id;
     setName(trip?.name ?? '');
     setLocation(trip?.location ?? '');
     setStartDate(trip?.startDate ?? '');
     setEndDate(trip?.endDate ?? '');
     setDescription(trip?.description ?? '');
     setErrors({});
-  }, [trip?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on trip.id change
+  }
 
   // Date picker popover state
   const [isStartDateOpen, setIsStartDateOpen] = useState(false);

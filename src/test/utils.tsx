@@ -236,7 +236,8 @@ export async function createTestTrip(data: {
     return trip.id;
   } catch (error) {
     throw new Error(
-      `Failed to create test trip "${data.name}": ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to create test trip "${data.name}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error }
     );
   }
 }
@@ -263,7 +264,8 @@ export async function createTestPerson(
     return person.id;
   } catch (error) {
     throw new Error(
-      `Failed to create test person "${data.name}": ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to create test person "${data.name}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error }
     );
   }
 }
@@ -290,7 +292,8 @@ export async function createTestRoom(
     return room.id;
   } catch (error) {
     throw new Error(
-      `Failed to create test room "${data.name}": ${error instanceof Error ? error.message : 'Unknown error'}`
+      `Failed to create test room "${data.name}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error }
     );
   }
 }

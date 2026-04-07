@@ -143,7 +143,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         </button>
       );
     });
-  }, [dayCount, handleItemClick, model.items]);
+  }, [dayCount, handleItemClick, model.items, model.checkoutDayIndex]);
 
   return (
     <div className="flex border-t border-muted">
