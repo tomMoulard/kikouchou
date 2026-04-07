@@ -85,6 +85,9 @@ const TransportIndicator = memo(function TransportIndicator({
   // Render content (shared between button and div)
   const content = (
     <>
+      <span className="text-[10px] font-semibold" aria-hidden="true">
+        {isArrival ? '↓' : '↑'}
+      </span>
       <TransportIcon mode={transportMode} className="size-3 shrink-0" />
       <span className="font-medium">{time}</span>
       <span

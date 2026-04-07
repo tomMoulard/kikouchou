@@ -33,7 +33,12 @@
     "share": "Partager",
     "skipToMain": "Aller au contenu principal",
     "main": "Navigation principale",
+    "mobileMain": "Navigation mobile",
     "more": "Plus",
+    "moreNavigation": "Navigation supplémentaire",
+    "tripsNavigation": "Navigation des voyages",
+    "tripSections": "Navigation du voyage",
+    "settingsNavigation": "Navigation des paramètres",
     "expand": "Développer la barre latérale",
     "collapse": "Réduire la barre latérale"
   },
@@ -94,6 +99,16 @@
     "capacityWarning": "Cette chambre risque d'être surchargée pour certaines de ces dates",
     "filterDates": "Afficher la disponibilité pour les dates",
     "dragHint": "Glissez un participant sur une chambre ci-dessous pour l'assigner",
+    "swapSuccess": "Chambres échangées",
+    "view": {
+      "ariaLabel": "Vue des chambres",
+      "cards": "Cartes",
+      "timeline": "Chronologie"
+    },
+    "timeline": {
+      "ariaLabel": "Chronologie d'occupation des chambres",
+      "rows": "Lignes de chambres"
+    },
     "icons": {
       "bedDouble": "Lit double",
       "bedSingle": "Lit simple",
@@ -232,13 +247,28 @@
     "nextMonth": "Mois suivant",
     "monthView": "Calendrier mensuel",
     "scrollableCalendar": "Calendrier défilable",
+    "keyboardHelp": "Utilisez les flèches du clavier pour vous déplacer entre les jours du calendrier.",
+    "outsideCurrentMonth": "Hors du mois en cours",
+    "outsideTripDates": "Hors des dates du voyage",
+    "moreItemsHidden": "{{count}} autres éléments dans cette journée",
     "personArriving": "Arrivée de {{name}}",
     "personDeparting": "Départ de {{name}}",
     "eventDetails": "Détails de l'événement",
     "nights": "{{count}} nuit",
     "nights_plural": "{{count}} nuits",
     "viewTransportDetails": "Voir les détails de {{type}} de {{name}}",
-    "transportDeleted": "Transport supprimé avec succès"
+    "transportDeleted": "Transport supprimé avec succès",
+    "view": {
+      "ariaLabel": "Vue du calendrier",
+      "month": "Mois",
+      "timeline": "Chronologie"
+    },
+    "timeline": {
+      "ariaLabel": "Calendrier en chronologie",
+      "persons": "Invités",
+      "rows": "Lignes de chronologie",
+      "personRow": "Chronologie de {{name}}"
+    }
   },
   "sharing": {
     "title": "Partager le voyage",
@@ -320,7 +350,22 @@
     "transportAddAnother": "En ajouter un autre ?",
     "transportEmpty": "Pas encore de détails de voyage",
     "transportEnteredCount": "{{count}} transport(s) ajouté(s)",
-    "transportNeedsPickupBadge": "Trajet nécessaire"
+    "transportNeedsPickupBadge": "Trajet nécessaire",
+    "summaryTitle": "Vous êtes prêt(e) !",
+    "summarySubtitle": "Voici un récapitulatif de votre configuration",
+    "summaryIdentityLabel": "Identité",
+    "summaryRoomLabel": "Chambre",
+    "summaryTransportLabel": "Transport",
+    "summaryChange": "Modifier",
+    "summaryChangeIdentity": "Modifier l'identité",
+    "summaryChangeRoom": "Modifier la chambre",
+    "summaryChangeTransport": "Modifier le transport",
+    "summaryRoomEmpty": "Pas encore assigné(e)",
+    "summaryTransportEmpty": "Aucun ajouté",
+    "summaryUnknown": "Inconnu",
+    "summaryEnterTrip": "C'est parti !",
+    "summaryEntering": "Chargement...",
+    "summaryEnterTripError": "Impossible d'accéder au voyage. Veuillez réessayer."
   },
   "settings": {
     "title": "Paramètres",

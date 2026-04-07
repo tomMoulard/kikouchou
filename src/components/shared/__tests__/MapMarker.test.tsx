@@ -44,6 +44,9 @@ vi.mock('react-leaflet', () => ({
   Popup: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="mock-popup">{children}</div>
   ),
+  Tooltip: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="mock-tooltip">{children}</div>
+  ),
 }));
 
 // Mock leaflet
@@ -193,6 +196,29 @@ describe('MapMarker Popup', () => {
 
     const popup = screen.getByRole('dialog');
     expect(popup).toHaveAttribute('aria-label', 'Details for Test Location');
+  });
+});
+
+// ============================================================================
+// Tooltip Tests
+// ============================================================================
+
+describe('MapMarker Tooltip', () => {
+  it('renders tooltip when tooltipContent is provided', () => {
+    const marker = createTestMarker({
+      tooltipContent: <div>Short info</div>,
+    });
+    render(<MapMarker marker={marker} />);
+
+    expect(screen.getByTestId('mock-tooltip')).toBeInTheDocument();
+    expect(screen.getByText('Short info')).toBeInTheDocument();
+  });
+
+  it('does not render tooltip when tooltipContent is not provided', () => {
+    const marker = createTestMarker();
+    render(<MapMarker marker={marker} />);
+
+    expect(screen.queryByTestId('mock-tooltip')).not.toBeInTheDocument();
   });
 });
 

@@ -24,6 +24,11 @@ export type {
   CalendarEventProps,
   TransportIndicatorProps,
   SegmentPosition,
+  CalendarView,
+  CalendarTimelineProps,
+  CalendarTimelineModel,
+  CalendarTimelineRowModel,
+  TimelineItem,
 } from './types';
 
 // ============================================================================
@@ -36,6 +41,8 @@ export {
   CalendarDay,
   CalendarEventPill,
   TransportIndicator,
+  CalendarTimeline,
+  CalendarTimelineRow,
 } from './components';
 
 // ============================================================================

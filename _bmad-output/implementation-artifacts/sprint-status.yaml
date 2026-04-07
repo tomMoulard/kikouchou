@@ -34,7 +34,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-16
-last_updated: 2026-03-17 # updated for 2-4 story completion → review
+last_updated: 2026-03-22 # updated for 2-5 story creation → ready-for-dev
 project: kikoushou
 project_key: NOKEY
 tracking_system: file-system
@@ -59,7 +59,7 @@ development_status:
   2-2-identity-selection-step: done
   2-3-room-selection-step: done
   2-4-transport-entry-step: review
-  2-5-summary-and-trip-entry: backlog
+  2-5-summary-and-trip-entry: review
   2-6-trip-dashboard-for-returning-guests: backlog
   epic-2-retrospective: optional
 

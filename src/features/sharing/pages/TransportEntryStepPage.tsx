@@ -18,7 +18,7 @@ import {
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Bus, Car, Check, MapPin, Plane, Plus, Train } from 'lucide-react';
+import { Check, Plus, Train } from 'lucide-react';
 
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Button } from '@/components/ui/button';
@@ -54,6 +54,7 @@ import type {
   TransportType,
   Trip,
 } from '@/types';
+import { formatDatetime, getTransportIcon } from '../components/transport-display-helpers';
 
 // ============================================================================
 // Type Definitions
@@ -114,41 +115,6 @@ function isValidDatetime(value: string): boolean {
   return value.trim() !== '' && !isNaN(new Date(value).getTime());
 }
 
-/**
- * Gets the transport mode icon component.
- *
- * @param mode - The transport mode
- * @returns The Lucide icon component
- */
-function getTransportIcon(mode?: TransportMode): ReactElement {
-  const iconProps = { className: 'size-4', 'aria-hidden': true as const };
-  switch (mode) {
-    case 'train':
-      return <Train {...iconProps} />;
-    case 'plane':
-      return <Plane {...iconProps} />;
-    case 'car':
-      return <Car {...iconProps} />;
-    case 'bus':
-      return <Bus {...iconProps} />;
-    default:
-      return <MapPin {...iconProps} />;
-  }
-}
-
-/**
- * Formats a datetime string for display.
- *
- * @param datetime - ISO datetime string
- * @returns Formatted date and time string
- */
-function formatDatetime(datetime: string): string {
-  const date = new Date(datetime);
-  return date.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
 
 // ============================================================================
 // Component
@@ -177,7 +143,7 @@ function formatDatetime(datetime: string): string {
  */
 export const TransportEntryStepPage = memo(function TransportEntryStepPage(): ReactElement {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { shareId } = useParams<TransportEntryStepParams>();
 
   // ============================================================================
@@ -216,6 +182,9 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
   /** Brief success indicator after adding transport */
   const [showSuccess, setShowSuccess] = useState(false);
 
+  /** Timer ref for success indicator cleanup */
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   // ============================================================================
   // Refs for Async Operation Safety
   // ============================================================================
@@ -240,6 +209,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
    */
   useEffect(() => () => {
     isMountedRef.current = false;
+    if (successTimerRef.current !== undefined) clearTimeout(successTimerRef.current);
   }, []);
 
   /**
@@ -369,8 +339,10 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
 
       // Show brief success indicator
       setShowSuccess(true);
-      setTimeout(() => {
+      if (successTimerRef.current !== undefined) clearTimeout(successTimerRef.current);
+      successTimerRef.current = setTimeout(() => {
         if (isMountedRef.current) setShowSuccess(false);
+        successTimerRef.current = undefined;
       }, 2000);
 
       // Reset form with opposite type
@@ -479,7 +451,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
 
           {/* Submit error message */}
           {errors.submit !== undefined && (
-            <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
+            <p id="submit-error" role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
               {errors.submit}
             </p>
           )}
@@ -493,7 +465,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
                   className="rounded-lg border border-amber-200 bg-white p-3"
                 >
                   <div className="flex items-center gap-2">
-                    {getTransportIcon(transport.transportMode)}
+                    {getTransportIcon(transport.transportMode, t)}
                     <span className="font-medium text-amber-900 capitalize">
                       {transport.type === 'arrival'
                         ? t('sharing.transportArrival', 'Arrival')
@@ -501,7 +473,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
                     </span>
                   </div>
                   <p className="mt-1 text-sm text-amber-700">
-                    {formatDatetime(transport.datetime)}
+                    {formatDatetime(transport.datetime, i18n.language)}
                   </p>
                   <p className="text-sm text-amber-700">
                     {transport.location}
@@ -562,6 +534,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
               <Input
                 id="transport-datetime"
                 type="datetime-local"
+                inputMode="numeric"
                 value={datetime}
                 onChange={(e) => setDatetime(e.target.value)}
                 className="h-12"
@@ -660,13 +633,16 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
             onClick={() => { void handleSubmit(); }}
             disabled={isSubmitting}
             className="h-12 w-full bg-amber-500 text-base font-semibold text-white hover:bg-amber-600 focus-visible:ring-2 focus-visible:ring-amber-500"
+            aria-describedby={errors.submit ? 'submit-error' : undefined}
           >
             {isSubmitting ? (
               t('sharing.transportAdding', 'Adding...')
             ) : (
               <>
                 <Plus className="mr-2 size-4" aria-hidden="true" />
-                {t('sharing.transportAdd', 'Add transport')}
+                {hasEnteredTransports
+                  ? t('sharing.transportAddAnother', 'Add another?')
+                  : t('sharing.transportAdd', 'Add transport')}
               </>
             )}
           </Button>
@@ -674,8 +650,10 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
           {/* Next / Done button */}
           <Button
             type="button"
+            variant="outline"
             onClick={handleNavigateToSummary}
-            className="h-12 w-full bg-amber-500 text-base font-semibold text-white hover:bg-amber-600 focus-visible:ring-2 focus-visible:ring-amber-500"
+            disabled={isSubmitting}
+            className="h-12 w-full border-amber-300 text-base font-semibold text-amber-700 hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-amber-500"
           >
             {hasEnteredTransports
               ? t('sharing.transportDone', 'Done')
@@ -687,7 +665,8 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
             type="button"
             variant="ghost"
             onClick={handleNavigateToSummary}
-            className="h-11 w-full text-amber-700 hover:bg-amber-50 hover:text-amber-900"
+            disabled={isSubmitting}
+            className="h-12 w-full text-amber-700 hover:bg-amber-50 hover:text-amber-900"
           >
             {t('sharing.transportSkip', 'Skip for now')}
           </Button>

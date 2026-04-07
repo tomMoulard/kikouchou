@@ -222,6 +222,28 @@ describe('TransportEntryStepPage — 4.2: missing identity redirects to identity
 });
 
 // ============================================================================
+// 4.2b — Stale tripId cross-validation redirects to identity step
+// ============================================================================
+
+describe('TransportEntryStepPage — 4.2b: stale tripId redirects to identity step', () => {
+  it('redirects when stored tripId does not match loaded trip', async () => {
+    // Stored identity references a different trip
+    setStoredIdentity('abc123', { personId: 'person1', tripId: 'different-trip' });
+    mockGetTripByShareId.mockResolvedValue(makeTrip({ id: 'trip1' as TripId }));
+    mockGetTransportsByPersonId.mockResolvedValue([]);
+
+    renderTransportEntryPage('abc123');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('identity-page')).toBeInTheDocument();
+    });
+
+    // localStorage should be cleared
+    expect(localStorageMock['kikoushou_guest_abc123']).toBeUndefined();
+  });
+});
+
+// ============================================================================
 // 4.3 — Filling in valid data and submitting calls createTransport
 // ============================================================================
 

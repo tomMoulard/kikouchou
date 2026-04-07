@@ -25,13 +25,13 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useOfflineAwareToast } from '@/hooks';
-import { format, parseISO, eachDayOfInterval } from 'date-fns';
+import { differenceInCalendarDays, format, parseISO, eachDayOfInterval, subDays } from 'date-fns';
 import { type Locale, enUS, fr } from 'date-fns/locale';
-import { AlertTriangle, CheckCircle, DoorOpen, GripVertical, Plus } from 'lucide-react';
+import { AlertTriangle, DoorOpen, GripVertical, Plus } from 'lucide-react';
 import {
   DndContext,
   type DragEndEvent,
@@ -56,6 +56,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
 import { RoomDialog } from '@/features/rooms/components/RoomDialog';
@@ -63,9 +64,12 @@ import { RoomAssignmentSection } from '@/features/rooms/components/RoomAssignmen
 import { DraggableGuest, type DraggableGuestData } from '@/features/rooms/components/DraggableGuest';
 import { DroppableRoom, type DroppableRoomData } from '@/features/rooms/components/DroppableRoom';
 import { QuickAssignmentDialog } from '@/features/rooms/components/QuickAssignmentDialog';
+import { RoomOccupancyTimeline } from '@/features/rooms/components/RoomOccupancyTimeline';
 import { type DateRange as PickerDateRange, DateRangePicker } from '@/components/shared/DateRangePicker';
 import { isDateInStayRange, calculatePeakOccupancy } from '@/features/rooms/utils/capacity-utils';
-import type { Person, PersonId, Room, RoomAssignment, RoomId, Transport } from '@/types';
+import type { Person, Room, RoomAssignment, RoomId, Transport } from '@/types';
+import type { DraggableRoomAssignmentData } from '@/features/rooms/components/DraggableRoomAssignment';
+import type { DroppableAssignmentData } from '@/features/rooms/components/DroppableAssignment';
 
 // ============================================================================
 // Type Definitions
@@ -118,46 +122,39 @@ function getDateLocale(language: string): Locale {
  * @returns Array of ISO date strings where the person needs a room but has no assignment
  */
 function calculateUnassignedDates(
-  personId: PersonId,
+  person: Person,
   arrivals: readonly Transport[],
   departures: readonly Transport[],
   assignments: readonly RoomAssignment[],
 ): { startDate: string; endDate: string; unassignedDates: string[] } | null {
-  // Get person's arrival and departure transports
-  const personArrivals = arrivals.filter((t) => t.personId === personId);
-  const personDepartures = departures.filter((t) => t.personId === personId);
+  // Prefer explicit stay dates when available (covers "I'm here" without transports)
+  let arrivalDate: string | null = person.stayStartDate ?? null;
+  let departureDate: string | null = person.stayEndDate ?? null;
 
-  // If no transports, person doesn't need a room (they're not traveling)
-  if (personArrivals.length === 0 && personDepartures.length === 0) {
-    return null;
-  }
+  // Otherwise derive from transports (earliest arrival / latest departure)
+  const personArrivals = arrivals.filter((t) => t.personId === person.id);
+  const personDepartures = departures.filter((t) => t.personId === person.id);
 
-  // Find earliest arrival date and latest departure date
-  // Transport datetime is ISO format: YYYY-MM-DDTHH:mm:ss
-  let arrivalDate: string | null = null;
-  let departureDate: string | null = null;
-
-  for (const arrival of personArrivals) {
-    const date = arrival.datetime.substring(0, 10);
-    if (!arrivalDate || date < arrivalDate) {
-      arrivalDate = date;
-    }
-  }
-
-  for (const departure of personDepartures) {
-    const date = departure.datetime.substring(0, 10);
-    if (!departureDate || date > departureDate) {
-      departureDate = date;
-    }
-  }
-
-  // If no arrival, use trip start? For now, skip if no arrival
   if (!arrivalDate) {
-    return null;
+    for (const arrival of personArrivals) {
+      const date = arrival.datetime.substring(0, 10);
+      if (!arrivalDate || date < arrivalDate) {
+        arrivalDate = date;
+      }
+    }
   }
 
-  // If no departure, use trip end? For now, skip if no departure
   if (!departureDate) {
+    for (const departure of personDepartures) {
+      const date = departure.datetime.substring(0, 10);
+      if (!departureDate || date > departureDate) {
+        departureDate = date;
+      }
+    }
+  }
+
+  // Still no range => we don't know when they need a room
+  if (!arrivalDate || !departureDate) {
     return null;
   }
 
@@ -182,7 +179,7 @@ function calculateUnassignedDates(
   );
 
   // Get person's room assignments
-  const personAssignments = assignments.filter((a) => a.personId === personId);
+  const personAssignments = assignments.filter((a) => a.personId === person.id);
 
   // Build set of dates covered by assignments
   const coveredDates = new Set<string>();
@@ -236,6 +233,53 @@ function formatToISODate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function getStaySpanPercent(args: {
+  readonly tripStartDate: string | undefined;
+  readonly tripEndDate: string | undefined;
+  readonly stayStartDate: string;
+  readonly stayEndDate: string;
+}): { leftPercent: number; widthPercent: number } | null {
+  const { tripStartDate, tripEndDate, stayStartDate, stayEndDate } = args;
+  if (!tripStartDate || !tripEndDate) {
+    return null;
+  }
+
+  const tripStart = parseISO(tripStartDate);
+  const tripEnd = parseISO(tripEndDate);
+  const stayStart = parseISO(stayStartDate);
+  const stayEnd = parseISO(stayEndDate);
+
+  if (
+    Number.isNaN(tripStart.getTime()) ||
+    Number.isNaN(tripEnd.getTime()) ||
+    Number.isNaN(stayStart.getTime()) ||
+    Number.isNaN(stayEnd.getTime())
+  ) {
+    return null;
+  }
+
+  // Nights model: guest needs a room from stayStart night to (stayEnd - 1) night.
+  const lastNight = subDays(stayEnd, 1);
+  if (lastNight < stayStart) {
+    return null;
+  }
+
+  const clippedStart = stayStart < tripStart ? tripStart : stayStart;
+  const clippedEnd = lastNight > tripEnd ? tripEnd : lastNight;
+  if (clippedEnd < clippedStart) {
+    return null;
+  }
+
+  const totalNights = Math.max(1, differenceInCalendarDays(tripEnd, tripStart));
+  const startOffset = Math.max(0, differenceInCalendarDays(clippedStart, tripStart));
+  const spanNights = Math.max(1, differenceInCalendarDays(clippedEnd, clippedStart) + 1);
+
+  return {
+    leftPercent: (startOffset / totalNights) * 100,
+    widthPercent: (spanNights / totalNights) * 100,
+  };
+}
+
 // ============================================================================
 // RoomListPage Component
 // ============================================================================
@@ -254,6 +298,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   const { t, i18n } = useTranslation(),
    navigate = useNavigate(),
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
+   [searchParams, setSearchParams] = useSearchParams(),
 
   // Context hooks
    { successToast } = useOfflineAwareToast(),
@@ -265,7 +310,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     error: roomsError,
     deleteRoom,
   } = useRoomContext(),
-   { assignments, getAssignmentsByRoom } = useAssignmentContext(),
+   { assignments, getAssignmentsByRoom, createAssignment, updateAssignment } = useAssignmentContext(),
    { persons, getPersonById } = usePersonContext(),
    { arrivals, departures, isLoading: isTransportsLoading } = useTransportContext(),
 
@@ -285,6 +330,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
   // Drag-and-drop state
    [activeDragPerson, setActiveDragPerson] = useState<Person | null>(null),
+   [activeDragAssignment, setActiveDragAssignment] = useState<RoomAssignment | null>(null),
    [quickAssignDialogOpen, setQuickAssignDialogOpen] = useState(false),
    [quickAssignData, setQuickAssignData] = useState<{
      person: Person | null;
@@ -297,6 +343,26 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
      startDate: '',
      endDate: '',
    }),
+
+  currentView = useMemo(() => {
+    const raw = searchParams.get('view');
+    if (raw === 'timeline') return 'timeline';
+    // Back-compat with older links
+    if (raw === 'cards') return 'card';
+    return raw === 'card' ? 'card' : 'timeline';
+  }, [searchParams]),
+
+  handleViewChange = useCallback(
+    (nextValue: string) => {
+      const view = nextValue === 'timeline' ? 'timeline' : 'card';
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('view', view);
+        return next;
+      });
+    },
+    [setSearchParams],
+  ),
 
   // Trip date constraints for DateRangePicker
    tripStartDate = useMemo(
@@ -415,7 +481,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     
     for (const person of persons) {
       const unassignedInfo = calculateUnassignedDates(
-        person.id,
+        person,
         arrivals,
         departures,
         assignments,
@@ -431,6 +497,9 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     
     return result;
   }, [persons, arrivals, departures, assignments]),
+
+  // Notify once when all guests become assigned
+  hasNotifiedAllAssignedRef = useRef(false),
 
   // ============================================================================
   // Event Handlers
@@ -507,21 +576,30 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
    */
    handleDragStart = useCallback((event: DragStartEvent) => {
     const { active } = event;
-    const data = active.data.current as DraggableGuestData | undefined;
-    
-    if (data?.person) {
-      setActiveDragPerson(data.person);
+    const guestData = active.data.current as DraggableGuestData | undefined;
+    const assignmentData = active.data.current as DraggableRoomAssignmentData | undefined;
+
+    if (guestData?.person) {
+      setActiveDragPerson(guestData.person);
+      setActiveDragAssignment(null);
+      return;
+    }
+
+    if (assignmentData?.assignment) {
+      setActiveDragAssignment(assignmentData.assignment);
+      setActiveDragPerson(null);
     }
   }, []),
 
   /**
    * Handles end of drag operation.
    */
-   handleDragEnd = useCallback((event: DragEndEvent) => {
+  handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     
     // Clear active drag state
     setActiveDragPerson(null);
+    setActiveDragAssignment(null);
     
     // If no drop target, do nothing
     if (!over) return;
@@ -529,24 +607,82 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     // Get the dragged guest data
     const guestData = active.data.current as DraggableGuestData | undefined;
     const roomData = over.data.current as DroppableRoomData | undefined;
+    const draggedAssignmentData = active.data.current as DraggableRoomAssignmentData | undefined;
+    const targetAssignmentData = over.data.current as DroppableAssignmentData | undefined;
     
-    if (!guestData?.person || !roomData?.roomId) return;
+    // Case 1: Guest -> Room (existing flow)
+    if (guestData?.person && roomData?.roomId) {
+      if (currentView === 'timeline') {
+        void (async () => {
+          try {
+            await createAssignment({
+              roomId: roomData.roomId,
+              personId: guestData.person.id,
+              startDate: guestData.startDate as import('@/types').ISODateString,
+              endDate: guestData.endDate as import('@/types').ISODateString,
+            });
+            successToast(t('assignments.createSuccess'));
+          } catch (error) {
+            console.error('Failed to create assignment from timeline drag:', error);
+            toast.error(t('errors.saveFailed'));
+          }
+        })();
+        return;
+      }
+
+      // Cards view: keep confirmation dialog
+      setQuickAssignData({
+        person: guestData.person,
+        roomId: roomData.roomId,
+        startDate: guestData.startDate,
+        endDate: guestData.endDate,
+      });
+      setQuickAssignDialogOpen(true);
+      return;
+    }
     
-    // Open quick assignment dialog
-    setQuickAssignData({
-      person: guestData.person,
-      roomId: roomData.roomId,
-      startDate: guestData.startDate,
-      endDate: guestData.endDate,
-    });
-    setQuickAssignDialogOpen(true);
-  }, []),
+    // Case 2: Assignment -> Room (move)
+    if (draggedAssignmentData?.assignment && roomData?.roomId) {
+      const assignment = draggedAssignmentData.assignment;
+      void (async () => {
+        try {
+          await updateAssignment(assignment.id, { roomId: roomData.roomId });
+          successToast(t('assignments.updateSuccess'));
+        } catch (error) {
+          console.error('Failed to move assignment:', error);
+          toast.error(t('errors.saveFailed'));
+        }
+      })();
+      return;
+    }
+
+    // Case 3: Assignment -> Assignment (swap rooms)
+    if (draggedAssignmentData?.assignment && targetAssignmentData?.assignmentId) {
+      const a = draggedAssignmentData.assignment;
+      const b = assignments.find((x) => x.id === targetAssignmentData.assignmentId);
+      if (!b) return;
+
+      void (async () => {
+        try {
+          await Promise.all([
+            updateAssignment(a.id, { roomId: b.roomId }),
+            updateAssignment(b.id, { roomId: a.roomId }),
+          ]);
+          successToast(t('rooms.swapSuccess', 'Rooms swapped'));
+        } catch (error) {
+          console.error('Failed to swap assignments:', error);
+          toast.error(t('errors.saveFailed'));
+        }
+      })();
+    }
+  }, [assignments, createAssignment, currentView, successToast, t, updateAssignment]),
 
   /**
    * Handles drag cancel.
    */
    handleDragCancel = useCallback(() => {
     setActiveDragPerson(null);
+    setActiveDragAssignment(null);
   }, []),
 
   /**
@@ -604,6 +740,38 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     ),
     [handleAddRoom, t],
   );
+
+  useEffect(() => {
+    if (hasNotifiedAllAssignedRef.current) {
+      return;
+    }
+
+    const allAssigned = persons.length > 0 && unassignedGuests.length === 0;
+    if (!allAssigned) {
+      return;
+    }
+
+    const tripId = currentTrip?.id ?? tripIdFromUrl;
+    if (!tripId) {
+      return;
+    }
+
+    const storageKey = `rooms_all_assigned_notified_${tripId}`;
+    try {
+      if (localStorage.getItem(storageKey) === '1') {
+        hasNotifiedAllAssignedRef.current = true;
+        return;
+      }
+
+      successToast(t('rooms.allGuestsAssigned', 'All guests have rooms assigned'));
+      localStorage.setItem(storageKey, '1');
+      hasNotifiedAllAssignedRef.current = true;
+    } catch {
+      // If storage is unavailable (private mode), still avoid spamming within the session.
+      successToast(t('rooms.allGuestsAssigned', 'All guests have rooms assigned'));
+      hasNotifiedAllAssignedRef.current = true;
+    }
+  }, [currentTrip?.id, persons.length, successToast, t, tripIdFromUrl, unassignedGuests.length]);
 
   // ============================================================================
   // Render: Loading State
@@ -720,8 +888,15 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           action={headerAction}
         />
 
-      {/* Date range filter for room availability */}
-      {rooms.length > 0 && currentTrip && (
+      <Tabs value={currentView} onValueChange={handleViewChange} className="mb-4">
+        <TabsList aria-label={t('rooms.view.ariaLabel', 'Rooms view')}>
+          <TabsTrigger value="card">{t('rooms.view.cards', 'Cards')}</TabsTrigger>
+          <TabsTrigger value="timeline">{t('rooms.view.timeline', 'Timeline')}</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {/* Date range filter for room availability (cards view only) */}
+      {currentView === 'card' && rooms.length > 0 && currentTrip && (
         <div className="mb-4">
           <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
             {t('rooms.filterDates')}
@@ -737,40 +912,34 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       )}
 
       {/* Unassigned guests section */}
-      {persons.length > 0 && (
-        <Card className={cn(
-          'mb-6',
-          unassignedGuests.length > 0 
-            ? 'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20' 
-            : 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20',
-        )}>
+      {persons.length > 0 && unassignedGuests.length > 0 && (
+        <Card
+          className={cn(
+            'mb-6',
+            'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20',
+          )}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              {unassignedGuests.length > 0 ? (
-                <>
-                  <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-                  <span className="text-amber-800 dark:text-amber-200">
-                    {t('rooms.unassignedGuests', 'Guests without rooms')} ({unassignedGuests.length})
-                  </span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="size-4 text-green-600 dark:text-green-400" aria-hidden="true" />
-                  <span className="text-green-800 dark:text-green-200">
-                    {t('rooms.allGuestsAssigned', 'All guests have rooms assigned')}
-                  </span>
-                </>
-              )}
+              <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+              <span className="text-amber-800 dark:text-amber-200">
+                {t('rooms.unassignedGuests', 'Guests without rooms')} ({unassignedGuests.length})
+              </span>
             </CardTitle>
           </CardHeader>
-          {unassignedGuests.length > 0 && (
-            <CardContent className="pt-0">
-              <div className="space-y-2">
-                {unassignedGuests.map(({ person, startDate, endDate }) => {
+          <CardContent className="pt-0">
+            <div className="space-y-2">
+              {unassignedGuests.map(({ person, startDate, endDate }) => {
                   const formattedStart = format(parseISO(startDate), 'MMM d', { locale: dateLocale });
                   const formattedEnd = format(parseISO(endDate), 'MMM d', { locale: dateLocale });
+                  const staySpan = getStaySpanPercent({
+                    tripStartDate: currentTrip?.startDate,
+                    tripEndDate: currentTrip?.endDate,
+                    stayStartDate: startDate,
+                    stayEndDate: endDate,
+                  });
                   return (
-                    <div key={person.id} className="flex items-center gap-2 flex-wrap">
+                    <div key={person.id} className="flex items-center gap-3 flex-wrap">
                       <div className="flex items-center gap-1">
                         <GripVertical className="size-4 text-muted-foreground/50" aria-hidden="true" />
                         <DraggableGuest
@@ -780,68 +949,88 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
                           size="sm"
                         />
                       </div>
+                      {staySpan && (
+                        <div className="w-full sm:w-40">
+                          <div className="h-2 rounded-full bg-muted/60 relative overflow-hidden">
+                            <div
+                              className="absolute top-0 bottom-0 rounded-full"
+                              style={{
+                                left: `${staySpan.leftPercent}%`,
+                                width: `${staySpan.widthPercent}%`,
+                                backgroundColor: person.color,
+                              }}
+                              aria-hidden="true"
+                            />
+                          </div>
+                        </div>
+                      )}
                       <span className="text-sm text-muted-foreground">
                         {formattedStart} - {formattedEnd} {t('rooms.needsRoom', 'needs room')}
                       </span>
                     </div>
                   );
-                })}
-              </div>
-              <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
-                <GripVertical className="size-3" aria-hidden="true" />
-                {t('rooms.dragHint', 'Drag a guest to a room below to assign')}
-              </p>
-            </CardContent>
-          )}
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
+              <GripVertical className="size-3" aria-hidden="true" />
+              {t('rooms.dragHint', 'Drag a guest to a room below to assign')}
+            </p>
+          </CardContent>
         </Card>
       )}
 
-      {/* All rooms full message */}
-      {sortedRoomsWithOccupancy.length > 0 && sortedRoomsWithOccupancy.every((r) => r.isFull) && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20 p-4 text-center">
-          <p className="text-sm text-amber-800 dark:text-amber-200">
-            {t('rooms.allRoomsFull')}
-          </p>
-        </div>
-      )}
-
       {/* Room grid */}
-      <div
-        role="list"
-        aria-label={t('rooms.title')}
-        className={cn(
-          'grid gap-4',
-          'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-          // Extra bottom padding for FAB on mobile
-          'pb-20 sm:pb-4',
-        )}
-      >
-        {sortedRoomsWithOccupancy.map(({ room, currentOccupants, peakOccupancy, availableSpots, isFull }) => (
-          <div key={room.id} role="listitem">
-            <DroppableRoom roomId={room.id}>
-              <RoomCard
-                room={room}
-                occupants={currentOccupants}
-                peakOccupancy={peakOccupancy}
-                availableSpots={availableSpots}
-                isFull={isFull}
-                onClick={handleRoomClick}
-                onEdit={handleRoomEdit}
-                onDelete={handleRoomDelete}
-                onClaim={handleClaimRoom}
-                isDisabled={isActionInProgress}
-                isExpanded={expandedRoomId === room.id}
-                expandedContent={
-                  <RoomAssignmentSection
-                    roomId={room.id}
-                    variant="compact"
-                  />
-                }
-              />
-            </DroppableRoom>
-          </div>
-        ))}
-      </div>
+      {currentView === 'card' ? (
+        <div
+          role="list"
+          aria-label={t('rooms.title')}
+          className={cn(
+            'grid gap-4',
+            'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+            // Extra bottom padding for FAB on mobile
+            'pb-20 sm:pb-4',
+          )}
+        >
+          {sortedRoomsWithOccupancy.map(({ room, currentOccupants, peakOccupancy, availableSpots, isFull }) => (
+            <div key={room.id} role="listitem">
+              <DroppableRoom roomId={room.id}>
+                <RoomCard
+                  room={room}
+                  occupants={currentOccupants}
+                  peakOccupancy={peakOccupancy}
+                  availableSpots={availableSpots}
+                  isFull={isFull}
+                  onClick={handleRoomClick}
+                  onEdit={handleRoomEdit}
+                  onDelete={handleRoomDelete}
+                  onClaim={handleClaimRoom}
+                  isDisabled={isActionInProgress}
+                  isExpanded={expandedRoomId === room.id}
+                  expandedContent={
+                    <RoomAssignmentSection
+                      roomId={room.id}
+                      variant="compact"
+                    />
+                  }
+                />
+              </DroppableRoom>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <RoomOccupancyTimeline
+          trip={currentTrip}
+          rooms={sortedRoomsWithOccupancy.map((r) => r.room)}
+          assignments={assignments}
+          persons={persons}
+          unassignedGuests={unassignedGuests}
+          dateLocale={dateLocale}
+          range={{
+            startDate: currentTrip.startDate,
+            endDate: currentTrip.endDate,
+          }}
+        />
+      )}
 
       {/* Floating Action Button for mobile */}
       <Button
@@ -881,6 +1070,13 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       {activeDragPerson && (
         <div className="opacity-80 shadow-lg">
           <PersonBadge person={activeDragPerson} size="sm" />
+        </div>
+      )}
+      {activeDragAssignment && (
+        <div className="opacity-80 shadow-lg">
+          <div className="rounded-md bg-muted px-3 py-2 text-sm">
+            {t('assignments.title')}
+          </div>
         </div>
       )}
     </DragOverlay>

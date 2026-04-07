@@ -5,14 +5,17 @@
  * @module features/calendar/types
  */
 
+import type { KeyboardEvent } from 'react';
 import type { Locale } from 'date-fns/locale';
 import type {
   HexColor,
+  ISODateString,
   Person,
   Room,
   RoomAssignment,
   Transport,
   TransportType,
+  Trip,
 } from '@/types';
 
 // ============================================================================
@@ -100,6 +103,7 @@ export interface CalendarDayHeaderProps {
  * Props for the CalendarDay subcomponent.
  */
 export interface CalendarDayProps {
+  readonly dateKey: ISODateString;
   readonly date: Date;
   readonly events: readonly CalendarEvent[];
   readonly transports: readonly CalendarTransport[];
@@ -107,9 +111,16 @@ export interface CalendarDayProps {
   readonly isToday: boolean;
   readonly isWithinTrip: boolean;
   readonly dateLocale: Locale;
+  readonly tabIndex?: number;
   readonly onEventClick: (assignment: RoomAssignment) => void;
   /** Callback when a transport event is clicked */
   readonly onTransportClick?: (transport: CalendarTransport) => void;
+  readonly onDayFocus?: (dateKey: ISODateString) => void;
+  readonly onDayKeyDown?: (
+    event: KeyboardEvent<HTMLDivElement>,
+    dateKey: ISODateString,
+  ) => void;
+  readonly dayRef?: (dateKey: ISODateString, node: HTMLDivElement | null) => void;
 }
 
 /**
@@ -128,4 +139,72 @@ export interface TransportIndicatorProps {
   readonly type: TransportType;
   /** Callback when the transport is clicked */
   readonly onClick?: (transport: CalendarTransport) => void;
+}
+
+// ============================================================================
+// Timeline View Types
+// ============================================================================
+
+export type CalendarView = 'month' | 'timeline';
+
+export interface TimelineItemAssignment extends TimelineItemBase {
+  readonly kind: 'assignment';
+  readonly assignment: RoomAssignment;
+  readonly person: Person | undefined;
+  readonly room: Room | undefined;
+  readonly label: string;
+  readonly color: HexColor;
+  readonly textColor: 'white' | 'black';
+}
+
+export interface TimelineItemTransport extends TimelineItemBase {
+  readonly kind: 'transport';
+  readonly transport: Transport;
+  readonly person: Person | undefined;
+  readonly label: string;
+}
+
+export type TimelineItem = TimelineItemAssignment | TimelineItemTransport;
+
+export interface TimelineItemBase {
+  readonly id: string;
+  readonly startIndex: number;
+  readonly endIndex: number;
+}
+
+export type TimelineItemWithLane = TimelineItem & { readonly laneIndex: number };
+
+export interface CalendarTimelineRowModel {
+  readonly person: Person;
+  readonly items: readonly TimelineItemWithLane[];
+  readonly laneCount: number;
+  readonly staySpan?: {
+    readonly startIndex: number;
+    readonly endIndex: number;
+  };
+  /**
+   * Checkout day index (within tripDays) for this person.
+   * Represents the day they leave and therefore do not sleep on that day.
+   */
+  readonly checkoutDayIndex?: number;
+}
+
+export interface CalendarTimelineModel {
+  readonly tripDays: readonly Date[];
+  readonly dayKeys: readonly ISODateString[];
+  readonly rows: readonly CalendarTimelineRowModel[];
+  readonly maxLaneCount: number;
+}
+
+export interface CalendarTimelineProps {
+  readonly trip: Trip;
+  readonly persons: readonly Person[];
+  readonly rooms: readonly Room[];
+  readonly assignments: readonly RoomAssignment[];
+  readonly arrivals: readonly Transport[];
+  readonly departures: readonly Transport[];
+  readonly dateLocale: Locale;
+  readonly today: Date;
+  readonly onAssignmentClick: (assignment: RoomAssignment) => void;
+  readonly onTransportClick?: (transport: CalendarTransport) => void;
 }

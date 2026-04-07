@@ -109,6 +109,21 @@ const NO_SELECTION = '__none__';
 // ============================================================================
 
 /**
+ * Builds a safe datetime-local value from an ISO date string.
+ * Uses midday to avoid DST gaps around night/morning hours.
+ */
+function toLocalDatetimeMidday(date: string | undefined): string {
+  if (!date) {
+    return '';
+  }
+  // Expect YYYY-MM-DD
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return '';
+  }
+  return `${date}T12:00`;
+}
+
+/**
  * Creates initial form state from a transport or defaults.
  *
  * @param transport - Existing transport for edit mode
@@ -307,6 +322,36 @@ const TransportForm = memo(function TransportForm({
     setFormState(getInitialFormState(transport, defaultType));
     setErrors({});
   }, [transport?.id, defaultType]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on transport.id change
+
+  // Prefill datetime when creating a new transport and a person is selected.
+  // Uses person's stayStartDate/stayEndDate as the best available "arrival to house" date hint.
+  useEffect(() => {
+    // Edit mode: never override existing value
+    if (transport) {
+      return;
+    }
+    // Only prefill if datetime is still empty
+    if (formState.datetime) {
+      return;
+    }
+    if (!formState.personId) {
+      return;
+    }
+
+    const person = persons.find((p) => p.id === formState.personId);
+    if (!person) {
+      return;
+    }
+
+    const date =
+      formState.type === 'arrival' ? person.stayStartDate : person.stayEndDate;
+    const prefill = toLocalDatetimeMidday(date);
+    if (!prefill) {
+      return;
+    }
+
+    setFormState((prev) => (prev.datetime ? prev : { ...prev, datetime: prefill }));
+  }, [formState.datetime, formState.personId, formState.type, persons, transport]);
 
   // Clear driver if it matches the newly selected person
   useEffect(() => {
