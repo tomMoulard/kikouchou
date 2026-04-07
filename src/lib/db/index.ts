@@ -57,6 +57,7 @@ export {
   getTripByShareId,
   updateTrip,
   deleteTrip,
+  getTripsByLocation,
 } from './repositories/trip-repository';
 
 // Room repository
@@ -70,6 +71,8 @@ export {
   deleteRoom,
   reorderRooms,
   getRoomCount,
+  // Import / clone operations
+  cloneRoomsToTrip,
   // Transactional operations with ownership validation (CR-2)
   updateRoomWithOwnershipCheck,
   deleteRoomWithOwnershipCheck,

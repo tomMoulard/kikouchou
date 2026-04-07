@@ -16,6 +16,7 @@ import {
   deleteRoom,
   reorderRooms,
   getRoomCount,
+  cloneRoomsToTrip,
 } from '@/lib/db/repositories/room-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
@@ -580,5 +581,116 @@ describe('getRoomCount', () => {
 
     expect(count1).toBe(2);
     expect(count2).toBe(1);
+  });
+});
+
+// ============================================================================
+// cloneRoomsToTrip Tests
+// ============================================================================
+
+describe('cloneRoomsToTrip', () => {
+  it('clones all rooms from source trip to target trip', async () => {
+    const sourceTripId = await createTestTrip('Source');
+    const targetTripId = await createTestTrip('Target');
+
+    await createRoom(sourceTripId, createTestRoomData({ name: 'Master Bedroom', capacity: 2 }));
+    await createRoom(sourceTripId, createTestRoomData({ name: 'Guest Room', capacity: 3 }));
+
+    const cloned = await cloneRoomsToTrip(sourceTripId, targetTripId);
+
+    expect(cloned).toHaveLength(2);
+
+    const targetRooms = await getRoomsByTripId(targetTripId);
+    expect(targetRooms).toHaveLength(2);
+    expect(targetRooms[0]?.name).toBe('Master Bedroom');
+    expect(targetRooms[1]?.name).toBe('Guest Room');
+  });
+
+  it('creates rooms with new IDs in the target trip', async () => {
+    const sourceTripId = await createTestTrip('Source');
+    const targetTripId = await createTestTrip('Target');
+
+    const sourceRoom = await createRoom(sourceTripId, createTestRoomData({ name: 'Room A' }));
+    const cloned = await cloneRoomsToTrip(sourceTripId, targetTripId);
+
+    expect(cloned[0]?.id).not.toBe(sourceRoom.id);
+    expect(cloned[0]?.tripId).toBe(targetTripId);
+  });
+
+  it('preserves room properties (name, capacity, description, icon)', async () => {
+    const sourceTripId = await createTestTrip('Source');
+    const targetTripId = await createTestTrip('Target');
+
+    await createRoom(sourceTripId, {
+      name: 'Master Bedroom',
+      capacity: 2,
+      description: 'King bed with ensuite',
+      icon: 'bed-double',
+    });
+
+    const cloned = await cloneRoomsToTrip(sourceTripId, targetTripId);
+
+    expect(cloned[0]?.name).toBe('Master Bedroom');
+    expect(cloned[0]?.capacity).toBe(2);
+    expect(cloned[0]?.description).toBe('King bed with ensuite');
+    expect(cloned[0]?.icon).toBe('bed-double');
+  });
+
+  it('maintains room ordering', async () => {
+    const sourceTripId = await createTestTrip('Source');
+    const targetTripId = await createTestTrip('Target');
+
+    await createRoom(sourceTripId, createTestRoomData({ name: 'First' }));
+    await createRoom(sourceTripId, createTestRoomData({ name: 'Second' }));
+    await createRoom(sourceTripId, createTestRoomData({ name: 'Third' }));
+
+    const cloned = await cloneRoomsToTrip(sourceTripId, targetTripId);
+
+    expect(cloned[0]?.order).toBe(0);
+    expect(cloned[1]?.order).toBe(1);
+    expect(cloned[2]?.order).toBe(2);
+    expect(cloned[0]?.name).toBe('First');
+    expect(cloned[1]?.name).toBe('Second');
+    expect(cloned[2]?.name).toBe('Third');
+  });
+
+  it('returns empty array when source trip has no rooms', async () => {
+    const sourceTripId = await createTestTrip('Source');
+    const targetTripId = await createTestTrip('Target');
+
+    const cloned = await cloneRoomsToTrip(sourceTripId, targetTripId);
+
+    expect(cloned).toHaveLength(0);
+  });
+
+  it('does not affect existing rooms in the target trip', async () => {
+    const sourceTripId = await createTestTrip('Source');
+    const targetTripId = await createTestTrip('Target');
+
+    // Create a room in the target trip first
+    await createRoom(targetTripId, createTestRoomData({ name: 'Existing Room' }));
+    // Create rooms in the source trip
+    await createRoom(sourceTripId, createTestRoomData({ name: 'Imported Room' }));
+
+    await cloneRoomsToTrip(sourceTripId, targetTripId);
+
+    const targetRooms = await getRoomsByTripId(targetTripId);
+    expect(targetRooms).toHaveLength(2);
+    expect(targetRooms[0]?.name).toBe('Existing Room');
+    expect(targetRooms[1]?.name).toBe('Imported Room');
+  });
+
+  it('does not modify source trip rooms', async () => {
+    const sourceTripId = await createTestTrip('Source');
+    const targetTripId = await createTestTrip('Target');
+
+    await createRoom(sourceTripId, createTestRoomData({ name: 'Source Room' }));
+
+    await cloneRoomsToTrip(sourceTripId, targetTripId);
+
+    const sourceRooms = await getRoomsByTripId(sourceTripId);
+    expect(sourceRooms).toHaveLength(1);
+    expect(sourceRooms[0]?.name).toBe('Source Room');
+    expect(sourceRooms[0]?.tripId).toBe(sourceTripId);
   });
 });

@@ -60,7 +60,16 @@
     "created": "Voyage créé avec succès",
     "updated": "Voyage mis à jour avec succès",
     "deleted": "Voyage supprimé avec succès",
-    "noGuests": "Aucun invité"
+    "noGuests": "Aucun invité",
+    "importSuggestion": "Lieu déjà utilisé",
+    "importConfirm": "Importer depuis \"{{tripName}}\" ?",
+    "importConfirmDescription": "Cela pré-remplira le lieu, la description, et copiera {{roomCount}} chambre(s) dans votre nouveau voyage.",
+    "importAction": "Importer",
+    "importedFrom": "Import depuis {{tripName}}",
+    "removeImport": "Annuler l'import",
+    "createdWithImport": "Voyage créé avec les chambres importées",
+    "importRoomsFailed": "Voyage créé mais l'import des chambres a échoué",
+    "noMatchingLocations": "Aucun lieu correspondant"
   },
   "rooms": {
     "title": "Chambres",
