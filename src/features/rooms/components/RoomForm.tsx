@@ -13,6 +13,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -118,6 +119,20 @@ const RoomForm = memo(function RoomForm({
   const [description, setDescription] = useState(room?.description ?? '');
   const [icon, setIcon] = useState<RoomIcon | undefined>(room?.icon);
 
+  // Validation errors
+  const [errors, setErrors] = useState<FormErrors>({});
+
+  // Ref-based sync: reset form state when room.id changes (render-time, no effect needed)
+  const prevRoomIdRef = useRef(room?.id);
+  if (prevRoomIdRef.current !== room?.id) {
+    prevRoomIdRef.current = room?.id;
+    setName(room?.name ?? '');
+    setCapacity(room?.capacity ?? DEFAULT_CAPACITY);
+    setDescription(room?.description ?? '');
+    setIcon(room?.icon);
+    setErrors({});
+  }
+
   // Compute dirty state
   const isDirty = useMemo(
     () =>
@@ -132,22 +147,6 @@ const RoomForm = memo(function RoomForm({
   useEffect(() => {
     onDirtyChange?.(isDirty);
   }, [isDirty, onDirtyChange]);
-
-  // Validation errors
-  const [errors, setErrors] = useState<FormErrors>({});
-
-  // ============================================================================
-  // Lifecycle Effects
-  // ============================================================================
-
-  // Sync form state when room prop changes (for edit mode navigation)
-  useEffect(() => {
-    setName(room?.name ?? '');
-    setCapacity(room?.capacity ?? DEFAULT_CAPACITY);
-    setDescription(room?.description ?? '');
-    setIcon(room?.icon);
-    setErrors({});
-  }, [room?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on room.id change
 
   // ============================================================================
   // Validation
