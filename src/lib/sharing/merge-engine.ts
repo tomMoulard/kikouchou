@@ -21,6 +21,7 @@ import {
 import type {
   Person,
   PersonId,
+  Room,
   RoomAssignment,
   RoomAssignmentId,
   RoomId,
@@ -60,11 +61,15 @@ export async function computeMerge(changeset: AppChangeset): Promise<MergeResult
   const hostPersonMap = new Map(hostPersons.map(p => [p.id, p]));
   const hostAssignmentMap = new Map(hostAssignments.map(a => [a.id, a]));
   const hostTransportMap = new Map(hostTransports.map(t => [t.id, t]));
+  const hostRoomMap = new Map(hostRooms.map(r => [r.id, r]));
   const hostRoomIds = new Set(hostRooms.map(r => r.id));
+
+  const incomingRoomIds = collectIncomingRoomIds(changeset);
 
   const autoApplyPersons: Person[] = [];
   const autoApplyAssignments: RoomAssignment[] = [];
   const autoApplyTransports: Transport[] = [];
+  const autoApplyRooms: Room[] = [];
   const conflicts: MergeConflict[] = [];
   const warnings: MergeWarning[] = [];
 
@@ -80,7 +85,12 @@ export async function computeMerge(changeset: AppChangeset): Promise<MergeResult
   }
 
   for (const assignment of changeset.added.assignments) {
-    const assignmentWarnings = checkAssignmentRefs(assignment, hostPersonMap, hostRoomIds);
+    const assignmentWarnings = checkAssignmentRefs(
+      assignment,
+      hostPersonMap,
+      hostRoomIds,
+      incomingRoomIds,
+    );
     warnings.push(...assignmentWarnings);
 
     if (hostAssignmentMap.has(assignment.id)) {
@@ -101,6 +111,14 @@ export async function computeMerge(changeset: AppChangeset): Promise<MergeResult
     }
   }
 
+  for (const room of changeset.added.rooms) {
+    if (hostRoomMap.has(room.id)) {
+      processRoomModification(room, hostRoomMap, autoApplyRooms);
+    } else {
+      autoApplyRooms.push(room);
+    }
+  }
+
   // ---- Process MODIFIED entities ----
 
   for (const person of changeset.modified.persons) {
@@ -108,7 +126,12 @@ export async function computeMerge(changeset: AppChangeset): Promise<MergeResult
   }
 
   for (const assignment of changeset.modified.assignments) {
-    const assignmentWarnings = checkAssignmentRefs(assignment, hostPersonMap, hostRoomIds);
+    const assignmentWarnings = checkAssignmentRefs(
+      assignment,
+      hostPersonMap,
+      hostRoomIds,
+      incomingRoomIds,
+    );
     warnings.push(...assignmentWarnings);
     processAssignmentModification(assignment, hostAssignmentMap, autoApplyAssignments, conflicts);
   }
@@ -119,10 +142,15 @@ export async function computeMerge(changeset: AppChangeset): Promise<MergeResult
     processTransportModification(transport, hostTransportMap, autoApplyTransports, conflicts);
   }
 
+  for (const room of changeset.modified.rooms) {
+    processRoomModification(room, hostRoomMap, autoApplyRooms);
+  }
+
   const autoApply: EntityCollection = {
     persons: autoApplyPersons,
     assignments: autoApplyAssignments,
     transports: autoApplyTransports,
+    rooms: autoApplyRooms,
   };
 
   return {
@@ -133,12 +161,28 @@ export async function computeMerge(changeset: AppChangeset): Promise<MergeResult
     summary: {
       additions: changeset.added.persons.length +
         changeset.added.assignments.length +
-        changeset.added.transports.length,
-      autoUpdates: autoApplyPersons.length + autoApplyAssignments.length + autoApplyTransports.length,
+        changeset.added.transports.length +
+        changeset.added.rooms.length,
+      autoUpdates:
+        autoApplyPersons.length +
+        autoApplyAssignments.length +
+        autoApplyTransports.length +
+        autoApplyRooms.length,
       conflicts: conflicts.length,
       warnings: warnings.length,
     },
   };
+}
+
+function collectIncomingRoomIds(changeset: AppChangeset): Set<RoomId> {
+  const ids = new Set<RoomId>();
+  for (const r of changeset.added.rooms) {
+    ids.add(r.id);
+  }
+  for (const r of changeset.modified.rooms) {
+    ids.add(r.id);
+  }
+  return ids;
 }
 
 // ============================================================================
@@ -199,6 +243,27 @@ function processAssignmentModification(
     guestVersion: guestAssignment,
     conflictingFields,
   });
+}
+
+function processRoomModification(
+  guestRoom: Room,
+  hostMap: Map<RoomId, Room>,
+  autoApply: Room[],
+): void {
+  const hostRoom = hostMap.get(guestRoom.id);
+
+  if (!hostRoom) {
+    autoApply.push(guestRoom);
+    return;
+  }
+
+  const conflictingFields = getRoomConflictingFields(hostRoom, guestRoom);
+
+  if (conflictingFields.length === 0) {
+    return;
+  }
+
+  autoApply.push(guestRoom);
 }
 
 function processTransportModification(
@@ -268,6 +333,16 @@ function getTransportConflictingFields(host: Transport, guest: Transport): strin
   return fields;
 }
 
+function getRoomConflictingFields(host: Room, guest: Room): string[] {
+  const fields: string[] = [];
+  if (host.name !== guest.name) fields.push('name');
+  if (host.capacity !== guest.capacity) fields.push('capacity');
+  if (host.order !== guest.order) fields.push('order');
+  if (host.description !== guest.description) fields.push('description');
+  if (host.icon !== guest.icon) fields.push('icon');
+  return fields;
+}
+
 // ============================================================================
 // Reference Validation
 // ============================================================================
@@ -276,10 +351,11 @@ function checkAssignmentRefs(
   assignment: RoomAssignment,
   hostPersonMap: Map<PersonId, Person>,
   hostRoomIds: Set<RoomId>,
+  incomingRoomIds: Set<RoomId>,
 ): MergeWarning[] {
   const warnings: MergeWarning[] = [];
 
-  if (!hostRoomIds.has(assignment.roomId)) {
+  if (!hostRoomIds.has(assignment.roomId) && !incomingRoomIds.has(assignment.roomId)) {
     warnings.push({
       type: 'orphaned-room-ref',
       message: `Assignment references room "${assignment.roomId}" which no longer exists`,

@@ -8,7 +8,7 @@
     "prod": "vite --mode production",
     "validate": "bun run generate-proto && bun run test:run && bun run lint && bun run build && bun run generate-icons && bun run test:e2e:run",
     "build": "tsc -b && VITE_APP_VERSION=${VITE_APP_VERSION:-$npm_package_version} vite build",
-    "generate-proto": "buf generate && node -e \"const fs=require('fs'),g='src/gen';fs.readdirSync(g).filter(f=>f.endsWith('.ts')).forEach(f=>{const p=g+'/'+f,c=fs.readFileSync(p,'utf8');if(!c.startsWith('// @ts-nocheck'))fs.writeFileSync(p,'// @ts-nocheck\\n'+c)})\"",
+    "generate-proto": "NODE_NO_WARNINGS=1 buf generate && node scripts/generate-proto.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "generate-icons": "node scripts/generate-icons.js",

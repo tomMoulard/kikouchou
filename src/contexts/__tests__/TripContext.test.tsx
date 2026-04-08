@@ -45,10 +45,13 @@ async function createTestTrip(name = 'Test Trip'): Promise<TripId> {
 }
 
 /**
- * Small delay to allow live queries to update.
+ * Small delay to allow live queries to update, wrapped in act()
+ * to avoid "not wrapped in act(...)" warnings.
  */
 async function waitForLiveQuery(ms = 50): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  });
 }
 
 // ============================================================================
@@ -282,6 +285,11 @@ describe('TripContext', () => {
         await result.current.setCurrentTrip(tripId);
       });
 
+      // Wait for live query to process the state update
+      await waitFor(() => {
+        expect(result.current.currentTrip?.id).toBe(tripId);
+      });
+
       // Verify persisted to settings
       const trip = await getTripById(tripId);
       expect(trip).toBeDefined();
@@ -399,7 +407,9 @@ describe('TripContext', () => {
       const initialCurrentTrip = result.current.currentTrip;
 
       // Create a third trip (should update trips array but not currentTrip)
-      await createTestTrip('Trip 3');
+      await act(async () => {
+        await createTestTrip('Trip 3');
+      });
       await waitForLiveQuery(100);
 
       // Wait for trips array to update

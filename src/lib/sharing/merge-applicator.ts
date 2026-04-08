@@ -8,6 +8,7 @@
 import { db } from '@/lib/db/database';
 import type {
   Person,
+  Room,
   RoomAssignment,
   Transport,
 } from '@/types';
@@ -41,6 +42,7 @@ export async function applyMerge(mergeResult: MergeResult): Promise<ApplyResult>
     );
   }
 
+  let roomsUpserted = 0;
   let personsUpserted = 0;
   let assignmentsUpserted = 0;
   let transportsUpserted = 0;
@@ -49,9 +51,14 @@ export async function applyMerge(mergeResult: MergeResult): Promise<ApplyResult>
 
   await db.transaction(
     'rw',
-    [db.persons, db.roomAssignments, db.transports],
+    [db.rooms, db.persons, db.roomAssignments, db.transports],
     async () => {
-      // Apply auto-apply entities
+      // Apply auto-apply entities (rooms before assignments that reference them)
+      for (const room of mergeResult.autoApply.rooms) {
+        await upsertRoom(room);
+        roomsUpserted++;
+      }
+
       for (const person of mergeResult.autoApply.persons) {
         await upsertPerson(person);
         personsUpserted++;
@@ -80,6 +87,7 @@ export async function applyMerge(mergeResult: MergeResult): Promise<ApplyResult>
   );
 
   return {
+    roomsUpserted,
     personsUpserted,
     assignmentsUpserted,
     transportsUpserted,
@@ -96,6 +104,7 @@ export async function applyMerge(mergeResult: MergeResult): Promise<ApplyResult>
  * Summary of what was applied during the merge.
  */
 export interface ApplyResult {
+  readonly roomsUpserted: number;
   readonly personsUpserted: number;
   readonly assignmentsUpserted: number;
   readonly transportsUpserted: number;
@@ -106,6 +115,10 @@ export interface ApplyResult {
 // ============================================================================
 // Internal Helpers
 // ============================================================================
+
+async function upsertRoom(room: Room): Promise<void> {
+  await db.rooms.put(room);
+}
 
 async function upsertPerson(person: Person): Promise<void> {
   await db.persons.put(person);

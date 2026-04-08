@@ -17,6 +17,7 @@ export type {
   MergeSummary,
   ConflictResolution,
   QRFrame,
+  TripSnapshotMeta,
 } from './types';
 
 export {
@@ -41,10 +42,14 @@ export {
   personToProto,
   assignmentToProto,
   transportToProto,
+  roomToProto,
+  tripSnapshotToProto,
   changesetToProto,
   protoToPerson,
   protoToAssignment,
   protoToTransport,
+  protoToRoom,
+  protoToTripSnapshot,
   protoToChangeset,
   entityCollectionToProto,
   protoToEntityCollection,
@@ -65,3 +70,13 @@ export { computeMerge } from './merge-engine';
 // Merge applicator
 export { applyMerge } from './merge-applicator';
 export type { ApplyResult } from './merge-applicator';
+
+// Local import (trips list QR)
+export {
+  IMPORT_SNAPSHOT_REQUIRED,
+  ImportChangesetError,
+  prepareChangesetForLocalImport,
+  buildRoomIdMapByName,
+  rewriteChangesetForTargetTrip,
+  rewriteChangesetTripId,
+} from './import-from-changeset';

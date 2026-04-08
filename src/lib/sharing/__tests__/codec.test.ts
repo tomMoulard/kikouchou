@@ -39,8 +39,8 @@ function makeMinimalChangeset(): AppChangeset {
     exportedBy: 'person-1' as PersonId,
     exportedAt: 1775649600000, // 2026-04-07T12:00:00Z as Unix ms
     baseSnapshotAt: 1775563200000,
-    added: { persons: [], assignments: [], transports: [] },
-    modified: { persons: [], assignments: [], transports: [] },
+    added: { persons: [], assignments: [], transports: [], rooms: [] },
+    modified: { persons: [], assignments: [], transports: [], rooms: [] },
   };
 }
 
@@ -87,8 +87,9 @@ function makeFullChangeset(): AppChangeset {
       persons: [person],
       assignments: [assignment],
       transports: [transport],
+      rooms: [],
     },
-    modified: { persons: [], assignments: [], transports: [] },
+    modified: { persons: [], assignments: [], transports: [], rooms: [] },
   };
 }
 

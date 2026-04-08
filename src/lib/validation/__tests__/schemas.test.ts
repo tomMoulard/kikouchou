@@ -25,6 +25,10 @@ import {
   validateRoomAssignmentForm,
   validateTransportForm,
   validateTripFormOrThrow,
+  validateRoomFormOrThrow,
+  validatePersonFormOrThrow,
+  validateRoomAssignmentFormOrThrow,
+  validateTransportFormOrThrow,
   isValidationError,
   isValidationSuccess,
   getFieldError,
@@ -504,6 +508,80 @@ describe('Validation Functions', () => {
           name: '',
           startDate: '2024-07-15',
           endDate: '2024-07-22',
+        }),
+      ).toThrow(FormValidationError);
+    });
+  });
+
+  describe('validateRoomFormOrThrow', () => {
+    it('returns data for valid input', () => {
+      const data = validateRoomFormOrThrow({ name: 'Room', capacity: 2 });
+      expect(data.name).toBe('Room');
+    });
+
+    it('throws FormValidationError for invalid input', () => {
+      expect(() => validateRoomFormOrThrow({ name: '', capacity: 2 })).toThrow(
+        FormValidationError,
+      );
+    });
+  });
+
+  describe('validatePersonFormOrThrow', () => {
+    it('returns data for valid input', () => {
+      const data = validatePersonFormOrThrow({ name: 'Marie', color: '#ef4444' });
+      expect(data.name).toBe('Marie');
+    });
+
+    it('throws FormValidationError for invalid input', () => {
+      expect(() => validatePersonFormOrThrow({ name: '', color: '#ef4444' })).toThrow(
+        FormValidationError,
+      );
+    });
+  });
+
+  describe('validateRoomAssignmentFormOrThrow', () => {
+    it('returns data for valid input', () => {
+      const data = validateRoomAssignmentFormOrThrow({
+        roomId: 'room123',
+        personId: 'person456',
+        startDate: '2024-07-15',
+        endDate: '2024-07-19',
+      });
+      expect(data.roomId).toBe('room123');
+    });
+
+    it('throws FormValidationError for invalid input', () => {
+      expect(() =>
+        validateRoomAssignmentFormOrThrow({
+          roomId: '',
+          personId: '',
+          startDate: '',
+          endDate: '',
+        }),
+      ).toThrow(FormValidationError);
+    });
+  });
+
+  describe('validateTransportFormOrThrow', () => {
+    it('returns data for valid input', () => {
+      const data = validateTransportFormOrThrow({
+        personId: 'person123',
+        type: 'arrival',
+        datetime: '2024-07-15T14:30:00.000Z',
+        location: 'Station',
+        needsPickup: false,
+      });
+      expect(data.personId).toBe('person123');
+    });
+
+    it('throws FormValidationError for invalid input', () => {
+      expect(() =>
+        validateTransportFormOrThrow({
+          personId: '',
+          type: 'invalid',
+          datetime: '',
+          location: '',
+          needsPickup: false,
         }),
       ).toThrow(FormValidationError);
     });

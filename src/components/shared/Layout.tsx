@@ -5,7 +5,17 @@
  * @module components/shared/Layout
  */
 
-import { type ReactNode, memo, useCallback, useMemo, useState } from 'react';
+import {
+  type ReactNode,
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -460,51 +470,103 @@ const NavLinkItem = memo(function NavLinkItem({
   const isDisabled = item.requiresTrip && !tripId;
   const label = String(t(item.labelKey));
 
+  const linkRef = useRef<HTMLAnchorElement>(null);
+  const hideTooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [collapsedTooltipOpen, setCollapsedTooltipOpen] = useState(false);
+  const [collapsedTooltipPos, setCollapsedTooltipPos] = useState({ top: 0, left: 0 });
+
+  const clearHideTooltipTimer = useCallback(() => {
+    if (hideTooltipTimerRef.current !== null) {
+      clearTimeout(hideTooltipTimerRef.current);
+      hideTooltipTimerRef.current = null;
+    }
+  }, []);
+
+  const openCollapsedTooltip = useCallback(() => {
+    clearHideTooltipTimer();
+    setCollapsedTooltipOpen(true);
+  }, [clearHideTooltipTimer]);
+
+  const scheduleCloseCollapsedTooltip = useCallback(() => {
+    clearHideTooltipTimer();
+    hideTooltipTimerRef.current = setTimeout(() => {
+      setCollapsedTooltipOpen(false);
+    }, 150);
+  }, [clearHideTooltipTimer]);
+
+  const closeCollapsedTooltipNow = useCallback(() => {
+    clearHideTooltipTimer();
+    setCollapsedTooltipOpen(false);
+  }, [clearHideTooltipTimer]);
+
+  useLayoutEffect(() => {
+    if (!isCollapsed || !collapsedTooltipOpen || !linkRef.current) {
+      return;
+    }
+    const r = linkRef.current.getBoundingClientRect();
+    setCollapsedTooltipPos({ top: r.top + r.height / 2, left: r.right + 8 });
+  }, [isCollapsed, collapsedTooltipOpen]);
+
+  useEffect(() => {
+    return () => {
+      clearHideTooltipTimer();
+    };
+  }, [clearHideTooltipTimer]);
+
   return (
     <li className={cn(isCollapsed && 'flex justify-center')}>
-      <div className={cn('relative', isCollapsed && 'group')}>
-        <NavLink
-          to={path}
-          onClick={(e) => {
-            if (isDisabled) e.preventDefault();
-          }}
-          tabIndex={isDisabled ? -1 : undefined}
-          aria-label={isCollapsed ? label : undefined}
-          className={({ isActive }) =>
-            cn(
-              'flex items-center rounded-lg transition-colors',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-              isCollapsed
-                ? 'size-9 shrink-0 justify-center'
-                : 'min-h-9 gap-3 px-3 py-2',
-              isActive
-                ? 'bg-primary/14 text-primary font-medium shadow-sm ring-1 ring-primary/20'
-                : 'text-muted-foreground hover:bg-accent/80 hover:text-accent-foreground',
-              isActive && 'hover:bg-primary/20 hover:text-primary',
-              isDisabled && 'pointer-events-none opacity-50',
-            )
-          }
-          title={isCollapsed ? label : undefined}
-          aria-disabled={isDisabled || undefined}
-        >
-          <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-          {!isCollapsed ? <span className="truncate">{label}</span> : null}
-        </NavLink>
-        {isCollapsed ? (
-          <span
-            className={cn(
-              'pointer-events-none absolute left-full top-1/2 z-[60] ms-2 -translate-y-1/2',
-              'whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1.5',
-              'text-xs font-medium text-popover-foreground shadow-md',
-              'opacity-0 transition-opacity duration-150',
-              'group-hover:opacity-100 group-focus-within:opacity-100',
-            )}
-            aria-hidden="true"
-          >
-            {label}
-          </span>
-        ) : null}
-      </div>
+      <NavLink
+        ref={linkRef}
+        to={path}
+        onClick={(e) => {
+          if (isDisabled) e.preventDefault();
+        }}
+        tabIndex={isDisabled ? -1 : undefined}
+        aria-label={isCollapsed ? label : undefined}
+        className={({ isActive }) =>
+          cn(
+            'flex items-center rounded-lg transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+            isCollapsed
+              ? 'size-9 shrink-0 justify-center'
+              : 'min-h-9 gap-3 px-3 py-2',
+            isActive
+              ? 'bg-primary/14 text-primary font-medium shadow-sm ring-1 ring-primary/20'
+              : 'text-muted-foreground hover:bg-accent/80 hover:text-accent-foreground',
+            isActive && 'hover:bg-primary/20 hover:text-primary',
+            isDisabled && 'pointer-events-none opacity-50',
+          )
+        }
+        aria-disabled={isDisabled || undefined}
+        onMouseEnter={isCollapsed ? openCollapsedTooltip : undefined}
+        onMouseLeave={isCollapsed ? scheduleCloseCollapsedTooltip : undefined}
+        onFocus={isCollapsed ? openCollapsedTooltip : undefined}
+        onBlur={isCollapsed ? closeCollapsedTooltipNow : undefined}
+      >
+        <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+        {!isCollapsed ? <span className="truncate">{label}</span> : null}
+      </NavLink>
+      {isCollapsed && collapsedTooltipOpen
+        ? createPortal(
+            <div
+              role="tooltip"
+              className={cn(
+                'pointer-events-auto fixed z-[100] -translate-y-1/2',
+                'whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1.5',
+                'text-xs font-medium text-popover-foreground shadow-md',
+              )}
+              style={{
+                top: collapsedTooltipPos.top,
+                left: collapsedTooltipPos.left,
+              }}
+              onMouseEnter={clearHideTooltipTimer}
+              onMouseLeave={scheduleCloseCollapsedTooltip}
+            >
+              {label}
+            </div>,
+            document.body,
+          )
+        : null}
     </li>
   );
 });

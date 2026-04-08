@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { LocationPicker } from '../LocationPicker';
@@ -142,7 +142,7 @@ describe('LocationPicker', () => {
       await user.type(input, 'Pa');
 
       // Advance past debounce
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -158,7 +158,7 @@ describe('LocationPicker', () => {
       expect(fetchMock).not.toHaveBeenCalled();
 
       // Advance past debounce
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -172,7 +172,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -193,7 +193,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'zzzzzzz');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(screen.getByText('locationPicker.noResults')).toBeInTheDocument();
@@ -212,7 +212,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       // Loading spinner should appear
       await waitFor(() => {
@@ -232,7 +232,11 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+        // Flush the fetch promise chain so all state updates land inside act
+        await Promise.resolve();
+      });
 
       await waitFor(() => {
         expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -252,7 +256,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -275,7 +279,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -311,7 +315,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -338,7 +342,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -357,7 +361,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -377,7 +381,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -397,7 +401,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -428,7 +432,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -464,7 +468,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(input).toHaveAttribute('aria-expanded', 'true');
@@ -478,7 +482,7 @@ describe('LocationPicker', () => {
       const input = screen.getByRole('combobox');
       await user.type(input, 'Paris');
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -533,7 +537,7 @@ describe('LocationPicker', () => {
       // Unmount before debounce completes
       unmount();
 
-      vi.advanceTimersByTime(350);
+      await act(() => { vi.advanceTimersByTime(350); });
 
       // Should not throw or cause issues
       expect(true).toBe(true);

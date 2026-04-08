@@ -20,6 +20,8 @@
 
 export { ShareDialog } from './components/ShareDialog';
 export type { ShareDialogProps } from './components/ShareDialog';
+export { TripSyncExportPanel } from './components/TripSyncExportPanel';
+export type { TripSyncExportPanelProps } from './components/TripSyncExportPanel';
 export { ImportTripQrDialog } from './components/ImportTripQrDialog';
 export type { ImportTripQrDialogProps } from './components/ImportTripQrDialog';
 export { extractShareIdFromScannedPayload } from './utils/share-qr-parse';

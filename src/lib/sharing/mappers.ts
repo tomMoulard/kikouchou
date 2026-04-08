@@ -1,6 +1,6 @@
 /**
  * @fileoverview Mappers between application branded types and protobuf generated types.
- * Converts between the app's Person/RoomAssignment/Transport and the proto equivalents.
+ * Converts between the app's Person/Room/RoomAssignment/Transport and the proto equivalents.
  *
  * @module lib/sharing/mappers
  */
@@ -8,15 +8,19 @@
 import { create } from '@bufbuild/protobuf';
 import {
   CoordinatesSchema,
+  RoomSchema,
   TransportMode as ProtoTransportMode,
   TransportType as ProtoTransportType,
+  TripSnapshotSchema,
 } from '@/gen/changeset_pb';
 import type {
   EntityList as ProtoEntityList,
   Person as ProtoPerson,
+  Room as ProtoRoom,
   RoomAssignment as ProtoRoomAssignment,
   Transport as ProtoTransport,
   TripChangeset as ProtoTripChangeset,
+  TripSnapshot as ProtoTripSnapshot,
 } from '@/gen/changeset_pb';
 import {
   EntityListSchema,
@@ -31,15 +35,40 @@ import type {
   ISODateTimeString,
   Person,
   PersonId,
+  Room,
   RoomAssignment,
   RoomAssignmentId,
+  RoomIcon,
   RoomId,
   Transport,
   TransportId,
   TripId,
 } from '@/types';
 import type { TransportMode, TransportType } from '@/types';
-import type { AppChangeset, EntityCollection } from '@/lib/sharing/types';
+import type { AppChangeset, EntityCollection, TripSnapshotMeta } from '@/lib/sharing/types';
+
+// ============================================================================
+// Room icon validation (proto carries plain strings)
+// ============================================================================
+
+const VALID_ROOM_ICONS: ReadonlySet<string> = new Set<RoomIcon>([
+  'bed-double',
+  'bed-single',
+  'bath',
+  'sofa',
+  'tent',
+  'caravan',
+  'warehouse',
+  'home',
+  'door-open',
+  'baby',
+  'armchair',
+]);
+
+function parseRoomIcon(raw: string | undefined): RoomIcon | undefined {
+  if (!raw) return undefined;
+  return VALID_ROOM_ICONS.has(raw) ? (raw as RoomIcon) : undefined;
+}
 
 // ============================================================================
 // Transport Type Mapping
@@ -141,6 +170,36 @@ export function transportToProto(transport: Transport): ProtoTransport {
 }
 
 /**
+ * Converts an app Room to a protobuf Room message.
+ */
+export function roomToProto(room: Room): ProtoRoom {
+  return create(RoomSchema, {
+    id: room.id,
+    tripId: room.tripId,
+    name: room.name,
+    capacity: room.capacity,
+    order: room.order,
+    description: room.description,
+    icon: room.icon,
+  });
+}
+
+/**
+ * Converts trip snapshot metadata to protobuf.
+ */
+export function tripSnapshotToProto(meta: TripSnapshotMeta): ProtoTripSnapshot {
+  return create(TripSnapshotSchema, {
+    name: meta.name,
+    startDate: meta.startDate,
+    endDate: meta.endDate,
+    location: meta.location,
+    description: meta.description,
+    coordLat: meta.coordinates?.lat,
+    coordLon: meta.coordinates?.lon,
+  });
+}
+
+/**
  * Converts an EntityCollection to a protobuf EntityList.
  */
 export function entityCollectionToProto(collection: EntityCollection): ProtoEntityList {
@@ -148,6 +207,7 @@ export function entityCollectionToProto(collection: EntityCollection): ProtoEnti
     persons: collection.persons.map(personToProto),
     assignments: collection.assignments.map(assignmentToProto),
     transports: collection.transports.map(transportToProto),
+    rooms: collection.rooms.map(roomToProto),
   });
 }
 
@@ -164,6 +224,9 @@ export function changesetToProto(changeset: AppChangeset): ProtoTripChangeset {
     baseSnapshotAt: BigInt(changeset.baseSnapshotAt),
     added: entityCollectionToProto(changeset.added),
     modified: entityCollectionToProto(changeset.modified),
+    tripSnapshot: changeset.tripSnapshot
+      ? tripSnapshotToProto(changeset.tripSnapshot)
+      : undefined,
   });
 }
 
@@ -227,16 +290,49 @@ export function protoToTransport(proto: ProtoTransport): Transport {
 }
 
 /**
+ * Converts a protobuf Room to an app Room.
+ */
+export function protoToRoom(proto: ProtoRoom): Room {
+  return {
+    id: proto.id as RoomId,
+    tripId: proto.tripId as TripId,
+    name: proto.name,
+    capacity: proto.capacity,
+    order: proto.order,
+    description: proto.description,
+    icon: parseRoomIcon(proto.icon),
+  };
+}
+
+/**
+ * Converts a protobuf TripSnapshot to app metadata.
+ */
+export function protoToTripSnapshot(proto: ProtoTripSnapshot): TripSnapshotMeta {
+  return {
+    name: proto.name,
+    startDate: proto.startDate as ISODateString,
+    endDate: proto.endDate as ISODateString,
+    location: proto.location,
+    description: proto.description,
+    coordinates:
+      proto.coordLat !== undefined && proto.coordLon !== undefined
+        ? { lat: proto.coordLat, lon: proto.coordLon }
+        : undefined,
+  };
+}
+
+/**
  * Converts a protobuf EntityList to an EntityCollection.
  */
 export function protoToEntityCollection(proto: ProtoEntityList | undefined): EntityCollection {
   if (!proto) {
-    return { persons: [], assignments: [], transports: [] };
+    return { persons: [], assignments: [], transports: [], rooms: [] };
   }
   return {
     persons: proto.persons.map(protoToPerson),
     assignments: proto.assignments.map(protoToAssignment),
     transports: proto.transports.map(protoToTransport),
+    rooms: proto.rooms.map(protoToRoom),
   };
 }
 
@@ -253,5 +349,6 @@ export function protoToChangeset(proto: ProtoTripChangeset): AppChangeset {
     baseSnapshotAt: Number(proto.baseSnapshotAt),
     added: protoToEntityCollection(proto.added),
     modified: protoToEntityCollection(proto.modified),
+    tripSnapshot: proto.tripSnapshot ? protoToTripSnapshot(proto.tripSnapshot) : undefined,
   };
 }

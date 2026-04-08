@@ -17,7 +17,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { type Locale, format, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
-import { Calendar, MapPin, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
+import { Calendar, MapPin, MoreHorizontal, Pencil, Share2, Trash2, Users } from 'lucide-react';
 
 // Lazy load the map component for performance
 const TripLocationMap = lazy(() =>
@@ -132,6 +132,8 @@ interface TripCardProps {
   readonly onEdit?: () => void;
   /** Callback when Delete is selected from the menu */
   readonly onDelete?: () => void;
+  /** Opens share dialog (link + QR) for this trip — e.g. from the trip list */
+  readonly onShare?: (trip: Trip) => void;
   /** Whether the card interaction is currently disabled    */
   readonly isDisabled?: boolean;
   readonly persons: readonly Person[];
@@ -169,6 +171,7 @@ const TripCard = memo(function TripCard({
   onClick,
   onEdit,
   onDelete,
+  onShare,
   isDisabled = false,
   persons,
 }: TripCardProps) {
@@ -248,11 +251,23 @@ const TripCard = memo(function TripCard({
    */
    handleDeleteClick = useCallback(() => {
     onDelete?.();
-  }, [onDelete]);
+  }, [onDelete]),
+
+   handleShareClick = useCallback(
+    (event: MouseEvent) => {
+      event.stopPropagation();
+      if (isDisabled) {return;}
+      onShare?.(trip);
+    },
+    [isDisabled, onShare, trip],
+  );
 
   // ============================================================================
   // Render
   // ============================================================================
+
+  const showCornerMenu = Boolean(onEdit && onDelete);
+  const showCornerActions = Boolean(onShare || showCornerMenu);
 
   return (
     <Card
@@ -269,13 +284,27 @@ const TripCard = memo(function TripCard({
         isDisabled && 'opacity-50 cursor-not-allowed',
       )}
     >
-      {/* Dropdown Menu - positioned absolutely in top-right corner */}
+      {/* Share + overflow menu — top-right */}
+      {showCornerActions && (
       <div
-        className="absolute top-2 right-2 z-10"
+        className="absolute top-2 right-2 z-10 flex items-center gap-0.5"
         onClick={handleMenuTriggerClick}
         onKeyDown={(e) => e.stopPropagation()}
       >
-        {onEdit && onDelete && (
+        {onShare && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-11 md:size-8"
+            aria-label={t('trips.shareTripAria', 'Share trip — link and QR code')}
+            disabled={isDisabled}
+            onClick={handleShareClick}
+          >
+            <Share2 className="size-4" aria-hidden="true" />
+          </Button>
+        )}
+        {showCornerMenu && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -301,9 +330,14 @@ const TripCard = memo(function TripCard({
         </DropdownMenu>
         )}
       </div>
+      )}
 
       {/* Card Content */}
-      <CardHeader className="pr-12">
+      <CardHeader
+        className={cn(
+          showCornerActions && (onShare && showCornerMenu ? 'pr-28' : 'pr-14'),
+        )}
+      >
         <CardTitle className="text-lg truncate" title={trip.name}>
           {trip.name}
         </CardTitle>
