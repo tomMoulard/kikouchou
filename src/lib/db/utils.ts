@@ -149,6 +149,21 @@ export const toISODateString = (date: Date): ISODateString => {
 };
 
 /**
+ * Calendar date in the user's local timezone (YYYY-MM-DD from getFullYear/Month/Date).
+ * Use for matching `useToday()` / start-of-day Dates to trip day strings. `toISODateString`
+ * uses UTC and can be one calendar day behind local "today" for timezones ahead of UTC.
+ */
+export const toLocalISODateString = (date: Date): ISODateString => {
+  if (isNaN(date.getTime())) {
+    throw new Error('Invalid Date passed to toLocalISODateString');
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}` as ISODateString;
+};
+
+/**
  * Formats a Date to a full ISO datetime string with timezone.
  * @param date - The Date to format (must be a valid Date)
  * @returns ISO datetime string in YYYY-MM-DDTHH:mm:ss.sssZ format

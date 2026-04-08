@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package kikoushou.sharing;
+
+// Top-level changeset message — this is what goes into the QR code.
+// Captures a guest's additions and modifications relative to a baseline snapshot.
+message TripChangeset {
+  uint32 version = 1;           // schema version (currently 1)
+  string trip_id = 2;
+  string share_id = 3;
+  string exported_by = 4;       // PersonId of the guest who exported
+  int64 exported_at = 5;        // unix timestamp ms when exported
+  int64 base_snapshot_at = 6;   // unix timestamp ms of when guest imported the trip
+
+  EntityList added = 7;         // entities the guest created
+  EntityList modified = 8;      // entities the guest modified
+}
+
+// A collection of entities grouped by type.
+message EntityList {
+  repeated Person persons = 1;
+  repeated RoomAssignment assignments = 2;
+  repeated Transport transports = 3;
+}
+
+// A trip participant.
+message Person {
+  string id = 1;
+  string trip_id = 2;
+  string name = 3;
+  string color = 4;                     // hex color "#rrggbb"
+  optional string stay_start_date = 5;  // ISO date YYYY-MM-DD
+  optional string stay_end_date = 6;    // ISO date YYYY-MM-DD
+}
+
+// Links a person to a room for a specific date range.
+message RoomAssignment {
+  string id = 1;
+  string trip_id = 2;
+  string room_id = 3;
+  string person_id = 4;
+  string start_date = 5;   // ISO date YYYY-MM-DD
+  string end_date = 6;     // ISO date YYYY-MM-DD
+}
+
+// An arrival or departure event.
+message Transport {
+  string id = 1;
+  string trip_id = 2;
+  string person_id = 3;
+  TransportType type = 4;
+  string datetime = 5;                     // ISO datetime
+  string location = 6;
+  optional Coordinates coordinates = 7;
+  optional TransportMode transport_mode = 8;
+  optional string transport_number = 9;
+  optional string driver_id = 10;
+  bool needs_pickup = 11;
+  optional string notes = 12;
+}
+
+// GPS coordinates.
+message Coordinates {
+  double lat = 1;
+  double lon = 2;
+}
+
+enum TransportType {
+  TRANSPORT_TYPE_UNSPECIFIED = 0;
+  TRANSPORT_TYPE_ARRIVAL = 1;
+  TRANSPORT_TYPE_DEPARTURE = 2;
+}
+
+enum TransportMode {
+  TRANSPORT_MODE_UNSPECIFIED = 0;
+  TRANSPORT_MODE_TRAIN = 1;
+  TRANSPORT_MODE_PLANE = 2;
+  TRANSPORT_MODE_CAR = 3;
+  TRANSPORT_MODE_BUS = 4;
+  TRANSPORT_MODE_OTHER = 5;
+}

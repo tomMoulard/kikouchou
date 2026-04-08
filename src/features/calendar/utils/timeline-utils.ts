@@ -7,6 +7,7 @@
 import { subDays } from 'date-fns';
 
 import { parseISODateString, toISODateString } from '@/lib/db/utils';
+import { dedupeContainedTimelineSpans } from '@/lib/utils/dedupe-timeline-spans';
 import type {
   ISODateString,
   Person,
@@ -20,8 +21,11 @@ import type {
   CalendarTimelineModel,
   CalendarTimelineRowModel,
   TimelineItem,
+  TimelineItemAssignment,
   TimelineItemBase,
+  TimelineItemTransport,
   TimelineItemWithLane,
+  TimelineTransportMarker,
 } from '../types';
 import { getContrastTextColor } from './calendar-utils';
 
@@ -37,13 +41,26 @@ function buildTripDays(trip: Trip): readonly Date[] {
   }
 
   // Build days by stepping in UTC to avoid DST-related off-by-one issues.
-  const days: Date[] = [];
+  const raw: Date[] = [];
   let cursor = new Date(start.getTime());
   const endTime = end.getTime();
 
   while (cursor.getTime() <= endTime) {
-    days.push(new Date(cursor.getTime()));
+    raw.push(new Date(cursor.getTime()));
     cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  // Defensive: if two steps ever map to the same UTC calendar day, collapse so header
+  // column count matches row grids (duplicate React keys would drop a header cell).
+  const seen = new Set<ISODateString>();
+  const days: Date[] = [];
+  for (const d of raw) {
+    const k = toISODateString(d);
+    if (seen.has(k)) {
+      continue;
+    }
+    seen.add(k);
+    days.push(d);
   }
 
   return days;
@@ -78,6 +95,83 @@ function allocateLanes<TItem extends TimelineItemBase>(items: readonly TItem[]):
   }
 
   return result;
+}
+
+/**
+ * Picks the room assignment that should host a transport in the same stay pill
+ * (same calendar night, checkout-day departure, or day-before-stay arrival).
+ */
+function findHostAssignmentForTransport(
+  transportItem: TimelineItemTransport,
+  assignments: readonly TimelineItemAssignment[],
+): TimelineItemAssignment | undefined {
+  const day = transportItem.startIndex;
+  const tType = transportItem.transport.type;
+
+  const matches = assignments.filter((a) => {
+    if (day >= a.startIndex && day <= a.endIndex) {
+      return true;
+    }
+    if (tType === 'departure' && day === a.endIndex + 1) {
+      return true;
+    }
+    if (tType === 'arrival' && day === a.startIndex - 1) {
+      return true;
+    }
+    return false;
+  });
+
+  if (matches.length === 0) {
+    return undefined;
+  }
+
+  return [...matches].sort((a, b) => a.startIndex - b.startIndex || a.endIndex - b.endIndex)[0];
+}
+
+/**
+ * Merges transport points into assignment items so the timeline renders a single pill.
+ * Transports without a host assignment stay as standalone items (e.g. no room yet).
+ */
+function mergeTransportsIntoAssignments(items: readonly TimelineItem[]): TimelineItem[] {
+  const assignments = items.filter((i): i is TimelineItemAssignment => i.kind === 'assignment');
+  const transports = items.filter((i): i is TimelineItemTransport => i.kind === 'transport');
+
+  if (transports.length === 0) {
+    return [...items];
+  }
+
+  const markersByAssignmentId = new Map<string, TimelineTransportMarker[]>();
+  for (const a of assignments) {
+    markersByAssignmentId.set(a.id, []);
+  }
+
+  const orphans: TimelineItemTransport[] = [];
+
+  for (const tr of transports) {
+    const host = findHostAssignmentForTransport(tr, assignments);
+    if (host) {
+      const bucket = markersByAssignmentId.get(host.id);
+      if (bucket) {
+        bucket.push({ transport: tr.transport, dayIndex: tr.startIndex });
+      }
+    } else {
+      orphans.push(tr);
+    }
+  }
+
+  const mergedAssignments: TimelineItem[] = assignments.map((a) => {
+    const markers = markersByAssignmentId.get(a.id);
+    const sorted =
+      markers && markers.length > 0
+        ? [...markers].sort((m1, m2) => m1.transport.datetime.localeCompare(m2.transport.datetime))
+        : undefined;
+    return {
+      ...a,
+      timelineTransports: sorted,
+    };
+  });
+
+  return [...mergedAssignments, ...orphans];
 }
 
 function isAssignmentVisible(
@@ -183,6 +277,7 @@ export function buildCalendarTimelineModel(args: {
     })();
 
     // Room assignment spans (nights model like month view: endDate is checkout -> subtract 1 day)
+    const assignmentItems: TimelineItemAssignment[] = [];
     for (const assignment of assignments) {
       if (assignment.personId !== person.id) {
         continue;
@@ -216,7 +311,7 @@ export function buildCalendarTimelineModel(args: {
       const color = person.color;
       const textColor = getContrastTextColor(color);
 
-      baseItems.push({
+      assignmentItems.push({
         kind: 'assignment',
         id: assignment.id,
         startIndex,
@@ -229,6 +324,8 @@ export function buildCalendarTimelineModel(args: {
         room,
       });
     }
+
+    baseItems.push(...dedupeContainedTimelineSpans(assignmentItems));
 
     const effectiveStaySpan = (() => {
       if (!staySpan) return undefined;
@@ -287,7 +384,8 @@ export function buildCalendarTimelineModel(args: {
       });
     }
 
-    const lanes = allocateLanes(baseItems) as readonly TimelineItemWithLane[];
+    const mergedItems = mergeTransportsIntoAssignments(baseItems);
+    const lanes = allocateLanes(mergedItems) as readonly TimelineItemWithLane[];
     const maxLaneIndex = lanes.reduce((max, i) => Math.max(max, i.laneIndex), -1);
     const maxLaneCount = maxLaneIndex + 1;
 

@@ -23,8 +23,6 @@ import {
   Users,
 } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
-import { useTripContext } from '@/contexts/TripContext';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -33,6 +31,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { listGuestsPresentOnDate } from '@/features/persons/utils/guest-presence';
+import { usePersonContext } from '@/contexts/PersonContext';
+import { useTransportContext } from '@/contexts/TransportContext';
+import { useTripContext } from '@/contexts/TripContext';
+import { useToday } from '@/hooks/useToday';
+import { toLocalISODateString } from '@/lib/db/utils';
+import { cn } from '@/lib/utils';
 import type { Trip } from '@/types';
 
 // ============================================================================
@@ -339,7 +344,7 @@ function formatDateRange(startDate: string, endDate: string): string {
 }
 
 /**
- * Trip info section displayed in the sidebar when a trip is selected.
+ * Trip info section in the sidebar when a trip is selected (expanded rail only).
  */
 const TripInfoSection = memo(function TripInfoSection({
   trip,
@@ -347,26 +352,36 @@ const TripInfoSection = memo(function TripInfoSection({
 }: {
   readonly trip: Trip;
   readonly isCollapsed: boolean;
-}): React.ReactElement {
+}): React.ReactElement | null {
+  const { t } = useTranslation();
+  const { today } = useToday();
+  const { persons, isLoading: isPersonsLoading } = usePersonContext();
+  const { arrivals, departures, isLoading: isTransportsLoading } = useTransportContext();
+
   const dateRange = useMemo(
     () => formatDateRange(trip.startDate, trip.endDate),
     [trip.startDate, trip.endDate],
   );
 
+  const todayKey = useMemo(() => toLocalISODateString(today), [today]);
+
+  const todayWithinTrip = useMemo(
+    () => trip.startDate <= todayKey && todayKey <= trip.endDate,
+    [todayKey, trip.endDate, trip.startDate],
+  );
+
+  const guestsTonight = useMemo(() => {
+    if (!todayWithinTrip) {
+      return [];
+    }
+    return listGuestsPresentOnDate(persons, arrivals, departures, todayKey);
+  }, [arrivals, departures, persons, todayKey, todayWithinTrip]);
+
+  const isGuestsLoading = isPersonsLoading || isTransportsLoading;
+
   if (isCollapsed) {
-    // When collapsed, show minimal trip indicator
-    return (
-      <div
-        className="px-2 py-3 border-b"
-        title={`${trip.name}\n${dateRange}${trip.location ? `\n${trip.location}` : ''}`}
-      >
-        <div className="flex justify-center">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <Luggage className="h-4 w-4 text-primary" aria-hidden="true" />
-          </div>
-        </div>
-      </div>
-    );
+    // Icon-only sidebar already has trip nav; a duplicate luggage chip adds no usable info.
+    return null;
   }
 
   return (
@@ -383,6 +398,45 @@ const TripInfoSection = memo(function TripInfoSection({
             <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />
             <span className="truncate" title={trip.location}>{trip.location}</span>
           </p>
+        )}
+      </div>
+
+      <div className="mt-3 pt-2 border-t border-border/60">
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+          {t('nav.guestsOfTheDay')}
+        </p>
+        <p className="sr-only">{t('nav.guestsOfTheDayHint')}</p>
+        {isGuestsLoading ? (
+          <p className="text-xs text-muted-foreground mt-1.5">{t('nav.guestsOfTheDayLoading')}</p>
+        ) : !todayWithinTrip ? (
+          <p className="text-xs text-muted-foreground mt-1.5">{t('nav.guestsOfTheDayOutsideTrip')}</p>
+        ) : guestsTonight.length === 0 ? (
+          <p className="text-xs text-muted-foreground mt-1.5">{t('nav.guestsOfTheDayEmpty')}</p>
+        ) : (
+          <ul
+            className="mt-1.5 space-y-1 max-h-36 overflow-y-auto"
+            aria-label={t('nav.guestsOfTheDay')}
+          >
+            {guestsTonight.map((person) => (
+              <li key={person.id}>
+                <Link
+                  to={`/trips/${trip.id}/persons`}
+                  className={cn(
+                    'flex items-center gap-2 rounded-md px-1 py-0.5 -mx-1',
+                    'text-xs text-foreground hover:bg-accent/80 transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  )}
+                >
+                  <span
+                    className="size-2 rounded-full shrink-0"
+                    style={{ backgroundColor: person.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{person.name}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>
@@ -404,33 +458,53 @@ const NavLinkItem = memo(function NavLinkItem({
   const { t } = useTranslation();
   const path = buildNavPath(item, tripId);
   const isDisabled = item.requiresTrip && !tripId;
+  const label = String(t(item.labelKey));
 
   return (
-    <li>
-      <NavLink
-        to={path}
-        onClick={(e) => { if (isDisabled) e.preventDefault(); }}
-        tabIndex={isDisabled ? -1 : undefined}
-        className={({ isActive }) =>
-          cn(
-            'flex items-center gap-3 rounded-lg px-3 py-2 transition-colors',
-            'hover:bg-accent hover:text-accent-foreground',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            isActive
-              ? 'bg-accent text-accent-foreground font-medium'
-              : 'text-muted-foreground',
-            isCollapsed && 'justify-center px-2',
-            isDisabled && 'opacity-50 pointer-events-none',
-          )
-        }
-        title={isCollapsed ? t(item.labelKey) : undefined}
-        aria-disabled={isDisabled || undefined}
-      >
-        <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-        {!isCollapsed && (
-          <span className="truncate">{t(item.labelKey)}</span>
-        )}
-      </NavLink>
+    <li className={cn(isCollapsed && 'flex justify-center')}>
+      <div className={cn('relative', isCollapsed && 'group')}>
+        <NavLink
+          to={path}
+          onClick={(e) => {
+            if (isDisabled) e.preventDefault();
+          }}
+          tabIndex={isDisabled ? -1 : undefined}
+          aria-label={isCollapsed ? label : undefined}
+          className={({ isActive }) =>
+            cn(
+              'flex items-center rounded-lg transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+              isCollapsed
+                ? 'size-9 shrink-0 justify-center'
+                : 'min-h-9 gap-3 px-3 py-2',
+              isActive
+                ? 'bg-primary/14 text-primary font-medium shadow-sm ring-1 ring-primary/20'
+                : 'text-muted-foreground hover:bg-accent/80 hover:text-accent-foreground',
+              isActive && 'hover:bg-primary/20 hover:text-primary',
+              isDisabled && 'pointer-events-none opacity-50',
+            )
+          }
+          title={isCollapsed ? label : undefined}
+          aria-disabled={isDisabled || undefined}
+        >
+          <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+          {!isCollapsed ? <span className="truncate">{label}</span> : null}
+        </NavLink>
+        {isCollapsed ? (
+          <span
+            className={cn(
+              'pointer-events-none absolute left-full top-1/2 z-[60] ms-2 -translate-y-1/2',
+              'whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1.5',
+              'text-xs font-medium text-popover-foreground shadow-md',
+              'opacity-0 transition-opacity duration-150',
+              'group-hover:opacity-100 group-focus-within:opacity-100',
+            )}
+            aria-hidden="true"
+          >
+            {label}
+          </span>
+        ) : null}
+      </div>
     </li>
   );
 });
@@ -514,12 +588,17 @@ const DesktopSidebar = memo(function DesktopSidebar({
       </nav>
 
       {/* Collapse toggle button */}
-      <div className="border-t p-2">
+      <div className={cn('border-t p-2', isCollapsed && 'flex justify-center')}>
         <Button
           variant="ghost"
-          size="sm"
-          className={cn('w-full', isCollapsed ? 'justify-center' : '')}
+          size={isCollapsed ? 'icon' : 'sm'}
+          className={cn(!isCollapsed && 'w-full')}
           onClick={onToggle}
+          title={
+            isCollapsed
+              ? t('nav.expand', 'Expand sidebar')
+              : t('nav.collapse', 'Collapse sidebar')
+          }
           aria-label={
             isCollapsed
               ? t('nav.expand', 'Expand sidebar')
@@ -527,10 +606,10 @@ const DesktopSidebar = memo(function DesktopSidebar({
           }
         >
           {isCollapsed ? (
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-5 w-5" aria-hidden="true" />
           ) : (
             <>
-              <ChevronLeft className="h-4 w-4 mr-2" />
+              <ChevronLeft className="h-4 w-4 mr-2" aria-hidden="true" />
               <span>{t('nav.collapse', 'Collapse')}</span>
             </>
           )}

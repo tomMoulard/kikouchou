@@ -20,6 +20,9 @@
 
 export { ShareDialog } from './components/ShareDialog';
 export type { ShareDialogProps } from './components/ShareDialog';
+export { ImportTripQrDialog } from './components/ImportTripQrDialog';
+export type { ImportTripQrDialogProps } from './components/ImportTripQrDialog';
+export { extractShareIdFromScannedPayload } from './utils/share-qr-parse';
 
 // ============================================================================
 // Pages
@@ -31,9 +34,10 @@ export { IdentityStepPage } from './pages/IdentityStepPage';
 export { RoomSelectionStepPage } from './pages/RoomSelectionStepPage';
 export { TransportEntryStepPage } from './pages/TransportEntryStepPage';
 export { SummaryStepPage } from './pages/SummaryStepPage';
+export { TripSyncPage } from './pages/TripSyncPage';
 
 // ============================================================================
 // Routes
 // ============================================================================
 
-export { sharingRoutes, ShareImportRoute } from './routes';
+export { sharingRoutes, sharingSyncRoutes, ShareImportRoute } from './routes';

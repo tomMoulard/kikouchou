@@ -67,7 +67,7 @@ import { QuickAssignmentDialog } from '@/features/rooms/components/QuickAssignme
 import { RoomOccupancyTimeline } from '@/features/rooms/components/RoomOccupancyTimeline';
 import { type DateRange as PickerDateRange, DateRangePicker } from '@/components/shared/DateRangePicker';
 import { isDateInStayRange, calculatePeakOccupancy } from '@/features/rooms/utils/capacity-utils';
-import type { Person, Room, RoomAssignment, RoomId, Transport } from '@/types';
+import type { ISODateString, Person, Room, RoomAssignment, RoomId, Transport } from '@/types';
 import type { DraggableRoomAssignmentData } from '@/features/rooms/components/DraggableRoomAssignment';
 import type { DroppableAssignmentData } from '@/features/rooms/components/DroppableAssignment';
 
@@ -881,7 +881,12 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div
+        className={cn(
+          'container py-6 md:py-8',
+          currentView === 'timeline' ? 'max-w-7xl' : 'max-w-4xl',
+        )}
+      >
         <PageHeader
           title={t('rooms.title')}
           backLink={`/trips/${tripIdFromUrl}/calendar`}
@@ -1022,6 +1027,8 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           trip={currentTrip}
           rooms={sortedRoomsWithOccupancy.map((r) => r.room)}
           assignments={assignments}
+          arrivals={arrivals}
+          departures={departures}
           persons={persons}
           unassignedGuests={unassignedGuests}
           dateLocale={dateLocale}
@@ -1029,6 +1036,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             startDate: currentTrip.startDate,
             endDate: currentTrip.endDate,
           }}
+          todayKey={todayStr as ISODateString}
         />
       )}
 

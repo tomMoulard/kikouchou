@@ -39,6 +39,11 @@
     "tripsNavigation": "Trips navigation",
     "tripSections": "Trip navigation",
     "settingsNavigation": "Settings navigation",
+    "guestsOfTheDay": "Guests tonight",
+    "guestsOfTheDayHint": "Who is staying overnight on today’s date (stay dates and travel).",
+    "guestsOfTheDayEmpty": "No guests tonight",
+    "guestsOfTheDayOutsideTrip": "Today is outside this trip’s dates",
+    "guestsOfTheDayLoading": "Loading guests…",
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar"
   },
@@ -69,7 +74,13 @@
     "removeImport": "Remove import",
     "createdWithImport": "Trip created with rooms imported",
     "importRoomsFailed": "Trip created but room import failed",
-    "noMatchingLocations": "No matching previous locations"
+    "noMatchingLocations": "No matching previous locations",
+    "importFromQr": "Import from QR code",
+    "importFromQrAria": "Import a shared trip using a QR code",
+    "importFromQrTitle": "Import a shared trip",
+    "importFromQrDescription": "Scan or paste the trip invite link or Share QR (adds this trip to your list). Sync export codes belong under Settings → Sync → Import on an open trip.",
+    "importQrInvalid": "This QR code or link is not a valid trip share.",
+    "importQrIsSyncPayload": "That text is a trip sync export (from Sync), not an invite link. Open that trip, go to Settings → Sync, then use Import there — or use the share link / invite QR from Share."
   },
   "rooms": {
     "title": "Rooms",
@@ -116,7 +127,9 @@
     },
     "timeline": {
       "ariaLabel": "Room occupancy timeline",
-      "rows": "Room rows"
+      "rows": "Room rows",
+      "freeBedHint": "Another bed is free in this room — drag a guest onto this row",
+      "assignmentPillA11y": "{{name}} — stay {{range}}"
     },
     "icons": {
       "bedDouble": "Double bed",
@@ -150,7 +163,8 @@
     "updateSuccess": "Guest updated successfully",
     "deleteSuccess": "Guest removed successfully",
     "empty": "No guests yet",
-    "emptyDescription": "Add the friends joining this trip — they'll pick rooms and add their travel details"
+    "emptyDescription": "Add the friends joining this trip — they'll pick rooms and add their travel details",
+    "cardNoTransportDetail": "No travel details yet"
   },
   "assignments": {
     "title": "Room assignments",
@@ -267,6 +281,7 @@
     "nights_plural": "{{count}} nights",
     "viewTransportDetails": "View {{name}}'s {{type}} details",
     "transportDeleted": "Transport deleted successfully",
+    "relatedTravel": "Travel",
     "view": {
       "ariaLabel": "Calendar view",
       "month": "Month",
@@ -276,7 +291,9 @@
       "ariaLabel": "Timeline calendar",
       "persons": "Guests",
       "rows": "Timeline rows",
-      "personRow": "{{name}} timeline"
+      "personRow": "{{name}} timeline",
+      "assignmentBarTitle": "{{room}} — {{range}}",
+      "assignmentBarAria": "{{room}}. Stay {{range}}."
     }
   },
   "sharing": {
@@ -374,7 +391,42 @@
     "summaryUnknown": "Unknown",
     "summaryEnterTrip": "Let's go!",
     "summaryEntering": "Entering...",
-    "summaryEnterTripError": "Failed to enter trip. Please try again."
+    "summaryEnterTripError": "Failed to enter trip. Please try again.",
+    "sync": {
+      "pageTitle": "Sync",
+      "importTab": "Import",
+      "exportTab": "Export",
+      "exportInstructions": "Show this QR code to another participant so they can scan it and sync your changes.",
+      "exportInstructionsHost": "Scan this QR from another device that has this same trip open to copy participants, room assignments, and transport details.",
+      "hostExportEmpty": "Add at least one participant (or room assignment or transport) before exporting.",
+      "exportError": "Failed to export changes",
+      "tripNotFound": "Trip not found",
+      "noGuestIdentity": "No guest identity found. You need to import this trip first via a share link.",
+      "noBaseline": "No import baseline found. Re-import the trip via the share link.",
+      "multiFrameHint": "This QR code has {{count}} frames. Keep it still while scanning all frames.",
+      "importInstructions": "Point your camera at the other participant's QR code to import their changes.",
+      "wrongTrip": "This QR code is for a different trip",
+      "decodeError": "Failed to decode QR code data",
+      "processing": "Processing changes...",
+      "framesProgress": "Frames: {{received}} / {{total}}",
+      "mergeSummary": "Merge Summary",
+      "noChanges": "No changes to apply",
+      "autoApplyCount": "{{count}} auto-applied changes",
+      "conflictCount": "{{count}} conflicts to resolve",
+      "warningCount": "{{count}} warnings",
+      "autoApplied": "Auto-applied changes",
+      "assignment": "Room assignment",
+      "conflictsTitle": "Conflicts",
+      "warningsTitle": "Warnings",
+      "conflictFields": "Differing fields: {{fields}}",
+      "keepMine": "Keep mine",
+      "acceptGuest": "Accept theirs",
+      "applyMerge": "Apply Changes",
+      "applying": "Applying...",
+      "mergeSuccess": "Merged {{count}} changes successfully",
+      "mergeError": "Failed to apply changes",
+      "scanAnother": "Scan another"
+    }
   },
   "settings": {
     "title": "Settings",
@@ -396,7 +448,10 @@
     "clearDataConfirmTitle": "Clear All Data?",
     "clearDataConfirmDescription": "This will permanently delete all your trips, rooms, persons, and transport information. This action cannot be undone.",
     "dataCleared": "All data has been cleared",
-    "clearDataFailed": "Failed to clear data. Please try again."
+    "clearDataFailed": "Failed to clear data. Please try again.",
+    "currentTrip": "Current Trip",
+    "currentTripDescription": "Edit your current trip settings",
+    "unsavedTripChanges": "You have unsaved changes"
   },
   "confirm": {
     "deleteTrip": "Delete this trip?",

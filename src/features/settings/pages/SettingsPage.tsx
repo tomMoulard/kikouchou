@@ -5,9 +5,10 @@
  * @module features/settings/pages/SettingsPage
  */
 
-import { type ReactElement, memo, useCallback, useState } from 'react';
+import { type ReactElement, memo, useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Globe, Info, Trash2 } from 'lucide-react';
+import { Globe, Info, Luggage, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useOfflineAwareToast } from '@/hooks';
 
@@ -29,8 +30,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { TripForm } from '@/features/trips/components/TripForm';
+import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db';
+import { deleteTrip, updateTrip } from '@/lib/db';
 import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage } from '@/lib/i18n';
+import type { TripFormData } from '@/types';
 
 // ============================================================================
 // Constants
@@ -216,6 +221,139 @@ const DataSection = memo(function DataSection(): ReactElement {
   );
 });
 
+/**
+ * Current trip section component.
+ * Displays the current trip edit form, sync button, and delete option.
+ * Only shown when a trip is currently selected.
+ */
+const CurrentTripSection = memo(function CurrentTripSection(): ReactElement | null {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { currentTrip, setCurrentTrip } = useTripContext();
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const isDeletingRef = useRef(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => () => {
+    isMountedRef.current = false;
+  }, []);
+
+  const handleDirtyChange = useCallback((dirty: boolean) => {
+    setIsDirty(dirty);
+  }, []);
+
+  const handleSubmit = useCallback(
+    async (data: TripFormData): Promise<void> => {
+      if (!currentTrip) return;
+      await updateTrip(currentTrip.id, data);
+      setIsDirty(false);
+      toast.success(t('trips.updated', 'Trip updated successfully'));
+    },
+    [currentTrip, t],
+  );
+
+  const handleCancel = useCallback(() => {
+    setIsDirty(false);
+  }, []);
+
+  const handleDelete = useCallback(async (): Promise<void> => {
+    if (isDeletingRef.current || !currentTrip) return;
+    isDeletingRef.current = true;
+
+    const tripIdToDelete = currentTrip.id;
+
+    try {
+      await deleteTrip(tripIdToDelete);
+      try {
+        await setCurrentTrip(null);
+      } catch (clearErr) {
+        console.error('Failed to clear current trip after delete:', clearErr);
+      }
+      toast.success(t('trips.deleted', 'Trip deleted successfully'));
+      navigate('/trips', { replace: true });
+    } catch (error) {
+      console.error('Failed to delete trip:', error);
+      if (isMountedRef.current) {
+        toast.error(t('errors.deleteFailed', 'Failed to delete. Please try again.'));
+      }
+    } finally {
+      isDeletingRef.current = false;
+    }
+  }, [currentTrip, navigate, setCurrentTrip, t]);
+
+  const handleSync = useCallback(() => {
+    if (!currentTrip) return;
+    navigate(`/trips/${currentTrip.id}/sync`);
+  }, [currentTrip, navigate]);
+
+  const handleOpenDeleteDialog = useCallback(() => {
+    setIsDeleteDialogOpen(true);
+  }, []);
+
+  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+    setIsDeleteDialogOpen(open);
+  }, []);
+
+  if (!currentTrip) {
+    return null;
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+              <Luggage className="size-5 text-primary" aria-hidden="true" />
+            </div>
+            <div className="flex-1">
+              <CardTitle className="text-base">{t('settings.currentTrip', 'Current Trip')}</CardTitle>
+              <CardDescription>
+                {t('settings.currentTripDescription', 'Edit your current trip settings')}
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleSync}>
+                <RefreshCw className="mr-2 size-4" aria-hidden="true" />
+                {t('sharing.sync.pageTitle', 'Sync')}
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleOpenDeleteDialog}>
+                <Trash2 className="mr-2 size-4" aria-hidden="true" />
+                {t('common.delete')}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <TripForm
+            trip={currentTrip}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            onDirtyChange={handleDirtyChange}
+          />
+          {isDirty && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {t('settings.unsavedTripChanges', 'You have unsaved changes')}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <ConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={handleDeleteDialogOpenChange}
+        title={t('confirm.deleteTrip')}
+        description={t('confirm.deleteTripDescription')}
+        confirmLabel={t('common.delete')}
+        onConfirm={handleDelete}
+        variant="destructive"
+      />
+    </>
+  );
+});
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -251,6 +389,9 @@ function SettingsPageComponent(): ReactElement {
       />
 
       <div className="mt-6 space-y-6">
+        {/* Current Trip Section - only shown when a trip is selected */}
+        <CurrentTripSection />
+
         {/* Language Section */}
         <LanguageSelector />
 

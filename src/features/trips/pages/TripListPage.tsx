@@ -8,14 +8,15 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Luggage, Plus } from 'lucide-react';
+import { Luggage, Plus, QrCode } from 'lucide-react';
 
-import { useTripContext } from '@/contexts/TripContext';
-import { PageHeader } from '@/components/shared/PageHeader';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { Button } from '@/components/ui/button';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { ImportTripQrDialog } from '@/features/sharing';
+import { useTripContext } from '@/contexts/TripContext';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/db/database';
 import type { Person, Trip, TripId } from '@/types';
@@ -46,6 +47,7 @@ const TripListPage = memo(function TripListPage() {
   // Using ref for guard check to avoid stale closure issues
   const isNavigatingRef = useRef(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [importQrOpen, setImportQrOpen] = useState(false);
 
   // Persons per trip (map of tripId -> persons)
   const [personsByTrip, setPersonsByTrip] = useState<Map<TripId, Person[]>>(
@@ -144,14 +146,30 @@ const TripListPage = memo(function TripListPage() {
       // Error is captured in context
     }
   }, [checkConnection]);
+  const openImportQr = useCallback(() => {
+    setImportQrOpen(true);
+  }, []);
+
   const headerAction = useMemo(
     () => (
-      <Button onClick={handleCreateClick} className="hidden sm:flex">
-        <Plus className="size-4 mr-2" aria-hidden="true" />
-        {t('trips.new')}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={openImportQr}
+          aria-label={t('trips.importFromQrAria', 'Import a shared trip using a QR code')}
+          className="shrink-0"
+        >
+          <QrCode className="size-4 sm:mr-2" aria-hidden="true" />
+          <span className="hidden sm:inline">{t('trips.importFromQr', 'Import from QR code')}</span>
+        </Button>
+        <Button onClick={handleCreateClick} className="hidden sm:flex">
+          <Plus className="size-4 mr-2" aria-hidden="true" />
+          {t('trips.new')}
+        </Button>
+      </div>
     ),
-    [handleCreateClick, t],
+    [handleCreateClick, openImportQr, t],
   );
 
   // ============================================================================
@@ -160,12 +178,15 @@ const TripListPage = memo(function TripListPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col min-h-[calc(100vh-4rem)]">
-        <PageHeader title={t('trips.title')} />
-        <div className="flex-1 flex items-center justify-center">
-          <LoadingState variant="inline" size="lg" />
+      <>
+        <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+          <PageHeader title={t('trips.title')} action={headerAction} />
+          <div className="flex-1 flex items-center justify-center">
+            <LoadingState variant="inline" size="lg" />
+          </div>
         </div>
-      </div>
+        <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
+      </>
     );
   }
 
@@ -175,10 +196,13 @@ const TripListPage = memo(function TripListPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col min-h-[calc(100vh-4rem)]">
-        <PageHeader title={t('trips.title')} />
-        <ErrorDisplay error={error} onRetry={handleRetry} />
-      </div>
+      <>
+        <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+          <PageHeader title={t('trips.title')} action={headerAction} />
+          <ErrorDisplay error={error} onRetry={handleRetry} />
+        </div>
+        <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
+      </>
     );
   }
 
@@ -188,20 +212,23 @@ const TripListPage = memo(function TripListPage() {
 
   if (trips.length === 0) {
     return (
-      <div className="flex flex-col min-h-[calc(100vh-4rem)]">
-        <PageHeader title={t('trips.title')} />
-        <div className="flex-1 flex items-center justify-center">
-          <EmptyState
-            icon={Luggage}
-            title={t('trips.empty')}
-            description={t('trips.emptyDescription')}
-            action={{
-              label: t('trips.new'),
-              onClick: handleCreateClick,
-            }}
-          />
+      <>
+        <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+          <PageHeader title={t('trips.title')} action={headerAction} />
+          <div className="flex-1 flex items-center justify-center">
+            <EmptyState
+              icon={Luggage}
+              title={t('trips.empty')}
+              description={t('trips.emptyDescription')}
+              action={{
+                label: t('trips.new'),
+                onClick: handleCreateClick,
+              }}
+            />
+          </div>
         </div>
-      </div>
+        <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
+      </>
     );
   }
 
@@ -210,47 +237,65 @@ const TripListPage = memo(function TripListPage() {
   // ============================================================================
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-4rem)]">
-      <PageHeader title={t('trips.title')} action={headerAction} />
+    <>
+      <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+        <PageHeader title={t('trips.title')} action={headerAction} />
 
-      {/* Trip grid */}
-      <div
-        className={cn(
-          'grid gap-4',
-          'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-          // Extra bottom padding for FAB on mobile
-          'pb-20 sm:pb-4',
-        )}
-        role="list"
-        aria-label={t('trips.title')}
-      >
-        {trips.map((trip) => (
-          <div key={trip.id} role="listitem">
-            <TripCard
-              trip={trip}
-              persons={personsByTrip.get(trip.id) ?? []}
-              onClick={handleTripSelect}
-              isDisabled={isNavigating}
-            />
-          </div>
-        ))}
+        {/* Trip grid */}
+        <div
+          className={cn(
+            'grid gap-4',
+            'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+            // Extra bottom padding for stacked FABs on mobile
+            'pb-52 sm:pb-4',
+          )}
+          role="list"
+          aria-label={t('trips.title')}
+        >
+          {trips.map((trip) => (
+            <div key={trip.id} role="listitem">
+              <TripCard
+                trip={trip}
+                persons={personsByTrip.get(trip.id) ?? []}
+                onClick={handleTripSelect}
+                isDisabled={isNavigating}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Floating actions — mobile */}
+        <Button
+          type="button"
+          onClick={openImportQr}
+          size="lg"
+          variant="secondary"
+          className={cn(
+            'fixed bottom-36 right-4 z-10',
+            'size-14 rounded-full shadow-lg',
+            'sm:hidden',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          )}
+          aria-label={t('trips.importFromQrAria', 'Import a shared trip using a QR code')}
+        >
+          <QrCode className="size-6" aria-hidden="true" />
+        </Button>
+        <Button
+          onClick={handleCreateClick}
+          size="lg"
+          className={cn(
+            'fixed bottom-20 right-4 z-10',
+            'size-14 rounded-full shadow-lg',
+            'sm:hidden',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          )}
+          aria-label={t('trips.new')}
+        >
+          <Plus className="size-6" aria-hidden="true" />
+        </Button>
       </div>
-
-      {/* Floating Action Button for mobile */}
-      <Button
-        onClick={handleCreateClick}
-        size="lg"
-        className={cn(
-          'fixed bottom-20 right-4 z-10',
-          'size-14 rounded-full shadow-lg',
-          'sm:hidden',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        )}
-        aria-label={t('trips.new')}
-      >
-        <Plus className="size-6" aria-hidden="true" />
-      </Button>
-    </div>
+      <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
+    </>
   );
 });
 

@@ -44,6 +44,7 @@ import {
   getTripByShareId,
   setCurrentTrip,
 } from '@/lib/db';
+import { createBaselineForGuest } from '@/lib/sharing';
 import type {
   Person,
   PersonId,
@@ -235,6 +236,9 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
     try {
       await setCurrentTrip(trip.id);
       if (!isMountedRef.current) return;
+
+      // Save import baseline for future QR export (non-fatal if it fails)
+      try { await createBaselineForGuest(trip.id, shareId, guestPersonId); } catch { /* non-fatal */ }
 
       // Mark wizard as completed for this share link (non-fatal if storage fails)
       try { localStorage.setItem(getWizardCompleteKey(shareId), 'true'); } catch { /* non-fatal */ }

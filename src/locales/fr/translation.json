@@ -39,6 +39,11 @@
     "tripsNavigation": "Navigation des voyages",
     "tripSections": "Navigation du voyage",
     "settingsNavigation": "Navigation des paramètres",
+    "guestsOfTheDay": "Invités ce soir",
+    "guestsOfTheDayHint": "Présents cette nuit selon les dates de séjour et les trajets.",
+    "guestsOfTheDayEmpty": "Aucun invité cette nuit",
+    "guestsOfTheDayOutsideTrip": "Aujourd’hui est en dehors des dates du voyage",
+    "guestsOfTheDayLoading": "Chargement des invités…",
     "expand": "Développer la barre latérale",
     "collapse": "Réduire la barre latérale"
   },
@@ -69,7 +74,13 @@
     "removeImport": "Annuler l'import",
     "createdWithImport": "Voyage créé avec les chambres importées",
     "importRoomsFailed": "Voyage créé mais l'import des chambres a échoué",
-    "noMatchingLocations": "Aucun lieu correspondant"
+    "noMatchingLocations": "Aucun lieu correspondant",
+    "importFromQr": "Importer via QR code",
+    "importFromQrAria": "Importer un voyage partagé avec un QR code",
+    "importFromQrTitle": "Importer un voyage partagé",
+    "importFromQrDescription": "Scannez ou collez le lien d'invitation ou le QR de partage (ajoute le voyage à votre liste). Les codes d'export Sync vont dans Paramètres → Sync → Importer sur un voyage ouvert.",
+    "importQrInvalid": "Ce QR code ou lien ne correspond pas à un partage de voyage valide.",
+    "importQrIsSyncPayload": "Ce texte est une exportation de synchronisation (depuis Sync), pas un lien d'invitation. Ouvrez ce voyage, allez dans Paramètres → Sync, puis utilisez Importer — ou utilisez le lien de partage / QR d'invitation depuis Partager."
   },
   "rooms": {
     "title": "Chambres",
@@ -116,7 +127,9 @@
     },
     "timeline": {
       "ariaLabel": "Chronologie d'occupation des chambres",
-      "rows": "Lignes de chambres"
+      "rows": "Lignes de chambres",
+      "freeBedHint": "Un autre lit est libre dans cette chambre — glissez un participant sur cette ligne",
+      "assignmentPillA11y": "{{name}} — séjour {{range}}"
     },
     "icons": {
       "bedDouble": "Lit double",
@@ -150,7 +163,8 @@
     "updateSuccess": "Participant mis à jour avec succès",
     "deleteSuccess": "Participant supprimé avec succès",
     "empty": "Aucun participant pour l'instant",
-    "emptyDescription": "Ajoutez les amis qui participent — ils choisiront leur chambre et ajouteront leurs trajets"
+    "emptyDescription": "Ajoutez les amis qui participent — ils choisiront leur chambre et ajouteront leurs trajets",
+    "cardNoTransportDetail": "Pas encore de trajet renseigné"
   },
   "assignments": {
     "title": "Attribution des chambres",
@@ -267,6 +281,7 @@
     "nights_plural": "{{count}} nuits",
     "viewTransportDetails": "Voir les détails de {{type}} de {{name}}",
     "transportDeleted": "Transport supprimé avec succès",
+    "relatedTravel": "Déplacements",
     "view": {
       "ariaLabel": "Vue du calendrier",
       "month": "Mois",
@@ -276,7 +291,9 @@
       "ariaLabel": "Calendrier en chronologie",
       "persons": "Invités",
       "rows": "Lignes de chronologie",
-      "personRow": "Chronologie de {{name}}"
+      "personRow": "Chronologie de {{name}}",
+      "assignmentBarTitle": "{{room}} — {{range}}",
+      "assignmentBarAria": "{{room}}. Séjour {{range}}."
     }
   },
   "sharing": {
@@ -374,7 +391,42 @@
     "summaryUnknown": "Inconnu",
     "summaryEnterTrip": "C'est parti !",
     "summaryEntering": "Chargement...",
-    "summaryEnterTripError": "Impossible d'accéder au voyage. Veuillez réessayer."
+    "summaryEnterTripError": "Impossible d'accéder au voyage. Veuillez réessayer.",
+    "sync": {
+      "pageTitle": "Sync",
+      "importTab": "Importer",
+      "exportTab": "Exporter",
+      "exportInstructions": "Montrez ce QR code a un autre participant pour qu'il puisse le scanner et synchroniser vos modifications.",
+      "exportInstructionsHost": "Scannez ce QR depuis un autre appareil avec le meme voyage ouvert pour copier les participants, les attributions de chambre et les transports.",
+      "hostExportEmpty": "Ajoutez au moins un participant (ou une attribution de chambre ou un transport) avant d'exporter.",
+      "exportError": "Echec de l'exportation des modifications",
+      "tripNotFound": "Voyage introuvable",
+      "noGuestIdentity": "Aucune identite d'invite trouvee. Vous devez d'abord importer ce voyage via un lien de partage.",
+      "noBaseline": "Aucune reference d'import trouvee. Reimportez le voyage via le lien de partage.",
+      "multiFrameHint": "Ce QR code a {{count}} images. Gardez-le immobile pendant le scan.",
+      "importInstructions": "Pointez votre camera vers le QR code d'un autre participant pour importer ses modifications.",
+      "wrongTrip": "Ce QR code correspond a un autre voyage",
+      "decodeError": "Impossible de decoder les donnees du QR code",
+      "processing": "Traitement des modifications...",
+      "framesProgress": "Images : {{received}} / {{total}}",
+      "mergeSummary": "Resume de la fusion",
+      "noChanges": "Aucune modification a appliquer",
+      "autoApplyCount": "{{count}} modifications automatiques",
+      "conflictCount": "{{count}} conflits a resoudre",
+      "warningCount": "{{count}} avertissements",
+      "autoApplied": "Modifications automatiques",
+      "assignment": "Attribution de chambre",
+      "conflictsTitle": "Conflits",
+      "warningsTitle": "Avertissements",
+      "conflictFields": "Champs differents : {{fields}}",
+      "keepMine": "Garder le mien",
+      "acceptGuest": "Accepter les leurs",
+      "applyMerge": "Appliquer les modifications",
+      "applying": "Application en cours...",
+      "mergeSuccess": "{{count}} modifications fusionnees avec succes",
+      "mergeError": "Echec de l'application des modifications",
+      "scanAnother": "Scanner un autre"
+    }
   },
   "settings": {
     "title": "Paramètres",
@@ -396,7 +448,10 @@
     "clearDataConfirmTitle": "Supprimer toutes les données ?",
     "clearDataConfirmDescription": "Cela supprimera définitivement tous vos voyages, chambres, participants et informations de transport. Cette action est irréversible.",
     "dataCleared": "Toutes les données ont été supprimées",
-    "clearDataFailed": "Échec de la suppression des données. Veuillez réessayer."
+    "clearDataFailed": "Échec de la suppression des données. Veuillez réessayer.",
+    "currentTrip": "Voyage actuel",
+    "currentTripDescription": "Modifier les paramètres de votre voyage actuel",
+    "unsavedTripChanges": "Vous avez des modifications non enregistrées"
   },
   "confirm": {
     "deleteTrip": "Supprimer ce voyage ?",
