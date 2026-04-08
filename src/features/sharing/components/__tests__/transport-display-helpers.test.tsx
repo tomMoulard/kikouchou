@@ -3,7 +3,7 @@ import { render, screen } from '@/test/utils';
 import { getTransportIcon, formatDatetime } from '../transport-display-helpers';
 
 describe('getTransportIcon', () => {
-  const t = (key: string, fallback: string) => fallback;
+  const t = (_key: string, fallback: string) => fallback;
 
   it.each([
     ['train', 'train'],

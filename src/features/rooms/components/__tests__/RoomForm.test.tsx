@@ -41,8 +41,7 @@ describe('RoomForm', () => {
       name: 'Big Room',
       capacity: 3,
       description: 'A big room',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      order: 0,
     };
     render(
       <RoomForm room={room} onSubmit={vi.fn()} onCancel={vi.fn()} />,

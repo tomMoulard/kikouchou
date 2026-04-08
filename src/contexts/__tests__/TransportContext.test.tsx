@@ -109,12 +109,14 @@ describe('TransportContext', () => {
         personId,
         datetime: '2024-07-15T10:00:00.000Z',
         location: '',
+        needsPickup: false,
       });
       await createTransport(tripId, {
         type: 'departure',
         personId,
         datetime: '2024-07-20T14:00:00.000Z',
         location: '',
+        needsPickup: false,
       });
 
       const { result } = renderHook(() => useCombinedContexts(), {
@@ -148,6 +150,7 @@ describe('TransportContext', () => {
         personId,
         datetime: '2024-07-15T10:00:00.000Z',
         location: 'Airport',
+        needsPickup: false,
       });
 
       const { result } = renderHook(() => useCombinedContexts(), {
@@ -230,6 +233,8 @@ describe('TransportContext', () => {
             type: 'arrival',
             personId: 'p_123' as PersonId,
             datetime: '2024-07-15T10:00:00.000Z',
+            location: '',
+            needsPickup: false,
           });
         })
       ).rejects.toThrow('no trip selected');
@@ -262,6 +267,7 @@ describe('TransportContext', () => {
           personId,
           datetime: '2024-07-15T10:00:00.000Z',
           location: 'Airport',
+          needsPickup: false,
         });
       });
 
@@ -326,6 +332,7 @@ describe('TransportContext', () => {
           personId,
           datetime: '2024-07-20T14:00:00.000Z',
           location: '',
+          needsPickup: false,
         });
       });
 
@@ -374,18 +381,21 @@ describe('TransportContext', () => {
         personId: person1,
         datetime: '2024-07-15T10:00:00.000Z',
         location: '',
+        needsPickup: false,
       });
       await createTransport(tripId, {
         type: 'departure',
         personId: person1,
         datetime: '2024-07-20T14:00:00.000Z',
         location: '',
+        needsPickup: false,
       });
       await createTransport(tripId, {
         type: 'arrival',
         personId: person2,
         datetime: '2024-07-16T12:00:00.000Z',
         location: '',
+        needsPickup: false,
       });
 
       const { result } = renderHook(() => useCombinedContexts(), {

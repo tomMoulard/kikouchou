@@ -25,8 +25,6 @@ function makeAssignment(
     personId: 'person-1' as PersonId,
     startDate: startDate as ISODateString,
     endDate: endDate as ISODateString,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   };
 }
 

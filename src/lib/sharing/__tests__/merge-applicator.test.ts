@@ -23,8 +23,6 @@ function makePerson(id: string, name = 'Person'): Person {
     tripId: TRIP_ID,
     name,
     color: '#ef4444' as HexColor,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   };
 }
 
@@ -36,8 +34,6 @@ function makeAssignment(id: string): RoomAssignment {
     personId: 'person-1' as PersonId,
     startDate: '2024-07-15' as ISODateString,
     endDate: '2024-07-20' as ISODateString,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   };
 }
 
@@ -50,8 +46,6 @@ function makeTransport(id: string): Transport {
     datetime: '2024-07-15T14:00:00.000Z',
     location: 'Station',
     needsPickup: false,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   };
 }
 

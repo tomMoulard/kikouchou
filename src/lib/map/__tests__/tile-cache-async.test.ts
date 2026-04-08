@@ -11,7 +11,6 @@ import {
   getCacheStats,
   clearTileCache,
   isTileCached,
-  isCacheAvailable,
 } from '@/lib/map/tile-cache';
 
 // ============================================================================

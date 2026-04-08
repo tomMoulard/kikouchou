@@ -91,7 +91,7 @@ describe('dedupeContainedTimelineSpansByGroup', () => {
   }
 
   it('returns empty array for empty input', () => {
-    expect(dedupeContainedTimelineSpansByGroup([], (i) => i.id)).toEqual([]);
+    expect(dedupeContainedTimelineSpansByGroup<GroupedSpan>([], (i) => i.id)).toEqual([]);
   });
 
   it('dedupes within groups independently', () => {

@@ -8,8 +8,7 @@ const mockRooms: Room[] = [
     tripId: 't1' as Room['tripId'],
     name: 'Bedroom',
     capacity: 2,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    order: 0,
   },
 ];
 

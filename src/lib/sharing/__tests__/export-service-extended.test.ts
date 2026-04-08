@@ -45,8 +45,6 @@ function seedPerson(id: string = PERSON_ID as string) {
     tripId: TRIP_ID,
     name: 'Test Person',
     color: '#ef4444' as HexColor,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   });
 }
 
@@ -58,8 +56,6 @@ function seedAssignment(id: string, personId: string = PERSON_ID as string) {
     personId: personId as PersonId,
     startDate: '2024-07-15' as ISODateString,
     endDate: '2024-07-20' as ISODateString,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   });
 }
 
@@ -72,8 +68,6 @@ function seedTransport(id: string, personId: string = PERSON_ID as string) {
     datetime: '2024-07-15T14:00:00.000Z',
     location: 'Station',
     needsPickup: false,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   });
 }
 

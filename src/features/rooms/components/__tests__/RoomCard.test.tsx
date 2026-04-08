@@ -9,8 +9,7 @@ const mockRoom: Room = {
   name: 'Main Bedroom',
   capacity: 4,
   description: 'Large bedroom with two double beds',
-  createdAt: Date.now(),
-  updatedAt: Date.now(),
+  order: 0,
 };
 
 const mockPerson: Person = {

@@ -10,8 +10,7 @@ const mockTransports: Transport[] = [
     type: 'arrival',
     datetime: '2026-07-15T10:00:00Z',
     location: 'Airport',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    needsPickup: false,
   },
 ];
 

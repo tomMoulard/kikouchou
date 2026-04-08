@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@/test/utils';
 import { CalendarEventPill } from '../CalendarEventPill';
 import type { CalendarEvent } from '../../types';
-import type { RoomAssignment } from '@/types';
+import type { HexColor, RoomAssignment } from '@/types';
 
 const mockAssignment: RoomAssignment = {
   id: 'a1' as RoomAssignment['id'],
@@ -19,9 +19,13 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     person: undefined,
     room: undefined,
     label: 'Alice - Room 1',
-    color: '#3b82f6',
-    textColor: '#ffffff',
+    color: '#3b82f6' as HexColor,
+    textColor: 'white',
     segmentPosition: 'single',
+    slotIndex: 0,
+    spanId: 'a1',
+    totalDays: 5,
+    dayOfWeek: 0,
     isRowStart: false,
     isRowEnd: false,
     ...overrides,
@@ -115,7 +119,7 @@ describe('CalendarEventPill', () => {
   it('applies background color from event', () => {
     const onClick = vi.fn();
     render(
-      <CalendarEventPill event={makeEvent({ color: '#ff0000', textColor: '#000000' })} onClick={onClick} />,
+      <CalendarEventPill event={makeEvent({ color: '#ff0000' as HexColor, textColor: 'black' })} onClick={onClick} />,
       { withProviders: false },
     );
     const button = screen.getByRole('button');

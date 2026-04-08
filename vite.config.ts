@@ -11,11 +11,26 @@ const base = process.env.GITHUB_ACTIONS ? '/kikoushou/' : '/'
  * Manual chunk splitting strategy to keep bundles under 500KB
  * Groups dependencies by functionality for optimal caching
  * 
- * Strategy: Split only truly independent libraries to avoid circular deps
+ * Strategy: Split stable vendor libraries into long-lived cacheable chunks
  */
 function manualChunks(id: string): string | undefined {
   if (!id.includes('node_modules')) {
     return undefined
+  }
+
+  // React core — extremely stable, rarely changes between deploys
+  if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/scheduler/')) {
+    return 'vendor-react'
+  }
+
+  // React Router — stable routing library
+  if (id.includes('react-router')) {
+    return 'vendor-router'
+  }
+
+  // Dexie (IndexedDB) — stable data layer with no React dependency
+  if (id.includes('node_modules/dexie')) {
+    return 'vendor-dexie'
   }
 
   // date-fns is a pure utility library with no React deps
@@ -23,14 +38,19 @@ function manualChunks(id: string): string | undefined {
     return 'vendor-date'
   }
 
-  // i18next core is standalone (but react-i18next depends on React)
-  if (id.includes('node_modules/i18next/') || id.includes('node_modules/i18next-browser-languagedetector/')) {
+  // i18next core + react-i18next bridge
+  if (id.includes('i18next')) {
     return 'vendor-i18n'
   }
 
-  // Radix primitives - large but self-contained UI library
+  // Radix primitives — large but self-contained UI library
   if (id.includes('@radix-ui')) {
     return 'vendor-radix'
+  }
+
+  // Lucide icons — tree-shaken but imported from many eager components
+  if (id.includes('lucide-react')) {
+    return 'vendor-icons'
   }
 
   // Let Rollup handle the rest to avoid circular dependencies
