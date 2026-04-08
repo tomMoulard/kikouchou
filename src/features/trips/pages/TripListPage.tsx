@@ -15,7 +15,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { ImportTripQrDialog } from '@/features/sharing';
+import { ImportTripQrDialog, ShareDialog } from '@/features/sharing';
 import { useTripContext } from '@/contexts/TripContext';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/db/database';
@@ -48,6 +48,7 @@ const TripListPage = memo(function TripListPage() {
   const isNavigatingRef = useRef(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [importQrOpen, setImportQrOpen] = useState(false);
+  const [shareDialogTrip, setShareDialogTrip] = useState<Trip | null>(null);
 
   // Persons per trip (map of tripId -> persons)
   const [personsByTrip, setPersonsByTrip] = useState<Map<TripId, Person[]>>(
@@ -148,6 +149,16 @@ const TripListPage = memo(function TripListPage() {
   }, [checkConnection]);
   const openImportQr = useCallback(() => {
     setImportQrOpen(true);
+  }, []);
+
+  const handleShareTrip = useCallback((trip: Trip) => {
+    setShareDialogTrip(trip);
+  }, []);
+
+  const handleShareDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setShareDialogTrip(null);
+    }
   }, []);
 
   const headerAction = useMemo(
@@ -258,6 +269,7 @@ const TripListPage = memo(function TripListPage() {
                 trip={trip}
                 persons={personsByTrip.get(trip.id) ?? []}
                 onClick={handleTripSelect}
+                onShare={handleShareTrip}
                 isDisabled={isNavigating}
               />
             </div>
@@ -295,6 +307,11 @@ const TripListPage = memo(function TripListPage() {
         </Button>
       </div>
       <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
+      <ShareDialog
+        open={shareDialogTrip !== null}
+        onOpenChange={handleShareDialogOpenChange}
+        trip={shareDialogTrip ?? undefined}
+      />
     </>
   );
 });

@@ -345,5 +345,70 @@ describe('buildRoomTimelineModel', () => {
 
     expect(model.rows[0]!.items).toHaveLength(0);
   });
+
+  it('shows only one overlapping cross-room bar per guest (prefers longer stay)', () => {
+    const trip: Trip = {
+      id: 'trip-1' as Trip['id'],
+      shareId: 'share-1' as Trip['shareId'],
+      name: 'Trip',
+      startDate: iso('2026-04-01'),
+      endDate: iso('2026-04-30'),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const room1: Room = {
+      id: 'r1' as Room['id'],
+      tripId: trip.id,
+      name: 'Room 1',
+      capacity: 2,
+      order: 0,
+    };
+    const room2: Room = {
+      id: 'r2' as Room['id'],
+      tripId: trip.id,
+      name: 'Room 2',
+      capacity: 2,
+      order: 1,
+    };
+    const tom: Person = {
+      id: 'p-tom' as Person['id'],
+      tripId: trip.id,
+      name: 'Tom',
+      color: '#ef4444' as HexColor,
+    };
+    const shortInRoom1: RoomAssignment = {
+      id: 'a-r1' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room1.id,
+      personId: tom.id,
+      startDate: iso('2026-04-16'),
+      endDate: iso('2026-04-25'),
+    };
+    const longInRoom2: RoomAssignment = {
+      id: 'a-r2' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room2.id,
+      personId: tom.id,
+      startDate: iso('2026-04-07'),
+      endDate: iso('2026-04-25'),
+    };
+
+    const model = buildRoomTimelineModel({
+      trip,
+      range: { startDate: iso('2026-04-01'), endDate: iso('2026-04-30') },
+      rooms: [room1, room2],
+      assignments: [shortInRoom1, longInRoom2],
+      personsById: new Map([[tom.id, tom]]),
+      unknownLabel: 'Unknown',
+      arrivals: [],
+      departures: [],
+    });
+
+    const row1 = model.rows.find((r) => r.room.id === room1.id);
+    const row2 = model.rows.find((r) => r.room.id === room2.id);
+    expect(row1?.items).toHaveLength(0);
+    expect(row2?.items).toHaveLength(1);
+    expect(row2?.items[0]?.assignment.id).toBe(longInRoom2.id);
+  });
 });
 

@@ -81,10 +81,13 @@ async function createTestPerson(tripId: TripId, name = 'Test Person'): Promise<P
 }
 
 /**
- * Small delay to allow live queries to update.
+ * Small delay to allow live queries to update, wrapped in act()
+ * to avoid "not wrapped in act(...)" warnings.
  */
 async function waitForLiveQuery(ms = 100): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  });
 }
 
 // ============================================================================

@@ -78,9 +78,12 @@
     "importFromQr": "Import from QR code",
     "importFromQrAria": "Import a shared trip using a QR code",
     "importFromQrTitle": "Import a shared trip",
-    "importFromQrDescription": "Scan or paste the trip invite link or Share QR (adds this trip to your list). Sync export codes belong under Settings → Sync → Import on an open trip.",
+    "importFromQrDescription": "Scan or paste an invite link, Share QR, or Settings → Sync export QR. Matching share links or same trip name merge; otherwise a new trip is created.",
     "importQrInvalid": "This QR code or link is not a valid trip share.",
-    "importQrIsSyncPayload": "That text is a trip sync export (from Sync), not an invite link. Open that trip, go to Settings → Sync, then use Import there — or use the share link / invite QR from Share."
+    "importQrMergeSuccess": "Trip data imported and merged successfully.",
+    "importQrSnapshotRequired": "This export is too old to import here (missing trip details). Export again from Settings → Sync on the source device, then scan the new QR.",
+    "importQrMergeFailed": "Could not import this trip data. Try again or open a trip and use Settings → Sync → Import.",
+    "shareTripAria": "Share trip — link and QR code"
   },
   "rooms": {
     "title": "Rooms",
@@ -299,6 +302,9 @@
   "sharing": {
     "title": "Share trip",
     "description": "Share this link with your friends so they can view the trip",
+    "p2pDescription": "Send the full trip the same way as Settings → Sync → Export: QR or copied text. No cloud storage — data travels directly between devices.",
+    "p2pNotice": "There is no shared online database. Recipients add the trip on their phone by scanning the QR or pasting the text under Trips → Import from QR code.",
+    "fullTripPayload": "Full trip data",
     "link": "Share link",
     "copy": "Copy link",
     "copied": "Link copied!",

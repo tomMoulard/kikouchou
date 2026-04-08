@@ -31,9 +31,11 @@ describe('buildHostChangeset', () => {
     expect(changeset).not.toBeNull();
     expect(changeset!.tripId).toBe(tripId);
     expect(changeset!.shareId).toBe(trip!.shareId);
+    expect(changeset!.tripSnapshot?.name).toBe('Host export');
     expect(changeset!.modified.persons).toHaveLength(0);
     expect(changeset!.added.persons).toHaveLength(1);
     expect(changeset!.added.persons[0]?.name).toBe('Alice');
+    expect(changeset!.added.rooms).toEqual([]);
     expect(changeset!.exportedBy).toBe(changeset!.added.persons[0]?.id);
   });
 });

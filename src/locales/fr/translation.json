@@ -78,9 +78,12 @@
     "importFromQr": "Importer via QR code",
     "importFromQrAria": "Importer un voyage partagé avec un QR code",
     "importFromQrTitle": "Importer un voyage partagé",
-    "importFromQrDescription": "Scannez ou collez le lien d'invitation ou le QR de partage (ajoute le voyage à votre liste). Les codes d'export Sync vont dans Paramètres → Sync → Importer sur un voyage ouvert.",
+    "importFromQrDescription": "Scannez ou collez un lien d'invitation, un QR de partage ou un QR d'export (Paramètres → Sync). Même lien de partage ou même nom de voyage : fusion ; sinon un nouveau voyage est créé.",
     "importQrInvalid": "Ce QR code ou lien ne correspond pas à un partage de voyage valide.",
-    "importQrIsSyncPayload": "Ce texte est une exportation de synchronisation (depuis Sync), pas un lien d'invitation. Ouvrez ce voyage, allez dans Paramètres → Sync, puis utilisez Importer — ou utilisez le lien de partage / QR d'invitation depuis Partager."
+    "importQrMergeSuccess": "Données du voyage importées et fusionnées.",
+    "importQrSnapshotRequired": "Cet export est trop ancien pour être importé ici (détails du voyage manquants). Réexportez depuis Paramètres → Sync sur l'appareil source, puis scannez le nouveau QR.",
+    "importQrMergeFailed": "Impossible d'importer ces données. Réessayez ou ouvrez un voyage et utilisez Paramètres → Sync → Importer.",
+    "shareTripAria": "Partager le voyage — lien et QR code"
   },
   "rooms": {
     "title": "Chambres",
@@ -299,6 +302,9 @@
   "sharing": {
     "title": "Partager le voyage",
     "description": "Partagez ce lien avec vos amis pour qu'ils puissent voir le voyage",
+    "p2pDescription": "Envoyez le voyage complet comme dans Paramètres → Sync → Export : QR ou texte copié. Pas de stockage cloud — les données vont directement d’un appareil à l’autre.",
+    "p2pNotice": "Il n’y a pas de base de données en ligne partagée. Les destinataires ajoutent le voyage via le QR ou le texte collé dans Voyages → Importer via QR code.",
+    "fullTripPayload": "Données complètes du voyage",
     "link": "Lien de partage",
     "copy": "Copier le lien",
     "copied": "Lien copié !",

@@ -102,8 +102,8 @@ function makeChangeset(overrides: Partial<AppChangeset> = {}): AppChangeset {
     exportedBy: 'person-1' as PersonId,
     exportedAt: 1775649600000,
     baseSnapshotAt: 1775563200000,
-    added: { persons: [], assignments: [], transports: [] },
-    modified: { persons: [], assignments: [], transports: [] },
+    added: { persons: [], assignments: [], transports: [], rooms: [] },
+    modified: { persons: [], assignments: [], transports: [], rooms: [] },
     ...overrides,
   };
 }
@@ -124,7 +124,7 @@ describe('computeMerge', () => {
     it('auto-applies a new person not present on host', async () => {
       const newPerson = makePerson({ id: 'person-new' as PersonId, name: 'Bob' });
       const changeset = makeChangeset({
-        added: { persons: [newPerson], assignments: [], transports: [] },
+        added: { persons: [newPerson], assignments: [], transports: [], rooms: [] },
       });
 
       const result = await computeMerge(changeset);
@@ -141,7 +141,7 @@ describe('computeMerge', () => {
 
       const newAssignment = makeAssignment({ id: 'assign-new' as RoomAssignmentId });
       const changeset = makeChangeset({
-        added: { persons: [], assignments: [newAssignment], transports: [] },
+        added: { persons: [], assignments: [newAssignment], transports: [], rooms: [] },
       });
 
       const result = await computeMerge(changeset);
@@ -156,7 +156,7 @@ describe('computeMerge', () => {
 
       const newTransport = makeTransport({ id: 'transport-new' as TransportId });
       const changeset = makeChangeset({
-        added: { persons: [], assignments: [], transports: [newTransport] },
+        added: { persons: [], assignments: [], transports: [newTransport], rooms: [] },
       });
 
       const result = await computeMerge(changeset);
@@ -173,7 +173,7 @@ describe('computeMerge', () => {
 
       const guestPerson = makePerson({ name: 'Alice B.' });
       const changeset = makeChangeset({
-        modified: { persons: [guestPerson], assignments: [], transports: [] },
+        modified: { persons: [guestPerson], assignments: [], transports: [], rooms: [] },
       });
 
       const result = await computeMerge(changeset);
@@ -189,7 +189,7 @@ describe('computeMerge', () => {
       mockHostPersons.push(person);
 
       const changeset = makeChangeset({
-        modified: { persons: [{ ...person }], assignments: [], transports: [] },
+        modified: { persons: [{ ...person }], assignments: [], transports: [], rooms: [] },
       });
 
       const result = await computeMerge(changeset);
@@ -208,7 +208,7 @@ describe('computeMerge', () => {
 
       const guestAssignment = makeAssignment({ roomId: 'room-2' as RoomId });
       const changeset = makeChangeset({
-        modified: { persons: [], assignments: [guestAssignment], transports: [] },
+        modified: { persons: [], assignments: [guestAssignment], transports: [], rooms: [] },
       });
 
       const result = await computeMerge(changeset);
@@ -227,7 +227,7 @@ describe('computeMerge', () => {
 
       const guestTransport = makeTransport({ location: 'Gare de Rennes' });
       const changeset = makeChangeset({
-        modified: { persons: [], assignments: [], transports: [guestTransport] },
+        modified: { persons: [], assignments: [], transports: [guestTransport], rooms: [] },
       });
 
       const result = await computeMerge(changeset);
@@ -245,7 +245,7 @@ describe('computeMerge', () => {
 
       const assignment = makeAssignment();
       const changeset = makeChangeset({
-        added: { persons: [], assignments: [assignment], transports: [] },
+        added: { persons: [], assignments: [assignment], transports: [], rooms: [] },
       });
 
       const result = await computeMerge(changeset);
@@ -259,7 +259,7 @@ describe('computeMerge', () => {
 
       const transport = makeTransport();
       const changeset = makeChangeset({
-        added: { persons: [], assignments: [], transports: [transport] },
+        added: { persons: [], assignments: [], transports: [transport], rooms: [] },
       });
 
       const result = await computeMerge(changeset);
@@ -274,7 +274,7 @@ describe('computeMerge', () => {
 
       const transport = makeTransport({ driverId: 'person-2' as PersonId });
       const changeset = makeChangeset({
-        added: { persons: [], assignments: [], transports: [transport] },
+        added: { persons: [], assignments: [], transports: [transport], rooms: [] },
       });
 
       const result = await computeMerge(changeset);
@@ -296,11 +296,13 @@ describe('computeMerge', () => {
           persons: [makePerson({ id: 'person-new' as PersonId, name: 'Bob' })],
           assignments: [makeAssignment({ id: 'assign-new' as RoomAssignmentId })],
           transports: [],
+          rooms: [],
         },
         modified: {
           persons: [makePerson({ name: 'Alice Updated' })],
           assignments: [],
           transports: [],
+          rooms: [],
         },
       });
 

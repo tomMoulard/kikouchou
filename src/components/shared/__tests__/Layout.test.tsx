@@ -51,6 +51,33 @@ vi.mock('@/contexts/TripContext', () => ({
   useTripContext: () => mockUseTripContext(),
 }));
 
+// Mock PersonContext
+vi.mock('@/contexts/PersonContext', () => ({
+  usePersonContext: () => ({
+    persons: [],
+    isLoading: false,
+    error: null,
+    createPerson: vi.fn(),
+    updatePerson: vi.fn(),
+    deletePerson: vi.fn(),
+  }),
+}));
+
+// Mock TransportContext
+vi.mock('@/contexts/TransportContext', () => ({
+  useTransportContext: () => ({
+    transports: [],
+    arrivals: [],
+    departures: [],
+    upcomingPickups: [],
+    isLoading: false,
+    error: null,
+    createTransport: vi.fn(),
+    updateTransport: vi.fn(),
+    deleteTransport: vi.fn(),
+  }),
+}));
+
 // ============================================================================
 // Test Helpers
 // ============================================================================

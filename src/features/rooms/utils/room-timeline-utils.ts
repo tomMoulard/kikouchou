@@ -192,6 +192,77 @@ function clipAssignmentToPersonStayAndTripGrid(
   };
 }
 
+function indexRangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart <= bEnd && bStart <= aEnd;
+}
+
+/**
+ * When the same guest has overlapping room assignments in different rooms (duplicate or
+ * forgotten move), show only one bar: prefer the longer stay, then lower room order, then id.
+ */
+type CrossRoomClip = {
+  readonly assignment: RoomAssignment;
+  readonly room: Room;
+  readonly startIndex: number;
+  readonly endIndex: number;
+};
+
+function selectVisibleAssignmentIdsForCrossRoomOverlap(
+  clipped: readonly CrossRoomClip[],
+): ReadonlySet<string> {
+  const byPerson = new Map<string, CrossRoomClip[]>();
+  for (const c of clipped) {
+    const pid = c.assignment.personId;
+    const list = byPerson.get(pid);
+    if (list) {
+      list.push(c);
+    } else {
+      byPerson.set(pid, [c]);
+    }
+  }
+
+  const kept = new Set<string>();
+
+  for (const [, entries] of byPerson) {
+    if (entries.length <= 1) {
+      for (const e of entries) {
+        kept.add(e.assignment.id);
+      }
+      continue;
+    }
+
+    const sorted = [...entries].sort((a, b) => {
+      const na = a.endIndex - a.startIndex + 1;
+      const nb = b.endIndex - b.startIndex + 1;
+      if (nb !== na) {
+        return nb - na;
+      }
+      if (a.room.order !== b.room.order) {
+        return a.room.order - b.room.order;
+      }
+      return a.assignment.id.localeCompare(b.assignment.id);
+    });
+
+    const picked: CrossRoomClip[] = [];
+    for (const c of sorted) {
+      const overlapsOtherRoom = picked.some(
+        (p) =>
+          p.room.id !== c.room.id &&
+          indexRangesOverlap(p.startIndex, p.endIndex, c.startIndex, c.endIndex),
+      );
+      if (overlapsOtherRoom) {
+        continue;
+      }
+      picked.push(c);
+    }
+    for (const p of picked) {
+      kept.add(p.assignment.id);
+    }
+  }
+
+  return kept;
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -216,24 +287,61 @@ export function buildRoomTimelineModel(args: {
     if (key) dayIndexByKey.set(key, i);
   }
 
+  const roomsById = new Map<string, Room>(rooms.map((r) => [r.id, r]));
+
+  const clippedMetas: {
+    readonly assignment: RoomAssignment;
+    readonly room: Room;
+    readonly person: Person | undefined;
+    readonly clipped: {
+      readonly startIndex: number;
+      readonly endIndex: number;
+      readonly displayStayStart: ISODateString;
+      readonly displayStayEnd: ISODateString;
+    };
+  }[] = [];
+
+  for (const assignment of assignments) {
+    const room = roomsById.get(assignment.roomId);
+    if (!room) {
+      continue;
+    }
+    const person = personsById.get(assignment.personId);
+    const clipped = clipAssignmentToPersonStayAndTripGrid(
+      assignment,
+      person,
+      arrivals,
+      departures,
+      dayKeys,
+      dayIndexByKey,
+    );
+    if (!clipped) {
+      continue;
+    }
+    clippedMetas.push({ assignment, room, person, clipped });
+  }
+
+  const visibleAssignmentIds = selectVisibleAssignmentIdsForCrossRoomOverlap(
+    clippedMetas.map((m) => ({
+      assignment: m.assignment,
+      room: m.room,
+      startIndex: m.clipped.startIndex,
+      endIndex: m.clipped.endIndex,
+    })),
+  );
+
   const rows: RoomTimelineRowModel[] = rooms.map((room) => {
     const baseItems: RoomTimelineItem[] = [];
 
-    for (const assignment of assignments) {
-      if (assignment.roomId !== room.id) continue;
-
-      const person = personsById.get(assignment.personId);
-      const clipped = clipAssignmentToPersonStayAndTripGrid(
-        assignment,
-        person,
-        arrivals,
-        departures,
-        dayKeys,
-        dayIndexByKey,
-      );
-      if (!clipped) {
+    for (const meta of clippedMetas) {
+      if (meta.assignment.roomId !== room.id) {
         continue;
       }
+      if (!visibleAssignmentIds.has(meta.assignment.id)) {
+        continue;
+      }
+
+      const { assignment, person, clipped } = meta;
 
       baseItems.push({
         kind: 'assignment',

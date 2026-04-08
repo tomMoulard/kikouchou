@@ -6,8 +6,10 @@
  */
 
 import type {
+  ISODateString,
   Person,
   PersonId,
+  Room,
   RoomAssignment,
   RoomAssignmentId,
   Transport,
@@ -18,6 +20,21 @@ import type {
 // ============================================================================
 // Changeset Types
 // ============================================================================
+
+/**
+ * Trip metadata embedded in a full host export — used to create or match a local trip.
+ */
+export interface TripSnapshotMeta {
+  readonly name: string;
+  readonly startDate: ISODateString;
+  readonly endDate: ISODateString;
+  readonly location?: string;
+  readonly description?: string;
+  readonly coordinates?: {
+    readonly lat: number;
+    readonly lon: number;
+  };
+}
 
 /**
  * Application-level representation of a trip changeset.
@@ -41,6 +58,8 @@ export interface AppChangeset {
   readonly added: EntityCollection;
   /** Entities the guest modified (relative to their baseline) */
   readonly modified: EntityCollection;
+  /** Set on full host exports — used to import/merge on a device without the same trip id */
+  readonly tripSnapshot?: TripSnapshotMeta;
 }
 
 /**
@@ -50,6 +69,7 @@ export interface EntityCollection {
   readonly persons: readonly Person[];
   readonly assignments: readonly RoomAssignment[];
   readonly transports: readonly Transport[];
+  readonly rooms: readonly Room[];
 }
 
 /**
@@ -59,6 +79,7 @@ export const EMPTY_ENTITY_COLLECTION: EntityCollection = {
   persons: [],
   assignments: [],
   transports: [],
+  rooms: [],
 } as const;
 
 // ============================================================================

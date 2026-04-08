@@ -11,6 +11,7 @@ import {
   getAssignmentsByTripId,
   getPersonById,
   getPersonsByTripId,
+  getRoomsByTripId,
   getTransportsByPersonId,
   getTransportsByTripId,
 } from '@/lib/db';
@@ -109,6 +110,7 @@ export async function buildChangeset(
     persons: !baselinePersonIds.has(person.id) ? [person] : [],
     assignments: assignments.filter(a => !baselineAssignmentIds.has(a.id)),
     transports: transports.filter(t => !baselineTransportIds.has(t.id)),
+    rooms: [],
   };
 
   const modified: EntityCollection = {
@@ -117,6 +119,7 @@ export async function buildChangeset(
     persons: baselinePersonIds.has(person.id) ? [person] : [],
     assignments: assignments.filter(a => baselineAssignmentIds.has(a.id)),
     transports: transports.filter(t => baselineTransportIds.has(t.id)),
+    rooms: [],
   };
 
   return {
@@ -140,10 +143,11 @@ export async function buildChangeset(
  * @returns The changeset, or null if there is nothing to export (no people or related data)
  */
 export async function buildHostChangeset(trip: Trip): Promise<AppChangeset | null> {
-  const [persons, assignments, transports] = await Promise.all([
+  const [persons, assignments, transports, rooms] = await Promise.all([
     getPersonsByTripId(trip.id),
     getAssignmentsByTripId(trip.id),
     getTransportsByTripId(trip.id),
+    getRoomsByTripId(trip.id),
   ]);
 
   const exportedBy: PersonId | undefined =
@@ -157,6 +161,7 @@ export async function buildHostChangeset(trip: Trip): Promise<AppChangeset | nul
     persons: [],
     assignments: [],
     transports: [],
+    rooms: [],
   };
 
   return {
@@ -166,10 +171,19 @@ export async function buildHostChangeset(trip: Trip): Promise<AppChangeset | nul
     exportedBy,
     exportedAt: Date.now(),
     baseSnapshotAt: trip.createdAt,
+    tripSnapshot: {
+      name: trip.name,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      location: trip.location,
+      description: trip.description,
+      coordinates: trip.coordinates,
+    },
     added: {
       persons,
       assignments,
       transports,
+      rooms,
     },
     modified: emptyModified,
   };
