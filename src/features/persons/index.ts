@@ -36,6 +36,17 @@ export { PersonDialog } from './components/PersonDialog';
 export type { PersonDialogProps } from './components/PersonDialog';
 
 // ============================================================================
+// Utils
+// ============================================================================
+
+export {
+  buildGuestIdsByTripDateMap,
+  deriveGuestStayDateBounds,
+  isGuestPresentOnDate,
+  listGuestsPresentOnDate,
+} from './utils/guest-presence';
+
+// ============================================================================
 // Route Configuration
 // ============================================================================
 

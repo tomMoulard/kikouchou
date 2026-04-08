@@ -5,9 +5,9 @@
  * @module features/calendar/utils/calendar-utils
  */
 
-import { format, parseISO } from 'date-fns';
+import { format, isValid, parseISO } from 'date-fns';
 import { type Locale, enUS, fr } from 'date-fns/locale';
-import type { HexColor } from '@/types';
+import type { HexColor, RoomAssignment } from '@/types';
 import type { CalendarEvent, SegmentPosition } from '../types';
 
 // ============================================================================
@@ -161,4 +161,19 @@ export function formatTime(datetime: string): string {
   } catch {
     return '';
   }
+}
+
+/**
+ * Short stay label for timeline bars: first night through checkout day (assignment.endDate).
+ */
+export function formatAssignmentStayRange(
+  assignment: Pick<RoomAssignment, 'startDate' | 'endDate'>,
+  locale: Locale,
+): string {
+  const start = parseISO(assignment.startDate);
+  const end = parseISO(assignment.endDate);
+  if (!isValid(start) || !isValid(end)) {
+    return '';
+  }
+  return `${format(start, 'd MMM', { locale })} – ${format(end, 'd MMM', { locale })}`;
 }

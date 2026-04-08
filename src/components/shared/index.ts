@@ -89,3 +89,14 @@ export type { MapViewProps, MapViewRef, MapMarkerData, MapMarkerType } from './M
 
 export { MapMarker } from './MapMarker';
 export type { MapMarkerProps } from './MapMarker';
+
+// ============================================================================
+// QR Code Components
+// ============================================================================
+
+export { QRScanner } from './QRScanner';
+
+export { MultiFrameQR } from './MultiFrameQR';
+
+export { TripTimelineFrame } from './TripTimelineFrame';
+export type { TripTimelineFrameProps, TripTimelineViewportContext } from './TripTimelineFrame';

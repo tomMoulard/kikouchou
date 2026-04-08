@@ -20,6 +20,8 @@ interface DraggableRoomAssignmentProps {
   readonly label: string;
   readonly color: string;
   readonly style: React.CSSProperties;
+  /** Tooltip and screen reader text (e.g. includes dates when the visible label is only a name). */
+  readonly accessibilityLabel?: string;
 }
 
 const DraggableRoomAssignment = memo(function DraggableRoomAssignment({
@@ -27,6 +29,7 @@ const DraggableRoomAssignment = memo(function DraggableRoomAssignment({
   label,
   color,
   style,
+  accessibilityLabel,
 }: DraggableRoomAssignmentProps): ReactElement {
   const draggableId = `assignment-${assignment.id}`;
 
@@ -59,8 +62,8 @@ const DraggableRoomAssignment = memo(function DraggableRoomAssignment({
         backgroundColor: color,
         color: 'white',
       }}
-      title={label}
-      aria-label={label}
+      title={accessibilityLabel ?? label}
+      aria-label={accessibilityLabel ?? label}
     >
       <span className="truncate">{label}</span>
     </button>

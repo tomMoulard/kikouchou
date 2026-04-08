@@ -5,20 +5,14 @@
  */
 
 import { type ReactElement, memo, useCallback, useMemo } from 'react';
+import type { Locale } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 
-import type { RoomAssignment } from '@/types';
+import type { TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
+import type { HexColor, RoomAssignment, Transport } from '@/types';
 import { cn } from '@/lib/utils';
 import type { CalendarTransport, CalendarTimelineRowModel, TimelineItemWithLane } from '../types';
-import { formatTime } from '../utils/calendar-utils';
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const DAY_WIDTH_PX = 44;
-const LANE_HEIGHT_PX = 32;
-const PERSON_COL_PX = 200;
+import { formatAssignmentStayRange, formatTime, getContrastTextColor } from '../utils/calendar-utils';
 
 // ============================================================================
 // Component
@@ -26,21 +20,23 @@ const PERSON_COL_PX = 200;
 
 interface CalendarTimelineRowProps {
   readonly model: CalendarTimelineRowModel;
-  readonly dayCount: number;
-  readonly onAssignmentClick: (assignment: RoomAssignment) => void;
+  readonly viewport: TripTimelineViewportContext;
+  readonly dateLocale: Locale;
+  readonly onAssignmentClick: (assignment: RoomAssignment, relatedTransports?: readonly Transport[]) => void;
   readonly onTransportClick?: (transport: CalendarTransport) => void;
 }
 
 const CalendarTimelineRow = memo(function CalendarTimelineRow({
   model,
-  dayCount,
+  viewport,
+  dateLocale,
   onAssignmentClick,
   onTransportClick,
 }: CalendarTimelineRowProps): ReactElement {
   const { t } = useTranslation();
 
-  const rowHeight = Math.max(1, model.laneCount) * LANE_HEIGHT_PX;
-  const canvasWidth = dayCount * DAY_WIDTH_PX;
+  const rowHeight = Math.max(1, model.laneCount) * viewport.laneHeightPx;
+  const { canvasWidth, dayCount, cellWidthPx, dayGridTemplateColumns, todayColumnIndex } = viewport;
 
   const personLabel = model.person.name || t('common.unknown');
 
@@ -57,7 +53,8 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
   const handleItemClick = useCallback(
     (item: TimelineItemWithLane) => {
       if (item.kind === 'assignment') {
-        onAssignmentClick(item.assignment);
+        const related = item.timelineTransports?.map((m) => m.transport);
+        onAssignmentClick(item.assignment, related?.length ? related : undefined);
         return;
       }
 
@@ -67,11 +64,14 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
   );
 
   const renderedItems = useMemo(() => {
+    const cellW = cellWidthPx;
+    const laneH = viewport.laneHeightPx;
+
     return model.items.map((item) => {
       const laneIndex = item.laneIndex;
-      const left = item.startIndex * DAY_WIDTH_PX;
-      const baseWidth = (item.endIndex - item.startIndex + 1) * DAY_WIDTH_PX;
-      const top = laneIndex * LANE_HEIGHT_PX + 2;
+      const left = item.startIndex * cellW;
+      const baseWidth = (item.endIndex - item.startIndex + 1) * cellW;
+      const bandTop = laneIndex * laneH + 2;
 
       const isAssignment = item.kind === 'assignment';
       const isTransport = item.kind === 'transport';
@@ -86,10 +86,63 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         model.checkoutDayIndex >= 0 &&
         model.checkoutDayIndex < dayCount;
 
-      const width = shouldHatchCheckoutDay ? baseWidth + DAY_WIDTH_PX : baseWidth;
+      const pillLeft = left;
+      const rawBarWidth = shouldHatchCheckoutDay ? baseWidth + cellW : baseWidth;
+      const maxBarWidth = Math.max(0, canvasWidth - pillLeft);
+      const width = Math.min(rawBarWidth, maxBarWidth);
 
       const pillWidth = Math.max(12, width - 4);
-      const pillLeft = left;
+
+      const assignmentRange =
+        isAssignment && item.kind === 'assignment'
+          ? formatAssignmentStayRange(item.assignment, dateLocale)
+          : '';
+      let assignmentTitle =
+        isAssignment && item.kind === 'assignment' && assignmentRange
+          ? t('calendar.timeline.assignmentBarTitle', '{{room}} — {{range}}', {
+              room: item.label,
+              range: assignmentRange,
+            })
+          : isAssignment
+            ? item.label
+            : '';
+      let assignmentAria =
+        isAssignment && item.kind === 'assignment' && assignmentRange
+          ? t('calendar.timeline.assignmentBarAria', '{{room}}. Stay {{range}}.', {
+              room: item.label,
+              range: assignmentRange,
+            })
+          : isAssignment
+            ? item.label
+            : '';
+
+      const markers =
+        isAssignment && item.kind === 'assignment' ? item.timelineTransports : undefined;
+      const arrivals =
+        markers
+          ?.filter((m) => m.transport.type === 'arrival')
+          .sort((a, b) => a.transport.datetime.localeCompare(b.transport.datetime)) ?? [];
+      const departures =
+        markers
+          ?.filter((m) => m.transport.type === 'departure')
+          .sort((a, b) => a.transport.datetime.localeCompare(b.transport.datetime)) ?? [];
+
+      if (markers?.length && isAssignment) {
+        const legSummaries = markers
+          .map((m) => {
+            const arrow = m.transport.type === 'arrival' ? '↓' : '↑';
+            return `${arrow} ${formatTime(m.transport.datetime)} — ${m.transport.location}`;
+          })
+          .join('; ');
+        assignmentTitle = assignmentTitle ? `${assignmentTitle}. ${legSummaries}` : legSummaries;
+        assignmentAria = assignmentAria ? `${assignmentAria} ${legSummaries}` : legSummaries;
+      }
+
+      const orphanBg =
+        isTransport && item.kind === 'transport'
+          ? ((item.person?.color ?? '#6b7280') as HexColor)
+          : undefined;
+      const orphanTextColor = orphanBg ? getContrastTextColor(orphanBg) : undefined;
 
       return (
         <button
@@ -97,23 +150,23 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
           type="button"
           onClick={() => handleItemClick(item)}
           className={cn(
-            'absolute flex items-center gap-2 rounded-md px-2 text-xs overflow-hidden',
+            'absolute z-[1] flex items-center gap-2 rounded-md px-2 text-xs overflow-hidden',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
             'transition-opacity hover:opacity-90',
-            isAssignment
-              ? 'border'
-              : 'text-foreground/80 hover:text-foreground',
+            isAssignment && 'justify-start gap-1.5',
+            isAssignment && 'border',
+            isTransport && 'justify-center border',
           )}
           style={{
             left: isTransport ? left : pillLeft,
-            top: isTransport ? laneIndex * LANE_HEIGHT_PX + 6 : top,
-            width: isTransport ? DAY_WIDTH_PX : pillWidth,
-            height: isTransport ? LANE_HEIGHT_PX - 10 : LANE_HEIGHT_PX - 6,
-            backgroundColor: isAssignment ? item.color : undefined,
-            color: isAssignment ? item.textColor : undefined,
+            top: bandTop,
+            width: isTransport ? cellW : pillWidth,
+            height: laneH - 6,
+            backgroundColor: isAssignment ? item.color : orphanBg,
+            color: isAssignment ? item.textColor : orphanTextColor,
           }}
-          title={isTransport ? `${transportLabel} — ${item.label}` : item.label}
-          aria-label={isTransport ? `${transportLabel} — ${item.label}` : item.label}
+          title={isTransport ? `${transportLabel} — ${item.label}` : assignmentTitle}
+          aria-label={isTransport ? `${transportLabel} — ${item.label}` : assignmentAria}
         >
           {isTransport ? (
             <span className="flex items-center justify-center gap-1 w-full">
@@ -124,12 +177,61 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
             </span>
           ) : (
             <>
-              <span className="truncate relative z-10">{item.label}</span>
+              <span className="relative z-[1] flex min-w-0 flex-1 items-center gap-1">
+                {arrivals.length > 0 ? (
+                  <span className="flex shrink-0 flex-col justify-center gap-0.5">
+                    {arrivals.map((m) => (
+                      <span
+                        key={m.transport.id}
+                        className="flex items-center gap-0.5 text-[10px] font-semibold tabular-nums leading-none opacity-95"
+                        title={m.transport.location}
+                      >
+                        <span aria-hidden="true">↓</span>
+                        <span>{formatTime(m.transport.datetime)}</span>
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
+                  <span
+                    className={cn(
+                      'flex h-[18px] max-w-[2.75rem] shrink-0 items-center justify-center rounded-full px-1',
+                      'text-[9px] font-semibold leading-none tabular-nums',
+                      item.textColor === 'white'
+                        ? 'bg-white/25 text-white shadow-sm shadow-black/15'
+                        : 'bg-black/12 text-black/80',
+                    )}
+                    aria-hidden="true"
+                    title={item.label}
+                  >
+                    <span className="block max-w-full truncate">{item.label}</span>
+                  </span>
+                  {assignmentRange ? (
+                    <span className="min-w-0 flex-1 truncate text-left text-[11px] font-medium leading-tight opacity-90">
+                      {assignmentRange}
+                    </span>
+                  ) : null}
+                </span>
+                {departures.length > 0 ? (
+                  <span className="flex shrink-0 flex-col items-end justify-center gap-0.5">
+                    {departures.map((m) => (
+                      <span
+                        key={m.transport.id}
+                        className="flex items-center gap-0.5 text-[10px] font-semibold tabular-nums leading-none opacity-95"
+                        title={m.transport.location}
+                      >
+                        <span aria-hidden="true">↑</span>
+                        <span>{formatTime(m.transport.datetime)}</span>
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
+              </span>
               {shouldHatchCheckoutDay && (
                 <span
-                  className="absolute top-0 bottom-0 right-0 pointer-events-none"
+                  className="absolute top-0 bottom-0 right-0 z-0 pointer-events-none"
                   style={{
-                    width: DAY_WIDTH_PX,
+                    width: cellW,
                     backgroundImage:
                       item.textColor === 'white'
                         ? 'repeating-linear-gradient(135deg, rgba(255,255,255,0.22) 0 6px, rgba(255,255,255,0) 6px 12px)'
@@ -143,7 +245,17 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         </button>
       );
     });
-  }, [dayCount, handleItemClick, model.items, model.checkoutDayIndex]);
+  }, [
+    canvasWidth,
+    cellWidthPx,
+    dateLocale,
+    dayCount,
+    handleItemClick,
+    model.items,
+    model.checkoutDayIndex,
+    t,
+    viewport.laneHeightPx,
+  ]);
 
   return (
     <div className="flex border-t border-muted">
@@ -152,7 +264,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
           'sticky left-0 z-10 flex items-center gap-2 bg-background',
           'border-r border-muted px-3',
         )}
-        style={{ width: PERSON_COL_PX, minWidth: PERSON_COL_PX, height: rowHeight }}
+        style={{ width: viewport.labelColumnWidth, minWidth: viewport.labelColumnWidth, height: rowHeight }}
       >
         <span
           className="size-2 rounded-full shrink-0"
@@ -165,32 +277,38 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
       </div>
 
       <div
-        className="relative bg-background"
+        className="relative min-w-0 overflow-hidden bg-background"
         style={{ width: canvasWidth, height: rowHeight }}
         aria-label={t('calendar.timeline.personRow', '{{name}} timeline', { name: personLabel })}
       >
-        {/* Day grid vertical lines */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="flex h-full">
+        <div className="pointer-events-none absolute inset-0 z-0">
+          <div
+            className="grid h-full min-w-0 w-full"
+            style={
+              dayGridTemplateColumns !== undefined
+                ? { gridTemplateColumns: dayGridTemplateColumns }
+                : undefined
+            }
+          >
             {Array.from({ length: dayCount }).map((_, i) => (
               <div
-                key={`grid-${i}`}
-                className={cn('h-full border-r border-muted/50', i % 2 === 0 && 'bg-muted/10')}
-                style={{ width: DAY_WIDTH_PX }}
+                key={`grid-bg-${i}`}
+                className={cn(
+                  'min-w-0 h-full border-r border-muted/50',
+                  todayColumnIndex === i ? 'bg-primary/12' : i % 2 === 0 && 'bg-muted/10',
+                )}
               />
             ))}
           </div>
         </div>
 
-        {/* Stay span (presence) shown even without room assignment */}
         {model.staySpan && (
           <div
-            className="absolute rounded-md border border-dashed border-muted-foreground/40 bg-muted/20"
+            className="absolute z-[1] rounded-md border border-dashed border-muted-foreground/40 bg-muted/20"
             style={{
-              left: model.staySpan.startIndex * DAY_WIDTH_PX + 2,
+              left: model.staySpan.startIndex * cellWidthPx + 2,
               top: 2,
-              width:
-                (model.staySpan.endIndex - model.staySpan.startIndex + 1) * DAY_WIDTH_PX - 4,
+              width: (model.staySpan.endIndex - model.staySpan.startIndex + 1) * cellWidthPx - 4,
               height: rowHeight - 4,
             }}
             aria-hidden="true"
@@ -204,4 +322,3 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
 });
 
 export { CalendarTimelineRow };
-

@@ -126,6 +126,65 @@ describe('buildCalendarTimelineModel', () => {
     expect(item!.endIndex).toBe(1);
   });
 
+  it('merges transport into the assignment pill when the transport day is within the stay span', () => {
+    const trip = createTrip();
+    const person: Person = {
+      id: 'p1' as Person['id'],
+      tripId: trip.id,
+      name: 'Alex',
+      color: '#f97316' as HexColor,
+    };
+
+    const room: Room = {
+      id: 'r1' as Room['id'],
+      tripId: trip.id,
+      name: '1',
+      capacity: 2,
+      order: 0,
+    };
+
+    const assignment: RoomAssignment = {
+      id: 'a1' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room.id,
+      personId: person.id,
+      startDate: iso('2026-04-01'),
+      endDate: iso('2026-04-04'),
+    };
+
+    const arrival: Transport = {
+      id: 't1' as Transport['id'],
+      tripId: trip.id,
+      personId: person.id,
+      type: 'arrival',
+      datetime: '2026-04-01T12:10:00.000Z',
+      location: 'Station',
+      needsPickup: false,
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip,
+      persons: [person],
+      rooms: [room],
+      assignments: [assignment],
+      arrivals: [arrival],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+
+    const row = model.rows[0]!;
+    const assign = row.items.find((i) => i.kind === 'assignment');
+    const transportItem = row.items.find((i) => i.kind === 'transport');
+
+    expect(assign).toBeDefined();
+    expect(transportItem).toBeUndefined();
+    expect(row.laneCount).toBe(1);
+    if (assign?.kind === 'assignment') {
+      expect(assign.timelineTransports).toHaveLength(1);
+      expect(assign.timelineTransports![0]!.transport.id).toBe(arrival.id);
+    }
+  });
+
   it('adds transport points as single-day items', () => {
     const trip = createTrip();
     const person: Person = {
@@ -159,6 +218,63 @@ describe('buildCalendarTimelineModel', () => {
     expect(transportItem).toBeDefined();
     expect(transportItem!.startIndex).toBe(1);
     expect(transportItem!.endIndex).toBe(1);
+  });
+
+  it('dedupes nested same-person assignments so only the wider stay bar remains', () => {
+    const trip: Trip = {
+      id: 'trip-1' as Trip['id'],
+      shareId: 'share-1' as Trip['shareId'],
+      name: 'Trip',
+      startDate: iso('2026-04-01'),
+      endDate: iso('2026-04-30'),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const person: Person = {
+      id: 'p1' as Person['id'],
+      tripId: trip.id,
+      name: 'Tom',
+      color: '#ef4444' as HexColor,
+    };
+    const room: Room = {
+      id: 'r1' as Room['id'],
+      tripId: trip.id,
+      name: '2',
+      capacity: 2,
+      order: 0,
+    };
+    const wide: RoomAssignment = {
+      id: 'a-wide' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room.id,
+      personId: person.id,
+      startDate: iso('2026-04-07'),
+      endDate: iso('2026-04-26'),
+    };
+    const narrow: RoomAssignment = {
+      id: 'a-narrow' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room.id,
+      personId: person.id,
+      startDate: iso('2026-04-16'),
+      endDate: iso('2026-04-26'),
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip,
+      persons: [person],
+      rooms: [room],
+      assignments: [wide, narrow],
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+
+    const assignmentItems = model.rows[0]!.items.filter((i) => i.kind === 'assignment');
+    expect(assignmentItems).toHaveLength(1);
+    expect(assignmentItems[0]!.assignment.id).toBe(wide.id);
+    expect(assignmentItems[0]!.startIndex).toBe(6);
+    expect(assignmentItems[0]!.endIndex).toBe(24);
   });
 });
 

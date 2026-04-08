@@ -7,7 +7,7 @@
  * Features:
  * - Lists persons as cards in responsive grid
  * - Shows person color indicator and name
- * - Displays arrival/departure transport summary for each person
+ * - Displays stay dates, assigned room(s), and arrival/departure transport summary
  * - Add person action (FAB on mobile, header button on desktop)
  * - Empty state for trips with no persons
  *
@@ -36,7 +36,6 @@ import { useRoomContext } from '@/contexts/RoomContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
-import { useToday } from '@/hooks';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
@@ -51,7 +50,6 @@ import {
 import { cn } from '@/lib/utils';
 import { TransportIcon } from '@/components/shared/TransportIcon';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
-import { toISODateString } from '@/lib/db/utils';
 import type { Person, PersonId, TransportMode } from '@/types';
 
 // ============================================================================
@@ -84,8 +82,10 @@ interface PersonCardProps {
   readonly person: Person;
   /** Transport summary for the person */
   readonly transportSummary: TransportSummary;
-  /** Room name currently assigned (if any) */
-  readonly roomName?: string;
+  /** Formatted stay range from guest dates (e.g. "7 Apr – 26 Apr") */
+  readonly stayRangeLabel?: string;
+  /** Comma-separated room names from trip assignments (any dates) */
+  readonly roomsDisplay?: string;
   /** Callback when the card is clicked */
   readonly onClick: (personId: PersonId) => void;
   /** Whether interaction is disabled */
@@ -132,6 +132,28 @@ function formatTransportDatetime(
   }
 }
 
+/**
+ * Formats guest stay dates for the card (check-out day exclusive in storage, shown as end date).
+ */
+function formatPersonStayRangeLabel(
+  person: Person,
+  locale: typeof fr | typeof enUS,
+): string | undefined {
+  if (!person.stayStartDate || !person.stayEndDate) {
+    return undefined;
+  }
+  try {
+    const start = parseISO(person.stayStartDate);
+    const end = parseISO(person.stayEndDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+      return undefined;
+    }
+    return `${format(start, 'd MMM', { locale })} – ${format(end, 'd MMM', { locale })}`;
+  } catch {
+    return undefined;
+  }
+}
+
 // ============================================================================
 // PersonCard Component
 // ============================================================================
@@ -142,7 +164,8 @@ function formatTransportDatetime(
 const PersonCard = memo(function PersonCard({
   person,
   transportSummary,
-  roomName,
+  stayRangeLabel,
+  roomsDisplay,
   onClick,
   isDisabled = false,
   dateLocale,
@@ -171,6 +194,12 @@ const PersonCard = memo(function PersonCard({
   // Build aria-label for screen readers
    ariaLabel = useMemo(() => {
     const parts = [person.name];
+    if (stayRangeLabel) {
+      parts.push(`${t('persons.stayDates')}: ${stayRangeLabel}`);
+    }
+    if (roomsDisplay) {
+      parts.push(`${t('assignments.room')}: ${roomsDisplay}`);
+    }
     if (transportSummary.arrival) {
       const { date, time } = formatTransportDatetime(transportSummary.arrival.datetime, dateLocale);
       parts.push(`${t('transports.arrival')}: ${date} ${time}`);
@@ -180,9 +209,10 @@ const PersonCard = memo(function PersonCard({
       parts.push(`${t('transports.departure')}: ${date} ${time}`);
     }
     return parts.join(', ');
-  }, [person.name, transportSummary, dateLocale, t]),
+  }, [dateLocale, person.name, roomsDisplay, stayRangeLabel, transportSummary.departure, transportSummary.arrival, t]),
 
-   hasTransportInfo = transportSummary.arrival || transportSummary.departure;
+   hasTransportInfo = transportSummary.arrival || transportSummary.departure,
+   hasStaySummary = Boolean(stayRangeLabel || roomsDisplay);
 
   return (
     <Card
@@ -213,14 +243,18 @@ const PersonCard = memo(function PersonCard({
         </div>
       </CardHeader>
 
-      <CardContent className="pt-0">
-        {roomName && (
-          <div className="mb-2 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">
-              {t('rooms.room', 'Room')}:
-            </span>{' '}
-            <span className="text-muted-foreground">{roomName}</span>
-          </div>
+      <CardContent className="pt-0 space-y-2">
+        {stayRangeLabel && (
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{t('persons.stayDates')}</span>
+            <span className="text-muted-foreground"> · {stayRangeLabel}</span>
+          </p>
+        )}
+        {roomsDisplay && (
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{t('assignments.room')}</span>
+            <span className="text-muted-foreground"> · {roomsDisplay}</span>
+          </p>
         )}
 
         {hasTransportInfo ? (
@@ -269,7 +303,7 @@ const PersonCard = memo(function PersonCard({
           </div>
         ) : (
           <p className="text-sm text-muted-foreground italic">
-            {t('transports.empty', 'No transport info')}
+            {hasStaySummary ? t('persons.cardNoTransportDetail') : t('transports.empty')}
           </p>
         )}
       </CardContent>
@@ -302,7 +336,6 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
    { assignments, isLoading: isAssignmentsLoading } = useAssignmentContext(),
    { persons, isLoading: isPersonsLoading, error: personsError } = usePersonContext(),
    { getTransportsByPerson, isLoading: isTransportsLoading } = useTransportContext(),
-   { today } = useToday(),
 
   // Track if we're currently navigating to prevent double-clicks
    isNavigatingRef = useRef(false),
@@ -334,25 +367,20 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
     return tripIdFromUrl !== currentTrip.id;
   }, [tripIdFromUrl, currentTrip]),
 
-  // Calculate transport summaries for all persons
-  // Uses single-pass O(n) algorithm instead of sort-based O(n log n)
+  // Transport summaries + stay label + all assigned room names for this trip
    personsWithTransports = useMemo(() => {
       const roomsById = new Map<string, string>(rooms.map((r) => [r.id, r.name]));
-      const todayKey = toISODateString(today);
 
-      const roomNameByPersonId = new Map<string, string>();
+      const roomNamesByPersonId = new Map<PersonId, string[]>();
       for (const a of assignments) {
-        // Nights semantics: [startDate, endDate) so endDate is checkout day
-        const isActiveToday = a.startDate <= todayKey && todayKey < a.endDate;
-        if (!isActiveToday) continue;
-
         const roomName = roomsById.get(a.roomId);
         if (!roomName) continue;
 
-        // If multiple active rooms today, keep first (rare) to avoid noisy UI.
-        if (!roomNameByPersonId.has(a.personId)) {
-          roomNameByPersonId.set(a.personId, roomName);
+        const list = roomNamesByPersonId.get(a.personId) ?? [];
+        if (!list.includes(roomName)) {
+          list.push(roomName);
         }
+        roomNamesByPersonId.set(a.personId, list);
       }
 
       return persons.map((person) => {
@@ -388,10 +416,17 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
         departure: latestDeparture,
       };
 
-      const roomName = roomNameByPersonId.get(person.id);
-      return { person, transportSummary, roomName };
+      const roomList = roomNamesByPersonId.get(person.id);
+      const roomsDisplay =
+        roomList && roomList.length > 0
+          ? [...roomList].sort((a, b) => a.localeCompare(b)).join(', ')
+          : undefined;
+
+      const stayRangeLabel = formatPersonStayRangeLabel(person, dateLocale);
+
+      return { person, transportSummary, stayRangeLabel, roomsDisplay };
     });
-    }, [assignments, getTransportsByPerson, persons, rooms, today]),
+    }, [assignments, dateLocale, getTransportsByPerson, persons, rooms]),
 
   // ============================================================================
   // Event Handlers
@@ -568,12 +603,13 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
           'pb-20 sm:pb-4',
         )}
       >
-        {personsWithTransports.map(({ person, transportSummary, roomName }) => (
+        {personsWithTransports.map(({ person, transportSummary, stayRangeLabel, roomsDisplay }) => (
           <div key={person.id} role="listitem">
             <PersonCard
               person={person}
               transportSummary={transportSummary}
-              roomName={roomName}
+              stayRangeLabel={stayRangeLabel}
+              roomsDisplay={roomsDisplay}
               onClick={handlePersonClick}
               isDisabled={isNavigating}
               dateLocale={dateLocale}

@@ -147,6 +147,15 @@ export interface TransportIndicatorProps {
 
 export type CalendarView = 'month' | 'timeline';
 
+/**
+ * Transport merged into a timeline assignment bar (same click target as the stay pill).
+ */
+export interface TimelineTransportMarker {
+  readonly transport: Transport;
+  /** Trip day column index for this transport's calendar date */
+  readonly dayIndex: number;
+}
+
 export interface TimelineItemAssignment extends TimelineItemBase {
   readonly kind: 'assignment';
   readonly assignment: RoomAssignment;
@@ -155,6 +164,8 @@ export interface TimelineItemAssignment extends TimelineItemBase {
   readonly label: string;
   readonly color: HexColor;
   readonly textColor: 'white' | 'black';
+  /** Arrivals/departures on adjacent or covered nights, shown inside the pill */
+  readonly timelineTransports?: readonly TimelineTransportMarker[];
 }
 
 export interface TimelineItemTransport extends TimelineItemBase {
@@ -205,6 +216,9 @@ export interface CalendarTimelineProps {
   readonly departures: readonly Transport[];
   readonly dateLocale: Locale;
   readonly today: Date;
-  readonly onAssignmentClick: (assignment: RoomAssignment) => void;
+  readonly onAssignmentClick: (
+    assignment: RoomAssignment,
+    relatedTransports?: readonly Transport[],
+  ) => void;
   readonly onTransportClick?: (transport: CalendarTransport) => void;
 }

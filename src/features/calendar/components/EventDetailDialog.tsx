@@ -54,6 +54,8 @@ export interface AssignmentEventData {
   readonly assignment: RoomAssignment;
   readonly person: Person | undefined;
   readonly room: Room | undefined;
+  /** Arrivals/departures shown on the timeline stay pill */
+  readonly relatedTransports?: readonly Transport[];
 }
 
 /**
@@ -126,7 +128,7 @@ interface AssignmentDetailsProps {
  */
 const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }: AssignmentDetailsProps) {
   const { t } = useTranslation();
-  const { assignment, person, room } = event;
+  const { assignment, person, room, relatedTransports } = event;
 
   // Parse dates for formatting
   const startDate = parseISO(assignment.startDate);
@@ -183,6 +185,75 @@ const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }:
           {nights !== 1 && 's'}
         </span>
       </div>
+
+      {relatedTransports && relatedTransports.length > 0 ? (
+        <>
+          <Separator />
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium">{t('calendar.relatedTravel', 'Travel')}</h3>
+            {relatedTransports.map((tr) => {
+              const dt = parseISO(tr.datetime);
+              const formattedDate = format(dt, 'PPP', { locale: dateLocale });
+              const formattedTime = format(dt, 'HH:mm', { locale: dateLocale });
+              const mode = tr.transportMode ?? 'other';
+              const modeLabel = t(`transports.modes.${mode}`);
+
+              return (
+                <div
+                  key={tr.id}
+                  className="space-y-2 rounded-md border border-border bg-muted/30 p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant={tr.type === 'arrival' ? 'default' : 'secondary'}
+                      className={
+                        tr.type === 'arrival'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
+                          : 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400'
+                      }
+                    >
+                      {tr.type === 'arrival' ? '↓' : '↑'}{' '}
+                      {tr.type === 'arrival'
+                        ? t('transports.arrival', 'Arrival')
+                        : t('transports.departure', 'Departure')}
+                    </Badge>
+                    <span className="text-sm font-medium tabular-nums">{formattedTime}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Calendar className="size-3.5 shrink-0" aria-hidden="true" />
+                    <span>{formattedDate}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <TransportIcon mode={mode} className="size-3.5 shrink-0 text-muted-foreground" />
+                    <span>
+                      {modeLabel}
+                      {tr.transportNumber ? ` — ${tr.transportNumber}` : ''}
+                    </span>
+                  </div>
+                  {tr.location ? (
+                    <div className="flex items-start gap-2 text-sm">
+                      <MapPin className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <span>{tr.location}</span>
+                    </div>
+                  ) : null}
+                  {tr.coordinates ? (
+                    <DirectionsButton
+                      coordinates={tr.coordinates}
+                      locationName={tr.location}
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                    />
+                  ) : null}
+                  {tr.notes ? (
+                    <p className="text-xs text-muted-foreground">{tr.notes}</p>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 });

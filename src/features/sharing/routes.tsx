@@ -77,6 +77,15 @@ const SummaryStepPage = lazy(() =>
   })),
 );
 
+/**
+ * Lazy-loaded TripSyncPage component for unified export/import via QR codes.
+ */
+const TripSyncPage = lazy(() =>
+  import('./pages/TripSyncPage').then((module) => ({
+    default: module.TripSyncPage,
+  })),
+);
+
 // ============================================================================
 // Route Wrapper Components
 // ============================================================================
@@ -158,6 +167,20 @@ export const ShareImportRoute = {
   path: 'share/:shareId',
   element: withSuspense(ShareImportPage),
 } satisfies RouteObject;
+
+/**
+ * Routes for the P2P sync feature (QR code export/import).
+ * These should be nested under `/trips/:tripId` in the main app routes.
+ *
+ * Routes:
+ * - `/trips/:tripId/sync` — Unified sync page (export + import QR codes)
+ */
+export const sharingSyncRoutes: RouteObject[] = [
+  {
+    path: 'sync',
+    element: withSuspense(TripSyncPage),
+  },
+];
 
 // ============================================================================
 // Type Exports

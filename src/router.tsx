@@ -29,7 +29,7 @@ import { calendarRoutes } from '@/features/calendar/routes';
 import { roomRoutes } from '@/features/rooms/routes';
 import { personRoutes } from '@/features/persons/routes';
 import { transportRoutes } from '@/features/transports/routes';
-import { sharingRoutes } from '@/features/sharing/routes';
+import { sharingRoutes, sharingSyncRoutes } from '@/features/sharing/routes';
 
 // ============================================================================
 // Lazy-loaded Components
@@ -195,6 +195,12 @@ const settingsRoute: RouteObject = {
     // Transport management routes
     // Note: transportRoutes uses 'transports' path, need to check if it needs trip scoping
     ...transportRoutes,
+
+    // P2P sync routes (QR export/import within trips)
+    {
+      path: 'trips/:tripId',
+      children: sharingSyncRoutes,
+    },
 
     // Settings route
     settingsRoute,

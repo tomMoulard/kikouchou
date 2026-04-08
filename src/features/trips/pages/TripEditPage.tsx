@@ -27,6 +27,7 @@ import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { TripForm } from '@/features/trips/components/TripForm';
+import { useTripContext } from '@/contexts/TripContext';
 
 import { deleteTrip, getTripById, updateTrip } from '@/lib/db';
 import type { Trip, TripFormData, TripId } from '@/types';
@@ -58,6 +59,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { tripId } = useParams<{ tripId: string }>();
+  const { currentTrip, setCurrentTrip } = useTripContext();
 
   // ============================================================================
   // State
@@ -216,19 +218,19 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
     try {
       await deleteTrip(tripId as TripId);
 
-      // Only proceed if component is still mounted
-      if (!isMountedRef.current) {
-        return;
+      if (currentTrip?.id === tripId) {
+        try {
+          await setCurrentTrip(null);
+        } catch (clearErr) {
+          console.error('Failed to clear current trip after delete:', clearErr);
+        }
       }
 
-      // Show success toast
       toast.success(t('trips.deleted', 'Trip deleted successfully'));
 
-      // Skip blocker before navigation (form may still have dirty state)
       skipNextBlock();
 
-      // Navigate to trips list
-      navigate('/trips');
+      navigate('/trips', { replace: true });
     } catch (error) {
       // Log error for debugging
       console.error('Failed to delete trip:', error);
@@ -245,7 +247,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
     } finally {
       isDeletingRef.current = false;
     }
-  }, [navigate, skipNextBlock, t, tripId]);
+  }, [currentTrip?.id, navigate, setCurrentTrip, skipNextBlock, t, tripId]);
 
   /**
    * Handles opening the delete confirmation dialog.

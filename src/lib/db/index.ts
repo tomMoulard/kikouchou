@@ -36,6 +36,7 @@ export {
   toUnixTimestamp,
   fromUnixTimestamp,
   toISODateString,
+  toLocalISODateString,
   toISODateTimeString,
   // Parsing functions
   parseISODateString,

@@ -63,6 +63,7 @@ import type {
   ISODateString,
   Room,
   RoomAssignment,
+  Transport,
   TransportId,
 } from '@/types';
 
@@ -604,7 +605,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   }, []);
 
   const handleEventClick = useCallback(
-    (assignment: RoomAssignment) => {
+    (assignment: RoomAssignment, relatedTransports?: readonly Transport[]) => {
       const person = getPersonById(assignment.personId);
       const room = roomsMap.get(assignment.roomId);
 
@@ -613,6 +614,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         assignment,
         person,
         room,
+        relatedTransports:
+          relatedTransports && relatedTransports.length > 0 ? relatedTransports : undefined,
       };
 
       setSelectedEvent(eventData);
@@ -819,7 +822,10 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
 
   return (
     <div className="container max-w-6xl py-6 md:py-8">
-      <PageHeader title={t('calendar.title')} description={currentTrip.name} />
+      <PageHeader
+        title={t('calendar.title')}
+        description={currentTrip.name}
+      />
 
       <Tabs value={currentView} onValueChange={handleViewChange} className="mb-4">
         <TabsList aria-label={t('calendar.view.ariaLabel', 'Calendar view')}>

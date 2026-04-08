@@ -381,7 +381,7 @@ describe('Layout', () => {
       expect(sidebar).toHaveClass('w-60');
     });
 
-    it('shows trip indicator when collapsed and trip selected', async () => {
+    it('hides trip info section when collapsed and trip selected', async () => {
       const user = userEvent.setup();
       mockUseTripContext.mockReturnValue({
         currentTrip: mockTrip,
@@ -398,10 +398,8 @@ describe('Layout', () => {
       const collapseButton = screen.getByRole('button', { name: 'nav.collapse' });
       await user.click(collapseButton);
 
-      // Trip info section should have a title attribute with trip details
-      const sidebar = getSidebar();
-      const tripIndicator = sidebar?.querySelector('[title*="Beach House Vacation"]');
-      expect(tripIndicator).toBeInTheDocument();
+      // Icon rail has no duplicate trip chip; details stay in expanded sidebar / header.
+      expect(screen.queryByTestId('trip-info-section')).not.toBeInTheDocument();
     });
   });
 

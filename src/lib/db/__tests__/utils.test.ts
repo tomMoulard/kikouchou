@@ -22,6 +22,7 @@ import {
   toUnixTimestamp,
   fromUnixTimestamp,
   toISODateString,
+  toLocalISODateString,
   toISODateTimeString,
   // Parsing Functions
   parseISODateString,
@@ -347,6 +348,19 @@ describe('utils', () => {
         const dateStr = toISODateString(date);
 
         expect(dateStr).toBe('2024-07-15');
+      });
+    });
+
+    describe('toLocalISODateString', () => {
+      it('should format local calendar date (Date constructor with local components)', () => {
+        const date = new Date(2026, 3, 8, 14, 30, 0);
+        expect(toLocalISODateString(date)).toBe('2026-04-08');
+      });
+
+      it('should throw Error for invalid Date', () => {
+        expect(() => toLocalISODateString(new Date('invalid'))).toThrow(
+          'Invalid Date passed to toLocalISODateString',
+        );
       });
     });
 
