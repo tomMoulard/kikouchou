@@ -24,6 +24,10 @@ vi.mock('@/contexts/TripContext', () => ({
   useTripContext: vi.fn(() => ({
     currentTrip: mockTrip,
     setCurrentTrip: vi.fn().mockResolvedValue(undefined),
+    trips: [mockTrip],
+    isLoading: false,
+    error: null,
+    checkConnection: vi.fn().mockResolvedValue(undefined),
   })),
 }));
 
@@ -77,6 +81,10 @@ describe('SettingsPage', () => {
     vi.mocked(useTripContext).mockReturnValue({
       currentTrip: null,
       setCurrentTrip: vi.fn().mockResolvedValue(undefined),
+      trips: [],
+      isLoading: false,
+      error: null,
+      checkConnection: vi.fn().mockResolvedValue(undefined),
     } as ReturnType<typeof useTripContext>);
     render(<SettingsPage />, { withProviders: false });
     expect(screen.queryByText('settings.currentTrip')).not.toBeInTheDocument();

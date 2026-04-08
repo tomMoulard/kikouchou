@@ -8,7 +8,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { CalendarTimelineRow } from '../CalendarTimelineRow';
 import type { CalendarTimelineRowModel, TimelineItemWithLane } from '../../types';
 import type { TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
-import type { HexColor, ISODateString, Person, PersonId, RoomAssignment, RoomAssignmentId, RoomId, TripId } from '@/types';
+import type { HexColor, ISODateString, Person, PersonId, RoomAssignment, RoomAssignmentId, RoomId, TransportId, TripId } from '@/types';
 import { enUS } from 'date-fns/locale';
 
 // Mock i18next
@@ -40,8 +40,6 @@ function makePerson(name: string, color = '#ef4444'): Person {
     name,
     color: color as HexColor,
     order: 0,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   } as Person;
 }
 
@@ -53,8 +51,6 @@ function makeAssignment(id: string, roomId: string, personId: string): RoomAssig
     personId: personId as PersonId,
     startDate: '2026-01-06' as ISODateString,
     endDate: '2026-01-09' as ISODateString,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   } as RoomAssignment;
 }
 
@@ -138,7 +134,8 @@ describe('CalendarTimelineRow', () => {
       startIndex: 1,
       endIndex: 3,
       assignment,
-      roomName: 'Room 1',
+      person: undefined,
+      room: undefined,
       label: 'Room 1',
       color: '#ef4444' as HexColor,
       textColor: 'white',
@@ -167,17 +164,15 @@ describe('CalendarTimelineRow', () => {
 
   it('renders transport item and handles click', () => {
     const transport = {
-      id: 't1',
-      tripId: 'trip-1',
-      personId: 'p-Alice',
+      id: 't1' as TransportId,
+      tripId: 'trip-1' as TripId,
+      personId: 'p-Alice' as PersonId,
       type: 'arrival' as const,
       datetime: '2026-01-06T14:00:00Z',
       location: 'Station',
       mode: 'train' as const,
       transportNumber: '',
       needsPickup: false,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
     };
     const person = makePerson('Alice');
 
@@ -190,7 +185,7 @@ describe('CalendarTimelineRow', () => {
       person,
       label: 'Station',
       laneIndex: 0,
-    } as TimelineItemWithLane;
+    };
 
     const model = makeModel({ items: [item] });
     const onTransportClick = vi.fn();
@@ -248,7 +243,6 @@ describe('CalendarTimelineRow', () => {
 
   it('uses "Unknown" label for person without name', () => {
     const person = makePerson('');
-    // @ts-expect-error - force empty name
     person.name = '';
     const model = makeModel({ person });
 

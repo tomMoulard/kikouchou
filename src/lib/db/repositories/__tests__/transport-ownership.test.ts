@@ -46,6 +46,7 @@ describe('updateTransportWithOwnershipCheck', () => {
       personId,
       datetime: '2024-07-15T10:00:00.000Z',
       location: 'Airport',
+      needsPickup: false,
     });
 
     await updateTransportWithOwnershipCheck(transport.id, tripId, {
@@ -73,6 +74,7 @@ describe('updateTransportWithOwnershipCheck', () => {
       personId,
       datetime: '2024-07-15T10:00:00.000Z',
       location: '',
+      needsPickup: false,
     });
 
     await expect(
@@ -94,6 +96,7 @@ describe('deleteTransportWithOwnershipCheck', () => {
       personId,
       datetime: '2024-07-20T14:00:00.000Z',
       location: '',
+      needsPickup: false,
     });
 
     await deleteTransportWithOwnershipCheck(transport.id, tripId);
@@ -119,6 +122,7 @@ describe('deleteTransportWithOwnershipCheck', () => {
       personId,
       datetime: '2024-07-15T10:00:00.000Z',
       location: '',
+      needsPickup: false,
     });
 
     await expect(

@@ -90,6 +90,7 @@ describe('deletePersonWithOwnershipCheck', () => {
       personId: person.id,
       datetime: '2024-07-15T10:00:00.000Z',
       location: '',
+      needsPickup: false,
     });
 
     await deletePersonWithOwnershipCheck(person.id, tripId);
@@ -118,6 +119,7 @@ describe('deletePersonWithOwnershipCheck', () => {
       datetime: '2024-07-15T10:00:00.000Z',
       driverId: driver.id,
       location: '',
+      needsPickup: false,
     });
 
     await deletePersonWithOwnershipCheck(driver.id, tripId);

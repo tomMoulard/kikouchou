@@ -11,7 +11,6 @@ import {
   computeRoomTimelineViewportLayout,
   computeDayGridTemplateColumns,
   TIMELINE_PREFERRED_DAY_WIDTH_PX,
-  TIMELINE_MIN_COMPRESSED_DAY_WIDTH_PX,
 } from '../timeline-viewport-layout';
 
 // ============================================================================

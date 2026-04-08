@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { ShareDialog } from '../ShareDialog';
-import type { Trip } from '@/types';
+import type { Trip, TripId, ShareId, ISODateString } from '@/types';
 
 // ShareDialog delegates export UI to TripSyncExportPanel — stub it to avoid loading the full sharing stack in this dialog test.
 vi.mock('../TripSyncExportPanel', () => ({
@@ -29,11 +29,11 @@ vi.mock('react-i18next', () => ({
 }));
 
 const mockTrip: Trip = {
-  id: 'trip-1',
+  id: 'trip-1' as TripId,
   name: 'Test Trip',
-  shareId: 'abc123',
-  startDate: '2026-01-05',
-  endDate: '2026-01-10',
+  shareId: 'abc123' as ShareId,
+  startDate: '2026-01-05' as ISODateString,
+  endDate: '2026-01-10' as ISODateString,
   createdAt: 1,
   updatedAt: 1,
 };
