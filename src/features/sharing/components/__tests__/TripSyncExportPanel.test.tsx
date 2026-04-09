@@ -173,7 +173,7 @@ describe('TripSyncExportPanel', () => {
     });
   });
 
-  it('shows multi-frame hint when multiple frames', async () => {
+  it('uses copy-only export instructions when multiple frames', async () => {
     mockBuildHostChangeset.mockResolvedValue({ tripId: 'trip-1' });
     mockEncodeChangeset.mockReturnValue('encoded');
     mockSplitIntoFrames.mockReturnValue(['frame1', 'frame2', 'frame3']);
@@ -181,8 +181,10 @@ describe('TripSyncExportPanel', () => {
     render(<TripSyncExportPanel trip={mockTrip} />, { withProviders: false });
 
     await waitFor(() => {
-      expect(screen.getByText(/sharing\.sync\.multiFrameHint/)).toBeInTheDocument();
+      expect(screen.getByText(/sharing\.sync\.exportInstructionsCopyOnly/)).toBeInTheDocument();
     });
+    const qr = screen.getByTestId('multi-frame-qr');
+    expect(qr.getAttribute('data-frames')).toBe('3');
   });
 
   it('does not update state when unmounted during host export', async () => {
