@@ -281,7 +281,7 @@ describe('PersonListPage', () => {
       updatePerson: vi.fn(),
       deletePerson: vi.fn(),
     } as ReturnType<typeof usePersonContext>);
-    const { user: _user } = render(<PersonListPage />, { withProviders: false });
+    render(<PersonListPage />, { withProviders: false });
     // Dialog is only rendered when open; click the add button
     // In empty state the dialog exists but is closed by default
     // PersonDialog mock returns null when open=false

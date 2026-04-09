@@ -24,8 +24,10 @@ describe('cn', () => {
   });
 
   it('handles conditional classes via clsx', () => {
-    expect(cn('base', false && 'hidden', 'extra')).toBe('base extra');
-    expect(cn('base', true && 'visible', 'extra')).toBe('base visible extra');
+    const falsy = false as boolean;
+    const truthy = true as boolean;
+    expect(cn('base', falsy && 'hidden', 'extra')).toBe('base extra');
+    expect(cn('base', truthy && 'visible', 'extra')).toBe('base visible extra');
   });
 
   it('resolves Tailwind conflicts (last wins)', () => {
