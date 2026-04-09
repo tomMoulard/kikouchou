@@ -53,6 +53,11 @@ function manualChunks(id: string): string | undefined {
     return 'vendor-icons'
   }
 
+  // Hugging Face Transformers.js — large ML runtime, only loaded by the AI assistant page
+  if (id.includes('@huggingface/transformers') || id.includes('onnxruntime')) {
+    return 'vendor-transformers'
+  }
+
   // Let Rollup handle the rest to avoid circular dependencies
   return undefined
 }
@@ -91,6 +96,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Exclude large Transformers.js vendor chunk from precache (loaded on demand)
+        globIgnores: ['**/vendor-transformers*.js'],
         // Runtime caching for external resources
         runtimeCaching: [
           {

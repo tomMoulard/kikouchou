@@ -45,7 +45,8 @@
     "guestsOfTheDayOutsideTrip": "Today is outside this trip’s dates",
     "guestsOfTheDayLoading": "Loading guests…",
     "expand": "Expand sidebar",
-    "collapse": "Collapse sidebar"
+    "collapse": "Collapse sidebar",
+    "assistant": "AI Assistant"
   },
   "trips": {
     "title": "My trips",
@@ -434,6 +435,18 @@
       "mergeError": "Failed to apply changes",
       "scanAnother": "Scan another"
     }
+  },
+  "assistant": {
+    "title": "AI Assistant",
+    "description": "Run Gemma locally on your device to manage your trip with natural language.",
+    "pageDescription": "Ask questions or modify your trip using natural language",
+    "loadModel": "Load Model",
+    "loadHint": "The model (~2.5 GB) will be downloaded and cached in your browser. Requires WebGPU support.",
+    "placeholder": "Ask about your trip or request changes...",
+    "send": "Send message",
+    "stop": "Stop generating",
+    "emptyTitle": "Ready to help with your trip!",
+    "emptyHint": "Try asking \"Who is staying tonight?\" or \"Add a guest named Alice\""
   },
   "settings": {
     "title": "Settings",
