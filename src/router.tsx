@@ -30,6 +30,7 @@ import { roomRoutes } from '@/features/rooms/routes';
 import { personRoutes } from '@/features/persons/routes';
 import { transportRoutes } from '@/features/transports/routes';
 import { sharingRoutes, sharingSyncRoutes } from '@/features/sharing/routes';
+import { assistantRoutes } from '@/features/assistant/routes';
 
 // ============================================================================
 // Lazy-loaded Components
@@ -204,6 +205,9 @@ const settingsRoute: RouteObject = {
 
     // Settings route
     settingsRoute,
+
+    // AI Assistant route
+    ...assistantRoutes,
 
     // Catch-all 404 route - must be last
     {
