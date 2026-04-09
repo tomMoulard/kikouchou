@@ -4,10 +4,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QuickAssignmentDialog } from '../QuickAssignmentDialog';
-import type { Person, PersonId, Room, RoomAssignment, RoomId, Trip } from '@/types';
+import type { Person, PersonId, Room, RoomId, Trip } from '@/types';
 
 // ============================================================================
 // Mock Data
@@ -204,7 +204,7 @@ describe('QuickAssignmentDialog', () => {
   });
 
   it('does not render when not open', () => {
-    const { container } = render(
+    render(
       <QuickAssignmentDialog
         open={false}
         onOpenChange={vi.fn()}

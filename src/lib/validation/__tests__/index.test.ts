@@ -4,6 +4,7 @@
  * @module lib/validation/__tests__/index.test
  */
 import { describe, it, expect } from 'vitest';
+import { ZodError } from 'zod';
 import {
   validateTripForm,
   validateRoomForm,
@@ -95,7 +96,6 @@ describe('validation index', () => {
 
     it('uses fallback message when errors array is empty', () => {
       // Create a synthetic ValidationError with empty errors
-      const { ZodError } = require('zod');
       const zodError = new ZodError([]);
       const error = new FormValidationError({
         success: false,

@@ -12,7 +12,7 @@ import type { RoomAssignmentId } from '@/types';
 // Mocks
 // ============================================================================
 
-const mockSetNodeRef = vi.fn();
+const mockSetNodeRef = vi.fn() as ReturnType<typeof vi.fn> & { _lastArgs?: unknown };
 vi.mock('@dnd-kit/core', () => ({
   useDroppable: vi.fn((args: { id: string; data: unknown }) => {
     // Store the last call args for assertions

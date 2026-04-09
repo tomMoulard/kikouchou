@@ -813,7 +813,6 @@ describe('Person Repository — Error Paths', () => {
   it('createPersonWithAutoColor re-throws wrapped error from createPerson', async () => {
     const tripId = await createTestTrip();
     // Spy on db.persons.add to cause a failure inside createPerson
-    const originalAdd = db.persons.add.bind(db.persons);
     vi.spyOn(db.persons, 'add').mockRejectedValueOnce(new Error('Constraint violation'));
 
     await expect(

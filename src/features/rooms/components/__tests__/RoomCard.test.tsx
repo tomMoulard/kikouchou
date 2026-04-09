@@ -427,7 +427,7 @@ describe('RoomCard', () => {
   });
 
   it('renders room with custom icon', () => {
-    const roomWithIcon = { ...mockRoom, icon: 'tent' };
+    const roomWithIcon: Room = { ...mockRoom, icon: 'tent' };
     render(
       <RoomCard
         room={roomWithIcon}

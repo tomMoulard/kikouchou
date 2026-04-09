@@ -165,6 +165,9 @@ function resetMocks() {
     isLoading: false,
     error: null,
     getPersonById: vi.fn((id: string) => (id === 'person-1' ? mockPerson : undefined)),
+    createPerson: vi.fn(),
+    updatePerson: vi.fn(),
+    deletePerson: vi.fn(),
   } as ReturnType<typeof usePersonContext>);
   vi.mocked(useRoomContext).mockReturnValue({
     rooms: [],
@@ -226,6 +229,9 @@ describe('PersonListPage', () => {
       isLoading: false,
       error: null,
       getPersonById: vi.fn(),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: vi.fn(),
     } as ReturnType<typeof usePersonContext>);
     render(<PersonListPage />, { withProviders: false });
     expect(screen.getByText('persons.empty')).toBeInTheDocument();
@@ -250,6 +256,9 @@ describe('PersonListPage', () => {
       isLoading: false,
       error: new Error('DB Error'),
       getPersonById: vi.fn(),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: vi.fn(),
     } as ReturnType<typeof usePersonContext>);
     render(<PersonListPage />, { withProviders: false });
     // ErrorDisplay is rendered
@@ -268,6 +277,9 @@ describe('PersonListPage', () => {
       isLoading: false,
       error: null,
       getPersonById: vi.fn(),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: vi.fn(),
     } as ReturnType<typeof usePersonContext>);
     const { user: _user } = render(<PersonListPage />, { withProviders: false });
     // Dialog is only rendered when open; click the add button
@@ -288,6 +300,9 @@ describe('PersonListPage', () => {
       isLoading: true,
       error: null,
       getPersonById: vi.fn(),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: vi.fn(),
     } as ReturnType<typeof usePersonContext>);
     render(<PersonListPage />, { withProviders: false });
     expect(screen.getByRole('status')).toBeInTheDocument();
@@ -355,6 +370,9 @@ describe('PersonListPage', () => {
       isLoading: false,
       error: null,
       getPersonById: vi.fn(() => mockPerson2),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: vi.fn(),
     } as ReturnType<typeof usePersonContext>);
     render(<PersonListPage />, { withProviders: false });
     expect(screen.getByText('transports.empty')).toBeInTheDocument();
@@ -402,6 +420,9 @@ describe('PersonListPage', () => {
       isLoading: false,
       error: null,
       getPersonById: vi.fn(),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: vi.fn(),
     } as ReturnType<typeof usePersonContext>);
     const { user } = render(<PersonListPage />, { withProviders: false });
     await user.click(screen.getByRole('button', { name: 'persons.new' }));
@@ -453,6 +474,9 @@ describe('PersonListPage', () => {
         if (id === 'person-2') return mockPerson2;
         return undefined;
       }),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: vi.fn(),
     } as ReturnType<typeof usePersonContext>);
     vi.mocked(useTransportContext).mockReturnValue({
       getTransportsByPerson: vi.fn((personId: string) => {
@@ -515,6 +539,9 @@ describe('PersonListPage', () => {
       isLoading: false,
       error: null,
       getPersonById: vi.fn(() => personBadDates),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: vi.fn(),
     } as ReturnType<typeof usePersonContext>);
     render(<PersonListPage />, { withProviders: false });
     // Should not crash and should not show stay dates
@@ -533,6 +560,9 @@ describe('PersonListPage', () => {
       isLoading: false,
       error: null,
       getPersonById: vi.fn(() => personReversedDates),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: vi.fn(),
     } as ReturnType<typeof usePersonContext>);
     render(<PersonListPage />, { withProviders: false });
     expect(screen.getByText('Alice')).toBeInTheDocument();

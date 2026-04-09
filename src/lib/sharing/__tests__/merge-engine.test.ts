@@ -420,10 +420,10 @@ describe('computeMerge', () => {
     });
 
     it('detects conflicting room fields: description, icon, order', async () => {
-      const hostRoom = makeRoom({ description: 'Old', icon: 'bed', order: 1 });
+      const hostRoom = makeRoom({ description: 'Old', icon: 'bed-double', order: 1 });
       mockHostRooms.push(hostRoom);
 
-      const guestRoom = makeRoom({ description: 'New', icon: 'star', order: 2 });
+      const guestRoom = makeRoom({ description: 'New', icon: 'bed-single', order: 2 });
       const changeset = makeChangeset({
         modified: { persons: [], assignments: [], transports: [], rooms: [guestRoom] },
       });

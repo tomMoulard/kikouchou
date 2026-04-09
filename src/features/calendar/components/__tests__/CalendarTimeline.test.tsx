@@ -16,7 +16,6 @@ import type {
   RoomAssignmentId,
   RoomId,
   Transport,
-  TransportId,
   Trip,
   TripId,
 } from '@/types';
@@ -42,6 +41,7 @@ vi.mock('react-i18next', () => ({
 function makeTrip(): Trip {
   return {
     id: 'trip-1' as TripId,
+    shareId: 'share-1' as Trip['shareId'],
     name: 'Test Trip',
     startDate: '2026-01-05' as ISODateString,
     endDate: '2026-01-10' as ISODateString,
@@ -56,9 +56,6 @@ function makePerson(name: string, id = 'p1'): Person {
     tripId: 'trip-1' as TripId,
     name,
     color: '#3b82f6' as HexColor,
-    order: 0,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   };
 }
 
@@ -69,8 +66,6 @@ function makeRoom(): Room {
     name: 'Room A',
     capacity: 2,
     order: 0,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   };
 }
 
@@ -82,8 +77,6 @@ function makeAssignment(personId: string): RoomAssignment {
     personId: personId as PersonId,
     startDate: '2026-01-06' as ISODateString,
     endDate: '2026-01-09' as ISODateString,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
   };
 }
 

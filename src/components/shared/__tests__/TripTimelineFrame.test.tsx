@@ -103,7 +103,7 @@ describe('TripTimelineFrame', () => {
     );
 
     expect(childrenFn).toHaveBeenCalledTimes(1);
-    const viewport = childrenFn.mock.calls[0]![0];
+    const viewport = (childrenFn.mock.calls[0] as unknown[])[0];
     expect(viewport).toHaveProperty('labelColumnWidth', 150);
     expect(viewport).toHaveProperty('dayCount', 5);
     expect(viewport).toHaveProperty('laneHeightPx');
@@ -160,7 +160,7 @@ describe('TripTimelineFrame', () => {
       </TripTimelineFrame>
     );
 
-    const viewport = childrenFn.mock.calls[0]![0];
+    const viewport = (childrenFn.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
     expect(viewport.todayColumnIndex).toBe(1);
   });
 
@@ -173,7 +173,7 @@ describe('TripTimelineFrame', () => {
       </TripTimelineFrame>
     );
 
-    const viewport = childrenFn.mock.calls[0]![0];
+    const viewport = (childrenFn.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
     expect(viewport.todayColumnIndex).toBeUndefined();
   });
 
@@ -191,7 +191,7 @@ describe('TripTimelineFrame', () => {
     );
 
     expect(screen.getByText('empty timeline')).toBeInTheDocument();
-    const viewport = childrenFn.mock.calls[0]![0];
+    const viewport = (childrenFn.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
     expect(viewport.dayCount).toBe(0);
   });
 });
