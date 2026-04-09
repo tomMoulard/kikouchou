@@ -122,6 +122,20 @@ describe('ErrorDisplay', () => {
       expect(alert.className).toContain('py-4');
       expect(alert.className).not.toContain('min-h-[400px]');
     });
+
+    it('renders compact size with error message and action buttons', () => {
+      const error = new Error('Compact error');
+      render(
+        <ErrorDisplay size="compact" error={error} onRetry={vi.fn()} onBack={vi.fn()} />,
+        { withProviders: false }
+      );
+
+      // Error message uses smaller text in compact
+      expect(screen.getByText('Compact error')).toBeInTheDocument();
+      // Action buttons are present
+      expect(screen.getByRole('button', { name: /common.retry/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /common.back/i })).toBeInTheDocument();
+    });
   });
 
   describe('Custom className and children', () => {

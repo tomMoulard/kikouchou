@@ -15,6 +15,10 @@ vi.mock('@/hooks/useInstallPrompt', () => ({
   }),
 }));
 
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 import { InstallPrompt } from '../InstallPrompt';
 
 describe('InstallPrompt', () => {
@@ -49,5 +53,113 @@ describe('InstallPrompt', () => {
     await act(async () => { vi.advanceTimersByTime(1100); });
     // The install prompt should be visible now (rendered as a region)
     expect(screen.getByRole('region')).toBeInTheDocument();
+  });
+
+  it('shows install and dismiss buttons when visible', async () => {
+    mockCanInstall.mockReturnValue(true);
+    render(<InstallPrompt />, { withProviders: false });
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    // "pwa.install" appears as both title and button text
+    expect(screen.getAllByText('pwa.install').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('pwa.notNow')).toBeInTheDocument();
+    expect(screen.getByLabelText('common.close')).toBeInTheDocument();
+  });
+
+  it('calls install when install button is clicked', async () => {
+    mockCanInstall.mockReturnValue(true);
+    mockInstall.mockResolvedValue(true);
+    render(<InstallPrompt />, { withProviders: false });
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    // Click the button (not the title) — use getAllByText and pick the button
+    const installBtns = screen.getAllByText('pwa.install');
+    const installBtn = installBtns.find(el => el.closest('button'))!;
+    await act(async () => { installBtn.click(); });
+    expect(mockInstall).toHaveBeenCalled();
+  });
+
+  it('shows error toast when install fails', async () => {
+    const { toast } = await import('sonner');
+    mockCanInstall.mockReturnValue(true);
+    mockInstall.mockResolvedValue(false);
+    mockIsInstalled.mockReturnValue(false);
+    render(<InstallPrompt />, { withProviders: false });
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    const installBtns = screen.getAllByText('pwa.install');
+    const installBtn = installBtns.find(el => el.closest('button'))!;
+    await act(async () => { installBtn.click(); });
+    expect(vi.mocked(toast.error)).toHaveBeenCalled();
+  });
+
+  it('dismisses prompt when dismiss button is clicked', async () => {
+    mockCanInstall.mockReturnValue(true);
+    render(<InstallPrompt />, { withProviders: false });
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    expect(screen.getByRole('region')).toBeInTheDocument();
+    const dismissBtn = screen.getByText('pwa.notNow');
+    await act(async () => { dismissBtn.click(); });
+    // After dismiss animation timeout
+    await act(async () => { vi.advanceTimersByTime(400); });
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
+  });
+
+  it('dismisses prompt when close (X) button is clicked', async () => {
+    mockCanInstall.mockReturnValue(true);
+    render(<InstallPrompt />, { withProviders: false });
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    const closeBtn = screen.getByLabelText('common.close');
+    await act(async () => { closeBtn.click(); });
+    await act(async () => { vi.advanceTimersByTime(400); });
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
+  });
+
+  it('shows loading text when installing', async () => {
+    mockCanInstall.mockReturnValue(true);
+    mockIsInstalling.mockReturnValue(true);
+    render(<InstallPrompt />, { withProviders: false });
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    expect(screen.getByText('common.loading')).toBeInTheDocument();
+  });
+
+  it('renders description text when visible', async () => {
+    mockCanInstall.mockReturnValue(true);
+    render(<InstallPrompt />, { withProviders: false });
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    expect(screen.getByText('pwa.installDescription')).toBeInTheDocument();
+  });
+
+  it('applies custom className', async () => {
+    mockCanInstall.mockReturnValue(true);
+    render(<InstallPrompt className="my-class" />, { withProviders: false });
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    const region = screen.getByRole('region');
+    expect(region).toHaveClass('my-class');
+  });
+
+  it('shows prompt when dismissed timestamp is NaN (invalid localStorage)', async () => {
+    // Spy on localStorage.getItem to return a non-numeric value
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
+      if (key === 'kikoushou-install-dismissed') return 'invalid-value';
+      return null;
+    });
+    mockCanInstall.mockReturnValue(true);
+    render(<InstallPrompt />, { withProviders: false });
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    // isDismissedRecently() returns false for NaN, so prompt should show
+    expect(screen.getByRole('region')).toBeInTheDocument();
+    getItemSpy.mockRestore();
+  });
+
+  it('shows prompt when dismissal timestamp is expired', async () => {
+    // Spy on localStorage.getItem to return an expired timestamp
+    const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
+      if (key === 'kikoushou-install-dismissed') return eightDaysAgo.toString();
+      return null;
+    });
+    mockCanInstall.mockReturnValue(true);
+    render(<InstallPrompt />, { withProviders: false });
+    await act(async () => { vi.advanceTimersByTime(1100); });
+    expect(screen.getByRole('region')).toBeInTheDocument();
+    getItemSpy.mockRestore();
   });
 });

@@ -669,3 +669,178 @@ describe('TripCard Accessibility', () => {
     expect(titleElement).toHaveAttribute('title', 'A Very Long Trip Name That Should Be Truncated');
   });
 });
+
+// ============================================================================
+// Share Button Tests
+// ============================================================================
+
+describe('TripCard Share Button', () => {
+  it('renders share button when onShare is provided', () => {
+    const trip = createTestTrip();
+    render(
+      <TripCard
+        trip={trip}
+        persons={[]}
+        onClick={vi.fn()}
+        onShare={vi.fn()}
+      />
+    );
+    expect(screen.getByLabelText(/trips\.shareTripAria/i)).toBeInTheDocument();
+  });
+
+  it('calls onShare when share button is clicked', async () => {
+    const user = userEvent.setup();
+    const onShare = vi.fn();
+    const trip = createTestTrip();
+    render(
+      <TripCard
+        trip={trip}
+        persons={[]}
+        onClick={vi.fn()}
+        onShare={onShare}
+      />
+    );
+    await user.click(screen.getByLabelText(/trips\.shareTripAria/i));
+    expect(onShare).toHaveBeenCalledWith(trip);
+  });
+
+  it('does not call onShare when disabled', async () => {
+    const user = userEvent.setup();
+    const onShare = vi.fn();
+    const trip = createTestTrip();
+    render(
+      <TripCard
+        trip={trip}
+        persons={[]}
+        onClick={vi.fn()}
+        onShare={onShare}
+        isDisabled
+      />
+    );
+    await user.click(screen.getByLabelText(/trips\.shareTripAria/i));
+    expect(onShare).not.toHaveBeenCalled();
+  });
+
+  it('does not call card onClick when share button is clicked', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const trip = createTestTrip();
+    render(
+      <TripCard
+        trip={trip}
+        persons={[]}
+        onClick={onClick}
+        onShare={vi.fn()}
+      />
+    );
+    await user.click(screen.getByLabelText(/trips\.shareTripAria/i));
+    expect(onClick).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// No Corner Actions Tests
+// ============================================================================
+
+describe('TripCard without actions', () => {
+  it('does not render menu or share when no onEdit/onDelete/onShare', () => {
+    const trip = createTestTrip();
+    render(
+      <TripCard
+        trip={trip}
+        persons={[]}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /common\.openMenu/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/trips\.shareTripAria/i)).not.toBeInTheDocument();
+  });
+
+  it('renders only share when onShare provided but no edit/delete', () => {
+    const trip = createTestTrip();
+    render(
+      <TripCard
+        trip={trip}
+        persons={[]}
+        onClick={vi.fn()}
+        onShare={vi.fn()}
+      />
+    );
+    expect(screen.getByLabelText(/trips\.shareTripAria/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /common\.openMenu/i })).not.toBeInTheDocument();
+  });
+});
+
+// ============================================================================
+// Persons Display Tests
+// ============================================================================
+
+describe('TripCard Persons', () => {
+  it('shows "no guests" when persons array is empty', () => {
+    const trip = createTestTrip();
+    render(
+      <TripCard
+        trip={trip}
+        persons={[]}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/trips\.noGuests/i)).toBeInTheDocument();
+  });
+
+  it('renders person badges when persons are provided', () => {
+    const trip = createTestTrip();
+    const persons = [
+      { id: 'p1', tripId: 'trip-1', name: 'Alice', color: '#ef4444', order: 0, createdAt: Date.now(), updatedAt: Date.now() },
+      { id: 'p2', tripId: 'trip-1', name: 'Bob', color: '#3b82f6', order: 1, createdAt: Date.now(), updatedAt: Date.now() },
+    ] as never;
+    render(
+      <TripCard
+        trip={trip}
+        persons={persons}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.queryByText(/trips\.noGuests/i)).not.toBeInTheDocument();
+  });
+
+  it('renders overflow count when more than 4 persons', () => {
+    const trip = createTestTrip();
+    const persons = Array.from({ length: 6 }, (_, i) => ({
+      id: `p${i}`, tripId: 'trip-1', name: `Person ${i}`, color: '#ef4444',
+      order: i, createdAt: Date.now(), updatedAt: Date.now(),
+    })) as never;
+    render(
+      <TripCard
+        trip={trip}
+        persons={persons}
+        onClick={vi.fn()}
+      />
+    );
+    expect(screen.getByText('+2')).toBeInTheDocument();
+  });
+});
+
+// ============================================================================
+// Keyboard While Disabled Tests
+// ============================================================================
+
+describe('TripCard Keyboard while disabled', () => {
+  it('does not call onClick on Enter when disabled', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const trip = createTestTrip();
+    render(
+      <TripCard
+        trip={trip}
+        persons={[]}
+        onClick={onClick}
+        isDisabled
+      />
+    );
+    const card = screen.getByRole('button', { name: /beach vacation/i });
+    card.focus();
+    await user.keyboard('{Enter}');
+    expect(onClick).not.toHaveBeenCalled();
+  });
+});

@@ -249,6 +249,20 @@ describe('ColorPicker Keyboard Navigation', () => {
     expect(onChange).toHaveBeenCalledWith(DEFAULT_COLORS[2]);
   });
 
+  it('ignores unhandled keyboard keys (default branch)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+
+    render(<ColorPicker value="#ef4444" onChange={onChange} />);
+
+    const buttons = screen.getAllByRole('radio');
+    buttons[0]!.focus();
+    
+    await user.keyboard('a');
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('selects color with Space', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

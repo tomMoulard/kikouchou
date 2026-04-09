@@ -7,7 +7,7 @@
  * @module components/shared/__tests__/ConfirmDialog.test
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -604,6 +604,68 @@ describe('ConfirmDialog Sync vs Async', () => {
     });
 
     // Should NOT close on error
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it('guards handleConfirm when isLoading is true (fireEvent bypasses disabled)', async () => {
+    const onConfirm = vi.fn().mockImplementation(() => new Promise(() => {})); // never resolves
+    const onOpenChange = vi.fn();
+
+    render(
+      <ConfirmDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        title="Test"
+        description="Test"
+        onConfirm={onConfirm}
+        confirmLabel="Confirm"
+      />
+    );
+
+    const confirmButton = screen.getByRole('button', { name: 'Confirm' });
+
+    // First click starts loading
+    fireEvent.click(confirmButton);
+
+    // Wait for loading state
+    await waitFor(() => {
+      expect(confirmButton).toBeDisabled();
+    });
+
+    // Second click via fireEvent bypasses disabled attribute, testing isLoading guard
+    fireEvent.click(confirmButton);
+
+    // onConfirm should only be called once due to the isLoading guard
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('guards handleOpenChange when isLoading is true (cancel during loading)', async () => {
+    const onConfirm = vi.fn().mockImplementation(() => new Promise(() => {})); // never resolves
+    const onOpenChange = vi.fn();
+
+    render(
+      <ConfirmDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        title="Test"
+        description="Test"
+        onConfirm={onConfirm}
+        confirmLabel="Confirm"
+        cancelLabel="Cancel"
+      />
+    );
+
+    // Start loading
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled();
+    });
+
+    // Try cancel during loading via fireEvent
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // onOpenChange should not be called with false during loading
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });

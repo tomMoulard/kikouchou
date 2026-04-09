@@ -159,6 +159,11 @@ describe('encodeChangeset / decodeChangeset', () => {
     expect(() => decodeChangeset('not valid! data')).toThrow('Invalid base64url payload');
   });
 
+  it('throws on too-short valid base64url payload (< 2 bytes)', () => {
+    // 'AQ' decodes to a single byte [0x01] — passes base64url validation but is too short
+    expect(() => decodeChangeset('AQ')).toThrow('Invalid changeset payload: too short');
+  });
+
   it('throws on unsupported version', () => {
     // Version byte 99 is unsupported
     const fakePayload = btoa(String.fromCharCode(99, 0, 0)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -232,6 +237,17 @@ describe('splitIntoFrames / parseFrame / reassembleFrames', () => {
     frames.set(0, 'aaa');
 
     expect(reassembleFrames(frames, 3)).toBeNull();
+  });
+
+  it('reassembleFrames returns null when size matches total but indices have gaps', () => {
+    // Map with 2 entries: keys 0 and 2, totalFrames=2
+    // frames.size === 2 === totalFrames passes the size check
+    // but frames.get(1) === undefined triggers the missing-frame branch
+    const frames = new Map<number, string>();
+    frames.set(0, 'aaa');
+    frames.set(2, 'ccc');
+
+    expect(reassembleFrames(frames, 2)).toBeNull();
   });
 });
 

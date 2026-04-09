@@ -486,6 +486,102 @@ describe('IdentityStepPage — 3.7: i18n text nodes use translation keys', () =>
 });
 
 // ============================================================================
+// Additional branch coverage
+// ============================================================================
+
+describe('IdentityStepPage — additional branch coverage', () => {
+  it('shows toast.error when createPersonWithAutoColor fails', async () => {
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+    mockGetPersonsByTripId.mockResolvedValue([makePerson()]);
+    mockCreatePersonWithAutoColor.mockRejectedValue(new Error('DB failure'));
+
+    const { user } = renderIdentityStepPage();
+
+    await user.click(
+      await screen.findByRole('button', { name: 'sharing.identityNotOnList' }),
+    );
+    const nameInput = screen.getByRole('textbox');
+    await user.type(nameInput, 'Failing User');
+    await user.click(screen.getByRole('button', { name: 'sharing.identityAddMyself' }));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('clears name error when typing in the name input', async () => {
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+    mockGetPersonsByTripId.mockResolvedValue([makePerson()]);
+
+    const { user } = renderIdentityStepPage();
+
+    await user.click(
+      await screen.findByRole('button', { name: 'sharing.identityNotOnList' }),
+    );
+
+    // Submit without typing -> error should appear
+    await user.click(screen.getByRole('button', { name: 'sharing.identityAddMyself' }));
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+
+    // Type something -> error should clear
+    const nameInput = screen.getByRole('textbox');
+    await user.type(nameInput, 'A');
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+  });
+
+  it('submits add form via Enter key on input', async () => {
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+    mockGetPersonsByTripId.mockResolvedValue([makePerson()]);
+
+    const newPerson = makePerson({ id: 'p-enter' as PersonId, name: 'EnterUser' });
+    mockCreatePersonWithAutoColor.mockResolvedValue(newPerson);
+
+    const { user } = renderIdentityStepPage();
+
+    await user.click(
+      await screen.findByRole('button', { name: 'sharing.identityNotOnList' }),
+    );
+    const nameInput = screen.getByRole('textbox');
+    await user.type(nameInput, 'EnterUser');
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => {
+      expect(mockCreatePersonWithAutoColor).toHaveBeenCalledWith('trip-abc', 'EnterUser');
+    });
+  });
+
+  it('shows not-found state when getTripByShareId throws an error', async () => {
+    mockGetTripByShareId.mockRejectedValue(new Error('Network error'));
+
+    renderIdentityStepPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('sharing.notFoundWizard')).toBeInTheDocument();
+    });
+  });
+
+  it('does not show "I\'m not on the list" when add form is open', async () => {
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+    mockGetPersonsByTripId.mockResolvedValue([makePerson()]);
+
+    const { user } = renderIdentityStepPage();
+
+    await user.click(
+      await screen.findByRole('button', { name: 'sharing.identityNotOnList' }),
+    );
+
+    // Now that the form is open, the toggle button should be gone
+    expect(
+      screen.queryByRole('button', { name: 'sharing.identityNotOnList' }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+// ============================================================================
 // F16 — localStorage failure path (warn-and-continue with toast)
 // ============================================================================
 

@@ -93,4 +93,151 @@ describe('RoomIconPicker', () => {
     await user.keyboard('{ArrowRight}');
     expect(onChange).toHaveBeenCalledWith('bed-single');
   });
+
+  it('handles keyboard navigation with ArrowLeft', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RoomIconPicker value="bed-single" onChange={onChange} />,
+      { withProviders: false },
+    );
+    const bedSingle = screen.getByRole('radio', { name: 'rooms.icons.bedSingle' });
+    bedSingle.focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(onChange).toHaveBeenCalledWith('bed-double');
+  });
+
+  it('handles keyboard navigation with ArrowDown', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RoomIconPicker value="bed-double" onChange={onChange} />,
+      { withProviders: false },
+    );
+    const bedDouble = screen.getByRole('radio', { name: 'rooms.icons.bedDouble' });
+    bedDouble.focus();
+    await user.keyboard('{ArrowDown}');
+    // Grid columns = 4, so ArrowDown moves 4 positions: bed-double(0) -> caravan(4+1=5)?
+    // ICON_ORDER: 0:bed-double, 1:bed-single, 2:bath, 3:sofa, 4:tent, ...
+    // So 0+4 = 4 which is 'tent'
+    expect(onChange).toHaveBeenCalledWith('tent');
+  });
+
+  it('handles keyboard navigation with ArrowUp', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RoomIconPicker value="tent" onChange={onChange} />,
+      { withProviders: false },
+    );
+    const tent = screen.getByRole('radio', { name: 'rooms.icons.tent' });
+    tent.focus();
+    await user.keyboard('{ArrowUp}');
+    // tent is index 4, ArrowUp = 4-4 = 0 -> bed-double
+    expect(onChange).toHaveBeenCalledWith('bed-double');
+  });
+
+  it('handles keyboard navigation with Home', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RoomIconPicker value="armchair" onChange={onChange} />,
+      { withProviders: false },
+    );
+    const armchair = screen.getByRole('radio', { name: 'rooms.icons.armchair' });
+    armchair.focus();
+    await user.keyboard('{Home}');
+    expect(onChange).toHaveBeenCalledWith('bed-double');
+  });
+
+  it('handles keyboard navigation with End', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RoomIconPicker value="bed-double" onChange={onChange} />,
+      { withProviders: false },
+    );
+    const bedDouble = screen.getByRole('radio', { name: 'rooms.icons.bedDouble' });
+    bedDouble.focus();
+    await user.keyboard('{End}');
+    expect(onChange).toHaveBeenCalledWith('armchair');
+  });
+
+  it('wraps around from first to last with ArrowLeft', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RoomIconPicker value="bed-double" onChange={onChange} />,
+      { withProviders: false },
+    );
+    const bedDouble = screen.getByRole('radio', { name: 'rooms.icons.bedDouble' });
+    bedDouble.focus();
+    await user.keyboard('{ArrowLeft}');
+    // Index 0 - 1 = -1, wraps to last (armchair, index 10)
+    expect(onChange).toHaveBeenCalledWith('armchair');
+  });
+
+  it('wraps around from last to first with ArrowRight', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RoomIconPicker value="armchair" onChange={onChange} />,
+      { withProviders: false },
+    );
+    const armchair = screen.getByRole('radio', { name: 'rooms.icons.armchair' });
+    armchair.focus();
+    await user.keyboard('{ArrowRight}');
+    // Index 10 + 1 = 11, wraps to 0 (bed-double)
+    expect(onChange).toHaveBeenCalledWith('bed-double');
+  });
+
+  it('wraps around with ArrowUp from first row', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RoomIconPicker value="bed-single" onChange={onChange} />,
+      { withProviders: false },
+    );
+    const bedSingle = screen.getByRole('radio', { name: 'rooms.icons.bedSingle' });
+    bedSingle.focus();
+    await user.keyboard('{ArrowUp}');
+    // Index 1 - 4 = -3, wraps to 11 + (-3) = 8 -> 'door-open'
+    expect(onChange).toHaveBeenCalledWith('door-open');
+  });
+
+  it('ignores unhandled keyboard keys (default branch)', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RoomIconPicker value="bed-double" onChange={onChange} />,
+      { withProviders: false },
+    );
+    const bedDouble = screen.getByRole('radio', { name: 'rooms.icons.bedDouble' });
+    bedDouble.focus();
+    await user.keyboard('{Tab}');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('does not navigate keyboard when disabled', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <RoomIconPicker value="bed-double" onChange={onChange} disabled />,
+      { withProviders: false },
+    );
+    const bedDouble = screen.getByRole('radio', { name: 'rooms.icons.bedDouble' });
+    bedDouble.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });

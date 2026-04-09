@@ -65,4 +65,23 @@ describe('UnsavedChangesDialog', () => {
     expect(onStay).toHaveBeenCalledTimes(1);
     expect(onLeave).not.toHaveBeenCalled();
   });
+
+  it('does not call onStay or onLeave when dialog opens', () => {
+    const onLeave = vi.fn();
+    const onStay = vi.fn();
+
+    // Render closed first, then rerender as open
+    const { rerender } = render(
+      <UnsavedChangesDialog open={false} onStay={onStay} onLeave={onLeave} />,
+      { withProviders: false }
+    );
+
+    rerender(
+      <UnsavedChangesDialog open={true} onStay={onStay} onLeave={onLeave} />
+    );
+
+    // handleOpenChange(true) should be a no-op — neither callback is called
+    expect(onStay).not.toHaveBeenCalled();
+    expect(onLeave).not.toHaveBeenCalled();
+  });
 });

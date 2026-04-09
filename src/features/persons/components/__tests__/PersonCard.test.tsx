@@ -136,4 +136,111 @@ describe('PersonCard', () => {
     );
     expect(screen.getByText('A')).toBeInTheDocument();
   });
+
+  it('renders ? for empty name', () => {
+    const emptyNamePerson = { ...mockPerson, name: '' };
+    render(
+      <PersonCard
+        person={emptyNamePerson}
+        transportSummary={emptyTransport}
+        dateLocale={enUS}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.getByText('?')).toBeInTheDocument();
+  });
+
+  it('handles invalid transport datetime gracefully', () => {
+    const badTransport: TransportSummary = {
+      arrival: { datetime: 'not-a-date', location: 'Somewhere' },
+      departure: null,
+    };
+    render(
+      <PersonCard
+        person={mockPerson}
+        transportSummary={badTransport}
+        dateLocale={enUS}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.getByText('Somewhere')).toBeInTheDocument();
+  });
+
+  it('does not render as interactive button when no onClick', () => {
+    render(
+      <PersonCard
+        person={mockPerson}
+        transportSummary={emptyTransport}
+        dateLocale={enUS}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    // Should not have an interactive card button (only menu button)
+    const cardBtn = screen.queryByRole('button', { name: /Alice Dupont/ });
+    expect(cardBtn).not.toBeInTheDocument();
+  });
+
+  it('calls onClick on Enter key', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <PersonCard
+        person={mockPerson}
+        transportSummary={emptyTransport}
+        dateLocale={enUS}
+        onClick={onClick}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    const card = screen.getByRole('button', { name: /Alice Dupont/ });
+    card.focus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledWith(mockPerson);
+  });
+
+  it('opens delete confirmation dialog', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(
+      <PersonCard
+        person={mockPerson}
+        transportSummary={emptyTransport}
+        dateLocale={enUS}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByLabelText('common.openMenu'));
+    await user.click(screen.getByText('common.delete'));
+    // ConfirmDialog should open
+    expect(screen.getByText('confirm.deletePerson')).toBeInTheDocument();
+  });
+
+  it('renders only departure transport info', () => {
+    const departureOnly: TransportSummary = {
+      arrival: null,
+      departure: { datetime: '2026-07-22T16:00:00Z', location: 'Airport', transportMode: 'bus' },
+    };
+    render(
+      <PersonCard
+        person={mockPerson}
+        transportSummary={departureOnly}
+        dateLocale={enUS}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.getByText('Airport')).toBeInTheDocument();
+  });
 });
