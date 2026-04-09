@@ -262,7 +262,15 @@ function resetMocks() {
 describe('RoomListPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Spy on localStorage to prevent the "all assigned" notification guard
+    // from leaking between tests (the component writes to localStorage).
+    vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
     resetMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   // ===========================================================================
