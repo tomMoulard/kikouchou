@@ -99,7 +99,7 @@ const TEST_DATA = {
 async function createTestTrip(page: Page): Promise<string> {
   // Navigate to trips page to ensure the database is initialized
   await page.goto('/trips');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
 
   // Create trip directly in IndexedDB
   const tripId = await page.evaluate(
@@ -300,7 +300,7 @@ async function createAssignmentViaDB(
  */
 async function navigateToRooms(page: Page, tripId: string): Promise<void> {
   await page.goto(`/trips/${tripId}/rooms`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
   // Wait for loading to complete
   await page.waitForFunction(() => {
     return !document.body.textContent?.toLowerCase().includes('loading');
@@ -314,7 +314,7 @@ async function navigateToRooms(page: Page, tripId: string): Promise<void> {
  */
 async function navigateToPersons(page: Page, tripId: string): Promise<void> {
   await page.goto(`/trips/${tripId}/persons`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
   await page.waitForFunction(() => {
     return !document.body.textContent?.toLowerCase().includes('loading');
   }, { timeout: 10000 }).catch(() => {});
@@ -325,7 +325,7 @@ async function navigateToPersons(page: Page, tripId: string): Promise<void> {
  */
 async function navigateToCalendar(page: Page, tripId: string): Promise<void> {
   await page.goto(`/trips/${tripId}/calendar`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
   await page.waitForFunction(() => {
     return !document.body.textContent?.toLowerCase().includes('loading');
   }, { timeout: 10000 }).catch(() => {});
@@ -499,7 +499,7 @@ test.describe('Room Assignment Flow', () => {
 
     // Reload to ensure contexts pick up the data
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Navigate to calendar to verify assignment shows
     await navigateToCalendar(page, tripId);
@@ -547,7 +547,7 @@ test.describe('Room Assignment Flow', () => {
 
     // Reload to ensure contexts pick up the data
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Navigate to rooms
     await navigateToRooms(page, tripId);
@@ -638,7 +638,7 @@ test.describe('Room Assignment Flow', () => {
 
     // Reload to ensure contexts pick up the data
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Navigate to rooms
     await navigateToRooms(page, tripId);
@@ -704,7 +704,7 @@ test.describe('Room Assignment Flow', () => {
 
     // Reload to ensure contexts pick up the data
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Navigate to rooms
     await navigateToRooms(page, tripId);
@@ -745,7 +745,7 @@ test.describe('Room Assignment Flow', () => {
     // Since assignments created via IndexedDB might not trigger context updates properly,
     // reload the page to verify the deletion persisted to the database
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Re-navigate to the room assignments
     await openRoomAssignments(page, TEST_DATA.room.name);

@@ -138,7 +138,7 @@ test.describe('Trip Import Feature', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     // Wait for the app to load
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
   });
 
   test('location autocomplete shows matching trips when typing', async ({ page }) => {
