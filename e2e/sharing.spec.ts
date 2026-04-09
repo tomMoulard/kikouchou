@@ -58,7 +58,7 @@ const TEST_DATA = {
 async function createTestTrip(page: Page): Promise<{ tripId: string; shareId: string }> {
   // Navigate to trips page to ensure the database is initialized
   await page.goto('/trips');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
 
   // Create trip directly in IndexedDB
   const { tripId, shareId } = await page.evaluate(
@@ -121,7 +121,7 @@ async function createTestTrip(page: Page): Promise<{ tripId: string; shareId: st
 async function openShareDialog(page: Page, tripId: string): Promise<void> {
   // Navigate to the trip edit page where share functionality is typically available
   await page.goto(`/trips/${tripId}/edit`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
 
   // Look for a share button - it might be in the header or as a separate action
   // The ShareDialog is a standalone component, so we need to find where it's triggered
@@ -135,7 +135,7 @@ async function openShareDialog(page: Page, tripId: string): Promise<void> {
   } else {
     // If no share button on edit page, try the calendar page header
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     
     // Look for share button in the page header or actions
     const calendarShareButton = page.getByRole('button', { name: /share|partager/i });
@@ -197,7 +197,7 @@ test.describe('Sharing Flow', () => {
       // If ShareDialog is not integrated yet, verify the URL format directly
       // by checking that we can navigate to the share import page
       await page.goto(`/share/${shareId}`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('load');
 
       // The page should show the trip info (not 404)
       await expect(page.getByText(TEST_DATA.trip.name)).toBeVisible({ timeout: 10000 });
@@ -289,7 +289,7 @@ test.describe('Sharing Flow', () => {
 
     // Navigate to the share import page
     await page.goto(`/share/${shareId}`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify the share import page loads correctly
     // The ShareImportPage shows trip info in a card
@@ -326,7 +326,7 @@ test.describe('Sharing Flow', () => {
 
     // Navigate to the share import page with invalid ID
     await page.goto(`/share/${invalidShareId}`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify error message is displayed
     // The ShareImportPage shows an ErrorDisplay component for not found trips
@@ -354,7 +354,7 @@ test.describe('Sharing Flow', () => {
     // Navigate to share route without a shareId (edge case)
     // This should show the not found state
     await page.goto('/share/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Should show error state or redirect
     // The router might redirect to 404 or show an error
@@ -371,14 +371,14 @@ test.describe('Sharing Flow', () => {
 
     // Navigate to share import page
     await page.goto(`/share/${shareId}`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify initial load
     await expect(page.getByText(TEST_DATA.trip.name)).toBeVisible({ timeout: 10000 });
 
     // Reload the page
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify trip info still displays correctly after reload
     await expect(page.getByText(TEST_DATA.trip.name)).toBeVisible({ timeout: 10000 });

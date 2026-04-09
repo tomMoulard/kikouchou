@@ -240,7 +240,7 @@ async function waitForLoading(page: Page): Promise<void> {
 async function createTestTrip(page: Page): Promise<string> {
   // First, navigate to the app to ensure the database is initialized
   await page.goto('/trips');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
 
   // Create trip directly in IndexedDB
   const tripId = await page.evaluate(
@@ -561,7 +561,7 @@ test.describe('Performance Tests', () => {
     // Measure calendar render time
     const renderTime = await measureDuration(async () => {
       await page.goto(calendarUrl);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('load');
       await waitForLoading(page);
 
       // Wait for calendar grid to be visible
@@ -617,7 +617,7 @@ test.describe('Performance Tests', () => {
 
     // Reload to ensure IndexedDB changes are visible to Dexie reactive hooks
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Navigate to rooms and measure render time
     const roomsUrl = `/trips/${tripId}/rooms`;
@@ -625,7 +625,7 @@ test.describe('Performance Tests', () => {
     // Measure room list render time
     const renderTime = await measureDuration(async () => {
       await page.goto(roomsUrl);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('load');
       await waitForLoading(page);
 
       // Wait for room list to be visible
@@ -680,7 +680,7 @@ test.describe('Performance Tests', () => {
     // Measure person list render time
     const renderTime = await measureDuration(async () => {
       await page.goto(personsUrl);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('load');
       await waitForLoading(page);
 
       // Wait for person list to be visible
@@ -719,7 +719,7 @@ test.describe('Performance Tests', () => {
 
     // Get initial memory
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     const initialMemory = await getMemoryUsage(page);
@@ -740,7 +740,7 @@ test.describe('Performance Tests', () => {
       for (const url of pages) {
         const navTime = await measureDuration(async () => {
           await page.goto(url);
-          await page.waitForLoadState('networkidle');
+          await page.waitForLoadState('load');
           await waitForLoading(page);
         });
 
@@ -781,7 +781,7 @@ test.describe('Performance Tests', () => {
 
     // Navigate to calendar
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
     await page.waitForSelector('[role="grid"]', { state: 'visible', timeout: 10000 });
 
@@ -920,7 +920,7 @@ test.describe('Mobile Performance', () => {
 
     // Navigate to calendar
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     // Find and click bottom navigation items
@@ -940,7 +940,7 @@ test.describe('Mobile Performance', () => {
 
       const navTime = await measureDuration(async () => {
         await link.click();
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('load');
         await waitForLoading(page);
       });
 
@@ -960,7 +960,7 @@ test.describe('Mobile Performance', () => {
 
     // Navigate to rooms
     await page.goto(`/trips/${tripId}/rooms`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     // Wait for room cards to appear

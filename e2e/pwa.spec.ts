@@ -46,16 +46,23 @@ async function waitForServiceWorker(page: Page): Promise<{
   state: string | null;
   scriptURL: string | null;
 }> {
-  return await page.evaluate(async () => {
-    // Wait for service worker to be ready
-    const registration = await navigator.serviceWorker.ready;
+  return await page.evaluate(async (timeout) => {
+    // Wait for service worker to be ready (with timeout to prevent hanging)
+    const registration = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), timeout)),
+    ]);
+
+    if (!registration) {
+      return { active: false, state: 'timeout', scriptURL: null };
+    }
 
     return {
       active: !!registration.active,
       state: registration.active?.state ?? null,
       scriptURL: registration.active?.scriptURL ?? null,
     };
-  });
+  }, SW_READY_TIMEOUT);
 }
 
 /**
@@ -163,7 +170,7 @@ async function isUrlCached(page: Page, urlPattern: string): Promise<boolean> {
  */
 async function createTestTrip(page: Page): Promise<string> {
   await page.goto('/trips/new');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
 
   // Fill trip form
   await page.locator('#trip-name').fill('PWA Test Trip');
@@ -226,7 +233,7 @@ test.describe('Service Worker Registration', () => {
 
   test('service worker is registered after page load', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Wait for service worker to be ready
     const swRegistration = await page.evaluate(async () => {
@@ -263,13 +270,13 @@ test.describe('Service Worker Registration', () => {
 
   test('service worker has correct scope', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Wait for SW registration
     await page.waitForFunction(
       async () => {
         const registrations = await navigator.serviceWorker.getRegistrations();
-        return registrations.length > 0 && registrations[0].active?.state === 'activated';
+        return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
       },
       { timeout: SW_READY_TIMEOUT },
     );
@@ -292,7 +299,7 @@ test.describe('Service Worker Registration', () => {
 
   test('service worker script URL is correct', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     const swRegistration = await waitForServiceWorker(page);
 
@@ -312,14 +319,14 @@ test.describe('Offline Capability', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate and wait for SW to be fully active
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Ensure service worker is activated
     await page.waitForFunction(
       async () => {
         if (!('serviceWorker' in navigator)) return false;
-        const registration = await navigator.serviceWorker.ready;
-        return registration.active?.state === 'activated';
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
       },
       { timeout: SW_READY_TIMEOUT },
     );
@@ -331,7 +338,7 @@ test.describe('Offline Capability', () => {
   test('app shell loads when offline', async ({ page, context }) => {
     // Verify we're online and the app works
     await page.goto('/trips');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await expect(page.locator('body')).toBeVisible();
 
     // Go offline
@@ -365,9 +372,9 @@ test.describe('Offline Capability', () => {
   test('navigation works offline', async ({ page, context }) => {
     // Visit multiple pages to cache them
     await page.goto('/trips');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Wait for caching
     await page.waitForTimeout(1000);
@@ -390,14 +397,14 @@ test.describe('Offline Capability', () => {
     // Clear existing data first
     await clearIndexedDB(page);
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Create a trip while online
     const tripId = await createTestTrip(page);
 
     // Navigate to trips list to ensure it's cached
     await page.goto('/trips');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify trip is visible (use first() to handle multiple matches)
     await expect(page.getByText('PWA Test Trip').first()).toBeVisible();
@@ -427,7 +434,7 @@ test.describe('Offline Capability', () => {
 
   test('shows appropriate UI when offline with uncached routes', async ({ page, context }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Go offline before visiting a new route
     await context.setOffline(true);
@@ -568,14 +575,14 @@ test.describe('Manifest Validation', () => {
 test.describe('App Updates', () => {
   test('VitePWA is configured for auto-update', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Wait for SW to be active
     await page.waitForFunction(
       async () => {
         if (!('serviceWorker' in navigator)) return false;
-        const registration = await navigator.serviceWorker.ready;
-        return registration.active?.state === 'activated';
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
       },
       { timeout: SW_READY_TIMEOUT },
     );
@@ -601,14 +608,14 @@ test.describe('App Updates', () => {
 
   test('service worker can check for updates', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Wait for SW to be active
     await page.waitForFunction(
       async () => {
         if (!('serviceWorker' in navigator)) return false;
-        const registration = await navigator.serviceWorker.ready;
-        return registration.active?.state === 'activated';
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
       },
       { timeout: SW_READY_TIMEOUT },
     );
@@ -616,7 +623,9 @@ test.describe('App Updates', () => {
     // Trigger an update check
     const updateResult = await page.evaluate(async () => {
       try {
-        const registration = await navigator.serviceWorker.ready;
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        const registration = registrations[0];
+        if (!registration) return { success: false, error: 'No registration' };
         await registration.update();
         return {
           success: true,
@@ -636,7 +645,7 @@ test.describe('App Updates', () => {
 
   test('controllerchange event fires on SW update', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Set up a listener for controllerchange
     // This is triggered when a new SW takes control
@@ -677,14 +686,14 @@ test.describe('App Updates', () => {
 test.describe('Precaching', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Wait for SW and precaching to complete
     await page.waitForFunction(
       async () => {
         if (!('serviceWorker' in navigator)) return false;
-        const registration = await navigator.serviceWorker.ready;
-        return registration.active?.state === 'activated';
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
       },
       { timeout: SW_READY_TIMEOUT },
     );
@@ -811,7 +820,7 @@ test.describe('Precaching', () => {
 test.describe('PWA Installation Readiness', () => {
   test('app meets basic PWA installability criteria', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Check all installability requirements
     const installabilityChecks = await page.evaluate(async () => {

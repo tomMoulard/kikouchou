@@ -7,6 +7,12 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
 
+  /* Global test timeout — prevents any single test from hanging CI */
+  timeout: 60_000,
+
+  /* Expect timeout for assertions */
+  expect: { timeout: 10_000 },
+
   /* Run tests in files in parallel */
   fullyParallel: true,
 
@@ -29,6 +35,12 @@ export default defineConfig({
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
     baseURL: 'http://localhost:4173',
+
+    /* Timeout for user actions (click, fill, etc.) */
+    actionTimeout: 10_000,
+
+    /* Timeout for page navigations */
+    navigationTimeout: 15_000,
 
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',

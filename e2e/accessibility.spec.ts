@@ -98,7 +98,7 @@ async function clearIndexedDB(page: Page): Promise<void> {
 async function createTestTrip(page: Page): Promise<string> {
   // First, navigate to the app to ensure the database is initialized
   await page.goto('/trips');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
 
   // Create trip directly in IndexedDB
   const tripId = await page.evaluate(
@@ -301,12 +301,12 @@ async function setupTripWithData(page: Page): Promise<string> {
 
   // Create room
   await page.goto(`/trips/${tripId}/rooms`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
   await createRoom(page);
 
   // Create person
   await page.goto(`/trips/${tripId}/persons`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
   await createPerson(page);
 
   return tripId;
@@ -330,7 +330,7 @@ test.describe('Page Accessibility', () => {
     await createTestTrip(page);
 
     await page.goto('/trips');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     const violations = await analyzeA11y(page);
@@ -351,7 +351,7 @@ test.describe('Page Accessibility', () => {
     const tripId = await setupTripWithData(page);
 
     await page.goto(`/trips/${tripId}/rooms`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     const violations = await analyzeA11y(page);
@@ -372,7 +372,7 @@ test.describe('Page Accessibility', () => {
     const tripId = await setupTripWithData(page);
 
     await page.goto(`/trips/${tripId}/persons`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     const violations = await analyzeA11y(page);
@@ -393,7 +393,7 @@ test.describe('Page Accessibility', () => {
     const tripId = await setupTripWithData(page);
 
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     const violations = await analyzeA11y(page);
@@ -411,7 +411,7 @@ test.describe('Page Accessibility', () => {
     const tripId = await setupTripWithData(page);
 
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     const firstDay = page.locator('[role="gridcell"]').first();
@@ -443,7 +443,7 @@ test.describe('Page Accessibility', () => {
     const tripId = await setupTripWithData(page);
 
     await page.goto(`/trips/${tripId}/transports`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     const violations = await analyzeA11y(page);
@@ -461,7 +461,7 @@ test.describe('Page Accessibility', () => {
   test('settings page has no a11y violations', async ({ page }) => {
     await setColorScheme(page, 'light');
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     const violations = await analyzeA11y(page);
@@ -487,7 +487,7 @@ test.describe('Dialog Focus Management', () => {
     const tripId = await setupTripWithData(page);
 
     await page.goto(`/trips/${tripId}/persons`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     // Open the person dialog
@@ -531,7 +531,7 @@ test.describe('Dialog Focus Management', () => {
   // --------------------------------------------------------------------------
   test('confirm dialog has proper focus management', async ({ page }) => {
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Click the "Clear All Data" button to open confirm dialog
     const clearDataButton = page.getByRole('button', { name: /clear.*data/i });
@@ -567,7 +567,7 @@ test.describe('Form Label Associations', () => {
   // --------------------------------------------------------------------------
   test('trip form has properly associated labels', async ({ page }) => {
     await page.goto('/trips/new');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Run a11y analysis focused on form labels
     const violations = await analyzeA11y(page);
@@ -616,7 +616,7 @@ test.describe('Keyboard Navigation', () => {
     await createTestTrip(page);
 
     await page.goto('/trips');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     // Wait for trip card to be visible
@@ -665,7 +665,7 @@ test.describe('Keyboard Navigation', () => {
     const tripId = await setupTripWithData(page);
 
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     // Look for the mobile navigation element
@@ -716,7 +716,7 @@ test.describe('Dark Mode Accessibility', () => {
     await createTestTrip(page);
 
     await page.goto('/trips');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     const violations = await analyzeA11y(page);
@@ -731,7 +731,7 @@ test.describe('Dark Mode Accessibility', () => {
   test('settings page in dark mode has no a11y violations', async ({ page }) => {
     await setColorScheme(page, 'dark');
     await page.goto('/settings');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     const violations = await analyzeA11y(page);
@@ -749,7 +749,7 @@ test.describe('Dark Mode Accessibility', () => {
     const tripId = await setupTripWithData(page);
 
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await waitForLoading(page);
 
     const violations = await analyzeA11y(page);
@@ -773,7 +773,7 @@ test.describe('Empty State Accessibility', () => {
     await page.reload();
 
     await page.goto('/trips');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Wait for empty state to appear
     await expect(

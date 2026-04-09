@@ -264,7 +264,7 @@ test.describe('Trip Lifecycle', () => {
     await page.goto('/trips');
 
     // Wait for the trip list to load
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify the trip is now in the list
     // The trip cards are buttons with aria-label containing the trip name and location
@@ -452,7 +452,7 @@ test.describe('Trip Lifecycle', () => {
     await page.goto('/trips');
 
     // Wait for trips to load
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify both trips are visible
     await expect(getTripCard(page, TEST_TRIP.name)).toBeVisible();
@@ -502,7 +502,7 @@ test.describe('Trip Lifecycle', () => {
     await page.reload();
 
     // Wait for the page to load (trips should be fetched from IndexedDB)
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify the trip data persisted after reload
     // The trip card includes the location in its aria-label, so checking the card is sufficient

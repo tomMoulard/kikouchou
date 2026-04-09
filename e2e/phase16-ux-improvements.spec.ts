@@ -24,7 +24,7 @@ import { test, expect, type Page } from '@playwright/test';
 async function clearAppData(page: Page): Promise<void> {
   // Navigate to settings page
   await page.goto('/settings');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
 
   // Look for the clear data button
   const clearDataButton = page.getByRole('button', { name: /clear.*data/i });
@@ -54,7 +54,7 @@ async function createTestTrip(
   } = {},
 ): Promise<string> {
   await page.goto('/trips');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
 
   const tripData = {
     name: options.name ?? 'Phase 16 Test Trip',
@@ -376,7 +376,7 @@ test.describe('Trip Creation with New UI', () => {
   test('trip form includes description field', async ({ page }) => {
     // Navigate directly to trip creation page
     await page.goto('/trips/new');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify we're on the trip form page
     await expect(page).toHaveURL('/trips/new');
@@ -395,7 +395,7 @@ test.describe('Trip Creation with New UI', () => {
   test('trip form has location input', async ({ page }) => {
     // Navigate directly to trip creation page
     await page.goto('/trips/new');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Find location input (could be LocationPicker or regular input)
     const locationInput = page.getByLabel(/location|lieu/i);
@@ -405,7 +405,7 @@ test.describe('Trip Creation with New UI', () => {
   test('trip form has date range picker', async ({ page }) => {
     // Navigate directly to trip creation page
     await page.goto('/trips/new');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Find date inputs or date range picker
     // The start date button has id="trip-start-date"
@@ -431,7 +431,7 @@ test.describe('Trip Creation with New UI', () => {
 
     // Navigate to trips list
     await page.goto('/trips');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Find trip card
     const tripCard = page.getByRole('button', { name: new RegExp(TEST_DATA.trip.name) });
@@ -475,7 +475,7 @@ test.describe('Calendar Multi-Day Events', () => {
 
     // Navigate to calendar
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Wait for calendar to render
     await page.waitForTimeout(500);
@@ -515,7 +515,7 @@ test.describe('Calendar Multi-Day Events', () => {
 
     // Navigate to calendar
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Wait for calendar to render
     await page.waitForTimeout(500);
@@ -544,7 +544,7 @@ test.describe('Calendar Multi-Day Events', () => {
 
     // Navigate to calendar
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await page.waitForTimeout(500);
 
     // Find and click the event
@@ -597,7 +597,7 @@ test.describe('Transport Single List', () => {
 
     // Navigate to transports page
     await page.goto(`/trips/${tripId}/transports`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify NO tabs are present
     const tabs = page.getByRole('tablist');
@@ -623,7 +623,7 @@ test.describe('Transport Single List', () => {
 
     // Navigate to transports page
     await page.goto(`/trips/${tripId}/transports`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Look for date headers (grouped by date)
     // The page should show dates like "March 2" or "2 mars" as section headers
@@ -645,7 +645,7 @@ test.describe('Transport Single List', () => {
 
     // Navigate to transports page
     await page.goto(`/trips/${tripId}/transports`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Look for arrival and departure indicators
     // The TransportListPage uses specific styling for arrivals/departures
@@ -667,7 +667,7 @@ test.describe('Transport Single List', () => {
 
     // Navigate to transports page
     await page.goto(`/trips/${tripId}/transports`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Look for past transports section or indicator
     // This might be a collapsible section or separate area
@@ -727,7 +727,7 @@ test.describe('Bug Fix: Assignment Dates (BUG-1)', () => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const _personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
     await page.goto(`/trips/${tripId}/rooms`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Open room card
     const roomCard = page.getByText(TEST_DATA.room.name);
@@ -769,7 +769,7 @@ test.describe('Bug Fix: Assignment Dates (BUG-1)', () => {
 
     // Navigate to calendar
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await page.waitForTimeout(500);
 
     // The assignment should appear on days 2, 3, 4 but NOT on day 5
@@ -818,7 +818,7 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
 
     // Navigate to transports page
     await page.goto(`/trips/${tripId}/transports`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // The time should be displayed in local timezone
     // In UTC+1, 13:00 UTC = 14:00 local
@@ -845,7 +845,7 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
 
     // Navigate to calendar
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await page.waitForTimeout(500);
 
     // Look for transport indicator with time
@@ -877,7 +877,7 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
 
     // Navigate to transports
     await page.goto(`/trips/${tripId}/transports`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Click add transport button - look for "New transport" button or FAB
     const addButton = page.getByRole('button', { name: /new transport|nouveau transport/i });
@@ -946,7 +946,7 @@ test.describe('Room Assignment Drag-Drop', () => {
 
     // Navigate to rooms page
     await page.goto(`/trips/${tripId}/rooms`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Look for unassigned guests section
     const unassignedSection = page.getByText(/unassigned|sans chambre|no room/i);
@@ -968,7 +968,7 @@ test.describe('Room Assignment Drag-Drop', () => {
 
     // Navigate to rooms page
     await page.goto(`/trips/${tripId}/rooms`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify rooms are displayed
     await expect(page.getByText('Single Room')).toBeVisible({ timeout: 5000 });

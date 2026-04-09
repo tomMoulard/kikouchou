@@ -64,7 +64,7 @@ async function createTestTrip(
   options: { name: string; location?: string } = { name: 'Test Trip' }
 ): Promise<string> {
   await page.goto('/trips/new');
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
 
   // Fill trip form
   await page.locator('#trip-name').fill(options.name);
@@ -122,7 +122,7 @@ async function _createTestTransport(
   }
 ): Promise<void> {
   await page.goto(`/trips/${tripId}/transports/new`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
 
   // Select transport type
   if (options.type === 'departure') {
@@ -166,7 +166,7 @@ async function _createTestTransport(
  */
 async function createTestPerson(page: Page, tripId: string, name: string): Promise<void> {
   await page.goto(`/trips/${tripId}/persons/new`);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('load');
 
   // Fill person form
   await page.locator('#person-name').fill(name);
@@ -230,8 +230,17 @@ async function _hasOsmTilesCached(page: Page): Promise<boolean> {
 test.describe('Trip Location Map', () => {
   test.beforeEach(async ({ page }) => {
     await clearIndexedDB(page);
+
+    // Mock external tile & geocoding requests to prevent slow/hanging network calls
+    await page.route('**/tile.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
+    );
+    await page.route('**/nominatim.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
   });
 
   test('trip card shows map preview when location has coordinates', async ({ page }) => {
@@ -243,7 +252,7 @@ test.describe('Trip Location Map', () => {
 
     // Navigate to trips list
     await page.goto('/trips');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Find the trip card
     const tripCard = page.getByRole('button', { name: new RegExp(TEST_TRIP_WITH_LOCATION.name) });
@@ -271,7 +280,7 @@ test.describe('Trip Location Map', () => {
 
     // Navigate to trip calendar (main trip view)
     await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // The trip detail page should be accessible
     await expect(page.locator('body')).toBeVisible();
@@ -295,8 +304,17 @@ test.describe('Transport Map View', () => {
 
   test.beforeEach(async ({ page }) => {
     await clearIndexedDB(page);
+
+    // Mock external tile & geocoding requests
+    await page.route('**/tile.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
+    );
+    await page.route('**/nominatim.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Create a trip
     tripId = await createTestTrip(page, { name: 'Transport Map Trip' });
@@ -307,7 +325,7 @@ test.describe('Transport Map View', () => {
 
   test('transport list page has map view button', async ({ page }) => {
     await page.goto(`/trips/${tripId}/transports`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Look for the map view button/toggle
     const mapViewButton = page.getByRole('button', { name: /map|carte/i }).or(
@@ -321,7 +339,7 @@ test.describe('Transport Map View', () => {
     page,
   }) => {
     await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Should show empty state or message about no locations
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -339,7 +357,7 @@ test.describe('Transport Map View', () => {
 
   test('transport map page loads without errors', async ({ page }) => {
     await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Page should load without console errors
     const consoleErrors: string[] = [];
@@ -365,7 +383,7 @@ test.describe('Transport Map View', () => {
 
   test('navigating from list view to map view works', async ({ page }) => {
     await page.goto(`/trips/${tripId}/transports`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Click on map view button
     const mapViewButton = page.getByRole('button', { name: /map|carte/i }).or(
@@ -390,17 +408,22 @@ test.describe('Transport Map View', () => {
 
 test.describe('Directions Button', () => {
   test('directions button opens external maps app', async ({ page, context }) => {
+    // Mock external tile requests
+    await page.route('**/tile.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
+    );
+
     // Create a trip with transports
     await clearIndexedDB(page);
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     const tripId = await createTestTrip(page, { name: 'Directions Test Trip' });
     await createTestPerson(page, tripId, 'Traveler');
 
     // Navigate to transport map page (where directions button exists)
     await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Look for directions button (might be in popup or always visible)
     const directionsButton = page.getByRole('button', {
@@ -442,15 +465,15 @@ test.describe('Offline Map Tiles', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate and wait for SW to be fully active
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Ensure service worker is activated
     await page.waitForFunction(
       async () => {
         if (!('serviceWorker' in navigator)) return true; // Skip if no SW support
         try {
-          const registration = await navigator.serviceWorker.ready;
-          return registration.active?.state === 'activated';
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
         } catch {
           return true; // Continue if SW check fails
         }
@@ -470,7 +493,7 @@ test.describe('Offline Map Tiles', () => {
 
     // Navigate to transport map (which loads OSM tiles)
     await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Wait for tiles to load and cache
     await page.waitForTimeout(3000);
@@ -494,7 +517,7 @@ test.describe('Offline Map Tiles', () => {
 
     // View the map to trigger tile caching
     await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await page.waitForTimeout(3000);
 
     // Go offline
@@ -546,11 +569,14 @@ test.describe('Offline Map Tiles', () => {
 test.describe('Map Accessibility', () => {
   test('map has proper ARIA attributes', async ({ page }) => {
     await clearIndexedDB(page);
+    await page.route('**/tile.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
+    );
 
     const tripId = await createTestTrip(page, { name: 'Accessibility Test Trip' });
 
     await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Check for proper ARIA roles and labels
     const hasAriaLabel = await page.evaluate(() => {
@@ -564,11 +590,14 @@ test.describe('Map Accessibility', () => {
 
   test('map markers are keyboard navigable', async ({ page }) => {
     await clearIndexedDB(page);
+    await page.route('**/tile.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
+    );
 
     const tripId = await createTestTrip(page, { name: 'Keyboard Nav Trip' });
 
     await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // The map should be focusable
     const mapContainer = page.locator('[role="application"]').first();
@@ -597,13 +626,16 @@ test.describe('Map Accessibility', () => {
 test.describe('Map Error Handling', () => {
   test('handles invalid coordinates gracefully', async ({ page }) => {
     await clearIndexedDB(page);
+    await page.route('**/tile.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
+    );
 
     // Create a trip
     const tripId = await createTestTrip(page, { name: 'Error Test Trip' });
 
     // Navigate to map page
     await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Page should not crash
     await expect(page.locator('body')).toBeVisible();
@@ -628,6 +660,9 @@ test.describe('Map Error Handling', () => {
 
   test('shows appropriate message when map fails to load', async ({ page, context }) => {
     await clearIndexedDB(page);
+    await page.route('**/tile.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
+    );
 
     // Create a trip first while online
     const tripId = await createTestTrip(page, { name: 'Fail Test Trip' });
