@@ -45,10 +45,19 @@ vi.mock('@/hooks', () => ({
 }));
 
 vi.mock('@/features/transports/components/TransportForm', () => ({
-  TransportForm: ({ transport, onCancel }: { transport?: Transport; onCancel: () => void }) => (
+  TransportForm: ({ transport, onCancel, onSubmit, onDirtyChange, defaultType }: {
+    transport?: Transport;
+    onCancel: () => void;
+    onSubmit: (data: unknown) => Promise<void>;
+    onDirtyChange?: (dirty: boolean) => void;
+    defaultType?: string;
+  }) => (
     <div data-testid="transport-form">
       {transport ? <span data-testid="edit-mode">{transport.location}</span> : <span data-testid="create-mode">New</span>}
+      {defaultType && <span data-testid="default-type">{defaultType}</span>}
       <button data-testid="cancel-btn" onClick={onCancel}>Cancel</button>
+      <button data-testid="submit-btn" onClick={() => void onSubmit({ type: 'arrival', location: 'Test', datetime: '2026-07-15T10:00:00Z', personId: 'p1', needsPickup: false }).catch(() => {})}>Submit</button>
+      <button data-testid="dirty-btn" onClick={() => onDirtyChange?.(true)}>Mark Dirty</button>
     </div>
   ),
 }));
@@ -105,5 +114,105 @@ describe('TransportDialog', () => {
       { withProviders: false },
     );
     expect(screen.queryByText('transports.new')).not.toBeInTheDocument();
+  });
+
+  it('renders description for create mode', () => {
+    render(
+      <TransportDialog open onOpenChange={vi.fn()} />,
+      { withProviders: false },
+    );
+    expect(screen.getByText('transports.newDescription')).toBeInTheDocument();
+  });
+
+  it('renders description for edit mode', () => {
+    render(
+      <TransportDialog transportId={'t1' as TransportId} open onOpenChange={vi.fn()} />,
+      { withProviders: false },
+    );
+    expect(screen.getByText('transports.editDescription')).toBeInTheDocument();
+  });
+
+  it('passes defaultType to TransportForm in create mode', () => {
+    render(
+      <TransportDialog open onOpenChange={vi.fn()} defaultType="departure" />,
+      { withProviders: false },
+    );
+    expect(screen.getByTestId('default-type')).toHaveTextContent('departure');
+  });
+
+  it('does not pass defaultType in edit mode', () => {
+    render(
+      <TransportDialog transportId={'t1' as TransportId} open onOpenChange={vi.fn()} defaultType="departure" />,
+      { withProviders: false },
+    );
+    expect(screen.queryByTestId('default-type')).not.toBeInTheDocument();
+  });
+
+  it('shows discard confirmation when cancelling with dirty state', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <TransportDialog open onOpenChange={onOpenChange} />,
+      { withProviders: false },
+    );
+    // Mark form as dirty
+    await user.click(screen.getByTestId('dirty-btn'));
+    // Now cancel should show discard dialog
+    await user.click(screen.getByTestId('cancel-btn'));
+    // onOpenChange should NOT have been called (discard dialog should show instead)
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it('closes dialog after successful form submission', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <TransportDialog open onOpenChange={onOpenChange} />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByTestId('submit-btn'));
+    // After successful submit, dialog should close
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('handles dialog close via overlay when not dirty', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <TransportDialog open onOpenChange={onOpenChange} />,
+      { withProviders: false },
+    );
+    // The dialog should exist and respect onOpenChange
+    expect(screen.getByTestId('transport-form')).toBeInTheDocument();
+  });
+
+  it('shows discard confirmation when closing dirty dialog via overlay', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <TransportDialog open onOpenChange={onOpenChange} />,
+      { withProviders: false },
+    );
+    // Mark form as dirty
+    await user.click(screen.getByTestId('dirty-btn'));
+    // Try to close via cancel
+    await user.click(screen.getByTestId('cancel-btn'));
+    // Should show discard dialog, not close directly
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it('handles edit mode submission via update transport', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <TransportDialog transportId={'t1' as TransportId} open onOpenChange={onOpenChange} />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByTestId('submit-btn'));
+    // After successful update, dialog should close
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

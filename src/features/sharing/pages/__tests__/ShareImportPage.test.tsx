@@ -29,6 +29,10 @@ vi.mock('@/lib/db', () => ({
   setCurrentTrip: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 // i18next is auto-mocked in test/setup.ts: t('key') → 'key', t('key', {x}) → 'key'
 
 // localStorage mock — controlled per test via localStorageMock
@@ -274,5 +278,140 @@ describe('ShareImportPage — 3.4: location row hidden when no location set', ()
     await waitFor(() => {
       expect(screen.getByText('Paris, France')).toBeInTheDocument();
     });
+  });
+});
+
+// ============================================================================
+// 3.5 — Error handling: Get Started and redirect failures
+// ============================================================================
+
+describe('ShareImportPage — 3.5: error handling', () => {
+  it('shows error toast when Get Started fails to set current trip', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const { toast } = await import('sonner');
+    const user = userEvent.setup();
+
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+    mockSetCurrentTrip.mockRejectedValueOnce(new Error('DB error'));
+
+    renderShareImportPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'sharing.getStarted' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'sharing.getStarted' }));
+
+    await waitFor(() => {
+      expect(vi.mocked(toast.error)).toHaveBeenCalledWith('sharing.viewError');
+    });
+  });
+
+  it('shows loading state on Get Started button while navigating', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+    // Make setCurrentTrip take a while
+    mockSetCurrentTrip.mockImplementation(() => new Promise(() => {}));
+
+    renderShareImportPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'sharing.getStarted' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'sharing.getStarted' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('common.loading')).toBeInTheDocument();
+    });
+  });
+
+  it('falls back to welcome screen when returning guest redirect fails', async () => {
+    const trip = makeTrip({ id: 'trip-abc' as TripId });
+    mockGetTripByShareId.mockResolvedValue(trip);
+    mockSetCurrentTrip.mockRejectedValueOnce(new Error('Failed to redirect'));
+
+    // Set up localStorage for returning guest
+    window.localStorage.setItem(
+      'kikoushou_guest_abc123',
+      JSON.stringify({ personId: 'person-1', tripId: 'trip-abc' }),
+    );
+
+    renderShareImportPage('abc123');
+
+    // Should fall back to the welcome screen
+    await waitFor(() => {
+      expect(screen.getByText('sharing.welcome')).toBeInTheDocument();
+    });
+  });
+
+  it('handles getTripByShareId rejection gracefully', async () => {
+    mockGetTripByShareId.mockRejectedValue(new Error('Network error'));
+
+    renderShareImportPage('error-id');
+
+    await waitFor(() => {
+      expect(screen.getByText('sharing.notFoundWizard')).toBeInTheDocument();
+    });
+  });
+
+  it('handles invalid localStorage data gracefully', async () => {
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+
+    // Set invalid JSON in localStorage
+    window.localStorage.setItem('kikoushou_guest_abc123', 'not valid json {{{');
+
+    renderShareImportPage('abc123');
+
+    await waitFor(() => {
+      expect(screen.getByText('sharing.welcome')).toBeInTheDocument();
+    });
+  });
+
+  it('handles localStorage with missing fields', async () => {
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+
+    // Set localStorage with missing fields (no tripId)
+    window.localStorage.setItem('kikoushou_guest_abc123', JSON.stringify({ personId: 'p1' }));
+
+    renderShareImportPage('abc123');
+
+    await waitFor(() => {
+      expect(screen.getByText('sharing.welcome')).toBeInTheDocument();
+    });
+
+    // Should not try to redirect
+    expect(mockSetCurrentTrip).not.toHaveBeenCalled();
+  });
+
+  it('renders same-day date range as single date', async () => {
+    mockGetTripByShareId.mockResolvedValue(
+      makeTrip({
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-15'),
+      }),
+    );
+
+    renderShareImportPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('sharing.welcome')).toBeInTheDocument();
+    });
+
+    // Single date (no range separator)
+    expect(screen.getByText('Jul 15, 2024')).toBeInTheDocument();
+  });
+
+  it('does not render location row when trip location is empty string', async () => {
+    mockGetTripByShareId.mockResolvedValue(makeTrip({ location: '' }));
+    renderShareImportPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('sharing.welcome')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('Brittany, France')).not.toBeInTheDocument();
   });
 });

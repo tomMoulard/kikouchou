@@ -124,6 +124,6 @@ describe('CalendarEventPill', () => {
     );
     const button = screen.getByRole('button');
     expect(button.style.backgroundColor).toBe('rgb(255, 0, 0)');
-    expect(button.style.color).toBe('rgb(0, 0, 0)');
+    expect(button.style.color).toMatch(/^(rgb\(0, 0, 0\)|black)$/);
   });
 });

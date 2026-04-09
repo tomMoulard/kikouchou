@@ -108,6 +108,28 @@ describe('useToday', () => {
 
       expect(result.current.today.getDate()).toBe(4);
     });
+
+    it('does not update when page becomes hidden', async () => {
+      const today = new Date('2026-02-03T14:00:00');
+      vi.setSystemTime(today);
+
+      const { result } = renderHook(() => useToday());
+      const initialToday = result.current.today;
+
+      // Simulate tab going hidden (different day in the background)
+      vi.setSystemTime(new Date('2026-02-04T10:00:00'));
+
+      await act(async () => {
+        Object.defineProperty(document, 'visibilityState', {
+          value: 'hidden',
+          writable: true,
+        });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+
+      // Should NOT update — visibility is hidden
+      expect(result.current.today).toBe(initialToday);
+    });
   });
 
   describe('focus event', () => {

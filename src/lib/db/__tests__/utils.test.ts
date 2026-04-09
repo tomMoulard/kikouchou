@@ -31,6 +31,9 @@ import {
   isValidISODateString,
   isValidISODateTimeString,
   isValidHexColor,
+  // Branded Type Conversion
+  toISODateStringFromString,
+  toHexColor,
   // Database Helpers
   createTimestamps,
   updateTimestamp,
@@ -920,6 +923,50 @@ describe('utils', () => {
         const timestamp2 = updateTimestamp();
 
         expect(timestamp2.updatedAt - timestamp1.updatedAt).toBe(60000);
+      });
+    });
+  });
+
+  // ==========================================================================
+  // Branded Type Conversion Tests
+  // ==========================================================================
+
+  describe('Branded Type Conversion', () => {
+    describe('toISODateStringFromString', () => {
+      it('should return branded string for valid date', () => {
+        const result = toISODateStringFromString('2024-07-15');
+        expect(result).toBe('2024-07-15');
+      });
+
+      it('should throw for invalid date string', () => {
+        expect(() => toISODateStringFromString('not-a-date')).toThrow(
+          'Invalid ISO date string',
+        );
+      });
+
+      it('should throw for empty string', () => {
+        expect(() => toISODateStringFromString('')).toThrow(
+          'Invalid ISO date string',
+        );
+      });
+    });
+
+    describe('toHexColor', () => {
+      it('should return branded string for valid hex color', () => {
+        const result = toHexColor('#ef4444');
+        expect(result).toBe('#ef4444');
+      });
+
+      it('should throw for invalid hex color', () => {
+        expect(() => toHexColor('red')).toThrow('Invalid hex color');
+      });
+
+      it('should throw for hex without hash', () => {
+        expect(() => toHexColor('ff0000')).toThrow('Invalid hex color');
+      });
+
+      it('should throw for shorthand hex', () => {
+        expect(() => toHexColor('#f00')).toThrow('Invalid hex color');
       });
     });
   });

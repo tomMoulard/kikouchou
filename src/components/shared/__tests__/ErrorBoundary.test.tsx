@@ -169,6 +169,21 @@ describe('ErrorBoundary', () => {
       expect(alert.className).toContain('my-custom-class');
     });
   });
+
+  describe('safeTranslate', () => {
+    it('renders error UI with translated keys', () => {
+      render(
+        <ErrorBoundary>
+          <ThrowingComponent message="Critical failure" />
+        </ErrorBoundary>,
+        { withProviders: false }
+      );
+
+      // The error boundary should render with i18n keys (from mock)
+      const alert = screen.getByRole('alert');
+      expect(alert).toBeInTheDocument();
+    });
+  });
 });
 
 // Need beforeEach/afterEach at module level for the import

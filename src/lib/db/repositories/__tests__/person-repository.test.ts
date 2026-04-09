@@ -6,7 +6,7 @@
  *
  * @module lib/db/repositories/__tests__/person-repository.test
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { db } from '@/lib/db/database';
 import {
   createPerson,
@@ -802,5 +802,39 @@ describe('searchPersonsByName', () => {
 
     expect(results1).toHaveLength(1);
     expect(results2).toHaveLength(1);
+  });
+});
+
+// ============================================================================
+// Error Handling Edge Cases
+// ============================================================================
+
+describe('Person Repository — Error Paths', () => {
+  it('createPersonWithAutoColor re-throws wrapped error from createPerson', async () => {
+    const tripId = await createTestTrip();
+    // Spy on db.persons.add to cause a failure inside createPerson
+    const originalAdd = db.persons.add.bind(db.persons);
+    vi.spyOn(db.persons, 'add').mockRejectedValueOnce(new Error('Constraint violation'));
+
+    await expect(
+      createPersonWithAutoColor(tripId, 'Bob')
+    ).rejects.toThrow('Failed to create person');
+
+    // Restore
+    vi.restoreAllMocks();
+  });
+
+  it('createPersonWithAutoColor wraps non-createPerson errors differently', async () => {
+    const tripId = await createTestTrip();
+    // Make the count query fail (before createPerson is called)
+    vi.spyOn(db.persons, 'where').mockImplementationOnce(() => {
+      throw new Error('IndexedDB unavailable');
+    });
+
+    await expect(
+      createPersonWithAutoColor(tripId, 'Carol')
+    ).rejects.toThrow('Failed to create person "Carol" with auto color');
+
+    vi.restoreAllMocks();
   });
 });

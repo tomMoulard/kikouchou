@@ -313,4 +313,299 @@ describe('computeMerge', () => {
       expect(result.summary.conflicts).toBe(0);
     });
   });
+
+  // ---- Room additions and modifications ----
+
+  describe('additions — rooms', () => {
+    it('auto-applies a new room not present on host', async () => {
+      const newRoom = makeRoom({ id: 'room-new' as RoomId, name: 'Penthouse' });
+      const changeset = makeChangeset({
+        added: { persons: [], assignments: [], transports: [], rooms: [newRoom] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.autoApply.rooms).toHaveLength(1);
+      expect(result.autoApply.rooms[0]?.name).toBe('Penthouse');
+      expect(result.conflicts).toHaveLength(0);
+    });
+
+    it('treats added room that already exists as modification', async () => {
+      const hostRoom = makeRoom({ name: 'Room 1', capacity: 2 });
+      mockHostRooms.push(hostRoom);
+
+      // Guest adds a room with the same id but different capacity
+      const guestRoom = makeRoom({ name: 'Room 1', capacity: 4 });
+      const changeset = makeChangeset({
+        added: { persons: [], assignments: [], transports: [], rooms: [guestRoom] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      // Room modifications are always auto-applied (no conflict)
+      expect(result.autoApply.rooms).toHaveLength(1);
+      expect(result.autoApply.rooms[0]?.capacity).toBe(4);
+    });
+
+    it('skips room modification when no fields changed', async () => {
+      const hostRoom = makeRoom();
+      mockHostRooms.push(hostRoom);
+
+      // Identical room as "added"
+      const changeset = makeChangeset({
+        added: { persons: [], assignments: [], transports: [], rooms: [{ ...hostRoom }] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.autoApply.rooms).toHaveLength(0);
+    });
+
+    it('includes room additions in summary count', async () => {
+      const newRoom = makeRoom({ id: 'room-new' as RoomId, name: 'Attic' });
+      const changeset = makeChangeset({
+        added: { persons: [], assignments: [], transports: [], rooms: [newRoom] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.summary.additions).toBe(1);
+    });
+  });
+
+  describe('modifications — rooms', () => {
+    it('auto-applies guest room changes when host room exists', async () => {
+      const hostRoom = makeRoom({ name: 'Room 1', capacity: 2 });
+      mockHostRooms.push(hostRoom);
+
+      const guestRoom = makeRoom({ name: 'Master Suite', capacity: 3 });
+      const changeset = makeChangeset({
+        modified: { persons: [], assignments: [], transports: [], rooms: [guestRoom] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.autoApply.rooms).toHaveLength(1);
+      expect(result.autoApply.rooms[0]?.name).toBe('Master Suite');
+      expect(result.autoApply.rooms[0]?.capacity).toBe(3);
+      // Rooms do not generate conflicts
+      expect(result.conflicts).toHaveLength(0);
+    });
+
+    it('auto-applies room as new when host room was deleted', async () => {
+      // No rooms on host
+      const guestRoom = makeRoom({ name: 'Deleted Room' });
+      const changeset = makeChangeset({
+        modified: { persons: [], assignments: [], transports: [], rooms: [guestRoom] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      // Room was deleted on host, guest wants to modify → added back
+      expect(result.autoApply.rooms).toHaveLength(1);
+      expect(result.autoApply.rooms[0]?.name).toBe('Deleted Room');
+    });
+
+    it('does nothing when modified room has no differences', async () => {
+      const hostRoom = makeRoom();
+      mockHostRooms.push(hostRoom);
+
+      const changeset = makeChangeset({
+        modified: { persons: [], assignments: [], transports: [], rooms: [{ ...hostRoom }] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.autoApply.rooms).toHaveLength(0);
+    });
+
+    it('detects conflicting room fields: description, icon, order', async () => {
+      const hostRoom = makeRoom({ description: 'Old', icon: 'bed', order: 1 });
+      mockHostRooms.push(hostRoom);
+
+      const guestRoom = makeRoom({ description: 'New', icon: 'star', order: 2 });
+      const changeset = makeChangeset({
+        modified: { persons: [], assignments: [], transports: [], rooms: [guestRoom] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      // Rooms auto-apply even with differences (no conflict for rooms)
+      expect(result.autoApply.rooms).toHaveLength(1);
+      expect(result.conflicts).toHaveLength(0);
+    });
+  });
+
+  describe('no assignment orphan warning when incoming room exists', () => {
+    it('does not warn when assignment room is in incoming added rooms', async () => {
+      mockHostPersons.push(makePerson());
+      // Room not on host, but included in changeset added rooms
+      const newRoom = makeRoom({ id: 'room-new' as RoomId });
+      const assignment = makeAssignment({ roomId: 'room-new' as RoomId });
+      const changeset = makeChangeset({
+        added: {
+          persons: [],
+          assignments: [assignment],
+          transports: [],
+          rooms: [newRoom],
+        },
+      });
+
+      const result = await computeMerge(changeset);
+
+      const orphanWarnings = result.warnings.filter(w => w.type === 'orphaned-room-ref');
+      expect(orphanWarnings).toHaveLength(0);
+    });
+  });
+
+  describe('added entity already exists — treated as modification', () => {
+    it('creates conflict when added assignment already exists on host and differs', async () => {
+      const hostAssignment = makeAssignment({ roomId: 'room-1' as RoomId });
+      mockHostAssignments.push(hostAssignment);
+      mockHostPersons.push(makePerson());
+      mockHostRooms.push(makeRoom());
+
+      // Same id but different room
+      const guestAssignment = makeAssignment({ roomId: 'room-2' as RoomId });
+      const changeset = makeChangeset({
+        added: { persons: [], assignments: [guestAssignment], transports: [], rooms: [] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.conflicts).toHaveLength(1);
+      expect(result.conflicts[0]?.entityType).toBe('assignment');
+    });
+
+    it('creates conflict when added transport already exists on host and differs', async () => {
+      const hostTransport = makeTransport({ location: 'Paris' });
+      mockHostTransports.push(hostTransport);
+      mockHostPersons.push(makePerson());
+
+      const guestTransport = makeTransport({ location: 'Lyon' });
+      const changeset = makeChangeset({
+        added: { persons: [], assignments: [], transports: [guestTransport], rooms: [] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.conflicts).toHaveLength(1);
+      expect(result.conflicts[0]?.entityType).toBe('transport');
+    });
+  });
+
+  describe('modification with deleted host entity', () => {
+    it('re-adds person when host deleted it', async () => {
+      // Person not on host
+      const guestPerson = makePerson({ name: 'Ghost' });
+      const changeset = makeChangeset({
+        modified: { persons: [guestPerson], assignments: [], transports: [], rooms: [] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.autoApply.persons).toHaveLength(1);
+      expect(result.autoApply.persons[0]?.name).toBe('Ghost');
+    });
+
+    it('re-adds assignment when host deleted it', async () => {
+      // Assignment not on host
+      mockHostPersons.push(makePerson());
+      mockHostRooms.push(makeRoom());
+
+      const guestAssignment = makeAssignment();
+      const changeset = makeChangeset({
+        modified: { persons: [], assignments: [guestAssignment], transports: [], rooms: [] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.autoApply.assignments).toHaveLength(1);
+    });
+
+    it('re-adds transport when host deleted it', async () => {
+      mockHostPersons.push(makePerson());
+
+      const guestTransport = makeTransport();
+      const changeset = makeChangeset({
+        modified: { persons: [], assignments: [], transports: [guestTransport], rooms: [] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.autoApply.transports).toHaveLength(1);
+    });
+  });
+
+  // ============================================================================
+  // Additional branch coverage
+  // ============================================================================
+
+  describe('additional branch coverage', () => {
+    it('treats added person that already exists on host as modification', async () => {
+      const hostPerson = makePerson({ name: 'Alice' });
+      mockHostPersons.push(hostPerson);
+
+      const guestPerson = makePerson({ name: 'Alice Updated' });
+      const changeset = makeChangeset({
+        added: { persons: [guestPerson], assignments: [], transports: [], rooms: [] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      // Should be treated as modification since person already exists on host
+      expect(result.autoApply.persons).toHaveLength(1);
+      expect(result.autoApply.persons[0]!.name).toBe('Alice Updated');
+    });
+
+    it('does nothing when modified assignment is identical to host', async () => {
+      const hostAssignment = makeAssignment();
+      mockHostAssignments.push(hostAssignment);
+      mockHostPersons.push(makePerson());
+      mockHostRooms.push(makeRoom());
+
+      // Same assignment with no changes
+      const changeset = makeChangeset({
+        modified: { persons: [], assignments: [{ ...hostAssignment }], transports: [], rooms: [] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.autoApply.assignments).toHaveLength(0);
+      expect(result.conflicts).toHaveLength(0);
+    });
+
+    it('does nothing when modified transport is identical to host', async () => {
+      const hostTransport = makeTransport();
+      mockHostTransports.push(hostTransport);
+      mockHostPersons.push(makePerson());
+
+      // Same transport with no changes
+      const changeset = makeChangeset({
+        modified: { persons: [], assignments: [], transports: [{ ...hostTransport }], rooms: [] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.autoApply.transports).toHaveLength(0);
+      expect(result.conflicts).toHaveLength(0);
+    });
+
+    it('warns when assignment references a person not on host', async () => {
+      mockHostRooms.push(makeRoom());
+      // No host persons - person-1 is missing
+
+      const assignment = makeAssignment();
+      const changeset = makeChangeset({
+        added: { persons: [], assignments: [assignment], transports: [], rooms: [] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      const personWarning = result.warnings.find(
+        (w) => w.type === 'orphaned-person-ref' && w.entityType === 'assignment',
+      );
+      expect(personWarning).toBeDefined();
+    });
+  });
 });

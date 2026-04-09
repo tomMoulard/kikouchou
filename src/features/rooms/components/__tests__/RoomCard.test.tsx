@@ -216,4 +216,230 @@ describe('RoomCard', () => {
     );
     expect(screen.queryByText('Large bedroom')).not.toBeInTheDocument();
   });
+
+  it('does not show available spots text when no spots open', () => {
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={4}
+        availableSpots={0}
+        isFull={true}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.queryByText('rooms.spotsOpen')).not.toBeInTheDocument();
+  });
+
+  it('does not show claim button when no onClaim provided', () => {
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.queryByText('rooms.claimRoom')).not.toBeInTheDocument();
+  });
+
+  it('does not show claim button when room is full even if onClaim provided', () => {
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={4}
+        availableSpots={0}
+        isFull={true}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onClaim={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.queryByText('rooms.claimRoom')).not.toBeInTheDocument();
+  });
+
+  it('calls onClaim when claim button is clicked', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onClaim = vi.fn();
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onClaim={onClaim}
+      />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByText('rooms.claimRoom'));
+    expect(onClaim).toHaveBeenCalledWith(mockRoom);
+  });
+
+  it('activates card on Enter key', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onClick={onClick}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    const card = screen.getByRole('button', { name: /Main Bedroom/ });
+    card.focus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledWith(mockRoom);
+  });
+
+  it('activates card on Space key', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onClick={onClick}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    const card = screen.getByRole('button', { name: /Main Bedroom/ });
+    card.focus();
+    await user.keyboard(' ');
+    expect(onClick).toHaveBeenCalledWith(mockRoom);
+  });
+
+  it('does not render expanded content when isExpanded is false', () => {
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        isExpanded={false}
+        expandedContent={<div data-testid="expanded-content">Expanded!</div>}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.queryByTestId('expanded-content')).not.toBeInTheDocument();
+  });
+
+  it('shows chevron when expandedContent is provided', () => {
+    const { container } = render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        expandedContent={<div>Content</div>}
+      />,
+      { withProviders: false },
+    );
+    // ChevronDown icon should be present (has rotate-180 class when expanded)
+    expect(container.querySelector('svg.lucide-chevron-down')).toBeInTheDocument();
+  });
+
+  it('shows amber progress bar when room is half full', () => {
+    const { container } = render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={2}
+        availableSpots={2}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    const progressBar = container.querySelector('[role="progressbar"]');
+    expect(progressBar).toBeInTheDocument();
+  });
+
+  it('handles zero capacity room without error', () => {
+    const zeroCapRoom = { ...mockRoom, capacity: 0 };
+    render(
+      <RoomCard
+        room={zeroCapRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={0}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.getByText(zeroCapRoom.name)).toBeInTheDocument();
+  });
+
+  it('shows delete confirmation dialog when delete menu item is clicked', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByLabelText('common.openMenu'));
+    // Click the "delete" menu item
+    const deleteItems = screen.getAllByText('common.delete');
+    await user.click(deleteItems[0]!);
+    // Confirm dialog should appear
+    expect(screen.getByText('confirm.deleteRoom')).toBeInTheDocument();
+  });
+
+  it('renders room with custom icon', () => {
+    const roomWithIcon = { ...mockRoom, icon: 'tent' };
+    render(
+      <RoomCard
+        room={roomWithIcon}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.getByText('Main Bedroom')).toBeInTheDocument();
+  });
 });

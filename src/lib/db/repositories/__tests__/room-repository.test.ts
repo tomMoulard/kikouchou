@@ -694,3 +694,85 @@ describe('cloneRoomsToTrip', () => {
     expect(sourceRooms[0]?.tripId).toBe(sourceTripId);
   });
 });
+
+// ============================================================================
+// Ownership Check Tests
+// ============================================================================
+
+describe('Room Repository — Ownership Checks', () => {
+  it('updateRoomWithOwnershipCheck throws when room not found', async () => {
+    const tripId = await createTestTrip();
+    const { updateRoomWithOwnershipCheck } = await import('@/lib/db/repositories/room-repository');
+
+    await expect(
+      updateRoomWithOwnershipCheck('nonexistent' as RoomId, tripId, { name: 'Updated' })
+    ).rejects.toThrow('not found');
+  });
+
+  it('updateRoomWithOwnershipCheck throws when room belongs to different trip', async () => {
+    const tripId1 = await createTestTrip('Trip 1');
+    const tripId2 = await createTestTrip('Trip 2');
+    const { updateRoomWithOwnershipCheck } = await import('@/lib/db/repositories/room-repository');
+
+    const room = await createRoom(tripId1, createTestRoomData({ name: 'Room A' }));
+
+    await expect(
+      updateRoomWithOwnershipCheck(room.id, tripId2, { name: 'Stolen' })
+    ).rejects.toThrow('does not belong');
+  });
+
+  it('updateRoomWithOwnershipCheck succeeds for valid ownership', async () => {
+    const tripId = await createTestTrip();
+    const { updateRoomWithOwnershipCheck } = await import('@/lib/db/repositories/room-repository');
+
+    const room = await createRoom(tripId, createTestRoomData({ name: 'Room A' }));
+
+    await updateRoomWithOwnershipCheck(room.id, tripId, { name: 'Updated A' });
+
+    const updated = await getRoomById(room.id);
+    expect(updated?.name).toBe('Updated A');
+  });
+
+  it('deleteRoomWithOwnershipCheck throws when room not found', async () => {
+    const tripId = await createTestTrip();
+    const { deleteRoomWithOwnershipCheck } = await import('@/lib/db/repositories/room-repository');
+
+    await expect(
+      deleteRoomWithOwnershipCheck('nonexistent' as RoomId, tripId)
+    ).rejects.toThrow('not found');
+  });
+
+  it('deleteRoomWithOwnershipCheck throws when room belongs to different trip', async () => {
+    const tripId1 = await createTestTrip('Trip 1');
+    const tripId2 = await createTestTrip('Trip 2');
+    const { deleteRoomWithOwnershipCheck } = await import('@/lib/db/repositories/room-repository');
+
+    const room = await createRoom(tripId1, createTestRoomData({ name: 'Room B' }));
+
+    await expect(
+      deleteRoomWithOwnershipCheck(room.id, tripId2)
+    ).rejects.toThrow('does not belong');
+  });
+
+  it('deleteRoomWithOwnershipCheck succeeds and removes room', async () => {
+    const tripId = await createTestTrip();
+    const { deleteRoomWithOwnershipCheck } = await import('@/lib/db/repositories/room-repository');
+
+    const room = await createRoom(tripId, createTestRoomData({ name: 'Room C' }));
+    expect(await getRoomById(room.id)).toBeDefined();
+
+    await deleteRoomWithOwnershipCheck(room.id, tripId);
+
+    expect(await getRoomById(room.id)).toBeUndefined();
+  });
+
+  it('updateRoom with description field', async () => {
+    const tripId = await createTestTrip();
+    const room = await createRoom(tripId, createTestRoomData({ description: 'original' }));
+
+    await updateRoom(room.id, { description: 'updated desc' });
+
+    const updated = await getRoomById(room.id);
+    expect(updated?.description).toBe('updated desc');
+  });
+});

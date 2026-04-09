@@ -245,4 +245,113 @@ describe('useInstallPrompt', () => {
 
     removeEventListenerSpy.mockRestore();
   });
+
+  it('detects standalone via display-mode media query change', async () => {
+    let changeHandler: ((e: MediaQueryListEvent) => void) | null = null;
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: false,
+      addEventListener: (event: string, handler: (e: MediaQueryListEvent) => void) => {
+        if (event === 'change') changeHandler = handler;
+      },
+      removeEventListener: vi.fn(),
+    });
+
+    const { result } = renderHook(() => useInstallPrompt());
+    expect(result.current.isInstalled).toBe(false);
+
+    // Simulate media query change to standalone
+    act(() => {
+      changeHandler?.({ matches: true } as MediaQueryListEvent);
+    });
+
+    expect(result.current.isInstalled).toBe(true);
+  });
+
+  it('detects installed via getInstalledRelatedApps API', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nav = navigator as any;
+    nav.getInstalledRelatedApps = vi.fn().mockResolvedValue([{ platform: 'webapp' }]);
+
+    const { result, unmount } = renderHook(() => useInstallPrompt());
+
+    // Wait for the async check to complete
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(result.current.isInstalled).toBe(true);
+
+    // Cleanup
+    delete nav.getInstalledRelatedApps;
+    unmount();
+  });
+
+  it('handles getInstalledRelatedApps returning empty array', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nav = navigator as any;
+    nav.getInstalledRelatedApps = vi.fn().mockResolvedValue([]);
+
+    const { result, unmount } = renderHook(() => useInstallPrompt());
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(result.current.isInstalled).toBe(false);
+
+    delete nav.getInstalledRelatedApps;
+    unmount();
+  });
+
+  it('handles getInstalledRelatedApps API error gracefully', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nav = navigator as any;
+    nav.getInstalledRelatedApps = vi.fn().mockRejectedValue(new Error('Not supported'));
+
+    const { result, unmount } = renderHook(() => useInstallPrompt());
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(result.current.isInstalled).toBe(false);
+
+    delete nav.getInstalledRelatedApps;
+    unmount();
+  });
+
+  it('returns outcome without setting state when component unmounts before userChoice resolves', async () => {
+    let resolveUserChoice: (value: { outcome: 'accepted' | 'dismissed'; platform: string }) => void;
+    const userChoicePromise = new Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>((r) => {
+      resolveUserChoice = r;
+    });
+
+    const { result, unmount } = renderHook(() => useInstallPrompt());
+
+    const event = new Event('beforeinstallprompt', { cancelable: true });
+    Object.defineProperties(event, {
+      platforms: { value: ['web'], writable: false },
+      prompt: { value: vi.fn().mockResolvedValue(undefined), writable: false },
+      userChoice: { value: userChoicePromise, writable: false },
+    });
+
+    act(() => {
+      window.dispatchEvent(event);
+    });
+
+    // Start install
+    let installPromise: Promise<boolean>;
+    act(() => {
+      installPromise = result.current.install();
+    });
+
+    // Unmount before userChoice resolves
+    unmount();
+
+    // Now resolve userChoice
+    resolveUserChoice!({ outcome: 'accepted', platform: 'web' });
+
+    const installResult = await installPromise!;
+    expect(installResult).toBe(true);
+  });
 });

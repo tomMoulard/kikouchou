@@ -576,3 +576,50 @@ describe('SummaryStepPage — 5.15: submit error shows error and allows retry', 
     });
   });
 });
+
+// ============================================================================
+// Additional Branch Coverage Tests
+// ============================================================================
+
+describe('SummaryStepPage — additional branch coverage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    Object.keys(localStorageMock).forEach((k) => { delete localStorageMock[k]; });
+  });
+
+  it('redirects when stored identity has whitespace-only personId', async () => {
+    localStorageMock['kikoushou_guest_abc123'] = JSON.stringify({
+      personId: '   ',
+      tripId: 'trip-1',
+    });
+
+    renderSummaryPage('abc123');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('identity-page')).toBeInTheDocument();
+    });
+  });
+
+  it('redirects when stored identity has whitespace-only tripId', async () => {
+    localStorageMock['kikoushou_guest_abc123'] = JSON.stringify({
+      personId: 'p1',
+      tripId: '  ',
+    });
+
+    renderSummaryPage('abc123');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('identity-page')).toBeInTheDocument();
+    });
+  });
+
+  it('redirects when stored identity JSON is malformed', async () => {
+    localStorageMock['kikoushou_guest_abc123'] = '{invalid json';
+
+    renderSummaryPage('abc123');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('identity-page')).toBeInTheDocument();
+    });
+  });
+});

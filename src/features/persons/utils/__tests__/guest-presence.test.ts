@@ -67,6 +67,83 @@ describe('deriveGuestStayDateBounds', () => {
       departure: iso('2026-04-18'),
     });
   });
+
+  it('picks earliest arrival from multiple arrivals', () => {
+    const p = person('p1');
+    const arrivals: Transport[] = [
+      {
+        id: 'a1' as Transport['id'],
+        tripId: 't1' as Transport['tripId'],
+        personId: p.id,
+        type: 'arrival',
+        datetime: '2026-04-15T10:00:00.000Z',
+        location: 'X',
+        needsPickup: false,
+      },
+      {
+        id: 'a2' as Transport['id'],
+        tripId: 't1' as Transport['tripId'],
+        personId: p.id,
+        type: 'arrival',
+        datetime: '2026-04-10T08:00:00.000Z',
+        location: 'Y',
+        needsPickup: false,
+      },
+    ];
+    expect(deriveGuestStayDateBounds(p, arrivals, []).arrival).toBe(iso('2026-04-10'));
+  });
+
+  it('picks latest departure from multiple departures', () => {
+    const p = person('p1');
+    const departures: Transport[] = [
+      {
+        id: 'd1' as Transport['id'],
+        tripId: 't1' as Transport['tripId'],
+        personId: p.id,
+        type: 'departure',
+        datetime: '2026-04-18T10:00:00.000Z',
+        location: 'X',
+        needsPickup: false,
+      },
+      {
+        id: 'd2' as Transport['id'],
+        tripId: 't1' as Transport['tripId'],
+        personId: p.id,
+        type: 'departure',
+        datetime: '2026-04-22T15:00:00.000Z',
+        location: 'Y',
+        needsPickup: false,
+      },
+    ];
+    expect(deriveGuestStayDateBounds(p, [], departures).departure).toBe(iso('2026-04-22'));
+  });
+
+  it('returns null for both when no stay dates and no transports', () => {
+    const p = person('p1');
+    expect(deriveGuestStayDateBounds(p, [], [])).toEqual({
+      arrival: null,
+      departure: null,
+    });
+  });
+
+  it('ignores transports for other persons', () => {
+    const p = person('p1');
+    const arrivals: Transport[] = [
+      {
+        id: 'a1' as Transport['id'],
+        tripId: 't1' as Transport['tripId'],
+        personId: 'other' as Transport['personId'],
+        type: 'arrival',
+        datetime: '2026-04-12T10:00:00.000Z',
+        location: 'X',
+        needsPickup: false,
+      },
+    ];
+    expect(deriveGuestStayDateBounds(p, arrivals, [])).toEqual({
+      arrival: null,
+      departure: null,
+    });
+  });
 });
 
 describe('isGuestPresentOnDate', () => {
@@ -76,6 +153,21 @@ describe('isGuestPresentOnDate', () => {
     expect(isGuestPresentOnDate(p, [], [], iso('2026-04-10'))).toBe(true);
     expect(isGuestPresentOnDate(p, [], [], iso('2026-04-19'))).toBe(true);
     expect(isGuestPresentOnDate(p, [], [], iso('2026-04-20'))).toBe(false);
+  });
+
+  it('returns false when arrival equals departure', () => {
+    const p = person('p1', { start: '2026-04-10', end: '2026-04-10' });
+    expect(isGuestPresentOnDate(p, [], [], iso('2026-04-10'))).toBe(false);
+  });
+
+  it('returns false when arrival is after departure', () => {
+    const p = person('p1', { start: '2026-04-20', end: '2026-04-10' });
+    expect(isGuestPresentOnDate(p, [], [], iso('2026-04-15'))).toBe(false);
+  });
+
+  it('returns false when no stay dates and no transports', () => {
+    const p = person('p1');
+    expect(isGuestPresentOnDate(p, [], [], iso('2026-04-15'))).toBe(false);
   });
 });
 
@@ -98,5 +190,17 @@ describe('buildGuestIdsByTripDateMap', () => {
     expect([...(map.get(iso('2026-04-09')) ?? [])].sort()).toEqual([a.id, b.id].sort());
     expect([...(map.get(iso('2026-04-10')) ?? [])].sort()).toEqual([b.id].sort());
     expect([...(map.get(iso('2026-04-11')) ?? [])].sort()).toEqual([b.id].sort());
+  });
+
+  it('returns empty map for invalid trip dates', () => {
+    const a = person('alice', { start: '2026-04-07', end: '2026-04-10' });
+    const map = buildGuestIdsByTripDateMap([a], [], [], iso('invalid'), iso('2026-04-11'));
+    expect(map.size).toBe(0);
+  });
+
+  it('returns empty map when trip start is after trip end', () => {
+    const a = person('alice', { start: '2026-04-07', end: '2026-04-10' });
+    const map = buildGuestIdsByTripDateMap([a], [], [], iso('2026-04-15'), iso('2026-04-10'));
+    expect(map.size).toBe(0);
   });
 });

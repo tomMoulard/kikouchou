@@ -198,4 +198,63 @@ describe('useOnlineStatus', () => {
       vi.advanceTimersByTime(5000);
     });
   });
+
+  it('cleans up without errors when no timer is running', () => {
+    Object.defineProperty(navigator, 'onLine', {
+      value: true,
+      writable: true,
+      configurable: true,
+    });
+
+    const { unmount } = renderHook(() => useOnlineStatus());
+
+    // Unmount immediately — no timer should be running
+    unmount();
+  });
+
+  it('handles rapid online/offline/online transitions', () => {
+    Object.defineProperty(navigator, 'onLine', {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+
+    const { result } = renderHook(() => useOnlineStatus());
+
+    // Go online
+    act(() => {
+      Object.defineProperty(navigator, 'onLine', {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+      window.dispatchEvent(new Event('online'));
+    });
+
+    expect(result.current.hasRecentlyChanged).toBe(true);
+
+    // Go offline
+    act(() => {
+      Object.defineProperty(navigator, 'onLine', {
+        value: false,
+        writable: true,
+        configurable: true,
+      });
+      window.dispatchEvent(new Event('offline'));
+    });
+
+    expect(result.current.hasRecentlyChanged).toBe(false);
+
+    // Go online again — should restart the "recently changed" timer
+    act(() => {
+      Object.defineProperty(navigator, 'onLine', {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+      window.dispatchEvent(new Event('online'));
+    });
+
+    expect(result.current.hasRecentlyChanged).toBe(true);
+  });
 });
