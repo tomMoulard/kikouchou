@@ -8,6 +8,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import i18n from '@/lib/i18n';
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -23,8 +25,13 @@ export type EngineStatus = 'idle' | 'loading' | 'ready' | 'generating' | 'error'
 export interface LoadProgress {
   /** Human-readable progress text */
   readonly text: string;
-  /** Download progress from 0 to 1 (if available) */
+  /**
+   * Progress 0–1 for the **current file** only (Transformers.js reports per shard).
+   * The bar resets when a new file starts; see UI caption.
+   */
   readonly progress: number;
+  /** Optional transferred size for the current file (e.g. `12.4 MB / 450 MB`). */
+  readonly bytesHint?: string;
 }
 
 /**
@@ -74,6 +81,20 @@ const MODEL_ID = 'onnx-community/gemma-4-E2B-it-ONNX';
  * Cache name used by @huggingface/transformers to store downloaded model files.
  */
 const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
+
+/**
+ * Formats a byte count for short progress lines.
+ */
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '';
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
+  const gb = mb / 1024;
+  return `${gb.toFixed(2)} GB`;
+}
 
 // ============================================================================
 // Cache Detection
@@ -175,7 +196,12 @@ export function useWebLLM(): UseWebLLMReturn {
     loadingRef.current = true;
     setStatus('loading');
     setError(null);
-    setLoadProgress({ text: 'Initializing...', progress: 0 });
+    setLoadProgress({
+      text: i18n.t('assistant.initializingLoader', {
+        defaultValue: 'Initializing…',
+      }),
+      progress: 0,
+    });
 
     try {
       // Dynamic import so the heavy library is only pulled in on demand
@@ -200,22 +226,50 @@ export function useWebLLM(): UseWebLLMReturn {
             loaded?: number;
             total?: number;
           }) => {
+            const fileName = progress.file?.split('/').pop() ?? '';
+
             if (
               progress.status === 'progress' &&
               progress.progress != null
             ) {
-              const fileName = progress.file?.split('/').pop() ?? '';
+              const pct = Math.round(progress.progress);
+              const loaded = progress.loaded;
+              const total = progress.total;
+              const bytesHint =
+                typeof loaded === 'number' &&
+                typeof total === 'number' &&
+                total > 0
+                  ? `${formatBytes(loaded)} / ${formatBytes(total)}`
+                  : undefined;
+
               setLoadProgress({
-                text: `Downloading ${fileName}`,
+                text: i18n.t('assistant.downloadingFile', {
+                  file: fileName || '…',
+                  percent: pct,
+                  defaultValue:
+                    'Downloading {{file}} — {{percent}}% of this file',
+                }),
                 progress: progress.progress / 100,
+                bytesHint,
               });
             } else if (progress.status === 'initiate') {
               setLoadProgress({
-                text: `Loading ${progress.file?.split('/').pop() ?? 'model'}...`,
+                text: i18n.t('assistant.preparingFile', {
+                  file: fileName || 'model',
+                  defaultValue: 'Preparing {{file}}…',
+                }),
                 progress: 0,
+                bytesHint: undefined,
               });
             } else if (progress.status === 'done') {
-              setLoadProgress({ text: 'Finalizing...', progress: 1 });
+              setLoadProgress((prev) => ({
+                text: i18n.t('assistant.fileDownloadDone', {
+                  file: fileName || '…',
+                  defaultValue: 'Finished {{file}}',
+                }),
+                progress: prev?.progress ?? 0,
+                bytesHint: undefined,
+              }));
             }
           },
         },

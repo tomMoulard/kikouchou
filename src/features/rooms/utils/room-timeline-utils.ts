@@ -4,7 +4,7 @@
  * @module features/rooms/utils/room-timeline-utils
  */
 
-import { addDays, parseISO, subDays } from 'date-fns';
+import { addDays, subDays } from 'date-fns';
 
 import { deriveGuestStayDateBounds } from '@/features/persons/utils/guest-presence';
 import { parseISODateString, toISODateString } from '@/lib/db/utils';
@@ -154,14 +154,24 @@ function clipAssignmentToPersonStayAndTripGrid(
   if (person) {
     const { arrival, departure } = deriveGuestStayDateBounds(person, arrivals, departures);
     if (arrival && departure && arrival < departure) {
-      const stayLastNight = toISODateString(subDays(parseISO(departure), 1));
-      const clipFn = fn > arrival ? fn : arrival;
-      const clipLn = ln < stayLastNight ? ln : stayLastNight;
-      if (clipFn > clipLn) {
-        return null;
+      const depParsed = parseISODateString(departure);
+      if (depParsed) {
+        const stayLastNight = toISODateString(subDays(depParsed, 1));
+        const clipFn = fn > arrival ? fn : arrival;
+        const clipLn = ln < stayLastNight ? ln : stayLastNight;
+        if (clipFn <= clipLn) {
+          fn = clipFn;
+          ln = clipLn;
+        } else {
+          // No calendar overlap between assignment nights and guest stay window.
+          // Hide only when the assignment is entirely *after* the guest left (stale row).
+          // If nights end before guest arrival or dates are inconsistent, keep the assignment
+          // so the room booking still shows on the timeline.
+          if (fn > stayLastNight) {
+            return null;
+          }
+        }
       }
-      fn = clipFn;
-      ln = clipLn;
     }
   }
 
@@ -184,11 +194,16 @@ function clipAssignmentToPersonStayAndTripGrid(
     return null;
   }
 
+  const visLnParsed = parseISODateString(visLn);
+  if (!visLnParsed) {
+    return null;
+  }
+
   return {
     startIndex,
     endIndex,
     displayStayStart: visFn,
-    displayStayEnd: toISODateString(addDays(parseISO(visLn), 1)),
+    displayStayEnd: toISODateString(addDays(visLnParsed, 1)),
   };
 }
 
