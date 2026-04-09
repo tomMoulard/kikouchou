@@ -12,12 +12,26 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
-import { useAssignmentContext } from '@/contexts/AssignmentContext';
-import { usePersonContext } from '@/contexts/PersonContext';
-import { useRoomContext } from '@/contexts/RoomContext';
-import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
-import { updateTrip } from '@/lib/db';
+import { db } from '@/lib/db/database';
+import {
+  createAssignment,
+  createPerson,
+  createRoom,
+  createTransport,
+  createTrip,
+  deleteAssignmentWithOwnershipCheck,
+  deletePersonWithOwnershipCheck,
+  deleteRoomWithOwnershipCheck,
+  deleteTransportWithOwnershipCheck,
+  getAssignmentById,
+  getPersonById,
+  getRoomById,
+  getTransportById,
+  getTripById,
+  setCurrentTrip,
+  updateTrip,
+} from '@/lib/db';
 import {
   getDefaultPersonColor,
   type ISODateString,
@@ -28,6 +42,7 @@ import {
   type TransportId,
   type TransportMode,
   type TransportType,
+  type TripId,
 } from '@/types';
 
 import { type LLMAction, validateAction } from '../action-schema';
@@ -37,11 +52,21 @@ import { type LLMAction, validateAction } from '../action-schema';
 // ============================================================================
 
 /**
+ * Result of executing parsed LLM actions (for UI: expandable change list).
+ */
+export interface ActionExecutionResult {
+  /** Number of actions that ran successfully */
+  readonly count: number;
+  /** One human-readable line per successful action */
+  readonly summaries: readonly string[];
+}
+
+/**
  * Return type for the useTripActions hook.
  */
 export interface UseTripActionsReturn {
   /** Parse an LLM response and execute any action blocks found. */
-  executeActions: (response: string) => Promise<number>;
+  executeActions: (response: string) => Promise<ActionExecutionResult>;
 }
 
 // ============================================================================
@@ -129,30 +154,93 @@ function parseActionBlocks(response: string): LLMAction[] {
 export function useTripActions(): UseTripActionsReturn {
   const { t } = useTranslation();
   const { currentTrip } = useTripContext();
-  const { createRoom, deleteRoom } = useRoomContext();
-  const { persons, createPerson, deletePerson } = usePersonContext();
-  const { createAssignment, deleteAssignment } = useAssignmentContext();
-  const { createTransport, deleteTransport } = useTransportContext();
 
   const executeActions = useCallback(
-    async (response: string): Promise<number> => {
+    async (response: string): Promise<ActionExecutionResult> => {
       const actions = parseActionBlocks(response);
 
       if (actions.length === 0) {
-        return 0;
+        return { count: 0, summaries: [] };
       }
 
       console.log('[AI Assistant] Parsed actions:', actions);
 
+      /** Tracks which trip mutations apply to (supports createTrip/selectTrip mid-batch). */
+      let activeTripId: TripId | null = currentTrip?.id ?? null;
+
       let executedCount = 0;
+      const summaries: string[] = [];
 
       for (const action of actions) {
         try {
           switch (action.action) {
+            case 'createTrip': {
+              const d = action.data as Record<string, unknown>;
+              const trip = await createTrip({
+                name: d.name as string,
+                startDate: d.startDate as ISODateString,
+                endDate: d.endDate as ISODateString,
+                ...(d.location !== undefined && { location: d.location as string }),
+                ...(d.description !== undefined && {
+                  description: d.description as string,
+                }),
+              });
+              activeTripId = trip.id;
+              await setCurrentTrip(trip.id);
+              toast.success(t('trips.created'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.createTrip', { name: trip.name }),
+              );
+              break;
+            }
+
+            case 'selectTrip': {
+              const rawId = action.data.tripId as string;
+              const trip = await getTripById(rawId as TripId);
+              if (!trip) {
+                toast.error(t('assistant.selectTripNotFound'));
+                break;
+              }
+              activeTripId = trip.id;
+              await setCurrentTrip(trip.id);
+              toast.success(
+                t('assistant.tripSwitched', { name: trip.name }),
+              );
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.selectTrip', { name: trip.name }),
+              );
+              break;
+            }
+
             case 'updateTrip': {
-              if (!currentTrip) break;
-              const d = action.data;
-              await updateTrip(currentTrip.id, {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              const keys = (
+                [
+                  'name',
+                  'location',
+                  'startDate',
+                  'endDate',
+                  'description',
+                ] as const
+              ).filter((k) => d[k] !== undefined);
+              if (keys.length === 0) {
+                break;
+              }
+              const fields = keys
+                .map((k) =>
+                  t(`assistant.actionDetails.tripField.${k}`, {
+                    defaultValue: k,
+                  }),
+                )
+                .join(', ');
+              await updateTrip(tid, {
                 ...(d.name !== undefined && { name: d.name as string }),
                 ...(d.location !== undefined && { location: d.location as string }),
                 ...(d.startDate !== undefined && { startDate: d.startDate as ISODateString }),
@@ -161,13 +249,27 @@ export function useTripActions(): UseTripActionsReturn {
               });
               toast.success(t('trips.updated'));
               executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.updateTrip', {
+                  fields,
+                  defaultValue: 'Updated trip ({{fields}})',
+                }),
+              );
               break;
             }
 
             case 'addGuest': {
-              const d = action.data;
-              const colorIndex = persons.length;
-              await createPerson({
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              const colorIndex = await db.persons
+                .where('tripId')
+                .equals(tid)
+                .count();
+              await createPerson(tid, {
                 name: d.name as string,
                 color: getDefaultPersonColor(colorIndex),
                 ...(d.stayStartDate !== undefined && {
@@ -179,38 +281,87 @@ export function useTripActions(): UseTripActionsReturn {
               });
               toast.success(t('persons.createSuccess'));
               executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.addGuest', {
+                  name: d.name as string,
+                  defaultValue: 'Added guest: {{name}}',
+                }),
+              );
               break;
             }
 
             case 'removeGuest': {
-              await deletePerson(action.data.personId as PersonId);
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const pid = action.data.personId as PersonId;
+              const guest = await getPersonById(pid);
+              await deletePersonWithOwnershipCheck(pid, tid);
               toast.success(t('persons.deleteSuccess'));
               executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.removeGuest', {
+                  name: guest?.name ?? String(pid),
+                  defaultValue: 'Removed guest: {{name}}',
+                }),
+              );
               break;
             }
 
             case 'addRoom': {
-              const d = action.data;
-              await createRoom({
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              await createRoom(tid, {
                 name: d.name as string,
                 capacity: d.capacity as number,
                 description: d.description as string | undefined,
               });
               toast.success(t('rooms.createSuccess'));
               executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.addRoom', {
+                  name: d.name as string,
+                  capacity: String(d.capacity),
+                  defaultValue: 'Added room: {{name}} ({{capacity}} guests max)',
+                }),
+              );
               break;
             }
 
             case 'removeRoom': {
-              await deleteRoom(action.data.roomId as RoomId);
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const rid = action.data.roomId as RoomId;
+              const room = await getRoomById(rid);
+              await deleteRoomWithOwnershipCheck(rid, tid);
               toast.success(t('rooms.deleteSuccess'));
               executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.removeRoom', {
+                  name: room?.name ?? String(rid),
+                  defaultValue: 'Removed room: {{name}}',
+                }),
+              );
               break;
             }
 
             case 'assignRoom': {
-              const d = action.data;
-              await createAssignment({
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              await createAssignment(tid, {
                 personId: d.personId as PersonId,
                 roomId: d.roomId as RoomId,
                 startDate: d.startDate as ISODateString,
@@ -218,21 +369,56 @@ export function useTripActions(): UseTripActionsReturn {
               });
               toast.success(t('assignments.createSuccess'));
               executedCount++;
+              const person = await getPersonById(d.personId as PersonId);
+              const room = await getRoomById(d.roomId as RoomId);
+              summaries.push(
+                t('assistant.actionDetails.assignRoom', {
+                  person: person?.name ?? String(d.personId),
+                  room: room?.name ?? String(d.roomId),
+                  start: d.startDate as string,
+                  end: d.endDate as string,
+                  defaultValue:
+                    'Assigned {{person}} → {{room}} ({{start}} – {{end}})',
+                }),
+              );
               break;
             }
 
             case 'removeAssignment': {
-              await deleteAssignment(
-                action.data.assignmentId as RoomAssignmentId,
-              );
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const aid = action.data.assignmentId as RoomAssignmentId;
+              const assignment = await getAssignmentById(aid);
+              const person = assignment
+                ? await getPersonById(assignment.personId)
+                : undefined;
+              const room = assignment
+                ? await getRoomById(assignment.roomId)
+                : undefined;
+              await deleteAssignmentWithOwnershipCheck(aid, tid);
               toast.success(t('assignments.deleteSuccess'));
               executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.removeAssignment', {
+                  person: person?.name ?? '…',
+                  room: room?.name ?? '…',
+                  defaultValue: 'Removed assignment: {{person}} ↔ {{room}}',
+                }),
+              );
               break;
             }
 
             case 'addTransport': {
-              const d = action.data;
-              await createTransport({
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              await createTransport(tid, {
                 personId: d.personId as PersonId,
                 type: d.type as TransportType,
                 datetime: d.datetime as ISODateTimeString,
@@ -243,13 +429,39 @@ export function useTripActions(): UseTripActionsReturn {
               });
               toast.success(t('transports.createSuccess'));
               executedCount++;
+              const person = await getPersonById(d.personId as PersonId);
+              summaries.push(
+                t('assistant.actionDetails.addTransport', {
+                  type: d.type as string,
+                  person: person?.name ?? String(d.personId),
+                  location: d.location as string,
+                  defaultValue:
+                    'Added {{type}} for {{person}} — {{location}}',
+                }),
+              );
               break;
             }
 
             case 'removeTransport': {
-              await deleteTransport(action.data.transportId as TransportId);
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const transportId = action.data.transportId as TransportId;
+              const tr = await getTransportById(transportId);
+              await deleteTransportWithOwnershipCheck(transportId, tid);
               toast.success(t('transports.deleteSuccess'));
               executedCount++;
+              const label = tr
+                ? `${tr.type} · ${tr.location}`
+                : String(transportId);
+              summaries.push(
+                t('assistant.actionDetails.removeTransport', {
+                  label,
+                  defaultValue: 'Removed transport: {{label}}',
+                }),
+              );
               break;
             }
 
@@ -264,21 +476,9 @@ export function useTripActions(): UseTripActionsReturn {
         }
       }
 
-      return executedCount;
+      return { count: executedCount, summaries };
     },
-    [
-      currentTrip,
-      persons,
-      t,
-      createRoom,
-      deleteRoom,
-      createPerson,
-      deletePerson,
-      createAssignment,
-      deleteAssignment,
-      createTransport,
-      deleteTransport,
-    ],
+    [currentTrip, t],
   );
 
   return { executeActions };

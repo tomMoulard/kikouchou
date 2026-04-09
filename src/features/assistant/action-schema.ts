@@ -57,8 +57,58 @@ export interface ActionDef {
 export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Trip ----------------------------------------------------------------
   {
+    action: 'createTrip',
+    label:
+      'Create a NEW trip and switch the app to it. Use when the user wants a new trip — never use updateTrip for that',
+    fields: {
+      name: {
+        type: 'string',
+        required: true,
+        description: 'Trip display name',
+        example: 'Paris weekend',
+      },
+      startDate: {
+        type: 'string',
+        required: true,
+        description: 'Start date (YYYY-MM-DD)',
+        example: '2026-04-15',
+      },
+      endDate: {
+        type: 'string',
+        required: true,
+        description: 'End date (YYYY-MM-DD)',
+        example: '2026-04-16',
+      },
+      location: {
+        type: 'string',
+        required: false,
+        description: 'Trip location',
+        example: 'Paris',
+      },
+      description: {
+        type: 'string',
+        required: false,
+        description: 'Notes or description',
+        example: '',
+      },
+    },
+  },
+  {
+    action: 'selectTrip',
+    label:
+      'Switch the app to an existing trip using its id from the "All trips" list in the system prompt',
+    fields: {
+      tripId: {
+        type: 'string',
+        required: true,
+        description: 'Trip id (copy from All trips)',
+        example: '<trip id>',
+      },
+    },
+  },
+  {
     action: 'updateTrip',
-    label: 'Update trip name, location, dates, or description',
+    label: 'Update the currently selected trip name, location, dates, or description (does not create a new trip)',
     fields: {
       name: {
         type: 'string',
@@ -380,6 +430,12 @@ export function generateActionPrompt(): string[] {
     '- You can output multiple ```action blocks if the user requests multiple changes.',
     '- Be concise and helpful.',
     '- If the user asks a question about the trip, answer based on the data above without any action block.',
+    '',
+    'Trip creation vs editing:',
+    '- If the user asks to **create a new trip**, you MUST use **createTrip**, not updateTrip.',
+    '- **updateTrip** only edits the trip that is currently selected; it never creates a separate trip.',
+    '- After **createTrip**, further actions in the same reply (guests, rooms, …) apply to that new trip.',
+    '- Use **selectTrip** with a trip id from **All trips** when the user wants to work on a different existing trip.',
   );
 
   return lines;

@@ -41,18 +41,38 @@ export interface UseTripSystemPromptReturn {
  * @returns The system prompt and whether trip context is available
  */
 export function useTripSystemPrompt(): UseTripSystemPromptReturn {
-  const { currentTrip } = useTripContext();
+  const { currentTrip, trips } = useTripContext();
   const { rooms } = useRoomContext();
   const { persons } = usePersonContext();
   const { assignments } = useAssignmentContext();
   const { transports } = useTransportContext();
 
   const systemPrompt = useMemo((): string => {
+    const tripsListLines =
+      trips.length > 0
+        ? [
+            '',
+            '## All trips (use trip id with the selectTrip action)',
+            ...trips.map(
+              (trip) =>
+                `- "${trip.name}" — id: \`${trip.id}\` — ${trip.startDate} to ${trip.endDate}${trip.location ? ` — ${trip.location}` : ''}`,
+            ),
+          ]
+        : [];
+
     if (!currentTrip) {
-      return (
-        'You are a helpful trip planning assistant for the Kikoushou app. ' +
-        'No trip is currently selected. Ask the user to select or create a trip first.'
-      );
+      return [
+        'You are a helpful trip planning assistant for the Kikoushou app.',
+        trips.length > 0
+          ? 'No trip is currently selected, but other trips exist — see below.'
+          : 'No trip is currently selected.',
+        ...tripsListLines,
+        '',
+        'Use **createTrip** to create a new trip (the app will select it automatically), or **selectTrip** with a trip id from the list above to work on an existing trip.',
+        ...generateActionPrompt(),
+      ]
+        .filter(Boolean)
+        .join('\n');
     }
 
     const parts: string[] = [
@@ -60,13 +80,19 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       'You have access to the current trip data and can help the user manage it.',
       'When the user asks to modify trip data, output a JSON action block that the app will execute.',
       '',
-      '## Current Trip',
+      '### Creating a new trip vs editing this one',
+      '- Use **createTrip** when the user wants a **new** trip (a separate row in their trip list).',
+      '- Use **updateTrip** only to change fields on the **current** trip shown below (rename, dates, location, …). **updateTrip does not create a new trip.**',
+      '- Use **selectTrip** with a trip id from "All trips" to switch which trip is active before other actions.',
+      '',
+      '## Current trip (selected)',
       `- Name: ${currentTrip.name}`,
       `- Location: ${currentTrip.location ?? 'Not set'}`,
       `- Dates: ${currentTrip.startDate} to ${currentTrip.endDate}`,
       currentTrip.description
         ? `- Description: ${currentTrip.description}`
         : '',
+      ...tripsListLines,
     ];
 
     // Rooms
@@ -126,7 +152,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     parts.push(...generateActionPrompt());
 
     return parts.filter(Boolean).join('\n');
-  }, [currentTrip, rooms, persons, assignments, transports]);
+  }, [currentTrip, trips, rooms, persons, assignments, transports]);
 
   return {
     systemPrompt,

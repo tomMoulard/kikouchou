@@ -411,6 +411,58 @@ describe('buildRoomTimelineModel', () => {
     expect(row2?.items[0]?.assignment.id).toBe(longInRoom2.id);
   });
 
+  it('still shows assignment when guest stay dates do not overlap assignment nights (misaligned data)', () => {
+    const trip: Trip = {
+      id: 'trip-1' as Trip['id'],
+      shareId: 'share-1' as Trip['shareId'],
+      name: 'Short trip',
+      startDate: iso('2026-04-15'),
+      endDate: iso('2026-04-16'),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const room: Room = {
+      id: 'r1' as Room['id'],
+      tripId: trip.id,
+      name: 'Hotel Room',
+      capacity: 1,
+      order: 0,
+    };
+    // Stay window starts after the assignment’s first night (bad data) — would yield empty
+    // intersection with old clipping; we fall back to assignment nights for the bar.
+    const person: Person = {
+      id: 'p1' as Person['id'],
+      tripId: trip.id,
+      name: 'Alex',
+      color: '#3b82f6' as HexColor,
+      stayStartDate: iso('2026-04-16'),
+      stayEndDate: iso('2026-04-17'),
+    };
+    const assignment: RoomAssignment = {
+      id: 'a1' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room.id,
+      personId: person.id,
+      startDate: iso('2026-04-15'),
+      endDate: iso('2026-04-16'),
+    };
+
+    const model = buildRoomTimelineModel({
+      trip,
+      range: { startDate: trip.startDate, endDate: trip.endDate },
+      rooms: [room],
+      assignments: [assignment],
+      personsById: new Map([[person.id, person]]),
+      unknownLabel: 'Unknown',
+      arrivals: [],
+      departures: [],
+    });
+
+    const row = model.rows[0]!;
+    expect(row.items).toHaveLength(1);
+    expect(row.items[0]!.label).toBe('Alex');
+  });
+
   it('handles empty date range gracefully', () => {
     const trip = createTrip();
     const room: Room = {
