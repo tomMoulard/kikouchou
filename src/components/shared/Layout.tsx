@@ -30,6 +30,7 @@ import {
   Menu,
   MoreHorizontal,
   Settings,
+  Sparkles,
   Users,
 } from 'lucide-react';
 
@@ -116,6 +117,16 @@ const SETTINGS_NAV_ITEM: NavItem = {
 };
 
 /**
+ * AI Assistant navigation item.
+ */
+const ASSISTANT_NAV_ITEM: NavItem = {
+  labelKey: 'nav.assistant',
+  pathSuffix: 'assistant',
+  icon: Sparkles,
+  requiresTrip: false,
+};
+
+/**
  * Primary mobile bottom nav items (max 4 for UX: 3 trip items + "More").
  * Calendar, Rooms, Transports are directly accessible.
  * Persons, Trips, Settings are inside the "More" sheet.
@@ -131,6 +142,7 @@ const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] =
 const MOBILE_MORE_NAV_ITEMS: readonly NavItem[] = [
   TRIP_NAV_ITEMS.find((item) => item.pathSuffix === 'persons')!,
   ...GLOBAL_NAV_ITEMS,
+  ASSISTANT_NAV_ITEM,
   SETTINGS_NAV_ITEM,
 ];
 
@@ -638,9 +650,14 @@ const DesktopSidebar = memo(function DesktopSidebar({
       {/* Spacer when no trip */}
       {!trip && <div className="flex-1" />}
 
-      {/* Settings - always at bottom */}
+      {/* AI Assistant & Settings - always at bottom */}
       <nav className="border-t py-2" aria-label={t('nav.settingsNavigation', 'Settings navigation')}>
-        <ul className="px-2">
+        <ul className="space-y-1 px-2">
+          <NavLinkItem
+            item={ASSISTANT_NAV_ITEM}
+            tripId={tripId}
+            isCollapsed={isCollapsed}
+          />
           <NavLinkItem
             item={SETTINGS_NAV_ITEM}
             tripId={tripId}

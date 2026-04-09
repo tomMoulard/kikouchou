@@ -45,7 +45,8 @@
     "guestsOfTheDayOutsideTrip": "Aujourd’hui est en dehors des dates du voyage",
     "guestsOfTheDayLoading": "Chargement des invités…",
     "expand": "Développer la barre latérale",
-    "collapse": "Réduire la barre latérale"
+    "collapse": "Réduire la barre latérale",
+    "assistant": "Assistant IA"
   },
   "trips": {
     "title": "Mes voyages",
@@ -434,6 +435,18 @@
       "mergeError": "Echec de l'application des modifications",
       "scanAnother": "Scanner un autre"
     }
+  },
+  "assistant": {
+    "title": "Assistant IA",
+    "description": "Exécutez Gemma localement sur votre appareil pour gérer votre voyage en langage naturel.",
+    "pageDescription": "Posez des questions ou modifiez votre voyage en langage naturel",
+    "loadModel": "Charger le modèle",
+    "loadHint": "Le modèle (~2,5 Go) sera téléchargé et mis en cache dans votre navigateur. Nécessite le support WebGPU.",
+    "placeholder": "Posez une question sur votre voyage ou demandez des modifications...",
+    "send": "Envoyer le message",
+    "stop": "Arrêter la génération",
+    "emptyTitle": "Prêt à vous aider avec votre voyage !",
+    "emptyHint": "Essayez de demander « Qui reste ce soir ? » ou « Ajouter un invité nommé Alice »"
   },
   "settings": {
     "title": "Paramètres",
