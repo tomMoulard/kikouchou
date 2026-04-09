@@ -46,72 +46,27 @@ describe('MultiFrameQR', () => {
     expect(screen.queryByLabelText('Next frame')).not.toBeInTheDocument();
   });
 
-  it('renders multi-frame with navigation controls', () => {
+  it('hides QR and navigation when payload is split into multiple frames', () => {
     render(<MultiFrameQR frames={['frame-1', 'frame-2', 'frame-3']} rawPayload="payload" />);
 
-    expect(screen.getByLabelText('Previous frame')).toBeInTheDocument();
-    expect(screen.getByLabelText('Next frame')).toBeInTheDocument();
-    expect(screen.getByText('1 / 3')).toBeInTheDocument();
+    expect(screen.queryByTestId('qr-canvas')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Previous frame')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Next frame')).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'This export is too large for a scannable QR code. Copy the text below and paste it on the other device to import.',
+      ),
+    ).toBeInTheDocument();
   });
 
-  it('navigates to next frame on button click', () => {
-    render(<MultiFrameQR frames={['f1', 'f2', 'f3']} rawPayload="payload" autoAdvanceMs={0} />);
-
-    expect(screen.getByText('1 / 3')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText('Next frame'));
-    expect(screen.getByText('2 / 3')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByLabelText('Next frame'));
-    expect(screen.getByText('3 / 3')).toBeInTheDocument();
-
-    // Wraps around
-    fireEvent.click(screen.getByLabelText('Next frame'));
-    expect(screen.getByText('1 / 3')).toBeInTheDocument();
-  });
-
-  it('navigates to previous frame on button click', () => {
-    render(<MultiFrameQR frames={['f1', 'f2', 'f3']} rawPayload="payload" autoAdvanceMs={0} />);
-
-    // Wraps around to last
-    fireEvent.click(screen.getByLabelText('Previous frame'));
-    expect(screen.getByText('3 / 3')).toBeInTheDocument();
-  });
-
-  it('auto-advances frames', () => {
-    render(<MultiFrameQR frames={['f1', 'f2', 'f3']} rawPayload="payload" autoAdvanceMs={1000} />);
-
-    expect(screen.getByText('1 / 3')).toBeInTheDocument();
-
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-    expect(screen.getByText('2 / 3')).toBeInTheDocument();
-
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-    expect(screen.getByText('3 / 3')).toBeInTheDocument();
-
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-    expect(screen.getByText('1 / 3')).toBeInTheDocument();
-  });
-
-  it('does not auto-advance when autoAdvanceMs is 0', () => {
-    render(<MultiFrameQR frames={['f1', 'f2']} rawPayload="payload" autoAdvanceMs={0} />);
-
-    expect(screen.getByText('1 / 2')).toBeInTheDocument();
-
-    act(() => {
-      vi.advanceTimersByTime(5000);
-    });
-    expect(screen.getByText('1 / 2')).toBeInTheDocument();
-  });
-
-  it('renders copy-as-text button', () => {
+  it('renders copy-as-text button for single frame', () => {
     render(<MultiFrameQR frames={['f1']} rawPayload="the-payload" />);
+
+    expect(screen.getByText('Copy as text')).toBeInTheDocument();
+  });
+
+  it('renders copy-as-text button when only copy mode (multi-frame)', () => {
+    render(<MultiFrameQR frames={['a', 'b']} rawPayload="full" />);
 
     expect(screen.getByText('Copy as text')).toBeInTheDocument();
   });
@@ -129,6 +84,19 @@ describe('MultiFrameQR', () => {
     expect(writeText).toHaveBeenCalledWith('the-payload');
   });
 
+  it('copies full raw payload in multi-frame mode', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(<MultiFrameQR frames={['p1', 'p2']} rawPayload="FULL-PAYLOAD" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Copy as text'));
+    });
+
+    expect(writeText).toHaveBeenCalledWith('FULL-PAYLOAD');
+  });
+
   it('shows copied state after successful copy', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
@@ -141,7 +109,6 @@ describe('MultiFrameQR', () => {
 
     expect(screen.getByText('Copied!')).toBeInTheDocument();
 
-    // Resets after 2s
     act(() => {
       vi.advanceTimersByTime(2000);
     });
@@ -152,7 +119,6 @@ describe('MultiFrameQR', () => {
     const writeText = vi.fn().mockRejectedValue(new Error('denied'));
     Object.assign(navigator, { clipboard: { writeText } });
 
-    // Define execCommand on document for the fallback path
     const execCommandMock = vi.fn().mockReturnValue(true);
     Object.defineProperty(document, 'execCommand', {
       value: execCommandMock,

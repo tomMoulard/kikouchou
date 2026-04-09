@@ -184,30 +184,25 @@ const TripSyncExportPanel = memo(function TripSyncExportPanel({
         <CardContent className="flex items-start gap-3 p-4">
           <QrCode className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">
-            {isHostExport
+            {frames.length > 1
               ? t(
-                  'sharing.sync.exportInstructionsHost',
-                  'Scan this QR from another device that has this same trip open to copy participants, room assignments, and transport details.',
+                  'sharing.sync.exportInstructionsCopyOnly',
+                  'Copy the encoded data below and use Import on the other device to sync.',
                 )
-              : t(
-                  'sharing.sync.exportInstructions',
-                  'Show this QR code to another participant so they can scan it and sync your changes.',
-                )}
+              : isHostExport
+                ? t(
+                    'sharing.sync.exportInstructionsHost',
+                    'Scan this QR from another device that has this same trip open to copy participants, room assignments, and transport details.',
+                  )
+                : t(
+                    'sharing.sync.exportInstructions',
+                    'Show this QR code to another participant so they can scan it and sync your changes.',
+                  )}
           </p>
         </CardContent>
       </Card>
 
       <MultiFrameQR frames={frames} rawPayload={rawPayload} />
-
-      {frames.length > 1 && (
-        <p className="text-center text-xs text-muted-foreground">
-          {t(
-            'sharing.sync.multiFrameHint',
-            'This QR code has {{count}} frames. Keep it still while scanning all frames.',
-            { count: frames.length },
-          )}
-        </p>
-      )}
     </div>
   );
 });

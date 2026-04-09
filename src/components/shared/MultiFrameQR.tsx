@@ -1,15 +1,15 @@
 /**
- * @fileoverview Multi-frame QR code display for large payloads.
- * Animates through QR frames if the payload exceeds single-QR capacity.
- * Also supports single-frame display with copy-as-text fallback.
+ * @fileoverview QR code display for export payloads that fit in one code.
+ * When the payload is split into multiple frames (too large for one QR), only
+ * copy-as-text is offered so users are not asked to scan a sequence of codes.
  *
  * @module components/shared/MultiFrameQR
  */
 
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QRCodeCanvas } from 'qrcode.react';
-import { Check, ClipboardCopy, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, ClipboardCopy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -19,13 +19,11 @@ import { cn } from '@/lib/utils';
 // ============================================================================
 
 interface MultiFrameQRProps {
-  /** Array of frame strings (1 for single QR, N for multi-frame) */
+  /** Array of frame strings (1 for single QR, N when payload was split — then QR is hidden) */
   readonly frames: readonly string[];
   /** Size of the QR code in pixels */
   readonly size?: number;
-  /** Auto-advance interval in ms (0 = manual navigation) */
-  readonly autoAdvanceMs?: number;
-  /** The full encoded payload for copy-as-text fallback */
+  /** The full encoded payload for copy-as-text */
   readonly rawPayload: string;
   /** Additional CSS classes */
   readonly className?: string;
@@ -36,7 +34,6 @@ interface MultiFrameQRProps {
 // ============================================================================
 
 const DEFAULT_SIZE = 280;
-const DEFAULT_AUTO_ADVANCE_MS = 1500;
 
 // ============================================================================
 // Component
@@ -45,33 +42,13 @@ const DEFAULT_AUTO_ADVANCE_MS = 1500;
 export const MultiFrameQR = memo(function MultiFrameQR({
   frames,
   size = DEFAULT_SIZE,
-  autoAdvanceMs = DEFAULT_AUTO_ADVANCE_MS,
   rawPayload,
   className,
 }: MultiFrameQRProps) {
   const { t } = useTranslation();
-  const [currentFrame, setCurrentFrame] = useState(0);
   const [copied, setCopied] = useState(false);
   const isMultiFrame = frames.length > 1;
-
-  // Auto-advance timer for multi-frame
-  useEffect(() => {
-    if (!isMultiFrame || autoAdvanceMs <= 0) return;
-
-    const interval = setInterval(() => {
-      setCurrentFrame(prev => (prev + 1) % frames.length);
-    }, autoAdvanceMs);
-
-    return () => clearInterval(interval);
-  }, [isMultiFrame, autoAdvanceMs, frames.length]);
-
-  const goNext = useCallback(() => {
-    setCurrentFrame(prev => (prev + 1) % frames.length);
-  }, [frames.length]);
-
-  const goPrev = useCallback(() => {
-    setCurrentFrame(prev => (prev - 1 + frames.length) % frames.length);
-  }, [frames.length]);
+  const singleFrameData = frames[0] ?? '';
 
   const handleCopy = useCallback(async () => {
     try {
@@ -99,48 +76,27 @@ export const MultiFrameQR = memo(function MultiFrameQR({
     }
   }, [rawPayload, t]);
 
-  const currentFrameData = useMemo(() => frames[currentFrame] ?? '', [frames, currentFrame]);
-
   return (
     <div className={cn('flex flex-col items-center gap-4', className)}>
-      {/* QR Code */}
-      <div className="rounded-xl bg-white p-4 shadow-md">
-        <QRCodeCanvas
-          value={currentFrameData}
-          size={size}
-          level="L"
-          marginSize={2}
-        />
-      </div>
-
-      {/* Multi-frame navigation */}
-      {isMultiFrame && (
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goPrev}
-            aria-label={t('sharing.sync.previousFrame', 'Previous frame')}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-
-          <span className="text-sm text-muted-foreground tabular-nums">
-            {currentFrame + 1} / {frames.length}
-          </span>
-
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goNext}
-            aria-label={t('sharing.sync.nextFrame', 'Next frame')}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+      {isMultiFrame ? (
+        <p className="max-w-md text-center text-sm text-muted-foreground">
+          {t(
+            'sharing.sync.payloadTooLargeForQr',
+            'This export is too large for a scannable QR code. Copy the text below and paste it on the other device to import.',
+          )}
+        </p>
+      ) : (
+        <div className="rounded-xl bg-white p-4 shadow-md">
+          <QRCodeCanvas
+            value={singleFrameData}
+            size={size}
+            level="L"
+            marginSize={2}
+          />
         </div>
       )}
 
-      {/* Copy as text fallback */}
+      {/* Copy full payload (required when multi-frame; also offered for single-frame) */}
       <Button
         variant="outline"
         onClick={handleCopy}
