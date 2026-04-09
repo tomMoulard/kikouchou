@@ -23,8 +23,11 @@ import { InstallPrompt } from '../InstallPrompt';
 
 describe('InstallPrompt', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     vi.useFakeTimers();
+    // Spy on localStorage to prevent state leaking between tests.
+    // The component reads 'kikoushou-install-dismissed' on init and writes on dismiss.
+    vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
     mockCanInstall.mockReturnValue(false);
     mockInstall.mockResolvedValue(true);
     mockIsInstalling.mockReturnValue(false);
@@ -33,6 +36,7 @@ describe('InstallPrompt', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('returns null when canInstall is false', () => {
