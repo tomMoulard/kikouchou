@@ -43,7 +43,7 @@ const mockRoom: Room = {
   tripId: mockTrip.id,
   name: 'Blue Room',
   capacity: 2,
-  color: '#2563eb' as Room['color'],
+  order: 0,
 };
 
 const mockAssignment: RoomAssignment = {

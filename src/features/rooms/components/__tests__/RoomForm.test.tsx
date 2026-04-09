@@ -295,13 +295,12 @@ describe('RoomForm', () => {
     );
   });
 
-  it('renders edit mode with color', () => {
+  it('renders edit mode with existing room data', () => {
     const room: Room = {
       id: 'r1' as Room['id'],
       tripId: 't1' as Room['tripId'],
       name: 'Colored Room',
       capacity: 2,
-      color: '#ff0000' as Room['color'],
       order: 0,
     };
     render(

@@ -363,6 +363,7 @@ describe('TripSyncPage', () => {
       assignmentsUpserted: 0,
       transportsUpserted: 0,
       conflictsAccepted: 0,
+      conflictsKept: 0,
     });
 
     const user = userEvent.setup();
@@ -561,7 +562,7 @@ describe('TripSyncPage', () => {
   });
 
   it('handles multi-frame QR code scanning', async () => {
-    const { parseFrame, reassembleFrames, decodeChangeset, computeMerge } = await import('@/lib/sharing');
+    const { parseFrame, reassembleFrames } = await import('@/lib/sharing');
 
     // First frame: not complete
     vi.mocked(parseFrame).mockReturnValueOnce({ index: 0, total: 2, data: 'part1' });

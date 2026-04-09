@@ -199,7 +199,7 @@ describe('SettingsPage', () => {
 
   describe('CurrentTripSection error handling', () => {
     it('handles update trip error gracefully', async () => {
-      const { toast } = await import('sonner');
+      await import('sonner');
       mockUpdateTrip.mockRejectedValueOnce(new Error('Update failed'));
 
       const { userEvent } = await import('@testing-library/user-event');

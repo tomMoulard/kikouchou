@@ -57,9 +57,6 @@ function makePerson(overrides: Partial<Person> = {}): Person {
     tripId: 'trip-1' as TripId,
     name: 'Alice',
     color: '#3b82f6' as HexColor,
-    order: 0,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
     ...overrides,
   };
 }
@@ -71,8 +68,6 @@ function makeRoom(overrides: Partial<Room> = {}): Room {
     name: 'Blue Room',
     capacity: 2,
     order: 0,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
     ...overrides,
   };
 }
@@ -85,8 +80,6 @@ function makeAssignment(overrides: Partial<RoomAssignment> = {}): RoomAssignment
     personId: 'person-1' as PersonId,
     startDate: '2026-01-10' as ISODateString,
     endDate: '2026-01-13' as ISODateString,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
     ...overrides,
   };
 }
@@ -102,8 +95,6 @@ function makeTransport(overrides: Partial<Transport> = {}): Transport {
     transportMode: 'plane',
     transportNumber: 'AF1234',
     needsPickup: false,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
     ...overrides,
   };
 }
@@ -212,7 +203,7 @@ describe('EventDetailDialog', () => {
     });
 
     it('shows directions button for transports with coordinates', () => {
-      const transport = makeTransport({ coordinates: { lat: 48.8, lng: 2.35 } });
+      const transport = makeTransport({ coordinates: { lat: 48.8, lon: 2.35 } });
       const event = makeAssignmentEvent({ relatedTransports: [transport] });
       render(<EventDetailDialog {...defaultProps} event={event} />);
       expect(screen.getByText('directions')).toBeInTheDocument();

@@ -856,7 +856,7 @@ describe('TripForm Date Selection Branches', () => {
   });
 
   it('handles import trip selection and removal', async () => {
-    const user = userEvent.setup();
+    userEvent.setup();
     const onImportSourceChange = vi.fn();
 
     render(

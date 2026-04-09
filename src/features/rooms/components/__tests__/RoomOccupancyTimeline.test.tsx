@@ -99,8 +99,6 @@ const mockAssignment: RoomAssignment = {
   personId: 'p1' as Person['id'],
   startDate: '2026-07-02' as RoomAssignment['startDate'],
   endDate: '2026-07-08' as RoomAssignment['endDate'],
-  createdAt: Date.now(),
-  updatedAt: Date.now(),
 };
 
 const defaultProps = {

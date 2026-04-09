@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@/test/utils';
+import { render } from '@/test/utils';
 import { TransportIcon } from '@/components/shared/TransportIcon';
 import type { TransportMode } from '@/types';
 
