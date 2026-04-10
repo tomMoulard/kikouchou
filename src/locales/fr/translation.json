@@ -434,6 +434,19 @@
       "mergeSuccess": "{{count}} modifications fusionnees avec succes",
       "mergeError": "Echec de l'application des modifications",
       "scanAnother": "Scanner un autre"
+    },
+    "p2p": {
+      "shareDescription": "Partagez ce lien pour collaborer en temps réel",
+      "privacyNotice": "Toute personne disposant de ce lien peut voir et modifier ce voyage",
+      "connectionError": "Échec de la connexion",
+      "connectionErrorDescription": "Impossible de rejoindre ce voyage. Vérifiez votre connexion puis réessayez.",
+      "joining": "Connexion au voyage...",
+      "waitingForData": "En attente des données du voyage...",
+      "syncedWithPeers": "Synchronisé avec {{count}} pair(s)",
+      "syncingWithPeers": "Synchronisation avec {{count}} pair(s)...",
+      "connectedWaitingPeers": "Connecté au serveur de signalisation, en attente des pairs...",
+      "waitingForPeers": "Connexion au serveur de signalisation...",
+      "waitingDescription": "Le propriétaire du voyage doit garder l’application ouverte pour que la synchronisation fonctionne."
     }
   },
   "assistant": {

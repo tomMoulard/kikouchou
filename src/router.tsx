@@ -45,6 +45,15 @@ const SettingsPage = lazy(() =>
   })),
 );
 
+/**
+ * Lazy-loaded P2PTripPage for real-time collaboration via shared link.
+ */
+const P2PTripPage = lazy(() =>
+  import('@/features/sharing/pages/P2PTripPage').then((module) => ({
+    default: module.P2PTripPage,
+  })),
+);
+
 // ============================================================================
 // Error Page Component
 // ============================================================================
@@ -228,6 +237,23 @@ const settingsRoute: RouteObject = {
   // `children` array and caused sub-routes to never render.
   ...sharingRoutes[0],
   errorElement: <ErrorPage />,
+},
+
+/**
+ * P2P real-time collaboration route.
+ * Accessed via /trip/:roomId#encryptionKey — the fragment is the credential.
+ * Not wrapped with Layout because it auto-redirects to the normal trip view.
+ */
+ p2pRoute: RouteObject = {
+  path: 'trip/:roomId',
+  element: (
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingState variant="fullPage" />}>
+        <P2PTripPage />
+      </Suspense>
+    </ErrorBoundary>
+  ),
+  errorElement: <ErrorPage />,
 };
 
 /**
@@ -262,6 +288,9 @@ export const router = createBrowserRouter(
   [
     // Public routes (outside Layout)
     publicRoutes,
+
+    // P2P real-time collaboration route
+    p2pRoute,
 
     // Main application routes (with Layout)
     appRoutes,

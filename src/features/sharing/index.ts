@@ -37,6 +37,7 @@ export { RoomSelectionStepPage } from './pages/RoomSelectionStepPage';
 export { TransportEntryStepPage } from './pages/TransportEntryStepPage';
 export { SummaryStepPage } from './pages/SummaryStepPage';
 export { TripSyncPage } from './pages/TripSyncPage';
+export { P2PTripPage } from './pages/P2PTripPage';
 
 // ============================================================================
 // Routes

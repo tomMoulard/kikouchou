@@ -434,6 +434,19 @@
       "mergeSuccess": "Merged {{count}} changes successfully",
       "mergeError": "Failed to apply changes",
       "scanAnother": "Scan another"
+    },
+    "p2p": {
+      "shareDescription": "Share this link to collaborate in real-time",
+      "privacyNotice": "Anyone with this link can view and edit this trip",
+      "connectionError": "Failed to connect",
+      "connectionErrorDescription": "Could not join this trip. Check your connection and try again.",
+      "joining": "Joining trip...",
+      "waitingForData": "Waiting for trip data...",
+      "syncedWithPeers": "Synced with {{count}} peer(s)",
+      "syncingWithPeers": "Syncing with {{count}} peer(s)...",
+      "connectedWaitingPeers": "Connected to signaling, waiting for peers...",
+      "waitingForPeers": "Connecting to signaling server...",
+      "waitingDescription": "The trip owner needs to have the app open for you to sync."
     }
   },
   "assistant": {

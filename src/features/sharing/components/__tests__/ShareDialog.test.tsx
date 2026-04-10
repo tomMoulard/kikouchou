@@ -1,120 +1,140 @@
 /**
- * @fileoverview Tests for ShareDialog — P2P full-trip export (same as Sync).
+ * @fileoverview Tests for ShareDialog.
  * @module features/sharing/components/__tests__/ShareDialog.test
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+
 import { ShareDialog } from '../ShareDialog';
-import type { Trip, TripId, ShareId, ISODateString } from '@/types';
+import type { ISODateString, ShareId, Trip, TripId } from '@/types';
 
-// ShareDialog delegates export UI to TripSyncExportPanel — stub it to avoid loading the full sharing stack in this dialog test.
-vi.mock('../TripSyncExportPanel', () => ({
-  TripSyncExportPanel: () => (
-    <div
-      data-testid="multi-frame-qr"
-      data-payload-length={String('ENCODED_PAYLOAD_FOR_QR'.length)}
-    />
-  ),
-}));
+const mockUpdateTrip = vi.fn();
+const mockWriteText = vi.fn();
+const originalClipboard = window.navigator.clipboard;
 
-// Mock i18next
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, fallback?: string | Record<string, unknown>) => {
-      if (typeof fallback === 'string') return fallback;
-      return key;
-    },
+    t: (_key: string, fallback?: string | Record<string, unknown>) =>
+      typeof fallback === 'string' ? fallback : _key,
   }),
 }));
 
-const mockTrip: Trip = {
+vi.mock('nanoid', () => ({
+  nanoid: vi
+    .fn()
+    .mockImplementationOnce(() => 'room-id-1234')
+    .mockImplementationOnce(() => 'secret-key-abcdefghijkl'),
+}));
+
+vi.mock('@/contexts/TripContext', () => ({
+  useTripContext: () => ({
+    currentTrip: null,
+  }),
+}));
+
+vi.mock('@/lib/db/database', () => ({
+  db: {
+    trips: {
+      update: (...args: unknown[]) => mockUpdateTrip(...args),
+    },
+  },
+}));
+
+vi.mock('@/lib/yjs', () => ({
+  TripYjsSyncBinding: () => <div data-testid="trip-yjs-sync-binding" />,
+}));
+
+const baseTrip: Trip = {
   id: 'trip-1' as TripId,
-  name: 'Test Trip',
-  shareId: 'abc123' as ShareId,
-  startDate: '2026-01-05' as ISODateString,
-  endDate: '2026-01-10' as ISODateString,
+  name: 'Shared Trip',
+  shareId: 'share-123' as ShareId,
+  startDate: '2026-08-10' as ISODateString,
+  endDate: '2026-08-20' as ISODateString,
   createdAt: 1,
   updatedAt: 1,
 };
 
-// Mock TripContext
-vi.mock('@/contexts/TripContext', () => ({
-  useTripContext: vi.fn(() => ({
-    currentTrip: mockTrip,
-  })),
-}));
-
 describe('ShareDialog', () => {
-  beforeEach(async () => {
-    const { useTripContext } = await import('@/contexts/TripContext');
-    vi.mocked(useTripContext).mockReturnValue({
-      currentTrip: mockTrip,
-    } as ReturnType<typeof useTripContext>);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUpdateTrip.mockResolvedValue(undefined);
+    mockWriteText.mockResolvedValue(undefined);
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: mockWriteText },
+    });
   });
 
-  afterEach(async () => {
-    const { useTripContext } = await import('@/contexts/TripContext');
-    vi.mocked(useTripContext).mockReturnValue({
-      currentTrip: mockTrip,
-    } as ReturnType<typeof useTripContext>);
+  afterEach(() => {
+    Object.defineProperty(window.navigator, 'clipboard', {
+      configurable: true,
+      value: originalClipboard,
+    });
   });
 
-  it('renders P2P description and loads full-trip QR when open', async () => {
-    render(<ShareDialog open={true} onOpenChange={vi.fn()} />);
-
-    expect(screen.getByText('sharing.p2pDescription')).toBeInTheDocument();
-    expect(screen.getByText('sharing.p2pNotice')).toBeInTheDocument();
+  it('generates missing room credentials, persists them, and renders the share URL', async () => {
+    render(<ShareDialog open={true} onOpenChange={vi.fn()} trip={baseTrip} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('multi-frame-qr')).toBeInTheDocument();
+      expect(mockUpdateTrip).toHaveBeenCalledWith(baseTrip.id, {
+        p2pRoomId: 'room-id-1234',
+        p2pEncryptionKey: 'secret-key-abcdefghijkl',
+      });
     });
 
-    const qr = screen.getByTestId('multi-frame-qr');
-    expect(qr.getAttribute('data-payload-length')).toBe(
-      String('ENCODED_PAYLOAD_FOR_QR'.length),
-    );
-  });
+    await waitFor(() => {
+      expect(screen.getByTestId('share-url')).toHaveTextContent(
+        'http://localhost:3000/trip/room-id-1234#secret-key-abcdefghijkl',
+      );
+    });
 
-  it('renders empty state when no trip in context and no trip prop', async () => {
-    const { useTripContext } = await import('@/contexts/TripContext');
-    vi.mocked(useTripContext).mockReturnValue({
-      currentTrip: null,
-    } as ReturnType<typeof useTripContext>);
-
-    render(<ShareDialog open={true} onOpenChange={vi.fn()} />);
-
+    expect(screen.getByTestId('trip-yjs-sync-binding')).toBeInTheDocument();
     expect(
-      screen.getByText('No trip selected. Please select a trip first.'),
+      screen.getByText('Anyone with this link can view and edit this trip'),
     ).toBeInTheDocument();
   });
 
-  it('does not render content when closed', () => {
-    const { container } = render(<ShareDialog open={false} onOpenChange={vi.fn()} />);
-    expect(container.querySelector('[role="dialog"]')).not.toBeInTheDocument();
-  });
-
-  it('uses trip prop when context has no current trip', async () => {
-    const { useTripContext } = await import('@/contexts/TripContext');
-    vi.mocked(useTripContext).mockReturnValueOnce({
-      currentTrip: null,
-      trips: [],
-      isLoading: false,
-      error: null,
-      setCurrentTrip: vi.fn(),
-      checkConnection: vi.fn(),
-    } as unknown as ReturnType<typeof useTripContext>);
-
+  it('reuses existing credentials without regenerating them', async () => {
     render(
       <ShareDialog
         open={true}
         onOpenChange={vi.fn()}
-        trip={mockTrip}
+        trip={{
+          ...baseTrip,
+          p2pRoomId: 'existing-room',
+          p2pEncryptionKey: 'existing-secret',
+        }}
       />,
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('multi-frame-qr')).toBeInTheDocument();
+      expect(screen.getByTestId('share-url')).toHaveTextContent(
+        'http://localhost:3000/trip/existing-room#existing-secret',
+      );
     });
+
+    expect(mockUpdateTrip).not.toHaveBeenCalled();
+    expect(screen.getByTestId('trip-yjs-sync-binding')).toBeInTheDocument();
+  });
+
+  it('renders a copy action for the generated URL', async () => {
+    render(
+      <ShareDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        trip={{
+          ...baseTrip,
+          p2pRoomId: 'existing-room',
+          p2pEncryptionKey: 'existing-secret',
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('share-url')).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
   });
 });
