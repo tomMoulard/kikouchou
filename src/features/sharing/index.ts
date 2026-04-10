@@ -24,7 +24,11 @@ export { TripSyncExportPanel } from './components/TripSyncExportPanel';
 export type { TripSyncExportPanelProps } from './components/TripSyncExportPanel';
 export { ImportTripQrDialog } from './components/ImportTripQrDialog';
 export type { ImportTripQrDialogProps } from './components/ImportTripQrDialog';
-export { extractShareIdFromScannedPayload } from './utils/share-qr-parse';
+export {
+  extractP2pTripInviteFromScannedPayload,
+  extractShareIdFromScannedPayload,
+  type P2pTripInviteFromScan,
+} from './utils/share-qr-parse';
 
 // ============================================================================
 // Pages

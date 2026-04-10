@@ -20,7 +20,6 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Check, Copy, Link2, Share2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { nanoid } from 'nanoid';
 
 import {
   Dialog,
@@ -32,8 +31,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { useTripContext } from '@/contexts/TripContext';
-import { db } from '@/lib/db/database';
-import { TripYjsSyncBinding } from '@/lib/yjs';
+import { ensureTripP2pCredentials, TripYjsSyncBinding } from '@/lib/yjs';
 import type { Trip, TripId } from '@/types';
 
 // ============================================================================
@@ -93,29 +91,17 @@ const ShareDialog = memo(function ShareDialog({
     async function ensureP2PCredentials() {
       setIsGenerating(true);
       try {
-        let roomId = effectiveTrip!.p2pRoomId;
-        let key = effectiveTrip!.p2pEncryptionKey;
-
-        if (!roomId || !key) {
-          // Generate new credentials
-          roomId = nanoid(12);
-          key = nanoid(24);
-
-          // Persist to Dexie
-          await db.trips.update(effectiveTrip!.id as TripId, {
-            p2pRoomId: roomId,
-            p2pEncryptionKey: key,
-          });
+        const creds = await ensureTripP2pCredentials(effectiveTrip!.id as TripId);
+        if (!creds || cancelled) {
+          return;
         }
 
-        if (!cancelled) {
-          const origin = window.location.origin;
-          const base = import.meta.env.BASE_URL ?? '/';
-          const url = `${origin}${base}trip/${roomId}#${key}`;
-          setShareUrl(url);
-          setSyncRoomId(roomId);
-          setSyncEncryptionKey(key);
-        }
+        const origin = window.location.origin;
+        const base = import.meta.env.BASE_URL ?? '/';
+        const url = `${origin}${base}trip/${creds.roomId}#${creds.encryptionKey}`;
+        setShareUrl(url);
+        setSyncRoomId(creds.roomId);
+        setSyncEncryptionKey(creds.encryptionKey);
       } catch (err) {
         console.error('[ShareDialog] Failed to generate P2P credentials:', err);
       } finally {
@@ -158,7 +144,7 @@ const ShareDialog = memo(function ShareDialog({
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
+          <DialogHeader className="pr-10">
             <DialogTitle className="flex items-center gap-2">
               <Share2 className="size-5" aria-hidden="true" />
               {t('sharing.title')}
@@ -193,15 +179,15 @@ const ShareDialog = memo(function ShareDialog({
       ) : null}
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="sm:max-w-md max-h-[90vh] overflow-y-auto"
+          className="flex max-h-[90vh] flex-col gap-0 overflow-hidden sm:max-w-md"
           data-testid="share-dialog"
         >
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Share2 className="size-5" aria-hidden="true" />
+          <DialogHeader className="min-w-0 shrink-0 space-y-2 pr-10 text-center">
+            <DialogTitle className="flex items-center justify-center gap-2">
+              <Share2 className="size-5 shrink-0" aria-hidden="true" />
               {t('sharing.title')}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="min-w-0 break-words">
               {t(
                 'sharing.p2p.shareDescription',
                 'Share this link to collaborate in real-time',
@@ -209,55 +195,57 @@ const ShareDialog = memo(function ShareDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 py-2">
-            {isGenerating || !shareUrl ? (
-              <LoadingState variant="inline" />
-            ) : (
-              <>
-                {/* QR Code */}
-                <div className="flex justify-center">
-                  <div className="rounded-xl bg-white p-4">
-                    <QRCodeSVG value={shareUrl} size={200} level="M" />
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]">
+            <div className="space-y-6 px-0 py-2">
+              {isGenerating || !shareUrl ? (
+                <LoadingState variant="inline" />
+              ) : (
+                <>
+                  {/* QR Code — full-width row so flex centering is stable inside the dialog */}
+                  <div className="flex w-full min-w-0 justify-center">
+                    <div className="shrink-0 rounded-xl bg-white p-4 shadow-sm">
+                      <QRCodeSVG value={shareUrl} size={200} level="M" />
+                    </div>
                   </div>
-                </div>
 
-                {/* Share URL + Copy */}
-                <div className="flex items-center gap-2">
-                  <div
-                    className="flex-1 flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 overflow-hidden"
+                  {/* Share URL — single control: click anywhere to copy */}
+                  <Button
+                    type="button"
+                    variant="outline"
                     data-testid="share-url"
+                    className="h-auto min-h-10 w-full max-w-full justify-start gap-2 px-3 py-2.5 text-left font-normal"
+                    onClick={handleCopy}
+                    title={shareUrl}
+                    aria-label={
+                      copied
+                        ? t('sharing.p2p.linkCopied', 'Link copied')
+                        : t('sharing.p2p.copyLinkAction', 'Copy link')
+                    }
                   >
                     <Link2
                       className="size-4 shrink-0 text-muted-foreground"
                       aria-hidden="true"
                     />
-                    <span className="text-sm truncate font-mono">
+                    <span className="min-w-0 flex-1 truncate text-sm font-mono">
                       {shareUrl}
                     </span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={handleCopy}
-                    aria-label={t('common.copy', 'Copy')}
-                  >
                     {copied ? (
-                      <Check className="size-4 text-green-500" />
+                      <Check className="size-4 shrink-0 text-green-500" aria-hidden="true" />
                     ) : (
-                      <Copy className="size-4" />
+                      <Copy className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     )}
                   </Button>
-                </div>
 
-                {/* Privacy notice */}
-                <p className="text-xs text-muted-foreground text-center">
-                  {t(
-                    'sharing.p2p.privacyNotice',
-                    'Anyone with this link can view and edit this trip',
-                  )}
-                </p>
-              </>
-            )}
+                  {/* Privacy notice */}
+                  <p className="px-1 text-center text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                    {t(
+                      'sharing.p2p.privacyNotice',
+                      'Anyone with this link can view and edit this trip',
+                    )}
+                  </p>
+                </>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>

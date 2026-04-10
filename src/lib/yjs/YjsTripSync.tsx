@@ -15,6 +15,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import type { Person, Room, RoomAssignment, Transport, TripId } from '@/types';
 
+import { ensureTripP2pCredentials } from './ensure-trip-p2p-credentials';
 import { P2PSyncPresence } from './P2PSyncPresence';
 import { YjsProvider, useYjsContext } from './YjsProvider';
 import { populateDocFromDexie, syncDexieToDoc, syncTripMetaToDoc } from './dexie-bridge';
@@ -193,6 +194,32 @@ const YjsTripSync = memo(function YjsTripSync({
   readonly children: ReactNode;
 }): ReactElement {
   const { currentTrip } = useTripContext();
+
+  /** Create P2P room credentials as soon as a trip is selected so Yjs can connect without opening Share. */
+  useEffect(() => {
+    if (!currentTrip?.id) {
+      return;
+    }
+    if (currentTrip.p2pRoomId && currentTrip.p2pEncryptionKey) {
+      return;
+    }
+
+    let cancelled = false;
+    void ensureTripP2pCredentials(currentTrip.id).catch((err) => {
+      if (!cancelled) {
+        console.error('[YjsTripSync] Failed to ensure P2P credentials:', err);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentTrip?.id,
+    currentTrip?.p2pRoomId,
+    currentTrip?.p2pEncryptionKey,
+  ]);
+
   const presence = useLiveQuery(
     async () => (currentTrip ? resolveTripPresenceProfile(currentTrip) : null),
     [currentTrip?.id, currentTrip?.shareId, currentTrip?.updatedAt],

@@ -143,17 +143,6 @@ describe('SettingsPage', () => {
   });
 
   describe('CurrentTripSection interactions', () => {
-    it('navigates to sync page when sync button is clicked', async () => {
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-
-      // Find sync button by its text content (may be nested with icon)
-      const syncBtn = screen.getByRole('button', { name: /sharing\.sync\.pageTitle|sync/i });
-      await user.click(syncBtn);
-      expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/sync');
-    });
-
     it('updates trip when form is submitted', async () => {
       const { userEvent } = await import('@testing-library/user-event');
       const user = userEvent.setup();

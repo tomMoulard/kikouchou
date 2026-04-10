@@ -29,3 +29,7 @@ export {
   type PresenceProfile,
 } from './presence';
 export { TripYjsSyncBinding, YjsTripSync } from './YjsTripSync';
+export {
+  ensureTripP2pCredentials,
+  type TripP2pCredentials,
+} from './ensure-trip-p2p-credentials';

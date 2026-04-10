@@ -6,7 +6,32 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { extractShareIdFromScannedPayload } from '../share-qr-parse';
+import {
+  extractP2pTripInviteFromScannedPayload,
+  extractShareIdFromScannedPayload,
+} from '../share-qr-parse';
+
+describe('extractP2pTripInviteFromScannedPayload', () => {
+  it('extracts room id and key from full https URL', () => {
+    expect(
+      extractP2pTripInviteFromScannedPayload(
+        'https://localhost:5173/trip/myRoomId#myEncryptionKey',
+      ),
+    ).toEqual({ roomId: 'myRoomId', encryptionKey: 'myEncryptionKey' });
+  });
+
+  it('returns null without hash', () => {
+    expect(
+      extractP2pTripInviteFromScannedPayload('https://example.com/trip/only-room'),
+    ).toBeNull();
+  });
+
+  it('returns null for /share/ guest URLs', () => {
+    expect(
+      extractP2pTripInviteFromScannedPayload('https://example.com/share/abc123defgh'),
+    ).toBeNull();
+  });
+});
 
 describe('extractShareIdFromScannedPayload', () => {
   it('extracts share id from full https URL with /share/:id path', () => {

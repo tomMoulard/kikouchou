@@ -33,17 +33,24 @@ vi.mock('@/contexts/TripContext', () => ({
   }),
 }));
 
+const mockGetTrip = vi.fn();
+
 vi.mock('@/lib/db/database', () => ({
   db: {
     trips: {
+      get: (...args: unknown[]) => mockGetTrip(...args),
       update: (...args: unknown[]) => mockUpdateTrip(...args),
     },
   },
 }));
 
-vi.mock('@/lib/yjs', () => ({
-  TripYjsSyncBinding: () => <div data-testid="trip-yjs-sync-binding" />,
-}));
+vi.mock('@/lib/yjs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/yjs')>();
+  return {
+    ...actual,
+    TripYjsSyncBinding: () => <div data-testid="trip-yjs-sync-binding" />,
+  };
+});
 
 const baseTrip: Trip = {
   id: 'trip-1' as TripId,
@@ -58,6 +65,7 @@ const baseTrip: Trip = {
 describe('ShareDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetTrip.mockResolvedValue(baseTrip);
     mockUpdateTrip.mockResolvedValue(undefined);
     mockWriteText.mockResolvedValue(undefined);
     Object.defineProperty(window.navigator, 'clipboard', {
@@ -96,6 +104,12 @@ describe('ShareDialog', () => {
   });
 
   it('reuses existing credentials without regenerating them', async () => {
+    mockGetTrip.mockResolvedValue({
+      ...baseTrip,
+      p2pRoomId: 'existing-room',
+      p2pEncryptionKey: 'existing-secret',
+    });
+
     render(
       <ShareDialog
         open={true}
@@ -135,6 +149,8 @@ describe('ShareDialog', () => {
       expect(screen.getByTestId('share-url')).toBeInTheDocument();
     });
 
-    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Copy link' }),
+    ).toBeInTheDocument();
   });
 });

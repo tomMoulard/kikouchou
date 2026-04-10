@@ -211,9 +211,9 @@ const TripListPage = memo(function TripListPage() {
   if (isLoading) {
     return (
       <>
-        <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+        <div className="flex flex-col">
           <PageHeader title={t('trips.title')} action={headerAction} />
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex items-center justify-center py-20">
             <LoadingState variant="inline" size="lg" />
           </div>
         </div>
@@ -230,9 +230,11 @@ const TripListPage = memo(function TripListPage() {
   if (error) {
     return (
       <>
-        <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+        <div className="flex flex-col">
           <PageHeader title={t('trips.title')} action={headerAction} />
-          <ErrorDisplay error={error} onRetry={handleRetry} />
+          <div className="py-8">
+            <ErrorDisplay error={error} onRetry={handleRetry} />
+          </div>
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
         {sharedTripSync}
@@ -247,9 +249,9 @@ const TripListPage = memo(function TripListPage() {
   if (trips.length === 0) {
     return (
       <>
-        <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+        <div className="flex flex-col">
           <PageHeader title={t('trips.title')} action={headerAction} />
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex items-center justify-center py-16 sm:py-24">
             <EmptyState
               icon={Luggage}
               title={t('trips.empty')}
@@ -273,7 +275,7 @@ const TripListPage = memo(function TripListPage() {
 
   return (
     <>
-      <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+      <div className="flex flex-col">
         <PageHeader title={t('trips.title')} action={headerAction} />
 
         {/* Trip grid */}

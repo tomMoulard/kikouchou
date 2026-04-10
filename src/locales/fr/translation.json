@@ -46,7 +46,9 @@
     "guestsOfTheDayLoading": "Chargement des invités…",
     "expand": "Développer la barre latérale",
     "collapse": "Réduire la barre latérale",
-    "assistant": "Assistant IA"
+    "assistant": "Assistant IA",
+    "syncOnlineCount": "{{count}} en ligne",
+    "syncPresenceRegion": "État de la collaboration"
   },
   "trips": {
     "title": "Mes voyages",
@@ -436,6 +438,8 @@
       "scanAnother": "Scanner un autre"
     },
     "p2p": {
+      "copyLinkAction": "Copier le lien",
+      "linkCopied": "Lien copié",
       "shareDescription": "Partagez ce lien pour collaborer en temps réel",
       "privacyNotice": "Toute personne disposant de ce lien peut voir et modifier ce voyage",
       "connectionError": "Échec de la connexion",

@@ -46,7 +46,9 @@
     "guestsOfTheDayLoading": "Loading guests…",
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
-    "assistant": "AI Assistant"
+    "assistant": "AI Assistant",
+    "syncOnlineCount": "{{count}} online",
+    "syncPresenceRegion": "Collaboration status"
   },
   "trips": {
     "title": "My trips",
@@ -436,6 +438,8 @@
       "scanAnother": "Scan another"
     },
     "p2p": {
+      "copyLinkAction": "Copy link",
+      "linkCopied": "Link copied",
       "shareDescription": "Share this link to collaborate in real-time",
       "privacyNotice": "Anyone with this link can view and edit this trip",
       "connectionError": "Failed to connect",
