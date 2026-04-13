@@ -12,6 +12,8 @@ import { RoomProvider } from '@/contexts/RoomContext';
 import { PersonProvider } from '@/contexts/PersonContext';
 import { AssignmentProvider } from '@/contexts/AssignmentContext';
 import { TransportProvider } from '@/contexts/TransportContext';
+import { SyncPresenceProvider } from '@/contexts/SyncPresenceContext';
+import { YjsTripSync } from '@/lib/yjs/YjsTripSync';
 
 // ============================================================================
 // Type Definitions
@@ -89,7 +91,11 @@ export function AppProviders({ children }: AppProvidersProps): ReactElement {
       <RoomProvider>
         <PersonProvider>
           <AssignmentProvider>
-            <TransportProvider>{children}</TransportProvider>
+            <TransportProvider>
+              <SyncPresenceProvider>
+                <YjsTripSync>{children}</YjsTripSync>
+              </SyncPresenceProvider>
+            </TransportProvider>
           </AssignmentProvider>
         </PersonProvider>
       </RoomProvider>

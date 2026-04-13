@@ -34,7 +34,7 @@ export default defineConfig({
   /* Shared settings for all the projects below */
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
-    baseURL: 'http://localhost:4173',
+    baseURL: 'http://127.0.0.1:4173',
 
     /* Timeout for user actions (click, fill, etc.) */
     actionTimeout: 10_000,
@@ -61,13 +61,25 @@ export default defineConfig({
     },
   ],
 
-  /* Run production build preview server before starting the tests */
-  webServer: {
-    // In CI, we already have the build artifact, so just run preview
-    // Locally, build first then preview
-    command: process.env.CI ? 'bun run preview' : 'bun run build && bun run preview',
-    url: 'http://localhost:4173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  /* Run production build preview server and signaling relay before starting tests */
+  webServer: [
+    {
+      // Signaling relay for P2P sync tests
+      command: 'node relay/server.js',
+      port: 4444,
+      reuseExistingServer: false,
+      timeout: 10_000,
+    },
+    {
+      // Run the Vite app against the local signaling relay.
+      // Using the dev server here is more reliable for end-to-end P2P checks.
+      command: 'bun x vite --host 127.0.0.1 --port 4173',
+      url: 'http://127.0.0.1:4173',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      env: {
+        VITE_SIGNALING_URL: 'ws://127.0.0.1:4444',
+      },
+    },
+  ],
 });

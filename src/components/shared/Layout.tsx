@@ -51,6 +51,8 @@ import { toLocalISODateString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
 import type { Trip } from '@/types';
 
+import { P2PSyncPresence } from './P2PSyncPresence';
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -207,10 +209,14 @@ const Header = memo(function Header({
         {t('app.name')}
       </Link>
 
-      {/* Current trip name or placeholder - responsive max-width */}
-      <span className="ml-auto text-sm text-muted-foreground truncate max-w-[120px] sm:max-w-[200px]">
-        {tripName ?? t('trips.empty')}
-      </span>
+      <div className="ml-auto flex min-w-0 max-w-full items-center gap-3">
+        <div className="shrink-0 md:hidden">
+          <P2PSyncPresence />
+        </div>
+        <span className="text-sm text-muted-foreground truncate max-w-[120px] sm:max-w-[200px]">
+          {tripName ?? t('trips.empty')}
+        </span>
+      </div>
     </header>
   );
 });
@@ -649,6 +655,17 @@ const DesktopSidebar = memo(function DesktopSidebar({
 
       {/* Spacer when no trip */}
       {!trip && <div className="flex-1" />}
+
+      {/* Yjs / P2P online count — desktop sidebar (mobile: header above) */}
+      <div
+        className={cn(
+          'hidden border-t px-2 pt-2 pb-1 md:block',
+          isCollapsed ? 'px-1' : 'px-3',
+        )}
+        aria-label={t('nav.syncPresenceRegion', 'Collaboration status')}
+      >
+        <P2PSyncPresence collapsed={isCollapsed} />
+      </div>
 
       {/* AI Assistant & Settings - always at bottom */}
       <nav className="border-t py-2" aria-label={t('nav.settingsNavigation', 'Settings navigation')}>

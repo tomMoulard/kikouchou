@@ -8,9 +8,6 @@
  */
 
 import Dexie, { type Table } from 'dexie';
-
-/** Current database schema version */
-export const DB_VERSION = 3;
 import type {
   AppSettings,
   Person,
@@ -19,6 +16,26 @@ import type {
   Transport,
   Trip,
 } from '@/types';
+
+/** Current database schema version */
+export const DB_VERSION = 5;
+
+// ============================================================================
+// Yjs Persistence Types
+// ============================================================================
+
+/**
+ * Stores raw Yjs CRDT updates for offline persistence and compaction.
+ * Each row is a single binary update for a given P2P room.
+ */
+export interface YjsUpdateRow {
+  /** Auto-incremented primary key */
+  id?: number;
+  /** The P2P room ID this update belongs to */
+  roomId: string;
+  /** Raw Yjs binary update (Uint8Array) */
+  update: Uint8Array;
+}
 
 /**
  * Kikoushou IndexedDB database class.
@@ -91,6 +108,13 @@ export class KikoushouDatabase extends Dexie {
    * Primary key: id (always 'settings')
    */
   settings!: Table<AppSettings, string>;
+
+  /**
+   * Yjs updates table - stores raw CRDT binary updates for P2P sync persistence.
+   * Primary key: ++id (auto-increment)
+   * Indexes: roomId for loading all updates of a given P2P room
+   */
+  yjsUpdates!: Table<YjsUpdateRow, number>;
 
   constructor() {
     super('kikoushou');
@@ -170,6 +194,44 @@ export class KikoushouDatabase extends Dexie {
         'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
       transports: 'id, personId, driverId, [tripId+datetime], [tripId+personId], [tripId+type]',
       settings: 'id',
+    });
+
+    /**
+     * Schema Version 4 - Add P2P sync support
+     *
+     * Added:
+     * - yjsUpdates table for persisting Yjs CRDT binary updates (offline-first P2P sync)
+     * - p2pRoomId field on trips (optional, for P2P room identification)
+     *
+     * The yjsUpdates table uses auto-increment (++id) because rows are
+     * append-only binary blobs, not user-facing entities.
+     */
+    this.version(4).stores({
+      trips: 'id, &shareId, startDate, createdAt',
+      rooms: 'id, [tripId+order]',
+      persons: 'id, tripId, [tripId+name]',
+      roomAssignments:
+        'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+      transports: 'id, personId, driverId, [tripId+datetime], [tripId+personId], [tripId+type]',
+      settings: 'id',
+      yjsUpdates: '++id, roomId',
+    });
+
+    /**
+     * Schema Version 5 - Add indexed P2P room lookup
+     *
+     * Added:
+     * - p2pRoomId index on trips for shared-link imports
+     */
+    this.version(5).stores({
+      trips: 'id, &shareId, p2pRoomId, startDate, createdAt',
+      rooms: 'id, [tripId+order]',
+      persons: 'id, tripId, [tripId+name]',
+      roomAssignments:
+        'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+      transports: 'id, personId, driverId, [tripId+datetime], [tripId+personId], [tripId+type]',
+      settings: 'id',
+      yjsUpdates: '++id, roomId',
     });
   }
 }

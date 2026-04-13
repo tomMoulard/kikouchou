@@ -8,7 +8,7 @@
 import { type ReactElement, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Globe, Info, Luggage, RefreshCw, Trash2 } from 'lucide-react';
+import { Globe, Info, Luggage, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useOfflineAwareToast } from '@/hooks';
 
@@ -223,7 +223,7 @@ const DataSection = memo(function DataSection(): ReactElement {
 
 /**
  * Current trip section component.
- * Displays the current trip edit form, sync button, and delete option.
+ * Displays the current trip edit form and delete option.
  * Only shown when a trip is currently selected.
  */
 const CurrentTripSection = memo(function CurrentTripSection(): ReactElement | null {
@@ -283,11 +283,6 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement | nu
     }
   }, [currentTrip, navigate, setCurrentTrip, t]);
 
-  const handleSync = useCallback(() => {
-    if (!currentTrip) return;
-    navigate(`/trips/${currentTrip.id}/sync`);
-  }, [currentTrip, navigate]);
-
   const handleOpenDeleteDialog = useCallback(() => {
     setIsDeleteDialogOpen(true);
   }, []);
@@ -315,10 +310,6 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement | nu
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleSync}>
-                <RefreshCw className="mr-2 size-4" aria-hidden="true" />
-                {t('sharing.sync.pageTitle', 'Sync')}
-              </Button>
               <Button variant="destructive" size="sm" onClick={handleOpenDeleteDialog}>
                 <Trash2 className="mr-2 size-4" aria-hidden="true" />
                 {t('common.delete')}

@@ -29,3 +29,4 @@ test-results/
 public/icons/
 public/favicon.ico
 .opencode/node_modules
+.omx/

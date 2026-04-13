@@ -19,7 +19,7 @@
  */
 
 // Database instance
-export { db, DB_VERSION, type KikoushouDatabase } from './database';
+export { db, DB_VERSION, type KikoushouDatabase, type YjsUpdateRow } from './database';
 
 // Utility functions
 export {

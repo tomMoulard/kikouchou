@@ -27,6 +27,9 @@
 export { Layout } from './Layout';
 export type { LayoutProps } from './Layout';
 
+export { P2PSyncPresence } from './P2PSyncPresence';
+export type { P2PSyncPresenceProps } from './P2PSyncPresence';
+
 // ============================================================================
 // State Components
 // ============================================================================
