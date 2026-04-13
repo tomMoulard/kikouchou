@@ -29,7 +29,10 @@ import {
 } from '@/lib/sharing';
 import type { AppChangeset, MergeResult } from '@/lib/sharing';
 
-import { extractShareIdFromScannedPayload } from '../utils/share-qr-parse';
+import {
+  extractP2pTripInviteFromScannedPayload,
+  extractShareIdFromScannedPayload,
+} from '../utils/share-qr-parse';
 
 // ============================================================================
 // Types
@@ -113,6 +116,14 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
         return;
       }
       const trimmed = data.trim();
+
+      const p2pInvite = extractP2pTripInviteFromScannedPayload(trimmed);
+      if (p2pInvite) {
+        handledRef.current = true;
+        onOpenChange(false);
+        navigate(`/trip/${p2pInvite.roomId}#${p2pInvite.encryptionKey}`);
+        return;
+      }
 
       const shareId = extractShareIdFromScannedPayload(trimmed);
       if (shareId) {

@@ -17,8 +17,10 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ImportTripQrDialog, ShareDialog } from '@/features/sharing';
 import { useTripContext } from '@/contexts/TripContext';
+import { TripYjsSyncBinding, resolveTripPresenceProfile } from '@/lib/yjs';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/db/database';
+import { useLiveQuery } from 'dexie-react-hooks';
 import type { Person, Trip, TripId } from '@/types';
 import { TripCard } from '../components/TripCard';
 
@@ -48,7 +50,16 @@ const TripListPage = memo(function TripListPage() {
   const isNavigatingRef = useRef(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [importQrOpen, setImportQrOpen] = useState(false);
-  const [shareDialogTrip, setShareDialogTrip] = useState<Trip | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [sharedTripId, setSharedTripId] = useState<TripId | null>(null);
+  const sharedTrip = useMemo(
+    () => trips.find((trip) => trip.id === sharedTripId) ?? null,
+    [sharedTripId, trips],
+  );
+  const sharedTripPresence = useLiveQuery(
+    async () => (sharedTrip ? resolveTripPresenceProfile(sharedTrip) : null),
+    [sharedTrip?.id, sharedTrip?.shareId, sharedTrip?.updatedAt],
+  );
 
   // Persons per trip (map of tripId -> persons)
   const [personsByTrip, setPersonsByTrip] = useState<Map<TripId, Person[]>>(
@@ -152,13 +163,12 @@ const TripListPage = memo(function TripListPage() {
   }, []);
 
   const handleShareTrip = useCallback((trip: Trip) => {
-    setShareDialogTrip(trip);
+    setSharedTripId(trip.id);
+    setShareDialogOpen(true);
   }, []);
 
   const handleShareDialogOpenChange = useCallback((open: boolean) => {
-    if (!open) {
-      setShareDialogTrip(null);
-    }
+    setShareDialogOpen(open);
   }, []);
 
   const headerAction = useMemo(
@@ -183,6 +193,17 @@ const TripListPage = memo(function TripListPage() {
     [handleCreateClick, openImportQr, t],
   );
 
+  const sharedTripSync =
+    sharedTrip?.p2pRoomId && sharedTrip?.p2pEncryptionKey ? (
+      <TripYjsSyncBinding
+        tripId={sharedTrip.id}
+        roomId={sharedTrip.p2pRoomId}
+        encryptionKey={sharedTrip.p2pEncryptionKey}
+        userName={sharedTripPresence?.name}
+        userColor={sharedTripPresence?.color}
+      />
+    ) : null;
+
   // ============================================================================
   // Render: Loading State
   // ============================================================================
@@ -190,13 +211,14 @@ const TripListPage = memo(function TripListPage() {
   if (isLoading) {
     return (
       <>
-        <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+        <div className="flex flex-col">
           <PageHeader title={t('trips.title')} action={headerAction} />
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex items-center justify-center py-20">
             <LoadingState variant="inline" size="lg" />
           </div>
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
+        {sharedTripSync}
       </>
     );
   }
@@ -208,11 +230,14 @@ const TripListPage = memo(function TripListPage() {
   if (error) {
     return (
       <>
-        <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+        <div className="flex flex-col">
           <PageHeader title={t('trips.title')} action={headerAction} />
-          <ErrorDisplay error={error} onRetry={handleRetry} />
+          <div className="py-8">
+            <ErrorDisplay error={error} onRetry={handleRetry} />
+          </div>
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
+        {sharedTripSync}
       </>
     );
   }
@@ -224,9 +249,9 @@ const TripListPage = memo(function TripListPage() {
   if (trips.length === 0) {
     return (
       <>
-        <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+        <div className="flex flex-col">
           <PageHeader title={t('trips.title')} action={headerAction} />
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex items-center justify-center py-16 sm:py-24">
             <EmptyState
               icon={Luggage}
               title={t('trips.empty')}
@@ -239,6 +264,7 @@ const TripListPage = memo(function TripListPage() {
           </div>
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
+        {sharedTripSync}
       </>
     );
   }
@@ -249,7 +275,7 @@ const TripListPage = memo(function TripListPage() {
 
   return (
     <>
-      <div className="flex flex-col min-h-[calc(100vh-4rem)]">
+      <div className="flex flex-col">
         <PageHeader title={t('trips.title')} action={headerAction} />
 
         {/* Trip grid */}
@@ -307,10 +333,11 @@ const TripListPage = memo(function TripListPage() {
         </Button>
       </div>
       <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
+      {sharedTripSync}
       <ShareDialog
-        open={shareDialogTrip !== null}
+        open={shareDialogOpen}
         onOpenChange={handleShareDialogOpenChange}
-        trip={shareDialogTrip ?? undefined}
+        trip={sharedTrip ?? undefined}
       />
     </>
   );
@@ -321,5 +348,3 @@ const TripListPage = memo(function TripListPage() {
 // ============================================================================
 
 export { TripListPage };
-
-

@@ -80,3 +80,13 @@ export {
   useTransportContext,
   type TransportContextValue,
 } from './TransportContext';
+
+// ============================================================================
+// Sync presence (Yjs awareness count for Layout)
+// ============================================================================
+
+export {
+  SyncPresenceProvider,
+  useSyncPresence,
+  type SyncPresenceContextValue,
+} from './SyncPresenceContext';

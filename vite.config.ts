@@ -56,6 +56,17 @@ function manualChunks(id: string): string | undefined {
   // Hugging Face Transformers.js — large ML runtime, only loaded by the AI assistant page
   if (id.includes('@huggingface/transformers') || id.includes('onnxruntime')) {
     return 'vendor-transformers'
+	}
+
+  // Yjs CRDT + sync protocols — P2P sync layer
+  if (
+    id.includes('node_modules/yjs') ||
+    id.includes('node_modules/y-webrtc') ||
+    id.includes('node_modules/simple-peer') ||
+    id.includes('y-protocols') ||
+    id.includes('lib0')
+  ) {
+    return 'vendor-yjs'
   }
 
   // Let Rollup handle the rest to avoid circular dependencies

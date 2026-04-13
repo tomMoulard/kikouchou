@@ -58,15 +58,18 @@ vi.mock('@/components/shared/QRScanner', () => ({
   },
 }));
 
-vi.mock('../utils/share-qr-parse', () => ({
-  extractShareIdFromScannedPayload: vi.fn((payload: string) => {
-    // Simulate share link detection
-    if (payload.startsWith('https://app.example.com/share/')) {
-      return payload.replace('https://app.example.com/share/', '');
-    }
-    return null;
-  }),
-}));
+vi.mock('../../utils/share-qr-parse', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/share-qr-parse')>();
+  return {
+    ...actual,
+    extractShareIdFromScannedPayload: vi.fn((payload: string) => {
+      if (payload.startsWith('https://app.example.com/share/')) {
+        return payload.replace('https://app.example.com/share/', '');
+      }
+      return null;
+    }),
+  };
+});
 
 import { ImportTripQrDialog } from '../ImportTripQrDialog';
 
@@ -102,6 +105,16 @@ describe('ImportTripQrDialog', () => {
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(mockNavigate).toHaveBeenCalledWith('/share/abc123');
+  });
+
+  it('navigates to P2P trip link when collaboration URL is scanned', () => {
+    render(<ImportTripQrDialog open={true} onOpenChange={onOpenChange} />, { withProviders: false });
+    expect(capturedOnScan).not.toBeNull();
+
+    capturedOnScan!('https://example.com/trip/room-abc#enc-key-xyz');
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(mockNavigate).toHaveBeenCalledWith('/trip/room-abc#enc-key-xyz');
   });
 
   it('decodes and imports changeset from raw encoded data', async () => {
