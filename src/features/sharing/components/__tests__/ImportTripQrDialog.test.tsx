@@ -58,8 +58,8 @@ vi.mock('@/components/shared/QRScanner', () => ({
   },
 }));
 
-vi.mock('../utils/share-qr-parse', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/share-qr-parse')>();
+vi.mock('../../utils/share-qr-parse', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/share-qr-parse')>();
   return {
     ...actual,
     extractShareIdFromScannedPayload: vi.fn((payload: string) => {
