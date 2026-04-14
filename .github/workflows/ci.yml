@@ -177,6 +177,7 @@ jobs:
         run: bun run build
         env:
           VITE_APP_VERSION: ${{ github.sha }}
+          VITE_SIGNALING_URL: wss://kikoushou.cyprin.eu
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

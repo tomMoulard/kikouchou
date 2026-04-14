@@ -46,6 +46,7 @@ jobs:
         run: bun run build
         env:
           VITE_APP_VERSION: ${{ github.ref_name }}@${{ github.sha }}
+          VITE_SIGNALING_URL: wss://kikoushou.cyprin.eu
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

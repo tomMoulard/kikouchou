@@ -17,7 +17,12 @@ services:
       - letsencrypt:/letsencrypt
 
   relay:
-    build: ./relay
+    build:
+      context: ./relay
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: tommoulard/kikoushou-relay:latest
     ports:
       - "4444:4444"
     expose:
