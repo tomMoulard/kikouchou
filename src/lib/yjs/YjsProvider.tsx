@@ -31,7 +31,10 @@ export interface YjsContextValue {
   readonly doc: Y.Doc;
   readonly provider: WebrtcProvider | null;
   readonly awareness: WebrtcProvider['awareness'] | null;
+  /** Whether the provider is active (looking for peers). */
   readonly connected: boolean;
+  /** Whether at least one signaling WebSocket is actually open. */
+  readonly signalingConnected: boolean;
   readonly synced: boolean;
   readonly peerCount: number;
   readonly loaded: boolean;
@@ -99,7 +102,7 @@ export function YjsProvider({
   userColor,
   children,
 }: YjsProviderProps): ReactElement {
-  const { doc, provider, awareness, connected, synced, peerCount, loaded } =
+  const { doc, provider, awareness, connected, signalingConnected, synced, peerCount, loaded } =
     useYjsSync(roomId, encryptionKey);
   const onlineUsersSnapshotRef = useRef<{
     key: string;
@@ -168,6 +171,7 @@ export function YjsProvider({
       provider,
       awareness,
       connected,
+      signalingConnected,
       synced,
       peerCount,
       loaded,
@@ -183,6 +187,7 @@ export function YjsProvider({
       peerCount,
       provider,
       roomId,
+      signalingConnected,
       synced,
     ],
   );
