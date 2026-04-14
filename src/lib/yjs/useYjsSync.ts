@@ -26,11 +26,31 @@ function resolveSignalingServer(): string {
   return 'wss://signaling.kikoushou.app';
 }
 
+/**
+ * Introspects the internal signaling connections of a WebrtcProvider to
+ * determine whether the WebSocket to the signaling server is actually open.
+ *
+ * y-webrtc's `provider.connected` only means "the provider is looking for
+ * peers", not that the underlying WebSocket is established. This helper
+ * reads the real WebSocket readyState so the UI can display accurate status.
+ */
+function isSignalingConnected(provider: WebrtcProvider): boolean {
+  const conns = (provider as unknown as { signalingConns?: { ws?: WebSocket | null; connected?: boolean }[] })
+    .signalingConns;
+  if (!conns || conns.length === 0) {
+    return false;
+  }
+  return conns.some((conn) => conn.connected === true);
+}
+
 export interface YjsSyncState {
   readonly doc: Y.Doc;
   readonly provider: WebrtcProvider | null;
   readonly awareness: WebrtcProvider['awareness'] | null;
+  /** Whether the provider is active (looking for peers). */
   readonly connected: boolean;
+  /** Whether at least one signaling WebSocket is actually open. */
+  readonly signalingConnected: boolean;
   readonly synced: boolean;
   readonly peerCount: number;
   readonly loaded: boolean;
@@ -42,6 +62,7 @@ function createInitialState(): YjsSyncState {
     provider: null,
     awareness: null,
     connected: false,
+    signalingConnected: false,
     synced: false,
     peerCount: 0,
     loaded: false,
@@ -68,7 +89,13 @@ export function useYjsSync(
     const doc = new Y.Doc();
     docRef.current = doc;
 
+    let signalingPollTimer: ReturnType<typeof setInterval> | null = null;
+
     const cleanup = () => {
+      if (signalingPollTimer !== null) {
+        clearInterval(signalingPollTimer);
+        signalingPollTimer = null;
+      }
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       providerRef.current?.destroy();
@@ -112,11 +139,29 @@ export function useYjsSync(
         }
       });
 
+      // y-webrtc does not emit events when the signaling WebSocket opens or
+      // closes, so we poll the internal connection state every 2 s to keep the
+      // UI accurate.  The interval is cheap (a few property reads) and is
+      // cleaned up when the effect unmounts.
+      signalingPollTimer = setInterval(() => {
+        if (cancelled) {
+          return;
+        }
+        const next = isSignalingConnected(provider);
+        setState((current) => {
+          if (current.signalingConnected === next) {
+            return current;
+          }
+          return { ...current, signalingConnected: next };
+        });
+      }, 2_000);
+
       setState({
         doc,
         provider,
         awareness: provider.awareness,
         connected: provider.connected,
+        signalingConnected: isSignalingConnected(provider),
         synced: false,
         peerCount: 0,
         loaded: true,

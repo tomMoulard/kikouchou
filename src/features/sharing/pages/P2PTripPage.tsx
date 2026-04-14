@@ -6,7 +6,7 @@
 import { type ReactElement, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Users, Wifi, WifiOff } from 'lucide-react';
+import { Loader2, RefreshCw, Users, Wifi, WifiOff } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,6 +14,9 @@ import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { applyDocToDexie, YjsProvider, useYjsContext } from '@/lib/yjs';
 import type { TripId } from '@/types';
+
+/** Seconds before showing a "signaling server unreachable" error. */
+const SIGNALING_TIMEOUT_MS = 15_000;
 
 async function resolveTripFromDoc(
   doc: NonNullable<ReturnType<typeof useYjsContext>>['doc'],
@@ -37,8 +40,37 @@ const P2PTripInner = memo(function P2PTripInner({
   const navigate = useNavigate();
   const { setCurrentTrip } = useTripContext();
   const yjs = useYjsContext();
-  const [status, setStatus] = useState<'loading' | 'waiting' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'waiting' | 'signaling-failed' | 'error'>('loading');
   const resolvedRef = useRef(false);
+
+  // ---- Signaling timeout ------------------------------------------------
+  // If the signaling WebSocket has not connected within SIGNALING_TIMEOUT_MS
+  // after the provider is loaded, surface a clear error instead of spinning
+  // forever.
+  useEffect(() => {
+    if (!yjs?.loaded || resolvedRef.current) {
+      return;
+    }
+
+    // Already connected — nothing to wait for.
+    if (yjs.signalingConnected) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (resolvedRef.current) {
+        return;
+      }
+      // Re-check at timer expiry: if still not connected → fail.
+      if (!yjs.signalingConnected) {
+        setStatus('signaling-failed');
+      }
+    }, SIGNALING_TIMEOUT_MS);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [yjs?.loaded, yjs?.signalingConnected]);
 
   useEffect(() => {
     if (!yjs?.loaded || !yjs.doc || resolvedRef.current) {
@@ -133,6 +165,41 @@ const P2PTripInner = memo(function P2PTripInner({
     navigate('/trips');
   }, [navigate]);
 
+  const handleRetry = useCallback(() => {
+    window.location.reload();
+  }, []);
+
+  // ---- Signaling server unreachable -------------------------------------
+  if (status === 'signaling-failed') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="pt-6 text-center space-y-4">
+            <WifiOff className="size-12 mx-auto text-destructive" />
+            <p className="text-lg font-semibold">
+              {t('sharing.p2p.signalingFailed', 'Signaling server unreachable')}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {t(
+                'sharing.p2p.signalingFailedDescription',
+                'Could not connect to the signaling server. The server may be down or your network may be blocking WebSocket connections.',
+              )}
+            </p>
+            <div className="flex gap-3 justify-center">
+              <Button variant="outline" onClick={handleGoHome}>
+                {t('trips.title')}
+              </Button>
+              <Button onClick={handleRetry}>
+                <RefreshCw className="size-4 mr-2" aria-hidden="true" />
+                {t('common.retry', 'Retry')}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (status === 'error') {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -182,7 +249,7 @@ const P2PTripInner = memo(function P2PTripInner({
                   defaultValue: 'Syncing with {{count}} peer(s)...',
                 })}
               </>
-            ) : yjs?.connected ? (
+            ) : yjs?.signalingConnected ? (
               <>
                 <Wifi className="size-4 text-blue-500" />
                 {t(
