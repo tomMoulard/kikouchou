@@ -138,6 +138,7 @@ export function sanitizePersonData<T extends { name: string }>(data: T): T {
 export function sanitizeTransportData<
   T extends {
     location: string;
+    startLocation?: string;
     transportNumber?: string;
     notes?: string;
   },
@@ -145,6 +146,7 @@ export function sanitizeTransportData<
   return {
     ...data,
     location: sanitizeText(data.location, MAX_LENGTHS.transportLocation),
+    startLocation: sanitizeOptionalText(data.startLocation, MAX_LENGTHS.transportLocation),
     transportNumber: sanitizeOptionalText(data.transportNumber, MAX_LENGTHS.transportNumber),
     notes: sanitizeOptionalText(data.notes, MAX_LENGTHS.transportNotes),
   };

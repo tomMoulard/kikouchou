@@ -48,7 +48,12 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { MapView, type MapMarkerData, type MapViewRef } from '@/components/shared/MapView';
+import {
+  MapView,
+  type MapMarkerData,
+  type MapPolylineData,
+  type MapViewRef,
+} from '@/components/shared/MapView';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
@@ -112,6 +117,20 @@ function hasCoordinates(transport: Transport): transport is TransportWithCoordin
     typeof transport.coordinates.lon === 'number' &&
     !isNaN(transport.coordinates.lat) &&
     !isNaN(transport.coordinates.lon)
+  );
+}
+
+/**
+ * True when optional start coordinates are present and numeric.
+ */
+function hasStartCoordinates(transport: Transport): boolean {
+  const c = transport.startCoordinates;
+  return (
+    c !== undefined &&
+    typeof c.lat === 'number' &&
+    typeof c.lon === 'number' &&
+    !isNaN(c.lat) &&
+    !isNaN(c.lon)
   );
 }
 
@@ -193,10 +212,30 @@ const TransportPopupContent = memo(function TransportPopupContent({
         <span>{time}</span>
       </div>
 
-      {/* Location */}
+      {/* Starting place (optional) */}
+      {transport.startLocation ? (
+        <div className="flex items-start gap-2 text-sm text-muted-foreground">
+          <MapPin className="size-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>
+            <span className="font-medium text-foreground">
+              {t('transports.legStart', 'Start')}
+              {': '}
+            </span>
+            <span className="truncate">{transport.startLocation}</span>
+          </span>
+        </div>
+      ) : null}
+
+      {/* End location */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
-        <span className="truncate">{transport.location}</span>
+        <span>
+          <span className="font-medium text-foreground">
+            {t('transports.endLocation', 'Destination')}
+            {': '}
+            </span>
+          <span className="truncate">{transport.location}</span>
+        </span>
       </div>
 
       {/* Transport mode and number */}
@@ -280,19 +319,57 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
     return allTransports.filter(hasCoordinates);
   }, [arrivals, departures]);
 
-  // Create markers for the map
+  /** Line from start to end when both GPS points exist */
+  const routePolylines = useMemo((): readonly MapPolylineData[] => {
+    const lines: MapPolylineData[] = [];
+    for (const transport of transportsWithCoordinates) {
+      if (!hasStartCoordinates(transport)) continue;
+      const start = transport.startCoordinates;
+      if (!start) continue;
+      lines.push({
+        id: `route-${transport.id}`,
+        positions: [
+          [start.lat, start.lon],
+          [transport.coordinates.lat, transport.coordinates.lon],
+        ],
+      });
+    }
+    return lines;
+  }, [transportsWithCoordinates]);
+
+  // Create markers (optional start marker + end marker per transport)
   const markers = useMemo((): readonly MapMarkerData[] => {
-    return transportsWithCoordinates.map((transport) => {
+    const result: MapMarkerData[] = [];
+    for (const transport of transportsWithCoordinates) {
       const person = personsMap.get(transport.personId);
       const { date, time } = formatTransportDatetime(transport.datetime, dateLocale);
 
-      return {
+      const startCoords = transport.startCoordinates;
+      if (hasStartCoordinates(transport) && startCoords) {
+        result.push({
+          id: `${transport.id}-start`,
+          position: [startCoords.lat, startCoords.lon] as readonly [number, number],
+          label: `${person?.name ?? t('common.unknown')} — ${t('transports.legStart', 'Start')}`,
+          type: 'default',
+          color: person?.color,
+          tooltipContent: (
+            <div className="space-y-0.5">
+              <div className="font-medium">
+                {t('transports.legStart', 'Start')}
+              </div>
+              <div className="text-muted-foreground truncate max-w-[220px]">
+                {transport.startLocation ?? '—'}
+              </div>
+            </div>
+          ),
+        });
+      }
+
+      result.push({
         id: transport.id,
         position: [transport.coordinates.lat, transport.coordinates.lon] as readonly [number, number],
         label: `${person?.name ?? t('common.unknown')} - ${transport.location}`,
-        // Use 'transport' type for arrivals (green), 'pickup' type for departures (orange)
         type: transport.type === 'arrival' ? 'transport' : 'pickup',
-        // Optionally use person color
         color: person?.color,
         tooltipContent: (
           <div className="space-y-0.5">
@@ -315,8 +392,9 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
             dateLocale={dateLocale}
           />
         ),
-      };
-    });
+      });
+    }
+    return result;
   }, [transportsWithCoordinates, personsMap, dateLocale, t]);
 
   // Calculate map center based on markers
@@ -344,7 +422,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
 
   // Fit bounds to show all markers when data loads
   useEffect(() => {
-    if (!isLoading && markers.length > 1) {
+    if (!isLoading && (markers.length > 1 || routePolylines.length > 0)) {
       // Small delay to ensure map is ready
       const timer = setTimeout(() => {
         mapRef.current?.fitBounds();
@@ -352,7 +430,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [isLoading, markers.length]);
+  }, [isLoading, markers.length, routePolylines.length]);
 
   // Validate tripId matches current trip
   const tripMismatch = useMemo(() => {
@@ -510,7 +588,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
         </div>
         <div className="ml-auto text-xs">
           {t('transports.locationsCount', '{{count}} location(s)', {
-            count: transportsWithCoordinates.length,
+            count: markers.length,
           })}
         </div>
       </div>
@@ -522,6 +600,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
           center={mapCenter}
           zoom={markers.length === 1 ? 14 : 10}
           markers={markers}
+          polylines={routePolylines}
           interactive={true}
           showZoomControl={true}
           showAttribution={true}

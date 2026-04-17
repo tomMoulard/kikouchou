@@ -81,6 +81,8 @@ interface FormState {
   personId: PersonId | '';
   type: TransportType;
   datetime: string;
+  startLocation: string;
+  startCoordinates: Coordinates | undefined;
   location: string;
   coordinates: Coordinates | undefined;
   transportMode: TransportMode | '';
@@ -138,6 +140,8 @@ function getInitialFormState(
     personId: transport?.personId ?? '',
     type: transport?.type ?? defaultType ?? 'arrival',
     datetime: transport?.datetime ? formatDatetimeLocal(transport.datetime) : '',
+    startLocation: transport?.startLocation ?? '',
+    startCoordinates: transport?.startCoordinates,
     location: transport?.location ?? '',
     coordinates: transport?.coordinates,
     transportMode: transport?.transportMode ?? '',
@@ -276,13 +280,16 @@ const TransportForm = memo(function TransportForm({
       formState.type !== initialFormState.type ||
       formState.datetime !== initialFormState.datetime ||
       formState.location !== initialFormState.location ||
+      formState.startLocation !== initialFormState.startLocation ||
       formState.transportMode !== initialFormState.transportMode ||
       formState.transportNumber !== initialFormState.transportNumber ||
       formState.driverId !== initialFormState.driverId ||
       formState.needsPickup !== initialFormState.needsPickup ||
       formState.notes !== initialFormState.notes ||
       formState.coordinates?.lat !== initialFormState.coordinates?.lat ||
-      formState.coordinates?.lon !== initialFormState.coordinates?.lon,
+      formState.coordinates?.lon !== initialFormState.coordinates?.lon ||
+      formState.startCoordinates?.lat !== initialFormState.startCoordinates?.lat ||
+      formState.startCoordinates?.lon !== initialFormState.startCoordinates?.lon,
     [formState, initialFormState],
   );
 
@@ -553,12 +560,15 @@ const TransportForm = memo(function TransportForm({
       if (!validateForm()) {return;}
 
       // Build form data with proper types
+      const startTrimmed = formState.startLocation.trim();
       const data: TransportFormData = {
         personId: formState.personId as PersonId,
         type: formState.type,
         datetime: toISODatetime(formState.datetime),
         location: formState.location.trim(),
         coordinates: formState.coordinates,
+        startLocation: startTrimmed || undefined,
+        startCoordinates: startTrimmed ? formState.startCoordinates : undefined,
         transportMode: formState.transportMode || undefined,
         transportNumber: formState.transportNumber.trim() || undefined,
         driverId: formState.driverId || undefined,
@@ -692,6 +702,26 @@ const TransportForm = memo(function TransportForm({
             {errors.datetime}
           </p>
         )}
+      </div>
+
+      {/* Optional starting place (map: route from start to main location) */}
+      <div className="space-y-2">
+        <Label htmlFor="transport-start-location">
+          {t('transports.startingPlace', 'Starting place')}
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          {t('transports.startLocationHint')}
+        </p>
+        <LocationPicker
+          id="transport-start-location"
+          value={formState.startLocation}
+          onChange={(startLocation, startCoordinates) => {
+            setFormState((prev) => ({ ...prev, startLocation, startCoordinates }));
+          }}
+          placeholder={t('transports.startLocationPlaceholder')}
+          disabled={isSubmitting}
+          aria-label={t('transports.startingPlace', 'Starting place')}
+        />
       </div>
 
       {/* Location Field - OpenStreetMap LocationPicker */}

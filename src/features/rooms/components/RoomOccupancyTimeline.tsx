@@ -154,7 +154,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                 <div key={`unassigned-${row.person.id}`} role="listitem" className="flex border-t border-muted">
                   <div
                     className={cn(
-                      'sticky left-0 z-10 bg-background border-r border-muted px-3 flex items-center gap-2',
+                      'sticky left-0 z-10 min-w-0 bg-background border-r border-muted px-3 flex items-center gap-2',
                     )}
                     style={{
                       width: ROOM_COL_PX_COMPACT,
@@ -163,14 +163,17 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                     }}
                     title={row.person.name}
                   >
-                    <GripVertical className="size-4 text-muted-foreground/50" aria-hidden="true" />
+                    <GripVertical className="size-4 shrink-0 text-muted-foreground/50" aria-hidden="true" />
                     <DraggableGuest
                       person={row.person}
                       startDate={row.startDate}
                       endDate={row.endDate}
                       size="sm"
                     />
-                    <span className="text-xs text-muted-foreground">
+                    <span
+                      className="min-w-0 flex-1 text-xs leading-tight whitespace-normal break-words text-muted-foreground"
+                      title={t('rooms.needsRoom', 'needs room')}
+                    >
                       {t('rooms.needsRoom', 'needs room')}
                     </span>
                   </div>

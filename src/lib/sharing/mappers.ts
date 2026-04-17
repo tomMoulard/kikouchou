@@ -166,6 +166,16 @@ export function transportToProto(transport: Transport): ProtoTransport {
     });
   }
 
+  if (transport.startLocation) {
+    protoTransport.startLocation = transport.startLocation;
+  }
+  if (transport.startCoordinates) {
+    protoTransport.startCoordinates = create(CoordinatesSchema, {
+      lat: transport.startCoordinates.lat,
+      lon: transport.startCoordinates.lon,
+    });
+  }
+
   return protoTransport;
 }
 
@@ -280,6 +290,10 @@ export function protoToTransport(proto: ProtoTransport): Transport {
     location: proto.location,
     coordinates: proto.coordinates
       ? { lat: proto.coordinates.lat, lon: proto.coordinates.lon }
+      : undefined,
+    startLocation: proto.startLocation ?? undefined,
+    startCoordinates: proto.startCoordinates
+      ? { lat: proto.startCoordinates.lat, lon: proto.startCoordinates.lon }
       : undefined,
     transportMode,
     transportNumber: proto.transportNumber ?? undefined,
