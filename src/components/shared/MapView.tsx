@@ -17,12 +17,24 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, Polyline, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import type { Map as LeafletMap } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 import { cn } from '@/lib/utils';
 import { MapMarker, type MapMarkerData, type MapMarkerType } from './MapMarker';
+
+// ============================================================================
+// Polyline type (exported for trip / transport routes)
+// ============================================================================
+
+/**
+ * A line drawn on the map (e.g. transport leg from start to end).
+ */
+export interface MapPolylineData {
+  readonly id: string;
+  readonly positions: readonly [number, number][];
+}
 import { MapOfflineIndicator } from './MapOfflineIndicator';
 
 // ============================================================================
@@ -39,6 +51,8 @@ export interface MapViewProps {
   readonly zoom?: number;
   /** Markers to display on the map */
   readonly markers?: readonly MapMarkerData[];
+  /** Optional polylines (e.g. route segments) */
+  readonly polylines?: readonly MapPolylineData[];
   /** Additional CSS classes */
   readonly className?: string;
   /** Callback when a marker is clicked */
@@ -313,6 +327,7 @@ export const MapView = memo(
       center,
       zoom = DEFAULT_ZOOM,
       markers = [],
+      polylines = [],
       className,
       onMarkerClick,
       onMapClick,
@@ -362,13 +377,16 @@ export const MapView = memo(
           mapRef.current?.setZoom(newZoom);
         },
         fitBounds: () => {
-          if (mapRef.current && markers.length > 0) {
-            const bounds = markers.map((m) => m.position as [number, number]);
+          if (!mapRef.current) return;
+          const fromMarkers = markers.map((m) => m.position as [number, number]);
+          const fromPolylines = polylines.flatMap((p) => [...p.positions]);
+          const bounds = [...fromMarkers, ...fromPolylines];
+          if (bounds.length > 0) {
             mapRef.current.fitBounds(bounds, { padding: [50, 50] });
           }
         },
       }),
-      [markers]
+      [markers, polylines]
     );
 
     // Handle marker click with keyboard support
@@ -428,6 +446,18 @@ export const MapView = memo(
               onMarkerClick={onMarkerClick}
             />
           )}
+
+          {polylines.map((line) => (
+            <Polyline
+              key={line.id}
+              positions={line.positions as [number, number][]}
+              pathOptions={{
+                color: '#2563eb',
+                weight: 4,
+                opacity: 0.75,
+              }}
+            />
+          ))}
 
           {markers.map((marker) => (
             <MapMarker

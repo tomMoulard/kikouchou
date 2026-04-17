@@ -20,8 +20,10 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
   Bot,
+  Check,
   Download,
   Loader2,
+  RotateCw,
   Send,
   Square,
   Sparkles,
@@ -80,16 +82,103 @@ import type { AssistantModelId } from '@/types';
 // Model Selection UI
 // ============================================================================
 
+const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
+
+async function getCachedAssistantModelIds(): Promise<Set<AssistantModelId>> {
+  const cached = new Set<AssistantModelId>();
+  if (typeof caches === 'undefined') return cached;
+
+  try {
+    const cache = await caches.open(TRANSFORMERS_CACHE_NAME);
+    const keys = await cache.keys();
+
+    for (const preset of ASSISTANT_MODEL_PRESETS) {
+      const encoded = preset.modelId.replace('/', '%2F');
+      const found = keys.some(
+        (req) => req.url.includes(encoded) || req.url.includes(preset.modelId),
+      );
+      if (found) {
+        cached.add(preset.id);
+      }
+    }
+  } catch {
+    // Ignore cache read failures and keep empty set.
+  }
+
+  return cached;
+}
+
+const CachedModelIcon = memo(function CachedModelIcon(): ReactElement {
+  return (
+    <span
+      className="relative inline-flex size-4 items-center justify-center text-muted-foreground"
+      aria-hidden="true"
+    >
+      <RotateCw className="size-4" strokeWidth={2.25} />
+      <Check
+        className="absolute size-2.5 text-foreground"
+        strokeWidth={3}
+      />
+    </span>
+  );
+});
+
+/**
+ * Compact model picker for the header when the engine is ready (replaces the full card).
+ */
+const AssistantModelCompactSelect = memo(function AssistantModelCompactSelect({
+  selectedModelId,
+  onModelChange,
+  disabled,
+  cachedModelIds,
+}: {
+  readonly selectedModelId: AssistantModelId;
+  readonly onModelChange: (value: string) => void;
+  readonly disabled: boolean;
+  readonly cachedModelIds: ReadonlySet<AssistantModelId>;
+}): ReactElement {
+  const { t } = useTranslation();
+
+  return (
+    <Select
+      value={selectedModelId}
+      onValueChange={onModelChange}
+      disabled={disabled}
+    >
+      <SelectTrigger
+        id="assistant-model-select-compact"
+        size="sm"
+        className="max-w-[12rem] sm:max-w-[16rem]"
+        aria-label={t('assistant.modelLabel', 'Assistant model')}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="end">
+        {ASSISTANT_MODEL_PRESETS.map((preset) => (
+          <SelectItem key={preset.id} value={preset.id}>
+            <span className="inline-flex items-center gap-1.5">
+              <span>{`${t(preset.nameKey, preset.fallbackName)} (${preset.id})`}</span>
+              {cachedModelIds.has(preset.id) ? <CachedModelIcon /> : null}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+});
+
 const AssistantModelPanel = memo(function AssistantModelPanel({
   selectedModelId,
   onModelChange,
   disabled,
   isCached,
+  cachedModelIds,
 }: {
   readonly selectedModelId: AssistantModelId;
   readonly onModelChange: (value: string) => void;
   readonly disabled: boolean;
   readonly isCached: boolean | null;
+  readonly cachedModelIds: ReadonlySet<AssistantModelId>;
 }): ReactElement {
   const { t } = useTranslation();
   const selectedModel = getAssistantModelPreset(selectedModelId);
@@ -124,11 +213,20 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
           <SelectContent>
             {ASSISTANT_MODEL_PRESETS.map((preset) => (
               <SelectItem key={preset.id} value={preset.id}>
-                {t(preset.nameKey, preset.fallbackName)}
+                <span className="inline-flex items-center gap-1.5">
+                  <span>{`${t(preset.nameKey, preset.fallbackName)} (${preset.id})`}</span>
+                  {cachedModelIds.has(preset.id) ? <CachedModelIcon /> : null}
+                </span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        <p className="text-xs text-muted-foreground font-mono break-all">
+          {t('assistant.hubModelLabel', {
+            defaultValue: 'HF model: {{model}}',
+            model: selectedModel.modelId,
+          })}
+        </p>
 
         <div className="space-y-1">
           <p className="text-sm text-foreground">
@@ -179,6 +277,7 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
   readonly error: string | null;
 }): ReactElement {
   const { t } = useTranslation();
+  const activeFiles = loadProgress?.files.filter((f) => !f.done) ?? [];
 
   return (
     <div className="flex flex-1 items-center justify-center p-4">
@@ -199,7 +298,7 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
         </CardHeader>
         <CardContent className="space-y-4">
           {status === 'loading' && loadProgress && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-start gap-2 text-sm text-muted-foreground">
                 <Loader2
                   className="size-4 shrink-0 animate-spin mt-0.5"
@@ -209,35 +308,117 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
                   {loadProgress.text}
                 </span>
               </div>
-              <div
-                className="h-2 w-full rounded-full bg-muted overflow-hidden"
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(loadProgress.progress * 100)}
-                aria-label={t(
-                  'assistant.loadingProgressAria',
-                  'Download progress for the current file',
-                )}
-              >
-                <div
-                  className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
-                  style={{
-                    width: `${Math.round(loadProgress.progress * 100)}%`,
-                  }}
-                />
-              </div>
-              {loadProgress.bytesHint ? (
-                <p className="text-xs text-muted-foreground text-center tabular-nums">
-                  {loadProgress.bytesHint}
+
+              {loadProgress.files.length > 0 ? (
+                <>
+                  <div className="space-y-1.5">
+                    <div
+                      className="h-2 w-full overflow-hidden rounded-full bg-muted"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(loadProgress.progress * 100)}
+                      aria-label={t(
+                        'assistant.loadingOverallProgressAria',
+                        'Overall model download progress',
+                      )}
+                    >
+                      <div
+                        className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                        style={{
+                          width: `${Math.round(loadProgress.progress * 100)}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-right text-xs tabular-nums text-muted-foreground">
+                      {Math.round(loadProgress.progress * 100)}%
+                    </p>
+                  </div>
+
+                  {activeFiles.length > 0 ? (
+                    <ul
+                      className="list-none space-y-3 p-0"
+                      aria-label={t(
+                        'assistant.modelFilesListAria',
+                        'Per-file download progress',
+                      )}
+                    >
+                      {activeFiles.map((f) => (
+                        <li key={f.fileKey} className="space-y-1.5">
+                          <div className="flex min-w-0 items-center justify-between gap-2">
+                            <p
+                              className="truncate text-xs font-medium text-foreground"
+                              title={f.fileName}
+                            >
+                              {f.fileName}
+                            </p>
+                          </div>
+                          <div
+                            className="h-2 w-full overflow-hidden rounded-full bg-muted"
+                            role="progressbar"
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={Math.round(f.progress * 100)}
+                            aria-label={t('assistant.fileDownloadProgressAria', {
+                              defaultValue: 'Download progress for {{file}}',
+                              file: f.fileName,
+                            })}
+                          >
+                            <div
+                              className={cn(
+                                'h-full rounded-full bg-primary transition-[width] duration-300 ease-out',
+                              )}
+                              style={{
+                                width: `${Math.round(f.progress * 100)}%`,
+                              }}
+                            />
+                          </div>
+                          {f.bytesHint ? (
+                            <p className="text-xs text-muted-foreground tabular-nums">
+                              {f.bytesHint}
+                            </p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <div
+                    className="h-2 w-full overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(loadProgress.progress * 100)}
+                    aria-label={t(
+                      'assistant.loadingProgressAria',
+                      'Download progress for the current file',
+                    )}
+                  >
+                    <div
+                      className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out"
+                      style={{
+                        width: `${Math.round(loadProgress.progress * 100)}%`,
+                      }}
+                    />
+                  </div>
+                  {loadProgress.bytesHint ? (
+                    <p className="text-center text-xs text-muted-foreground tabular-nums">
+                      {loadProgress.bytesHint}
+                    </p>
+                  ) : null}
+                </>
+              )}
+
+              {loadProgress.files.length > 0 ? (
+                <p className="text-center text-xs text-balance text-muted-foreground">
+                  {t(
+                    'assistant.loadingProgressCaption',
+                    'Top bar: overall model download progress. List: only files currently downloading.',
+                  )}
                 </p>
               ) : null}
-              <p className="text-xs text-muted-foreground text-center text-balance">
-                {t(
-                  'assistant.loadingProgressCaption',
-                  'The model is split into several files. They download one after another, so the bar restarts for each file. This is normal.',
-                )}
-              </p>
             </div>
           )}
 
@@ -363,6 +544,9 @@ function AssistantPageComponent(): ReactElement {
   const { t } = useTranslation();
   const [selectedModelId, setSelectedModelId] =
     useState<AssistantModelId>(DEFAULT_ASSISTANT_MODEL_ID);
+  const [cachedModelIds, setCachedModelIds] = useState<Set<AssistantModelId>>(
+    () => new Set(),
+  );
   const [isModelPreferenceReady, setIsModelPreferenceReady] = useState(false);
   const selectedModel = getAssistantModelPreset(selectedModelId);
   const {
@@ -438,6 +622,20 @@ function AssistantPageComponent(): ReactElement {
       loadModel();
     }
   }, [isCached, isModelPreferenceReady, status, loadModel]);
+
+  useEffect(() => {
+    void getCachedAssistantModelIds().then(setCachedModelIds);
+  }, []);
+
+  useEffect(() => {
+    if (isCached !== true) return;
+    setCachedModelIds((prev) => {
+      if (prev.has(selectedModelId)) return prev;
+      const next = new Set(prev);
+      next.add(selectedModelId);
+      return next;
+    });
+  }, [isCached, selectedModelId]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -578,42 +776,56 @@ function AssistantPageComponent(): ReactElement {
           'Ask questions or modify your trip using natural language',
         )}
         action={
-          isReady && messages.length > 0 ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              aria-label={t('assistant.clearConversation')}
-              onClick={handleClearConversation}
-            >
-              <Trash2 className="size-4" aria-hidden="true" />
-              <span className="hidden sm:inline">
-                {t('assistant.clearConversation')}
-              </span>
-            </Button>
+          isReady ? (
+            <>
+              <AssistantModelCompactSelect
+                selectedModelId={selectedModelId}
+                onModelChange={(value) => {
+                  void handleModelChange(value);
+                }}
+                disabled={isModelSelectionLocked}
+                cachedModelIds={cachedModelIds}
+              />
+              {messages.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  aria-label={t('assistant.clearConversation')}
+                  onClick={handleClearConversation}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">
+                    {t('assistant.clearConversation')}
+                  </span>
+                </Button>
+              ) : null}
+            </>
           ) : undefined
         }
       />
 
-      <AssistantModelPanel
-        selectedModelId={selectedModelId}
-        onModelChange={(value) => {
-          void handleModelChange(value);
-        }}
-        disabled={isModelSelectionLocked}
-        isCached={isCached}
-      />
-
       {!isReady ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          <ModelLoadingCard
-            onLoad={loadModel}
-            status={status}
-            loadProgress={loadProgress}
-            error={error}
+        <>
+          <AssistantModelPanel
+            selectedModelId={selectedModelId}
+            onModelChange={(value) => {
+              void handleModelChange(value);
+            }}
+            disabled={isModelSelectionLocked}
+            isCached={isCached}
+            cachedModelIds={cachedModelIds}
           />
-        </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <ModelLoadingCard
+              onLoad={loadModel}
+              status={status}
+              loadProgress={loadProgress}
+              error={error}
+            />
+          </div>
+        </>
       ) : (
         <>
           {/* Messages area — only this region scrolls; input stays visible above mobile nav */}

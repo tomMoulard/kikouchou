@@ -82,6 +82,9 @@ message Transport {
   optional string driver_id = 10;
   bool needs_pickup = 11;
   optional string notes = 12;
+  // Optional origin of this leg (e.g. previous station) for map routing.
+  optional string start_location = 13;
+  optional Coordinates start_coordinates = 14;
 }
 
 // GPS coordinates.

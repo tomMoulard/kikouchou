@@ -149,7 +149,13 @@
       "doorOpen": "Entryway",
       "baby": "Kids room",
       "armchair": "Lounge"
-    }
+    },
+    "autoAssignButton": "Optimize automatically",
+    "autoAssignWorking": "Optimizing...",
+    "autoAssignSuccess": "{{count}} room allocation(s) optimized automatically",
+    "autoAssignPartial": "{{count}} segment(s) could not be placed due to capacity limits",
+    "autoAssignNoSolution": "No available room slot found for these guests.",
+    "autoAssignFailed": "Could not optimize room assignments."
   },
   "persons": {
     "title": "Guests",
@@ -209,6 +215,11 @@
     "datetime": "Date and time",
     "location": "Location",
     "locationPlaceholder": "e.g. King's Cross Station",
+    "startingPlace": "Starting place",
+    "startLocationPlaceholder": "e.g. origin station, home address",
+    "startLocationHint": "Optional. When both this place and the main location have coordinates, the transport map draws a line between them.",
+    "legStart": "Start",
+    "endLocation": "Destination",
     "mode": "Transport mode",
     "modes": {
       "train": "Train",
@@ -461,16 +472,22 @@
     "pageDescription": "Ask questions or modify your trip using natural language",
     "modelLabel": "Assistant model",
     "modelDescription": "Pick a smaller model for weaker devices or a bigger one for better quality.",
+    "hubModelLabel": "HF model: {{model}}",
     "modelCached": "This model is already cached on this device.",
     "modelChanged": "Assistant model set to {{model}}",
     "modelChangeFailed": "Could not switch the assistant model. Please try again.",
     "loadModel": "Load Model",
     "loadHint": "The selected model will be downloaded and cached in your browser before first use.",
     "initializingLoader": "Initializing…",
+    "downloadingModelFiles": "Downloading model files…",
     "downloadingFile": "Downloading {{file}} — {{percent}}% of this file",
     "preparingFile": "Preparing {{file}}…",
     "fileDownloadDone": "Finished {{file}}",
-    "loadingProgressCaption": "The model is split into several files. They download one after another, so the bar restarts for each file. This is normal.",
+    "loadingProgressCaption": "Top bar: overall model download progress. List: only files currently downloading.",
+    "loadingOverallProgressAria": "Overall model download progress",
+    "modelFilesListAria": "Per-file download progress",
+    "fileDownloadProgressAria": "Download progress for {{file}}",
+    "fileShardDone": "Done",
     "loadingProgressAria": "Download progress for the current file",
     "placeholder": "Ask about your trip or request changes...",
     "send": "Send message",
@@ -520,7 +537,9 @@
       "removeAssignment": "Removed assignment: {{person}} ↔ {{room}}",
       "addTransport": "Added {{type}} for {{person}} — {{location}}",
       "removeTransport": "Removed transport: {{label}}"
-    }
+    },
+    "initializingCachedLoader": "Initializing cached model…",
+    "loadingCachedModelFiles": "Loading cached model files…"
   },
   "settings": {
     "title": "Settings",

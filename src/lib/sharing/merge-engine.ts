@@ -330,6 +330,10 @@ function getTransportConflictingFields(host: Transport, guest: Transport): strin
   if (host.driverId !== guest.driverId) fields.push('driverId');
   if (host.notes !== guest.notes) fields.push('notes');
   if (JSON.stringify(host.coordinates) !== JSON.stringify(guest.coordinates)) fields.push('coordinates');
+  if (host.startLocation !== guest.startLocation) fields.push('startLocation');
+  if (JSON.stringify(host.startCoordinates) !== JSON.stringify(guest.startCoordinates)) {
+    fields.push('startCoordinates');
+  }
   return fields;
 }
 

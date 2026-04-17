@@ -29,9 +29,16 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useOfflineAwareToast } from '@/hooks';
-import { differenceInCalendarDays, format, parseISO, eachDayOfInterval, subDays } from 'date-fns';
+import {
+  addDays,
+  differenceInCalendarDays,
+  eachDayOfInterval,
+  format,
+  parseISO,
+  subDays,
+} from 'date-fns';
 import { type Locale, enUS, fr } from 'date-fns/locale';
-import { AlertTriangle, DoorOpen, GripVertical, Plus } from 'lucide-react';
+import { AlertTriangle, DoorOpen, GripVertical, Plus, Sparkles } from 'lucide-react';
 import {
   DndContext,
   type DragEndEvent,
@@ -58,6 +65,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
+import { ASSISTANT_MODEL_PRESETS } from '@/features/assistant/models';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
 import { RoomDialog } from '@/features/rooms/components/RoomDialog';
 import { RoomAssignmentSection } from '@/features/rooms/components/RoomAssignmentSection';
@@ -103,6 +111,19 @@ interface UnassignedGuest {
   readonly endDate: string;
   /** Dates without room assignment (ISO strings) */
   readonly unassignedDates: readonly string[];
+}
+
+interface DateSegment {
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly dates: readonly string[];
+}
+
+interface RoomAssignmentPlan {
+  readonly personId: Person['id'];
+  readonly roomId: Room['id'];
+  readonly startDate: string;
+  readonly endDate: string;
 }
 
 /**
@@ -233,6 +254,193 @@ function formatToISODate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
+
+async function hasAnyCachedAssistantModel(): Promise<boolean> {
+  if (typeof caches === 'undefined') {
+    return false;
+  }
+
+  try {
+    const cache = await caches.open(TRANSFORMERS_CACHE_NAME);
+    const keys = await cache.keys();
+
+    return ASSISTANT_MODEL_PRESETS.some((preset) => {
+      const encoded = preset.modelId.replace('/', '%2F');
+      return keys.some(
+        (req) => req.url.includes(encoded) || req.url.includes(preset.modelId),
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
+function splitIntoDateSegments(dates: readonly string[]): readonly DateSegment[] {
+  if (dates.length === 0) {
+    return [];
+  }
+
+  const sorted = [...dates].sort((a, b) => a.localeCompare(b));
+  const segments: DateSegment[] = [];
+  let currentStart = sorted[0]!;
+  let currentEnd = sorted[0]!;
+  let currentDates: string[] = [sorted[0]!];
+
+  for (let i = 1; i < sorted.length; i += 1) {
+    const next = sorted[i]!;
+    const expectedNext = formatToISODate(
+      new Date(parseISO(currentEnd).getTime() + 24 * 60 * 60 * 1000),
+    );
+
+    if (next === expectedNext) {
+      currentEnd = next;
+      currentDates.push(next);
+      continue;
+    }
+
+    segments.push({
+      startDate: currentStart,
+      endDate: currentEnd,
+      dates: currentDates,
+    });
+    currentStart = next;
+    currentEnd = next;
+    currentDates = [next];
+  }
+
+  segments.push({
+    startDate: currentStart,
+    endDate: currentEnd,
+    dates: currentDates,
+  });
+
+  return segments;
+}
+
+function buildRoomDateOccupancy(
+  assignments: readonly RoomAssignment[],
+): Map<Room['id'], Map<string, number>> {
+  const occupancyByRoom = new Map<Room['id'], Map<string, number>>();
+
+  for (const assignment of assignments) {
+    let roomOccupancy = occupancyByRoom.get(assignment.roomId);
+    if (!roomOccupancy) {
+      roomOccupancy = new Map<string, number>();
+      occupancyByRoom.set(assignment.roomId, roomOccupancy);
+    }
+    // Match check-in / check-out model (see capacity-utils): endDate is exclusive.
+    const start = parseISO(assignment.startDate);
+    const end = parseISO(assignment.endDate);
+    const lastNight = new Date(end);
+    lastNight.setDate(lastNight.getDate() - 1);
+    if (start > lastNight) {
+      continue;
+    }
+    const nights = eachDayOfInterval({ start, end: lastNight });
+    for (const night of nights) {
+      const key = formatToISODate(night);
+      roomOccupancy.set(key, (roomOccupancy.get(key) ?? 0) + 1);
+    }
+  }
+
+  return occupancyByRoom;
+}
+
+function chooseRoomForSegment(
+  rooms: readonly Room[],
+  occupancyByRoom: Map<Room['id'], Map<string, number>>,
+  segment: DateSegment,
+): Room | undefined {
+  const candidates: Array<{
+    room: Room;
+    isCompletelyEmpty: boolean;
+    slackScore: number;
+  }> = [];
+
+  for (const room of rooms) {
+    if (room.capacity < 1) {
+      continue;
+    }
+    const roomOccupancy = occupancyByRoom.get(room.id) ?? new Map<string, number>();
+    const occupancies = segment.dates.map((date) => roomOccupancy.get(date) ?? 0);
+    if (occupancies.some((value) => value >= room.capacity)) {
+      continue;
+    }
+
+    const isCompletelyEmpty = occupancies.every((value) => value === 0);
+    const slackScore = occupancies.reduce(
+      (sum, value) => sum + (room.capacity - (value + 1)),
+      0,
+    );
+    candidates.push({
+      room,
+      isCompletelyEmpty,
+      slackScore,
+    });
+  }
+
+  candidates.sort((a, b) => {
+    if (a.isCompletelyEmpty !== b.isCompletelyEmpty) {
+      return a.isCompletelyEmpty ? -1 : 1;
+    }
+    if (a.slackScore !== b.slackScore) {
+      return a.slackScore - b.slackScore;
+    }
+    return a.room.order - b.room.order;
+  });
+
+  return candidates[0]?.room;
+}
+
+function planAutoAssignments(
+  guests: readonly UnassignedGuest[],
+  rooms: readonly Room[],
+  assignments: readonly RoomAssignment[],
+): {
+  readonly plans: readonly RoomAssignmentPlan[];
+  readonly unplacedSegments: number;
+} {
+  const occupancyByRoom = buildRoomDateOccupancy(assignments);
+  const plans: RoomAssignmentPlan[] = [];
+  let unplacedSegments = 0;
+
+  const guestsByConstraint = [...guests].sort(
+    (a, b) => b.unassignedDates.length - a.unassignedDates.length,
+  );
+
+  for (const guest of guestsByConstraint) {
+    const segments = splitIntoDateSegments(guest.unassignedDates);
+    for (const segment of segments) {
+      const room = chooseRoomForSegment(rooms, occupancyByRoom, segment);
+      if (!room) {
+        unplacedSegments += 1;
+        continue;
+      }
+
+      let roomOccupancy = occupancyByRoom.get(room.id);
+      if (!roomOccupancy) {
+        roomOccupancy = new Map<string, number>();
+        occupancyByRoom.set(room.id, roomOccupancy);
+      }
+
+      for (const date of segment.dates) {
+        roomOccupancy.set(date, (roomOccupancy.get(date) ?? 0) + 1);
+      }
+
+      plans.push({
+        personId: guest.person.id,
+        roomId: room.id,
+        startDate: segment.startDate,
+        // Assignments store check-out day as exclusive endDate (not the last night).
+        endDate: formatToISODate(addDays(parseISO(segment.endDate), 1)),
+      });
+    }
+  }
+
+  return { plans, unplacedSegments };
+}
+
 function getStaySpanPercent(args: {
   readonly tripStartDate: string | undefined;
   readonly tripEndDate: string | undefined;
@@ -317,6 +525,8 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   // Track if we're currently performing an action to prevent double-clicks
    isActionInProgressRef = useRef(false),
    [isActionInProgress] = useState(false),
+   [hasCachedAssistantModel, setHasCachedAssistantModel] = useState(false),
+   [isOptimizingAssignments, setIsOptimizingAssignments] = useState(false),
 
   // Date range filter for capacity calculation
    [selectedDateRange, setSelectedDateRange] = useState<PickerDateRange | undefined>(undefined),
@@ -422,6 +632,10 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     }
   }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
 
+  useEffect(() => {
+    void hasAnyCachedAssistantModel().then(setHasCachedAssistantModel);
+  }, []);
+
   // Validate tripId matches current trip
   const tripMismatch = useMemo(() => {
     if (!tripIdFromUrl || !currentTrip) {return false;}
@@ -504,6 +718,81 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   // ============================================================================
   // Event Handlers
   // ============================================================================
+
+  /**
+   * Auto-assigns missing room allocations using a local optimization heuristic.
+   * Visible only when at least one local assistant model is already cached.
+   */
+   handleOptimizeAssignments = useCallback(async () => {
+    if (isOptimizingAssignments || unassignedGuests.length === 0) {
+      return;
+    }
+    setIsOptimizingAssignments(true);
+
+    try {
+      const { plans, unplacedSegments } = planAutoAssignments(
+        unassignedGuests,
+        rooms,
+        assignments,
+      );
+
+      if (plans.length === 0) {
+        toast.error(
+          t(
+            'rooms.autoAssignNoSolution',
+            'No available room slot found for these guests.',
+          ),
+        );
+        return;
+      }
+
+      let createdCount = 0;
+      for (const plan of plans) {
+        await createAssignment({
+          roomId: plan.roomId,
+          personId: plan.personId,
+          startDate: plan.startDate as ISODateString,
+          endDate: plan.endDate as ISODateString,
+        });
+        createdCount += 1;
+      }
+
+      successToast(
+        t('rooms.autoAssignSuccess', {
+          count: createdCount,
+          defaultValue: '{{count}} room allocation(s) optimized automatically',
+        }),
+      );
+
+      if (unplacedSegments > 0) {
+        toast.error(
+          t('rooms.autoAssignPartial', {
+            count: unplacedSegments,
+            defaultValue:
+              '{{count}} segment(s) could not be placed due to capacity limits',
+          }),
+        );
+      }
+    } catch (error) {
+      console.error('Failed to optimize room assignments:', error);
+      toast.error(
+        t(
+          'rooms.autoAssignFailed',
+          'Could not optimize room assignments.',
+        ),
+      );
+    } finally {
+      setIsOptimizingAssignments(false);
+    }
+  }, [
+    assignments,
+    createAssignment,
+    isOptimizingAssignments,
+    rooms,
+    successToast,
+    t,
+    unassignedGuests,
+  ]),
 
   /**
    * Handles room card click - toggles the expanded state to show/hide assignments.
@@ -925,12 +1214,31 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           )}
         >
           <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-              <span className="text-amber-800 dark:text-amber-200">
-                {t('rooms.unassignedGuests', 'Guests without rooms')} ({unassignedGuests.length})
-              </span>
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                <span className="text-amber-800 dark:text-amber-200">
+                  {t('rooms.unassignedGuests', 'Guests without rooms')} ({unassignedGuests.length})
+                </span>
+              </CardTitle>
+              {hasCachedAssistantModel ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8"
+                  onClick={() => {
+                    void handleOptimizeAssignments();
+                  }}
+                  disabled={isOptimizingAssignments}
+                >
+                  <Sparkles className="mr-1.5 size-3.5" aria-hidden="true" />
+                  {isOptimizingAssignments
+                    ? t('rooms.autoAssignWorking', 'Optimizing...')
+                    : t('rooms.autoAssignButton', 'Optimize automatically')}
+                </Button>
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="space-y-2">

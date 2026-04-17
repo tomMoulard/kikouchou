@@ -21,18 +21,31 @@ import type { AssistantModelPreset } from '../models';
 export type EngineStatus = 'idle' | 'loading' | 'ready' | 'generating' | 'error';
 
 /**
+ * One model shard / file on Hugging Face Hub (e.g. `.onnx`, `.onnx_data`).
+ */
+export interface FileDownloadProgress {
+  readonly fileKey: string;
+  readonly fileName: string;
+  /** 0–1; completed files stay at 1. */
+  readonly progress: number;
+  readonly bytesHint?: string;
+  readonly done: boolean;
+}
+
+/**
  * Progress information during model download/loading.
  */
 export interface LoadProgress {
-  /** Human-readable progress text */
+  /** Summary line (initializing, or overall status while files download). */
   readonly text: string;
   /**
-   * Progress 0–1 for the **current file** only (Transformers.js reports per shard).
-   * The bar resets when a new file starts; see UI caption.
+   * Progress 0–1 — meaningful for the **initial** single-bar state; when `files`
+   * is non-empty, the UI uses per-file bars instead.
    */
   readonly progress: number;
-  /** Optional transferred size for the current file (e.g. `12.4 MB / 450 MB`). */
   readonly bytesHint?: string;
+  /** One entry per file seen in the Hub download callback (order preserved). */
+  readonly files: readonly FileDownloadProgress[];
 }
 
 /**
@@ -85,6 +98,76 @@ function formatBytes(bytes: number): string {
   if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
   const gb = mb / 1024;
   return `${gb.toFixed(2)} GB`;
+}
+
+interface FileEntry {
+  fileName: string;
+  progress: number;
+  bytesHint?: string;
+  done: boolean;
+}
+
+function fileEntriesToProgress(
+  map: Map<string, FileEntry>,
+): readonly FileDownloadProgress[] {
+  return Array.from(map.entries()).map(([fileKey, v]) => ({
+    fileKey,
+    fileName: v.fileName,
+    progress: v.done ? 1 : v.progress,
+    bytesHint: v.done ? undefined : v.bytesHint,
+    done: v.done,
+  }));
+}
+
+function buildLoadProgressFromMap(
+  map: Map<string, FileEntry>,
+  loadingFromCache: boolean,
+): LoadProgress {
+  const files = fileEntriesToProgress(map);
+
+  if (files.length === 0) {
+    return {
+      text: i18n.t('assistant.initializingLoader', {
+        defaultValue: 'Initializing…',
+      }),
+      progress: 0,
+      bytesHint: undefined,
+      files: [],
+    };
+  }
+
+  const overall =
+    files.reduce((sum, f) => sum + (f.done ? 1 : f.progress), 0) /
+    files.length;
+
+  return {
+    text: i18n.t(
+      loadingFromCache
+        ? 'assistant.loadingCachedModelFiles'
+        : 'assistant.downloadingModelFiles',
+      {
+        defaultValue: loadingFromCache
+          ? 'Loading cached model files…'
+          : 'Downloading model files…',
+      },
+    ),
+    progress: overall,
+    bytesHint: undefined,
+    files,
+  };
+}
+
+function getInitialLoaderText(loadingFromCache: boolean): string {
+  return i18n.t(
+    loadingFromCache
+      ? 'assistant.initializingCachedLoader'
+      : 'assistant.initializingLoader',
+    {
+      defaultValue: loadingFromCache
+        ? 'Initializing cached model…'
+        : 'Initializing…',
+    },
+  );
 }
 
 // ============================================================================
@@ -187,6 +270,9 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   // Track whether we're currently loading (to prevent double-loading)
   const loadingRef = useRef(false);
 
+  /** Per-file download state for Transformers.js Hub progress (key = full `file` URL/path). */
+  const downloadFilesRef = useRef<Map<string, FileEntry>>(new Map());
+
   // Track the selected preset and cache availability.
   useEffect(() => {
     if (pipelineInstance !== null && loadedModelId === preset.modelId) {
@@ -216,14 +302,15 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       return;
     }
 
+    const loadingFromCache = isCached === true;
     loadingRef.current = true;
+    downloadFilesRef.current = new Map();
     setStatus('loading');
     setError(null);
     setLoadProgress({
-      text: i18n.t('assistant.initializingLoader', {
-        defaultValue: 'Initializing…',
-      }),
+      text: getInitialLoaderText(loadingFromCache),
       progress: 0,
+      files: [],
     });
 
     try {
@@ -253,51 +340,61 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
             loaded?: number;
             total?: number;
           }) => {
+            const fileKey = progress.file;
             const fileName = progress.file?.split('/').pop() ?? '';
+            const map = downloadFilesRef.current;
 
-            if (
-              progress.status === 'progress' &&
-              progress.progress != null
-            ) {
-              const pct = Math.round(progress.progress);
-              const loaded = progress.loaded;
-              const total = progress.total;
-              const bytesHint =
-                typeof loaded === 'number' &&
-                typeof total === 'number' &&
-                total > 0
-                  ? `${formatBytes(loaded)} / ${formatBytes(total)}`
-                  : undefined;
-
-              setLoadProgress({
-                text: i18n.t('assistant.downloadingFile', {
-                  file: fileName || '…',
-                  percent: pct,
-                  defaultValue:
-                    'Downloading {{file}} — {{percent}}% of this file',
-                }),
-                progress: progress.progress / 100,
-                bytesHint,
-              });
-            } else if (progress.status === 'initiate') {
-              setLoadProgress({
-                text: i18n.t('assistant.preparingFile', {
-                  file: fileName || 'model',
-                  defaultValue: 'Preparing {{file}}…',
-                }),
-                progress: 0,
-                bytesHint: undefined,
-              });
-            } else if (progress.status === 'done') {
-              setLoadProgress((prev) => ({
-                text: i18n.t('assistant.fileDownloadDone', {
-                  file: fileName || '…',
-                  defaultValue: 'Finished {{file}}',
-                }),
-                progress: prev?.progress ?? 0,
-                bytesHint: undefined,
-              }));
+            if (fileKey) {
+              if (progress.status === 'initiate') {
+                map.set(fileKey, {
+                  fileName: fileName || '…',
+                  progress: 0,
+                  done: false,
+                });
+              } else if (
+                progress.status === 'progress' &&
+                progress.progress != null
+              ) {
+                const loaded = progress.loaded;
+                const total = progress.total;
+                const bytesHint =
+                  typeof loaded === 'number' &&
+                  typeof total === 'number' &&
+                  total > 0
+                    ? `${formatBytes(loaded)} / ${formatBytes(total)}`
+                    : undefined;
+                const prev = map.get(fileKey) ?? {
+                  fileName: fileName || '…',
+                  progress: 0,
+                  done: false,
+                };
+                map.set(fileKey, {
+                  ...prev,
+                  fileName: fileName || prev.fileName,
+                  progress: progress.progress / 100,
+                  bytesHint,
+                  done: false,
+                });
+              } else if (progress.status === 'done') {
+                const prev = map.get(fileKey);
+                if (prev) {
+                  map.set(fileKey, {
+                    ...prev,
+                    progress: 1,
+                    done: true,
+                    bytesHint: undefined,
+                  });
+                } else {
+                  map.set(fileKey, {
+                    fileName: fileName || '…',
+                    progress: 1,
+                    done: true,
+                  });
+                }
+              }
             }
+
+            setLoadProgress(buildLoadProgressFromMap(map, loadingFromCache));
           },
         },
       );
@@ -316,7 +413,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     } finally {
       loadingRef.current = false;
     }
-  }, [preset.device, preset.dtype, preset.modelId]);
+  }, [isCached, preset.device, preset.dtype, preset.modelId]);
 
   // ------------------------------------------------------------------
   // generate

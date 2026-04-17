@@ -496,6 +496,20 @@ export interface Transport extends Identifiable, TripScoped {
   };
 
   /**
+   * Optional starting point for this leg (e.g. origin station, home).
+   * When set with {@link coordinates}, maps can draw a route between start and end.
+   */
+  startLocation?: string;
+
+  /**
+   * Optional GPS coordinates for the starting point.
+   */
+  startCoordinates?: {
+    readonly lat: number;
+    readonly lon: number;
+  };
+
+  /**
    * Mode of transportation.
    * @example "train"
    */
@@ -664,6 +678,13 @@ export interface TransportFormData {
   location: string;
   /** Optional GPS coordinates for the transport location */
   coordinates?: {
+    readonly lat: number;
+    readonly lon: number;
+  };
+  /** Optional starting place name for this leg */
+  startLocation?: string;
+  /** Optional GPS coordinates for the starting place */
+  startCoordinates?: {
     readonly lat: number;
     readonly lon: number;
   };

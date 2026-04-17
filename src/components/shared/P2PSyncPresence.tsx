@@ -23,7 +23,7 @@ export interface P2PSyncPresenceProps {
 // ============================================================================
 
 /**
- * Green dot + “N online” when count &gt; 0. Renders nothing otherwise.
+ * Green dot + “N online” when count &gt; 1. Renders nothing otherwise.
  */
 const P2PSyncPresence = memo(function P2PSyncPresence({
   collapsed = false,
@@ -31,7 +31,7 @@ const P2PSyncPresence = memo(function P2PSyncPresence({
   const { t } = useTranslation();
   const presence = useSyncPresence();
 
-  if (!presence || presence.onlineCount <= 0) {
+  if (!presence || presence.onlineCount <= 1) {
     return null;
   }
 

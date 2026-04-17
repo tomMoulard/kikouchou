@@ -197,6 +197,16 @@ export async function updateTransport(
       needsPickup: false,
     }).location;
   }
+  if (sanitizedData.startLocation !== undefined) {
+    sanitizedData.startLocation = sanitizeTransportData({
+      location: '',
+      startLocation: sanitizedData.startLocation,
+      type: 'arrival',
+      personId: '' as PersonId,
+      datetime: '',
+      needsPickup: false,
+    }).startLocation;
+  }
   if (sanitizedData.transportNumber !== undefined) {
     sanitizedData.transportNumber = sanitizeTransportData({
       location: '',

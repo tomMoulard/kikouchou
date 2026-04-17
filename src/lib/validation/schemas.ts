@@ -269,6 +269,9 @@ export const RoomAssignmentFormDataSchema = z
  * - transportNumber: optional, max 50 characters
  * - driverId: optional, valid person ID
  * - needsPickup: required, boolean
+ * - coordinates: optional GPS coordinates (end point)
+ * - startLocation: optional starting place label
+ * - startCoordinates: optional GPS coordinates for start
  * - notes: optional, max 500 characters
  */
 export const TransportFormDataSchema = z.object({
@@ -279,6 +282,12 @@ export const TransportFormDataSchema = z.object({
     .string()
     .min(1, 'Location is required')
     .max(200, 'Location must be 200 characters or less'),
+  coordinates: coordinatesSchema.optional(),
+  startLocation: z
+    .string()
+    .max(200, 'Starting place must be 200 characters or less')
+    .optional(),
+  startCoordinates: coordinatesSchema.optional(),
   transportMode: transportModeSchema.optional(),
   transportNumber: z
     .string()

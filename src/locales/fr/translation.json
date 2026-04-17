@@ -149,7 +149,13 @@
       "doorOpen": "Entrée",
       "baby": "Chambre enfant",
       "armchair": "Fauteuil"
-    }
+    },
+    "autoAssignButton": "Optimiser automatiquement",
+    "autoAssignWorking": "Optimisation...",
+    "autoAssignSuccess": "{{count}} attribution(s) optimisée(s) automatiquement",
+    "autoAssignPartial": "{{count}} segment(s) n'ont pas pu être placés (capacité atteinte)",
+    "autoAssignNoSolution": "Aucun créneau disponible trouvé pour ces invités.",
+    "autoAssignFailed": "Impossible d'optimiser les attributions."
   },
   "persons": {
     "title": "Participants",
@@ -209,6 +215,11 @@
     "datetime": "Date et heure",
     "location": "Lieu",
     "locationPlaceholder": "Ex : Gare Montparnasse",
+    "startingPlace": "Lieu de départ",
+    "startLocationPlaceholder": "Ex. : gare d'origine, domicile",
+    "startLocationHint": "Facultatif. Si ce lieu et le lieu principal ont des coordonnées, la carte des transports affiche un trajet entre les deux.",
+    "legStart": "Départ",
+    "endLocation": "Arrivée",
     "mode": "Mode de transport",
     "modes": {
       "train": "Train",
@@ -461,16 +472,22 @@
     "pageDescription": "Posez des questions ou modifiez votre voyage en langage naturel",
     "modelLabel": "Modèle de l'assistant",
     "modelDescription": "Choisissez un petit modèle pour les appareils modestes, ou un plus gros pour une meilleure qualité.",
+    "hubModelLabel": "Modèle HF : {{model}}",
     "modelCached": "Ce modèle est déjà en cache sur cet appareil.",
     "modelChanged": "Modèle de l'assistant défini sur {{model}}",
     "modelChangeFailed": "Impossible de changer le modèle de l'assistant. Veuillez réessayer.",
     "loadModel": "Charger le modèle",
     "loadHint": "Le modèle sélectionné sera téléchargé et mis en cache dans votre navigateur avant la première utilisation.",
     "initializingLoader": "Initialisation…",
+    "downloadingModelFiles": "Téléchargement des fichiers du modèle…",
     "downloadingFile": "Téléchargement de {{file}} — {{percent}} % pour ce fichier",
     "preparingFile": "Préparation de {{file}}…",
     "fileDownloadDone": "Terminé : {{file}}",
-    "loadingProgressCaption": "Le modèle est découpé en plusieurs fichiers. Ils se téléchargent l'un après l'autre : la barre repart donc pour chaque fichier. C'est normal.",
+    "loadingProgressCaption": "Barre du haut : progression globale du modèle. Liste : uniquement les fichiers en cours de téléchargement.",
+    "loadingOverallProgressAria": "Progression globale du téléchargement du modèle",
+    "modelFilesListAria": "Progression du téléchargement par fichier",
+    "fileDownloadProgressAria": "Progression du téléchargement pour {{file}}",
+    "fileShardDone": "Terminé",
     "loadingProgressAria": "Progression du téléchargement du fichier en cours",
     "placeholder": "Posez une question sur votre voyage ou demandez des modifications...",
     "send": "Envoyer le message",
@@ -520,7 +537,9 @@
       "removeAssignment": "Attribution retirée : {{person}} ↔ {{room}}",
       "addTransport": "Transport ajouté ({{type}}) pour {{person}} — {{location}}",
       "removeTransport": "Transport supprimé : {{label}}"
-    }
+    },
+    "initializingCachedLoader": "Initialisation du modèle en cache…",
+    "loadingCachedModelFiles": "Chargement des fichiers du modèle depuis le cache…"
   },
   "settings": {
     "title": "Paramètres",

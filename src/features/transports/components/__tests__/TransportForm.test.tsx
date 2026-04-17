@@ -26,8 +26,22 @@ vi.mock('@/hooks', () => ({
 }));
 
 vi.mock('@/components/shared/LocationPicker', () => ({
-  LocationPicker: ({ value, onChange }: { value: string; onChange: (loc: string) => void }) => (
-    <input data-testid="location-picker" value={value} onChange={(e) => onChange(e.target.value)} />
+  LocationPicker: ({
+    id,
+    value,
+    onChange,
+  }: {
+    id?: string;
+    value: string;
+    onChange: (loc: string) => void;
+  }) => (
+    <input
+      id={id}
+      data-testid="location-picker"
+      data-location-id={id}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
   ),
 }));
 
@@ -61,7 +75,7 @@ describe('TransportForm', () => {
       { withProviders: false },
     );
     expect(screen.getByLabelText(/transports.datetime/)).toBeInTheDocument();
-    expect(screen.getByTestId('location-picker')).toBeInTheDocument();
+    expect(screen.getAllByTestId('location-picker')).toHaveLength(2);
     expect(screen.getByText('transports.mode')).toBeInTheDocument();
   });
 
@@ -102,8 +116,9 @@ describe('TransportForm', () => {
       <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} onDirtyChange={onDirtyChange} />,
       { withProviders: false },
     );
-    const locationInput = screen.getByTestId('location-picker');
-    await user.type(locationInput, 'Paris');
+    const locationInputs = screen.getAllByTestId('location-picker');
+    const mainLocationInput = locationInputs[1]!;
+    await user.type(mainLocationInput, 'Paris');
     expect(onDirtyChange).toHaveBeenCalledWith(true);
   });
 
@@ -154,8 +169,8 @@ describe('TransportForm', () => {
       { withProviders: false },
     );
     expect(screen.getByLabelText('transports.arrival')).toBeChecked();
-    const locationInput = screen.getByTestId('location-picker');
-    expect(locationInput).toHaveValue('CDG Airport');
+    const mainLocationInput = screen.getAllByTestId('location-picker')[1]!;
+    expect(mainLocationInput).toHaveValue('CDG Airport');
   });
 
   it('renders notes field', () => {
@@ -570,6 +585,6 @@ describe('TransportForm', () => {
       />,
       { withProviders: false },
     );
-    expect(screen.getByTestId('location-picker')).toHaveValue('CDG Airport');
+    expect(screen.getAllByTestId('location-picker')[1]).toHaveValue('CDG Airport');
   });
 });
