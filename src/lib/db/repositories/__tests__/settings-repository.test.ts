@@ -58,6 +58,7 @@ describe('getSettings', () => {
     expect(settings.id).toBe('settings');
     expect(settings.language).toBe('fr');
     expect(settings.currentTripId).toBeUndefined();
+    expect(settings.assistantModelId).toBeUndefined();
   });
 
   it('returns existing settings from database', async () => {
@@ -167,12 +168,22 @@ describe('updateSettings', () => {
     expect(settings.currentTripId).toBe(tripId);
   });
 
+  it('persists assistant model preference', async () => {
+    await ensureSettings();
+
+    await updateSettings({ assistantModelId: 'gemma-4-e4b' });
+
+    const settings = await getSettings();
+    expect(settings.assistantModelId).toBe('gemma-4-e4b');
+  });
+
   it('preserves unchanged fields', async () => {
     const tripId = await createTestTrip();
     await db.settings.add({
       id: 'settings',
       language: 'en',
       currentTripId: tripId,
+      assistantModelId: 'gemma-4-e2b',
     });
 
     await updateSettings({ language: 'fr' });
@@ -180,6 +191,7 @@ describe('updateSettings', () => {
     const settings = await getSettings();
     expect(settings.language).toBe('fr');
     expect(settings.currentTripId).toBe(tripId); // Preserved
+    expect(settings.assistantModelId).toBe('gemma-4-e2b');
   });
 
   it('can set currentTripId to undefined', async () => {
@@ -372,6 +384,7 @@ describe('resetSettings', () => {
       id: 'settings',
       language: 'en',
       currentTripId: tripId,
+      assistantModelId: 'gemma-3-1b',
     });
 
     await resetSettings();
@@ -379,6 +392,7 @@ describe('resetSettings', () => {
     const settings = await getSettings();
     expect(settings.language).toBe('fr');
     expect(settings.currentTripId).toBeUndefined();
+    expect(settings.assistantModelId).toBeUndefined();
   });
 
   it('creates default settings if none exist', async () => {

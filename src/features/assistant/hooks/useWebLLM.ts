@@ -1,5 +1,5 @@
 /**
- * @fileoverview Custom hook for managing a local Gemma model via
+ * @fileoverview Custom hook for managing a selectable local LLM via
  * @huggingface/transformers (Transformers.js).
  * Handles model loading, chat completion with streaming, and lifecycle.
  *
@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import i18n from '@/lib/i18n';
+import type { AssistantModelPreset } from '../models';
 
 // ============================================================================
 // Type Definitions
@@ -67,16 +68,6 @@ export interface UseWebLLMReturn {
   unload: () => Promise<void>;
 }
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-/**
- * The HuggingFace ONNX model ID for Gemma 4 (E2B = ~2B effective parameters).
- * Optimised for Transformers.js with WebGPU backend.
- */
-const MODEL_ID = 'onnx-community/gemma-4-E2B-it-ONNX';
-
 /**
  * Cache name used by @huggingface/transformers to store downloaded model files.
  */
@@ -106,13 +97,16 @@ function formatBytes(bytes: number): string {
  *
  * @returns `true` if cached files are found, `false` otherwise
  */
-async function isModelCached(): Promise<boolean> {
+async function isModelCached(modelId: string): Promise<boolean> {
   try {
     if (typeof caches === 'undefined') return false;
     const cache = await caches.open(TRANSFORMERS_CACHE_NAME);
     const keys = await cache.keys();
     // Check if at least one cached entry belongs to our model
-    return keys.some((req) => req.url.includes(MODEL_ID.replace('/', '%2F')) || req.url.includes(MODEL_ID));
+    return keys.some(
+      (req) =>
+        req.url.includes(modelId.replace('/', '%2F')) || req.url.includes(modelId),
+    );
   } catch {
     return false;
   }
@@ -130,6 +124,11 @@ async function isModelCached(): Promise<boolean> {
 let pipelineInstance: any = null;
 
 /**
+ * Hugging Face model ID associated with the currently loaded pipeline.
+ */
+let loadedModelId: string | null = null;
+
+/**
  * Reference to the dynamically imported TextStreamer class.
  * Stored at module level so `generate` can create instances without
  * re-importing the entire library.
@@ -142,19 +141,32 @@ let TextStreamerClass: any = null;
  */
 let shouldStop = false;
 
+/**
+ * Disposes the currently loaded pipeline, if any.
+ */
+async function disposeLoadedPipeline(): Promise<void> {
+  if (pipelineInstance !== null) {
+    await pipelineInstance.dispose?.();
+    pipelineInstance = null;
+  }
+  TextStreamerClass = null;
+  loadedModelId = null;
+}
+
 // ============================================================================
 // Hook Implementation
 // ============================================================================
 
 /**
- * Hook that manages a local Gemma model for on-device inference
+ * Hook that manages a local selectable model for on-device inference
  * via Hugging Face Transformers.js.
  *
+ * @param preset - Selected assistant model preset
  * @returns Engine state and control functions
  *
  * @example
  * ```tsx
- * const { status, loadModel, generate, error } = useWebLLM();
+ * const { status, loadModel, generate, error } = useWebLLM(preset);
  *
  * await loadModel();
  *
@@ -164,9 +176,9 @@ let shouldStop = false;
  * ]);
  * ```
  */
-export function useWebLLM(): UseWebLLMReturn {
+export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   const [status, setStatus] = useState<EngineStatus>(
-    pipelineInstance ? 'ready' : 'idle',
+    pipelineInstance !== null && loadedModelId === preset.modelId ? 'ready' : 'idle',
   );
   const [loadProgress, setLoadProgress] = useState<LoadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -175,21 +187,32 @@ export function useWebLLM(): UseWebLLMReturn {
   // Track whether we're currently loading (to prevent double-loading)
   const loadingRef = useRef(false);
 
-  // Check on mount whether the model is already cached in the browser
+  // Track the selected preset and cache availability.
   useEffect(() => {
-    if (pipelineInstance !== null) {
-      // Already loaded in memory — no need to check cache
+    if (pipelineInstance !== null && loadedModelId === preset.modelId) {
+      // Already loaded in memory — no need to check cache.
+      setStatus('ready');
       setIsCached(true);
       return;
     }
-    isModelCached().then(setIsCached);
-  }, []);
+
+    setStatus('idle');
+    setLoadProgress(null);
+    setError(null);
+    setIsCached(null);
+
+    void isModelCached(preset.modelId).then(setIsCached);
+  }, [preset.modelId]);
 
   // ------------------------------------------------------------------
   // loadModel
   // ------------------------------------------------------------------
   const loadModel = useCallback(async (): Promise<void> => {
-    if (pipelineInstance !== null || loadingRef.current) {
+    if (loadingRef.current) {
+      return;
+    }
+
+    if (pipelineInstance !== null && loadedModelId === preset.modelId) {
       return;
     }
 
@@ -213,12 +236,16 @@ export function useWebLLM(): UseWebLLMReturn {
       // Store the TextStreamer class for later use in generate()
       TextStreamerClass = transformers.TextStreamer;
 
+      if (pipelineInstance !== null && loadedModelId !== preset.modelId) {
+        await disposeLoadedPipeline();
+      }
+
       const generator = await transformers.pipeline(
         'text-generation',
-        MODEL_ID,
+        preset.modelId,
         {
-          dtype: 'q4f16',
-          device: 'webgpu',
+          dtype: preset.dtype,
+          ...(preset.device ? { device: preset.device } : {}),
           progress_callback: (progress: {
             status: string;
             file?: string;
@@ -276,8 +303,10 @@ export function useWebLLM(): UseWebLLMReturn {
       );
 
       pipelineInstance = generator;
+      loadedModelId = preset.modelId;
       setStatus('ready');
       setLoadProgress(null);
+      setIsCached(true);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to load model';
@@ -287,7 +316,7 @@ export function useWebLLM(): UseWebLLMReturn {
     } finally {
       loadingRef.current = false;
     }
-  }, []);
+  }, [preset.device, preset.dtype, preset.modelId]);
 
   // ------------------------------------------------------------------
   // generate
@@ -297,7 +326,7 @@ export function useWebLLM(): UseWebLLMReturn {
       messages: ChatMessage[],
       onChunk?: (chunk: string) => void,
     ): Promise<string> => {
-      if (pipelineInstance === null) {
+      if (pipelineInstance === null || loadedModelId !== preset.modelId) {
         throw new Error('Model not loaded. Call loadModel() first.');
       }
 
@@ -370,7 +399,7 @@ export function useWebLLM(): UseWebLLMReturn {
         throw err;
       }
     },
-    [],
+    [preset.modelId],
   );
 
   // ------------------------------------------------------------------
@@ -384,15 +413,13 @@ export function useWebLLM(): UseWebLLMReturn {
   // unload
   // ------------------------------------------------------------------
   const unload = useCallback(async (): Promise<void> => {
-    if (pipelineInstance !== null) {
-      await pipelineInstance.dispose?.();
-      pipelineInstance = null;
-      TextStreamerClass = null;
-    }
+    await disposeLoadedPipeline();
     setStatus('idle');
     setLoadProgress(null);
     setError(null);
-  }, []);
+    setIsCached(null);
+    void isModelCached(preset.modelId).then(setIsCached);
+  }, [preset.modelId]);
 
   return {
     status,
