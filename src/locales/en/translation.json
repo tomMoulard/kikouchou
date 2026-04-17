@@ -457,10 +457,15 @@
   },
   "assistant": {
     "title": "AI Assistant",
-    "description": "Run Gemma locally on your device to manage your trip with natural language.",
+    "description": "Run a local model on your device to manage your trip with natural language.",
     "pageDescription": "Ask questions or modify your trip using natural language",
+    "modelLabel": "Assistant model",
+    "modelDescription": "Pick a smaller model for weaker devices or a bigger one for better quality.",
+    "modelCached": "This model is already cached on this device.",
+    "modelChanged": "Assistant model set to {{model}}",
+    "modelChangeFailed": "Could not switch the assistant model. Please try again.",
     "loadModel": "Load Model",
-    "loadHint": "The model (~2.5 GB) will be downloaded and cached in your browser. Requires WebGPU support.",
+    "loadHint": "The selected model will be downloaded and cached in your browser before first use.",
     "initializingLoader": "Initializing…",
     "downloadingFile": "Downloading {{file}} — {{percent}}% of this file",
     "preparingFile": "Preparing {{file}}…",
@@ -479,6 +484,23 @@
     "noTripForAction": "Select or create a trip first.",
     "selectTripNotFound": "That trip was not found.",
     "tripSwitched": "Switched to {{name}}",
+    "models": {
+      "gemma-3-1b": {
+        "name": "Light",
+        "description": "Smallest option in the lineup, aimed at lighter devices.",
+        "hint": "Needs WebGPU. Best chance of running smoothly on modest hardware."
+      },
+      "gemma-4-e2b": {
+        "name": "Balanced",
+        "description": "Stronger reasoning and quality while staying lighter than E4B.",
+        "hint": "Needs WebGPU. Good default for recent laptops and desktops."
+      },
+      "gemma-4-e4b": {
+        "name": "Best quality",
+        "description": "Largest preset with the strongest reasoning quality in this app.",
+        "hint": "Needs a stronger WebGPU-capable device and the biggest download."
+      }
+    },
     "actionDetails": {
       "createTrip": "Created trip: {{name}}",
       "selectTrip": "Switched to trip: {{name}}",

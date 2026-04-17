@@ -1,8 +1,8 @@
 /**
- * @fileoverview AI Assistant page that runs Gemma locally on-device via
- * @huggingface/transformers (Transformers.js).
- * Users can ask questions about their trip and request modifications to
- * trip attributes (guests, rooms, transports, assignments).
+ * @fileoverview AI Assistant page that runs a selectable local model on-device
+ * via @huggingface/transformers (Transformers.js). Users can ask questions
+ * about their trip and request modifications to trip attributes (guests,
+ * rooms, transports, assignments).
  *
  * @module features/assistant/pages/AssistantPage
  */
@@ -36,11 +36,20 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 
 import { cn } from '@/lib/utils';
+import { getSettings, updateSettings } from '@/lib/db';
 
 import {
   ChatMessage,
@@ -59,6 +68,88 @@ import {
   type LoadProgress,
   useWebLLM,
 } from '../hooks/useWebLLM';
+import {
+  ASSISTANT_MODEL_PRESETS,
+  DEFAULT_ASSISTANT_MODEL_ID,
+  getAssistantModelPreset,
+  isAssistantModelId,
+} from '../models';
+import type { AssistantModelId } from '@/types';
+
+// ============================================================================
+// Model Selection UI
+// ============================================================================
+
+const AssistantModelPanel = memo(function AssistantModelPanel({
+  selectedModelId,
+  onModelChange,
+  disabled,
+  isCached,
+}: {
+  readonly selectedModelId: AssistantModelId;
+  readonly onModelChange: (value: string) => void;
+  readonly disabled: boolean;
+  readonly isCached: boolean | null;
+}): ReactElement {
+  const { t } = useTranslation();
+  const selectedModel = getAssistantModelPreset(selectedModelId);
+
+  return (
+    <Card className="mb-4">
+      <CardContent className="space-y-3 pt-4">
+        <div className="space-y-1">
+          <Label htmlFor="assistant-model-select">
+            {t('assistant.modelLabel', 'Assistant model')}
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              'assistant.modelDescription',
+              'Pick a smaller model for weaker devices or a bigger one for better quality.',
+            )}
+          </p>
+        </div>
+
+        <Select
+          value={selectedModelId}
+          onValueChange={onModelChange}
+          disabled={disabled}
+        >
+          <SelectTrigger
+            id="assistant-model-select"
+            className="w-full"
+            aria-label={t('assistant.modelLabel', 'Assistant model')}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ASSISTANT_MODEL_PRESETS.map((preset) => (
+              <SelectItem key={preset.id} value={preset.id}>
+                {t(preset.nameKey, preset.fallbackName)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="space-y-1">
+          <p className="text-sm text-foreground">
+            {t(selectedModel.descriptionKey, selectedModel.fallbackDescription)}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {t(selectedModel.hintKey, selectedModel.fallbackHint)}
+          </p>
+          {isCached === true && (
+            <p className="text-xs text-primary">
+              {t(
+                'assistant.modelCached',
+                'This model is already cached on this device.',
+              )}
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
 
 // ============================================================================
 // Helper
@@ -270,8 +361,20 @@ const ChatInput = memo(function ChatInput({
  */
 function AssistantPageComponent(): ReactElement {
   const { t } = useTranslation();
-  const { status, loadProgress, error, isCached, loadModel, generate, interrupt } =
-    useWebLLM();
+  const [selectedModelId, setSelectedModelId] =
+    useState<AssistantModelId>(DEFAULT_ASSISTANT_MODEL_ID);
+  const [isModelPreferenceReady, setIsModelPreferenceReady] = useState(false);
+  const selectedModel = getAssistantModelPreset(selectedModelId);
+  const {
+    status,
+    loadProgress,
+    error,
+    isCached,
+    loadModel,
+    generate,
+    interrupt,
+    unload,
+  } = useWebLLM(selectedModel);
   const { systemPrompt } = useTripSystemPrompt();
   const { executeActions } = useTripActions();
 
@@ -280,6 +383,35 @@ function AssistantPageComponent(): ReactElement {
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatHistoryRef = useRef<LLMChatMessage[]>([]);
+  const hasUserChangedModelRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadModelPreference(): Promise<void> {
+      try {
+        const settings = await getSettings();
+        if (
+          !cancelled &&
+          !hasUserChangedModelRef.current &&
+          settings.assistantModelId
+        ) {
+          setSelectedModelId(settings.assistantModelId);
+        }
+      } catch (settingsError) {
+        console.error('Failed to load assistant model preference:', settingsError);
+      } finally {
+        if (!cancelled) {
+          setIsModelPreferenceReady(true);
+        }
+      }
+    }
+
+    void loadModelPreference();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Restore LLM turn history from persisted UI messages (see handleSend for live updates).
   useLayoutEffect(() => {
@@ -298,10 +430,14 @@ function AssistantPageComponent(): ReactElement {
 
   // Auto-load the model if it's already cached in the browser
   useEffect(() => {
+    if (!isModelPreferenceReady) {
+      return;
+    }
+
     if (isCached === true && status === 'idle') {
       loadModel();
     }
-  }, [isCached, status, loadModel]);
+  }, [isCached, isModelPreferenceReady, status, loadModel]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -386,7 +522,46 @@ function AssistantPageComponent(): ReactElement {
     toast.success(t('assistant.conversationCleared'));
   }, [t]);
 
+  const handleModelChange = useCallback(
+    async (value: string): Promise<void> => {
+      if (!isAssistantModelId(value) || value === selectedModelId) {
+        return;
+      }
+
+      const previousModelId = selectedModelId;
+      hasUserChangedModelRef.current = true;
+      setSelectedModelId(value);
+
+      try {
+        if (status !== 'idle') {
+          await unload();
+        }
+        await updateSettings({ assistantModelId: value });
+        toast.success(
+          t('assistant.modelChanged', {
+            model: t(
+              getAssistantModelPreset(value).nameKey,
+              getAssistantModelPreset(value).fallbackName,
+            ),
+            defaultValue: 'Assistant model set to {{model}}',
+          }),
+        );
+      } catch (changeError) {
+        console.error('Failed to update assistant model:', changeError);
+        setSelectedModelId(previousModelId);
+        toast.error(
+          t(
+            'assistant.modelChangeFailed',
+            'Could not switch the assistant model. Please try again.',
+          ),
+        );
+      }
+    },
+    [selectedModelId, status, t, unload],
+  );
+
   const isReady = status === 'ready' || status === 'generating';
+  const isModelSelectionLocked = status === 'loading' || status === 'generating';
 
   return (
     <div
@@ -419,6 +594,15 @@ function AssistantPageComponent(): ReactElement {
             </Button>
           ) : undefined
         }
+      />
+
+      <AssistantModelPanel
+        selectedModelId={selectedModelId}
+        onModelChange={(value) => {
+          void handleModelChange(value);
+        }}
+        disabled={isModelSelectionLocked}
+        isCached={isCached}
       />
 
       {!isReady ? (

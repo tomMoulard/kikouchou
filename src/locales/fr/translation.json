@@ -457,10 +457,15 @@
   },
   "assistant": {
     "title": "Assistant IA",
-    "description": "Exécutez Gemma localement sur votre appareil pour gérer votre voyage en langage naturel.",
+    "description": "Exécutez un modèle localement sur votre appareil pour gérer votre voyage en langage naturel.",
     "pageDescription": "Posez des questions ou modifiez votre voyage en langage naturel",
+    "modelLabel": "Modèle de l'assistant",
+    "modelDescription": "Choisissez un petit modèle pour les appareils modestes, ou un plus gros pour une meilleure qualité.",
+    "modelCached": "Ce modèle est déjà en cache sur cet appareil.",
+    "modelChanged": "Modèle de l'assistant défini sur {{model}}",
+    "modelChangeFailed": "Impossible de changer le modèle de l'assistant. Veuillez réessayer.",
     "loadModel": "Charger le modèle",
-    "loadHint": "Le modèle (~2,5 Go) sera téléchargé et mis en cache dans votre navigateur. Nécessite le support WebGPU.",
+    "loadHint": "Le modèle sélectionné sera téléchargé et mis en cache dans votre navigateur avant la première utilisation.",
     "initializingLoader": "Initialisation…",
     "downloadingFile": "Téléchargement de {{file}} — {{percent}} % pour ce fichier",
     "preparingFile": "Préparation de {{file}}…",
@@ -479,6 +484,23 @@
     "noTripForAction": "Sélectionnez ou créez d'abord un voyage.",
     "selectTripNotFound": "Ce voyage est introuvable.",
     "tripSwitched": "Passage à {{name}}",
+    "models": {
+      "gemma-3-1b": {
+        "name": "Léger",
+        "description": "L'option la plus petite de la sélection, pensée pour les appareils plus modestes.",
+        "hint": "Nécessite WebGPU. C'est celle qui a le plus de chances d'être fluide sur un matériel limité."
+      },
+      "gemma-4-e2b": {
+        "name": "Équilibré",
+        "description": "Un meilleur niveau de raisonnement et de qualité tout en restant plus léger que E4B.",
+        "hint": "Nécessite WebGPU. Bon choix par défaut pour les laptops et desktops récents."
+      },
+      "gemma-4-e4b": {
+        "name": "Meilleure qualité",
+        "description": "Le plus gros preset de l'application, avec la meilleure qualité de raisonnement.",
+        "hint": "Nécessite un appareil WebGPU plus puissant et le téléchargement le plus volumineux."
+      }
+    },
     "actionDetails": {
       "createTrip": "Voyage créé : {{name}}",
       "selectTrip": "Passage au voyage : {{name}}",

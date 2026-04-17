@@ -110,6 +110,17 @@ export const DEFAULT_ROOM_ICON: RoomIcon = 'bed-double';
  */
 export type Language = 'en' | 'fr';
 
+/**
+ * Supported on-device assistant model presets.
+ *
+ * These are symbolic preset identifiers stored in user settings; the concrete
+ * Hugging Face model IDs live in the assistant feature module.
+ */
+export type AssistantModelId =
+  | 'gemma-3-1b'
+  | 'gemma-4-e2b'
+  | 'gemma-4-e4b';
+
 // ============================================================================
 // Base Interfaces
 // ============================================================================
@@ -549,6 +560,12 @@ export interface AppSettings extends Identifiable {
    * Undefined if no trip has been viewed yet.
    */
   currentTripId?: TripId;
+
+  /**
+   * Preferred local assistant model preset.
+   * Undefined means "use the app default".
+   */
+  assistantModelId?: AssistantModelId;
 }
 
 // ============================================================================
