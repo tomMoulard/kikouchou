@@ -75,6 +75,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
                 <CalendarTimelineRow
                   model={row}
                   viewport={viewport}
+                  tripDays={model.tripDays}
                   dateLocale={props.dateLocale}
                   onAssignmentClick={props.onAssignmentClick}
                   onTransportClick={props.onTransportClick}

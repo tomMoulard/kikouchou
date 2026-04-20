@@ -200,6 +200,7 @@
     "updateSuccess": "Room assignment updated",
     "deleteSuccess": "Room assignment removed",
     "autofilledFromTransport": "Dates pre-filled from transport schedule",
+    "openInRooms": "Open rooms to edit",
     "quickAssign": "Assign to room",
     "quickAssignDescription": "Confirm the dates for this room assignment."
   },

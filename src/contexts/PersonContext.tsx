@@ -107,10 +107,14 @@ interface PersonProviderProps {
 
 /**
  * Comparison function for Person objects.
- * Compares id, name, and color (tripId is same for all persons in filtered array).
+ * Compares all mutable Person fields (tripId is same in the filtered array).
  */
 const comparePersons = (a: Person, b: Person): boolean =>
-  a.id === b.id && a.name === b.name && a.color === b.color;
+  a.id === b.id &&
+  a.name === b.name &&
+  a.color === b.color &&
+  a.stayStartDate === b.stayStartDate &&
+  a.stayEndDate === b.stayEndDate;
 
 /**
  * Compares two person arrays for equality based on IDs and mutable properties.

@@ -231,6 +231,40 @@ describe('PersonContext', () => {
       });
     });
 
+    it('updates person stay dates in context state', async () => {
+      const tripId = await createTestTripData();
+      const person = await createTestPerson(tripId, 'Traveler');
+
+      const { result } = renderHook(() => useCombinedContexts(), {
+        wrapper: AllContextsWrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.trip.isLoading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.trip.setCurrentTrip(tripId);
+      });
+
+      await waitForLiveQuery();
+
+      await act(async () => {
+        await result.current.person.updatePerson(person.id, {
+          stayStartDate: isoDate('2026-04-23'),
+          stayEndDate: isoDate('2026-04-24'),
+        });
+      });
+
+      await waitForLiveQuery();
+
+      await waitFor(() => {
+        const updated = result.current.person.persons.find((p) => p.id === person.id);
+        expect(updated?.stayStartDate).toBe(isoDate('2026-04-23'));
+        expect(updated?.stayEndDate).toBe(isoDate('2026-04-24'));
+      });
+    });
+
     it('throws error when no trip selected', async () => {
       const { result } = renderHook(() => usePersonContext(), {
         wrapper: AllContextsWrapper,

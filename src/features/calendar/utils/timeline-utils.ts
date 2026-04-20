@@ -224,28 +224,35 @@ export function buildCalendarTimelineModel(args: {
     let stayStartKey: ISODateString | null = null;
     let stayEndKey: ISODateString | null = null;
 
-    // Presence range: derive from transports first (most accurate), fallback to person stay dates.
-    // We treat the stay as nights: start=arrival day, end=day before departure.
-    for (const arrival of arrivals) {
-      if (arrival.personId !== person.id) continue;
-      const key = arrival.datetime.substring(0, 10) as ISODateString;
-      if (!stayStartKey || key < stayStartKey) {
-        stayStartKey = key;
-      }
-    }
-    for (const departure of departures) {
-      if (departure.personId !== person.id) continue;
-      const key = departure.datetime.substring(0, 10) as ISODateString;
-      if (!stayEndKey || key > stayEndKey) {
-        stayEndKey = key;
-      }
-    }
-
-    if (!stayStartKey && person.stayStartDate) {
+    // Presence range: explicit stay dates take precedence over transports.
+    // This keeps timeline behavior consistent with the rest of the app when
+    // users manually edit a guest's stay window.
+    if (person.stayStartDate) {
       stayStartKey = person.stayStartDate;
     }
-    if (!stayEndKey && person.stayEndDate) {
+    if (person.stayEndDate) {
       stayEndKey = person.stayEndDate;
+    }
+
+    // Fallback to transports only when explicit stay bounds are missing.
+    // We treat the stay as nights: start=arrival day, end=day before departure.
+    if (!stayStartKey) {
+      for (const arrival of arrivals) {
+        if (arrival.personId !== person.id) continue;
+        const key = arrival.datetime.substring(0, 10) as ISODateString;
+        if (!stayStartKey || key < stayStartKey) {
+          stayStartKey = key;
+        }
+      }
+    }
+    if (!stayEndKey) {
+      for (const departure of departures) {
+        if (departure.personId !== person.id) continue;
+        const key = departure.datetime.substring(0, 10) as ISODateString;
+        if (!stayEndKey || key > stayEndKey) {
+          stayEndKey = key;
+        }
+      }
     }
 
     const staySpan = (() => {
@@ -306,6 +313,16 @@ export function buildCalendarTimelineModel(args: {
         continue;
       }
 
+      const clippedStartIndex = staySpan
+        ? Math.max(startIndex, staySpan.startIndex)
+        : startIndex;
+      const clippedEndIndex = staySpan
+        ? Math.min(endIndex, staySpan.endIndex)
+        : endIndex;
+      if (clippedStartIndex > clippedEndIndex) {
+        continue;
+      }
+
       const room = roomsMap.get(assignment.roomId);
       const label = room?.name ?? unknownLabel;
       const color = person.color;
@@ -314,8 +331,8 @@ export function buildCalendarTimelineModel(args: {
       assignmentItems.push({
         kind: 'assignment',
         id: assignment.id,
-        startIndex,
-        endIndex,
+        startIndex: clippedStartIndex,
+        endIndex: clippedEndIndex,
         label,
         color,
         textColor,
@@ -323,6 +340,17 @@ export function buildCalendarTimelineModel(args: {
         person: personsMap.get(assignment.personId),
         room,
       });
+    }
+
+    if (staySpan && assignmentItems.length === 1 && person.stayStartDate && person.stayEndDate) {
+      const [singleAssignment] = assignmentItems;
+      if (singleAssignment) {
+        assignmentItems[0] = {
+          ...singleAssignment,
+          startIndex: staySpan.startIndex,
+          endIndex: staySpan.endIndex,
+        };
+      }
     }
 
     baseItems.push(...dedupeContainedTimelineSpans(assignmentItems));

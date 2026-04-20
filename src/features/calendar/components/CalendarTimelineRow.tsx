@@ -5,14 +5,14 @@
  */
 
 import { type ReactElement, memo, useCallback, useMemo } from 'react';
-import type { Locale } from 'date-fns';
+import { addDays, format, type Locale } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 
 import type { TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
 import type { HexColor, RoomAssignment, Transport } from '@/types';
 import { cn } from '@/lib/utils';
 import type { CalendarTransport, CalendarTimelineRowModel, TimelineItemWithLane } from '../types';
-import { formatAssignmentStayRange, formatTime, getContrastTextColor } from '../utils/calendar-utils';
+import { formatTime, getContrastTextColor } from '../utils/calendar-utils';
 
 // ============================================================================
 // Component
@@ -21,6 +21,7 @@ import { formatAssignmentStayRange, formatTime, getContrastTextColor } from '../
 interface CalendarTimelineRowProps {
   readonly model: CalendarTimelineRowModel;
   readonly viewport: TripTimelineViewportContext;
+  readonly tripDays: readonly Date[];
   readonly dateLocale: Locale;
   readonly onAssignmentClick: (assignment: RoomAssignment, relatedTransports?: readonly Transport[]) => void;
   readonly onTransportClick?: (transport: CalendarTransport) => void;
@@ -29,6 +30,7 @@ interface CalendarTimelineRowProps {
 const CalendarTimelineRow = memo(function CalendarTimelineRow({
   model,
   viewport,
+  tripDays,
   dateLocale,
   onAssignmentClick,
   onTransportClick,
@@ -63,6 +65,18 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
     [onAssignmentClick, onTransportClick, transportToCalendarTransport],
   );
 
+  const formatVisibleAssignmentRange = useCallback(
+    (startIndex: number, endIndex: number): string => {
+      const startDate = tripDays[startIndex];
+      const endDate = tripDays[endIndex];
+      if (!startDate || !endDate) {
+        return '';
+      }
+      return `${format(startDate, 'd MMM', { locale: dateLocale })} – ${format(addDays(endDate, 1), 'd MMM', { locale: dateLocale })}`;
+    },
+    [dateLocale, tripDays],
+  );
+
   const renderedItems = useMemo(() => {
     const cellW = cellWidthPx;
     const laneH = viewport.laneHeightPx;
@@ -95,7 +109,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
 
       const assignmentRange =
         isAssignment && item.kind === 'assignment'
-          ? formatAssignmentStayRange(item.assignment, dateLocale)
+          ? formatVisibleAssignmentRange(item.startIndex, item.endIndex)
           : '';
       let assignmentTitle =
         isAssignment && item.kind === 'assignment' && assignmentRange
@@ -250,6 +264,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
     cellWidthPx,
     dateLocale,
     dayCount,
+    formatVisibleAssignmentRange,
     handleItemClick,
     model.items,
     model.checkoutDayIndex,

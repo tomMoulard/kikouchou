@@ -71,6 +71,11 @@ const mockGetPersonById = vi.fn((id: string) =>
   mockPersons.find((p) => p.id === id),
 );
 const mockGetTransportsByPerson = vi.fn().mockReturnValue([]);
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => mockNavigate,
+}));
 
 vi.mock('@/contexts/TripContext', () => ({
   useTripContext: () => ({
@@ -508,5 +513,25 @@ describe('RoomAssignmentSection', () => {
       <RoomAssignmentSection roomId={'room-1' as RoomId} />,
     );
     expect(screen.getByText('Alice')).toBeInTheDocument();
+  });
+
+  it('offers redirect to rooms page when conflict is detected', async () => {
+    const user = userEvent.setup();
+    mockGetAssignmentsByRoom.mockReturnValue([mockAssignment]);
+    mockCheckConflict.mockResolvedValue(true);
+
+    render(
+      <RoomAssignmentSection roomId={'room-1' as RoomId} />,
+    );
+
+    await user.click(screen.getByLabelText('common.edit'));
+
+    await waitFor(() => {
+      expect(screen.getByText('assignments.conflict')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'assignments.openInRooms' }));
+
+    expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/rooms?view=timeline');
   });
 });

@@ -200,6 +200,7 @@
     "updateSuccess": "Attribution mise à jour",
     "deleteSuccess": "Attribution supprimée",
     "autofilledFromTransport": "Dates pré-remplies à partir des transports",
+    "openInRooms": "Ouvrir la page chambres pour modifier",
     "quickAssign": "Attribuer une chambre",
     "quickAssignDescription": "Confirmez les dates pour cette attribution de chambre."
   },

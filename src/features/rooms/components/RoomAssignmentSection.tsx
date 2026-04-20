@@ -17,6 +17,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useFormSubmission, useOfflineAwareToast } from '@/hooks';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -325,6 +326,8 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   roomCapacity,
 }: AssignmentFormDialogProps): ReactElement {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { currentTrip } = useTripContext();
 
   // Form state
   const [selectedPersonId, setSelectedPersonId] = useState<PersonId | ''>('');
@@ -524,6 +527,16 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
     }
   }, []);
 
+  const handleOpenRoomsPage = useCallback(() => {
+    onOpenChange(false);
+    const tripId = currentTrip?.id;
+    if (tripId) {
+      navigate(`/trips/${tripId}/rooms?view=timeline`);
+      return;
+    }
+    navigate('/trips');
+  }, [currentTrip?.id, navigate, onOpenChange]);
+
   // Handle person selection with transport dates autofill
   const handlePersonChange = useCallback((value: string) => {
     const personId = value as PersonId | '';
@@ -662,11 +675,22 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
             {/* Conflict warning */}
             {conflictError && (
               <div
-                className="flex items-center gap-2 rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
+                className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive"
                 role="alert"
               >
-                <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-                <span>{conflictError}</span>
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
+                  <span>{conflictError}</span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-3 h-8 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={handleOpenRoomsPage}
+                >
+                  {t('assignments.openInRooms', 'Open rooms to edit')}
+                </Button>
               </div>
             )}
 
@@ -1090,4 +1114,5 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
 // Exports
 // ============================================================================
 
+export { AssignmentFormDialog };
 export type { AssignmentItemProps, AssignmentFormDialogProps };

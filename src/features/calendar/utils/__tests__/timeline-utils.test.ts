@@ -263,6 +263,112 @@ describe('buildCalendarTimelineModel', () => {
     expect(row.staySpan!.endIndex).toBe(2);   // Apr 3 (last night before checkout)
   });
 
+  it('prefers explicit person stay dates over transport-derived bounds', () => {
+    const personWithStay: Person = {
+      ...p1,
+      stayStartDate: iso('2026-04-03'),
+      stayEndDate: iso('2026-04-04'),
+    };
+    const arrival: Transport = {
+      id: 'tr-explicit-1' as Transport['id'],
+      tripId: 'trip-1' as TripId,
+      personId: 'p1' as PersonId,
+      type: 'arrival',
+      datetime: '2026-04-01T14:00:00Z',
+      location: 'Airport',
+      needsPickup: false,
+    };
+    const departure: Transport = {
+      id: 'tr-explicit-2' as Transport['id'],
+      tripId: 'trip-1' as TripId,
+      personId: 'p1' as PersonId,
+      type: 'departure',
+      datetime: '2026-04-05T10:00:00Z',
+      location: 'Airport',
+      needsPickup: false,
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [personWithStay],
+      rooms: [],
+      assignments: [],
+      arrivals: [arrival],
+      departures: [departure],
+      unknownLabel: 'Unknown',
+    });
+
+    const row = model.rows[0]!;
+    expect(row.staySpan).toBeDefined();
+    expect(row.staySpan!.startIndex).toBe(2); // Apr 3
+    expect(row.staySpan!.endIndex).toBe(2);   // Apr 3 (checkout Apr 4)
+  });
+
+  it('clips assignment bars to explicit stay dates', () => {
+    const personWithStay: Person = {
+      ...p1,
+      stayStartDate: iso('2026-04-03'),
+      stayEndDate: iso('2026-04-05'),
+    };
+    const assignment: RoomAssignment = {
+      id: 'clip-a1' as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: 'r1' as RoomId,
+      personId: 'p1' as PersonId,
+      startDate: iso('2026-04-01'),
+      endDate: iso('2026-04-06'),
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [personWithStay],
+      rooms: [room1],
+      assignments: [assignment],
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+
+    const row = model.rows[0]!;
+    const assignmentItem = row.items.find((i) => i.kind === 'assignment');
+    expect(assignmentItem).toBeDefined();
+    expect(assignmentItem!.startIndex).toBe(2); // Apr 3
+    expect(assignmentItem!.endIndex).toBe(3);   // Apr 4 (last night before checkout Apr 5)
+  });
+
+  it('expands a single assignment bar to match explicit stay span', () => {
+    const personWithStay: Person = {
+      ...p1,
+      stayStartDate: iso('2026-04-03'),
+      stayEndDate: iso('2026-04-06'),
+    };
+    const assignment: RoomAssignment = {
+      id: 'expand-a1' as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: 'r1' as RoomId,
+      personId: 'p1' as PersonId,
+      startDate: iso('2026-04-03'),
+      endDate: iso('2026-04-05'),
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [personWithStay],
+      rooms: [room1],
+      assignments: [assignment],
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+
+    const row = model.rows[0]!;
+    const assignmentItem = row.items.find((i) => i.kind === 'assignment');
+    expect(assignmentItem).toBeDefined();
+    expect(assignmentItem!.startIndex).toBe(2); // Apr 3
+    expect(assignmentItem!.endIndex).toBe(4);   // Apr 5 (last night before checkout Apr 6)
+    expect(row.staySpan).toBeUndefined();
+  });
+
   it('merges transports into host assignment items', () => {
     const assignment: RoomAssignment = {
       id: 'a1' as RoomAssignment['id'],
