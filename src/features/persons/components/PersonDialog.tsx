@@ -24,9 +24,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { PersonForm } from '@/features/persons/components/PersonForm';
-import type { Person, PersonFormData, PersonId } from '@/types';
+import type { ISODateString, Person, PersonFormData, PersonId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -83,6 +84,7 @@ const PersonDialog = memo(function PersonDialog({
 }: PersonDialogProps) {
   const { t } = useTranslation();
   const { persons, createPerson, updatePerson } = usePersonContext();
+  const { getAssignmentsByPerson, updateAssignment } = useAssignmentContext();
   const { successToast } = useOfflineAwareToast();
 
   // Dirty-state tracking for close guard
@@ -141,7 +143,27 @@ const PersonDialog = memo(function PersonDialog({
   const handleSubmit = useCallback(
     async (data: PersonFormData) => {
       if (isEditMode && personId) {
+        const shouldSyncSingleAssignmentDates =
+          person &&
+          data.stayStartDate &&
+          data.stayEndDate &&
+          (person.stayStartDate !== data.stayStartDate || person.stayEndDate !== data.stayEndDate);
+
         await updatePerson(personId, data);
+
+        if (shouldSyncSingleAssignmentDates) {
+          const personAssignments = getAssignmentsByPerson(personId);
+          if (personAssignments.length === 1) {
+            const [existing] = personAssignments;
+            if (existing) {
+              await updateAssignment(existing.id, {
+                startDate: data.stayStartDate as ISODateString,
+                endDate: data.stayEndDate as ISODateString,
+              });
+            }
+          }
+        }
+
         successToast(t('persons.updateSuccess', 'Participant updated successfully'));
       } else {
         await createPerson(data);
@@ -149,7 +171,18 @@ const PersonDialog = memo(function PersonDialog({
       }
       onOpenChange(false);
     },
-    [isEditMode, personId, updatePerson, createPerson, t, onOpenChange, successToast],
+    [
+      createPerson,
+      getAssignmentsByPerson,
+      isEditMode,
+      onOpenChange,
+      person,
+      personId,
+      successToast,
+      t,
+      updateAssignment,
+      updatePerson,
+    ],
   );
 
   /**

@@ -4,6 +4,8 @@ import type { Person, PersonId } from '@/types';
 
 const mockCreatePerson = vi.fn().mockResolvedValue(undefined);
 const mockUpdatePerson = vi.fn().mockResolvedValue(undefined);
+const mockGetAssignmentsByPerson = vi.fn().mockReturnValue([]);
+const mockUpdateAssignment = vi.fn().mockResolvedValue(undefined);
 const mockSuccessToast = vi.fn();
 
 const mockPersons: Person[] = [
@@ -20,6 +22,13 @@ vi.mock('@/contexts/PersonContext', () => ({
     persons: mockPersons,
     createPerson: mockCreatePerson,
     updatePerson: mockUpdatePerson,
+  }),
+}));
+
+vi.mock('@/contexts/AssignmentContext', () => ({
+  useAssignmentContext: () => ({
+    getAssignmentsByPerson: mockGetAssignmentsByPerson,
+    updateAssignment: mockUpdateAssignment,
   }),
 }));
 
@@ -40,7 +49,19 @@ vi.mock('@/features/persons/components/PersonForm', () => ({
     <div data-testid="person-form">
       {person ? <span data-testid="edit-mode">{person.name}</span> : <span data-testid="create-mode">New</span>}
       <button data-testid="cancel-btn" onClick={onCancel}>Cancel</button>
-      <button data-testid="submit-btn" onClick={() => onSubmit({ name: 'Test', color: '#000000' })}>Submit</button>
+      <button
+        data-testid="submit-btn"
+        onClick={() =>
+          onSubmit({
+            name: 'Test',
+            color: '#000000',
+            stayStartDate: '2026-04-22',
+            stayEndDate: '2026-04-25',
+          })
+        }
+      >
+        Submit
+      </button>
       <button data-testid="dirty-btn" onClick={() => onDirtyChange?.(true)}>Mark Dirty</button>
     </div>
   ),
@@ -51,6 +72,7 @@ import { PersonDialog } from '../PersonDialog';
 describe('PersonDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetAssignmentsByPerson.mockReturnValue([]);
   });
 
   it('renders create mode when personId is undefined', () => {
@@ -134,6 +156,35 @@ describe('PersonDialog', () => {
     });
     expect(mockSuccessToast).toHaveBeenCalledWith('persons.updateSuccess');
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('syncs single existing assignment dates when stay dates are edited', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    mockGetAssignmentsByPerson.mockReturnValue([
+      {
+        id: 'a1',
+        tripId: 't1',
+        roomId: 'r1',
+        personId: 'p1',
+        startDate: '2026-04-20',
+        endDate: '2026-04-24',
+      },
+    ]);
+
+    render(
+      <PersonDialog personId={'p1' as PersonId} open onOpenChange={vi.fn()} />,
+      { withProviders: false },
+    );
+
+    await user.click(screen.getByTestId('submit-btn'));
+
+    await waitFor(() => {
+      expect(mockUpdateAssignment).toHaveBeenCalledWith('a1', {
+        startDate: '2026-04-22',
+        endDate: '2026-04-25',
+      });
+    });
   });
 
   it('shows discard confirm when cancel is clicked on dirty form', async () => {

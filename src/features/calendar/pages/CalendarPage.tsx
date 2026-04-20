@@ -57,6 +57,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AssignmentFormDialog } from '@/features/rooms/components/RoomAssignmentSection';
 import { toISODateString } from '@/lib/db/utils';
 import type {
   HexColor,
@@ -117,7 +118,10 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     assignments,
     isLoading: isAssignmentsLoading,
     error: assignmentsError,
+    checkConflict,
     deleteAssignment,
+    getAssignmentsByRoom,
+    updateAssignment,
   } = useAssignmentContext();
   const {
     persons,
@@ -167,6 +171,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // Transport edit dialog state
   const [isTransportDialogOpen, setIsTransportDialogOpen] = useState(false);
   const [selectedTransportId, setSelectedTransportId] = useState<TransportId | undefined>();
+  const [editingAssignment, setEditingAssignment] = useState<RoomAssignment | undefined>(undefined);
+  const [isAssignmentDialogOpen, setIsAssignmentDialogOpen] = useState(false);
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -653,9 +659,9 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       setSelectedTransportId(selectedEvent.transport.id);
       setIsTransportDialogOpen(true);
     } else {
-      // Assignment edit - not yet implemented
-      toast.info('Edit functionality coming soon');
       setIsEventDialogOpen(false);
+      setEditingAssignment(selectedEvent.assignment);
+      setIsAssignmentDialogOpen(true);
     }
   }, [selectedEvent]);
 
@@ -689,6 +695,37 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       setSelectedTransportId(undefined);
     }
   }, []);
+
+  const handleAssignmentDialogClose = useCallback((open: boolean) => {
+    setIsAssignmentDialogOpen(open);
+    if (!open) {
+      setEditingAssignment(undefined);
+    }
+  }, []);
+
+  const handleAssignmentSubmit = useCallback(
+    async (data: {
+      readonly roomId: RoomAssignment['roomId'];
+      readonly personId: RoomAssignment['personId'];
+      readonly startDate: RoomAssignment['startDate'];
+      readonly endDate: RoomAssignment['endDate'];
+    }) => {
+      if (!editingAssignment) {
+        return;
+      }
+
+      try {
+        await updateAssignment(editingAssignment.id, data);
+        successToast(t('assignments.updateSuccess', 'Assignment updated successfully'));
+        setIsAssignmentDialogOpen(false);
+        setEditingAssignment(undefined);
+      } catch (error) {
+        console.error('Failed to update assignment from calendar:', error);
+        throw error;
+      }
+    },
+    [editingAssignment, successToast, t, updateAssignment],
+  );
 
   const handleDayRef = useCallback(
     (dateKey: ISODateString, node: HTMLDivElement | null) => {
@@ -948,6 +985,23 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         onOpenChange={handleTransportDialogClose}
         transportId={selectedTransportId}
       />
+
+      {/* Assignment Edit Dialog */}
+      {editingAssignment ? (
+        <AssignmentFormDialog
+          open={isAssignmentDialogOpen}
+          onOpenChange={handleAssignmentDialogClose}
+          roomId={editingAssignment.roomId}
+          existingAssignment={editingAssignment}
+          persons={persons}
+          tripStartDate={currentTrip ? parseISO(currentTrip.startDate) : undefined}
+          tripEndDate={currentTrip ? parseISO(currentTrip.endDate) : undefined}
+          onSubmit={handleAssignmentSubmit}
+          checkConflict={checkConflict}
+          existingAssignments={getAssignmentsByRoom(editingAssignment.roomId)}
+          roomCapacity={roomsMap.get(editingAssignment.roomId)?.capacity}
+        />
+      ) : null}
     </div>
   );
 });

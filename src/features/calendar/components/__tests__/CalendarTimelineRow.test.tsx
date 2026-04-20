@@ -66,6 +66,12 @@ const defaultViewport: TripTimelineViewportContext = {
   dayGridTemplateColumns: undefined,
 };
 
+const defaultTripDays = Array.from({ length: 6 }, (_, index) => {
+  const date = new Date('2026-01-05T00:00:00Z');
+  date.setUTCDate(date.getUTCDate() + index);
+  return date;
+});
+
 function makeModel(overrides: Partial<CalendarTimelineRowModel> = {}): CalendarTimelineRowModel {
   const person = makePerson('Alice');
   return {
@@ -89,6 +95,7 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
+        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,
@@ -103,6 +110,7 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
+        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,
@@ -118,6 +126,7 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
+        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,
@@ -150,6 +159,7 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
+        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={onClick}
       />,
@@ -194,6 +204,7 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
+        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
         onTransportClick={onTransportClick}
@@ -214,6 +225,7 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
+        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,
@@ -231,6 +243,7 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={{ ...defaultViewport, dayCount: 3 }}
+        tripDays={defaultTripDays.slice(0, 3)}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,
@@ -250,6 +263,7 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
+        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,

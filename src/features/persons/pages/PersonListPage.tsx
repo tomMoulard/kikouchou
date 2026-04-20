@@ -17,6 +17,7 @@
 
 import {
   type KeyboardEvent,
+  type MouseEvent,
   type ReactElement,
   memo,
   useCallback,
@@ -27,15 +28,18 @@ import {
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
-import { Plus, Users } from 'lucide-react';
+import { Plus, Trash2, Users } from 'lucide-react';
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useTripContext } from '@/contexts/TripContext';
 import { useRoomContext } from '@/contexts/RoomContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { useOfflineAwareToast } from '@/hooks';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
@@ -88,6 +92,8 @@ interface PersonCardProps {
   readonly roomsDisplay?: string;
   /** Callback when the card is clicked */
   readonly onClick: (personId: PersonId) => void;
+  /** Callback when delete action is clicked */
+  readonly onDelete: (personId: PersonId) => void;
   /** Whether interaction is disabled */
   readonly isDisabled?: boolean;
   /** Date locale for formatting */
@@ -167,6 +173,7 @@ const PersonCard = memo(function PersonCard({
   stayRangeLabel,
   roomsDisplay,
   onClick,
+  onDelete,
   isDisabled = false,
   dateLocale,
 }: PersonCardProps): ReactElement {
@@ -190,6 +197,16 @@ const PersonCard = memo(function PersonCard({
     if (isDisabled) {return;}
     onClick(person.id);
   }, [person.id, onClick, isDisabled]),
+   handleDeleteClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      if (isDisabled) {
+        return;
+      }
+      onDelete(person.id);
+    },
+    [isDisabled, onDelete, person.id],
+  ),
 
   // Build aria-label for screen readers
    ariaLabel = useMemo(() => {
@@ -240,6 +257,17 @@ const PersonCard = memo(function PersonCard({
           <CardTitle className="text-lg truncate" title={person.name}>
             {person.name}
           </CardTitle>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="ml-auto size-8 text-muted-foreground hover:text-destructive"
+            aria-label={t('common.delete')}
+            onClick={handleDeleteClick}
+            disabled={isDisabled}
+          >
+            <Trash2 className="size-4" aria-hidden="true" />
+          </Button>
         </div>
       </CardHeader>
 
@@ -329,12 +357,13 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   const { t, i18n } = useTranslation(),
    navigate = useNavigate(),
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
+   { successToast } = useOfflineAwareToast(),
 
   // Context hooks
    { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
    { rooms, isLoading: isRoomsLoading } = useRoomContext(),
    { assignments, isLoading: isAssignmentsLoading } = useAssignmentContext(),
-   { persons, isLoading: isPersonsLoading, error: personsError } = usePersonContext(),
+   { persons, isLoading: isPersonsLoading, error: personsError, deletePerson } = usePersonContext(),
    { getTransportsByPerson, isLoading: isTransportsLoading } = useTransportContext(),
 
   // Track if we're currently navigating to prevent double-clicks
@@ -344,6 +373,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   // Dialog state for create/edit person
    [isDialogOpen, setIsDialogOpen] = useState(false),
    [editingPersonId, setEditingPersonId] = useState<PersonId | undefined>(undefined),
+   [deletingPersonId, setDeletingPersonId] = useState<PersonId | undefined>(undefined),
 
   // Combined loading state (includes transports to avoid "no transport info" flash)
    isLoading =
@@ -468,6 +498,28 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
       setEditingPersonId(undefined);
     }
   }, []),
+   handlePersonDeleteIntent = useCallback((personId: PersonId) => {
+    setDeletingPersonId(personId);
+  }, []),
+   handleDeleteDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      setDeletingPersonId(undefined);
+    }
+  }, []),
+   handleConfirmDelete = useCallback(async () => {
+    if (!deletingPersonId) {
+      return;
+    }
+    try {
+      await deletePerson(deletingPersonId);
+      successToast(t('persons.deleteSuccess', 'Guest removed successfully'));
+      setDeletingPersonId(undefined);
+    } catch (error) {
+      console.error('Failed to delete person:', error);
+      toast.error(t('errors.deleteFailed', 'Failed to delete'));
+      throw error;
+    }
+  }, [deletePerson, deletingPersonId, successToast, t]),
 
   // ============================================================================
   // Header Action (desktop button)
@@ -611,6 +663,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
               stayRangeLabel={stayRangeLabel}
               roomsDisplay={roomsDisplay}
               onClick={handlePersonClick}
+              onDelete={handlePersonDeleteIntent}
               isDisabled={isNavigating}
               dateLocale={dateLocale}
             />
@@ -638,6 +691,16 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
         personId={editingPersonId}
         open={isDialogOpen}
         onOpenChange={handleDialogOpenChange}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deletingPersonId)}
+        onOpenChange={handleDeleteDialogOpenChange}
+        title={t('confirm.deletePerson', 'Delete guest?')}
+        description={t('confirm.deletePersonDescription', 'This action cannot be undone.')}
+        confirmLabel={t('common.delete')}
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
       />
     </div>
   );
