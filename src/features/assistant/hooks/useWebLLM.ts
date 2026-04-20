@@ -269,13 +269,35 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
 
   // Track whether we're currently loading (to prevent double-loading)
   const loadingRef = useRef(false);
+  const activeModelIdRef = useRef(preset.modelId);
+  const cacheProbeVersionRef = useRef(0);
 
   /** Per-file download state for Transformers.js Hub progress (key = full `file` URL/path). */
   const downloadFilesRef = useRef<Map<string, FileEntry>>(new Map());
 
+  const refreshCacheStatus = useCallback((modelId: string): void => {
+    activeModelIdRef.current = modelId;
+    const probeVersion = cacheProbeVersionRef.current + 1;
+    cacheProbeVersionRef.current = probeVersion;
+
+    void isModelCached(modelId).then((cached) => {
+      if (cacheProbeVersionRef.current !== probeVersion) {
+        return;
+      }
+      if (activeModelIdRef.current !== modelId) {
+        return;
+      }
+
+      setIsCached(cached);
+    });
+  }, []);
+
   // Track the selected preset and cache availability.
   useEffect(() => {
+    activeModelIdRef.current = preset.modelId;
+
     if (pipelineInstance !== null && loadedModelId === preset.modelId) {
+      cacheProbeVersionRef.current += 1;
       // Already loaded in memory — no need to check cache.
       setStatus('ready');
       setIsCached(true);
@@ -287,8 +309,15 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     setError(null);
     setIsCached(null);
 
-    void isModelCached(preset.modelId).then(setIsCached);
-  }, [preset.modelId]);
+    refreshCacheStatus(preset.modelId);
+  }, [preset.modelId, refreshCacheStatus]);
+
+  useEffect(
+    () => () => {
+      cacheProbeVersionRef.current += 1;
+    },
+    [],
+  );
 
   // ------------------------------------------------------------------
   // loadModel
@@ -511,12 +540,13 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   // ------------------------------------------------------------------
   const unload = useCallback(async (): Promise<void> => {
     await disposeLoadedPipeline();
+    activeModelIdRef.current = preset.modelId;
     setStatus('idle');
     setLoadProgress(null);
     setError(null);
     setIsCached(null);
-    void isModelCached(preset.modelId).then(setIsCached);
-  }, [preset.modelId]);
+    refreshCacheStatus(preset.modelId);
+  }, [preset.modelId, refreshCacheStatus]);
 
   return {
     status,

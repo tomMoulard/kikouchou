@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@/test/utils';
 
 const mockLoadModel = vi.fn().mockResolvedValue(undefined);
@@ -67,6 +67,8 @@ describe('AssistantPage', () => {
     Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
     Element.prototype.setPointerCapture = vi.fn();
     Element.prototype.releasePointerCapture = vi.fn();
+    vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
     mockGetSettings.mockResolvedValue({});
     mockUseWebLLM.mockReturnValue({
       status: 'idle',
@@ -78,6 +80,10 @@ describe('AssistantPage', () => {
       interrupt: mockInterrupt,
       unload: mockUnload,
     });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('renders the assistant model selector and load button', async () => {
@@ -124,7 +130,9 @@ describe('AssistantPage', () => {
     await user.click(
       screen.getByRole('combobox', { name: 'assistant.modelLabel' }),
     );
-    await user.click(await screen.findByText('assistant.models.gemma-3-1b.name'));
+    await user.click(
+      await screen.findByText(/assistant\.models\.gemma-3-1b\.name/),
+    );
 
     await waitFor(() => {
       expect(mockUnload).toHaveBeenCalledTimes(1);

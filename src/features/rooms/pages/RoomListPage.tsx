@@ -289,9 +289,7 @@ function splitIntoDateSegments(dates: readonly string[]): readonly DateSegment[]
 
   for (let i = 1; i < sorted.length; i += 1) {
     const next = sorted[i]!;
-    const expectedNext = formatToISODate(
-      new Date(parseISO(currentEnd).getTime() + 24 * 60 * 60 * 1000),
-    );
+    const expectedNext = formatToISODate(addDays(parseISO(currentEnd), 1));
 
     if (next === expectedNext) {
       currentEnd = next;
