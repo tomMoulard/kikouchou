@@ -19,6 +19,7 @@ const mockUpdateAssignment = vi.fn().mockResolvedValue(undefined);
 const mockGetAssignmentsByRoom = vi.fn(() => []);
 const mockSuccessToast = vi.fn();
 const mockSetSearchParams = vi.fn();
+let originalCaches: typeof globalThis.caches;
 
 const mockTrip: Trip = {
   id: 'trip-1' as Trip['id'],
@@ -255,12 +256,30 @@ function resetMocks() {
   } as unknown as ReturnType<typeof useTransportContext>);
 }
 
+function mockAssistantModelCacheAvailable(): void {
+  Object.defineProperty(globalThis, 'caches', {
+    value: {
+      open: vi.fn().mockResolvedValue({
+        keys: vi.fn().mockResolvedValue([
+          new Request('https://example.test/onnx-community%2Fgemma-4-E2B-it-ONNX'),
+        ]),
+      }),
+      delete: vi.fn().mockResolvedValue(true),
+      has: vi.fn().mockResolvedValue(false),
+      keys: vi.fn().mockResolvedValue([]),
+      match: vi.fn().mockResolvedValue(undefined),
+    },
+    configurable: true,
+  });
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
 
 describe('RoomListPage', () => {
   beforeEach(() => {
+    originalCaches = globalThis.caches;
     vi.clearAllMocks();
     // Spy on localStorage to prevent the "all assigned" notification guard
     // from leaking between tests (the component writes to localStorage).
@@ -270,6 +289,10 @@ describe('RoomListPage', () => {
   });
 
   afterEach(() => {
+    Object.defineProperty(globalThis, 'caches', {
+      value: originalCaches,
+      configurable: true,
+    });
     vi.restoreAllMocks();
   });
 
@@ -435,6 +458,55 @@ describe('RoomListPage', () => {
     currentSearchParams = new URLSearchParams('view=card');
     render(<RoomListPage />, { withProviders: false });
     expect(screen.getByText(/rooms\.unassignedGuests/)).toBeInTheDocument();
+  });
+
+  it('keeps one continuous auto-assignment across DST fallback nights', async () => {
+    const originalTimezone = process.env.TZ;
+    const dstGuest: Person = {
+      ...mockPerson,
+      id: 'person-dst' as Person['id'],
+      name: 'DST Guest',
+      stayStartDate: '2026-10-24' as Person['stayStartDate'],
+      stayEndDate: '2026-10-27' as Person['stayEndDate'],
+    };
+
+    process.env.TZ = 'Europe/Paris';
+    mockAssistantModelCacheAvailable();
+    vi.mocked(usePersonContext).mockReturnValue({
+      persons: [dstGuest],
+      isLoading: false,
+      error: null,
+      getPersonById: vi.fn((id: string) =>
+        id === dstGuest.id ? dstGuest : undefined,
+      ),
+    } as unknown as ReturnType<typeof usePersonContext>);
+
+    try {
+      const { user } = render(<RoomListPage />, { withProviders: false });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: 'rooms.autoAssignButton' }),
+        ).toBeInTheDocument();
+      });
+
+      await user.click(
+        screen.getByRole('button', { name: 'rooms.autoAssignButton' }),
+      );
+
+      await waitFor(() => {
+        expect(mockCreateAssignment).toHaveBeenCalledTimes(1);
+      });
+
+      expect(mockCreateAssignment).toHaveBeenCalledWith({
+        roomId: mockRoom.id,
+        personId: dstGuest.id,
+        startDate: '2026-10-24',
+        endDate: '2026-10-27',
+      });
+    } finally {
+      process.env.TZ = originalTimezone;
+    }
   });
 
   it('does not render unassigned section when all guests are assigned', () => {
