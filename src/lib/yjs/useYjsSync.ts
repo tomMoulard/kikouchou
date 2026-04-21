@@ -11,7 +11,7 @@ import * as Y from 'yjs';
 
 import { loadPersistedUpdates, subscribeToUpdates } from './dexie-bridge';
 
-function resolveSignalingServer(): string {
+export function resolveSignalingServer(): string {
   if (import.meta.env.VITE_SIGNALING_URL) {
     return import.meta.env.VITE_SIGNALING_URL;
   }
@@ -23,7 +23,7 @@ function resolveSignalingServer(): string {
     }
   }
 
-  return 'wss://signaling.kikoushou.app';
+  return 'wss://kikoushou.cyprin.eu';
 }
 
 /**
