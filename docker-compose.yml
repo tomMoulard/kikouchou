@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
     labels:
       - traefik.enable=true
-      - traefik.http.routers.relay.rule=Host(`signaling.kikoushou.app`)
+      - traefik.http.routers.relay.rule=Host(`kikoushou.cyprin.eu`)
       - traefik.http.routers.relay.entrypoints=websecure
       - traefik.http.routers.relay.tls.certresolver=letsencrypt
       - traefik.http.services.relay.loadbalancer.server.port=4444

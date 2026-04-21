@@ -15,7 +15,11 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { ImportTripQrDialog, ShareDialog } from '@/features/sharing';
+import {
+  ImportTripQrDialog,
+  ShareDialog,
+  type ShareDialogSyncState,
+} from '@/features/sharing';
 import { useTripContext } from '@/contexts/TripContext';
 import { TripYjsSyncBinding, resolveTripPresenceProfile } from '@/lib/yjs';
 import { cn } from '@/lib/utils';
@@ -42,7 +46,7 @@ import { TripCard } from '../components/TripCard';
 const TripListPage = memo(function TripListPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { trips, isLoading, error, setCurrentTrip, checkConnection } =
+  const { trips, currentTrip, isLoading, error, setCurrentTrip, checkConnection } =
     useTripContext();
 
   // Track if we're currently navigating to prevent double-clicks
@@ -52,10 +56,24 @@ const TripListPage = memo(function TripListPage() {
   const [importQrOpen, setImportQrOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharedTripId, setSharedTripId] = useState<TripId | null>(null);
+  const [sharedTripSyncSession, setSharedTripSyncSession] = useState<ShareDialogSyncState | null>(
+    null,
+  );
   const sharedTrip = useMemo(
     () => trips.find((trip) => trip.id === sharedTripId) ?? null,
     [sharedTripId, trips],
   );
+  const activeSharedTripSyncSession = useMemo<ShareDialogSyncState | null>(() => {
+    if (sharedTrip?.p2pRoomId && sharedTrip?.p2pEncryptionKey) {
+      return {
+        tripId: sharedTrip.id,
+        roomId: sharedTrip.p2pRoomId,
+        encryptionKey: sharedTrip.p2pEncryptionKey,
+      };
+    }
+
+    return sharedTripSyncSession;
+  }, [sharedTrip, sharedTripSyncSession]);
   const sharedTripPresence = useLiveQuery(
     async () => (sharedTrip ? resolveTripPresenceProfile(sharedTrip) : null),
     [sharedTrip?.id, sharedTrip?.shareId, sharedTrip?.updatedAt],
@@ -164,11 +182,24 @@ const TripListPage = memo(function TripListPage() {
 
   const handleShareTrip = useCallback((trip: Trip) => {
     setSharedTripId(trip.id);
+    setSharedTripSyncSession(
+      trip.p2pRoomId && trip.p2pEncryptionKey
+        ? {
+            tripId: trip.id,
+            roomId: trip.p2pRoomId,
+            encryptionKey: trip.p2pEncryptionKey,
+          }
+        : null,
+    );
     setShareDialogOpen(true);
   }, []);
 
   const handleShareDialogOpenChange = useCallback((open: boolean) => {
     setShareDialogOpen(open);
+  }, []);
+
+  const handleShareSyncReady = useCallback((sync: ShareDialogSyncState) => {
+    setSharedTripSyncSession(sync);
   }, []);
 
   const headerAction = useMemo(
@@ -193,12 +224,16 @@ const TripListPage = memo(function TripListPage() {
     [handleCreateClick, openImportQr, t],
   );
 
+  const currentTripOwnsSharedSync =
+    currentTrip?.id === activeSharedTripSyncSession?.tripId &&
+    Boolean(currentTrip?.p2pRoomId && currentTrip?.p2pEncryptionKey);
+
   const sharedTripSync =
-    sharedTrip?.p2pRoomId && sharedTrip?.p2pEncryptionKey ? (
+    activeSharedTripSyncSession && !currentTripOwnsSharedSync ? (
       <TripYjsSyncBinding
-        tripId={sharedTrip.id}
-        roomId={sharedTrip.p2pRoomId}
-        encryptionKey={sharedTrip.p2pEncryptionKey}
+        tripId={activeSharedTripSyncSession.tripId}
+        roomId={activeSharedTripSyncSession.roomId}
+        encryptionKey={activeSharedTripSyncSession.encryptionKey}
         userName={sharedTripPresence?.name}
         userColor={sharedTripPresence?.color}
       />
@@ -338,6 +373,7 @@ const TripListPage = memo(function TripListPage() {
         open={shareDialogOpen}
         onOpenChange={handleShareDialogOpenChange}
         trip={sharedTrip ?? undefined}
+        onSyncReady={handleShareSyncReady}
       />
     </>
   );

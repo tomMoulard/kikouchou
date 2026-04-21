@@ -6,6 +6,7 @@ import type { Trip } from '@/types';
 const mockNavigate = vi.fn();
 const mockSetCurrentTrip = vi.fn().mockResolvedValue(undefined);
 const mockCheckConnection = vi.fn().mockResolvedValue(undefined);
+const mockResolveTripPresenceProfile = vi.fn().mockResolvedValue(null);
 
 const mockTrip: Trip = {
   id: 'trip-1' as Trip['id'],
@@ -37,12 +38,49 @@ vi.mock('@/contexts/TripContext', () => ({
 vi.mock('@/features/sharing', () => ({
   ImportTripQrDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="import-qr-dialog" /> : null,
-  ShareDialog: ({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) =>
+  ShareDialog: ({
+    open,
+    onOpenChange,
+    onSyncReady,
+  }: {
+    open: boolean;
+    onOpenChange: (o: boolean) => void;
+    onSyncReady?: (sync: { tripId: string; roomId: string; encryptionKey: string }) => void;
+  }) =>
     open ? (
       <div data-testid="share-dialog">
+        <button
+          data-testid="ready-share-sync"
+          onClick={() =>
+            onSyncReady?.({
+              tripId: 'trip-1',
+              roomId: 'room-1',
+              encryptionKey: 'key-1',
+            })
+          }
+        >
+          Ready
+        </button>
         <button data-testid="close-share-dialog" onClick={() => onOpenChange(false)}>Close</button>
       </div>
     ) : null,
+}));
+
+vi.mock('@/lib/yjs', () => ({
+  TripYjsSyncBinding: ({
+    tripId,
+    roomId,
+    encryptionKey,
+  }: {
+    tripId: string;
+    roomId: string;
+    encryptionKey: string;
+  }) => (
+    <div data-testid="trip-yjs-sync-binding">
+      {tripId}:{roomId}:{encryptionKey}
+    </div>
+  ),
+  resolveTripPresenceProfile: (...args: unknown[]) => mockResolveTripPresenceProfile(...args),
 }));
 
 vi.mock('@/lib/db/database', () => ({
@@ -63,6 +101,7 @@ import { useTripContext } from '@/contexts/TripContext';
 describe('TripListPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolveTripPresenceProfile.mockResolvedValue(null);
     vi.mocked(useTripContext).mockReturnValue({
       trips: [mockTrip],
       isLoading: false,
@@ -318,5 +357,23 @@ describe('TripListPage', () => {
     const closeBtn = screen.getByTestId('close-share-dialog');
     await user.click(closeBtn);
     expect(screen.queryByTestId('share-dialog')).not.toBeInTheDocument();
+  });
+
+  it('keeps the shared trip sync binding alive after the share dialog closes', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+
+    render(<TripListPage />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Trip')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText(/trips\.shareTripAria/));
+    await user.click(screen.getByTestId('ready-share-sync'));
+    await user.click(screen.getByTestId('close-share-dialog'));
+
+    expect(screen.queryByTestId('share-dialog')).not.toBeInTheDocument();
+    expect(screen.getByTestId('trip-yjs-sync-binding')).toHaveTextContent('trip-1:room-1:key-1');
   });
 });

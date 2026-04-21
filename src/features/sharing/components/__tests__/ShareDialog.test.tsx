@@ -44,14 +44,6 @@ vi.mock('@/lib/db/database', () => ({
   },
 }));
 
-vi.mock('@/lib/yjs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/yjs')>();
-  return {
-    ...actual,
-    TripYjsSyncBinding: () => <div data-testid="trip-yjs-sync-binding" />,
-  };
-});
-
 const baseTrip: Trip = {
   id: 'trip-1' as TripId,
   name: 'Shared Trip',
@@ -63,6 +55,8 @@ const baseTrip: Trip = {
 };
 
 describe('ShareDialog', () => {
+  const onSyncReady = vi.fn();
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetTrip.mockResolvedValue(baseTrip);
@@ -82,7 +76,14 @@ describe('ShareDialog', () => {
   });
 
   it('generates missing room credentials, persists them, and renders the share URL', async () => {
-    render(<ShareDialog open={true} onOpenChange={vi.fn()} trip={baseTrip} />);
+    render(
+      <ShareDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        trip={baseTrip}
+        onSyncReady={onSyncReady}
+      />,
+    );
 
     await waitFor(() => {
       expect(mockUpdateTrip).toHaveBeenCalledWith(baseTrip.id, {
@@ -97,7 +98,11 @@ describe('ShareDialog', () => {
       );
     });
 
-    expect(screen.getByTestId('trip-yjs-sync-binding')).toBeInTheDocument();
+    expect(onSyncReady).toHaveBeenCalledWith({
+      tripId: baseTrip.id,
+      roomId: 'room-id-1234',
+      encryptionKey: 'secret-key-abcdefghijkl',
+    });
     expect(
       screen.getByText('Anyone with this link can view and edit this trip'),
     ).toBeInTheDocument();
@@ -114,6 +119,7 @@ describe('ShareDialog', () => {
       <ShareDialog
         open={true}
         onOpenChange={vi.fn()}
+        onSyncReady={onSyncReady}
         trip={{
           ...baseTrip,
           p2pRoomId: 'existing-room',
@@ -129,7 +135,11 @@ describe('ShareDialog', () => {
     });
 
     expect(mockUpdateTrip).not.toHaveBeenCalled();
-    expect(screen.getByTestId('trip-yjs-sync-binding')).toBeInTheDocument();
+    expect(onSyncReady).toHaveBeenCalledWith({
+      tripId: baseTrip.id,
+      roomId: 'existing-room',
+      encryptionKey: 'existing-secret',
+    });
   });
 
   it('renders a copy action for the generated URL', async () => {

@@ -31,7 +31,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { useTripContext } from '@/contexts/TripContext';
-import { ensureTripP2pCredentials, TripYjsSyncBinding } from '@/lib/yjs';
+import { ensureTripP2pCredentials } from '@/lib/yjs';
 import type { Trip, TripId } from '@/types';
 
 // ============================================================================
@@ -51,6 +51,14 @@ export interface ShareDialogProps {
    * `currentTrip` (useful when no trip is selected in context).
    */
   readonly trip?: Trip;
+  /** Called once the trip has usable P2P credentials and can be kept online elsewhere. */
+  readonly onSyncReady?: (sync: ShareDialogSyncState) => void;
+}
+
+export interface ShareDialogSyncState {
+  readonly tripId: TripId;
+  readonly roomId: string;
+  readonly encryptionKey: string;
 }
 
 // ============================================================================
@@ -64,6 +72,7 @@ const ShareDialog = memo(function ShareDialog({
   open,
   onOpenChange,
   trip: tripProp,
+  onSyncReady,
 }: ShareDialogProps): ReactElement {
   const { t } = useTranslation();
   const { currentTrip } = useTripContext();
@@ -71,8 +80,6 @@ const ShareDialog = memo(function ShareDialog({
   const hasTrip = Boolean(effectiveTrip);
 
   const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [syncRoomId, setSyncRoomId] = useState<string | null>(null);
-  const [syncEncryptionKey, setSyncEncryptionKey] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -80,8 +87,6 @@ const ShareDialog = memo(function ShareDialog({
   useEffect(() => {
     if (!open || !effectiveTrip) {
       setShareUrl(null);
-      setSyncRoomId(null);
-      setSyncEncryptionKey(null);
       setCopied(false);
       return;
     }
@@ -100,8 +105,11 @@ const ShareDialog = memo(function ShareDialog({
         const base = import.meta.env.BASE_URL ?? '/';
         const url = `${origin}${base}trip/${creds.roomId}#${creds.encryptionKey}`;
         setShareUrl(url);
-        setSyncRoomId(creds.roomId);
-        setSyncEncryptionKey(creds.encryptionKey);
+        onSyncReady?.({
+          tripId: effectiveTrip!.id as TripId,
+          roomId: creds.roomId,
+          encryptionKey: creds.encryptionKey,
+        });
       } catch (err) {
         console.error('[ShareDialog] Failed to generate P2P credentials:', err);
       } finally {
@@ -115,7 +123,7 @@ const ShareDialog = memo(function ShareDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, effectiveTrip]);
+  }, [onSyncReady, open, effectiveTrip]);
 
   const handleCopy = useCallback(async () => {
     if (!shareUrl) return;
@@ -166,90 +174,78 @@ const ShareDialog = memo(function ShareDialog({
   // ============================================================================
 
   return (
-    <>
-      {open &&
-      effectiveTrip &&
-      syncRoomId &&
-      syncEncryptionKey ? (
-        <TripYjsSyncBinding
-          tripId={effectiveTrip.id}
-          roomId={syncRoomId}
-          encryptionKey={syncEncryptionKey}
-        />
-      ) : null}
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent
-          className="flex max-h-[90vh] flex-col gap-0 overflow-hidden sm:max-w-md"
-          data-testid="share-dialog"
-        >
-          <DialogHeader className="min-w-0 shrink-0 space-y-2 pr-10 text-center">
-            <DialogTitle className="flex items-center justify-center gap-2">
-              <Share2 className="size-5 shrink-0" aria-hidden="true" />
-              {t('sharing.title')}
-            </DialogTitle>
-            <DialogDescription className="min-w-0 break-words">
-              {t(
-                'sharing.p2p.shareDescription',
-                'Share this link to collaborate in real-time',
-              )}
-            </DialogDescription>
-          </DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="flex max-h-[90vh] flex-col gap-0 overflow-hidden sm:max-w-md"
+        data-testid="share-dialog"
+      >
+        <DialogHeader className="min-w-0 shrink-0 space-y-2 pr-10 text-center">
+          <DialogTitle className="flex items-center justify-center gap-2">
+            <Share2 className="size-5 shrink-0" aria-hidden="true" />
+            {t('sharing.title')}
+          </DialogTitle>
+          <DialogDescription className="min-w-0 break-words">
+            {t(
+              'sharing.p2p.shareDescription',
+              'Share this link to collaborate in real-time',
+            )}
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]">
-            <div className="space-y-6 px-0 py-2">
-              {isGenerating || !shareUrl ? (
-                <LoadingState variant="inline" />
-              ) : (
-                <>
-                  {/* QR Code — full-width row so flex centering is stable inside the dialog */}
-                  <div className="flex w-full min-w-0 justify-center">
-                    <div className="shrink-0 rounded-xl bg-white p-4 shadow-sm">
-                      <QRCodeSVG value={shareUrl} size={200} level="M" />
-                    </div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]">
+          <div className="space-y-6 px-0 py-2">
+            {isGenerating || !shareUrl ? (
+              <LoadingState variant="inline" />
+            ) : (
+              <>
+                {/* QR Code — full-width row so flex centering is stable inside the dialog */}
+                <div className="flex w-full min-w-0 justify-center">
+                  <div className="shrink-0 rounded-xl bg-white p-4 shadow-sm">
+                    <QRCodeSVG value={shareUrl} size={200} level="M" />
                   </div>
+                </div>
 
-                  {/* Share URL — single control: click anywhere to copy */}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    data-testid="share-url"
-                    className="h-auto min-h-10 w-full max-w-full justify-start gap-2 px-3 py-2.5 text-left font-normal"
-                    onClick={handleCopy}
-                    title={shareUrl}
-                    aria-label={
-                      copied
-                        ? t('sharing.p2p.linkCopied', 'Link copied')
-                        : t('sharing.p2p.copyLinkAction', 'Copy link')
-                    }
-                  >
-                    <Link2
-                      className="size-4 shrink-0 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 flex-1 truncate text-sm font-mono">
-                      {shareUrl}
-                    </span>
-                    {copied ? (
-                      <Check className="size-4 shrink-0 text-green-500" aria-hidden="true" />
-                    ) : (
-                      <Copy className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    )}
-                  </Button>
+                {/* Share URL — single control: click anywhere to copy */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  data-testid="share-url"
+                  className="h-auto min-h-10 w-full max-w-full justify-start gap-2 px-3 py-2.5 text-left font-normal"
+                  onClick={handleCopy}
+                  title={shareUrl}
+                  aria-label={
+                    copied
+                      ? t('sharing.p2p.linkCopied', 'Link copied')
+                      : t('sharing.p2p.copyLinkAction', 'Copy link')
+                  }
+                >
+                  <Link2
+                    className="size-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm font-mono">
+                    {shareUrl}
+                  </span>
+                  {copied ? (
+                    <Check className="size-4 shrink-0 text-green-500" aria-hidden="true" />
+                  ) : (
+                    <Copy className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  )}
+                </Button>
 
-                  {/* Privacy notice */}
-                  <p className="px-1 text-center text-xs text-muted-foreground [overflow-wrap:anywhere]">
-                    {t(
-                      'sharing.p2p.privacyNotice',
-                      'Anyone with this link can view and edit this trip',
-                    )}
-                  </p>
-                </>
-              )}
-            </div>
+                {/* Privacy notice */}
+                <p className="px-1 text-center text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                  {t(
+                    'sharing.p2p.privacyNotice',
+                    'Anyone with this link can view and edit this trip',
+                  )}
+                </p>
+              </>
+            )}
           </div>
-        </DialogContent>
-      </Dialog>
-    </>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 });
 

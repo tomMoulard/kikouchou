@@ -19,7 +19,7 @@
 // ============================================================================
 
 export { ShareDialog } from './components/ShareDialog';
-export type { ShareDialogProps } from './components/ShareDialog';
+export type { ShareDialogProps, ShareDialogSyncState } from './components/ShareDialog';
 export { TripSyncExportPanel } from './components/TripSyncExportPanel';
 export type { TripSyncExportPanelProps } from './components/TripSyncExportPanel';
 export { ImportTripQrDialog } from './components/ImportTripQrDialog';
