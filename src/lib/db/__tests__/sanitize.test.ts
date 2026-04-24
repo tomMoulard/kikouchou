@@ -47,6 +47,7 @@ describe('MAX_LENGTHS constants', () => {
       'roomName',
       'roomDescription',
       'personName',
+      'personNotes',
       'transportLocation',
       'transportNumber',
       'transportNotes',
@@ -390,6 +391,24 @@ describe('sanitizePersonData', () => {
       color: '#ef4444',
     });
     expect(result.name).toBe('François');
+  });
+
+  it('trims and truncates optional notes', () => {
+    const result = sanitizePersonData({
+      name: 'Marie',
+      color: '#ef4444',
+      notes: `  ${'n'.repeat(2500)}  `,
+    });
+    expect(result.notes).toBe('n'.repeat(2000));
+  });
+
+  it('drops empty notes', () => {
+    const result = sanitizePersonData({
+      name: 'Marie',
+      color: '#ef4444',
+      notes: '   ',
+    });
+    expect(result.notes).toBeUndefined();
   });
 });
 

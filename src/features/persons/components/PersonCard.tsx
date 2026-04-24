@@ -18,7 +18,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { format, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
-import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 import {
   Card,
@@ -34,7 +34,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { TransportIcon } from '@/components/shared/TransportIcon';
 import { cn } from '@/lib/utils';
 import type { Person, TransportMode } from '@/types';
 
@@ -182,6 +181,8 @@ const PersonCard = memo(function PersonCard({
 
    hasTransportInfo = transportSummary.arrival || transportSummary.departure,
 
+   trimmedNotes = person.notes?.trim() ?? '',
+
   // Build aria-label for screen readers
    ariaLabel = useMemo(() => {
     const parts = [person.name];
@@ -197,8 +198,12 @@ const PersonCard = memo(function PersonCard({
         parts.push(`${t('transports.departure')}: ${date} ${time}`);
       }
     }
+    if (trimmedNotes) {
+      const excerpt = trimmedNotes.length > 160 ? `${trimmedNotes.slice(0, 160)}…` : trimmedNotes;
+      parts.push(`${t('persons.notes')}: ${excerpt}`);
+    }
     return parts.join(', ');
-  }, [person.name, transportSummary.arrival, transportSummary.departure, dateLocale, t]),
+  }, [person.name, trimmedNotes, transportSummary.arrival, transportSummary.departure, dateLocale, t]),
 
   // Determine if card should be interactive (has onClick handler)
    isInteractive = Boolean(onClick) && !isDisabled,
@@ -349,8 +354,8 @@ const PersonCard = memo(function PersonCard({
           </div>
         </CardHeader>
 
-        {/* Card Content - Transport summary */}
-        <CardContent className="pt-0">
+        {/* Card Content - Transport summary + optional notes */}
+        <CardContent className="pt-0 space-y-2">
           {hasTransportInfo ? (
             <div className="space-y-1 text-sm text-muted-foreground">
               {/* Arrival info */}
@@ -359,9 +364,9 @@ const PersonCard = memo(function PersonCard({
                 const fullText = `${date}, ${time} — ${transportSummary.arrival.location}`;
                 return (
                   <div className="flex items-start gap-2 min-w-0" title={fullText} aria-label={fullText}>
-                    <TransportIcon
-                      mode={transportSummary.arrival.transportMode ?? 'other'}
+                    <ArrowDownRight
                       className="size-4 shrink-0 text-green-600"
+                      aria-hidden="true"
                     />
                     <div className="min-w-0">
                       <div className="font-medium text-foreground tabular-nums">
@@ -381,9 +386,9 @@ const PersonCard = memo(function PersonCard({
                 const fullText = `${date}, ${time} — ${transportSummary.departure.location}`;
                 return (
                   <div className="flex items-start gap-2 min-w-0" title={fullText} aria-label={fullText}>
-                    <TransportIcon
-                      mode={transportSummary.departure.transportMode ?? 'other'}
+                    <ArrowUpRight
                       className="size-4 shrink-0 text-orange-600"
+                      aria-hidden="true"
                     />
                     <div className="min-w-0">
                       <div className="font-medium text-foreground tabular-nums">
@@ -397,10 +402,24 @@ const PersonCard = memo(function PersonCard({
                 );
               })()}
             </div>
-          ) : (
+          ) : trimmedNotes ? null : (
             <p className="text-sm text-muted-foreground italic">
               {t('transports.empty', 'No transport info')}
             </p>
+          )}
+
+          {trimmedNotes && (
+            <div
+              className={cn(
+                'text-sm text-muted-foreground',
+                hasTransportInfo && 'border-t border-muted/60 pt-2',
+              )}
+            >
+              <span className="font-medium text-foreground">{t('persons.notes')}</span>
+              <p className="mt-0.5 line-clamp-4 whitespace-pre-wrap break-words" title={trimmedNotes}>
+                {trimmedNotes}
+              </p>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -10,6 +10,7 @@ import {
   computeTimelineViewportLayout,
   computeRoomTimelineViewportLayout,
   computeDayGridTemplateColumns,
+  computeTimelineScrollLeftToCenterDay,
   TIMELINE_PREFERRED_DAY_WIDTH_PX,
 } from '../timeline-viewport-layout';
 
@@ -129,5 +130,64 @@ describe('computeDayGridTemplateColumns', () => {
   it('returns fixed pixel columns when useFractionalColumns is false', () => {
     const result = computeDayGridTemplateColumns(7, 44, false);
     expect(result).toBe('repeat(7, 44px)');
+  });
+});
+
+// ============================================================================
+// computeTimelineScrollLeftToCenterDay
+// ============================================================================
+
+describe('computeTimelineScrollLeftToCenterDay', () => {
+  it('returns 0 when client width is not positive', () => {
+    expect(
+      computeTimelineScrollLeftToCenterDay({
+        scrollContainerClientWidth: 0,
+        scrollContainerScrollWidth: 800,
+        labelColumnWidth: 150,
+        columnIndex: 3,
+        cellWidthPx: 44,
+      }),
+    ).toBe(0);
+  });
+
+  it('clamps to max scroll when centering would scroll past the end', () => {
+    const label = 150;
+    const cell = 44;
+    const dayCount = 10;
+    const sw = label + dayCount * cell;
+    const cw = 400;
+    const idx = 5;
+    const columnCenter = label + idx * cell + cell / 2;
+    const naive = columnCenter - cw / 2;
+    const max = sw - cw;
+    expect(max).toBeLessThan(naive);
+    expect(
+      computeTimelineScrollLeftToCenterDay({
+        scrollContainerClientWidth: cw,
+        scrollContainerScrollWidth: sw,
+        labelColumnWidth: label,
+        columnIndex: idx,
+        cellWidthPx: cell,
+      }),
+    ).toBe(max);
+  });
+
+  it('centers an interior column when there is room to scroll both ways', () => {
+    const label = 100;
+    const cell = 50;
+    const sw = label + 20 * cell;
+    const cw = 300;
+    const idx = 10;
+    const columnCenter = label + idx * cell + cell / 2;
+    const expected = columnCenter - cw / 2;
+    expect(
+      computeTimelineScrollLeftToCenterDay({
+        scrollContainerClientWidth: cw,
+        scrollContainerScrollWidth: sw,
+        labelColumnWidth: label,
+        columnIndex: idx,
+        cellWidthPx: cell,
+      }),
+    ).toBe(expected);
   });
 });

@@ -22,6 +22,7 @@ import { useFormSubmission } from '@/hooks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
 import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
 import { useTripContext } from '@/contexts/TripContext';
@@ -154,12 +155,14 @@ const PersonForm = memo(function PersonForm({
     }
     return undefined;
   });
+  const [notes, setNotes] = useState(person?.notes ?? '');
 
   const [initialSnapshot, setInitialSnapshot] = useState<{
     readonly name: string;
     readonly color: string;
     readonly stayStartDate: string;
     readonly stayEndDate: string;
+    readonly notes: string;
   } | null>(null);
 
   const currentStayStart = stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : '';
@@ -174,10 +177,11 @@ const PersonForm = memo(function PersonForm({
         name !== initialSnapshot.name ||
         color !== initialSnapshot.color ||
         currentStayStart !== initialSnapshot.stayStartDate ||
-        currentStayEnd !== initialSnapshot.stayEndDate
+        currentStayEnd !== initialSnapshot.stayEndDate ||
+        notes !== initialSnapshot.notes
       );
     },
-    [color, currentStayEnd, currentStayStart, name, initialSnapshot],
+    [color, currentStayEnd, currentStayStart, name, notes, initialSnapshot],
   );
 
   // Notify parent of dirty state changes
@@ -212,11 +216,15 @@ const PersonForm = memo(function PersonForm({
       setStayDates(undefined);
     }
 
+    const nextNotes = person?.notes ?? '';
+    setNotes(nextNotes);
+
     setInitialSnapshot({
       name: nextName,
       color: nextColor,
       stayStartDate: person?.stayStartDate ?? '',
       stayEndDate: person?.stayEndDate ?? '',
+      notes: nextNotes,
     });
 
     // Use callback to avoid creating new object if already empty
@@ -300,6 +308,10 @@ const PersonForm = memo(function PersonForm({
     setStayDates(range);
   }, []);
 
+  const handleNotesChange = useCallback((e: ChangeEvent<HTMLTextAreaElement>) => {
+    setNotes(e.target.value);
+  }, []);
+
   /**
    * Trip date constraints for the date picker.
    */
@@ -328,17 +340,19 @@ const PersonForm = memo(function PersonForm({
       const formattedEndDate = stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : undefined;
 
       try {
+        const trimmedNotes = notes.trim();
         await doSubmit({
           name: name.trim(),
           color: toHexColor(color),
           stayStartDate: formattedStartDate ? toISODateStringFromString(formattedStartDate) : undefined,
           stayEndDate: formattedEndDate ? toISODateStringFromString(formattedEndDate) : undefined,
+          notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
         });
       } catch {
         // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, doSubmit, name, color, stayDates],
+    [validateForm, doSubmit, name, color, stayDates, notes],
   );
 
   // ============================================================================
@@ -404,6 +418,25 @@ const PersonForm = memo(function PersonForm({
           </p>
         </div>
       )}
+
+      <div className="space-y-2">
+        <Label htmlFor="person-notes">
+          {t('persons.notes', 'Notes')}{' '}
+          <span className="text-muted-foreground text-xs">({t('common.optional', 'optional')})</span>
+        </Label>
+        <Textarea
+          id="person-notes"
+          value={notes}
+          onChange={handleNotesChange}
+          placeholder={t('persons.notesPlaceholder', 'e.g. allergic to cats, vegan…')}
+          disabled={isSubmitting}
+          rows={4}
+          className="min-h-24 resize-y"
+        />
+        <p className="text-xs text-muted-foreground">
+          {t('persons.notesHint', 'Diet, allergies, or anything hosts should know.')}
+        </p>
+      </div>
 
       {/* Submission Error */}
       {submitError && (

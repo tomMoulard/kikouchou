@@ -63,6 +63,21 @@ describe('PersonCard', () => {
     expect(screen.getByText('Gare du Nord')).toBeInTheDocument();
   });
 
+  it('shows notes when person has notes and hides empty transport line', () => {
+    render(
+      <PersonCard
+        person={{ ...mockPerson, notes: 'Allergic to cats' }}
+        transportSummary={emptyTransport}
+        dateLocale={enUS}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.getByText('Allergic to cats')).toBeInTheDocument();
+    expect(screen.queryByText('transports.empty')).not.toBeInTheDocument();
+  });
+
   it('calls onEdit when edit menu item is clicked', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();

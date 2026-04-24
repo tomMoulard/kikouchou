@@ -8,7 +8,7 @@
     "prod": "vite --mode production",
     "validate": "bun run generate-proto && bun run test:run && bun run lint && bun run build && bun run generate-icons && bun run test:e2e:run",
     "build": "tsc -b && VITE_APP_VERSION=${VITE_APP_VERSION:-$npm_package_version} vite build",
-    "generate-proto": "NODE_NO_WARNINGS=1 buf generate && node scripts/generate-proto.js",
+    "generate-proto": "NODE_NO_WARNINGS=1 PATH=\"$PWD/node_modules/.bin:$PATH\" buf generate && node scripts/generate-proto.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "generate-icons": "node scripts/generate-icons.js",

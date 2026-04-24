@@ -424,7 +424,7 @@ const PickupAlertCard = memo(function PickupAlertCard({
  * - Alert-style cards with amber/warning styling
  * - "Volunteer to drive" button with person selector dialog
  * - Station/time grouping with "Combined trip" badge
- * - Warm empty state when all pickups covered
+ * - Renders nothing when there are no unassigned upcoming pickups
  * - Animated removal when pickup is resolved
  * - Full i18n support
  *
@@ -519,23 +519,9 @@ const UpcomingPickups = memo(function UpcomingPickups({
     [updateTransport, personsMap, t, successToast],
   );
 
-  // Check if there are any pickups at all (assigned or unassigned)
-  const hasAnyPickups = upcomingPickups.some((t) => t.needsPickup);
-
-  // If there are no pickups needing a ride at all, hide the section entirely
-  if (!hasAnyPickups) {
-    return null;
-  }
-
-  // If all pickups are covered (have drivers), show warm empty state
+  // No unassigned upcoming pickups (including "all covered" and empty)
   if (unassignedCount === 0) {
-    return (
-      <div className={className}>
-        <div className="text-center py-6 text-sm text-muted-foreground">
-          <p>{t('pickups.allCovered')}</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (

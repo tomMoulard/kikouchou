@@ -424,6 +424,23 @@ describe('TransportListPage', () => {
     expect(screen.getByTestId('upcoming-pickups')).toBeInTheDocument();
   });
 
+  it('does not render upcoming pickups section when every pickup has a driver', () => {
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [mockArrival],
+      departures: [],
+      upcomingPickups: [{
+        ...mockArrival,
+        needsPickup: true,
+        driverId: 'person-1' as Transport['driverId'],
+      }],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ReturnType<typeof useTransportContext>);
+    render(<TransportListPage />, { withProviders: false });
+    expect(screen.queryByTestId('upcoming-pickups')).not.toBeInTheDocument();
+  });
+
   // ============================================================================
   // Additional branch coverage tests
   // ============================================================================

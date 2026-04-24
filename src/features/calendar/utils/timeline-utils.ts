@@ -187,6 +187,47 @@ function isTransportVisible(transport: Transport, tripStart: ISODateString, trip
   return dateKey >= tripStart && dateKey <= tripEnd;
 }
 
+/**
+ * Merges touching or overlapping assignment bars for the same room on one guest row.
+ * Two DB rows (e.g. checkout + re-check-in the same calendar night) become one pill.
+ */
+function mergeAdjacentSameRoomAssignmentSpans(
+  items: readonly TimelineItemAssignment[],
+): TimelineItemAssignment[] {
+  if (items.length <= 1) {
+    return [...items];
+  }
+
+  const sorted = [...items].sort((a, b) => {
+    const d = a.startIndex - b.startIndex;
+    if (d !== 0) {
+      return d;
+    }
+    return a.endIndex - b.endIndex;
+  });
+
+  const out: TimelineItemAssignment[] = [];
+  for (const item of sorted) {
+    const prev = out[out.length - 1];
+    if (
+      prev &&
+      prev.assignment.roomId === item.assignment.roomId &&
+      item.startIndex <= prev.endIndex + 1
+    ) {
+      out[out.length - 1] = {
+        ...prev,
+        startIndex: Math.min(prev.startIndex, item.startIndex),
+        endIndex: Math.max(prev.endIndex, item.endIndex),
+        id: `${prev.id}+${item.id}`,
+      };
+    } else {
+      out.push(item);
+    }
+  }
+
+  return out;
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -353,7 +394,33 @@ export function buildCalendarTimelineModel(args: {
       }
     }
 
-    baseItems.push(...dedupeContainedTimelineSpans(assignmentItems));
+    const dedupedAssignments = dedupeContainedTimelineSpans(assignmentItems);
+    const mergedAssignments = mergeAdjacentSameRoomAssignmentSpans(dedupedAssignments);
+
+    // After merging consecutive same-room rows, we may have one pill but multiple DB
+    // assignments skipped the pre-merge "expand to stay" branch — align bar with stay.
+    let finalAssignments: TimelineItemAssignment[];
+    if (
+      staySpan &&
+      mergedAssignments.length === 1 &&
+      person.stayStartDate &&
+      person.stayEndDate
+    ) {
+      const [only] = mergedAssignments;
+      finalAssignments = only
+        ? [
+            {
+              ...only,
+              startIndex: staySpan.startIndex,
+              endIndex: staySpan.endIndex,
+            },
+          ]
+        : [];
+    } else {
+      finalAssignments = mergedAssignments;
+    }
+
+    baseItems.push(...finalAssignments);
 
     const effectiveStaySpan = (() => {
       if (!staySpan) return undefined;

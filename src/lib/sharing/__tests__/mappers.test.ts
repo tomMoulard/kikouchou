@@ -102,6 +102,13 @@ describe('Person mappers', () => {
     expect(result.stayStartDate).toBeUndefined();
     expect(result.stayEndDate).toBeUndefined();
   });
+
+  it('round-trips person notes', () => {
+    const person: Person = { ...testPerson, notes: 'Vegan, no nuts' };
+    const proto = personToProto(person);
+    const result = protoToPerson(proto);
+    expect(result.notes).toBe('Vegan, no nuts');
+  });
 });
 
 describe('Room mappers', () => {

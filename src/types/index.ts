@@ -376,6 +376,11 @@ export interface Person extends Identifiable, TripScoped {
    * @example "2024-07-22"
    */
   stayEndDate?: ISODateString;
+
+  /**
+   * Optional free-text notes (allergies, diet, accessibility, etc.).
+   */
+  notes?: string;
 }
 
 /**
@@ -642,6 +647,8 @@ export interface PersonFormData {
   stayStartDate?: ISODateString;
   /** Optional stay end date (ISO format, YYYY-MM-DD) */
   stayEndDate?: ISODateString;
+  /** Optional notes (allergies, diet, etc.) */
+  notes?: string;
 }
 
 /**

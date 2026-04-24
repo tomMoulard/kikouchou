@@ -453,6 +453,146 @@ describe('buildCalendarTimelineModel', () => {
     expect(row.items.length).toBe(0);
   });
 
+  it('expands merged same-room assignments to explicit stay span when one pill remains', () => {
+    const trip = createTrip({
+      startDate: iso('2026-04-20'),
+      endDate: iso('2026-04-28'),
+    });
+    const guest: Person = {
+      id: 'p-marc' as PersonId,
+      tripId: 'trip-1' as TripId,
+      name: 'Marc',
+      color: '#14b8a6' as HexColor,
+      stayStartDate: iso('2026-04-21'),
+      stayEndDate: iso('2026-04-27'),
+    };
+    const room2: Room = {
+      id: 'r2' as RoomId,
+      tripId: 'trip-1' as TripId,
+      name: '2',
+      capacity: 2,
+      order: 1,
+    };
+    const firstStay: RoomAssignment = {
+      id: 'a-first' as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: 'r2' as RoomId,
+      personId: 'p-marc' as PersonId,
+      startDate: iso('2026-04-22'),
+      endDate: iso('2026-04-24'),
+    };
+    const secondStay: RoomAssignment = {
+      id: 'a-second' as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: 'r2' as RoomId,
+      personId: 'p-marc' as PersonId,
+      startDate: iso('2026-04-24'),
+      endDate: iso('2026-04-25'),
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip,
+      persons: [guest],
+      rooms: [room1, room2],
+      assignments: [firstStay, secondStay],
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+
+    const row = model.rows[0]!;
+    const assignmentBars = row.items.filter((i) => i.kind === 'assignment');
+    expect(assignmentBars).toHaveLength(1);
+    // Stay nights Apr 21–Apr 26 (checkout Apr 27) within trip
+    expect(assignmentBars[0]!.startIndex).toBe(1);
+    expect(assignmentBars[0]!.endIndex).toBe(6);
+  });
+
+  it('merges consecutive same-room assignments into one pill for one guest', () => {
+    const trip = createTrip({
+      startDate: iso('2026-04-20'),
+      endDate: iso('2026-04-28'),
+    });
+    const guest: Person = {
+      id: 'p-marc' as PersonId,
+      tripId: 'trip-1' as TripId,
+      name: 'Marc',
+      color: '#14b8a6' as HexColor,
+    };
+    const room2: Room = {
+      id: 'r2' as RoomId,
+      tripId: 'trip-1' as TripId,
+      name: '2',
+      capacity: 2,
+      order: 1,
+    };
+    // Checkout morning Apr 24 then same room again: two rows that share one calendar night
+    const firstStay: RoomAssignment = {
+      id: 'a-first' as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: 'r2' as RoomId,
+      personId: 'p-marc' as PersonId,
+      startDate: iso('2026-04-22'),
+      endDate: iso('2026-04-24'),
+    };
+    const secondStay: RoomAssignment = {
+      id: 'a-second' as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: 'r2' as RoomId,
+      personId: 'p-marc' as PersonId,
+      startDate: iso('2026-04-24'),
+      endDate: iso('2026-04-25'),
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip,
+      persons: [guest],
+      rooms: [room1, room2],
+      assignments: [firstStay, secondStay],
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+
+    const row = model.rows[0]!;
+    const assignmentBars = row.items.filter((i) => i.kind === 'assignment');
+    expect(assignmentBars).toHaveLength(1);
+    expect(assignmentBars[0]!.startIndex).toBe(2); // Apr 22
+    expect(assignmentBars[0]!.endIndex).toBe(4); // Apr 24 night (checkout Apr 25)
+  });
+
+  it('does not merge same-room assignments when there is a gap night', () => {
+    const a1: RoomAssignment = {
+      id: 'a-gap-1' as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: 'r1' as RoomId,
+      personId: 'p1' as PersonId,
+      startDate: iso('2026-04-01'),
+      endDate: iso('2026-04-03'),
+    };
+    const a2: RoomAssignment = {
+      id: 'a-gap-2' as RoomAssignment['id'],
+      tripId: 'trip-1' as TripId,
+      roomId: 'r1' as RoomId,
+      personId: 'p1' as PersonId,
+      startDate: iso('2026-04-04'),
+      endDate: iso('2026-04-05'),
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [p1],
+      rooms: [room1],
+      assignments: [a1, a2],
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+
+    const row = model.rows[0]!;
+    expect(row.items.filter((i) => i.kind === 'assignment')).toHaveLength(2);
+  });
+
   it('allocates lanes for overlapping assignments', () => {
     const a1: RoomAssignment = {
       id: 'a1' as RoomAssignment['id'],

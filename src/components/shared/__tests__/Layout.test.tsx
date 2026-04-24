@@ -213,6 +213,7 @@ describe('Layout', () => {
       expect(sidebarContent).not.toContain('nav.rooms');
       expect(sidebarContent).not.toContain('nav.persons');
       expect(sidebarContent).not.toContain('nav.transports');
+      expect(sidebarContent).not.toContain('nav.tripAnalytics');
     });
 
     it('shows empty trip placeholder in header', () => {
@@ -313,6 +314,7 @@ describe('Layout', () => {
       expect(within(sidebar as HTMLElement).getByText('nav.rooms')).toBeInTheDocument();
       expect(within(sidebar as HTMLElement).getByText('nav.persons')).toBeInTheDocument();
       expect(within(sidebar as HTMLElement).getByText('nav.transports')).toBeInTheDocument();
+      expect(within(sidebar as HTMLElement).getByText('nav.tripAnalytics')).toBeInTheDocument();
     });
 
     it('shows "Settings" link in sidebar', () => {
@@ -344,6 +346,9 @@ describe('Layout', () => {
       expect(roomsLink).toHaveAttribute('href', '/trips/trip-123/rooms');
       expect(personsLink).toHaveAttribute('href', '/trips/trip-123/persons');
       expect(transportsLink).toHaveAttribute('href', '/trips/trip-123/transports');
+
+      const analyticsLink = within(sidebar as HTMLElement).getByText('nav.tripAnalytics').closest('a');
+      expect(analyticsLink).toHaveAttribute('href', '/trips/trip-123/analytics');
     });
 
     it('My Trips link has correct href', () => {

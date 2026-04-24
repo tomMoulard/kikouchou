@@ -56,6 +56,7 @@ message Person {
   string color = 4;                     // hex color "#rrggbb"
   optional string stay_start_date = 5;  // ISO date YYYY-MM-DD
   optional string stay_end_date = 6;    // ISO date YYYY-MM-DD
+  optional string notes = 7;              // allergies, diet, etc.
 }
 
 // Links a person to a room for a specific date range.

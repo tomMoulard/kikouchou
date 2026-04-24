@@ -31,7 +31,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
-import { Plus, Trash2, Users } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Plus, Trash2, Users } from 'lucide-react';
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useTripContext } from '@/contexts/TripContext';
@@ -52,7 +52,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { TransportIcon } from '@/components/shared/TransportIcon';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
 import type { Person, PersonId, TransportMode } from '@/types';
 
@@ -225,11 +224,16 @@ const PersonCard = memo(function PersonCard({
       const { date, time } = formatTransportDatetime(transportSummary.departure.datetime, dateLocale);
       parts.push(`${t('transports.departure')}: ${date} ${time}`);
     }
+    const rawNotes = person.notes?.trim();
+    if (rawNotes) {
+      const excerpt = rawNotes.length > 160 ? `${rawNotes.slice(0, 160)}…` : rawNotes;
+      parts.push(`${t('persons.notes')}: ${excerpt}`);
+    }
     return parts.join(', ');
-  }, [dateLocale, person.name, roomsDisplay, stayRangeLabel, transportSummary.departure, transportSummary.arrival, t]),
+  }, [dateLocale, person.name, person.notes, roomsDisplay, stayRangeLabel, transportSummary.departure, transportSummary.arrival, t]),
 
    hasTransportInfo = transportSummary.arrival || transportSummary.departure,
-   hasStaySummary = Boolean(stayRangeLabel || roomsDisplay);
+   trimmedNotes = person.notes?.trim() ?? '';
 
   return (
     <Card
@@ -292,9 +296,9 @@ const PersonCard = memo(function PersonCard({
               const { date, time } = formatTransportDatetime(transportSummary.arrival.datetime, dateLocale);
               return (
                 <div className="flex items-start gap-2 min-w-0">
-                  <TransportIcon
-                    mode={transportSummary.arrival.transportMode ?? 'other'}
+                  <ArrowDownRight
                     className="size-4 shrink-0 text-green-600"
+                    aria-hidden="true"
                   />
                   <div className="min-w-0">
                     <div className="font-medium text-foreground tabular-nums">
@@ -313,9 +317,9 @@ const PersonCard = memo(function PersonCard({
               const { date, time } = formatTransportDatetime(transportSummary.departure.datetime, dateLocale);
               return (
                 <div className="flex items-start gap-2 min-w-0">
-                  <TransportIcon
-                    mode={transportSummary.departure.transportMode ?? 'other'}
+                  <ArrowUpRight
                     className="size-4 shrink-0 text-orange-600"
+                    aria-hidden="true"
                   />
                   <div className="min-w-0">
                     <div className="font-medium text-foreground tabular-nums">
@@ -330,9 +334,31 @@ const PersonCard = memo(function PersonCard({
             })()}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground italic">
-            {hasStaySummary ? t('persons.cardNoTransportDetail') : t('transports.empty')}
-          </p>
+          <>
+            {(stayRangeLabel || roomsDisplay) && (
+              <p className="text-sm text-muted-foreground italic">
+                {t('persons.cardNoTransportDetail')}
+              </p>
+            )}
+            {!stayRangeLabel && !roomsDisplay && !trimmedNotes && (
+              <p className="text-sm text-muted-foreground italic">{t('transports.empty')}</p>
+            )}
+          </>
+        )}
+
+        {trimmedNotes && (
+          <div
+            className={cn(
+              'text-sm text-muted-foreground',
+              (stayRangeLabel || roomsDisplay || hasTransportInfo) &&
+                'mt-2 border-t border-muted/60 pt-2',
+            )}
+          >
+            <span className="font-medium text-foreground">{t('persons.notes')}</span>
+            <p className="mt-0.5 line-clamp-4 whitespace-pre-wrap break-words" title={trimmedNotes}>
+              {trimmedNotes}
+            </p>
+          </div>
         )}
       </CardContent>
     </Card>

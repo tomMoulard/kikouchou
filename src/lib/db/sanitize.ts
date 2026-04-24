@@ -29,6 +29,8 @@ export const MAX_LENGTHS = {
   roomDescription: 500,
   /** Person name (e.g., "Marie Dupont") */
   personName: 100,
+  /** Person notes (allergies, diet, etc.) */
+  personNotes: 2000,
   /** Transport location (e.g., "Gare Montparnasse") */
   transportLocation: 200,
   /** Transport number (e.g., "TGV 8541") */
@@ -122,10 +124,11 @@ export function sanitizeRoomData<T extends { name: string; description?: string 
  * @param data - Person form data to sanitize
  * @returns Sanitized person form data
  */
-export function sanitizePersonData<T extends { name: string }>(data: T): T {
+export function sanitizePersonData<T extends { name: string; notes?: string }>(data: T): T {
   return {
     ...data,
     name: sanitizeText(data.name, MAX_LENGTHS.personName),
+    notes: sanitizeOptionalText(data.notes, MAX_LENGTHS.personNotes),
   };
 }
 
