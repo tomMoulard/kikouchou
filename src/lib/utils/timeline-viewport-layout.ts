@@ -107,3 +107,31 @@ export function computeDayGridTemplateColumns(
     ? `repeat(${dayCount}, minmax(0, 1fr))`
     : `repeat(${dayCount}, ${dayWidthPx}px)`;
 }
+
+/**
+ * Horizontal scroll offset so the center of day column `columnIndex` aligns with the
+ * scroll container’s horizontal center (sticky label column included in layout math).
+ */
+export function computeTimelineScrollLeftToCenterDay(args: {
+  readonly scrollContainerClientWidth: number;
+  readonly scrollContainerScrollWidth: number;
+  readonly labelColumnWidth: number;
+  readonly columnIndex: number;
+  readonly cellWidthPx: number;
+}): number {
+  const {
+    scrollContainerClientWidth: cw,
+    scrollContainerScrollWidth: sw,
+    labelColumnWidth,
+    columnIndex,
+    cellWidthPx,
+  } = args;
+  if (cw <= 0 || columnIndex < 0) {
+    return 0;
+  }
+  const columnStart = labelColumnWidth + columnIndex * cellWidthPx;
+  const columnCenter = columnStart + cellWidthPx / 2;
+  const target = columnCenter - cw / 2;
+  const max = Math.max(0, sw - cw);
+  return Math.max(0, Math.min(max, target));
+}

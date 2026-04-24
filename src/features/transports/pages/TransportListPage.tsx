@@ -799,9 +799,9 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
 
    pastCount = pastTransports.length,
 
-  // Check if there are any pickups (assigned or unassigned) to show the UpcomingPickups section
-   hasAnyPickups = useMemo(
-    () => upcomingPickups.some((t) => t.needsPickup),
+  // Amber pickup alerts only when at least one upcoming pickup still needs a driver
+   hasUnassignedUpcomingPickup = useMemo(
+    () => upcomingPickups.some((t) => t.needsPickup && !t.driverId),
     [upcomingPickups],
   );
 
@@ -1014,8 +1014,8 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         </div>
       )}
 
-      {/* Pickup alerts section - shown when any pickups exist (component handles empty state internally) */}
-      {hasAnyPickups && (
+      {/* Pickup alerts section - only when a driver is still needed */}
+      {hasUnassignedUpcomingPickup && (
         <div className="mb-6 p-4 rounded-xl border-2 border-amber-200 bg-amber-50/20 dark:border-amber-800 dark:bg-amber-950/10">
           <UpcomingPickups />
         </div>

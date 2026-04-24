@@ -31,6 +31,7 @@ import { personRoutes } from '@/features/persons/routes';
 import { transportRoutes } from '@/features/transports/routes';
 import { sharingRoutes, sharingSyncRoutes } from '@/features/sharing/routes';
 import { assistantRoutes } from '@/features/assistant/routes';
+import { analyticsRoutes } from '@/features/analytics/routes';
 
 // ============================================================================
 // Lazy-loaded Components
@@ -206,6 +207,9 @@ const settingsRoute: RouteObject = {
     // Note: transportRoutes uses 'transports' path, need to check if it needs trip scoping
     ...transportRoutes,
 
+    // Trip + global analytics
+    ...analyticsRoutes,
+
     // P2P sync routes (QR export/import within trips)
     {
       path: 'trips/:tripId',
@@ -270,7 +274,9 @@ const settingsRoute: RouteObject = {
  *   - `/trips/:tripId/calendar` - Trip calendar
  *   - `/trips/:tripId/rooms` - Room management
  *   - `/trips/:tripId/persons` - Person management
- *   - `/transports` - Transport management
+ *   - `/trips/:tripId/transports` - Transport management
+ *   - `/trips/:tripId/analytics` - Trip analytics
+ *   - `/analytics` - Analytics across all trips
  *   - `/settings` - App settings
  *
  * @example
@@ -312,3 +318,4 @@ export type { TripEditParams } from '@/features/trips/routes';
 export type { CalendarParams } from '@/features/calendar/routes';
 export type { RoomListParams } from '@/features/rooms/routes';
 export type { PersonListParams } from '@/features/persons/routes';
+export type { AnalyticsParams } from '@/features/analytics/routes';

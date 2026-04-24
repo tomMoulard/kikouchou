@@ -278,6 +278,110 @@ function selectVisibleAssignmentIdsForCrossRoomOverlap(
   return kept;
 }
 
+/**
+ * When the same guest has multiple room assignments in one room whose night ranges
+ * overlap or touch (split rows / duplicate edits), show a single pill spanning the union.
+ * Drag-and-drop keeps the widest underlying assignment as canonical.
+ */
+function pickCanonicalAssignmentForCluster(
+  cluster: readonly RoomTimelineAssignmentItem[],
+): RoomTimelineAssignmentItem {
+  return [...cluster].sort((a, b) => {
+    const widthA = a.endIndex - a.startIndex;
+    const widthB = b.endIndex - b.startIndex;
+    if (widthB !== widthA) {
+      return widthB - widthA;
+    }
+    return a.assignment.id.localeCompare(b.assignment.id);
+  })[0]!;
+}
+
+function mergeOverlappingOrAdjacentClusterForPerson(
+  items: readonly RoomTimelineAssignmentItem[],
+  dayKeys: readonly ISODateString[],
+): RoomTimelineAssignmentItem[] {
+  if (items.length <= 1) {
+    return [...items];
+  }
+
+  const sorted = [...items].sort((a, b) => {
+    if (a.startIndex !== b.startIndex) {
+      return a.startIndex - b.startIndex;
+    }
+    return a.assignment.id.localeCompare(b.assignment.id);
+  });
+
+  const clusters: RoomTimelineAssignmentItem[][] = [];
+  for (const item of sorted) {
+    const lastCluster = clusters[clusters.length - 1];
+    if (!lastCluster) {
+      clusters.push([item]);
+      continue;
+    }
+    const clusterMaxEnd = Math.max(...lastCluster.map((i) => i.endIndex));
+    if (item.startIndex <= clusterMaxEnd + 1) {
+      lastCluster.push(item);
+    } else {
+      clusters.push([item]);
+    }
+  }
+
+  const result: RoomTimelineAssignmentItem[] = [];
+  for (const cluster of clusters) {
+    if (cluster.length === 1) {
+      result.push(cluster[0]!);
+      continue;
+    }
+    const startIndex = Math.min(...cluster.map((c) => c.startIndex));
+    const endIndex = Math.max(...cluster.map((c) => c.endIndex));
+    const canonical = pickCanonicalAssignmentForCluster(cluster);
+    const visStartKey = dayKeys[startIndex];
+    const visEndKey = dayKeys[endIndex];
+    if (!visStartKey || !visEndKey) {
+      continue;
+    }
+    const visLnParsed = parseISODateString(visEndKey);
+    if (!visLnParsed) {
+      continue;
+    }
+    result.push({
+      kind: 'assignment',
+      id: canonical.assignment.id,
+      startIndex,
+      endIndex,
+      assignment: canonical.assignment,
+      person: canonical.person,
+      label: canonical.label,
+      color: canonical.color,
+      displayStayStart: visStartKey,
+      displayStayEnd: toISODateString(addDays(visLnParsed, 1)),
+    });
+  }
+  return result;
+}
+
+function mergeOverlappingOrAdjacentSamePersonRoomItems(
+  items: readonly RoomTimelineAssignmentItem[],
+  dayKeys: readonly ISODateString[],
+): RoomTimelineAssignmentItem[] {
+  const byPerson = new Map<string, RoomTimelineAssignmentItem[]>();
+  for (const item of items) {
+    const pid = item.assignment.personId;
+    const list = byPerson.get(pid);
+    if (list) {
+      list.push(item);
+    } else {
+      byPerson.set(pid, [item]);
+    }
+  }
+
+  const merged: RoomTimelineAssignmentItem[] = [];
+  for (const group of byPerson.values()) {
+    merged.push(...mergeOverlappingOrAdjacentClusterForPerson(group, dayKeys));
+  }
+  return merged;
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -377,7 +481,9 @@ export function buildRoomTimelineModel(args: {
       (item) => item.assignment.personId,
     );
 
-    const itemsWithLanes = allocateLanes(dedupedItems) as readonly RoomTimelineItemWithLane[];
+    const mergedItems = mergeOverlappingOrAdjacentSamePersonRoomItems(dedupedItems, dayKeys);
+
+    const itemsWithLanes = allocateLanes(mergedItems) as readonly RoomTimelineItemWithLane[];
     const laneCount = itemsWithLanes.reduce((max, i) => Math.max(max, i.laneIndex + 1), 1);
 
     return { room, items: itemsWithLanes, laneCount };

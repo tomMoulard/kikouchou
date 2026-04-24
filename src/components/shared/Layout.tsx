@@ -19,6 +19,7 @@ import { createPortal } from 'react-dom';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  BarChart2,
   Calendar,
   Car,
   ChevronLeft,
@@ -99,6 +100,7 @@ const TRIP_NAV_ITEMS: readonly NavItem[] = [
   { labelKey: 'nav.rooms', pathSuffix: 'rooms', icon: Home, requiresTrip: true },
   { labelKey: 'nav.persons', pathSuffix: 'persons', icon: Users, requiresTrip: true },
   { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
+  { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: BarChart2, requiresTrip: true },
 ] as const;
 
 /**
@@ -134,8 +136,9 @@ const ASSISTANT_NAV_ITEM: NavItem = {
  * Persons, Trips, Settings are inside the "More" sheet.
  * Derived from canonical arrays to avoid duplication.
  */
-const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] =
-  TRIP_NAV_ITEMS.filter((item) => item.pathSuffix !== 'persons');
+const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] = TRIP_NAV_ITEMS.filter(
+  (item) => item.pathSuffix !== 'persons' && item.pathSuffix !== 'analytics',
+);
 
 /**
  * Items shown inside the "More" sheet on mobile.
@@ -143,6 +146,7 @@ const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] =
  */
 const MOBILE_MORE_NAV_ITEMS: readonly NavItem[] = [
   TRIP_NAV_ITEMS.find((item) => item.pathSuffix === 'persons')!,
+  TRIP_NAV_ITEMS.find((item) => item.pathSuffix === 'analytics')!,
   ...GLOBAL_NAV_ITEMS,
   ASSISTANT_NAV_ITEM,
   SETTINGS_NAV_ITEM,
@@ -328,7 +332,7 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
                 const isActive = location.pathname === path || location.pathname.startsWith(path + '/');
 
                 return (
-                  <li key={item.pathSuffix || 'trips'}>
+                  <li key={`${item.requiresTrip ? 'trip' : 'global'}-${item.pathSuffix || 'trips'}`}>
                     <button
                       type="button"
                       onClick={() => handleMoreItemClick(path)}
@@ -656,16 +660,8 @@ const DesktopSidebar = memo(function DesktopSidebar({
       {/* Spacer when no trip */}
       {!trip && <div className="flex-1" />}
 
-      {/* Yjs / P2P online count — desktop sidebar (mobile: header above) */}
-      <div
-        className={cn(
-          'hidden border-t px-2 pt-2 pb-1 md:block',
-          isCollapsed ? 'px-1' : 'px-3',
-        )}
-        aria-label={t('nav.syncPresenceRegion', 'Collaboration status')}
-      >
-        <P2PSyncPresence collapsed={isCollapsed} />
-      </div>
+      {/* Yjs / P2P online count — desktop sidebar only when others are online (mobile: header above) */}
+      <P2PSyncPresence collapsed={isCollapsed} layout="sidebar" />
 
       {/* AI Assistant & Settings - always at bottom */}
       <nav className="border-t py-2" aria-label={t('nav.settingsNavigation', 'Settings navigation')}>

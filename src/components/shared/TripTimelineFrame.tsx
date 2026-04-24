@@ -22,6 +22,7 @@ import { toISODateString } from '@/lib/db/utils';
 import { TIMELINE_LANE_HEIGHT_PX } from '@/lib/utils/timeline-bar-geometry';
 import {
   computeDayGridTemplateColumns,
+  computeTimelineScrollLeftToCenterDay,
   computeTimelineViewportLayout,
 } from '@/lib/utils/timeline-viewport-layout';
 import type { ISODateString } from '@/types';
@@ -147,6 +148,32 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
       todayColumnIndex,
     ],
   );
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (
+      !el ||
+      todayColumnIndex === undefined ||
+      dayCount < 1 ||
+      viewportWidth <= 0
+    ) {
+      return;
+    }
+    el.scrollLeft = computeTimelineScrollLeftToCenterDay({
+      scrollContainerClientWidth: el.clientWidth,
+      scrollContainerScrollWidth: el.scrollWidth,
+      labelColumnWidth,
+      columnIndex: todayColumnIndex,
+      cellWidthPx,
+    });
+  }, [
+    todayColumnIndex,
+    labelColumnWidth,
+    cellWidthPx,
+    dayCount,
+    viewportWidth,
+    canvasWidth,
+  ]);
 
   return (
     <div role="region" aria-label={ariaLabel} className="w-full min-w-0 border rounded-lg overflow-hidden">

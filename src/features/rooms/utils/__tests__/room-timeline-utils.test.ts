@@ -770,6 +770,114 @@ describe('buildRoomTimelineModel', () => {
     expect(totalItems).toBeGreaterThanOrEqual(1);
   });
 
+  it('merges partially overlapping same-person assignments in one room into a single pill', () => {
+    const trip: Trip = {
+      id: 'trip-1' as Trip['id'],
+      shareId: 'share-1' as Trip['shareId'],
+      name: 'Trip',
+      startDate: iso('2026-04-01'),
+      endDate: iso('2026-04-30'),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const room: Room = {
+      id: 'r1' as Room['id'],
+      tripId: trip.id,
+      name: 'Room 1',
+      capacity: 2,
+      order: 0,
+    };
+    const marc: Person = {
+      id: 'p-marc' as Person['id'],
+      tripId: trip.id,
+      name: 'Marc',
+      color: '#06b6d4' as HexColor,
+    };
+    const left: RoomAssignment = {
+      id: 'a-left' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room.id,
+      personId: marc.id,
+      startDate: iso('2026-04-07'),
+      endDate: iso('2026-04-21'),
+    };
+    const right: RoomAssignment = {
+      id: 'a-right' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room.id,
+      personId: marc.id,
+      startDate: iso('2026-04-16'),
+      endDate: iso('2026-04-26'),
+    };
+
+    const model = buildRoomTimelineModel({
+      trip,
+      range: { startDate: iso('2026-04-01'), endDate: iso('2026-04-30') },
+      rooms: [room],
+      assignments: [left, right],
+      personsById: new Map([[marc.id, marc]]),
+      unknownLabel: 'Unknown',
+      arrivals: [],
+      departures: [],
+    });
+
+    const row = model.rows[0]!;
+    expect(row.items).toHaveLength(1);
+    expect(row.items[0]!.assignment.id).toBe(left.id);
+    expect(row.items[0]!.startIndex).toBe(6);
+    expect(row.items[0]!.endIndex).toBe(24);
+    expect(row.items[0]!.label).toBe('Marc');
+  });
+
+  it('merges consecutive same-person assignments in one room into a single pill', () => {
+    const trip = createTrip();
+    const room: Room = {
+      id: 'r1' as Room['id'],
+      tripId: trip.id,
+      name: 'Room 1',
+      capacity: 2,
+      order: 0,
+    };
+    const marc: Person = {
+      id: 'p-marc' as Person['id'],
+      tripId: trip.id,
+      name: 'Marc',
+      color: '#06b6d4' as HexColor,
+    };
+    const first: RoomAssignment = {
+      id: 'a-first' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room.id,
+      personId: marc.id,
+      startDate: iso('2026-04-01'),
+      endDate: iso('2026-04-04'),
+    };
+    const second: RoomAssignment = {
+      id: 'a-second' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room.id,
+      personId: marc.id,
+      startDate: iso('2026-04-04'),
+      endDate: iso('2026-04-06'),
+    };
+
+    const model = buildRoomTimelineModel({
+      trip,
+      range: { startDate: iso('2026-04-01'), endDate: iso('2026-04-05') },
+      rooms: [room],
+      assignments: [first, second],
+      personsById: new Map([[marc.id, marc]]),
+      unknownLabel: 'Unknown',
+      arrivals: [],
+      departures: [],
+    });
+
+    const row = model.rows[0]!;
+    expect(row.items).toHaveLength(1);
+    expect(row.items[0]!.startIndex).toBe(0);
+    expect(row.items[0]!.endIndex).toBe(4);
+  });
+
   it('cross-room overlap tiebreak: uses assignment id when stay lengths and room orders are equal', () => {
     const trip = createTrip();
     const roomA: Room = {

@@ -67,7 +67,7 @@ describe('UpcomingPickups', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('shows "all covered" when pickups exist but all have drivers', async () => {
+  it('renders nothing when pickups exist but all have drivers', async () => {
     const { useTransportContext } = await import('@/contexts/TransportContext');
     vi.mocked(useTransportContext).mockReturnValue({
       upcomingPickups: [
@@ -94,8 +94,9 @@ describe('UpcomingPickups', () => {
       deleteTransport: vi.fn(),
     } as never);
 
-    render(<UpcomingPickups />);
-    expect(screen.getByText('pickups.allCovered')).toBeInTheDocument();
+    const { container } = render(<UpcomingPickups />);
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByText('pickups.allCovered')).not.toBeInTheDocument();
   });
 
   it('renders pickup cards for unassigned pickups', async () => {
@@ -407,7 +408,7 @@ describe('UpcomingPickups', () => {
     expect(container.querySelector('.custom-test')).toBeInTheDocument();
   });
 
-  it('renders overdue pickup as all-covered since grouping filters out past pickups', async () => {
+  it('renders nothing when grouping filters out past pickups', async () => {
     // Set time to after the pickup — groupPickupsByProximity filters out date < now
     vi.setSystemTime(new Date('2026-07-16T10:00:00.000Z'));
 
@@ -447,10 +448,9 @@ describe('UpcomingPickups', () => {
       deleteTransport: vi.fn(),
     } as never);
 
-    render(<UpcomingPickups />);
-    // Past pickups are filtered out by groupPickupsByProximity (date >= now),
-    // so with all pickups past, unassignedCount = 0 and we see "all covered"
-    expect(screen.getByText('pickups.allCovered')).toBeInTheDocument();
+    const { container } = render(<UpcomingPickups />);
+    // Past pickups are filtered out by groupPickupsByProximity (date >= now)
+    expect(container.firstChild).toBeNull();
   });
 
   it('handles driver assignment with resolving animation', async () => {

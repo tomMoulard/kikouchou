@@ -8,7 +8,7 @@
  */
 
 import { db } from '@/lib/db/database';
-import { sanitizePersonData } from '@/lib/db/sanitize';
+import { MAX_LENGTHS, sanitizeOptionalText, sanitizePersonData } from '@/lib/db/sanitize';
 import { createPersonId } from '@/lib/db/utils';
 import type { Person, PersonFormData, PersonId, TripId } from '@/types';
 import { getDefaultPersonColor } from '@/types';
@@ -148,6 +148,9 @@ export async function updatePerson(
       color: '#000000',
     }).name;
   }
+  if (sanitizedData.notes !== undefined) {
+    sanitizedData.notes = sanitizeOptionalText(sanitizedData.notes, MAX_LENGTHS.personNotes);
+  }
   // Note: color field is not sanitized (it's a hex color, not free text)
 
   const updatedCount = await db.persons.update(id, sanitizedData);
@@ -283,7 +286,15 @@ export async function updatePersonWithOwnershipCheck(
       throw new Error('Cannot update person: person does not belong to current trip');
     }
 
-    await db.persons.update(id, data);
+    const patch: Partial<PersonFormData> = { ...data };
+    if (patch.name !== undefined) {
+      patch.name = sanitizePersonData({ name: patch.name, color: '#000000' }).name;
+    }
+    if (patch.notes !== undefined) {
+      patch.notes = sanitizeOptionalText(patch.notes, MAX_LENGTHS.personNotes);
+    }
+
+    await db.persons.update(id, patch);
   });
 }
 

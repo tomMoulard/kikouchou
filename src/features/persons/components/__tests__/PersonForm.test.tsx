@@ -125,6 +125,14 @@ describe('PersonForm', () => {
     expect(screen.getByTestId('date-range-picker')).toBeInTheDocument();
   });
 
+  it('renders optional notes field', () => {
+    render(
+      <PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+    expect(screen.getByLabelText(/persons\.notes/)).toBeInTheDocument();
+  });
+
   it('hides stay dates picker when no current trip', () => {
     vi.mocked(useTripContext).mockReturnValue({
       currentTrip: null,

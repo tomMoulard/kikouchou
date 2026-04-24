@@ -9,6 +9,7 @@ import { differenceInCalendarDays, format, parseISO, subDays } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
+import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
 import { cn } from '@/lib/utils';
 import { timelineAssignmentBarStyle, TIMELINE_LANE_HEIGHT_PX } from '@/lib/utils/timeline-bar-geometry';
 import type { ISODateString, Person, Room, RoomAssignment, Transport, Trip } from '@/types';
@@ -227,6 +228,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                   row.room.capacity > 1 && bedsFree > 0
                     ? `${row.room.name}. ${t('rooms.spotsOpen', { count: bedsFree })}`
                     : row.room.name;
+                const RoomGlyph = getRoomIconComponent(row.room.icon);
 
                 return (
                   <div
@@ -253,7 +255,13 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                           : row.room.name
                       }
                     >
-                      <span className="text-sm font-medium truncate">{row.room.name}</span>
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <RoomGlyph
+                          className="size-3.5 shrink-0 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        <span className="truncate text-sm font-medium">{row.room.name}</span>
+                      </div>
                       {row.room.capacity > 1 &&
                         (bedsFree > 0 || row.laneCount > row.room.capacity) && (
                           <span className="text-[11px] text-muted-foreground leading-tight truncate">

@@ -114,7 +114,8 @@ const comparePersons = (a: Person, b: Person): boolean =>
   a.name === b.name &&
   a.color === b.color &&
   a.stayStartDate === b.stayStartDate &&
-  a.stayEndDate === b.stayEndDate;
+  a.stayEndDate === b.stayEndDate &&
+  a.notes === b.notes;
 
 /**
  * Compares two person arrays for equality based on IDs and mutable properties.

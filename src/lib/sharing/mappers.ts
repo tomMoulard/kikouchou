@@ -121,6 +121,7 @@ export function personToProto(person: Person): ProtoPerson {
     color: person.color,
     stayStartDate: person.stayStartDate ?? undefined,
     stayEndDate: person.stayEndDate ?? undefined,
+    notes: person.notes ?? undefined,
   });
 }
 
@@ -248,7 +249,7 @@ export function changesetToProto(changeset: AppChangeset): ProtoTripChangeset {
  * Converts a protobuf Person to an app Person.
  */
 export function protoToPerson(proto: ProtoPerson): Person {
-  return {
+  const person: Person = {
     id: proto.id as PersonId,
     tripId: proto.tripId as TripId,
     name: proto.name,
@@ -256,6 +257,10 @@ export function protoToPerson(proto: ProtoPerson): Person {
     stayStartDate: proto.stayStartDate ? (proto.stayStartDate as ISODateString) : undefined,
     stayEndDate: proto.stayEndDate ? (proto.stayEndDate as ISODateString) : undefined,
   };
+  if (proto.notes) {
+    person.notes = proto.notes;
+  }
+  return person;
 }
 
 /**
