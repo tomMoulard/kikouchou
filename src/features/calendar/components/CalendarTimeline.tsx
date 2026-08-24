@@ -9,6 +9,8 @@ import { useTranslation } from 'react-i18next';
 import { Users } from 'lucide-react';
 
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
+import { ActivityTimelineRow } from '@/features/activities/components/ActivityTimelineRow';
+import { buildActivityTimelineModel } from '@/features/activities/utils/activity-timeline-utils';
 import { toLocalISODateString } from '@/lib/db/utils';
 import type { ISODateString } from '@/types';
 import type { CalendarTimelineProps } from '../types';
@@ -49,6 +51,17 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
       props.departures,
       t,
     ],
+  );
+
+  // The shared agenda gets its own bands under the guest rows; it reuses the
+  // same day axis, so the two halves of the timeline always line up.
+  const activityModel = useMemo(
+    () =>
+      buildActivityTimelineModel({
+        trip: props.trip,
+        activities: props.activities,
+      }),
+    [props.trip, props.activities],
   );
 
   const todayKey = toLocalISODateString(props.today) as ISODateString;
@@ -96,7 +109,10 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
     props.assignments.length === 0 &&
     props.arrivals.length === 0 &&
     props.departures.length === 0 &&
+    activityModel.rows.length === 0 &&
     model.rows.every((r) => r.staySpan === undefined);
+
+  const handleActivityClick = props.onActivityClick;
 
   return (
     <TripTimelineFrame
@@ -125,6 +141,29 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
               </div>
             ))}
           </div>
+
+          {activityModel.rows.length > 0 && handleActivityClick && (
+            <>
+              <div
+                className="sticky left-0 border-t-2 border-muted bg-muted/40 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                style={{ width: viewport.labelColumnWidth + viewport.canvasWidth }}
+              >
+                {t('activities.title')}
+              </div>
+              <div role="list" aria-label={t('activities.timeline.rows', 'Timeline rows')}>
+                {activityModel.rows.map((row) => (
+                  <div key={`activity-${row.category}`} role="listitem">
+                    <ActivityTimelineRow
+                      model={row}
+                      viewport={viewport}
+                      dateLocale={props.dateLocale}
+                      onActivityClick={handleActivityClick}
+                    />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           {showEmptyState && (
             <div className="p-6 text-center text-muted-foreground">{t('calendar.noAssignments')}</div>

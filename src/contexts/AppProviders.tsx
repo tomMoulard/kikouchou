@@ -12,6 +12,7 @@ import { RoomProvider } from '@/contexts/RoomContext';
 import { PersonProvider } from '@/contexts/PersonContext';
 import { AssignmentProvider } from '@/contexts/AssignmentContext';
 import { TransportProvider } from '@/contexts/TransportContext';
+import { ActivityProvider } from '@/contexts/ActivityContext';
 import { SyncPresenceProvider } from '@/contexts/SyncPresenceContext';
 import { YjsTripSync } from '@/lib/yjs/YjsTripSync';
 
@@ -40,6 +41,7 @@ interface AppProvidersProps {
  * 3. PersonProvider - Manages persons for the current trip (depends on TripProvider)
  * 4. AssignmentProvider - Manages room assignments (depends on TripProvider)
  * 5. TransportProvider - Manages transports (depends on TripProvider)
+ * 6. ActivityProvider - Manages the shared activity agenda (depends on TripProvider)
  *
  * @remarks
  * This nesting order ensures that:
@@ -92,9 +94,11 @@ export function AppProviders({ children }: AppProvidersProps): ReactElement {
         <PersonProvider>
           <AssignmentProvider>
             <TransportProvider>
-              <SyncPresenceProvider>
-                <YjsTripSync>{children}</YjsTripSync>
-              </SyncPresenceProvider>
+              <ActivityProvider>
+                <SyncPresenceProvider>
+                  <YjsTripSync>{children}</YjsTripSync>
+                </SyncPresenceProvider>
+              </ActivityProvider>
             </TransportProvider>
           </AssignmentProvider>
         </PersonProvider>

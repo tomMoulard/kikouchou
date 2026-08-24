@@ -13,7 +13,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
-import type { Person, Room, RoomAssignment, Transport, TripId } from '@/types';
+import type { Activity, Person, Room, RoomAssignment, Transport, TripId } from '@/types';
 
 import { ensureTripP2pCredentials } from './ensure-trip-p2p-credentials';
 import { P2PSyncPresence } from './P2PSyncPresence';
@@ -80,6 +80,14 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
     () =>
       db.transports
         .where('[tripId+datetime]')
+        .between([tripId, Dexie.minKey], [tripId, Dexie.maxKey])
+        .toArray(),
+    [tripId],
+  );
+  const activities = useLiveQuery(
+    () =>
+      db.activities
+        .where('[tripId+startDatetime]')
         .between([tripId, Dexie.minKey], [tripId, Dexie.maxKey])
         .toArray(),
     [tripId],
@@ -151,6 +159,18 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       stripTripId(transports as readonly Transport[]),
     );
   }, [transports, yjs?.doc, yjs?.loaded]);
+
+  useEffect(() => {
+    if (!yjs?.loaded || !activities) {
+      return;
+    }
+
+    syncDexieToDoc(
+      yjs.doc,
+      'activities',
+      stripTripId(activities as readonly Activity[]),
+    );
+  }, [activities, yjs?.doc, yjs?.loaded]);
 
   return null;
 });

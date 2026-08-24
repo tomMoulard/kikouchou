@@ -29,6 +29,7 @@ import { calendarRoutes } from '@/features/calendar/routes';
 import { roomRoutes } from '@/features/rooms/routes';
 import { personRoutes } from '@/features/persons/routes';
 import { transportRoutes } from '@/features/transports/routes';
+import { activityRoutes } from '@/features/activities/routes';
 import { sharingRoutes, sharingSyncRoutes } from '@/features/sharing/routes';
 import { assistantRoutes } from '@/features/assistant/routes';
 import { analyticsRoutes } from '@/features/analytics/routes';
@@ -207,6 +208,9 @@ const settingsRoute: RouteObject = {
     // Note: transportRoutes uses 'transports' path, need to check if it needs trip scoping
     ...transportRoutes,
 
+    // Shared activity agenda (trip-scoped)
+    ...activityRoutes,
+
     // Trip + global analytics
     ...analyticsRoutes,
 
@@ -275,6 +279,7 @@ const settingsRoute: RouteObject = {
  *   - `/trips/:tripId/rooms` - Room management
  *   - `/trips/:tripId/persons` - Person management
  *   - `/trips/:tripId/transports` - Transport management
+ *   - `/trips/:tripId/activities` - Shared activity agenda
  *   - `/trips/:tripId/analytics` - Trip analytics
  *   - `/analytics` - Analytics across all trips
  *   - `/settings` - App settings
@@ -319,3 +324,4 @@ export type { CalendarParams } from '@/features/calendar/routes';
 export type { RoomListParams } from '@/features/rooms/routes';
 export type { PersonListParams } from '@/features/persons/routes';
 export type { AnalyticsParams } from '@/features/analytics/routes';
+export type { ActivityListParams } from '@/features/activities/routes';

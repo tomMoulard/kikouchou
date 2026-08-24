@@ -23,6 +23,7 @@
 
 import type { ZodError, ZodType } from 'zod';
 import type {
+  ActivityFormData,
   PersonFormData,
   RoomAssignmentFormData,
   RoomFormData,
@@ -31,6 +32,7 @@ import type {
 } from '@/types';
 
 import {
+  ActivityFormDataSchema,
   PersonFormDataSchema,
   RoomAssignmentFormDataSchema,
   RoomFormDataSchema,
@@ -45,6 +47,7 @@ export {
   PersonFormDataSchema,
   RoomAssignmentFormDataSchema,
   TransportFormDataSchema,
+  ActivityFormDataSchema,
   // Primitive schemas
   isoDateStringSchema,
   isoDateTimeStringSchema,
@@ -52,6 +55,7 @@ export {
   roomIconSchema,
   transportTypeSchema,
   transportModeSchema,
+  activityCategorySchema,
   coordinatesSchema,
   personIdSchema,
   roomIdSchema,
@@ -64,6 +68,7 @@ export type {
   PersonFormDataInput,
   RoomAssignmentFormDataInput,
   TransportFormDataInput,
+  ActivityFormDataInput,
 } from './schemas';
 
 // ============================================================================
@@ -298,6 +303,29 @@ export function validateTransportForm(
   return validate(TransportFormDataSchema, data);
 }
 
+/**
+ * Validates activity form data.
+ *
+ * @param data - Unknown data to validate
+ * @returns Validation result with typed ActivityFormData or errors
+ *
+ * @example
+ * ```typescript
+ * const result = validateActivityForm({
+ *   title: 'Fête des plantes',
+ *   category: 'horticulture',
+ *   startDatetime: '2024-07-16T09:00:00.000Z',
+ *   allDay: false,
+ *   participantIds: [],
+ * });
+ * ```
+ */
+export function validateActivityForm(
+  data: unknown,
+): ValidationResult<ActivityFormData> {
+  return validate(ActivityFormDataSchema, data);
+}
+
 // ============================================================================
 // Throwing Validation Functions
 // ============================================================================
@@ -405,6 +433,21 @@ export function validateRoomAssignmentFormOrThrow(
  */
 export function validateTransportFormOrThrow(data: unknown): TransportFormData {
   const result = validateTransportForm(data);
+  if (!result.success) {
+    throw new FormValidationError(result);
+  }
+  return result.data;
+}
+
+/**
+ * Validates activity form data and throws on failure.
+ *
+ * @param data - Unknown data to validate
+ * @returns Validated ActivityFormData
+ * @throws FormValidationError if validation fails
+ */
+export function validateActivityFormOrThrow(data: unknown): ActivityFormData {
+  const result = validateActivityForm(data);
   if (!result.success) {
     throw new FormValidationError(result);
   }

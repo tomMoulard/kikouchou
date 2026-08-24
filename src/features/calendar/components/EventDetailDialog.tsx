@@ -1,6 +1,7 @@
 /**
  * @fileoverview Event Detail Dialog for displaying calendar event information.
- * Shows detailed view of room assignments or transports with edit/delete actions.
+ * Shows detailed view of room assignments, transports or activities with
+ * edit/delete actions.
  *
  * @module features/calendar/components/EventDetailDialog
  */
@@ -17,6 +18,7 @@ import {
   Pencil,
   Trash2,
   User,
+  Users,
 } from 'lucide-react';
 
 import {
@@ -30,12 +32,19 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { ActivityCategoryIcon } from '@/components/shared/ActivityCategoryIcon';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { TransportIcon } from '@/components/shared/TransportIcon';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
+import {
+  formatActivityDayRange,
+  formatActivityTimeRange,
+} from '@/features/activities/utils/activity-utils';
+import { getActivityCategoryColor } from '@/types';
 import type {
+  Activity,
   Person,
   Room,
   RoomAssignment,
@@ -69,9 +78,24 @@ export interface TransportEventData {
 }
 
 /**
+ * Event data for activity display.
+ */
+export interface ActivityEventData {
+  readonly type: 'activity';
+  readonly activity: Activity;
+  /** Guests signed up, resolved from the person list */
+  readonly participants: readonly Person[];
+  /** The guest leading the activity, when set */
+  readonly organizer?: Person | undefined;
+}
+
+/**
  * Union type for all calendar event data.
  */
-export type CalendarEventData = AssignmentEventData | TransportEventData;
+export type CalendarEventData =
+  | AssignmentEventData
+  | TransportEventData
+  | ActivityEventData;
 
 /**
  * Props for the EventDetailDialog component.
@@ -105,6 +129,13 @@ function isAssignmentEvent(event: CalendarEventData): event is AssignmentEventDa
  */
 function isTransportEvent(event: CalendarEventData): event is TransportEventData {
   return event.type === 'transport';
+}
+
+/**
+ * Type guard to check if event is an activity.
+ */
+function isActivityEvent(event: CalendarEventData): event is ActivityEventData {
+  return event.type === 'activity';
 }
 
 /**
@@ -365,6 +396,127 @@ const TransportDetails = memo(function TransportDetails({ event, dateLocale }: T
 });
 
 // ============================================================================
+// ActivityDetails Subcomponent
+// ============================================================================
+
+interface ActivityDetailsProps {
+  readonly event: ActivityEventData;
+  readonly dateLocale: ReturnType<typeof getDateLocale>;
+}
+
+/**
+ * Displays details for an activity: when, where, and who is coming.
+ */
+const ActivityDetails = memo(function ActivityDetails({
+  event,
+  dateLocale,
+}: ActivityDetailsProps) {
+  const { t } = useTranslation();
+  const { activity, participants, organizer } = event;
+
+  const categoryColor = getActivityCategoryColor(activity.category);
+  const dayRange = formatActivityDayRange(activity, dateLocale);
+  const timeRange = formatActivityTimeRange(activity, dateLocale);
+
+  const participantCount = activity.participantIds?.length ?? 0;
+  const cap = activity.maxParticipants;
+
+  return (
+    <div className="space-y-4">
+      {/* Category */}
+      <div className="flex items-center gap-3">
+        <ActivityCategoryIcon
+          category={activity.category}
+          style={{ color: categoryColor }}
+        />
+        <span className="text-sm">{t(`activities.categories.${activity.category}`)}</span>
+      </div>
+
+      {/* Day */}
+      <div className="flex items-center gap-3">
+        <Calendar className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
+        <span className="text-sm">{dayRange}</span>
+      </div>
+
+      {/* Time */}
+      <div className="flex items-center gap-3">
+        <Clock className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
+        <span className="text-sm">
+          {activity.allDay ? t('activities.allDay') : timeRange}
+        </span>
+      </div>
+
+      {/* Location */}
+      {activity.location && (
+        <div className="flex items-center gap-3">
+          <MapPin className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
+          <span className="text-sm">{activity.location}</span>
+        </div>
+      )}
+
+      {/* Get Directions */}
+      {activity.coordinates && (
+        <DirectionsButton
+          coordinates={activity.coordinates}
+          locationName={activity.location ?? activity.title}
+          variant="outline"
+          size="sm"
+          className="w-full"
+        />
+      )}
+
+      {/* Participants */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-3">
+          <Users className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
+          <span className="text-sm text-muted-foreground">
+            {cap === undefined
+              ? t('activities.participantCount', '{{count}} participants', {
+                  count: participantCount,
+                })
+              : `${participantCount}/${cap}`}
+          </span>
+          {cap !== undefined && participantCount >= cap && (
+            <Badge variant="outline" className="border-amber-500 text-amber-600">
+              {t('activities.full')}
+            </Badge>
+          )}
+        </div>
+        {participants.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 pl-7">
+            {participants.map((person) => (
+              <PersonBadge key={person.id} person={person} size="sm" />
+            ))}
+          </div>
+        ) : (
+          <p className="pl-7 text-sm text-muted-foreground">
+            {t('activities.noParticipants', 'Nobody has signed up yet')}
+          </p>
+        )}
+      </div>
+
+      {/* Organizer */}
+      {organizer && (
+        <div className="flex items-center gap-3">
+          <User className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
+          <span className="text-sm text-muted-foreground">
+            {t('activities.organizer')}:
+          </span>
+          <PersonBadge person={organizer} size="sm" />
+        </div>
+      )}
+
+      {/* Notes */}
+      {activity.notes && (
+        <div className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground">
+          {activity.notes}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ============================================================================
 // Main Component
 // ============================================================================
 
@@ -410,6 +562,9 @@ const EventDetailDialog = memo(function EventDetailDialog({
     if (!event) return '';
     if (isAssignmentEvent(event)) {
       return t('assignments.title', 'Room Assignment');
+    }
+    if (isActivityEvent(event)) {
+      return event.activity.title;
     }
     return event.transport.type === 'arrival'
       ? t('transports.arrival', 'Arrival')
@@ -491,6 +646,8 @@ const EventDetailDialog = memo(function EventDetailDialog({
           <div className="py-2">
             {isAssignmentEvent(event) ? (
               <AssignmentDetails event={event} dateLocale={dateLocale} />
+            ) : isActivityEvent(event) ? (
+              <ActivityDetails event={event} dateLocale={dateLocale} />
             ) : (
               <TransportDetails event={event} dateLocale={dateLocale} />
             )}
@@ -529,12 +686,16 @@ const EventDetailDialog = memo(function EventDetailDialog({
         title={
           isAssignmentEvent(event)
             ? t('confirm.removeAssignment')
-            : t('confirm.deleteTransport')
+            : isActivityEvent(event)
+              ? t('confirm.deleteActivity')
+              : t('confirm.deleteTransport')
         }
         description={
           isAssignmentEvent(event)
             ? t('confirm.removeAssignmentDescription')
-            : t('confirm.deleteTransportDescription')
+            : isActivityEvent(event)
+              ? t('confirm.deleteActivityDescription')
+              : t('confirm.deleteTransportDescription')
         }
         confirmLabel={t('common.delete')}
         variant="destructive"
@@ -548,4 +709,4 @@ const EventDetailDialog = memo(function EventDetailDialog({
 // Exports
 // ============================================================================
 
-export { EventDetailDialog, isAssignmentEvent, isTransportEvent };
+export { EventDetailDialog, isActivityEvent, isAssignmentEvent, isTransportEvent };

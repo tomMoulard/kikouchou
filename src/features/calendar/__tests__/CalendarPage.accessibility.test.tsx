@@ -80,6 +80,15 @@ vi.mock('@/contexts/TransportContext', () => ({
   }),
 }));
 
+vi.mock('@/contexts/ActivityContext', () => ({
+  useActivityContext: () => ({
+    activities: [],
+    isLoading: false,
+    error: null,
+    deleteActivity: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 vi.mock('@/hooks', () => ({
   useOfflineAwareToast: () => ({
     successToast: vi.fn(),
@@ -94,6 +103,10 @@ vi.mock('@/hooks/useToday', () => ({
 
 vi.mock('@/features/transports', () => ({
   TransportDialog: () => null,
+}));
+
+vi.mock('@/features/activities/components/ActivityDialog', () => ({
+  ActivityDialog: () => null,
 }));
 
 describe('CalendarPage accessibility', () => {

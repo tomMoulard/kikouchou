@@ -9,7 +9,7 @@ import { Routes, Route } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { render, screen } from '@/test/utils';
-import type { Person, Room, RoomAssignment, Transport, Trip } from '@/types';
+import type { Activity, Person, Room, RoomAssignment, Transport, Trip } from '@/types';
 
 import { CalendarPage } from '../pages/CalendarPage';
 
@@ -66,6 +66,18 @@ const mockArrival: Transport = {
   transportMode: 'plane',
 };
 
+const mockActivity: Activity = {
+  id: 'activity-1' as Activity['id'],
+  tripId: mockTrip.id,
+  title: 'Plant fair',
+  category: 'horticulture',
+  startDatetime: '2026-04-03T09:00:00.000Z',
+  endDatetime: '2026-04-03T12:00:00.000Z',
+  allDay: false,
+  location: 'Saint-Jean',
+  participantIds: [mockPerson.id],
+};
+
 // ============================================================================
 // Context mocks - default state
 // ============================================================================
@@ -75,6 +87,7 @@ const mockUseRoomContext = vi.fn();
 const mockUseAssignmentContext = vi.fn();
 const mockUsePersonContext = vi.fn();
 const mockUseTransportContext = vi.fn();
+const mockUseActivityContext = vi.fn();
 
 vi.mock('@/contexts/TripContext', () => ({
   useTripContext: () => mockUseTripContext(),
@@ -96,6 +109,10 @@ vi.mock('@/contexts/TransportContext', () => ({
   useTransportContext: () => mockUseTransportContext(),
 }));
 
+vi.mock('@/contexts/ActivityContext', () => ({
+  useActivityContext: () => mockUseActivityContext(),
+}));
+
 vi.mock('@/hooks', () => ({
   useOfflineAwareToast: () => ({ successToast: vi.fn() }),
 }));
@@ -106,6 +123,10 @@ vi.mock('@/hooks/useToday', () => ({
 
 vi.mock('@/features/transports', () => ({
   TransportDialog: () => null,
+}));
+
+vi.mock('@/features/activities/components/ActivityDialog', () => ({
+  ActivityDialog: () => null,
 }));
 
 // ============================================================================
@@ -150,6 +171,12 @@ function setDefaultMocks() {
     isLoading: false,
     error: null,
     deleteTransport: vi.fn().mockResolvedValue(undefined),
+  });
+  mockUseActivityContext.mockReturnValue({
+    activities: [mockActivity],
+    isLoading: false,
+    error: null,
+    deleteActivity: vi.fn().mockResolvedValue(undefined),
   });
 }
 
@@ -274,13 +301,19 @@ describe('CalendarPage', () => {
       error: null,
       deleteAssignment: vi.fn(),
     });
-    // Also clear transports so hasVisibleCalendarItems is false
+    // Also clear transports and activities so hasVisibleCalendarItems is false
     mockUseTransportContext.mockReturnValue({
       arrivals: [],
       departures: [],
       isLoading: false,
       error: null,
       deleteTransport: vi.fn().mockResolvedValue(undefined),
+    });
+    mockUseActivityContext.mockReturnValue({
+      activities: [],
+      isLoading: false,
+      error: null,
+      deleteActivity: vi.fn().mockResolvedValue(undefined),
     });
     const { user } = renderCalendarPage();
     // Switch to month/card view

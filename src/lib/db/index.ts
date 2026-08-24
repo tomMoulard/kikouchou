@@ -29,6 +29,7 @@ export {
   createPersonId,
   createRoomAssignmentId,
   createTransportId,
+  createActivityId,
   createShareId,
   generateId,
   // Timestamp utilities
@@ -136,6 +137,22 @@ export {
   deleteTransportWithOwnershipCheck,
 } from './repositories/transport-repository';
 
+// Activity repository
+export {
+  createActivity,
+  getActivitiesByTripId,
+  getActivityById,
+  getActivitiesByParticipantId,
+  getActivitiesByOrganizerId,
+  getActivitiesForDate,
+  getActivityCount,
+  isActivityFull,
+  setActivityParticipation,
+  // Transactional operations with ownership validation
+  updateActivityWithOwnershipCheck,
+  deleteActivityWithOwnershipCheck,
+} from './repositories/activity-repository';
+
 // Settings repository
 export {
   getSettings,
@@ -157,4 +174,6 @@ export {
   sanitizeRoomData,
   sanitizePersonData,
   sanitizeTransportData,
+  sanitizeActivityData,
+  normalizeMaxParticipants,
 } from './sanitize';

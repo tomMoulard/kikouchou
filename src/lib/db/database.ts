@@ -9,6 +9,7 @@
 
 import Dexie, { type Table } from 'dexie';
 import type {
+  Activity,
   AppSettings,
   Person,
   Room,
@@ -18,7 +19,7 @@ import type {
 } from '@/types';
 
 /** Current database schema version */
-export const DB_VERSION = 5;
+export const DB_VERSION = 6;
 
 // ============================================================================
 // Yjs Persistence Types
@@ -102,6 +103,14 @@ export class KikoushouDatabase extends Dexie {
    * Compound indexes: [tripId+datetime], [tripId+personId], [tripId+type]
    */
   transports!: Table<Transport, string>;
+
+  /**
+   * Activities table - stores the shared trip agenda (outings, events, meals).
+   * Primary key: id (ActivityId)
+   * Compound indexes: [tripId+startDatetime], [tripId+category]
+   * Multi-entry index: *participantIds (activities a given guest joined)
+   */
+  activities!: Table<Activity, string>;
 
   /**
    * Settings table - stores application settings (singleton).
@@ -230,6 +239,31 @@ export class KikoushouDatabase extends Dexie {
       roomAssignments:
         'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
       transports: 'id, personId, driverId, [tripId+datetime], [tripId+personId], [tripId+type]',
+      settings: 'id',
+      yjsUpdates: '++id, roomId',
+    });
+
+    /**
+     * Schema Version 6 - Add the shared activity agenda
+     *
+     * Added:
+     * - activities table for trip outings and events guests can join
+     *   - [tripId+startDatetime] for the chronological agenda and timeline
+     *   - [tripId+category] for filtering by kind of activity
+     *   - organizerId for clearing references when a guest is deleted
+     *   - *participantIds (multi-entry) for "activities this guest joined"
+     *
+     * No data migration needed - the table starts empty for existing trips.
+     */
+    this.version(6).stores({
+      trips: 'id, &shareId, p2pRoomId, startDate, createdAt',
+      rooms: 'id, [tripId+order]',
+      persons: 'id, tripId, [tripId+name]',
+      roomAssignments:
+        'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+      transports: 'id, personId, driverId, [tripId+datetime], [tripId+personId], [tripId+type]',
+      activities:
+        'id, tripId, organizerId, *participantIds, [tripId+startDatetime], [tripId+category]',
       settings: 'id',
       yjsUpdates: '++id, roomId',
     });

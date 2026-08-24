@@ -10,7 +10,7 @@
  * @module lib/db/sanitize
  */
 
-import { normalizePersonHeadcount } from '@/types';
+import { MAX_ACTIVITY_PARTICIPANTS, normalizePersonHeadcount } from '@/types';
 
 // ============================================================================
 // Constants - Maximum Lengths
@@ -39,6 +39,12 @@ export const MAX_LENGTHS = {
   transportNumber: 50,
   /** Transport notes */
   transportNotes: 1000,
+  /** Activity title (e.g., "Fête des plantes") */
+  activityTitle: 100,
+  /** Activity location (e.g., "Château de Saint-Jean") */
+  activityLocation: 200,
+  /** Activity notes (booking links, price, what to bring) */
+  activityNotes: 1000,
 } as const;
 
 // ============================================================================
@@ -159,4 +165,56 @@ export function sanitizeTransportData<
     transportNumber: sanitizeOptionalText(data.transportNumber, MAX_LENGTHS.transportNumber),
     notes: sanitizeOptionalText(data.notes, MAX_LENGTHS.transportNotes),
   };
+}
+
+/**
+ * Sanitizes activity form data.
+ *
+ * Trims text fields, drops empty optional text, de-duplicates participants
+ * and clamps the optional participant cap to a sane whole number.
+ *
+ * @param data - Activity form data to sanitize
+ * @returns Sanitized activity form data
+ */
+export function sanitizeActivityData<
+  T extends {
+    title: string;
+    location?: string;
+    notes?: string;
+    participantIds?: readonly string[];
+    maxParticipants?: number;
+  },
+>(data: T): T {
+  return {
+    ...data,
+    title: sanitizeText(data.title, MAX_LENGTHS.activityTitle),
+    location: sanitizeOptionalText(data.location, MAX_LENGTHS.activityLocation),
+    notes: sanitizeOptionalText(data.notes, MAX_LENGTHS.activityNotes),
+    participantIds: data.participantIds
+      ? Array.from(new Set(data.participantIds))
+      : data.participantIds,
+    maxParticipants: normalizeMaxParticipants(data.maxParticipants),
+  };
+}
+
+/**
+ * Clamps a raw participant cap to a whole number within the allowed range.
+ * Returns undefined (unlimited) for undefined, non-finite or non-positive values.
+ *
+ * @param value - Raw cap (form input, imported changeset, legacy record)
+ * @returns A whole number between 1 and {@link MAX_ACTIVITY_PARTICIPANTS}, or undefined
+ */
+export function normalizeMaxParticipants(
+  value: number | undefined,
+): number | undefined {
+  if (value === undefined || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  const rounded = Math.round(value);
+  if (rounded < 1) {
+    return undefined;
+  }
+
+  return rounded > MAX_ACTIVITY_PARTICIPANTS ? MAX_ACTIVITY_PARTICIPANTS : rounded;
 }

@@ -8,6 +8,8 @@ import { subDays } from 'date-fns';
 
 import { parseISODateString, toISODateString } from '@/lib/db/utils';
 import { dedupeContainedTimelineSpans } from '@/lib/utils/dedupe-timeline-spans';
+import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
+import { buildTripDayColumns } from '@/lib/utils/trip-days';
 import type {
   ISODateString,
   Person,
@@ -22,7 +24,6 @@ import type {
   CalendarTimelineRowModel,
   TimelineItem,
   TimelineItemAssignment,
-  TimelineItemBase,
   TimelineItemTransport,
   TimelineItemWithLane,
   TimelineTransportMarker,
@@ -33,69 +34,6 @@ import { getContrastTextColor } from './calendar-utils';
 // Internal helpers
 // ============================================================================
 
-function buildTripDays(trip: Trip): readonly Date[] {
-  const start = parseISODateString(trip.startDate);
-  const end = parseISODateString(trip.endDate);
-  if (!start || !end) {
-    return [];
-  }
-
-  // Build days by stepping in UTC to avoid DST-related off-by-one issues.
-  const raw: Date[] = [];
-  let cursor = new Date(start.getTime());
-  const endTime = end.getTime();
-
-  while (cursor.getTime() <= endTime) {
-    raw.push(new Date(cursor.getTime()));
-    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
-  }
-
-  // Defensive: if two steps ever map to the same UTC calendar day, collapse so header
-  // column count matches row grids (duplicate React keys would drop a header cell).
-  const seen = new Set<ISODateString>();
-  const days: Date[] = [];
-  for (const d of raw) {
-    const k = toISODateString(d);
-    if (seen.has(k)) {
-      continue;
-    }
-    seen.add(k);
-    days.push(d);
-  }
-
-  return days;
-}
-
-function allocateLanes<TItem extends TimelineItemBase>(items: readonly TItem[]): readonly (TItem & { readonly laneIndex: number })[] {
-  if (items.length === 0) {
-    return [];
-  }
-
-  const sorted = [...items].sort((a, b) => {
-    const startDiff = a.startIndex - b.startIndex;
-    if (startDiff !== 0) {
-      return startDiff;
-    }
-    return b.endIndex - a.endIndex;
-  });
-
-  const laneEndByIndex: number[] = [];
-  const result: (TItem & { readonly laneIndex: number })[] = [];
-
-  for (const item of sorted) {
-    let laneIndex = laneEndByIndex.findIndex((laneEnd) => item.startIndex > laneEnd);
-    if (laneIndex === -1) {
-      laneIndex = laneEndByIndex.length;
-      laneEndByIndex.push(item.endIndex);
-    } else {
-      laneEndByIndex[laneIndex] = Math.max(laneEndByIndex[laneIndex] ?? item.endIndex, item.endIndex);
-    }
-
-    result.push({ ...item, laneIndex } as TItem & { readonly laneIndex: number });
-  }
-
-  return result;
-}
 
 /**
  * Picks the room assignment that should host a transport in the same stay pill
@@ -243,7 +181,7 @@ export function buildCalendarTimelineModel(args: {
 }): CalendarTimelineModel {
   const { trip, persons, rooms, assignments, arrivals, departures, unknownLabel } = args;
 
-  const tripDays = buildTripDays(trip);
+  const tripDays = buildTripDayColumns(trip);
   const dayKeys = tripDays.map((d) => toISODateString(d));
 
   const tripStartKey = trip.startDate;
@@ -480,7 +418,7 @@ export function buildCalendarTimelineModel(args: {
     }
 
     const mergedItems = mergeTransportsIntoAssignments(baseItems);
-    const lanes = allocateLanes(mergedItems) as readonly TimelineItemWithLane[];
+    const lanes = allocateTimelineLanes(mergedItems) as readonly TimelineItemWithLane[];
     const maxLaneIndex = lanes.reduce((max, i) => Math.max(max, i.laneIndex), -1);
     const maxLaneCount = maxLaneIndex + 1;
 

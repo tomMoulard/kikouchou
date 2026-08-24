@@ -13,6 +13,7 @@ import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
 import type {
+  Activity,
   Person,
   Room,
   RoomAssignment,
@@ -31,7 +32,8 @@ export type SharedCollectionName =
   | 'guests'
   | 'rooms'
   | 'roomAssignments'
-  | 'transport';
+  | 'transport'
+  | 'activities';
 export type DocCollectionName = SharedCollectionName;
 type SharedRecord = Record<string, unknown>;
 
@@ -91,6 +93,15 @@ function sortCollection(
         return datetimeCompare === 0
           ? String(left.id).localeCompare(String(right.id))
           : datetimeCompare;
+      });
+    case 'activities':
+      return nextItems.sort((left, right) => {
+        const startCompare = String(left.startDatetime ?? '').localeCompare(
+          String(right.startDatetime ?? ''),
+        );
+        return startCompare === 0
+          ? String(left.id).localeCompare(String(right.id))
+          : startCompare;
       });
   }
 
@@ -252,7 +263,7 @@ export async function syncDocToDexie(doc: Y.Doc, roomId: string): Promise<TripId
   try {
     await db.transaction(
       'rw',
-      [db.trips, db.persons, db.rooms, db.roomAssignments, db.transports],
+      [db.trips, db.persons, db.rooms, db.roomAssignments, db.transports, db.activities],
       async () => {
         await db.trips.put(nextTrip);
 
@@ -269,6 +280,10 @@ export async function syncDocToDexie(doc: Y.Doc, roomId: string): Promise<TripId
           .where('[tripId+datetime]')
           .between([tripId, ''], [tripId, '\uffff'])
           .toArray();
+        const currentActivities = await db.activities
+          .where('[tripId+startDatetime]')
+          .between([tripId, ''], [tripId, '\uffff'])
+          .toArray();
 
         const nextGuests = readCollection(doc, 'guests').map(
           (guest) => ({ ...guest, tripId } as Person),
@@ -281,6 +296,9 @@ export async function syncDocToDexie(doc: Y.Doc, roomId: string): Promise<TripId
         );
         const nextTransport = readCollection(doc, 'transport').map(
           (transport) => ({ ...transport, tripId } as Transport),
+        );
+        const nextActivities = readCollection(doc, 'activities').map(
+          (activity) => ({ ...activity, tripId } as Activity),
         );
 
         await replaceTripScopedRows(
@@ -307,6 +325,12 @@ export async function syncDocToDexie(doc: Y.Doc, roomId: string): Promise<TripId
           (rows) => db.transports.bulkPut(rows),
           (ids) => db.transports.bulkDelete([...ids]),
         );
+        await replaceTripScopedRows(
+          currentActivities,
+          nextActivities,
+          (rows) => db.activities.bulkPut(rows),
+          (ids) => db.activities.bulkDelete([...ids]),
+        );
       },
     );
   } catch (error) {
@@ -319,7 +343,7 @@ export async function syncDocToDexie(doc: Y.Doc, roomId: string): Promise<TripId
 export const applyDocToDexie = syncDocToDexie;
 
 export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<void> {
-  const [trip, guests, rooms, assignments, transport] = await Promise.all([
+  const [trip, guests, rooms, assignments, transport, activities] = await Promise.all([
     db.trips.get(tripId),
     db.persons.where('tripId').equals(tripId).toArray(),
     db.rooms
@@ -332,6 +356,10 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
       .toArray(),
     db.transports
       .where('[tripId+datetime]')
+      .between([tripId, ''], [tripId, '\uffff'])
+      .toArray(),
+    db.activities
+      .where('[tripId+startDatetime]')
       .between([tripId, ''], [tripId, '\uffff'])
       .toArray(),
   ]);
@@ -371,6 +399,11 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
     const transportArray = doc.getArray('transport');
     sortCollection('transport', transport.map((item) => stripTripId(item))).forEach((item) => {
       transportArray.push([item]);
+    });
+
+    const activitiesArray = doc.getArray('activities');
+    sortCollection('activities', activities.map((item) => stripTripId(item))).forEach((item) => {
+      activitiesArray.push([item]);
     });
   });
 }
