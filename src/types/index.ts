@@ -381,6 +381,20 @@ export interface Person extends Identifiable, TripScoped {
    * Optional free-text notes (allergies, diet, accessibility, etc.).
    */
   notes?: string;
+
+  /**
+   * Number of real people this participant stands for.
+   *
+   * A guest entry is often a couple or a family tracked under one name
+   * ("Alice+Auré"). Headcounts (meals, groceries) must count 2, while rooms,
+   * transports and the calendar still show a single row.
+   *
+   * Defaults to 1 when unset (all records created before this field existed).
+   * Read it through {@link getPersonHeadcount} instead of accessing directly.
+   *
+   * @example 2
+   */
+  headcount?: number;
 }
 
 /**
@@ -649,6 +663,8 @@ export interface PersonFormData {
   stayEndDate?: ISODateString;
   /** Optional notes (allergies, diet, etc.) */
   notes?: string;
+  /** Number of real people this guest stands for (defaults to 1) */
+  headcount?: number;
 }
 
 /**
@@ -790,6 +806,53 @@ export function getDefaultPersonColor(index: number): HexColor {
   const safeIndex = Math.abs(index) % DEFAULT_PERSON_COLORS.length;
 
   return DEFAULT_PERSON_COLORS[safeIndex]!;
+}
+
+/**
+ * Headcount used for guests that have no explicit `headcount` (one person).
+ */
+export const DEFAULT_PERSON_HEADCOUNT = 1;
+
+/**
+ * Smallest headcount a guest entry may represent.
+ */
+export const MIN_PERSON_HEADCOUNT = 1;
+
+/**
+ * Largest headcount a single guest entry may represent.
+ * Beyond this, guests should be split into several entries.
+ */
+export const MAX_PERSON_HEADCOUNT = 99;
+
+/**
+ * Clamps a raw headcount input to a whole number within the allowed range.
+ * Returns the default headcount for undefined, non-finite, or invalid values.
+ *
+ * @param value - Raw headcount (form input, imported changeset, legacy record)
+ * @returns A whole number between {@link MIN_PERSON_HEADCOUNT} and {@link MAX_PERSON_HEADCOUNT}
+ */
+export function normalizePersonHeadcount(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return DEFAULT_PERSON_HEADCOUNT;
+  }
+
+  const rounded = Math.round(value);
+  if (rounded < MIN_PERSON_HEADCOUNT) {
+    return MIN_PERSON_HEADCOUNT;
+  }
+
+  return rounded > MAX_PERSON_HEADCOUNT ? MAX_PERSON_HEADCOUNT : rounded;
+}
+
+/**
+ * Number of real people a guest entry stands for.
+ * Legacy records without the field count as one person.
+ *
+ * @param person - The guest (or any object carrying an optional headcount)
+ * @returns The guest's headcount, at least 1
+ */
+export function getPersonHeadcount(person: { readonly headcount?: number }): number {
+  return normalizePersonHeadcount(person.headcount);
 }
 
 /**

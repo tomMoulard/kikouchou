@@ -53,6 +53,7 @@ import {
 } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
+import { getPersonHeadcount } from '@/types';
 import type { Person, PersonId, TransportMode } from '@/types';
 
 // ============================================================================
@@ -229,11 +230,21 @@ const PersonCard = memo(function PersonCard({
       const excerpt = rawNotes.length > 160 ? `${rawNotes.slice(0, 160)}…` : rawNotes;
       parts.push(`${t('persons.notes')}: ${excerpt}`);
     }
+    const headcount = getPersonHeadcount(person);
+    if (headcount > 1) {
+      parts.push(t('persons.headcountSummary', 'Counts as {{count}} people', { count: headcount }));
+    }
     return parts.join(', ');
-  }, [dateLocale, person.name, person.notes, roomsDisplay, stayRangeLabel, transportSummary.departure, transportSummary.arrival, t]),
+  }, [dateLocale, person, roomsDisplay, stayRangeLabel, transportSummary.departure, transportSummary.arrival, t]),
 
    hasTransportInfo = transportSummary.arrival || transportSummary.departure,
    trimmedNotes = person.notes?.trim() ?? '';
+
+  // A guest entry can stand for several people (e.g. a couple under one name).
+  const personHeadcount = getPersonHeadcount(person);
+  const headcountLabel = t('persons.headcountSummary', 'Counts as {{count}} people', {
+    count: personHeadcount,
+  });
 
   return (
     <Card
@@ -261,6 +272,15 @@ const PersonCard = memo(function PersonCard({
           <CardTitle className="text-lg truncate" title={person.name}>
             {person.name}
           </CardTitle>
+          {personHeadcount > 1 && (
+            <span
+              className="shrink-0 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+              title={headcountLabel}
+            >
+              <Users className="size-3" aria-hidden="true" />
+              <span className="tabular-nums">{personHeadcount}</span>
+            </span>
+          )}
           <Button
             type="button"
             size="icon"

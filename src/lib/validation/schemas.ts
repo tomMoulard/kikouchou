@@ -8,6 +8,7 @@
  */
 
 import { z } from 'zod';
+import { MAX_PERSON_HEADCOUNT, MIN_PERSON_HEADCOUNT } from '@/types';
 import type {
   HexColor,
   ISODateString,
@@ -211,6 +212,7 @@ export const RoomFormDataSchema = z.object({
  * - stayStartDate: optional, valid ISO date
  * - stayEndDate: optional, valid ISO date
  * - If both stay dates provided, stayEndDate must be >= stayStartDate
+ * - headcount: optional, whole number between 1 and 99
  */
 export const PersonFormDataSchema = z
   .object({
@@ -221,6 +223,12 @@ export const PersonFormDataSchema = z
     color: hexColorSchema,
     stayStartDate: isoDateStringSchema.optional(),
     stayEndDate: isoDateStringSchema.optional(),
+    headcount: z
+      .number()
+      .int('Headcount must be a whole number')
+      .min(MIN_PERSON_HEADCOUNT, `Headcount must be at least ${MIN_PERSON_HEADCOUNT}`)
+      .max(MAX_PERSON_HEADCOUNT, `Headcount must be ${MAX_PERSON_HEADCOUNT} or less`)
+      .optional(),
   })
   .refine(
     (data) => {

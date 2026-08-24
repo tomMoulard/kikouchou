@@ -17,6 +17,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ChevronDown } from 'lucide-react';
 import { useFormSubmission } from '@/hooks';
 
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,13 @@ import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { parseISO, format } from 'date-fns';
 import { toHexColor, toISODateStringFromString } from '@/lib/db/utils';
+import { cn } from '@/lib/utils';
+import {
+  MAX_PERSON_HEADCOUNT,
+  MIN_PERSON_HEADCOUNT,
+  getPersonHeadcount,
+  normalizePersonHeadcount,
+} from '@/types';
 import type { Person, PersonFormData } from '@/types';
 
 // ============================================================================
@@ -80,6 +88,15 @@ function pickRandomUnusedColor(args: {
 
   const idx = Math.floor(Math.random() * pool.length);
   return pool[idx] ?? DEFAULT_COLOR;
+}
+
+/**
+ * Parses the headcount input into a valid headcount.
+ * Empty or malformed input falls back to the minimum (one person).
+ */
+function parseHeadcountInput(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? MIN_PERSON_HEADCOUNT : normalizePersonHeadcount(parsed);
 }
 
 // ============================================================================
@@ -156,6 +173,16 @@ const PersonForm = memo(function PersonForm({
     return undefined;
   });
   const [notes, setNotes] = useState(person?.notes ?? '');
+  // Headcount is kept as a string so the field can be cleared while typing;
+  // it is normalized on blur and on submit.
+  const [headcount, setHeadcount] = useState(() =>
+    String(getPersonHeadcount(person ?? {})),
+  );
+  // Extra details stay collapsed by default, but open when the guest already
+  // stands for several people so the value is not silently hidden.
+  const [isExtraOpen, setIsExtraOpen] = useState(
+    () => getPersonHeadcount(person ?? {}) > MIN_PERSON_HEADCOUNT,
+  );
 
   const [initialSnapshot, setInitialSnapshot] = useState<{
     readonly name: string;
@@ -163,10 +190,12 @@ const PersonForm = memo(function PersonForm({
     readonly stayStartDate: string;
     readonly stayEndDate: string;
     readonly notes: string;
+    readonly headcount: number;
   } | null>(null);
 
   const currentStayStart = stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : '';
   const currentStayEnd = stayDates?.to ? format(stayDates.to, 'yyyy-MM-dd') : '';
+  const currentHeadcount = parseHeadcountInput(headcount);
 
   // Compute dirty state: compare current values against initial (person prop)
   const isDirty = useMemo(
@@ -178,10 +207,11 @@ const PersonForm = memo(function PersonForm({
         color !== initialSnapshot.color ||
         currentStayStart !== initialSnapshot.stayStartDate ||
         currentStayEnd !== initialSnapshot.stayEndDate ||
-        notes !== initialSnapshot.notes
+        notes !== initialSnapshot.notes ||
+        currentHeadcount !== initialSnapshot.headcount
       );
     },
-    [color, currentStayEnd, currentStayStart, name, notes, initialSnapshot],
+    [color, currentHeadcount, currentStayEnd, currentStayStart, name, notes, initialSnapshot],
   );
 
   // Notify parent of dirty state changes
@@ -219,12 +249,17 @@ const PersonForm = memo(function PersonForm({
     const nextNotes = person?.notes ?? '';
     setNotes(nextNotes);
 
+    const nextHeadcount = getPersonHeadcount(person ?? {});
+    setHeadcount(String(nextHeadcount));
+    setIsExtraOpen(nextHeadcount > MIN_PERSON_HEADCOUNT);
+
     setInitialSnapshot({
       name: nextName,
       color: nextColor,
       stayStartDate: person?.stayStartDate ?? '',
       stayEndDate: person?.stayEndDate ?? '',
       notes: nextNotes,
+      headcount: nextHeadcount,
     });
 
     // Use callback to avoid creating new object if already empty
@@ -313,6 +348,28 @@ const PersonForm = memo(function PersonForm({
   }, []);
 
   /**
+   * Handles headcount input change. Keeps the raw string so the field can be
+   * emptied while typing; normalization happens on blur and on submit.
+   */
+  const handleHeadcountChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setHeadcount(e.target.value);
+  }, []);
+
+  /**
+   * Snaps the headcount back into the allowed range when the field loses focus.
+   */
+  const handleHeadcountBlur = useCallback(() => {
+    setHeadcount((prev) => String(parseHeadcountInput(prev)));
+  }, []);
+
+  /**
+   * Toggles the collapsible "more details" section.
+   */
+  const handleToggleExtra = useCallback(() => {
+    setIsExtraOpen((prev) => !prev);
+  }, []);
+
+  /**
    * Trip date constraints for the date picker.
    */
   const tripStartDate = currentTrip?.startDate ? parseISO(currentTrip.startDate) : undefined;
@@ -347,12 +404,13 @@ const PersonForm = memo(function PersonForm({
           stayStartDate: formattedStartDate ? toISODateStringFromString(formattedStartDate) : undefined,
           stayEndDate: formattedEndDate ? toISODateStringFromString(formattedEndDate) : undefined,
           notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
+          headcount: parseHeadcountInput(headcount),
         });
       } catch {
         // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, doSubmit, name, color, stayDates, notes],
+    [validateForm, doSubmit, name, color, stayDates, notes, headcount],
   );
 
   // ============================================================================
@@ -436,6 +494,62 @@ const PersonForm = memo(function PersonForm({
         <p className="text-xs text-muted-foreground">
           {t('persons.notesHint', 'Diet, allergies, or anything hosts should know.')}
         </p>
+      </div>
+
+      {/* Collapsible extra details (headcount) */}
+      <div className="rounded-md border">
+        <button
+          type="button"
+          onClick={handleToggleExtra}
+          aria-expanded={isExtraOpen}
+          aria-controls="person-extra-details"
+          className={cn(
+            'flex w-full items-center justify-between gap-2 px-3 py-2 text-sm font-medium',
+            'rounded-md hover:bg-accent/60 transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          )}
+        >
+          <span className="flex items-center gap-2">
+            {t('persons.moreDetails', 'More details')}
+            {currentHeadcount > MIN_PERSON_HEADCOUNT && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground tabular-nums">
+                {t('persons.headcountBadge', '{{count}} people', { count: currentHeadcount })}
+              </span>
+            )}
+          </span>
+          <ChevronDown
+            className={cn('size-4 shrink-0 transition-transform', isExtraOpen && 'rotate-180')}
+            aria-hidden="true"
+          />
+        </button>
+
+        {isExtraOpen && (
+          <div id="person-extra-details" className="border-t px-3 py-3 space-y-2">
+            <Label htmlFor="person-headcount">
+              {t('persons.headcount', 'Number of people')}
+            </Label>
+            <Input
+              id="person-headcount"
+              type="number"
+              inputMode="numeric"
+              min={MIN_PERSON_HEADCOUNT}
+              max={MAX_PERSON_HEADCOUNT}
+              step={1}
+              value={headcount}
+              onChange={handleHeadcountChange}
+              onBlur={handleHeadcountBlur}
+              disabled={isSubmitting}
+              aria-describedby="person-headcount-hint"
+              className="w-24"
+            />
+            <p id="person-headcount-hint" className="text-xs text-muted-foreground">
+              {t(
+                'persons.headcountHint',
+                'How many people this entry stands for — use 2 for a couple like "Alice+Auré". Meal headcounts use this.',
+              )}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Submission Error */}

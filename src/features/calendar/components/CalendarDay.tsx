@@ -7,6 +7,7 @@
 import { type ReactElement, memo, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
 import { useTranslation } from 'react-i18next';
+import { Users } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { CalendarDayProps, CalendarEvent } from '../types';
@@ -23,6 +24,7 @@ const CalendarDay = memo(function CalendarDay({
   date,
   events,
   transports,
+  headcount,
   isCurrentMonth,
   isToday,
   isWithinTrip,
@@ -36,6 +38,8 @@ const CalendarDay = memo(function CalendarDay({
 }: CalendarDayProps): ReactElement {
   const { t } = useTranslation();
   const dayNumber = format(date, 'd', { locale: dateLocale });
+  // `dateKey` is UTC-derived; use the local calendar day the cell actually shows.
+  const localDateKey = format(date, 'yyyy-MM-dd');
   const dateLabel = format(date, 'PPPP', { locale: dateLocale });
   const summaryId = `${dateKey}-summary`;
 
@@ -74,11 +78,19 @@ const CalendarDay = memo(function CalendarDay({
   const hiddenEventCount = events.length - visibleEvents.length;
   const totalHiddenCount = hiddenTransportCount + hiddenEventCount;
 
+  const peopleOnSite = headcount?.people ?? 0;
+
   const accessibilitySummary = useMemo(() => {
     const parts: string[] = [];
 
     if (isToday) {
       parts.push(t('calendar.today'));
+    }
+
+    if (peopleOnSite > 0) {
+      parts.push(
+        t('calendar.peopleOnSite', '{{count}} people on site', { count: peopleOnSite }),
+      );
     }
 
     if (!isCurrentMonth) {
@@ -98,7 +110,7 @@ const CalendarDay = memo(function CalendarDay({
     }
 
     return parts.join('. ');
-  }, [isCurrentMonth, isToday, isWithinTrip, t, totalHiddenCount]);
+  }, [isCurrentMonth, isToday, isWithinTrip, peopleOnSite, t, totalHiddenCount]);
 
   // Build an array of slot indices to render (including empty slots for alignment)
   const slotIndices = useMemo(() => {
@@ -155,8 +167,8 @@ const CalendarDay = memo(function CalendarDay({
       onFocus={handleFocus}
       onKeyDown={handleKeyDown}
     >
-      {/* Day number */}
-      <div className="flex items-center justify-center mb-1">
+      {/* Day number + people on site (meal planning) */}
+      <div className="relative flex items-center justify-center mb-1">
         <span
           className={cn(
             'text-sm font-medium size-6 flex items-center justify-center rounded-full',
@@ -167,6 +179,24 @@ const CalendarDay = memo(function CalendarDay({
         >
           {dayNumber}
         </span>
+
+        {/* Screen readers get this count from the cell's aria-describedby summary. */}
+        {peopleOnSite > 0 && (
+          <span
+            className={cn(
+              'absolute right-0 flex items-center gap-0.5 text-[10px] font-medium',
+              isCurrentMonth ? 'text-muted-foreground' : 'text-muted-foreground/50',
+            )}
+            title={t('calendar.peopleOnSite', '{{count}} people on site', {
+              count: peopleOnSite,
+            })}
+            data-testid={`day-headcount-${localDateKey}`}
+            aria-hidden="true"
+          >
+            <Users className="size-3 shrink-0" />
+            <span className="tabular-nums">{peopleOnSite}</span>
+          </span>
+        )}
       </div>
 
       {/* Content area with events and transports */}

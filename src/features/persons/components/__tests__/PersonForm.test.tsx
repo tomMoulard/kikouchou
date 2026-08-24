@@ -226,6 +226,91 @@ describe('PersonForm', () => {
     expect(screen.queryByText('common.required')).not.toBeInTheDocument();
   });
 
+  it('keeps the headcount field collapsed by default in create mode', () => {
+    render(
+      <PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+    expect(screen.getByRole('button', { name: /persons\.moreDetails/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByLabelText(/persons\.headcount/)).not.toBeInTheDocument();
+  });
+
+  it('reveals a headcount field defaulting to 1 when the section is opened', async () => {
+    const { user } = render(
+      <PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByRole('button', { name: /persons\.moreDetails/ }));
+    expect(screen.getByLabelText(/persons\.headcount/)).toHaveValue(1);
+  });
+
+  it('submits the headcount entered in the collapsible section', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { user } = render(
+      <PersonForm onSubmit={onSubmit} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+    await user.type(screen.getByLabelText(/persons\.name/), 'Alice+Auré');
+    await user.click(screen.getByRole('button', { name: /persons\.moreDetails/ }));
+
+    const headcountInput = screen.getByLabelText(/persons\.headcount/);
+    await user.clear(headcountInput);
+    await user.type(headcountInput, '2');
+    await user.click(screen.getByText('common.save'));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Alice+Auré', headcount: 2 }),
+    );
+  });
+
+  it('submits a headcount of 1 when the section is never opened', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { user } = render(
+      <PersonForm onSubmit={onSubmit} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+    await user.type(screen.getByLabelText(/persons\.name/), 'Tom');
+    await user.click(screen.getByText('common.save'));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Tom', headcount: 1 }),
+    );
+  });
+
+  it('clamps an out-of-range headcount back into bounds on blur', async () => {
+    const { user } = render(
+      <PersonForm onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByRole('button', { name: /persons\.moreDetails/ }));
+
+    const headcountInput = screen.getByLabelText(/persons\.headcount/);
+    await user.clear(headcountInput);
+    await user.type(headcountInput, '0');
+    await user.tab();
+
+    expect(headcountInput).toHaveValue(1);
+  });
+
+  it('opens the section pre-filled when editing a multi-person guest', () => {
+    render(
+      <PersonForm
+        person={{ ...existingPerson, headcount: 2 }}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.getByRole('button', { name: /persons\.moreDetails/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByLabelText(/persons\.headcount/)).toHaveValue(2);
+  });
+
   it('reports dirty state changes via onDirtyChange', async () => {
     const onDirtyChange = vi.fn();
     const { user } = render(

@@ -109,6 +109,19 @@ describe('Person mappers', () => {
     const result = protoToPerson(proto);
     expect(result.notes).toBe('Vegan, no nuts');
   });
+
+  it('round-trips a multi-person guest headcount', () => {
+    const person: Person = { ...testPerson, name: 'Alice+Auré', headcount: 2 };
+    const proto = personToProto(person);
+    const result = protoToPerson(proto);
+    expect(result.headcount).toBe(2);
+  });
+
+  it('leaves headcount unset for guests that stand for one person', () => {
+    const proto = personToProto(testPerson);
+    const result = protoToPerson(proto);
+    expect(result.headcount).toBeUndefined();
+  });
 });
 
 describe('Room mappers', () => {

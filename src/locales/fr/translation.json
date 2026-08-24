@@ -195,6 +195,13 @@
     "notes": "Notes",
     "notesPlaceholder": "ex. : allergique aux chats, végétalien…",
     "notesHint": "Régime, allergies ou informations utiles pour les hôtes.",
+    "moreDetails": "Plus de détails",
+    "headcount": "Nombre de personnes",
+    "headcountHint": "Combien de personnes cette fiche représente — mettez 2 pour un duo comme « Alice+Auré ». Les comptages de repas s'appuient dessus.",
+    "headcountBadge_one": "{{count}} personne",
+    "headcountBadge_other": "{{count}} personnes",
+    "headcountSummary_one": "Compte pour {{count}} personne",
+    "headcountSummary_other": "Compte pour {{count}} personnes",
     "deleteConfirm": "Voulez-vous vraiment supprimer ce participant ?",
     "deleteConfirmTitle": "Supprimer le participant ?",
     "newDescription": "Remplissez les informations pour ajouter un nouveau participant.",
@@ -320,6 +327,8 @@
     "outsideCurrentMonth": "Hors du mois en cours",
     "outsideTripDates": "Hors des dates du voyage",
     "moreItemsHidden": "{{count}} autres éléments dans cette journée",
+    "peopleOnSite_one": "{{count}} personne sur place",
+    "peopleOnSite_other": "{{count}} personnes sur place",
     "personArriving": "Arrivée de {{name}}",
     "personDeparting": "Départ de {{name}}",
     "eventDetails": "Détails de l'événement",
@@ -339,7 +348,9 @@
       "rows": "Lignes de chronologie",
       "personRow": "Chronologie de {{name}}",
       "assignmentBarTitle": "{{room}} — {{range}}",
-      "assignmentBarAria": "{{room}}. Séjour {{range}}."
+      "assignmentBarAria": "{{room}}. Séjour {{range}}.",
+      "guestHeadcount_one": "Compte pour {{count}} personne",
+      "guestHeadcount_other": "Compte pour {{count}} personnes"
     }
   },
   "sharing": {

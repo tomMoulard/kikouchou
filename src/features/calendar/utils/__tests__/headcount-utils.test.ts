@@ -1,0 +1,323 @@
+/**
+ * @fileoverview Tests for per-day calendar headcounts.
+ *
+ * @module features/calendar/utils/__tests__/headcount-utils.test
+ */
+
+import { describe, it, expect } from 'vitest';
+
+import type {
+  HexColor,
+  ISODateString,
+  Person,
+  PersonId,
+  RoomAssignment,
+  RoomAssignmentId,
+  RoomId,
+  Transport,
+  TransportId,
+  TripId,
+} from '@/types';
+import { buildDailyHeadcounts, isGuestOnSiteOnDate } from '../headcount-utils';
+
+// ============================================================================
+// Fixtures
+// ============================================================================
+
+const TRIP_ID = 'trip-1' as TripId;
+
+function makePerson(args: {
+  readonly id: string;
+  readonly name?: string;
+  readonly headcount?: number;
+  readonly stayStartDate?: ISODateString;
+  readonly stayEndDate?: ISODateString;
+}): Person {
+  return {
+    id: args.id as PersonId,
+    tripId: TRIP_ID,
+    name: args.name ?? 'Guest',
+    color: '#3b82f6' as HexColor,
+    headcount: args.headcount,
+    stayStartDate: args.stayStartDate,
+    stayEndDate: args.stayEndDate,
+  };
+}
+
+function makeAssignment(args: {
+  readonly id: string;
+  readonly personId: string;
+  readonly startDate: string;
+  readonly endDate: string;
+}): RoomAssignment {
+  return {
+    id: args.id as RoomAssignmentId,
+    tripId: TRIP_ID,
+    roomId: 'room-1' as RoomId,
+    personId: args.personId as PersonId,
+    startDate: args.startDate as ISODateString,
+    endDate: args.endDate as ISODateString,
+  };
+}
+
+function makeTransport(args: {
+  readonly id: string;
+  readonly personId: string;
+  readonly type: 'arrival' | 'departure';
+  readonly datetime: string;
+}): Transport {
+  return {
+    id: args.id as TransportId,
+    tripId: TRIP_ID,
+    personId: args.personId as PersonId,
+    type: args.type,
+    datetime: args.datetime,
+    location: 'Gare de Lyon',
+    needsPickup: false,
+  };
+}
+
+const day = (value: string): ISODateString => value as ISODateString;
+
+// ============================================================================
+// buildDailyHeadcounts
+// ============================================================================
+
+describe('buildDailyHeadcounts', () => {
+  it('counts a multi-person guest entry as several people', () => {
+    // Tom counts for 1, "Alice+Auré" counts for 2 → 3 people on site.
+    const tom = makePerson({
+      id: 'p-tom',
+      name: 'Tom',
+      stayStartDate: day('2024-07-15'),
+      stayEndDate: day('2024-07-20'),
+    });
+    const aliceAndAure = makePerson({
+      id: 'p-alice',
+      name: 'Alice+Auré',
+      headcount: 2,
+      stayStartDate: day('2024-07-15'),
+      stayEndDate: day('2024-07-20'),
+    });
+
+    const counts = buildDailyHeadcounts({
+      persons: [tom, aliceAndAure],
+      arrivals: [],
+      departures: [],
+      assignments: [],
+      dayKeys: [day('2024-07-16')],
+    });
+
+    expect(counts.get(day('2024-07-16'))).toEqual({ guests: 2, people: 3 });
+  });
+
+  it('treats a guest without headcount as one person', () => {
+    const person = makePerson({
+      id: 'p-1',
+      stayStartDate: day('2024-07-15'),
+      stayEndDate: day('2024-07-17'),
+    });
+
+    const counts = buildDailyHeadcounts({
+      persons: [person],
+      arrivals: [],
+      departures: [],
+      assignments: [],
+      dayKeys: [day('2024-07-15'), day('2024-07-16')],
+    });
+
+    expect(counts.get(day('2024-07-15'))).toEqual({ guests: 1, people: 1 });
+    expect(counts.get(day('2024-07-16'))).toEqual({ guests: 1, people: 1 });
+  });
+
+  it('excludes the checkout day (guests do not sleep the night they leave)', () => {
+    const person = makePerson({
+      id: 'p-1',
+      headcount: 3,
+      stayStartDate: day('2024-07-15'),
+      stayEndDate: day('2024-07-17'),
+    });
+
+    const counts = buildDailyHeadcounts({
+      persons: [person],
+      arrivals: [],
+      departures: [],
+      assignments: [],
+      dayKeys: [day('2024-07-16'), day('2024-07-17')],
+    });
+
+    expect(counts.get(day('2024-07-16'))).toEqual({ guests: 1, people: 3 });
+    expect(counts.has(day('2024-07-17'))).toBe(false);
+  });
+
+  it('counts guests whose presence comes from a room assignment only', () => {
+    const person = makePerson({ id: 'p-1', headcount: 2 });
+    const assignment = makeAssignment({
+      id: 'a-1',
+      personId: 'p-1',
+      startDate: '2024-07-15',
+      endDate: '2024-07-18',
+    });
+
+    const counts = buildDailyHeadcounts({
+      persons: [person],
+      arrivals: [],
+      departures: [],
+      assignments: [assignment],
+      dayKeys: [day('2024-07-16')],
+    });
+
+    expect(counts.get(day('2024-07-16'))).toEqual({ guests: 1, people: 2 });
+  });
+
+  it('counts guests whose presence comes from transports only', () => {
+    const person = makePerson({ id: 'p-1', headcount: 2 });
+
+    const counts = buildDailyHeadcounts({
+      persons: [person],
+      arrivals: [
+        makeTransport({
+          id: 't-1',
+          personId: 'p-1',
+          type: 'arrival',
+          datetime: '2024-07-15T14:00:00.000Z',
+        }),
+      ],
+      departures: [
+        makeTransport({
+          id: 't-2',
+          personId: 'p-1',
+          type: 'departure',
+          datetime: '2024-07-18T09:00:00.000Z',
+        }),
+      ],
+      assignments: [],
+      dayKeys: [day('2024-07-16')],
+    });
+
+    expect(counts.get(day('2024-07-16'))).toEqual({ guests: 1, people: 2 });
+  });
+
+  it('does not double count a guest with both a stay window and an assignment', () => {
+    const person = makePerson({
+      id: 'p-1',
+      headcount: 2,
+      stayStartDate: day('2024-07-15'),
+      stayEndDate: day('2024-07-18'),
+    });
+    const assignment = makeAssignment({
+      id: 'a-1',
+      personId: 'p-1',
+      startDate: '2024-07-15',
+      endDate: '2024-07-18',
+    });
+
+    const counts = buildDailyHeadcounts({
+      persons: [person],
+      arrivals: [],
+      departures: [],
+      assignments: [assignment],
+      dayKeys: [day('2024-07-16')],
+    });
+
+    expect(counts.get(day('2024-07-16'))).toEqual({ guests: 1, people: 2 });
+  });
+
+  it('omits days with nobody on site', () => {
+    const person = makePerson({
+      id: 'p-1',
+      stayStartDate: day('2024-07-15'),
+      stayEndDate: day('2024-07-16'),
+    });
+
+    const counts = buildDailyHeadcounts({
+      persons: [person],
+      arrivals: [],
+      departures: [],
+      assignments: [],
+      dayKeys: [day('2024-07-14'), day('2024-07-15'), day('2024-07-20')],
+    });
+
+    expect(counts.has(day('2024-07-14'))).toBe(false);
+    expect(counts.has(day('2024-07-20'))).toBe(false);
+    expect(counts.size).toBe(1);
+  });
+
+  it('clamps invalid stored headcounts to at least one person', () => {
+    const person = makePerson({
+      id: 'p-1',
+      headcount: 0,
+      stayStartDate: day('2024-07-15'),
+      stayEndDate: day('2024-07-17'),
+    });
+
+    const counts = buildDailyHeadcounts({
+      persons: [person],
+      arrivals: [],
+      departures: [],
+      assignments: [],
+      dayKeys: [day('2024-07-15')],
+    });
+
+    expect(counts.get(day('2024-07-15'))).toEqual({ guests: 1, people: 1 });
+  });
+
+  it('returns an empty map when there are no guests or no days', () => {
+    expect(
+      buildDailyHeadcounts({
+        persons: [],
+        arrivals: [],
+        departures: [],
+        assignments: [],
+        dayKeys: [day('2024-07-15')],
+      }).size,
+    ).toBe(0);
+
+    expect(
+      buildDailyHeadcounts({
+        persons: [makePerson({ id: 'p-1' })],
+        arrivals: [],
+        departures: [],
+        assignments: [],
+        dayKeys: [],
+      }).size,
+    ).toBe(0);
+  });
+});
+
+// ============================================================================
+// isGuestOnSiteOnDate
+// ============================================================================
+
+describe('isGuestOnSiteOnDate', () => {
+  it('is false for a guest with no stay window, transports, or assignment', () => {
+    expect(
+      isGuestOnSiteOnDate({
+        person: makePerson({ id: 'p-1' }),
+        arrivals: [],
+        departures: [],
+        assignments: [],
+        dateKey: day('2024-07-16'),
+      }),
+    ).toBe(false);
+  });
+
+  it('ignores assignments belonging to other guests', () => {
+    expect(
+      isGuestOnSiteOnDate({
+        person: makePerson({ id: 'p-1' }),
+        arrivals: [],
+        departures: [],
+        assignments: [
+          makeAssignment({
+            id: 'a-1',
+            personId: 'p-2',
+            startDate: '2024-07-15',
+            endDate: '2024-07-18',
+          }),
+        ],
+        dateKey: day('2024-07-16'),
+      }),
+    ).toBe(false);
+  });
+});

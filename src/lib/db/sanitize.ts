@@ -10,6 +10,8 @@
  * @module lib/db/sanitize
  */
 
+import { normalizePersonHeadcount } from '@/types';
+
 // ============================================================================
 // Constants - Maximum Lengths
 // ============================================================================
@@ -124,11 +126,15 @@ export function sanitizeRoomData<T extends { name: string; description?: string 
  * @param data - Person form data to sanitize
  * @returns Sanitized person form data
  */
-export function sanitizePersonData<T extends { name: string; notes?: string }>(data: T): T {
+export function sanitizePersonData<
+  T extends { name: string; notes?: string; headcount?: number },
+>(data: T): T {
   return {
     ...data,
     name: sanitizeText(data.name, MAX_LENGTHS.personName),
     notes: sanitizeOptionalText(data.notes, MAX_LENGTHS.personNotes),
+    headcount:
+      data.headcount === undefined ? undefined : normalizePersonHeadcount(data.headcount),
   };
 }
 

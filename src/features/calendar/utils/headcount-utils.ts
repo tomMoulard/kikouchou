@@ -1,0 +1,105 @@
+/**
+ * @fileoverview Per-day headcounts for the calendar — how many real people are
+ * on site each night, so hosts can plan meals and groceries.
+ *
+ * A guest entry can stand for several people (`Person.headcount`, e.g.
+ * "Alice+Auré" = 2), so the people total is not the number of guest rows.
+ *
+ * @module features/calendar/utils/headcount-utils
+ */
+
+import { isGuestPresentOnDate } from '@/features/persons/utils/guest-presence';
+import { isDateInStayRange } from '@/features/rooms/utils/capacity-utils';
+import { getPersonHeadcount } from '@/types';
+import type { ISODateString, Person, RoomAssignment, Transport } from '@/types';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Headcount for a single calendar night.
+ */
+export interface DailyHeadcount {
+  /** Number of guest entries present that night */
+  readonly guests: number;
+  /** Number of real people present that night (sum of guest headcounts) */
+  readonly people: number;
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/**
+ * True if the guest sleeps on `dateKey`, from either their stay window
+ * (explicit dates or transports) or a room assignment covering that night.
+ *
+ * Room assignments are included because a guest can be given a room without
+ * ever filling in stay dates or travel details.
+ */
+export function isGuestOnSiteOnDate(args: {
+  readonly person: Person;
+  readonly arrivals: readonly Transport[];
+  readonly departures: readonly Transport[];
+  readonly assignments: readonly RoomAssignment[];
+  readonly dateKey: ISODateString;
+}): boolean {
+  const { person, arrivals, departures, assignments, dateKey } = args;
+
+  if (isGuestPresentOnDate(person, arrivals, departures, dateKey)) {
+    return true;
+  }
+
+  return assignments.some(
+    (a) =>
+      a.personId === person.id && isDateInStayRange(a.startDate, a.endDate, dateKey),
+  );
+}
+
+/**
+ * Maps each requested calendar day to the guests and people present that night.
+ *
+ * Days with nobody on site are omitted from the map — callers should treat a
+ * missing key as zero.
+ *
+ * @example
+ * ```typescript
+ * // Tom (headcount 1) and "Alice+Auré" (headcount 2) both staying tonight
+ * const counts = buildDailyHeadcounts({ persons, arrivals, departures, assignments, dayKeys });
+ * counts.get(todayKey); // { guests: 2, people: 3 }
+ * ```
+ */
+export function buildDailyHeadcounts(args: {
+  readonly persons: readonly Person[];
+  readonly arrivals: readonly Transport[];
+  readonly departures: readonly Transport[];
+  readonly assignments: readonly RoomAssignment[];
+  readonly dayKeys: readonly ISODateString[];
+}): ReadonlyMap<ISODateString, DailyHeadcount> {
+  const { persons, arrivals, departures, assignments, dayKeys } = args;
+
+  const map = new Map<ISODateString, DailyHeadcount>();
+  if (persons.length === 0 || dayKeys.length === 0) {
+    return map;
+  }
+
+  for (const dateKey of dayKeys) {
+    let guests = 0;
+    let people = 0;
+
+    for (const person of persons) {
+      if (!isGuestOnSiteOnDate({ person, arrivals, departures, assignments, dateKey })) {
+        continue;
+      }
+      guests += 1;
+      people += getPersonHeadcount(person);
+    }
+
+    if (guests > 0) {
+      map.set(dateKey, { guests, people });
+    }
+  }
+
+  return map;
+}

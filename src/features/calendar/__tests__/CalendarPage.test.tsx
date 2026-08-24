@@ -362,6 +362,74 @@ describe('CalendarPage', () => {
   });
 
   // ============================================================================
+  // Headcount tests (meal planning)
+  // ============================================================================
+
+  it('counts a multi-person guest entry as several people in card view', async () => {
+    // Alice counts for 1, "Alice+Auré" counts for 2 → 3 people that night.
+    const couple: Person = {
+      ...mockPerson,
+      id: 'person-2' as Person['id'],
+      name: 'Alice+Auré',
+      headcount: 2,
+    };
+    mockUsePersonContext.mockReturnValue({
+      persons: [mockPerson, couple],
+      getPersonById: vi.fn((id: string) =>
+        id === mockPerson.id ? mockPerson : id === couple.id ? couple : undefined,
+      ),
+      isLoading: false,
+      error: null,
+    });
+
+    const { user } = renderCalendarPage();
+    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+
+    expect(screen.getByTestId('day-headcount-2026-04-05')).toHaveTextContent('3');
+  });
+
+  it('shows the per-night headcount in the timeline day headers', async () => {
+    const couple: Person = {
+      ...mockPerson,
+      id: 'person-2' as Person['id'],
+      name: 'Alice+Auré',
+      headcount: 2,
+    };
+    mockUsePersonContext.mockReturnValue({
+      persons: [mockPerson, couple],
+      getPersonById: vi.fn((id: string) =>
+        id === mockPerson.id ? mockPerson : id === couple.id ? couple : undefined,
+      ),
+      isLoading: false,
+      error: null,
+    });
+
+    renderCalendarPage();
+
+    expect(await screen.findByTestId('timeline-headcount-2026-04-05')).toHaveTextContent('3');
+  });
+
+  it('omits the headcount on nights with nobody on site', async () => {
+    mockUsePersonContext.mockReturnValue({
+      persons: [],
+      getPersonById: vi.fn(() => undefined),
+      isLoading: false,
+      error: null,
+    });
+    mockUseAssignmentContext.mockReturnValue({
+      assignments: [],
+      isLoading: false,
+      error: null,
+      deleteAssignment: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const { user } = renderCalendarPage();
+    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+
+    expect(screen.queryByTestId('day-headcount-2026-04-05')).not.toBeInTheDocument();
+  });
+
+  // ============================================================================
   // Assignment rendering tests
   // ============================================================================
 
