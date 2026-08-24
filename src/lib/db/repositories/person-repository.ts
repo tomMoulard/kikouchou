@@ -11,7 +11,7 @@ import { db } from '@/lib/db/database';
 import { MAX_LENGTHS, sanitizeOptionalText, sanitizePersonData } from '@/lib/db/sanitize';
 import { createPersonId } from '@/lib/db/utils';
 import type { Person, PersonFormData, PersonId, TripId } from '@/types';
-import { getDefaultPersonColor } from '@/types';
+import { getDefaultPersonColor, normalizePersonHeadcount } from '@/types';
 
 /**
  * Creates a new person in the database.
@@ -150,6 +150,9 @@ export async function updatePerson(
   }
   if (sanitizedData.notes !== undefined) {
     sanitizedData.notes = sanitizeOptionalText(sanitizedData.notes, MAX_LENGTHS.personNotes);
+  }
+  if (sanitizedData.headcount !== undefined) {
+    sanitizedData.headcount = normalizePersonHeadcount(sanitizedData.headcount);
   }
   // Note: color field is not sanitized (it's a hex color, not free text)
 
@@ -292,6 +295,9 @@ export async function updatePersonWithOwnershipCheck(
     }
     if (patch.notes !== undefined) {
       patch.notes = sanitizeOptionalText(patch.notes, MAX_LENGTHS.personNotes);
+    }
+    if (patch.headcount !== undefined) {
+      patch.headcount = normalizePersonHeadcount(patch.headcount);
     }
 
     await db.persons.update(id, patch);

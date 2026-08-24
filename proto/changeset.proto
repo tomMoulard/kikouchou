@@ -57,6 +57,8 @@ message Person {
   optional string stay_start_date = 5;  // ISO date YYYY-MM-DD
   optional string stay_end_date = 6;    // ISO date YYYY-MM-DD
   optional string notes = 7;              // allergies, diet, etc.
+  // Real people this entry stands for (e.g. "Alice+Auré" = 2). Absent/0 = 1.
+  optional uint32 headcount = 8;
 }
 
 // Links a person to a room for a specific date range.

@@ -29,6 +29,7 @@ import {
   TransportSchema,
   TripChangesetSchema,
 } from '@/gen/changeset_pb';
+import { normalizePersonHeadcount } from '@/types';
 import type {
   HexColor,
   ISODateString,
@@ -122,6 +123,7 @@ export function personToProto(person: Person): ProtoPerson {
     stayStartDate: person.stayStartDate ?? undefined,
     stayEndDate: person.stayEndDate ?? undefined,
     notes: person.notes ?? undefined,
+    headcount: person.headcount ?? undefined,
   });
 }
 
@@ -259,6 +261,9 @@ export function protoToPerson(proto: ProtoPerson): Person {
   };
   if (proto.notes) {
     person.notes = proto.notes;
+  }
+  if (proto.headcount) {
+    person.headcount = normalizePersonHeadcount(proto.headcount);
   }
   return person;
 }

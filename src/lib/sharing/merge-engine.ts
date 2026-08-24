@@ -18,6 +18,7 @@ import {
   getRoomsByTripId,
   getTransportsByTripId,
 } from '@/lib/db';
+import { getPersonHeadcount } from '@/types';
 import type {
   Person,
   PersonId,
@@ -308,6 +309,7 @@ function getPersonConflictingFields(host: Person, guest: Person): string[] {
   if (host.stayStartDate !== guest.stayStartDate) fields.push('stayStartDate');
   if (host.stayEndDate !== guest.stayEndDate) fields.push('stayEndDate');
   if (host.notes !== guest.notes) fields.push('notes');
+  if (getPersonHeadcount(host) !== getPersonHeadcount(guest)) fields.push('headcount');
   return fields;
 }
 

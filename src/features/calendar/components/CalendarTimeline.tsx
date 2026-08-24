@@ -4,13 +4,15 @@
  * @module features/calendar/components/CalendarTimeline
  */
 
-import { type ReactElement, memo, useMemo } from 'react';
+import { type ReactElement, type ReactNode, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Users } from 'lucide-react';
 
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
 import { toLocalISODateString } from '@/lib/db/utils';
 import type { ISODateString } from '@/types';
 import type { CalendarTimelineProps } from '../types';
+import { buildDailyHeadcounts } from '../utils/headcount-utils';
 import { buildCalendarTimelineModel } from '../utils/timeline-utils';
 import { CalendarTimelineRow } from './CalendarTimelineRow';
 
@@ -51,6 +53,45 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
 
   const todayKey = toLocalISODateString(props.today) as ISODateString;
 
+  // People on site each night — hosts read this row to plan meals.
+  const headcountsByDate = useMemo(
+    () =>
+      buildDailyHeadcounts({
+        persons: props.persons,
+        arrivals: props.arrivals,
+        departures: props.departures,
+        assignments: props.assignments,
+        dayKeys: model.dayKeys,
+      }),
+    [model.dayKeys, props.arrivals, props.assignments, props.departures, props.persons],
+  );
+
+  const renderDayHeadcount = useCallback(
+    (dayKey: ISODateString): ReactNode => {
+      const people = headcountsByDate.get(dayKey)?.people ?? 0;
+      if (people === 0) {
+        return null;
+      }
+
+      const label = t('calendar.peopleOnSite', '{{count}} people on site', { count: people });
+
+      return (
+        <div
+          className="mt-1 flex items-center gap-0.5 text-[10px] text-muted-foreground"
+          title={label}
+          data-testid={`timeline-headcount-${dayKey}`}
+        >
+          <Users className="size-2.5 shrink-0" aria-hidden="true" />
+          <span className="tabular-nums" aria-hidden="true">
+            {people}
+          </span>
+          <span className="sr-only">{label}</span>
+        </div>
+      );
+    },
+    [headcountsByDate, t],
+  );
+
   const showEmptyState =
     props.assignments.length === 0 &&
     props.arrivals.length === 0 &&
@@ -66,6 +107,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
       dayKeys={model.dayKeys}
       dateLocale={props.dateLocale}
       todayKey={todayKey}
+      renderDayMeta={renderDayHeadcount}
     >
       {(viewport) => (
         <>

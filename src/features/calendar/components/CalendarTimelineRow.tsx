@@ -9,6 +9,7 @@ import { addDays, format, type Locale } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 
 import type { TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
+import { getPersonHeadcount } from '@/types';
 import type { HexColor, RoomAssignment, Transport } from '@/types';
 import { cn } from '@/lib/utils';
 import type { CalendarTransport, CalendarTimelineRowModel, TimelineItemWithLane } from '../types';
@@ -41,6 +42,8 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
   const { canvasWidth, dayCount, cellWidthPx, dayGridTemplateColumns, todayColumnIndex } = viewport;
 
   const personLabel = model.person.name || t('common.unknown');
+  // A guest entry can stand for several people (e.g. a couple under one name).
+  const personHeadcount = getPersonHeadcount(model.person);
 
   const transportToCalendarTransport = useCallback(
     (item: Extract<TimelineItemWithLane, { kind: 'transport' }>): CalendarTransport => ({
@@ -289,6 +292,16 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         <span className="text-sm font-medium truncate" title={personLabel}>
           {personLabel}
         </span>
+        {personHeadcount > 1 && (
+          <span
+            className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] font-medium text-muted-foreground tabular-nums"
+            title={t('calendar.timeline.guestHeadcount', 'Counts as {{count}} people', {
+              count: personHeadcount,
+            })}
+          >
+            ×{personHeadcount}
+          </span>
+        )}
       </div>
 
       <div

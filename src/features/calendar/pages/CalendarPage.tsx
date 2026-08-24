@@ -58,7 +58,7 @@ import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AssignmentFormDialog } from '@/features/rooms/components/RoomAssignmentSection';
-import { toISODateString } from '@/lib/db/utils';
+import { toISODateString, toLocalISODateString } from '@/lib/db/utils';
 import type {
   HexColor,
   ISODateString,
@@ -91,6 +91,7 @@ import {
   getDateLocale,
   getContrastTextColor,
 } from '../utils/calendar-utils';
+import { buildDailyHeadcounts } from '../utils/headcount-utils';
 
 // ============================================================================
 // Main Component
@@ -557,6 +558,29 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     [calendarDays],
   );
 
+  // Headcounts compare against stored stay dates, so they need the calendar day
+  // as the user sees it. `visibleDateKeys` uses `toISODateString` (UTC), which is
+  // a day behind local midnight east of Greenwich — self-consistent for grid keys,
+  // but wrong when matched against `stayStartDate` & co.
+  const visibleLocalDateKeys = useMemo(
+    () => calendarDays.map((day) => toLocalISODateString(day)),
+    [calendarDays],
+  );
+
+  // People on site per night, used to plan meals. A guest entry can stand for
+  // several people (`headcount`), so this is not the number of calendar pills.
+  const headcountsByDate = useMemo(
+    () =>
+      buildDailyHeadcounts({
+        persons,
+        arrivals,
+        departures,
+        assignments,
+        dayKeys: visibleLocalDateKeys,
+      }),
+    [assignments, arrivals, departures, persons, visibleLocalDateKeys],
+  );
+
   const defaultFocusedDateKey = useMemo(() => {
     if (calendarDays.length === 0) {
       return null;
@@ -929,6 +953,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
                           date={day}
                           events={events}
                           transports={transports}
+                          headcount={headcountsByDate.get(toLocalISODateString(day))}
                           isCurrentMonth={isCurrentMonth}
                           isToday={isDayToday}
                           isWithinTrip={isWithinTrip}

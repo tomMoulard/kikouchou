@@ -195,6 +195,13 @@
     "notes": "Notes",
     "notesPlaceholder": "e.g. allergic to cats, vegan…",
     "notesHint": "Diet, allergies, or anything hosts should know.",
+    "moreDetails": "More details",
+    "headcount": "Number of people",
+    "headcountHint": "How many people this entry stands for — use 2 for a couple like \"Alice+Auré\". Meal headcounts use this.",
+    "headcountBadge_one": "{{count}} person",
+    "headcountBadge_other": "{{count}} people",
+    "headcountSummary_one": "Counts as {{count}} person",
+    "headcountSummary_other": "Counts as {{count}} people",
     "deleteConfirm": "Are you sure you want to delete this guest?",
     "deleteConfirmTitle": "Delete guest?",
     "newDescription": "Fill in the details to add a new guest.",
@@ -320,6 +327,8 @@
     "outsideCurrentMonth": "Outside the current month",
     "outsideTripDates": "Outside the trip dates",
     "moreItemsHidden": "{{count}} more items in this day",
+    "peopleOnSite_one": "{{count}} person on site",
+    "peopleOnSite_other": "{{count}} people on site",
     "personArriving": "{{name}} arriving",
     "personDeparting": "{{name}} departing",
     "eventDetails": "Event details",
@@ -339,7 +348,9 @@
       "rows": "Timeline rows",
       "personRow": "{{name}} timeline",
       "assignmentBarTitle": "{{room}} — {{range}}",
-      "assignmentBarAria": "{{room}}. Stay {{range}}."
+      "assignmentBarAria": "{{room}}. Stay {{range}}.",
+      "guestHeadcount_one": "Counts as {{count}} person",
+      "guestHeadcount_other": "Counts as {{count}} people"
     }
   },
   "sharing": {

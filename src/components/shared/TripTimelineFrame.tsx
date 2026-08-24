@@ -53,6 +53,12 @@ export interface TripTimelineFrameProps {
   readonly dateLocale: Locale;
   /** When set, that day column is highlighted in the header (local “today”). */
   readonly todayKey?: ISODateString;
+  /**
+   * Optional extra content rendered under each day number in the header
+   * (e.g. the number of people on site that night).
+   * Memoize the callback — the frame is a `memo` component.
+   */
+  readonly renderDayMeta?: (dayKey: ISODateString, index: number) => ReactNode;
   readonly children: (viewport: TripTimelineViewportContext) => ReactNode;
 }
 
@@ -68,6 +74,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
   dayKeys,
   dateLocale,
   todayKey,
+  renderDayMeta,
   children,
 }: TripTimelineFrameProps): ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -226,6 +233,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
                         >
                           {dayLabel}
                         </div>
+                        {renderDayMeta?.(key, index)}
                       </div>
                     </div>
                   );

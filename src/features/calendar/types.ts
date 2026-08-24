@@ -7,6 +7,7 @@
 
 import type { KeyboardEvent } from 'react';
 import type { Locale } from 'date-fns/locale';
+import type { DailyHeadcount } from './utils/headcount-utils';
 import type {
   HexColor,
   ISODateString,
@@ -107,6 +108,8 @@ export interface CalendarDayProps {
   readonly date: Date;
   readonly events: readonly CalendarEvent[];
   readonly transports: readonly CalendarTransport[];
+  /** People on site that night (meal planning); omitted when nobody is there */
+  readonly headcount?: DailyHeadcount;
   readonly isCurrentMonth: boolean;
   readonly isToday: boolean;
   readonly isWithinTrip: boolean;
