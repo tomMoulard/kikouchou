@@ -8,6 +8,7 @@
  * - Month view calendar grid (7 columns, Mon-Sun)
  * - Navigation (prev/next month, today button)
  * - Room assignments displayed as colored events
+ * - Shared activities shown as category-coloured pills
  * - Events show person name + room name
  * - Click event to edit assignment
  * - Responsive design with horizontal scroll on mobile
@@ -51,6 +52,7 @@ import { useRoomContext } from '@/contexts/RoomContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { useActivityContext } from '@/contexts/ActivityContext';
 import { useToday } from '@/hooks/useToday';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -59,9 +61,13 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AssignmentFormDialog } from '@/features/rooms/components/RoomAssignmentSection';
 import { toISODateString, toLocalISODateString } from '@/lib/db/utils';
+import { getActivityCategoryColor } from '@/types';
 import type {
+  Activity,
+  ActivityId,
   HexColor,
   ISODateString,
+  Person,
   Room,
   RoomAssignment,
   Transport,
@@ -75,6 +81,7 @@ import {
   CalendarDay,
   EventDetailDialog,
   CalendarTimeline,
+  type ActivityEventData,
   type AssignmentEventData,
   type TransportEventData,
   type CalendarEventData,
@@ -83,8 +90,20 @@ import {
 // Import TransportDialog for editing transports
 import { TransportDialog } from '@/features/transports';
 
+// Import ActivityDialog + helpers for the shared agenda
+import { ActivityDialog } from '@/features/activities/components/ActivityDialog';
+import {
+  getActivityEndDayKey,
+  getActivityStartDayKey,
+} from '@/features/activities/utils/activity-utils';
+
 // Import types and utilities
-import type { CalendarEvent, CalendarTransport, SegmentPosition } from '../types';
+import type {
+  CalendarActivity,
+  CalendarEvent,
+  CalendarTransport,
+  SegmentPosition,
+} from '../types';
 import {
   EMPTY_EVENTS,
   EMPTY_TRANSPORTS,
@@ -92,6 +111,16 @@ import {
   getContrastTextColor,
 } from '../utils/calendar-utils';
 import { buildDailyHeadcounts } from '../utils/headcount-utils';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Stable empty array so days without activities keep referential equality
+ * across renders (CalendarDay is memoized).
+ */
+const EMPTY_CALENDAR_ACTIVITIES: readonly CalendarActivity[] = [];
 
 // ============================================================================
 // Main Component
@@ -137,6 +166,12 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     error: transportsError,
     deleteTransport,
   } = useTransportContext();
+  const {
+    activities,
+    isLoading: isActivitiesLoading,
+    error: activitiesError,
+    deleteActivity,
+  } = useActivityContext();
 
   // Local state for current viewing month
   // Initialized to today - will sync with trip start date via useEffect when loaded
@@ -175,6 +210,10 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   const [editingAssignment, setEditingAssignment] = useState<RoomAssignment | undefined>(undefined);
   const [isAssignmentDialogOpen, setIsAssignmentDialogOpen] = useState(false);
 
+  // Activity edit dialog state
+  const [isActivityDialogOpen, setIsActivityDialogOpen] = useState(false);
+  const [selectedActivityId, setSelectedActivityId] = useState<ActivityId | undefined>();
+
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
     if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
@@ -205,7 +244,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     isRoomsLoading ||
     isAssignmentsLoading ||
     isPersonsLoading ||
-    isTransportsLoading;
+    isTransportsLoading ||
+    isActivitiesLoading;
 
   // Date locale based on current language
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
@@ -581,6 +621,60 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     [assignments, arrivals, departures, persons, visibleLocalDateKeys],
   );
 
+  // Activities are keyed by the LOCAL day the guest experiences, the same
+  // convention `headcountsByDate` uses, so a pill lands in the cell whose number
+  // the user actually sees. Multi-day activities repeat across every day they cover.
+  const activitiesByLocalDate = useMemo(() => {
+    const map = new Map<string, CalendarActivity[]>();
+
+    if (visibleLocalDateKeys.length === 0 || activities.length === 0) {
+      return map;
+    }
+
+    const firstKey = visibleLocalDateKeys[0]!;
+    const lastKey = visibleLocalDateKeys[visibleLocalDateKeys.length - 1]!;
+
+    for (const activity of activities) {
+      const startKey = getActivityStartDayKey(activity);
+      const endKey = getActivityEndDayKey(activity) ?? startKey;
+
+      if (!startKey || !endKey || endKey < firstKey || startKey > lastKey) {
+        continue;
+      }
+
+      const color = getActivityCategoryColor(activity.category);
+
+      for (const dayKey of visibleLocalDateKeys) {
+        if (dayKey < startKey || dayKey > endKey) {
+          continue;
+        }
+
+        const calendarActivity: CalendarActivity = {
+          activity,
+          color,
+          isSpanStart: dayKey === startKey,
+          isSpanEnd: dayKey === endKey,
+        };
+
+        const existing = map.get(dayKey);
+        if (existing) {
+          existing.push(calendarActivity);
+        } else {
+          map.set(dayKey, [calendarActivity]);
+        }
+      }
+    }
+
+    // Keep a stable chronological order within each day
+    for (const dayActivities of map.values()) {
+      dayActivities.sort((a, b) =>
+        a.activity.startDatetime.localeCompare(b.activity.startDatetime),
+      );
+    }
+
+    return map;
+  }, [activities, visibleLocalDateKeys]);
+
   const defaultFocusedDateKey = useMemo(() => {
     if (calendarDays.length === 0) {
       return null;
@@ -674,6 +768,27 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     [getPersonById],
   );
 
+  const handleActivityClick = useCallback(
+    (activity: Activity) => {
+      const participants = (activity.participantIds ?? [])
+        .map((personId) => getPersonById(personId))
+        .filter((person): person is Person => person !== undefined);
+
+      const eventData: ActivityEventData = {
+        type: 'activity',
+        activity,
+        participants,
+        organizer: activity.organizerId
+          ? getPersonById(activity.organizerId)
+          : undefined,
+      };
+
+      setSelectedEvent(eventData);
+      setIsEventDialogOpen(true);
+    },
+    [getPersonById],
+  );
+
   const handleEventEdit = useCallback(() => {
     if (!selectedEvent) return;
 
@@ -682,6 +797,10 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       setIsEventDialogOpen(false);
       setSelectedTransportId(selectedEvent.transport.id);
       setIsTransportDialogOpen(true);
+    } else if (selectedEvent.type === 'activity') {
+      setIsEventDialogOpen(false);
+      setSelectedActivityId(selectedEvent.activity.id);
+      setIsActivityDialogOpen(true);
     } else {
       setIsEventDialogOpen(false);
       setEditingAssignment(selectedEvent.assignment);
@@ -710,13 +829,29 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         toast.error(t('errors.deleteFailed', 'Failed to delete'));
         throw error;
       }
+    } else if (selectedEvent.type === 'activity') {
+      try {
+        await deleteActivity(selectedEvent.activity.id);
+        successToast(t('activities.deleteSuccess'));
+      } catch (error) {
+        console.error('Failed to delete activity:', error);
+        toast.error(t('errors.deleteFailed', 'Failed to delete'));
+        throw error;
+      }
     }
-  }, [selectedEvent, deleteAssignment, deleteTransport, t, successToast]);
+  }, [selectedEvent, deleteAssignment, deleteTransport, deleteActivity, t, successToast]);
 
   const handleTransportDialogClose = useCallback((open: boolean) => {
     setIsTransportDialogOpen(open);
     if (!open) {
       setSelectedTransportId(undefined);
+    }
+  }, []);
+
+  const handleActivityDialogClose = useCallback((open: boolean) => {
+    setIsActivityDialogOpen(open);
+    if (!open) {
+      setSelectedActivityId(undefined);
     }
   }, []);
 
@@ -843,8 +978,15 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // Render: Error State
   // ============================================================================
 
-  if (roomsError || assignmentsError || personsError || transportsError) {
-    const error = roomsError ?? assignmentsError ?? personsError ?? transportsError;
+  if (
+    roomsError ||
+    assignmentsError ||
+    personsError ||
+    transportsError ||
+    activitiesError
+  ) {
+    const error =
+      roomsError ?? assignmentsError ?? personsError ?? transportsError ?? activitiesError;
     return (
       <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('calendar.title')} backLink="/trips" />
@@ -879,7 +1021,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // Render: Calendar
   // ============================================================================
 
-  const hasVisibleCalendarItems = eventsByDate.size > 0 || transportsByDate.size > 0;
+  const hasVisibleCalendarItems =
+    eventsByDate.size > 0 || transportsByDate.size > 0 || activitiesByLocalDate.size > 0;
 
   return (
     <div className="container max-w-6xl py-6 md:py-8">
@@ -939,8 +1082,11 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
                   >
                     {week.map((day) => {
                       const dateKey = toISODateString(day);
+                      const localDateKey = toLocalISODateString(day);
                       const events = eventsByDate.get(dateKey) ?? EMPTY_EVENTS;
                       const transports = transportsByDate.get(dateKey) ?? EMPTY_TRANSPORTS;
+                      const dayActivities =
+                        activitiesByLocalDate.get(localDateKey) ?? EMPTY_CALENDAR_ACTIVITIES;
                       const isCurrentMonth = isSameMonth(day, currentMonth);
                       const isDayToday = isSameDay(day, today);
                       const isWithinTrip =
@@ -953,7 +1099,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
                           date={day}
                           events={events}
                           transports={transports}
-                          headcount={headcountsByDate.get(toLocalISODateString(day))}
+                          activities={dayActivities}
+                          headcount={headcountsByDate.get(localDateKey)}
                           isCurrentMonth={isCurrentMonth}
                           isToday={isDayToday}
                           isWithinTrip={isWithinTrip}
@@ -961,6 +1108,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
                           tabIndex={focusedDateKey === dateKey ? 0 : -1}
                           onEventClick={handleEventClick}
                           onTransportClick={handleTransportClick}
+                          onActivityClick={handleActivityClick}
                           onDayFocus={handleDayFocus}
                           onDayKeyDown={handleDayKeyDown}
                           dayRef={handleDayRef}
@@ -981,10 +1129,12 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           assignments={assignments}
           arrivals={arrivals}
           departures={departures}
+          activities={activities}
           dateLocale={dateLocale}
           today={today}
           onAssignmentClick={handleEventClick}
           onTransportClick={handleTransportClick}
+          onActivityClick={handleActivityClick}
         />
       )}
 
@@ -1009,6 +1159,13 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         open={isTransportDialogOpen}
         onOpenChange={handleTransportDialogClose}
         transportId={selectedTransportId}
+      />
+
+      {/* Activity Edit Dialog */}
+      <ActivityDialog
+        open={isActivityDialogOpen}
+        onOpenChange={handleActivityDialogClose}
+        activityId={selectedActivityId}
       />
 
       {/* Assignment Edit Dialog */}

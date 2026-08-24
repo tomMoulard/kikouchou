@@ -80,3 +80,12 @@ export {
   rewriteChangesetForTargetTrip,
   rewriteChangesetTripId,
 } from './import-from-changeset';
+
+// Guest identity (who this browser is on a shared trip)
+export {
+  GUEST_IDENTITY_STORAGE_PREFIX,
+  getGuestIdentityStorageKey,
+  readGuestIdentity,
+  getTripGuestPersonId,
+  type StoredGuestIdentity,
+} from './guest-identity';

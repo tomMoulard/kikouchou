@@ -35,6 +35,9 @@ export type RoomAssignmentId = Brand<'RoomAssignmentId'>;
 /** Type-safe Transport identifier (nanoid generated) */
 export type TransportId = Brand<'TransportId'>;
 
+/** Type-safe Activity identifier (nanoid generated) */
+export type ActivityId = Brand<'ActivityId'>;
+
 /** Type-safe Share identifier (shorter nanoid for sharing URLs) */
 export type ShareId = Brand<'ShareId'>;
 
@@ -82,6 +85,78 @@ export type TransportType = 'arrival' | 'departure';
  * Mode of transportation for arrivals and departures.
  */
 export type TransportMode = 'train' | 'plane' | 'car' | 'bus' | 'other';
+
+/**
+ * Kind of shared activity planned during a trip.
+ *
+ * Categories drive the icon and colour used on the activity list, the
+ * activity timeline and the calendar, so guests can scan the agenda at a glance.
+ */
+export type ActivityCategory =
+  | 'horticulture' // Garden visits, plant fairs, greenhouse tours
+  | 'visit'        // Sightseeing, museums, monuments
+  | 'hike'         // Walks, hikes, bike rides
+  | 'beach'        // Beach, pool, swimming
+  | 'sport'        // Sports and games outdoors
+  | 'meal'         // Shared meals, restaurants, barbecues
+  | 'culture'      // Concerts, cinema, festivals
+  | 'market'       // Markets, groceries, shopping
+  | 'workshop'     // Workshops, cooking, crafts
+  | 'other';       // Anything else
+
+/**
+ * All activity categories, in the order they are offered in the form.
+ */
+export const ACTIVITY_CATEGORIES: readonly ActivityCategory[] = [
+  'horticulture',
+  'visit',
+  'hike',
+  'beach',
+  'sport',
+  'meal',
+  'culture',
+  'market',
+  'workshop',
+  'other',
+] as const;
+
+/**
+ * Default category used when none is selected.
+ */
+export const DEFAULT_ACTIVITY_CATEGORY: ActivityCategory = 'other';
+
+/**
+ * Category colour used for activity pills on the calendar and timeline.
+ * Pre-validated hex colours cast to the branded type.
+ */
+export const ACTIVITY_CATEGORY_COLORS: Readonly<Record<ActivityCategory, HexColor>> = {
+  horticulture: '#16a34a' as HexColor, // Green
+  visit: '#0ea5e9' as HexColor,        // Sky
+  hike: '#65a30d' as HexColor,         // Lime
+  beach: '#06b6d4' as HexColor,        // Cyan
+  sport: '#f97316' as HexColor,        // Orange
+  meal: '#e11d48' as HexColor,         // Rose
+  culture: '#8b5cf6' as HexColor,      // Violet
+  market: '#d97706' as HexColor,       // Amber
+  workshop: '#0891b2' as HexColor,     // Teal
+  other: '#6b7280' as HexColor,        // Grey
+} as const;
+
+/**
+ * Returns the display colour for an activity category, falling back to the
+ * neutral colour for records stored with an unknown category.
+ *
+ * @param category - The activity category (may be undefined on legacy records)
+ * @returns A hex colour for the category
+ */
+export function getActivityCategoryColor(
+  category: ActivityCategory | undefined,
+): HexColor {
+  return (
+    (category && ACTIVITY_CATEGORY_COLORS[category]) ??
+    ACTIVITY_CATEGORY_COLORS.other
+  );
+}
 
 /**
  * Room icon type for visual identification across views.
@@ -140,6 +215,7 @@ export interface Identifiable {
  * - For Room: `[tripId+order]`
  * - For RoomAssignment: `[tripId+startDate]`, `[tripId+personId]`, `[tripId+roomId]`
  * - For Transport: `[tripId+datetime]`, `[tripId+personId]`, `[tripId+type]`
+ * - For Activity: `[tripId+startDatetime]`, `[tripId+category]`, `*participantIds`
  */
 export interface TripScoped {
   /** Foreign key reference to the parent Trip */
@@ -561,6 +637,110 @@ export interface Transport extends Identifiable, TripScoped {
 }
 
 /**
+ * A shared activity planned during a trip.
+ *
+ * @description Activities are the trip agenda: a garden fair, a hike, a market
+ * run, a shared meal. Any guest can be listed as a participant, so the group
+ * knows who is joining what and when.
+ *
+ * @see {@link Trip} - Parent entity
+ * @see {@link Person} - Organizer and participants
+ *
+ * @example
+ * ```typescript
+ * const activity: Activity = {
+ *   id: 'act123' as ActivityId,
+ *   tripId: 'trip456' as TripId,
+ *   title: 'Fête des plantes de Saint-Jean',
+ *   category: 'horticulture',
+ *   startDatetime: '2024-07-16T09:00:00.000Z',
+ *   endDatetime: '2024-07-16T12:00:00.000Z',
+ *   allDay: false,
+ *   location: 'Château de Saint-Jean',
+ *   organizerId: 'person789' as PersonId,
+ *   participantIds: ['person789' as PersonId],
+ * };
+ * ```
+ */
+export interface Activity extends Identifiable, TripScoped {
+  /** Unique activity identifier */
+  readonly id: ActivityId;
+
+  /**
+   * Short title shown on the agenda, timeline and calendar.
+   * @example "Fête des plantes de Saint-Jean"
+   */
+  title: string;
+
+  /**
+   * Kind of activity, driving the icon and colour used across views.
+   * @see {@link ActivityCategory}
+   */
+  category: ActivityCategory;
+
+  /**
+   * Start of the activity in ISO 8601 format with timezone.
+   * For all-day activities this is midnight local time on the first day.
+   * @example "2024-07-16T09:00:00.000Z"
+   */
+  startDatetime: ISODateTimeString;
+
+  /**
+   * Optional end of the activity in ISO 8601 format with timezone.
+   * Must be on or after {@link startDatetime}. Multi-day activities are
+   * rendered as a span on the timeline and the calendar.
+   * @example "2024-07-16T12:00:00.000Z"
+   */
+  endDatetime?: ISODateTimeString;
+
+  /**
+   * Whether the activity covers whole days rather than a time slot.
+   * All-day activities hide their times in every view.
+   */
+  allDay: boolean;
+
+  /**
+   * Optional place name (garden, market, trailhead, restaurant…).
+   * @example "Château de Saint-Jean"
+   */
+  location?: string;
+
+  /**
+   * Optional GPS coordinates for the activity location.
+   * Enables the "get directions" action.
+   */
+  coordinates?: {
+    readonly lat: number;
+    readonly lon: number;
+  };
+
+  /**
+   * Guests who signed up for this activity.
+   * Empty means the activity is open and nobody has joined yet.
+   * @see {@link Person}
+   */
+  participantIds: PersonId[];
+
+  /**
+   * Optional guest who proposed and leads the activity.
+   * @see {@link Person}
+   */
+  organizerId?: PersonId;
+
+  /**
+   * Optional cap on the number of participants (e.g. seats in a car,
+   * tickets booked). Undefined means unlimited.
+   */
+  maxParticipants?: number;
+
+  /**
+   * Free-text notes: booking links, price, what to bring…
+   * @example "10 € l'entrée. Prévoir des bottes."
+   */
+  notes?: string;
+}
+
+/**
  * Application settings stored as a singleton record.
  *
  * @description Stores user preferences and application state.
@@ -723,6 +903,40 @@ export interface TransportFormData {
   notes?: string;
 }
 
+/**
+ * Data required to create or update an Activity.
+ * Excludes auto-generated fields (id, tripId).
+ *
+ * @see {@link Activity}
+ */
+export interface ActivityFormData {
+  /** Short title shown on the agenda */
+  title: string;
+  /** Kind of activity */
+  category: ActivityCategory;
+  /** Start in ISO 8601 format with timezone */
+  startDatetime: ISODateTimeString;
+  /** Optional end in ISO 8601 format with timezone */
+  endDatetime?: ISODateTimeString;
+  /** Whether the activity covers whole days */
+  allDay: boolean;
+  /** Optional place name */
+  location?: string;
+  /** Optional GPS coordinates for the activity location */
+  coordinates?: {
+    readonly lat: number;
+    readonly lon: number;
+  };
+  /** Guests who signed up */
+  participantIds: PersonId[];
+  /** Optional guest leading the activity */
+  organizerId?: PersonId;
+  /** Optional cap on participants */
+  maxParticipants?: number;
+  /** Free-text notes */
+  notes?: string;
+}
+
 // ============================================================================
 // Utility Types for Common Operations
 // ============================================================================
@@ -730,7 +944,7 @@ export interface TransportFormData {
 /**
  * Union of all trip-scoped entity types.
  */
-export type TripEntity = Room | Person | RoomAssignment | Transport;
+export type TripEntity = Room | Person | RoomAssignment | Transport | Activity;
 
 /**
  * Union of all entity types in the application.
@@ -854,6 +1068,12 @@ export function normalizePersonHeadcount(value: number | undefined): number {
 export function getPersonHeadcount(person: { readonly headcount?: number }): number {
   return normalizePersonHeadcount(person.headcount);
 }
+
+/**
+ * Largest number of participants a single activity may cap itself at.
+ * Beyond that the cap is meaningless and treated as "unlimited".
+ */
+export const MAX_ACTIVITY_PARTICIPANTS = 999;
 
 /**
  * Default application settings.

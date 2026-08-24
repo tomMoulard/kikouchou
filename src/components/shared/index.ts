@@ -83,6 +83,9 @@ export type { PersonBadgeProps } from './PersonBadge';
 export { TransportIcon } from './TransportIcon';
 export type { TransportIconProps } from './TransportIcon';
 
+export { ActivityCategoryIcon } from './ActivityCategoryIcon';
+export type { ActivityCategoryIconProps } from './ActivityCategoryIcon';
+
 // ============================================================================
 // Map Components
 // ============================================================================

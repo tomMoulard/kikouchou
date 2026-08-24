@@ -12,6 +12,7 @@ import { Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { CalendarDayProps, CalendarEvent } from '../types';
 import { MAX_VISIBLE_EVENT_SLOTS } from '../utils/calendar-utils';
+import { ActivityIndicator } from './ActivityIndicator';
 import { CalendarEventPill } from './CalendarEventPill';
 import { TransportIndicator } from './TransportIndicator';
 
@@ -24,6 +25,7 @@ const CalendarDay = memo(function CalendarDay({
   date,
   events,
   transports,
+  activities,
   headcount,
   isCurrentMonth,
   isToday,
@@ -32,6 +34,7 @@ const CalendarDay = memo(function CalendarDay({
   tabIndex,
   onEventClick,
   onTransportClick,
+  onActivityClick,
   onDayFocus,
   onDayKeyDown,
   dayRef,
@@ -62,6 +65,10 @@ const CalendarDay = memo(function CalendarDay({
   const visibleTransports = transports.slice(0, maxVisibleTransports);
   const hiddenTransportCount = transports.length - visibleTransports.length;
 
+  const maxVisibleActivities = 2;
+  const visibleActivities = activities.slice(0, maxVisibleActivities);
+  const hiddenActivityCount = activities.length - visibleActivities.length;
+
   // For events, we show up to MAX_VISIBLE_EVENT_SLOTS slots
   // Events in higher slots get hidden (events are already sorted by slotIndex)
   const visibleEvents = useMemo(() => {
@@ -76,7 +83,7 @@ const CalendarDay = memo(function CalendarDay({
   }, [events]);
 
   const hiddenEventCount = events.length - visibleEvents.length;
-  const totalHiddenCount = hiddenTransportCount + hiddenEventCount;
+  const totalHiddenCount = hiddenTransportCount + hiddenEventCount + hiddenActivityCount;
 
   const peopleOnSite = headcount?.people ?? 0;
 
@@ -199,9 +206,18 @@ const CalendarDay = memo(function CalendarDay({
         )}
       </div>
 
-      {/* Content area with events and transports */}
+      {/* Content area with activities, transports and stays */}
       <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
-        {/* Transports (arrivals/departures) - shown at top */}
+        {/* Activities (the shared agenda) - shown at top */}
+        {visibleActivities.map((calendarActivity) => (
+          <ActivityIndicator
+            key={calendarActivity.activity.id}
+            activity={calendarActivity}
+            onClick={onActivityClick}
+          />
+        ))}
+
+        {/* Transports (arrivals/departures) */}
         {visibleTransports.map((transport) => (
           <TransportIndicator
             key={transport.transport.id}

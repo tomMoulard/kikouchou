@@ -7,6 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { CalendarTimeline } from '../CalendarTimeline';
 import type {
+  Activity,
   HexColor,
   ISODateString,
   Person,
@@ -92,6 +93,7 @@ describe('CalendarTimeline', () => {
     assignments: [] as RoomAssignment[],
     arrivals: [] as Transport[],
     departures: [] as Transport[],
+    activities: [] as Activity[],
     dateLocale: enUS,
     today: new Date('2026-01-07'),
     onAssignmentClick: vi.fn(),

@@ -8,8 +8,14 @@
  */
 
 import { z } from 'zod';
-import { MAX_PERSON_HEADCOUNT, MIN_PERSON_HEADCOUNT } from '@/types';
+import {
+  ACTIVITY_CATEGORIES,
+  MAX_ACTIVITY_PARTICIPANTS,
+  MAX_PERSON_HEADCOUNT,
+  MIN_PERSON_HEADCOUNT,
+} from '@/types';
 import type {
+  ActivityCategory,
   HexColor,
   ISODateString,
   PersonId,
@@ -110,6 +116,13 @@ export const transportModeSchema = z.enum([
   'bus',
   'other',
 ]) satisfies z.ZodType<TransportMode>;
+
+/**
+ * Activity category validator.
+ */
+export const activityCategorySchema = z.enum(
+  ACTIVITY_CATEGORIES as unknown as [ActivityCategory, ...ActivityCategory[]],
+) satisfies z.ZodType<ActivityCategory>;
 
 /**
  * Branded ID schema factory.
@@ -309,6 +322,69 @@ export const TransportFormDataSchema = z.object({
     .optional(),
 });
 
+/**
+ * Activity form data schema.
+ *
+ * Validates:
+ * - title: required, 1-100 characters
+ * - category: required, valid activity category
+ * - startDatetime: required, valid ISO datetime
+ * - endDatetime: optional, valid ISO datetime, must be >= startDatetime
+ * - allDay: required, boolean
+ * - location: optional, max 200 characters
+ * - coordinates: optional GPS coordinates
+ * - participantIds: required array of person IDs (may be empty)
+ * - organizerId: optional, valid person ID
+ * - maxParticipants: optional, whole number >= 1
+ * - notes: optional, max 1000 characters
+ */
+export const ActivityFormDataSchema = z
+  .object({
+    title: z
+      .string()
+      .min(1, 'Title is required')
+      .max(100, 'Title must be 100 characters or less'),
+    category: activityCategorySchema,
+    startDatetime: isoDateTimeStringSchema,
+    endDatetime: isoDateTimeStringSchema.optional(),
+    allDay: z.boolean(),
+    location: z
+      .string()
+      .max(200, 'Location must be 200 characters or less')
+      .optional(),
+    coordinates: coordinatesSchema.optional(),
+    participantIds: z.array(personIdSchema),
+    organizerId: personIdSchema.optional(),
+    maxParticipants: z
+      .number()
+      .int('Participant cap must be a whole number')
+      .min(1, 'Participant cap must be at least 1')
+      .max(MAX_ACTIVITY_PARTICIPANTS, `Participant cap must be ${MAX_ACTIVITY_PARTICIPANTS} or less`)
+      .optional(),
+    notes: z
+      .string()
+      .max(1000, 'Notes must be 1000 characters or less')
+      .optional(),
+  })
+  .refine(
+    (data) =>
+      data.endDatetime === undefined ||
+      new Date(data.endDatetime).getTime() >= new Date(data.startDatetime).getTime(),
+    {
+      message: 'End must be on or after start',
+      path: ['endDatetime'],
+    },
+  )
+  .refine(
+    (data) =>
+      data.maxParticipants === undefined ||
+      data.participantIds.length <= data.maxParticipants,
+    {
+      message: 'There are more participants than the cap allows',
+      path: ['maxParticipants'],
+    },
+  );
+
 // ============================================================================
 // Type Exports
 // ============================================================================
@@ -324,3 +400,4 @@ export type RoomAssignmentFormDataInput = z.input<
   typeof RoomAssignmentFormDataSchema
 >;
 export type TransportFormDataInput = z.input<typeof TransportFormDataSchema>;
+export type ActivityFormDataInput = z.input<typeof ActivityFormDataSchema>;

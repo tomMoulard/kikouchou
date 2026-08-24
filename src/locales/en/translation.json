@@ -49,7 +49,8 @@
     "assistant": "AI Assistant",
     "syncOnlineCount": "{{count}} online",
     "syncPresenceRegion": "Collaboration status",
-    "tripAnalytics": "Analytics"
+    "tripAnalytics": "Analytics",
+    "activities": "Activities"
   },
   "analytics": {
     "tripTitle": "Trip analytics",
@@ -292,6 +293,80 @@
     "locationsCount": "{{count}} location(s)",
     "mapAriaLabel": "Map showing transport locations"
   },
+  "activities": {
+    "title": "Activities",
+    "title_field": "Title",
+    "titlePlaceholder": "E.g. Saint-Jean plant fair",
+    "new": "New activity",
+    "edit": "Edit activity",
+    "newDescription": "Fill in the details to add an activity to the agenda.",
+    "editDescription": "Change the activity details below.",
+    "category": "Kind of activity",
+    "categories": {
+      "horticulture": "Gardens & plants",
+      "visit": "Visit",
+      "hike": "Walk & hike",
+      "beach": "Beach & swimming",
+      "sport": "Sport",
+      "meal": "Meal",
+      "culture": "Culture & shows",
+      "market": "Market & shopping",
+      "workshop": "Workshop",
+      "other": "Other"
+    },
+    "allDay": "All day",
+    "allDayDescription": "The activity fills one or more whole days, with no set time.",
+    "start": "Start",
+    "end": "End",
+    "endHint": "Optional. Leave empty for an activity with no set end.",
+    "location": "Location",
+    "locationPlaceholder": "E.g. Château de Saint-Jean",
+    "organizer": "Organizer",
+    "organizerPlaceholder": "Who is proposing this?",
+    "organizedBy": "Organized by {{name}}",
+    "participants": "Participants",
+    "participantsDescription": "Pick who is coming. Guests can also sign themselves up.",
+    "participantCount_one": "{{count}} participant",
+    "participantCount_other": "{{count}} participants",
+    "noParticipants": "Nobody has signed up yet",
+    "maxParticipants": "Seats",
+    "maxParticipantsPlaceholder": "Unlimited",
+    "full": "Full",
+    "join": "Join",
+    "leave": "Leave",
+    "joined": "You're in",
+    "left": "You left this activity",
+    "notes": "Notes",
+    "notesPlaceholder": "Price, booking, what to bring...",
+    "empty": "No activity planned yet",
+    "emptyDescription": "Add outings, visits and shared meals so everyone knows what's on and can sign up",
+    "pastActivities": "Past activities",
+    "createSuccess": "Activity created successfully",
+    "updateSuccess": "Activity updated successfully",
+    "deleteSuccess": "Activity deleted successfully",
+    "view": {
+      "ariaLabel": "Agenda view",
+      "list": "List",
+      "timeline": "Timeline"
+    },
+    "timeline": {
+      "ariaLabel": "Activity timeline",
+      "categories": "Categories",
+      "rows": "Timeline rows",
+      "categoryRow": "{{category}} timeline",
+      "barAria": "{{title}}. {{when}}. {{participants}} participants.",
+      "hiddenCount_one": "{{count}} activity falls outside the trip dates and is not shown.",
+      "hiddenCount_other": "{{count}} activities fall outside the trip dates and are not shown.",
+      "allOutsideTrip_one": "The only activity recorded falls outside the trip dates.",
+      "allOutsideTrip_other": "All {{count}} activities fall outside the trip dates."
+    },
+    "errors": {
+      "endBeforeStart": "The end must be after the start",
+      "invalidCap": "The seat count must be at least 1",
+      "capBelowParticipants": "There are already more participants than this cap",
+      "participationFailed": "Could not update your sign-up"
+    }
+  },
   "upcomingPickups": {
     "empty": "No pickups needed right now — everyone's sorted!",
     "overdue": "Overdue",
@@ -351,7 +426,8 @@
       "assignmentBarAria": "{{room}}. Stay {{range}}.",
       "guestHeadcount_one": "Counts as {{count}} person",
       "guestHeadcount_other": "Counts as {{count}} people"
-    }
+    },
+    "viewActivityDetails": "View activity {{title}} ({{category}}), {{participants}} participants"
   },
   "sharing": {
     "title": "Share trip",
@@ -618,7 +694,9 @@
     "removeAssignment": "Remove this room assignment?",
     "removeAssignmentDescription": "The guest will be unassigned from this room for the selected dates.",
     "clearAllData": "Clear all application data?",
-    "clearAllDataDescription": "This will permanently erase all trips, rooms, participants, transports, and settings from this device. This cannot be undone."
+    "clearAllDataDescription": "This will permanently erase all trips, rooms, participants, transports, and settings from this device. This cannot be undone.",
+    "deleteActivity": "Delete this activity?",
+    "deleteActivityDescription": "This activity will be removed from the trip agenda. This cannot be undone."
   },
   "unsaved": {
     "title": "Unsaved changes",
@@ -645,7 +723,8 @@
     "transportNotFound": "Transport not found. Please try again.",
     "loadingFailed": "Failed to load",
     "saveFailed": "Failed to save",
-    "deleteFailed": "Failed to delete"
+    "deleteFailed": "Failed to delete",
+    "activityNotFound": "Activity not found. Please try again."
   },
   "pwa": {
     "install": "Install app",

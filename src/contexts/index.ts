@@ -16,6 +16,7 @@
  *   usePersonContext,
  *   useAssignmentContext,
  *   useTransportContext,
+ *   useActivityContext,
  * } from '@/contexts';
  * ```
  */
@@ -80,6 +81,17 @@ export {
   useTransportContext,
   type TransportContextValue,
 } from './TransportContext';
+
+// ============================================================================
+// Activity Context
+// ============================================================================
+
+export {
+  ActivityProvider,
+  ActivityContext,
+  useActivityContext,
+  type ActivityContextValue,
+} from './ActivityContext';
 
 // ============================================================================
 // Sync presence (Yjs awareness count for Layout)

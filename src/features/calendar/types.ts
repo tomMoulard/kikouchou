@@ -9,6 +9,7 @@ import type { KeyboardEvent } from 'react';
 import type { Locale } from 'date-fns/locale';
 import type { DailyHeadcount } from './utils/headcount-utils';
 import type {
+  Activity,
   HexColor,
   ISODateString,
   Person,
@@ -78,6 +79,20 @@ export interface CalendarTransport {
   readonly color: HexColor;
 }
 
+/**
+ * Activity data enriched for calendar display.
+ */
+export interface CalendarActivity {
+  /** The underlying activity */
+  readonly activity: Activity;
+  /** Category colour used for the pill */
+  readonly color: HexColor;
+  /** Whether this cell is the first day of a multi-day activity */
+  readonly isSpanStart: boolean;
+  /** Whether this cell is the last day of a multi-day activity */
+  readonly isSpanEnd: boolean;
+}
+
 // ============================================================================
 // Component Props Types
 // ============================================================================
@@ -108,6 +123,8 @@ export interface CalendarDayProps {
   readonly date: Date;
   readonly events: readonly CalendarEvent[];
   readonly transports: readonly CalendarTransport[];
+  /** Activities overlapping this day */
+  readonly activities: readonly CalendarActivity[];
   /** People on site that night (meal planning); omitted when nobody is there */
   readonly headcount?: DailyHeadcount;
   readonly isCurrentMonth: boolean;
@@ -118,6 +135,8 @@ export interface CalendarDayProps {
   readonly onEventClick: (assignment: RoomAssignment) => void;
   /** Callback when a transport event is clicked */
   readonly onTransportClick?: (transport: CalendarTransport) => void;
+  /** Callback when an activity is clicked */
+  readonly onActivityClick?: (activity: Activity) => void;
   readonly onDayFocus?: (dateKey: ISODateString) => void;
   readonly onDayKeyDown?: (
     event: KeyboardEvent<HTMLDivElement>,
@@ -142,6 +161,15 @@ export interface TransportIndicatorProps {
   readonly type: TransportType;
   /** Callback when the transport is clicked */
   readonly onClick?: (transport: CalendarTransport) => void;
+}
+
+/**
+ * Props for the ActivityIndicator subcomponent.
+ */
+export interface ActivityIndicatorProps {
+  readonly activity: CalendarActivity;
+  /** Callback when the activity is clicked */
+  readonly onClick?: (activity: Activity) => void;
 }
 
 // ============================================================================
@@ -217,6 +245,8 @@ export interface CalendarTimelineProps {
   readonly assignments: readonly RoomAssignment[];
   readonly arrivals: readonly Transport[];
   readonly departures: readonly Transport[];
+  /** Shared agenda, drawn as category bands under the guest rows */
+  readonly activities: readonly Activity[];
   readonly dateLocale: Locale;
   readonly today: Date;
   readonly onAssignmentClick: (
@@ -224,4 +254,5 @@ export interface CalendarTimelineProps {
     relatedTransports?: readonly Transport[],
   ) => void;
   readonly onTransportClick?: (transport: CalendarTransport) => void;
+  readonly onActivityClick?: (activity: Activity) => void;
 }

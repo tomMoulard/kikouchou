@@ -188,7 +188,7 @@ export async function deletePerson(id: PersonId): Promise<void> {
   try {
     await db.transaction(
       'rw',
-      [db.persons, db.roomAssignments, db.transports],
+      [db.persons, db.roomAssignments, db.transports, db.activities],
       async () => {
         // Delete related records in parallel
         await Promise.all([
@@ -203,6 +203,9 @@ export async function deletePerson(id: PersonId): Promise<void> {
             .where('driverId')
             .equals(id)
             .modify({ driverId: undefined }),
+
+          // Drop the guest from every activity they had joined or organized
+          removePersonFromActivities(id),
         ]);
 
         // Delete the person
@@ -324,7 +327,7 @@ export async function deletePersonWithOwnershipCheck(
 ): Promise<void> {
   await db.transaction(
     'rw',
-    [db.persons, db.roomAssignments, db.transports],
+    [db.persons, db.roomAssignments, db.transports, db.activities],
     async () => {
       const person = await db.persons.get(id);
 
@@ -348,10 +351,40 @@ export async function deletePersonWithOwnershipCheck(
           .where('driverId')
           .equals(id)
           .modify({ driverId: undefined }),
+
+        // Drop the guest from every activity they had joined or organized
+        removePersonFromActivities(id),
       ]);
 
       // Delete the person
       await db.persons.delete(id);
     },
   );
+}
+
+/**
+ * Removes a guest from the shared agenda: drops them from every activity's
+ * participant list and clears them as organizer.
+ *
+ * Activities themselves are kept — an outing does not disappear because the
+ * person who proposed it left the trip.
+ *
+ * @param id - The person being deleted
+ *
+ * @internal Called from within the person delete transactions.
+ */
+async function removePersonFromActivities(id: PersonId): Promise<void> {
+  await db.activities
+    .where('participantIds')
+    .equals(id)
+    .modify((activity) => {
+      activity.participantIds = (activity.participantIds ?? []).filter(
+        (participantId) => participantId !== id,
+      );
+    });
+
+  await db.activities
+    .where('organizerId')
+    .equals(id)
+    .modify({ organizerId: undefined });
 }

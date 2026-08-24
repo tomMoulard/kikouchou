@@ -30,6 +30,7 @@ import {
   MapPin,
   Menu,
   MoreHorizontal,
+  PartyPopper,
   Settings,
   Sparkles,
   Users,
@@ -100,6 +101,7 @@ const TRIP_NAV_ITEMS: readonly NavItem[] = [
   { labelKey: 'nav.rooms', pathSuffix: 'rooms', icon: Home, requiresTrip: true },
   { labelKey: 'nav.persons', pathSuffix: 'persons', icon: Users, requiresTrip: true },
   { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
+  { labelKey: 'nav.activities', pathSuffix: 'activities', icon: PartyPopper, requiresTrip: true },
   { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: BarChart2, requiresTrip: true },
 ] as const;
 
@@ -131,13 +133,23 @@ const ASSISTANT_NAV_ITEM: NavItem = {
 };
 
 /**
+ * Trip sections kept out of the mobile bottom bar, in the order they appear
+ * inside the "More" sheet. The bar holds 3 trip items + "More".
+ */
+const MOBILE_SECONDARY_TRIP_PATHS: readonly string[] = [
+  'persons',
+  'activities',
+  'analytics',
+];
+
+/**
  * Primary mobile bottom nav items (max 4 for UX: 3 trip items + "More").
  * Calendar, Rooms, Transports are directly accessible.
- * Persons, Trips, Settings are inside the "More" sheet.
+ * Persons, Activities, Analytics, Trips, Settings are inside the "More" sheet.
  * Derived from canonical arrays to avoid duplication.
  */
 const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] = TRIP_NAV_ITEMS.filter(
-  (item) => item.pathSuffix !== 'persons' && item.pathSuffix !== 'analytics',
+  (item) => !MOBILE_SECONDARY_TRIP_PATHS.includes(item.pathSuffix),
 );
 
 /**
@@ -145,8 +157,9 @@ const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] = TRIP_NAV_ITEMS.filter(
  * Derived from canonical arrays to avoid duplication.
  */
 const MOBILE_MORE_NAV_ITEMS: readonly NavItem[] = [
-  TRIP_NAV_ITEMS.find((item) => item.pathSuffix === 'persons')!,
-  TRIP_NAV_ITEMS.find((item) => item.pathSuffix === 'analytics')!,
+  ...MOBILE_SECONDARY_TRIP_PATHS.map(
+    (pathSuffix) => TRIP_NAV_ITEMS.find((item) => item.pathSuffix === pathSuffix)!,
+  ),
   ...GLOBAL_NAV_ITEMS,
   ASSISTANT_NAV_ITEM,
   SETTINGS_NAV_ITEM,

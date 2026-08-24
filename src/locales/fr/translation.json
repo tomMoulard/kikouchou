@@ -49,7 +49,8 @@
     "assistant": "Assistant IA",
     "syncOnlineCount": "{{count}} en ligne",
     "syncPresenceRegion": "État de la collaboration",
-    "tripAnalytics": "Analyses"
+    "tripAnalytics": "Analyses",
+    "activities": "Activités"
   },
   "analytics": {
     "tripTitle": "Analyses du voyage",
@@ -292,6 +293,80 @@
     "locationsCount": "{{count}} lieu(x)",
     "mapAriaLabel": "Carte montrant les lieux de transport"
   },
+  "activities": {
+    "title": "Activités",
+    "title_field": "Titre",
+    "titlePlaceholder": "Ex. : Fête des plantes de Saint-Jean",
+    "new": "Nouvelle activité",
+    "edit": "Modifier l'activité",
+    "newDescription": "Remplissez les informations pour ajouter une activité à l'agenda.",
+    "editDescription": "Modifiez les informations de l'activité ci-dessous.",
+    "category": "Type d'activité",
+    "categories": {
+      "horticulture": "Jardins & plantes",
+      "visit": "Visite",
+      "hike": "Balade & randonnée",
+      "beach": "Plage & baignade",
+      "sport": "Sport",
+      "meal": "Repas",
+      "culture": "Culture & spectacle",
+      "market": "Marché & courses",
+      "workshop": "Atelier",
+      "other": "Autre"
+    },
+    "allDay": "Journée entière",
+    "allDayDescription": "L'activité occupe une ou plusieurs journées complètes, sans horaire précis.",
+    "start": "Début",
+    "end": "Fin",
+    "endHint": "Facultatif. Laissez vide pour une activité sans heure de fin.",
+    "location": "Lieu",
+    "locationPlaceholder": "Ex. : Château de Saint-Jean",
+    "organizer": "Organisateur",
+    "organizerPlaceholder": "Qui propose cette activité ?",
+    "organizedBy": "Proposé par {{name}}",
+    "participants": "Participants",
+    "participantsDescription": "Sélectionnez les personnes qui participent. Chacun peut aussi s'inscrire lui-même.",
+    "participantCount_one": "{{count}} participant",
+    "participantCount_other": "{{count}} participants",
+    "noParticipants": "Personne ne s'est encore inscrit",
+    "maxParticipants": "Nombre de places",
+    "maxParticipantsPlaceholder": "Illimité",
+    "full": "Complet",
+    "join": "Je participe",
+    "leave": "Me désinscrire",
+    "joined": "Inscription enregistrée",
+    "left": "Désinscription enregistrée",
+    "notes": "Notes",
+    "notesPlaceholder": "Prix, réservation, quoi prévoir...",
+    "empty": "Aucune activité prévue pour l'instant",
+    "emptyDescription": "Ajoutez les sorties, visites et repas partagés pour que chacun sache quoi faire et puisse s'inscrire",
+    "pastActivities": "Activités passées",
+    "createSuccess": "Activité créée avec succès",
+    "updateSuccess": "Activité mise à jour avec succès",
+    "deleteSuccess": "Activité supprimée avec succès",
+    "view": {
+      "ariaLabel": "Vue de l'agenda",
+      "list": "Liste",
+      "timeline": "Frise"
+    },
+    "timeline": {
+      "ariaLabel": "Frise des activités",
+      "categories": "Types",
+      "rows": "Lignes de la frise",
+      "categoryRow": "Frise {{category}}",
+      "barAria": "{{title}}. {{when}}. {{participants}} participants.",
+      "hiddenCount_one": "{{count}} activité en dehors des dates du voyage n'est pas affichée.",
+      "hiddenCount_other": "{{count}} activités en dehors des dates du voyage ne sont pas affichées.",
+      "allOutsideTrip_one": "La seule activité enregistrée est en dehors des dates du voyage.",
+      "allOutsideTrip_other": "Les {{count}} activités enregistrées sont en dehors des dates du voyage."
+    },
+    "errors": {
+      "endBeforeStart": "La fin doit être après le début",
+      "invalidCap": "Le nombre de places doit être d'au moins 1",
+      "capBelowParticipants": "Il y a déjà plus de participants que ce nombre de places",
+      "participationFailed": "Impossible de mettre à jour votre inscription"
+    }
+  },
   "upcomingPickups": {
     "empty": "Aucun transport à prévoir — tout le monde est organisé !",
     "overdue": "En retard",
@@ -351,7 +426,8 @@
       "assignmentBarAria": "{{room}}. Séjour {{range}}.",
       "guestHeadcount_one": "Compte pour {{count}} personne",
       "guestHeadcount_other": "Compte pour {{count}} personnes"
-    }
+    },
+    "viewActivityDetails": "Voir l'activité {{title}} ({{category}}), {{participants}} participants"
   },
   "sharing": {
     "title": "Partager le voyage",
@@ -618,7 +694,9 @@
     "removeAssignment": "Retirer cette attribution ?",
     "removeAssignmentDescription": "Le participant sera désattribué de cette chambre pour les dates sélectionnées.",
     "clearAllData": "Effacer toutes les données ?",
-    "clearAllDataDescription": "Cela effacera définitivement tous les voyages, chambres, participants, transports et paramètres de cet appareil. Cette action est irréversible."
+    "clearAllDataDescription": "Cela effacera définitivement tous les voyages, chambres, participants, transports et paramètres de cet appareil. Cette action est irréversible.",
+    "deleteActivity": "Supprimer l'activité ?",
+    "deleteActivityDescription": "Cette activité sera retirée de l'agenda du voyage. Cette action est irréversible."
   },
   "unsaved": {
     "title": "Modifications non enregistrées",
@@ -645,7 +723,8 @@
     "transportNotFound": "Transport non trouvé. Veuillez réessayer.",
     "loadingFailed": "Échec du chargement",
     "saveFailed": "Échec de l'enregistrement",
-    "deleteFailed": "Échec de la suppression"
+    "deleteFailed": "Échec de la suppression",
+    "activityNotFound": "Activité introuvable. Veuillez réessayer."
   },
   "pwa": {
     "install": "Installer l'application",

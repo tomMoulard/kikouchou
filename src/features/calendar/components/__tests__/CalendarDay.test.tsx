@@ -66,6 +66,7 @@ function makeDefaultProps(overrides: Partial<CalendarDayProps> = {}): CalendarDa
     date: new Date(2026, 6, 15),
     events: [],
     transports: [],
+    activities: [],
     isCurrentMonth: true,
     isToday: false,
     isWithinTrip: true,

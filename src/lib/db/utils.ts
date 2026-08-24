@@ -10,6 +10,7 @@
 
 import { nanoid } from 'nanoid';
 import type {
+  ActivityId,
   HexColor,
   ISODateString,
   ISODateTimeString,
@@ -67,6 +68,18 @@ export const createRoomAssignmentId = (): RoomAssignmentId =>
  * const transportId = createTransportId();
  */
 export const createTransportId = (): TransportId => nanoid() as TransportId;
+
+/**
+ * Creates a new Activity ID.
+ *
+ * @returns A branded ActivityId
+ *
+ * @example
+ * ```typescript
+ * const activityId = createActivityId();
+ * ```
+ */
+export const createActivityId = (): ActivityId => nanoid() as ActivityId;
 
 /**
  * Creates a new unique Share ID for trip sharing URLs.
