@@ -27,7 +27,72 @@ function createTrip(): Trip {
 }
 
 describe('buildCalendarTimelineModel', () => {
-  it('allocates two lanes for overlapping items in the same person row', () => {
+  it('allocates two lanes for overlapping stays in different rooms', () => {
+    const trip = createTrip();
+    const person: Person = {
+      id: 'p1' as Person['id'],
+      tripId: trip.id,
+      name: 'Alex',
+      color: '#3b82f6' as HexColor,
+    };
+
+    const room1: Room = {
+      id: 'r1' as Room['id'],
+      tripId: trip.id,
+      name: 'Room 1',
+      capacity: 2,
+      order: 0,
+    };
+
+    const room2: Room = {
+      id: 'r2' as Room['id'],
+      tripId: trip.id,
+      name: 'Room 2',
+      capacity: 2,
+      order: 1,
+    };
+
+    const a1: RoomAssignment = {
+      id: 'a1' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room1.id,
+      personId: person.id,
+      startDate: iso('2026-04-01'),
+      endDate: iso('2026-04-04'), // nights 1-3
+    };
+
+    const a2: RoomAssignment = {
+      id: 'a2' as RoomAssignment['id'],
+      tripId: trip.id,
+      roomId: room2.id,
+      personId: person.id,
+      startDate: iso('2026-04-02'),
+      endDate: iso('2026-04-05'), // nights 2-4, overlaps a1
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip,
+      persons: [person],
+      rooms: [room1, room2],
+      assignments: [a1, a2],
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+
+    expect(model.rows).toHaveLength(1);
+    expect(model.rows[0]?.laneCount).toBe(2);
+
+    const laneIndices = model.rows[0]!.items
+      .filter((i) => i.kind === 'assignment')
+      .map((i) => i.laneIndex);
+
+    expect(new Set(laneIndices).size).toBe(2);
+  });
+
+  it('merges overlapping stays in the same room into a single bar', () => {
+    // Two DB rows for one room (e.g. checkout then re-check-in the same night)
+    // are one continuous stay to the guest, so they render as one pill.
     const trip = createTrip();
     const person: Person = {
       id: 'p1' as Person['id'],
@@ -59,7 +124,7 @@ describe('buildCalendarTimelineModel', () => {
       roomId: room.id,
       personId: person.id,
       startDate: iso('2026-04-02'),
-      endDate: iso('2026-04-05'), // nights 2-4 overlaps
+      endDate: iso('2026-04-05'), // nights 2-4, overlaps a1
     };
 
     const model = buildCalendarTimelineModel({
@@ -72,14 +137,13 @@ describe('buildCalendarTimelineModel', () => {
       unknownLabel: 'Unknown',
     });
 
-    expect(model.rows).toHaveLength(1);
-    expect(model.rows[0]?.laneCount).toBe(2);
+    const assignmentItems = model.rows[0]!.items.filter((i) => i.kind === 'assignment');
 
-    const laneIndices = model.rows[0]!.items
-      .filter((i) => i.kind === 'assignment')
-      .map((i) => i.laneIndex);
-
-    expect(new Set(laneIndices).size).toBe(2);
+    expect(assignmentItems).toHaveLength(1);
+    expect(model.rows[0]?.laneCount).toBe(1);
+    // The merged bar spans the union of both rows: nights 1 through 4
+    expect(assignmentItems[0]?.startIndex).toBe(0);
+    expect(assignmentItems[0]?.endIndex).toBe(3);
   });
 
   it('treats assignment endDate as checkout and renders nights until endDate-1', () => {
