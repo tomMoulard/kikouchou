@@ -41,6 +41,14 @@ function getRootElement(): HTMLElement {
  * 2. Ensures database settings exist (required for liveQuery read-only operations)
  * 3. Renders the React application
  */
+/**
+ * How long to wait for the database before rendering anyway.
+ *
+ * Only reached when IndexedDB is genuinely blocked (another tab on an older
+ * schema); the normal path resolves in milliseconds.
+ */
+const DB_READY_TIMEOUT_MS = 3000;
+
 async function initializeApp(): Promise<void> {
   const rootElement = getRootElement();
 
@@ -55,7 +63,18 @@ async function initializeApp(): Promise<void> {
   try {
     // Ensure settings exist in database before app renders.
     // This prevents write operations inside liveQuery contexts.
-    await ensureSettings();
+    //
+    // Raced against a timeout on purpose: db.open() can block indefinitely
+    // behind another tab holding an older schema version, and a promise that
+    // never settles would leave the user on a blank page with no error, because
+    // createRoot().render() below is never reached. Rendering slightly early is
+    // safe — getSettings() falls back to defaults.
+    await Promise.race([
+      ensureSettings(),
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, DB_READY_TIMEOUT_MS);
+      }),
+    ]);
   } catch (error) {
     // Log error but continue - getSettings() returns defaults if DB is unavailable
     console.error('Database initialization failed:', error);
