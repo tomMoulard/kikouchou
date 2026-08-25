@@ -344,6 +344,7 @@
     "createSuccess": "Activité créée avec succès",
     "updateSuccess": "Activité mise à jour avec succès",
     "deleteSuccess": "Activité supprimée avec succès",
+    "participationUpdated": "Inscriptions mises à jour",
     "view": {
       "ariaLabel": "Vue de l'agenda",
       "list": "Liste",
@@ -616,6 +617,8 @@
     "changesApplied_other": "{{count}} modifications appliquées",
     "noTripForAction": "Sélectionnez ou créez d'abord un voyage.",
     "selectTripNotFound": "Ce voyage est introuvable.",
+    "activityNotFound": "Cette activité est introuvable.",
+    "invalidActivity": "Ces informations d'activité sont invalides, rien n'a été enregistré.",
     "tripSwitched": "Passage à {{name}}",
     "models": {
       "gemma-3-1b": {
@@ -652,7 +655,12 @@
       "assignRoom": "Attribué {{person}} → {{room}} ({{start}} – {{end}})",
       "removeAssignment": "Attribution retirée : {{person}} ↔ {{room}}",
       "addTransport": "Transport ajouté ({{type}}) pour {{person}} — {{location}}",
-      "removeTransport": "Transport supprimé : {{label}}"
+      "removeTransport": "Transport supprimé : {{label}}",
+      "addActivity": "Activité ajoutée : {{title}}",
+      "updateActivity": "Activité {{title}} mise à jour ({{fields}})",
+      "removeActivity": "Activité supprimée : {{title}}",
+      "joinActivity": "{{person}} participe à {{title}}",
+      "leaveActivity": "{{person}} ne participe plus à {{title}}"
     },
     "initializingCachedLoader": "Initialisation du modèle en cache…",
     "loadingCachedModelFiles": "Chargement des fichiers du modèle depuis le cache…"

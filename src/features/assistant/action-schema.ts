@@ -8,12 +8,18 @@
  * @module features/assistant/action-schema
  */
 
+import { ACTIVITY_CATEGORIES } from '@/types';
+
 // ============================================================================
 // Schema Primitive Types
 // ============================================================================
 
-/** JSON-serialisable field types the LLM can produce. */
-type FieldType = 'string' | 'number' | 'boolean';
+/**
+ * JSON-serialisable field types the LLM can produce.
+ * `string[]` accepts a JSON array of strings (a comma-separated string is
+ * coerced, because small models often flatten arrays).
+ */
+type FieldType = 'string' | 'number' | 'boolean' | 'string[]';
 
 /** Definition of a single field inside an action's `data` object. */
 export interface ActionFieldDef {
@@ -24,7 +30,7 @@ export interface ActionFieldDef {
   /** Human-readable description shown to the LLM */
   readonly description: string;
   /** Example value used in the generated prompt */
-  readonly example: string | number | boolean;
+  readonly example: string | number | boolean | readonly string[];
   /** Allowed values (for string enums) */
   readonly enum?: readonly string[];
 }
@@ -165,6 +171,19 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         required: false,
         description: 'Stay end date (YYYY-MM-DD)',
         example: '2026-04-25',
+      },
+      headcount: {
+        type: 'number',
+        required: false,
+        description:
+          'How many real people this entry stands for (a couple is 2). Defaults to 1',
+        example: 2,
+      },
+      notes: {
+        type: 'string',
+        required: false,
+        description: 'Allergies, diet, accessibility…',
+        example: 'Vegetarian',
       },
     },
   },
@@ -326,6 +345,191 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
       },
     },
   },
+
+  // ---- Activities (shared agenda) ------------------------------------------
+  {
+    action: 'addActivity',
+    label: 'Add an activity to the shared agenda (outing, meal, hike, market…)',
+    fields: {
+      title: {
+        type: 'string',
+        required: true,
+        description: 'Short activity title',
+        example: 'Plant fair',
+      },
+      category: {
+        type: 'string',
+        required: true,
+        description: 'Kind of activity',
+        example: 'horticulture',
+        enum: ACTIVITY_CATEGORIES,
+      },
+      startDatetime: {
+        type: 'string',
+        required: true,
+        description: 'Start date and time (ISO 8601)',
+        example: '2026-04-20T09:00:00',
+      },
+      endDatetime: {
+        type: 'string',
+        required: false,
+        description: 'End date and time (ISO 8601), on or after the start',
+        example: '2026-04-20T12:00:00',
+      },
+      allDay: {
+        type: 'boolean',
+        required: false,
+        description: 'True when the activity covers whole days (times ignored)',
+        example: false,
+      },
+      location: {
+        type: 'string',
+        required: false,
+        description: 'Place name (garden, market, restaurant…)',
+        example: 'Château de Saint-Jean',
+      },
+      participantIds: {
+        type: 'string[]',
+        required: false,
+        description: 'Guest IDs joining the activity',
+        example: ['<guest id>'],
+      },
+      organizerId: {
+        type: 'string',
+        required: false,
+        description: 'Guest ID of the person leading the activity',
+        example: '<guest id>',
+      },
+      maxParticipants: {
+        type: 'number',
+        required: false,
+        description: 'Cap on participants (whole number >= 1)',
+        example: 6,
+      },
+      notes: {
+        type: 'string',
+        required: false,
+        description: 'Booking link, price, what to bring…',
+        example: '10 € entry, bring boots',
+      },
+    },
+  },
+  {
+    action: 'updateActivity',
+    label:
+      'Update an existing activity using its id from the activities list (does not create a new one)',
+    fields: {
+      activityId: {
+        type: 'string',
+        required: true,
+        description: 'Activity ID (from the activities list)',
+        example: '<activity id>',
+      },
+      title: {
+        type: 'string',
+        required: false,
+        description: 'New title',
+        example: 'Plant fair',
+      },
+      category: {
+        type: 'string',
+        required: false,
+        description: 'New category',
+        example: 'horticulture',
+        enum: ACTIVITY_CATEGORIES,
+      },
+      startDatetime: {
+        type: 'string',
+        required: false,
+        description: 'New start date and time (ISO 8601)',
+        example: '2026-04-20T09:00:00',
+      },
+      endDatetime: {
+        type: 'string',
+        required: false,
+        description: 'New end date and time (ISO 8601)',
+        example: '2026-04-20T12:00:00',
+      },
+      allDay: {
+        type: 'boolean',
+        required: false,
+        description: 'Whether the activity covers whole days',
+        example: false,
+      },
+      location: {
+        type: 'string',
+        required: false,
+        description: 'New place name',
+        example: 'Château de Saint-Jean',
+      },
+      organizerId: {
+        type: 'string',
+        required: false,
+        description: 'Guest ID of the person leading the activity',
+        example: '<guest id>',
+      },
+      maxParticipants: {
+        type: 'number',
+        required: false,
+        description: 'Cap on participants (whole number >= 1)',
+        example: 6,
+      },
+      notes: {
+        type: 'string',
+        required: false,
+        description: 'Free-text notes',
+        example: '10 € entry, bring boots',
+      },
+    },
+  },
+  {
+    action: 'removeActivity',
+    label: 'Remove an activity from the agenda by ID',
+    fields: {
+      activityId: {
+        type: 'string',
+        required: true,
+        description: 'Activity ID (from the activities list)',
+        example: '<activity id>',
+      },
+    },
+  },
+  {
+    action: 'joinActivity',
+    label: 'Sign a guest up for an activity',
+    fields: {
+      activityId: {
+        type: 'string',
+        required: true,
+        description: 'Activity ID',
+        example: '<activity id>',
+      },
+      personId: {
+        type: 'string',
+        required: true,
+        description: 'Guest ID',
+        example: '<guest id>',
+      },
+    },
+  },
+  {
+    action: 'leaveActivity',
+    label: 'Remove a guest from an activity',
+    fields: {
+      activityId: {
+        type: 'string',
+        required: true,
+        description: 'Activity ID',
+        example: '<activity id>',
+      },
+      personId: {
+        type: 'string',
+        required: true,
+        description: 'Guest ID',
+        example: '<guest id>',
+      },
+    },
+  },
 ] as const;
 
 // ============================================================================
@@ -436,6 +640,11 @@ export function generateActionPrompt(): string[] {
     '- **updateTrip** only edits the trip that is currently selected; it never creates a separate trip.',
     '- After **createTrip**, further actions in the same reply (guests, rooms, …) apply to that new trip.',
     '- Use **selectTrip** with a trip id from **All trips** when the user wants to work on a different existing trip.',
+    '',
+    'Agenda (activities):',
+    '- **addActivity** creates a new agenda entry; **updateActivity** edits an existing one and requires its `activityId` from the **Activities** list.',
+    '- Use **joinActivity** / **leaveActivity** to change who is signed up — never rewrite the sign-up list through updateActivity.',
+    '- Resolve "today", "tonight", "tomorrow" and "this weekend" against the current date given above, then answer from the **Activities** list without an action block.',
   );
 
   return lines;
@@ -444,6 +653,32 @@ export function generateActionPrompt(): string[] {
 // ============================================================================
 // Validation
 // ============================================================================
+
+/**
+ * Coerce an LLM-produced value into an array of strings.
+ *
+ * Small models regularly emit `"a, b"` (or a single bare id) where the schema
+ * asks for `["a", "b"]`, so both shapes are accepted.
+ *
+ * @param value - The raw value from the parsed action data
+ * @returns The array of strings, or `null` when the value cannot be coerced
+ */
+function coerceStringArray(value: unknown): string[] | null {
+  if (Array.isArray(value)) {
+    return value.every((item) => typeof item === 'string')
+      ? (value as string[])
+      : null;
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+  }
+
+  return null;
+}
 
 /**
  * Validate a parsed JSON object against the action schema.
@@ -493,6 +728,19 @@ export function validateAction(
   for (const [key, value] of Object.entries(data)) {
     const fieldDef = schema.fields[key];
     if (!fieldDef) continue; // Allow extra fields (LLMs can be creative)
+
+    // Array fields: accept a JSON array, coerce a comma-separated string
+    if (fieldDef.type === 'string[]') {
+      const coerced = coerceStringArray(value);
+      if (coerced === null) {
+        console.warn(
+          `[AI Assistant] Field "${key}" in "${obj.action}" expected an array of strings, got ${typeof value}`,
+        );
+        return null;
+      }
+      data[key] = coerced;
+      continue;
+    }
 
     if (typeof value !== fieldDef.type) {
       console.warn(
