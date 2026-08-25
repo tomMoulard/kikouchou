@@ -460,8 +460,13 @@ const ActivityForm = memo(function ActivityForm({
         ? fromDateValue(formState.startDate, 'start')
         : fromDatetimeLocalValue(formState.startDatetime);
 
+      // An all-day activity with no end date must still carry a real end
+      // instant, or `getActivityEndInstant` falls back to local midnight and it
+      // reads as already over the moment it is created. The assistant's write
+      // path applies the same default.
       const endDatetime = formState.allDay
-        ? fromDateValue(formState.endDate, 'end')
+        ? fromDateValue(formState.endDate, 'end') ||
+          fromDateValue(formState.startDate, 'end')
         : fromDatetimeLocalValue(formState.endDatetime);
 
       const cap = Number(formState.maxParticipants);
