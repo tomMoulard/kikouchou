@@ -7,6 +7,8 @@
 import { type ReactElement, memo, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+
+import { getPersonHeadcount } from '@/types';
 import { BarChart2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -80,6 +82,13 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
     }
     return tripIdFromUrl !== currentTrip.id;
   }, [tripIdFromUrl, currentTrip]);
+
+  // A guest entry can stand for several real people, so the headline number
+  // must sum headcount rather than count rows.
+  const guestHeadcount = useMemo(
+    () => persons.reduce((total, person) => total + getPersonHeadcount(person), 0),
+    [persons],
+  );
 
   const pickupsNeedingDriver = useMemo(
     () => upcomingPickups.filter((tr) => tr.needsPickup && !tr.driverId).length,
@@ -156,7 +165,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
       <p className="mb-6 text-sm text-muted-foreground">{t('analytics.tripDescription')}</p>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label={t('analytics.guests')} value={persons.length} />
+        <StatCard label={t('analytics.guests')} value={guestHeadcount} />
         <StatCard label={t('analytics.rooms')} value={rooms.length} />
         <StatCard label={t('analytics.assignments')} value={assignments.length} />
         <StatCard label={t('analytics.arrivals')} value={arrivals.length} />

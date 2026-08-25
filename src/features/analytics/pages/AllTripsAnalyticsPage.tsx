@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { AnalyticsScopeSelector } from '@/features/analytics/components/AnalyticsScopeSelector';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
+import { getPersonHeadcount } from '@/types';
 import type { Trip } from '@/types';
 
 // ============================================================================
@@ -62,12 +63,19 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
       }
       return Promise.all(
         trips.map(async (trip) => {
-          const [personCount, roomCount, transportCount, assignmentCount] = await Promise.all([
-            db.persons.where('tripId').equals(trip.id).count(),
-            db.rooms.where('tripId').equals(trip.id).count(),
-            db.transports.where('tripId').equals(trip.id).count(),
-            db.roomAssignments.where('tripId').equals(trip.id).count(),
-          ]);
+          // `count()` would count guest rows; a row can stand for a couple or a
+          // family, so read the rows and sum their headcount instead.
+          const [tripPersons, roomCount, transportCount, assignmentCount] =
+            await Promise.all([
+              db.persons.where('tripId').equals(trip.id).toArray(),
+              db.rooms.where('tripId').equals(trip.id).count(),
+              db.transports.where('tripId').equals(trip.id).count(),
+              db.roomAssignments.where('tripId').equals(trip.id).count(),
+            ]);
+          const personCount = tripPersons.reduce(
+            (total, person) => total + getPersonHeadcount(person),
+            0,
+          );
           return { trip, personCount, roomCount, transportCount, assignmentCount };
         }),
       );
