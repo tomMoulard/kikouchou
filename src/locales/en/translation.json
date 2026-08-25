@@ -619,6 +619,7 @@
     "selectTripNotFound": "That trip was not found.",
     "activityNotFound": "That activity was not found.",
     "guestNotFound": "That guest was not found.",
+    "roomNotFound": "That room was not found.",
     "invalidActivity": "Those activity details are invalid, nothing was saved.",
     "tripSwitched": "Switched to {{name}}",
     "models": {

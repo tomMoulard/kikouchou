@@ -482,6 +482,21 @@ export function useTripActions(): UseTripActionsReturn {
                 break;
               }
               const d = action.data as Record<string, unknown>;
+
+              // createAssignment does not check its foreign keys, and
+              // activeTripId can change mid-batch (createTrip/selectTrip), so a
+              // stale id from the model would be stored as a permanent orphan.
+              const assignPerson = await getPersonById(d.personId as PersonId);
+              if (!assignPerson || assignPerson.tripId !== tid) {
+                toast.error(t('assistant.guestNotFound'));
+                break;
+              }
+              const assignRoomTarget = await getRoomById(d.roomId as RoomId);
+              if (!assignRoomTarget || assignRoomTarget.tripId !== tid) {
+                toast.error(t('assistant.roomNotFound'));
+                break;
+              }
+
               await createAssignment(tid, {
                 personId: d.personId as PersonId,
                 roomId: d.roomId as RoomId,
@@ -490,12 +505,10 @@ export function useTripActions(): UseTripActionsReturn {
               });
               toast.success(t('assignments.createSuccess'));
               executedCount++;
-              const person = await getPersonById(d.personId as PersonId);
-              const room = await getRoomById(d.roomId as RoomId);
               summaries.push(
                 t('assistant.actionDetails.assignRoom', {
-                  person: person?.name ?? String(d.personId),
-                  room: room?.name ?? String(d.roomId),
+                  person: assignPerson.name,
+                  room: assignRoomTarget.name,
                   start: d.startDate as string,
                   end: d.endDate as string,
                   defaultValue:
@@ -539,6 +552,15 @@ export function useTripActions(): UseTripActionsReturn {
                 break;
               }
               const d = action.data as Record<string, unknown>;
+
+              // Same reasoning as assignRoom: createTransport trusts its
+              // personId, so verify it belongs to the trip being written to.
+              const transportPerson = await getPersonById(d.personId as PersonId);
+              if (!transportPerson || transportPerson.tripId !== tid) {
+                toast.error(t('assistant.guestNotFound'));
+                break;
+              }
+
               await createTransport(tid, {
                 personId: d.personId as PersonId,
                 type: d.type as TransportType,
@@ -550,11 +572,10 @@ export function useTripActions(): UseTripActionsReturn {
               });
               toast.success(t('transports.createSuccess'));
               executedCount++;
-              const person = await getPersonById(d.personId as PersonId);
               summaries.push(
                 t('assistant.actionDetails.addTransport', {
                   type: d.type as string,
-                  person: person?.name ?? String(d.personId),
+                  person: transportPerson.name,
                   location: d.location as string,
                   defaultValue:
                     'Added {{type}} for {{person}} — {{location}}',
