@@ -17,7 +17,20 @@ const wsReadyStateOpen = 1;
 const pingTimeout = 30000;
 const port = process.env.PORT || 4444;
 
-const wss = new WebSocketServer({ noServer: true });
+/**
+ * Signaling frames carry SDP/ICE and small encrypted announces. `ws` defaults
+ * to a 100 MiB maxPayload, which lets one client force an O(subscribers)
+ * fan-out of a huge buffer through a single-threaded event loop.
+ */
+const maxPayload = 128 * 1024;
+
+/** Bounds the in-memory topic map: one client cannot allocate unbounded keys. */
+const maxTopicsPerConnection = 50;
+
+/** Longest accepted topic name — room ids are nanoid(12). */
+const maxTopicLength = 256;
+
+const wss = new WebSocketServer({ noServer: true, maxPayload });
 
 const server = http.createServer((_req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -41,6 +54,24 @@ const send = (conn, message) => {
   } catch {
     conn.close();
   }
+};
+
+/**
+ * Coerces an untrusted `topics` field into a list of usable topic names.
+ *
+ * `(message.topics || []).forEach(...)` throws on any truthy non-array, so a
+ * single `{"type":"subscribe","topics":42}` frame used to be a remote kill
+ * switch for the whole relay.
+ *
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+const asTopicNames = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (name) =>
+      typeof name === 'string' && name.length > 0 && name.length <= maxTopicLength,
+  );
 };
 
 /** @param {WebSocket} conn */
@@ -91,46 +122,60 @@ const onconnection = (conn) => {
     } catch {
       return;
     }
-    if (!message || !message.type || closed) return;
+    if (!message || typeof message.type !== 'string' || closed) return;
 
-    switch (message.type) {
-      case 'subscribe':
-        (message.topics || []).forEach((topicName) => {
-          if (typeof topicName !== 'string') return;
-          let topic = topics.get(topicName);
-          if (!topic) {
-            topic = new Set();
-            topics.set(topicName, topic);
-          }
-          topic.add(conn);
-          subscribedTopics.add(topicName);
-        });
-        break;
+    // A throw here would reach `ws`'s emit with no handler above it and take
+    // the whole process down, dropping every peer in every room. One
+    // malformed-but-parseable frame must never do that.
+    try {
+      switch (message.type) {
+        case 'subscribe':
+          asTopicNames(message.topics).forEach((topicName) => {
+            if (subscribedTopics.size >= maxTopicsPerConnection) return;
+            let topic = topics.get(topicName);
+            if (!topic) {
+              topic = new Set();
+              topics.set(topicName, topic);
+            }
+            topic.add(conn);
+            subscribedTopics.add(topicName);
+          });
+          break;
 
-      case 'unsubscribe':
-        (message.topics || []).forEach((topicName) => {
-          const subs = topics.get(topicName);
-          if (subs) {
-            subs.delete(conn);
-            if (subs.size === 0) {
-              topics.delete(topicName);
+        case 'unsubscribe':
+          asTopicNames(message.topics).forEach((topicName) => {
+            subscribedTopics.delete(topicName);
+            const subs = topics.get(topicName);
+            if (subs) {
+              subs.delete(conn);
+              if (subs.size === 0) {
+                topics.delete(topicName);
+              }
+            }
+          });
+          break;
+
+        case 'publish':
+          // Only a subscriber of the topic may publish to it. Without this,
+          // anyone who learns a room id can inject spoofed WebRTC signaling
+          // into a live session without ever joining it.
+          if (
+            typeof message.topic === 'string' &&
+            subscribedTopics.has(message.topic)
+          ) {
+            const receivers = topics.get(message.topic);
+            if (receivers) {
+              receivers.forEach((receiver) => send(receiver, message));
             }
           }
-        });
-        break;
+          break;
 
-      case 'publish':
-        if (message.topic) {
-          const receivers = topics.get(message.topic);
-          if (receivers) {
-            receivers.forEach((receiver) => send(receiver, message));
-          }
-        }
-        break;
-
-      case 'ping':
-        send(conn, { type: 'pong' });
-        break;
+        case 'ping':
+          send(conn, { type: 'pong' });
+          break;
+      }
+    } catch (error) {
+      console.error('[relay] dropped a message that threw:', error?.message);
     }
   });
 };
