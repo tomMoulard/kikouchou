@@ -74,8 +74,21 @@ import { DroppableRoom, type DroppableRoomData } from '@/features/rooms/componen
 import { QuickAssignmentDialog } from '@/features/rooms/components/QuickAssignmentDialog';
 import { RoomOccupancyTimeline } from '@/features/rooms/components/RoomOccupancyTimeline';
 import { type DateRange as PickerDateRange, DateRangePicker } from '@/components/shared/DateRangePicker';
-import { isDateInStayRange, calculatePeakOccupancy } from '@/features/rooms/utils/capacity-utils';
-import type { ISODateString, Person, Room, RoomAssignment, RoomId, Transport } from '@/types';
+import {
+  calculatePeakOccupancy,
+  createHeadcountResolver,
+  isDateInStayRange,
+} from '@/features/rooms/utils/capacity-utils';
+import { getPersonHeadcount } from '@/types';
+import type {
+  ISODateString,
+  Person,
+  PersonId,
+  Room,
+  RoomAssignment,
+  RoomId,
+  Transport,
+} from '@/types';
 import type { DraggableRoomAssignmentData } from '@/features/rooms/components/DraggableRoomAssignment';
 import type { DroppableAssignmentData } from '@/features/rooms/components/DroppableAssignment';
 
@@ -318,6 +331,7 @@ function splitIntoDateSegments(dates: readonly string[]): readonly DateSegment[]
 
 function buildRoomDateOccupancy(
   assignments: readonly RoomAssignment[],
+  headcountOf: (personId: PersonId) => number,
 ): Map<Room['id'], Map<string, number>> {
   const occupancyByRoom = new Map<Room['id'], Map<string, number>>();
 
@@ -338,7 +352,10 @@ function buildRoomDateOccupancy(
     const nights = eachDayOfInterval({ start, end: lastNight });
     for (const night of nights) {
       const key = formatToISODate(night);
-      roomOccupancy.set(key, (roomOccupancy.get(key) ?? 0) + 1);
+      roomOccupancy.set(
+        key,
+        (roomOccupancy.get(key) ?? 0) + headcountOf(assignment.personId),
+      );
     }
   }
 
@@ -395,11 +412,12 @@ function planAutoAssignments(
   guests: readonly UnassignedGuest[],
   rooms: readonly Room[],
   assignments: readonly RoomAssignment[],
+  headcountOf: (personId: PersonId) => number,
 ): {
   readonly plans: readonly RoomAssignmentPlan[];
   readonly unplacedSegments: number;
 } {
-  const occupancyByRoom = buildRoomDateOccupancy(assignments);
+  const occupancyByRoom = buildRoomDateOccupancy(assignments, headcountOf);
   const plans: RoomAssignmentPlan[] = [];
   let unplacedSegments = 0;
 
@@ -645,6 +663,8 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
    todayStr = useMemo(() => formatToISODate(todayDate), [todayDate]),
 
   // Calculate rooms with occupancy data
+   headcountOf = useMemo(() => createHeadcountResolver(persons), [persons]),
+
    roomsWithOccupancy = useMemo((): readonly RoomWithOccupancy[] => rooms.map((room) => {
       // Get all assignments for this room
       const roomAssignments = getAssignmentsByRoom(room.id),
@@ -659,14 +679,19 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         .map((assignment) => getPersonById(assignment.personId))
         .filter((person): person is Person => person !== undefined);
 
-      // Calculate peak occupancy for the selected date range
+      // Peak occupancy counts people, not assignment rows: one guest entry can
+      // stand for a couple or a family.
       const peakOccupancy = effectiveDateRange
         ? calculatePeakOccupancy(
             roomAssignments,
             effectiveDateRange.startDate,
             effectiveDateRange.endDate,
+            headcountOf,
           )
-        : currentOccupants.length;
+        : currentOccupants.reduce(
+            (total, person) => total + getPersonHeadcount(person),
+            0,
+          );
 
       const availableSpots = Math.max(0, room.capacity - peakOccupancy);
       const isFull = peakOccupancy >= room.capacity;
@@ -678,7 +703,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         availableSpots,
         isFull,
       };
-    }), [rooms, getAssignmentsByRoom, getPersonById, todayStr, effectiveDateRange]),
+    }), [rooms, getAssignmentsByRoom, getPersonById, todayStr, effectiveDateRange, headcountOf]),
 
   // Sort rooms: available first (by room.order), then full rooms (by room.order)
    sortedRoomsWithOccupancy = useMemo(() => {
@@ -732,6 +757,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         unassignedGuests,
         rooms,
         assignments,
+        headcountOf,
       );
 
       if (plans.length === 0) {
@@ -785,6 +811,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   }, [
     assignments,
     createAssignment,
+    headcountOf,
     isOptimizingAssignments,
     rooms,
     successToast,
@@ -998,7 +1025,12 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     const endDate = effectiveDateRange?.endDate ?? currentTrip?.endDate ?? '';
 
     if (startDate && endDate) {
-      const peak = calculatePeakOccupancy(roomAssignments, startDate, endDate);
+      const peak = calculatePeakOccupancy(
+        roomAssignments,
+        startDate,
+        endDate,
+        headcountOf,
+      );
       if (peak >= room.capacity) {
         toast.error(t('rooms.roomJustFilled'));
         return;
@@ -1012,7 +1044,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       endDate,
     });
     setQuickAssignDialogOpen(true);
-  }, [effectiveDateRange, currentTrip?.startDate, currentTrip?.endDate, getAssignmentsByRoom, t]),
+  }, [effectiveDateRange, currentTrip?.startDate, currentTrip?.endDate, getAssignmentsByRoom, headcountOf, t]),
 
   // ============================================================================
   // Header Action (desktop button)
