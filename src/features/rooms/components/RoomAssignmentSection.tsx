@@ -59,7 +59,10 @@ import { usePersonContext } from '@/contexts/PersonContext';
 import { useRoomContext } from '@/contexts/RoomContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useTransportContext } from '@/contexts/TransportContext';
-import { calculatePeakOccupancy } from '@/features/rooms/utils/capacity-utils';
+import {
+  calculatePeakOccupancy,
+  createHeadcountResolver,
+} from '@/features/rooms/utils/capacity-utils';
 import { cn } from '@/lib/utils';
 import type {
   ISODateString,
@@ -70,7 +73,7 @@ import type {
   RoomAssignmentId,
   RoomId,
 } from '@/types';
-import { toISODateString } from '@/lib/db/utils';
+import { toLocalISODateString } from '@/lib/db/utils';
 
 // ============================================================================
 // Type Definitions
@@ -399,15 +402,33 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
   const computedCapacityWarning = useMemo(() => {
     if (!selectedPersonId || !dateRange?.from || !dateRange?.to) return undefined;
     if (roomCapacity === undefined || !existingAssignments) return undefined;
-    const startDate = toISODateString(dateRange.from);
-    const endDate = toISODateString(dateRange.to);
+    const startDate = toLocalISODateString(dateRange.from);
+    const endDate = toLocalISODateString(dateRange.to);
     // Filter out the current assignment being edited (if any)
     const otherAssignments = existingAssignment
       ? existingAssignments.filter((a) => a.id !== existingAssignment.id)
       : existingAssignments;
-    const peak = calculatePeakOccupancy(otherAssignments, startDate, endDate);
-    return (peak + 1) > roomCapacity ? t('rooms.capacityWarning') : undefined;
-  }, [selectedPersonId, dateRange, roomCapacity, existingAssignments, existingAssignment, t]);
+    const headcountOf = createHeadcountResolver(persons);
+    const peak = calculatePeakOccupancy(
+      otherAssignments,
+      startDate,
+      endDate,
+      headcountOf,
+    );
+    // The guest being added may itself stand for several people.
+    const incoming = headcountOf(selectedPersonId as PersonId);
+    return peak + incoming > roomCapacity
+      ? t('rooms.capacityWarning')
+      : undefined;
+  }, [
+    selectedPersonId,
+    dateRange,
+    roomCapacity,
+    existingAssignments,
+    existingAssignment,
+    persons,
+    t,
+  ]);
 
   // Clear conflict error when inputs become invalid (render-time)
   const hasValidConflictInputs = Boolean(selectedPersonId && dateRange?.from && dateRange?.to);
@@ -426,8 +447,8 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
       return;
     }
 
-    const startDate = toISODateString(dateRange.from);
-    const endDate = toISODateString(dateRange.to);
+    const startDate = toLocalISODateString(dateRange.from);
+    const endDate = toLocalISODateString(dateRange.to);
 
     let cancelled = false;
     setIsCheckingConflict(true);
@@ -486,8 +507,8 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
     const data: RoomAssignmentFormData = {
       roomId,
       personId: selectedPersonId as PersonId,
-      startDate: toISODateString(dateRange.from),
-      endDate: toISODateString(dateRange.to),
+      startDate: toLocalISODateString(dateRange.from),
+      endDate: toLocalISODateString(dateRange.to),
     };
 
     try {

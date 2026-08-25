@@ -44,8 +44,11 @@ import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useRoomContext } from '@/contexts/RoomContext';
-import { calculatePeakOccupancy } from '@/features/rooms/utils/capacity-utils';
-import { toISODateString } from '@/lib/db/utils';
+import {
+  calculatePeakOccupancy,
+  createHeadcountResolver,
+} from '@/features/rooms/utils/capacity-utils';
+import { toLocalISODateString } from '@/lib/db/utils';
 import type {
   ISODateString,
   Person,
@@ -53,6 +56,7 @@ import type {
   RoomAssignmentFormData,
   RoomId,
 } from '@/types';
+import { getPersonHeadcount } from '@/types';
 
 // Utility functions (isDateInStayRange, calculatePeakOccupancy) imported from capacity-utils
 
@@ -236,12 +240,15 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
   const computedCapacityWarning = useMemo(() => {
     if (!effectivePerson || !dateRange?.from || !dateRange?.to) return undefined;
     if (!roomId || !room) return undefined;
-    const startDate = toISODateString(dateRange.from) as ISODateString;
-    const endDate = toISODateString(dateRange.to) as ISODateString;
+    const startDate = toLocalISODateString(dateRange.from) as ISODateString;
+    const endDate = toLocalISODateString(dateRange.to) as ISODateString;
     const roomAssignments = getAssignmentsByRoom(roomId);
-    const peak = calculatePeakOccupancy(roomAssignments, startDate, endDate);
-    return (peak + 1) > room.capacity ? t('rooms.capacityWarning') : undefined;
-  }, [effectivePerson, dateRange, roomId, room, getAssignmentsByRoom, t]);
+    const headcountOf = createHeadcountResolver(persons);
+    const peak = calculatePeakOccupancy(roomAssignments, startDate, endDate, headcountOf);
+    // The guest being added may itself stand for several people.
+    const incoming = getPersonHeadcount(effectivePerson);
+    return peak + incoming > room.capacity ? t('rooms.capacityWarning') : undefined;
+  }, [effectivePerson, dateRange, roomId, room, getAssignmentsByRoom, persons, t]);
 
   // Clear conflict error when inputs become invalid (render-time)
   const hasValidConflictInputs = Boolean(effectivePerson && dateRange?.from && dateRange?.to);
@@ -260,8 +267,8 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
       return;
     }
 
-    const startDate = toISODateString(dateRange.from) as ISODateString;
-    const endDate = toISODateString(dateRange.to) as ISODateString;
+    const startDate = toLocalISODateString(dateRange.from) as ISODateString;
+    const endDate = toLocalISODateString(dateRange.to) as ISODateString;
 
     let cancelled = false;
     setIsCheckingConflict(true);
@@ -318,8 +325,8 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     const data: RoomAssignmentFormData = {
       roomId,
       personId: effectivePerson.id,
-      startDate: toISODateString(dateRange.from),
-      endDate: toISODateString(dateRange.to),
+      startDate: toLocalISODateString(dateRange.from),
+      endDate: toLocalISODateString(dateRange.to),
     };
 
     try {
