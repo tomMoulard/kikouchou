@@ -62,6 +62,22 @@ export interface TripTimelineFrameProps {
   readonly children: (viewport: TripTimelineViewportContext) => ReactNode;
 }
 
+/**
+ * Re-reads a `YYYY-MM-DD` day key as a local-midnight Date, so date-fns
+ * `format()` prints exactly that calendar day in every timezone.
+ *
+ * @param dayKey - A day key from `buildTripDayColumns`
+ * @returns A Date whose local calendar day equals `dayKey`
+ */
+function localDateFromDayKey(dayKey: string): Date {
+  const [year, month, day] = dayKey.split('-').map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return new Date(year, month - 1, day);
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -208,8 +224,13 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
               >
                 {days.map((day, index) => {
                   const key = toISODateString(day);
-                  const monthLabel = format(day, 'MMM', { locale: dateLocale });
-                  const dayLabel = format(day, 'dd', { locale: dateLocale });
+                  // `days` are built by stepping in UTC, so date-fns `format()`
+                  // — which reads LOCAL components — prints the previous day at
+                  // any negative offset, while the "today" highlight (matched on
+                  // `key`) lands on the correct column. Label from the key.
+                  const labelDate = localDateFromDayKey(key);
+                  const monthLabel = format(labelDate, 'MMM', { locale: dateLocale });
+                  const dayLabel = format(labelDate, 'dd', { locale: dateLocale });
                   const isToday = todayColumnIndex === index;
                   return (
                     <div
@@ -218,7 +239,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
                         'min-w-0 border-r border-muted px-1 py-2 text-xs text-muted-foreground',
                         isToday && 'bg-primary/12 text-foreground',
                       )}
-                      title={format(day, 'PPPP', { locale: dateLocale })}
+                      title={format(labelDate, 'PPPP', { locale: dateLocale })}
                       {...(isToday ? { 'aria-current': 'date' as const } : {})}
                     >
                       <div className="flex flex-col items-center leading-none">

@@ -18,6 +18,8 @@ import {
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { format, isValid, parseISO } from 'date-fns';
+import type { Locale } from 'date-fns';
 import {
   BarChart2,
   Calendar,
@@ -49,6 +51,7 @@ import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useToday } from '@/hooks/useToday';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
 import type { Trip } from '@/types';
@@ -380,12 +383,22 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
  * @param endDate - End date in ISO format
  * @returns Formatted date range string
  */
-function formatDateRange(startDate: string, endDate: string): string {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-  
-  return `${start.toLocaleDateString(undefined, options)} - ${end.toLocaleDateString(undefined, options)}`;
+function formatDateRange(
+  startDate: string,
+  endDate: string,
+  locale: Locale,
+): string {
+  // `new Date('2026-08-01')` is UTC midnight, and `toLocaleDateString` renders
+  // it in the LOCAL zone — one day early at any negative offset. `parseISO`
+  // gives local midnight, so the printed day matches the stored one. Passing the
+  // locale also keeps month names in the app's language rather than the
+  // browser's default.
+  const start = parseISO(startDate);
+  const end = parseISO(endDate);
+  if (!isValid(start) || !isValid(end)) {
+    return '';
+  }
+  return `${format(start, 'MMM d', { locale })} - ${format(end, 'MMM d', { locale })}`;
 }
 
 /**
@@ -403,9 +416,10 @@ const TripInfoSection = memo(function TripInfoSection({
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
   const { arrivals, departures, isLoading: isTransportsLoading } = useTransportContext();
 
+  const { i18n } = useTranslation();
   const dateRange = useMemo(
-    () => formatDateRange(trip.startDate, trip.endDate),
-    [trip.startDate, trip.endDate],
+    () => formatDateRange(trip.startDate, trip.endDate, getDateLocale(i18n.language)),
+    [trip.startDate, trip.endDate, i18n.language],
   );
 
   const todayKey = useMemo(() => toLocalISODateString(today), [today]);
