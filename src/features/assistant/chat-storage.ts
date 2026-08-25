@@ -57,13 +57,27 @@ export function loadAssistantChatMessages(): ChatMessageData[] {
 }
 
 /**
+ * Keeps only turns that are meaningful to restore: a queued prompt was never
+ * seen by the model, and an empty assistant bubble is a placeholder whose
+ * generation is still in flight. Persisting either would rebuild an LLM history
+ * with a dangling user turn or a blank answer.
+ */
+function isPersistableMessage(message: ChatMessageData): boolean {
+  if (message.queued === true || message.failed === true) return false;
+  return message.role !== 'assistant' || message.content.length > 0;
+}
+
+/**
  * Saves the current assistant message list (overwrites previous).
  */
 export function saveAssistantChatMessages(
   messages: readonly ChatMessageData[],
 ): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(messages.filter(isPersistableMessage)),
+    );
   } catch (error) {
     console.error('Failed to persist assistant chat:', error);
   }
@@ -82,12 +96,38 @@ export function clearAssistantChatStorage(): void {
 
 /**
  * Rebuilds LLM user/assistant history from UI messages (for session restore).
+ *
+ * Only complete user→assistant pairs survive. Gemma's chat template rejects a
+ * history whose roles do not strictly alternate, so a prompt left unanswered by
+ * a failed or interrupted turn would break *every* later generation, not just
+ * its own.
  */
 export function messagesToLLMChatHistory(
   messages: readonly ChatMessageData[],
 ): LLMChatMessage[] {
-  return messages.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  const history: LLMChatMessage[] = [];
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const prompt = messages[index];
+    if (prompt === undefined || prompt.role !== 'user') continue;
+    if (prompt.queued === true) continue;
+
+    const answer = messages[index + 1];
+    if (
+      answer === undefined ||
+      answer.role !== 'assistant' ||
+      answer.failed === true ||
+      answer.content.length === 0
+    ) {
+      continue;
+    }
+
+    history.push(
+      { role: 'user', content: prompt.content },
+      { role: 'assistant', content: answer.content },
+    );
+    index += 1;
+  }
+
+  return history;
 }

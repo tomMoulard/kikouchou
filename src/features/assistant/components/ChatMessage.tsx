@@ -32,6 +32,19 @@ export interface ChatMessageData {
   readonly actionsExecuted?: number;
   /** Human-readable line per applied action (enables expandable details) */
   readonly actionSummaries?: readonly string[];
+  /**
+   * Set on a user prompt that is waiting its turn behind the answer currently
+   * being generated. Never persisted — an unanswered prompt is dropped on
+   * reload rather than restored as a turn the model never saw.
+   */
+  readonly queued?: boolean;
+  /**
+   * Set on an assistant bubble that reports a failure instead of an answer.
+   * Never persisted and never replayed to the model — the exchange did not
+   * happen, and feeding an error back as the model's own words derails the
+   * next turn.
+   */
+  readonly failed?: boolean;
 }
 
 /**
