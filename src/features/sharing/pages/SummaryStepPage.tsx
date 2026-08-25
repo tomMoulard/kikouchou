@@ -137,8 +137,14 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
   // ============================================================================
 
   /** Cleanup effect to track component unmount. */
-  useEffect(() => () => {
-    isMountedRef.current = false;
+  useEffect(() => {
+    // Set on setup, not only in cleanup: StrictMode's dev-time
+    // mount -> cleanup -> mount cycle would otherwise latch this false
+    // forever, silently turning every guarded setState into a no-op.
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   /** Guard: read guest identity from localStorage on mount. */

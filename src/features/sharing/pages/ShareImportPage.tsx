@@ -225,9 +225,15 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
   /**
    * Cleanup effect to track component unmount.
    */
-  useEffect(() => () => {
+  useEffect(() => {
+    // Set on setup, not only in cleanup: StrictMode's dev-time
+    // mount -> cleanup -> mount cycle would otherwise latch this false
+    // forever, silently turning every guarded setState into a no-op.
+    isMountedRef.current = true;
+    return () => {
       isMountedRef.current = false;
-    }, []);
+    };
+  }, []);
 
   /**
    * Load trip data when shareId changes.
