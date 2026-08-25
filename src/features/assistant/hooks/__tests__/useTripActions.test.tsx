@@ -218,7 +218,9 @@ describe('useTripActions — activities', () => {
         action: 'updateActivity',
         data: {
           activityId: activity.id,
-          startDatetime: '2024-07-16T18:00:00',
+          // Z-suffixed: a naive value would be read as local time, making the
+          // assertion pass or fail depending on the machine's timezone.
+          startDatetime: '2024-07-16T18:00:00.000Z',
         },
       }),
     );
@@ -281,6 +283,159 @@ describe('useTripActions — activities', () => {
 
     expect(outcome.count).toBe(1);
     expect(await db.activities.get(activity.id)).toBeUndefined();
+  });
+
+  it('normalizes a naive datetime to a UTC instant', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addActivity',
+        data: {
+          title: 'Naive times',
+          category: 'other',
+          startDatetime: '2024-07-16T09:00:00',
+          endDatetime: '2024-07-16T11:00:00',
+        },
+      }),
+    );
+
+    const [activity] = await activitiesOf(tripId);
+    // Stored as a real instant, exactly as the form path writes it.
+    expect(activity?.startDatetime).toBe(
+      new Date('2024-07-16T09:00:00').toISOString(),
+    );
+    expect(activity?.startDatetime).toMatch(/Z$/);
+    expect(activity?.endDatetime).toMatch(/Z$/);
+  });
+
+  it('snaps an all-day activity to local day boundaries', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addActivity',
+        data: {
+          title: 'Village fete',
+          category: 'culture',
+          startDatetime: '2024-07-16T09:00:00',
+          allDay: true,
+        },
+      }),
+    );
+
+    const [activity] = await activitiesOf(tripId);
+    expect(activity?.allDay).toBe(true);
+    // 09:00 is discarded: the span covers the whole local day.
+    expect(activity?.startDatetime).toBe(
+      new Date(2024, 6, 16, 0, 0, 0, 0).toISOString(),
+    );
+    expect(activity?.endDatetime).toBe(
+      new Date(2024, 6, 16, 23, 59, 59, 999).toISOString(),
+    );
+  });
+
+  it('re-snaps the instants when an update turns on all-day', async () => {
+    const { tripId } = await seedTrip();
+    const activity = await createActivity(tripId, {
+      title: 'Market',
+      category: 'market',
+      startDatetime: new Date(2024, 6, 16, 9, 0, 0, 0).toISOString() as ISODateTimeString,
+      endDatetime: new Date(2024, 6, 16, 11, 0, 0, 0).toISOString() as ISODateTimeString,
+      allDay: false,
+      participantIds: [],
+    });
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'updateActivity',
+        data: { activityId: activity.id, allDay: true },
+      }),
+    );
+
+    const stored = await db.activities.get(activity.id);
+    expect(stored?.allDay).toBe(true);
+    expect(stored?.startDatetime).toBe(
+      new Date(2024, 6, 16, 0, 0, 0, 0).toISOString(),
+    );
+    expect(stored?.endDatetime).toBe(
+      new Date(2024, 6, 16, 23, 59, 59, 999).toISOString(),
+    );
+  });
+
+  it('keeps a repeated participant id from blowing the seat cap', async () => {
+    const { tripId, personId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addActivity',
+        data: {
+          title: 'Carpool',
+          category: 'other',
+          startDatetime: '2024-07-16T09:00:00',
+          participantIds: [personId, personId, personId],
+          maxParticipants: 2,
+        },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    const [activity] = await activitiesOf(tripId);
+    expect(activity?.participantIds).toEqual([personId]);
+  });
+
+  it('refuses to sign up a guest who is not in the trip', async () => {
+    const { tripId } = await seedTrip();
+    const activity = await createActivity(tripId, {
+      title: 'Hike',
+      category: 'hike',
+      startDatetime: '2024-07-16T09:00:00.000Z' as ISODateTimeString,
+      allDay: false,
+      participantIds: [],
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'joinActivity',
+        data: { activityId: activity.id, personId: 'made-up-id' },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect((await db.activities.get(activity.id))?.participantIds).toEqual([]);
+  });
+
+  it('does not report a change when a guest is already signed up', async () => {
+    const { tripId, personId } = await seedTrip();
+    const activity = await createActivity(tripId, {
+      title: 'Hike',
+      category: 'hike',
+      startDatetime: '2024-07-16T09:00:00.000Z' as ISODateTimeString,
+      allDay: false,
+      participantIds: [personId],
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'joinActivity',
+        data: { activityId: activity.id, personId },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(outcome.summaries).toEqual([]);
   });
 
   it('leaves an activity from another trip untouched', async () => {

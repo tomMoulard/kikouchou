@@ -77,7 +77,15 @@ beforeEach(async () => {
     // Clear all tables in a single transaction for efficiency
     await db.transaction(
       'rw',
-      [db.trips, db.rooms, db.persons, db.roomAssignments, db.transports, db.settings],
+      [
+        db.trips,
+        db.rooms,
+        db.persons,
+        db.roomAssignments,
+        db.transports,
+        db.activities,
+        db.settings,
+      ],
       async () => {
         await Promise.all([
           db.trips.clear(),
@@ -85,6 +93,7 @@ beforeEach(async () => {
           db.persons.clear(),
           db.roomAssignments.clear(),
           db.transports.clear(),
+          db.activities.clear(),
           db.settings.clear(),
         ]);
       }

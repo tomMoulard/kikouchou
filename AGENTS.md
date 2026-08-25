@@ -13,14 +13,16 @@ bun run build                 # tsc -b && vite build
 
 # Quality
 bun run lint                  # ESLint
-bun run validate              # test:run + lint + build + generate-icons + test:e2e:run
+bun run validate              # generate-proto + test:run + lint + build + generate-icons + test:e2e:run
+                              # (generate-proto runs first and needs `buf` installed)
 
 # Unit tests (Vitest)
-bun run test                  # Watch mode
+bun run test                  # Single run (alias of test:run — NOT watch mode)
 bun run test:run              # Single run (use in CI)
+bun run test:ui               # Watch mode with the Vitest UI
 bun run test:coverage         # Coverage report (target: 80% — not yet enforced in CI)
 bun run test src/features/trips/components/__tests__/TripForm.test.tsx  # Single file
-bun run test --grep="TripForm"  # Pattern match
+bun run test -t "TripForm"    # Pattern match (vitest has no --grep)
 
 # E2E tests (Playwright)
 bun run test:e2e              # Headless
