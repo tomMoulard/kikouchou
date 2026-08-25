@@ -13,6 +13,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -22,6 +23,7 @@ import {
   Bot,
   Check,
   Download,
+  ListPlus,
   Loader2,
   RotateCw,
   Send,
@@ -68,6 +70,7 @@ import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
 import {
   type ChatMessage as LLMChatMessage,
   type LoadProgress,
+  isFatalEngineError,
   useWebLLM,
 } from '../hooks/useWebLLM';
 import {
@@ -252,6 +255,21 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
 // ============================================================================
 // Helper
 // ============================================================================
+
+/**
+ * How one queued turn ended. `engine-lost` means the inference session died and
+ * is being rebuilt, so nothing else can run until it is back.
+ */
+type TurnOutcome = 'answered' | 'failed' | 'abandoned' | 'engine-lost';
+
+/**
+ * A prompt accepted by the UI and waiting for the assistant to reach it.
+ */
+interface QueuedPrompt {
+  /** Id of the user bubble already rendered in the transcript. */
+  readonly messageId: string;
+  readonly text: string;
+}
 
 /**
  * How close to the bottom of the transcript counts as "following along".
@@ -455,18 +473,26 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
 });
 
 /**
- * Chat input area with a textarea and send/stop buttons.
+ * Chat input area with a textarea, a send button and — while the assistant is
+ * answering — a stop button.
+ *
+ * The textarea and send button stay live during generation: a prompt sent then
+ * joins the queue instead of being dropped on the floor.
  */
 const ChatInput = memo(function ChatInput({
   onSend,
   isGenerating,
   onStop,
   disabled,
+  queuedCount,
+  onClearQueue,
 }: {
   readonly onSend: (message: string) => void;
   readonly isGenerating: boolean;
   readonly onStop: () => void;
   readonly disabled: boolean;
+  readonly queuedCount: number;
+  readonly onClearQueue: () => void;
 }): ReactElement {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -493,39 +519,74 @@ const ChatInput = memo(function ChatInput({
 
   return (
     <div className="shrink-0 border-t bg-background p-3">
-      <div className="mx-auto flex max-w-3xl items-end gap-2">
-        <Textarea
-          ref={textareaRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={t(
-            'assistant.placeholder',
-            'Ask about your trip or request changes...',
-          )}
-          disabled={disabled}
-          className="min-h-10 max-h-32 resize-none"
-          rows={1}
-        />
-        {isGenerating ? (
-          <Button
-            variant="destructive"
-            size="icon"
-            onClick={onStop}
-            aria-label={t('assistant.stop', 'Stop generating')}
+      <div className="mx-auto flex max-w-3xl flex-col gap-2">
+        {queuedCount > 0 ? (
+          <div
+            className="flex items-center justify-between gap-2 rounded-lg border border-dashed bg-muted/40 px-3 py-1.5"
+            role="status"
           >
-            <Square className="size-4" aria-hidden="true" />
-          </Button>
-        ) : (
+            <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <ListPlus className="size-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate">
+                {t('assistant.queuedCount', { count: queuedCount })}
+              </span>
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0 px-2 text-xs"
+              onClick={onClearQueue}
+            >
+              {t('assistant.clearQueue', 'Clear queue')}
+            </Button>
+          </div>
+        ) : null}
+
+        <div className="flex items-end gap-2">
+          <Textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              isGenerating
+                ? t(
+                    'assistant.placeholderQueue',
+                    'Send another request — it will be answered next...',
+                  )
+                : t(
+                    'assistant.placeholder',
+                    'Ask about your trip or request changes...',
+                  )
+            }
+            disabled={disabled}
+            className="min-h-10 max-h-32 resize-none"
+            rows={1}
+          />
+          {isGenerating ? (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={onStop}
+              aria-label={t('assistant.stop', 'Stop generating')}
+            >
+              <Square className="size-4" aria-hidden="true" />
+            </Button>
+          ) : null}
           <Button
             size="icon"
             onClick={handleSend}
             disabled={!input.trim() || disabled}
-            aria-label={t('assistant.send', 'Send message')}
+            aria-label={
+              isGenerating
+                ? t('assistant.queueMessage', 'Queue message')
+                : t('assistant.send', 'Send message')
+            }
           >
             <Send className="size-4" aria-hidden="true" />
           </Button>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -577,6 +638,29 @@ function AssistantPageComponent(): ReactElement {
   const chatHistoryRef = useRef<LLMChatMessage[]>([]);
   const hasUserChangedModelRef = useRef(false);
 
+  /** Prompts accepted while an answer was in flight, oldest first. */
+  const queueRef = useRef<QueuedPrompt[]>([]);
+  /** Guards the drain loop so exactly one turn runs at a time. */
+  const isDrainingRef = useRef(false);
+  /**
+   * Bumped whenever the transcript is wiped. A turn that started before the
+   * wipe must not write its answer into the fresh conversation.
+   */
+  const conversationVersionRef = useRef(0);
+  const [isAnswering, setIsAnswering] = useState(false);
+
+  // Latest-value refs: a turn started minutes ago must still generate against
+  // the current trip prompt and action executor, not the ones captured when it
+  // was queued.
+  const systemPromptRef = useRef(systemPrompt);
+  systemPromptRef.current = systemPrompt;
+  const generateRef = useRef(generate);
+  generateRef.current = generate;
+  const executeActionsRef = useRef(executeActions);
+  executeActionsRef.current = executeActions;
+  const tRef = useRef(t);
+  tRef.current = t;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -605,10 +689,11 @@ function AssistantPageComponent(): ReactElement {
     };
   }, []);
 
-  // Restore LLM turn history from persisted UI messages (see handleSend for live updates).
+  // Restore LLM turn history from persisted UI messages (see runTurn for live updates).
   useLayoutEffect(() => {
     chatHistoryRef.current = messagesToLLMChatHistory(messages);
-    // Sync only on mount: live updates stay in handleSend (placeholder assistant must not enter history).
+    // Sync only on mount: live updates stay in runTurn (a queued prompt and the
+    // streaming placeholder must not enter history before the turn runs).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -661,19 +746,25 @@ function AssistantPageComponent(): ReactElement {
     isPinnedToBottomRef.current = distanceFromBottom <= SCROLL_PIN_THRESHOLD_PX;
   }, []);
 
-  const handleSend = useCallback(
-    async (text: string) => {
-      // Add user message
-      const userMsg: ChatMessageData = {
-        id: nextMessageId(),
-        role: 'user',
-        content: text,
-      };
-      setMessages((prev) => [...prev, userMsg]);
-      // A prompt the user just sent should always scroll into view.
-      isPinnedToBottomRef.current = true;
+  /**
+   * Runs one queued prompt to completion: promote it out of the queue, stream
+   * the answer, then apply any actions it asked for.
+   */
+  const runTurn = useCallback(
+    async ({ messageId, text }: QueuedPrompt): Promise<TurnOutcome> => {
+      const conversationVersion = conversationVersionRef.current;
+      const isSameConversation = (): boolean =>
+        conversationVersionRef.current === conversationVersion;
 
-      // Build chat history for the LLM
+      // The prompt is now the one being answered — drop the queued marker.
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, queued: false } : msg,
+        ),
+      );
+
+      // Enter the LLM history only now, so an answer already in flight never
+      // sees a prompt the user typed after it started.
       chatHistoryRef.current.push({ role: 'user', content: text });
 
       // Create assistant placeholder for streaming
@@ -685,11 +776,11 @@ function AssistantPageComponent(): ReactElement {
 
       try {
         const fullMessages: LLMChatMessage[] = [
-          { role: 'system', content: systemPrompt },
+          { role: 'system', content: systemPromptRef.current },
           ...chatHistoryRef.current,
         ];
 
-        const response = await generate(fullMessages, (chunk) => {
+        const response = await generateRef.current(fullMessages, (chunk) => {
           // Update the assistant message with streaming content
           setMessages((prev) =>
             prev.map((msg) =>
@@ -698,12 +789,16 @@ function AssistantPageComponent(): ReactElement {
           );
         });
 
+        // The transcript was cleared while this ran: its history is gone, so
+        // appending the answer would leave a reply with nothing to reply to.
+        if (!isSameConversation()) return 'abandoned';
+
         // Add to chat history
         chatHistoryRef.current.push({ role: 'assistant', content: response });
 
         // Execute any action blocks in the response
         const { count: actionsExecuted, summaries: actionSummaries } =
-          await executeActions(response);
+          await executeActionsRef.current(response);
 
         // Update message with final content and action count
         setMessages((prev) =>
@@ -718,28 +813,114 @@ function AssistantPageComponent(): ReactElement {
               : msg,
           ),
         );
+
+        return 'answered';
       } catch (err) {
-        // On error, update the placeholder with error text
-        const errorText =
-          err instanceof Error ? err.message : 'Generation failed';
+        const fatal = isFatalEngineError(err);
+
+        if (!isSameConversation()) return fatal ? 'engine-lost' : 'abandoned';
+
+        // The exchange never happened: leaving the prompt in the history would
+        // send two user turns in a row, which Gemma's chat template rejects.
+        chatHistoryRef.current.pop();
+
+        const detail = err instanceof Error ? err.message : String(err);
+        const content = fatal
+          ? tRef.current('assistant.engineCrashed', {
+              defaultValue:
+                'The model ran out of GPU resources and had to restart. Reloading it now — send your request again in a moment.',
+            })
+          : tRef.current('assistant.generationFailed', {
+              defaultValue: 'Could not answer that: {{error}}',
+              error: detail,
+            });
+
+        console.error('Assistant generation failed:', err);
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.id === assistantId
-              ? { ...msg, content: `Error: ${errorText}` }
-              : msg,
+            msg.id === assistantId ? { ...msg, content, failed: true } : msg,
           ),
         );
+
+        return fatal ? 'engine-lost' : 'failed';
       }
     },
-    [systemPrompt, generate, executeActions],
+    [],
   );
 
+  /**
+   * Answers queued prompts one at a time. Re-entrant calls are no-ops: the loop
+   * already running picks up anything appended while it works.
+   */
+  const drainQueue = useCallback(async (): Promise<void> => {
+    if (isDrainingRef.current) return;
+
+    isDrainingRef.current = true;
+    setIsAnswering(true);
+    try {
+      let next = queueRef.current.shift();
+      while (next !== undefined) {
+        const outcome = await runTurn(next);
+        if (outcome === 'engine-lost') {
+          // Every further prompt would hit the same dead session. Leave them
+          // queued; the reload effect below restarts the drain.
+          return;
+        }
+        next = queueRef.current.shift();
+      }
+    } finally {
+      isDrainingRef.current = false;
+      setIsAnswering(false);
+    }
+  }, [runTurn]);
+
+  const handleSend = useCallback(
+    (text: string): void => {
+      const messageId = nextMessageId();
+
+      // Show the prompt straight away; `queued` is cleared when its turn starts.
+      setMessages((prev) => [
+        ...prev,
+        { id: messageId, role: 'user', content: text, queued: true },
+      ]);
+      // A prompt the user just sent should always scroll into view.
+      isPinnedToBottomRef.current = true;
+
+      queueRef.current.push({ messageId, text });
+      void drainQueue();
+    },
+    [drainQueue],
+  );
+
+  // The engine reloads itself after a crash (see useWebLLM); pick the queue up
+  // again as soon as it can answer.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    if (queueRef.current.length === 0) return;
+    void drainQueue();
+  }, [status, drainQueue]);
+
+  const handleClearQueue = useCallback((): void => {
+    const dropped = queueRef.current;
+    if (dropped.length === 0) return;
+    queueRef.current = [];
+
+    const droppedIds = new Set(dropped.map((prompt) => prompt.messageId));
+    setMessages((prev) => prev.filter((msg) => !droppedIds.has(msg.id)));
+    toast.success(t('assistant.queueCleared', { count: dropped.length }));
+  }, [t]);
+
   const handleClearConversation = useCallback(() => {
+    // Stop the answer in flight and drop everything still waiting, or they
+    // would keep writing into a transcript the user just emptied.
+    queueRef.current = [];
+    conversationVersionRef.current += 1;
+    interrupt();
     setMessages([]);
     chatHistoryRef.current = [];
     clearAssistantChatStorage();
     toast.success(t('assistant.conversationCleared'));
-  }, [t]);
+  }, [interrupt, t]);
 
   const handleModelChange = useCallback(
     async (value: string): Promise<void> => {
@@ -780,7 +961,12 @@ function AssistantPageComponent(): ReactElement {
   );
 
   const isReady = status === 'ready' || status === 'generating';
-  const isModelSelectionLocked = status === 'loading' || status === 'generating';
+  const isModelSelectionLocked =
+    status === 'loading' || status === 'generating' || isAnswering;
+  const queuedCount = useMemo(
+    () => messages.reduce((count, msg) => (msg.queued ? count + 1 : count), 0),
+    [messages],
+  );
 
   return (
     <div
@@ -882,12 +1068,14 @@ function AssistantPageComponent(): ReactElement {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input area */}
+          {/* Input area — stays live while answering so prompts can be queued */}
           <ChatInput
             onSend={handleSend}
-            isGenerating={status === 'generating'}
+            isGenerating={isAnswering}
             onStop={interrupt}
-            disabled={status === 'generating'}
+            disabled={status !== 'ready' && status !== 'generating'}
+            queuedCount={queuedCount}
+            onClearQueue={handleClearQueue}
           />
         </>
       )}

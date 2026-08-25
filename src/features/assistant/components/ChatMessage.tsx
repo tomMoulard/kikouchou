@@ -6,7 +6,7 @@
 
 import { memo, useMemo, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Clock3 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -113,12 +113,29 @@ const ChatMessage = memo(function ChatMessage({
           isUser
             ? 'bg-primary text-primary-foreground rounded-br-md whitespace-pre-wrap'
             : 'bg-muted text-foreground rounded-bl-md',
+          message.queued && 'opacity-70',
+          message.failed &&
+            !isUser &&
+            'border border-destructive/40 bg-destructive/10 text-destructive',
         )}
       >
         {isUser ? (
           displayContent || '...'
         ) : (
           <MarkdownText content={displayContent || '...'} />
+        )}
+        {message.queued && (
+          <div
+            className={cn(
+              'mt-1.5 flex items-center gap-1.5 border-t pt-1.5 text-xs',
+              isUser
+                ? 'border-primary-foreground/20 text-primary-foreground/80'
+                : 'border-border text-muted-foreground',
+            )}
+          >
+            <Clock3 className="size-3.5 shrink-0" aria-hidden="true" />
+            <span>{t('assistant.queuedBadge', 'Queued')}</span>
+          </div>
         )}
         {appliedCount > 0 && (
           hasExpandableDetails ? (
