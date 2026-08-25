@@ -74,30 +74,13 @@ beforeEach(async () => {
       await db.open();
     }
 
-    // Clear all tables in a single transaction for efficiency
-    await db.transaction(
-      'rw',
-      [
-        db.trips,
-        db.rooms,
-        db.persons,
-        db.roomAssignments,
-        db.transports,
-        db.activities,
-        db.settings,
-      ],
-      async () => {
-        await Promise.all([
-          db.trips.clear(),
-          db.rooms.clear(),
-          db.persons.clear(),
-          db.roomAssignments.clear(),
-          db.transports.clear(),
-          db.activities.clear(),
-          db.settings.clear(),
-        ]);
-      }
-    );
+    // Clear every table in a single transaction. The list is DERIVED from
+    // db.tables rather than hand-maintained: the old literal array silently
+    // missed `activities` when DB v6 added it, and `yjsUpdates` before that,
+    // leaking rows between tests in whichever file wrote them.
+    await db.transaction('rw', db.tables, async () => {
+      await Promise.all(db.tables.map((table) => table.clear()));
+    });
   } catch (error) {
     console.error('Failed to reset test database:', error);
     throw new Error(
