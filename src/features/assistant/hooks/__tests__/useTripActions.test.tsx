@@ -17,6 +17,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { createActivity } from '@/lib/db/repositories/activity-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
+import { createRoom } from '@/lib/db/repositories/room-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { hexColor, isoDate } from '@/test/utils';
 import type { Activity, ISODateTimeString, PersonId, TripId } from '@/types';
@@ -464,5 +465,121 @@ describe('useTripActions — activities', () => {
 
     expect(outcome.count).toBe(0);
     expect(await db.activities.get(foreign.id)).toBeDefined();
+  });
+});
+
+// ============================================================================
+// Cross-trip foreign keys
+// ============================================================================
+
+describe('useTripActions — cross-trip references', () => {
+  it('refuses to assign a room to a guest from another trip', async () => {
+    const { tripId } = await seedTrip();
+    const other = await createTrip({
+      name: 'Other trip',
+      startDate: isoDate('2025-01-01'),
+      endDate: isoDate('2025-01-05'),
+    });
+    const foreignPerson = await createPerson(other.id, {
+      name: 'Not mine',
+      color: hexColor('#22c55e'),
+    });
+    const room = await createRoom(tripId, { name: 'Blue', capacity: 2 });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'assignRoom',
+        data: {
+          personId: foreignPerson.id,
+          roomId: room.id,
+          startDate: '2024-07-16',
+          endDate: '2024-07-18',
+        },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await db.roomAssignments.where('tripId').equals(tripId).count()).toBe(0);
+  });
+
+  it('refuses to assign a room that belongs to another trip', async () => {
+    const { tripId, personId } = await seedTrip();
+    const other = await createTrip({
+      name: 'Other trip',
+      startDate: isoDate('2025-01-01'),
+      endDate: isoDate('2025-01-05'),
+    });
+    const foreignRoom = await createRoom(other.id, { name: 'Theirs', capacity: 2 });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'assignRoom',
+        data: {
+          personId,
+          roomId: foreignRoom.id,
+          startDate: '2024-07-16',
+          endDate: '2024-07-18',
+        },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await db.roomAssignments.where('tripId').equals(tripId).count()).toBe(0);
+  });
+
+  it('refuses transport for a guest from another trip', async () => {
+    const { tripId } = await seedTrip();
+    const other = await createTrip({
+      name: 'Other trip',
+      startDate: isoDate('2025-01-01'),
+      endDate: isoDate('2025-01-05'),
+    });
+    const foreignPerson = await createPerson(other.id, {
+      name: 'Not mine',
+      color: hexColor('#22c55e'),
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addTransport',
+        data: {
+          personId: foreignPerson.id,
+          type: 'arrival',
+          datetime: '2024-07-16T14:00:00',
+          location: 'Gare',
+        },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await db.transports.where('tripId').equals(tripId).count()).toBe(0);
+  });
+
+  it('still allows a guest and room from the active trip', async () => {
+    const { tripId, personId } = await seedTrip();
+    const room = await createRoom(tripId, { name: 'Blue', capacity: 2 });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'assignRoom',
+        data: {
+          personId,
+          roomId: room.id,
+          startDate: '2024-07-16',
+          endDate: '2024-07-18',
+        },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    expect(await db.roomAssignments.where('tripId').equals(tripId).count()).toBe(1);
   });
 });
