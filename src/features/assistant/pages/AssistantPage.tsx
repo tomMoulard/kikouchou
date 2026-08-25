@@ -253,6 +253,12 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
 // Helper
 // ============================================================================
 
+/**
+ * How close to the bottom of the transcript counts as "following along".
+ * Past it, streamed tokens must not yank the reader back down.
+ */
+const SCROLL_PIN_THRESHOLD_PX = 80;
+
 let messageCounter = 0;
 function nextMessageId(): string {
   return `msg-${++messageCounter}-${Date.now()}`;
@@ -566,6 +572,8 @@ function AssistantPageComponent(): ReactElement {
     loadAssistantChatMessages(),
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const isPinnedToBottomRef = useRef(true);
   const chatHistoryRef = useRef<LLMChatMessage[]>([]);
   const hasUserChangedModelRef = useRef(false);
 
@@ -637,10 +645,21 @@ function AssistantPageComponent(): ReactElement {
     });
   }, [isCached, selectedModelId]);
 
-  // Auto-scroll to bottom when messages change
+  // Follow the conversation only while the reader is already at the bottom, and
+  // jump instantly rather than animating — a smooth scroll restarted on every
+  // streamed token makes the transcript impossible to read or scroll away from.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!isPinnedToBottomRef.current) return;
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
   }, [messages]);
+
+  const handleMessagesScroll = useCallback((): void => {
+    const container = messagesScrollRef.current;
+    if (!container) return;
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    isPinnedToBottomRef.current = distanceFromBottom <= SCROLL_PIN_THRESHOLD_PX;
+  }, []);
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -651,6 +670,8 @@ function AssistantPageComponent(): ReactElement {
         content: text,
       };
       setMessages((prev) => [...prev, userMsg]);
+      // A prompt the user just sent should always scroll into view.
+      isPinnedToBottomRef.current = true;
 
       // Build chat history for the LLM
       chatHistoryRef.current.push({ role: 'user', content: text });
@@ -829,7 +850,11 @@ function AssistantPageComponent(): ReactElement {
       ) : (
         <>
           {/* Messages area — only this region scrolls; input stays visible above mobile nav */}
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-4">
+          <div
+            ref={messagesScrollRef}
+            onScroll={handleMessagesScroll}
+            className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain py-4"
+          >
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground gap-3">
                 <Bot className="size-12 opacity-50" aria-hidden="true" />
