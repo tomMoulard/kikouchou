@@ -107,8 +107,10 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        // Exclude large Transformers.js vendor chunk from precache (loaded on demand)
-        globIgnores: ['**/vendor-transformers*.js'],
+        // Exclude the large Transformers.js bundles from precache — the ML
+        // runtime now lives in the assistant worker, fetched only when someone
+        // actually loads a model.
+        globIgnores: ['**/vendor-transformers*.js', '**/llm.worker*.js'],
         // Runtime caching for external resources
         runtimeCaching: [
           {
@@ -150,6 +152,11 @@ export default defineConfig({
     alias: {
       '@': resolve(import.meta.dirname, './src'),
     },
+  },
+  // The assistant worker statically imports Transformers.js, which needs
+  // code-splitting — Vite's default `iife` worker format cannot express that.
+  worker: {
+    format: 'es',
   },
   build: {
     rollupOptions: {

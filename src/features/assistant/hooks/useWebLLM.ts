@@ -1,7 +1,12 @@
 /**
  * @fileoverview Custom hook for managing a selectable local LLM via
  * @huggingface/transformers (Transformers.js).
- * Handles model loading, chat completion with streaming, and lifecycle.
+ *
+ * The heavy lifting — downloading weights, building the ONNX session and the
+ * token loop — runs inside a dedicated worker (see `workers/llm.worker.ts`), so
+ * loading or answering never freezes the page. This hook is the main-thread
+ * client: it owns the worker, translates progress events into UI state, and
+ * exposes a promise-based API.
  *
  * @module features/assistant/hooks/useWebLLM
  */
@@ -10,6 +15,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import i18n from '@/lib/i18n';
 import type { AssistantModelPreset } from '../models';
+import type {
+  HubProgressEvent,
+  LLMWorkerRequest,
+  LLMWorkerResponse,
+} from '../workers/llm-worker-protocol';
 
 // ============================================================================
 // Type Definitions
@@ -54,6 +64,25 @@ export interface LoadProgress {
 export interface ChatMessage {
   readonly role: 'system' | 'user' | 'assistant';
   readonly content: string;
+}
+
+/**
+ * Error raised when the inference session itself died. The engine unloads
+ * itself and reloads from cache; the prompt that hit it was never answered.
+ */
+export interface FatalEngineError extends Error {
+  readonly fatal: true;
+}
+
+/**
+ * Whether a rejected `generate()` took the whole engine down with it, rather
+ * than just failing that one answer.
+ */
+export function isFatalEngineError(error: unknown): error is FatalEngineError {
+  return (
+    error instanceof Error &&
+    (error as { readonly fatal?: unknown }).fatal === true
+  );
 }
 
 /**
@@ -157,6 +186,59 @@ function buildLoadProgressFromMap(
   };
 }
 
+/**
+ * Folds one raw Hub progress event into the per-file map.
+ */
+function applyHubProgressEvent(
+  map: Map<string, FileEntry>,
+  event: HubProgressEvent,
+): void {
+  const fileKey = event.file;
+  if (!fileKey) return;
+
+  const fileName = fileKey.split('/').pop() ?? '';
+
+  if (event.status === 'initiate') {
+    map.set(fileKey, {
+      fileName: fileName || '…',
+      progress: 0,
+      done: false,
+    });
+    return;
+  }
+
+  if (event.status === 'progress' && event.progress != null) {
+    const { loaded, total } = event;
+    const bytesHint =
+      typeof loaded === 'number' && typeof total === 'number' && total > 0
+        ? `${formatBytes(loaded)} / ${formatBytes(total)}`
+        : undefined;
+    const prev = map.get(fileKey) ?? {
+      fileName: fileName || '…',
+      progress: 0,
+      done: false,
+    };
+    map.set(fileKey, {
+      ...prev,
+      fileName: fileName || prev.fileName,
+      progress: event.progress / 100,
+      bytesHint,
+      done: false,
+    });
+    return;
+  }
+
+  if (event.status === 'done') {
+    const prev = map.get(fileKey);
+    map.set(fileKey, {
+      fileName: prev?.fileName ?? (fileName || '…'),
+      progress: 1,
+      done: true,
+      bytesHint: undefined,
+    });
+  }
+}
+
 function getInitialLoaderText(loadingFromCache: boolean): string {
   return i18n.t(
     loadingFromCache
@@ -196,44 +278,132 @@ async function isModelCached(modelId: string): Promise<boolean> {
 }
 
 // ============================================================================
-// Module-level singleton state
+// Module-level worker client
 // ============================================================================
 
 /**
- * Holds the loaded text-generation pipeline.
- * Module-level to survive React strict-mode double-mounts.
+ * One worker per tab, created lazily on first load and reused across React
+ * strict-mode double-mounts and model switches.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let pipelineInstance: any = null;
+let workerInstance: Worker | null = null;
 
 /**
- * Hugging Face model ID associated with the currently loaded pipeline.
+ * Hugging Face model ID the worker currently holds a pipeline for.
  */
 let loadedModelId: string | null = null;
 
 /**
- * Reference to the dynamically imported TextStreamer class.
- * Stored at module level so `generate` can create instances without
- * re-importing the entire library.
+ * Monotonic request counter; pairs a worker reply with the promise that asked.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let TextStreamerClass: any = null;
+let requestCounter = 0;
 
-/**
- * Flag used by the interrupt mechanism.
- */
-let shouldStop = false;
+interface PendingRequest {
+  readonly resolve: (value: string) => void;
+  readonly reject: (error: Error) => void;
+  readonly onProgress?: (event: HubProgressEvent) => void;
+  readonly onChunk?: (text: string) => void;
+}
 
-/**
- * Disposes the currently loaded pipeline, if any.
- */
-async function disposeLoadedPipeline(): Promise<void> {
-  if (pipelineInstance !== null) {
-    await pipelineInstance.dispose?.();
-    pipelineInstance = null;
+const pendingRequests = new Map<string, PendingRequest>();
+
+function nextRequestId(): string {
+  requestCounter += 1;
+  return `llm-${requestCounter}`;
+}
+
+function settleAllPending(error: Error): void {
+  const pending = Array.from(pendingRequests.values());
+  pendingRequests.clear();
+  for (const request of pending) {
+    request.reject(error);
   }
-  TextStreamerClass = null;
+}
+
+function handleWorkerMessage(event: MessageEvent<LLMWorkerResponse>): void {
+  const response = event.data;
+  const pending = pendingRequests.get(response.requestId);
+  if (!pending) return;
+
+  switch (response.type) {
+    case 'progress':
+      pending.onProgress?.(response.event);
+      break;
+    case 'chunk':
+      pending.onChunk?.(response.text);
+      break;
+    case 'loaded':
+    case 'unloaded':
+      pendingRequests.delete(response.requestId);
+      pending.resolve('');
+      break;
+    case 'done':
+      pendingRequests.delete(response.requestId);
+      pending.resolve(response.text);
+      break;
+    case 'error':
+      pendingRequests.delete(response.requestId);
+      if (response.fatal) {
+        // The worker tore the pipeline down; the client's view of what is
+        // loaded has to follow or `loadModel` would no-op.
+        loadedModelId = null;
+      }
+      pending.reject(
+        Object.assign(new Error(response.message), { fatal: response.fatal }),
+      );
+      break;
+  }
+}
+
+function handleWorkerError(event: ErrorEvent): void {
   loadedModelId = null;
+  settleAllPending(
+    new Error(event.message || 'The assistant worker stopped unexpectedly.'),
+  );
+}
+
+function getWorker(): Worker {
+  if (workerInstance !== null) return workerInstance;
+
+  if (typeof Worker === 'undefined') {
+    throw new Error('Web Workers are not supported in this browser.');
+  }
+
+  const worker = new Worker(
+    new URL('../workers/llm.worker.ts', import.meta.url),
+    { type: 'module' },
+  );
+  worker.addEventListener('message', handleWorkerMessage);
+  worker.addEventListener('error', handleWorkerError);
+  workerInstance = worker;
+  return worker;
+}
+
+/**
+ * Every worker request except the fire-and-forget `interrupt`.
+ */
+type TrackedWorkerRequest = Extract<LLMWorkerRequest, { requestId: string }>;
+
+/**
+ * Posts a request and resolves when the worker settles that same request id.
+ */
+function sendRequest(
+  request: TrackedWorkerRequest,
+  handlers: Pick<PendingRequest, 'onProgress' | 'onChunk'> = {},
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    let worker: Worker;
+    try {
+      worker = getWorker();
+    } catch (error) {
+      reject(
+        error instanceof Error ? error : new Error('Failed to start worker'),
+      );
+      return;
+    }
+
+    pendingRequests.set(request.requestId, { resolve, reject, ...handlers });
+    worker.postMessage(request);
+  });
 }
 
 // ============================================================================
@@ -242,7 +412,7 @@ async function disposeLoadedPipeline(): Promise<void> {
 
 /**
  * Hook that manages a local selectable model for on-device inference
- * via Hugging Face Transformers.js.
+ * via Hugging Face Transformers.js, running in a worker.
  *
  * @param preset - Selected assistant model preset
  * @returns Engine state and control functions
@@ -261,7 +431,7 @@ async function disposeLoadedPipeline(): Promise<void> {
  */
 export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   const [status, setStatus] = useState<EngineStatus>(
-    pipelineInstance !== null && loadedModelId === preset.modelId ? 'ready' : 'idle',
+    loadedModelId === preset.modelId ? 'ready' : 'idle',
   );
   const [loadProgress, setLoadProgress] = useState<LoadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -296,9 +466,9 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   useEffect(() => {
     activeModelIdRef.current = preset.modelId;
 
-    if (pipelineInstance !== null && loadedModelId === preset.modelId) {
+    if (loadedModelId === preset.modelId) {
       cacheProbeVersionRef.current += 1;
-      // Already loaded in memory — no need to check cache.
+      // Already loaded in the worker — no need to check cache.
       setStatus('ready');
       setIsCached(true);
       return;
@@ -327,7 +497,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       return;
     }
 
-    if (pipelineInstance !== null && loadedModelId === preset.modelId) {
+    if (loadedModelId === preset.modelId) {
       return;
     }
 
@@ -343,92 +513,29 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     });
 
     try {
-      // Dynamic import so the heavy library is only pulled in on demand
-      const transformers = await import('@huggingface/transformers');
-
-      // Disable local model checks — always use HuggingFace Hub / browser cache
-      transformers.env.allowLocalModels = false;
-
-      // Store the TextStreamer class for later use in generate()
-      TextStreamerClass = transformers.TextStreamer;
-
-      if (pipelineInstance !== null && loadedModelId !== preset.modelId) {
-        await disposeLoadedPipeline();
-      }
-
-      const generator = await transformers.pipeline(
-        'text-generation',
-        preset.modelId,
+      await sendRequest(
         {
-          dtype: preset.dtype,
-          ...(preset.device ? { device: preset.device } : {}),
-          progress_callback: (progress: {
-            status: string;
-            file?: string;
-            progress?: number;
-            loaded?: number;
-            total?: number;
-          }) => {
-            const fileKey = progress.file;
-            const fileName = progress.file?.split('/').pop() ?? '';
-            const map = downloadFilesRef.current;
-
-            if (fileKey) {
-              if (progress.status === 'initiate') {
-                map.set(fileKey, {
-                  fileName: fileName || '…',
-                  progress: 0,
-                  done: false,
-                });
-              } else if (
-                progress.status === 'progress' &&
-                progress.progress != null
-              ) {
-                const loaded = progress.loaded;
-                const total = progress.total;
-                const bytesHint =
-                  typeof loaded === 'number' &&
-                  typeof total === 'number' &&
-                  total > 0
-                    ? `${formatBytes(loaded)} / ${formatBytes(total)}`
-                    : undefined;
-                const prev = map.get(fileKey) ?? {
-                  fileName: fileName || '…',
-                  progress: 0,
-                  done: false,
-                };
-                map.set(fileKey, {
-                  ...prev,
-                  fileName: fileName || prev.fileName,
-                  progress: progress.progress / 100,
-                  bytesHint,
-                  done: false,
-                });
-              } else if (progress.status === 'done') {
-                const prev = map.get(fileKey);
-                if (prev) {
-                  map.set(fileKey, {
-                    ...prev,
-                    progress: 1,
-                    done: true,
-                    bytesHint: undefined,
-                  });
-                } else {
-                  map.set(fileKey, {
-                    fileName: fileName || '…',
-                    progress: 1,
-                    done: true,
-                  });
-                }
-              }
-            }
-
-            setLoadProgress(buildLoadProgressFromMap(map, loadingFromCache));
+          type: 'load',
+          requestId: nextRequestId(),
+          config: {
+            modelId: preset.modelId,
+            dtype: preset.dtype,
+            ...(preset.device ? { device: preset.device } : {}),
+          },
+        },
+        {
+          onProgress: (event) => {
+            applyHubProgressEvent(downloadFilesRef.current, event);
+            setLoadProgress(
+              buildLoadProgressFromMap(
+                downloadFilesRef.current,
+                loadingFromCache,
+              ),
+            );
           },
         },
       );
 
-      pipelineInstance = generator;
       loadedModelId = preset.modelId;
       setStatus('ready');
       setLoadProgress(null);
@@ -452,76 +559,33 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       messages: ChatMessage[],
       onChunk?: (chunk: string) => void,
     ): Promise<string> => {
-      if (pipelineInstance === null || loadedModelId !== preset.modelId) {
+      if (loadedModelId !== preset.modelId) {
         throw new Error('Model not loaded. Call loadModel() first.');
       }
 
       setStatus('generating');
       setError(null);
-      shouldStop = false;
-
-      let fullResponse = '';
 
       try {
-        // Build a proper TextStreamer that decodes token IDs into text.
-        // The pipeline exposes its tokenizer at `pipelineInstance.tokenizer`.
-        const streamer =
-          TextStreamerClass && pipelineInstance.tokenizer
-            ? new TextStreamerClass(pipelineInstance.tokenizer, {
-                skip_prompt: true,
-                skip_special_tokens: true,
-                callback_function: (text: string) => {
-                  if (shouldStop) return;
-                  fullResponse += text;
-                  onChunk?.(fullResponse);
-                },
-              })
-            : undefined;
-
-        const output = await pipelineInstance(messages, {
-          max_new_tokens: 1024,
-          temperature: 0.7,
-          do_sample: true,
-          return_full_text: false,
-          ...(streamer ? { streamer } : {}),
-          // Interrupt hook: the callback_function is called per-step
-          // and throwing inside it aborts generation early.
-          callback_function: () => {
-            if (shouldStop) {
-              throw new Error('__interrupted__');
-            }
+        const response = await sendRequest(
+          {
+            type: 'generate',
+            requestId: nextRequestId(),
+            modelId: preset.modelId,
+            messages,
           },
-        });
-
-        // If streamer wasn't available (fallback), extract from pipeline output
-        if (!fullResponse && Array.isArray(output) && output.length > 0) {
-          const generated = output[0]?.generated_text;
-          if (typeof generated === 'string') {
-            fullResponse = generated;
-          } else if (Array.isArray(generated)) {
-            // Chat-style output: array of {role, content}
-            const last = generated[generated.length - 1];
-            fullResponse =
-              typeof last === 'object' && last?.content
-                ? String(last.content)
-                : '';
-          }
-        }
+          { onChunk: (text) => onChunk?.(text) },
+        );
 
         setStatus('ready');
-        return fullResponse;
+        return response;
       } catch (err) {
-        if (
-          err instanceof Error &&
-          err.message === '__interrupted__'
-        ) {
-          setStatus('ready');
-          return fullResponse;
-        }
         const message =
           err instanceof Error ? err.message : 'Generation failed';
         setError(message);
-        setStatus('ready');
+        // On a fatal failure the pipeline is gone: going back to `idle` (with
+        // the files still cached) is what makes the page reload it on its own.
+        setStatus(isFatalEngineError(err) ? 'idle' : 'ready');
         throw err;
       }
     },
@@ -532,14 +596,23 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   // interrupt
   // ------------------------------------------------------------------
   const interrupt = useCallback((): void => {
-    shouldStop = true;
+    if (workerInstance === null) return;
+    workerInstance.postMessage({ type: 'interrupt' } satisfies LLMWorkerRequest);
   }, []);
 
   // ------------------------------------------------------------------
   // unload
   // ------------------------------------------------------------------
   const unload = useCallback(async (): Promise<void> => {
-    await disposeLoadedPipeline();
+    if (workerInstance !== null) {
+      try {
+        await sendRequest({ type: 'unload', requestId: nextRequestId() });
+      } catch (unloadError) {
+        console.error('Failed to unload assistant model:', unloadError);
+      }
+    }
+
+    loadedModelId = null;
     activeModelIdRef.current = preset.modelId;
     setStatus('idle');
     setLoadProgress(null);
