@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@/test/utils';
+import { act, render, screen, waitFor } from '@/test/utils';
 
 const mockLoadModel = vi.fn().mockResolvedValue(undefined);
 const mockGenerate = vi.fn();
@@ -54,11 +54,62 @@ vi.mock('../../hooks/useTripActions', () => ({
 
 const mockUseWebLLM = vi.fn();
 
-vi.mock('../../hooks/useWebLLM', () => ({
+// Keep the real `isFatalEngineError` — the crash-recovery path depends on it
+// classifying errors exactly the way production does.
+vi.mock('../../hooks/useWebLLM', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../hooks/useWebLLM')>()),
   useWebLLM: (...args: unknown[]) => mockUseWebLLM(...args),
 }));
 
 import { AssistantPage } from '../AssistantPage';
+
+// ============================================================================
+// Test Helpers
+// ============================================================================
+
+interface GenerateCall {
+  readonly messages: readonly { readonly role: string; readonly content: string }[];
+  readonly resolve: (response: string) => void;
+  readonly reject: (error: unknown) => void;
+}
+
+/**
+ * Replaces `generate` with one that never settles on its own, so a test can
+ * hold an answer open and send more prompts behind it.
+ */
+function useDeferredGenerate(): GenerateCall[] {
+  const calls: GenerateCall[] = [];
+  mockGenerate.mockImplementation(
+    (messages: GenerateCall['messages']) =>
+      new Promise<string>((resolve, reject) => {
+        calls.push({ messages, resolve, reject });
+      }),
+  );
+  return calls;
+}
+
+function readyEngine(overrides: Record<string, unknown> = {}) {
+  return {
+    status: 'ready',
+    loadProgress: null,
+    error: null,
+    isCached: true,
+    loadModel: mockLoadModel,
+    generate: mockGenerate,
+    interrupt: mockInterrupt,
+    unload: mockUnload,
+    ...overrides,
+  };
+}
+
+async function sendPrompt(
+  user: ReturnType<typeof render>['user'],
+  text: string,
+  buttonName: 'assistant.send' | 'assistant.queueMessage',
+): Promise<void> {
+  await user.type(screen.getByRole('textbox'), text);
+  await user.click(screen.getByRole('button', { name: buttonName }));
+}
 
 describe('AssistantPage', () => {
   beforeEach(() => {
@@ -140,5 +191,155 @@ describe('AssistantPage', () => {
         assistantModelId: 'gemma-3-1b',
       });
     });
+  });
+});
+
+describe('AssistantPage — request queue', () => {
+  beforeEach(() => {
+    mockUseWebLLM.mockReturnValue(readyEngine());
+  });
+
+  it('accepts a prompt while answering and keeps it out of the answer in flight', async () => {
+    const calls = useDeferredGenerate();
+    const { user } = render(<AssistantPage />, { withProviders: false });
+
+    await sendPrompt(user, 'first', 'assistant.send');
+    await waitFor(() => expect(calls).toHaveLength(1));
+
+    // The composer stays usable — that is the whole point of the queue.
+    expect(screen.getByRole('textbox')).not.toBeDisabled();
+
+    await sendPrompt(user, 'second', 'assistant.queueMessage');
+
+    expect(screen.getByText('second')).toBeInTheDocument();
+    expect(screen.getByText('assistant.queuedBadge')).toBeInTheDocument();
+    expect(screen.getByText('assistant.queuedCount')).toBeInTheDocument();
+
+    // Still exactly one generation, and it never saw the queued prompt.
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.messages).toEqual([
+      { role: 'system', content: 'system-prompt' },
+      { role: 'user', content: 'first' },
+    ]);
+  });
+
+  it('answers queued prompts in order, with the earlier exchange in history', async () => {
+    const calls = useDeferredGenerate();
+    const { user } = render(<AssistantPage />, { withProviders: false });
+
+    await sendPrompt(user, 'first', 'assistant.send');
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await sendPrompt(user, 'second', 'assistant.queueMessage');
+
+    await act(async () => {
+      calls[0]!.resolve('answer one');
+    });
+
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[1]!.messages).toEqual([
+      { role: 'system', content: 'system-prompt' },
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'answer one' },
+      { role: 'user', content: 'second' },
+    ]);
+    expect(screen.queryByText('assistant.queuedBadge')).not.toBeInTheDocument();
+  });
+
+  it('drops waiting prompts when the queue is cleared', async () => {
+    const calls = useDeferredGenerate();
+    const { user } = render(<AssistantPage />, { withProviders: false });
+
+    await sendPrompt(user, 'first', 'assistant.send');
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await sendPrompt(user, 'second', 'assistant.queueMessage');
+
+    await user.click(screen.getByRole('button', { name: 'assistant.clearQueue' }));
+    expect(screen.queryByText('second')).not.toBeInTheDocument();
+
+    await act(async () => {
+      calls[0]!.resolve('answer one');
+    });
+
+    await waitFor(() => expect(screen.getByText('answer one')).toBeInTheDocument());
+    expect(calls).toHaveLength(1);
+  });
+
+  it('abandons an answer whose conversation was cleared mid-flight', async () => {
+    const calls = useDeferredGenerate();
+    const { user } = render(<AssistantPage />, { withProviders: false });
+
+    await sendPrompt(user, 'first', 'assistant.send');
+    await waitFor(() => expect(calls).toHaveLength(1));
+
+    await user.click(
+      screen.getByRole('button', { name: 'assistant.clearConversation' }),
+    );
+    expect(mockInterrupt).toHaveBeenCalled();
+
+    await act(async () => {
+      calls[0]!.resolve('answer nobody asked for any more');
+    });
+
+    expect(
+      screen.queryByText('answer nobody asked for any more'),
+    ).not.toBeInTheDocument();
+
+    // The abandoned turn must leave no trace in the history the next one sends.
+    await sendPrompt(user, 'fresh start', 'assistant.send');
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[1]!.messages).toEqual([
+      { role: 'system', content: 'system-prompt' },
+      { role: 'user', content: 'fresh start' },
+    ]);
+  });
+
+  it('holds the queue when the engine dies and resumes once it reloads', async () => {
+    const calls = useDeferredGenerate();
+    // `AssistantPage` is memoized, so a re-render has to come from inside it:
+    // give the mocked hook real state and drive the status from there.
+    let setEngineStatus: (status: string) => void = () => {};
+    mockUseWebLLM.mockImplementation(() => {
+      const [status, setStatus] = useState('ready');
+      setEngineStatus = setStatus;
+      return readyEngine({ status });
+    });
+
+    const { user } = render(<AssistantPage />, { withProviders: false });
+
+    await sendPrompt(user, 'first', 'assistant.send');
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await sendPrompt(user, 'second', 'assistant.queueMessage');
+
+    // The WebGPU session dies mid-answer.
+    await act(async () => {
+      calls[0]!.reject(
+        Object.assign(new Error('failed to call OrtRun()'), { fatal: true }),
+      );
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText('assistant.engineCrashed')).toBeInTheDocument(),
+    );
+    // The queued prompt is held rather than thrown at the dead session.
+    expect(calls).toHaveLength(1);
+    expect(screen.getByText('assistant.queuedBadge')).toBeInTheDocument();
+
+    // useWebLLM drops to `idle` and reloads the cached model; the queue must
+    // pick up again when it reports ready.
+    await act(async () => {
+      setEngineStatus('loading');
+    });
+    expect(calls).toHaveLength(1);
+
+    await act(async () => {
+      setEngineStatus('ready');
+    });
+
+    await waitFor(() => expect(calls).toHaveLength(2));
+    // The failed exchange left no dangling user turn behind it.
+    expect(calls[1]!.messages).toEqual([
+      { role: 'system', content: 'system-prompt' },
+      { role: 'user', content: 'second' },
+    ]);
   });
 });
