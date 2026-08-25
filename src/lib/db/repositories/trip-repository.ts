@@ -271,8 +271,21 @@ export async function getTripsByLocation(query: string): Promise<Trip[]> {
 export async function deleteTrip(id: TripId): Promise<void> {
   await db.transaction(
     'rw',
-    [db.trips, db.rooms, db.persons, db.roomAssignments, db.transports],
+    [
+      db.trips,
+      db.rooms,
+      db.persons,
+      db.roomAssignments,
+      db.transports,
+      db.activities,
+      db.yjsUpdates,
+    ],
     async () => {
+      // The trip's own row is read first: purging the CRDT log needs its
+      // p2pRoomId, and without that purge a deleted trip re-materialises in
+      // full the next time its share link is opened.
+      const trip = await db.trips.get(id);
+
       // Delete related records in parallel for better performance
       // Within a transaction, all operations are atomic regardless of order
       await Promise.all([
@@ -280,7 +293,12 @@ export async function deleteTrip(id: TripId): Promise<void> {
         db.transports.where('tripId').equals(id).delete(),
         db.persons.where('tripId').equals(id).delete(),
         db.rooms.where('tripId').equals(id).delete(),
+        db.activities.where('tripId').equals(id).delete(),
       ]);
+
+      if (trip?.p2pRoomId) {
+        await db.yjsUpdates.where('roomId').equals(trip.p2pRoomId).delete();
+      }
 
       // Delete the trip itself after related data is removed
       await db.trips.delete(id);
