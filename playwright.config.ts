@@ -79,6 +79,11 @@ export default defineConfig({
       timeout: 120 * 1000,
       env: {
         VITE_SIGNALING_URL: 'ws://127.0.0.1:4444',
+        // vite.config.ts sets base='/kikoushou/' when GITHUB_ACTIONS is set,
+        // but baseURL and every page.goto('/...') here assume '/'. The plugin
+        // spawns this command with the full ambient env, so CI's own
+        // GITHUB_ACTIONS=true would 404 every non-root navigation. Clear it.
+        GITHUB_ACTIONS: '',
       },
     },
   ],
