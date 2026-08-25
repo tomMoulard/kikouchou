@@ -267,6 +267,22 @@ export class KikoushouDatabase extends Dexie {
       settings: 'id',
       yjsUpdates: '++id, roomId',
     });
+
+    // An idle tab holding an older schema version blocks a newer tab's upgrade
+    // transaction indefinitely. Without these two handlers the newer tab's
+    // db.open() never resolves *or rejects*, so a caller awaiting it hangs
+    // forever — see the render gate in main.tsx.
+    this.on('versionchange', () => {
+      // Another tab wants to upgrade: let go so it can.
+      this.close();
+      return false;
+    });
+
+    this.on('blocked', () => {
+      console.warn(
+        '[db] upgrade blocked by another open tab — close other Kikoushou tabs',
+      );
+    });
   }
 }
 
