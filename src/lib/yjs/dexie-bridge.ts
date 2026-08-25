@@ -112,17 +112,20 @@ function getMeta(doc: Y.Doc): Y.Map<unknown> {
   return doc.getMap('meta');
 }
 
-function buildTripRecord(doc: Y.Doc, roomId: string, existingTrip?: Trip): Trip | null {
+function buildTripRecord(
+  doc: Y.Doc,
+  roomId: string,
+  existingTrip?: Trip,
+  encryptionKey?: string,
+): Trip | null {
   const meta = getMeta(doc);
   const id = meta.get('id');
   if (typeof id !== 'string') {
     return null;
   }
 
-  const shareId = meta.get('shareId');
   const createdAt = meta.get('createdAt');
   const updatedAt = meta.get('updatedAt');
-  const fragmentKey = typeof window !== 'undefined' ? window.location.hash.slice(1) : undefined;
 
   const trip: Trip = {
     id: id as TripId,
@@ -135,9 +138,10 @@ function buildTripRecord(doc: Y.Doc, roomId: string, existingTrip?: Trip): Trip 
       (meta.get('endDate') as Trip['endDate']) ??
       existingTrip?.endDate ??
       ('' as Trip['endDate']),
-    shareId:
-      ((typeof shareId === 'string' ? shareId : existingTrip?.shareId) as ShareId | undefined) ??
-      (id.slice(0, 10) as ShareId),
+    // NEVER take shareId from a peer: it is a UNIQUE Dexie index, so a value
+    // colliding with another local trip aborts the whole write transaction and
+    // permanently kills sync for this trip.
+    shareId: existingTrip?.shareId ?? (id.slice(0, 10) as ShareId),
     createdAt:
       ((typeof createdAt === 'number' ? createdAt : existingTrip?.createdAt) as UnixTimestamp | undefined) ??
       (Date.now() as UnixTimestamp),
@@ -145,8 +149,13 @@ function buildTripRecord(doc: Y.Doc, roomId: string, existingTrip?: Trip): Trip 
       ((typeof updatedAt === 'number' ? updatedAt : existingTrip?.updatedAt) as UnixTimestamp | undefined) ??
       (Date.now() as UnixTimestamp),
     p2pRoomId: roomId,
-    ...(fragmentKey
-      ? { p2pEncryptionKey: fragmentKey }
+    // The encryption key is NEVER derived from window.location here. Reading
+    // the URL fragment meant any in-page anchor — the a11y skip link
+    // `#main-content` among them — overwrote the trip's real key on the next
+    // remote update, permanently breaking sync with its existing peers.
+    // The join flow passes the key in explicitly instead.
+    ...(encryptionKey
+      ? { p2pEncryptionKey: encryptionKey }
       : existingTrip?.p2pEncryptionKey
         ? { p2pEncryptionKey: existingTrip.p2pEncryptionKey }
         : {}),
@@ -252,8 +261,50 @@ export async function compactUpdates(doc: Y.Doc, roomId: string): Promise<void> 
   });
 }
 
-export async function syncDocToDexie(doc: Y.Doc, roomId: string): Promise<TripId | null> {
-  const nextTrip = buildTripRecord(doc, roomId, await db.trips.get(getMeta(doc).get('id') as TripId));
+export async function syncDocToDexie(
+  doc: Y.Doc,
+  roomId: string,
+  /**
+   * The room's encryption key, supplied by the join flow that read it from the
+   * share link. Only pass this where the key is genuinely known; it must never
+   * be inferred from `window.location` inside this module.
+   */
+  encryptionKey?: string,
+): Promise<TripId | null> {
+  const claimedId = getMeta(doc).get('id');
+  if (typeof claimedId !== 'string' || claimedId.length === 0) {
+    // Validate before the lookup: an object here would make Dexie reject an
+    // invalid key and reject this promise, and the caller invokes us as a bare
+    // `void`, producing an unhandled rejection on every remote update.
+    return null;
+  }
+
+  // The trip this room is actually bound to locally. `meta.id` is remote
+  // controlled, so using it as the write key let any peer in this room
+  // overwrite — and wipe the contents of — a DIFFERENT local trip.
+  const ownerTrip = await db.trips
+    .where('p2pRoomId')
+    .equals(roomId)
+    .first();
+
+  if (ownerTrip && ownerTrip.id !== claimedId) {
+    console.warn(
+      '[yjs] refusing remote update: doc claims trip',
+      claimedId,
+      'but room',
+      roomId,
+      'belongs to',
+      ownerTrip.id,
+    );
+    return null;
+  }
+
+  const nextTrip = buildTripRecord(
+    doc,
+    roomId,
+    ownerTrip ?? (await db.trips.get(claimedId as TripId)),
+    encryptionKey,
+  );
   if (!nextTrip) {
     return null;
   }
