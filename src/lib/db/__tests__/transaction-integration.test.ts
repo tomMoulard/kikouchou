@@ -34,7 +34,8 @@ import {
   deleteAssignmentWithOwnershipCheck,
 } from '@/lib/db/repositories/assignment-repository';
 import { createTransport } from '@/lib/db/repositories/transport-repository';
-import type { TripId, RoomId, PersonId } from '@/types';
+import { createActivity } from '@/lib/db/repositories/activity-repository';
+import type { TripId, RoomId, PersonId, ISODateTimeString } from '@/types';
 import { isoDate, hexColor } from '@/test/utils';
 
 // ============================================================================
@@ -153,6 +154,80 @@ describe('Cascade Delete Atomicity', () => {
       
       const remainingRoom = await db.rooms.toArray();
       expect(remainingRoom[0]?.tripId).toBe(trip2Id);
+    });
+  });
+
+  describe('deleteTrip cascade — activities and CRDT log', () => {
+    it('deletes the trip\'s activities', async () => {
+      const trip = await createTrip({
+        name: 'Trip with agenda',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
+      });
+      await createActivity(trip.id, {
+        title: 'Plant fair',
+        category: 'horticulture',
+        startDatetime: '2024-07-16T09:00:00.000Z' as ISODateTimeString,
+        allDay: false,
+        participantIds: [],
+      });
+      expect(await db.activities.where('tripId').equals(trip.id).count()).toBe(1);
+
+      await deleteTrip(trip.id);
+
+      // Previously left behind: unreachable forever, and resurrected by a
+      // re-import because merge-applicator puts entities back under their ids.
+      expect(await db.activities.where('tripId').equals(trip.id).count()).toBe(0);
+    });
+
+    it('purges the trip\'s persisted Yjs updates', async () => {
+      const trip = await createTrip({
+        name: 'Shared trip',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
+      });
+      const roomId = 'p2p-room-abc';
+      await db.trips.update(trip.id, { p2pRoomId: roomId });
+      await db.yjsUpdates.add({ roomId, update: new Uint8Array([1, 2, 3]) });
+      expect(await db.yjsUpdates.where('roomId').equals(roomId).count()).toBe(1);
+
+      await deleteTrip(trip.id);
+
+      // A retained CRDT log re-materialises the whole "deleted" trip the next
+      // time its share link is opened.
+      expect(await db.yjsUpdates.where('roomId').equals(roomId).count()).toBe(0);
+    });
+
+    it('leaves another trip\'s activities untouched', async () => {
+      const keep = await createTrip({
+        name: 'Keep',
+        startDate: isoDate('2024-07-15'),
+        endDate: isoDate('2024-07-20'),
+      });
+      const drop = await createTrip({
+        name: 'Drop',
+        startDate: isoDate('2024-08-15'),
+        endDate: isoDate('2024-08-20'),
+      });
+      await createActivity(keep.id, {
+        title: 'Keep me',
+        category: 'other',
+        startDatetime: '2024-07-16T09:00:00.000Z' as ISODateTimeString,
+        allDay: false,
+        participantIds: [],
+      });
+      await createActivity(drop.id, {
+        title: 'Drop me',
+        category: 'other',
+        startDatetime: '2024-08-16T09:00:00.000Z' as ISODateTimeString,
+        allDay: false,
+        participantIds: [],
+      });
+
+      await deleteTrip(drop.id);
+
+      expect(await db.activities.where('tripId').equals(keep.id).count()).toBe(1);
+      expect(await db.activities.where('tripId').equals(drop.id).count()).toBe(0);
     });
   });
 
