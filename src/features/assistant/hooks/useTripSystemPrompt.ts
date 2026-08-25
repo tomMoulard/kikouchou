@@ -1,18 +1,35 @@
 /**
  * @fileoverview Builds a structured system prompt from trip context data.
- * Serializes trip, guests, rooms, assignments, and transports into a
- * text representation that the LLM can understand and reason about.
+ * Serializes trip, guests, rooms, assignments, transports and the shared
+ * activity agenda into a text representation that the LLM can understand
+ * and reason about.
+ *
+ * Every user-facing trip feature must be represented here, otherwise the
+ * assistant answers "I don't have access to that" — see AGENTS.md
+ * ("Keeping the AI assistant in sync").
  *
  * @module features/assistant/hooks/useTripSystemPrompt
  */
 
 import { useMemo } from 'react';
 
+import {
+  getActivityEndDayKey,
+  getActivityStartDayKey,
+} from '@/features/activities/utils/activity-utils';
+
+import { useToday } from '@/hooks/useToday';
+
+import { useActivityContext } from '@/contexts/ActivityContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useRoomContext } from '@/contexts/RoomContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
+
+import { toLocalISODateString } from '@/lib/db/utils';
+
+import { getPersonHeadcount, type Activity, type Person } from '@/types';
 
 import { generateActionPrompt } from '../action-schema';
 
@@ -31,6 +48,122 @@ export interface UseTripSystemPromptReturn {
 }
 
 // ============================================================================
+// Formatting Helpers
+// ============================================================================
+
+/**
+ * Local clock time (HH:MM) of an ISO datetime, or undefined when unparseable.
+ */
+function formatLocalTime(datetime: string): string | undefined {
+  const date = new Date(datetime);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+/**
+ * Human-readable "when" for an activity, using local calendar days so it
+ * matches what the user sees on the calendar and timeline.
+ *
+ * @param activity - The activity to describe
+ * @returns A phrase such as `2026-04-20 09:00–12:00` or `all day 2026-04-20 → 2026-04-22`
+ */
+function formatActivityWhen(activity: Activity): string {
+  const startDay = getActivityStartDayKey(activity) ?? activity.startDatetime;
+  const endDay = getActivityEndDayKey(activity) ?? startDay;
+  const isMultiDay = endDay !== startDay;
+
+  if (activity.allDay) {
+    return isMultiDay
+      ? `all day ${startDay} → ${endDay}`
+      : `all day ${startDay}`;
+  }
+
+  const startTime = formatLocalTime(activity.startDatetime);
+  const endTime = activity.endDatetime
+    ? formatLocalTime(activity.endDatetime)
+    : undefined;
+
+  if (isMultiDay) {
+    return `${startDay}${startTime ? ` ${startTime}` : ''} → ${endDay}${endTime ? ` ${endTime}` : ''}`;
+  }
+
+  if (startTime && endTime) {
+    return `${startDay} ${startTime}–${endTime}`;
+  }
+
+  return startTime ? `${startDay} ${startTime}` : startDay;
+}
+
+/**
+ * Builds the agenda line for a single activity, including everything the LLM
+ * needs to both answer questions and target it with an action.
+ *
+ * @param activity - The activity to serialize
+ * @param persons - All guests of the trip, used to resolve names
+ * @param todayIso - Local "today" (YYYY-MM-DD) used to tag current activities
+ * @returns A single prompt line
+ */
+function formatActivityLine(
+  activity: Activity,
+  persons: readonly Person[],
+  todayIso: string,
+): string {
+  const startDay = getActivityStartDayKey(activity);
+  const endDay = getActivityEndDayKey(activity) ?? startDay;
+  const isToday =
+    startDay !== undefined &&
+    endDay !== undefined &&
+    startDay <= todayIso &&
+    endDay >= todayIso;
+
+  const nameOf = (personId: string): string =>
+    persons.find((person) => person.id === personId)?.name ?? 'Unknown';
+
+  const participants = activity.participantIds ?? [];
+  const cap =
+    activity.maxParticipants !== undefined
+      ? `/${activity.maxParticipants}`
+      : '';
+
+  const segments = [
+    `- "${activity.title}" (id: ${activity.id})`,
+    activity.category,
+    formatActivityWhen(activity),
+    isToday ? 'TODAY' : '',
+    activity.location ? `at ${activity.location}` : '',
+    activity.organizerId
+      ? `organizer: ${nameOf(activity.organizerId)}`
+      : '',
+    participants.length > 0
+      ? `signed up (${participants.length}${cap}): ${participants.map(nameOf).join(', ')}`
+      : `signed up (0${cap}): nobody yet`,
+    activity.notes ? `notes: ${activity.notes}` : '',
+  ].filter(Boolean);
+
+  return segments.join(' — ');
+}
+
+/**
+ * Builds the guest line, including headcount and notes so the assistant can
+ * answer catering and accessibility questions.
+ */
+function formatGuestLine(person: Person): string {
+  const stay =
+    person.stayStartDate && person.stayEndDate
+      ? ` (stay: ${person.stayStartDate} to ${person.stayEndDate})`
+      : '';
+  const headcount = getPersonHeadcount(person);
+  const headcountLabel = headcount > 1 ? ` — counts as ${headcount} people` : '';
+  const notes = person.notes ? ` — notes: ${person.notes}` : '';
+
+  return `- "${person.name}" (id: ${person.id})${stay}${headcountLabel}${notes}`;
+}
+
+// ============================================================================
 // Hook Implementation
 // ============================================================================
 
@@ -46,8 +179,14 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
   const { persons } = usePersonContext();
   const { assignments } = useAssignmentContext();
   const { transports } = useTransportContext();
+  const { activities } = useActivityContext();
+  const { today } = useToday();
+
+  const todayIso = useMemo(() => toLocalISODateString(today), [today]);
 
   const systemPrompt = useMemo((): string => {
+    const todayLine = `Today's date is ${todayIso}. Resolve any relative date the user mentions ("today", "tonight", "tomorrow", "this weekend") against it.`;
+
     const tripsListLines =
       trips.length > 0
         ? [
@@ -63,6 +202,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     if (!currentTrip) {
       return [
         'You are a helpful trip planning assistant for the Kikoushou app.',
+        todayLine,
         trips.length > 0
           ? 'No trip is currently selected, but other trips exist — see below.'
           : 'No trip is currently selected.',
@@ -70,15 +210,15 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
         '',
         'Use **createTrip** to create a new trip (the app will select it automatically), or **selectTrip** with a trip id from the list above to work on an existing trip.',
         ...generateActionPrompt(),
-      ]
-        .filter(Boolean)
-        .join('\n');
+      ].join('\n');
     }
 
     const parts: string[] = [
       'You are a helpful trip planning assistant for the Kikoushou app.',
-      'You have access to the current trip data and can help the user manage it.',
+      'You have access to the current trip data below: its guests, rooms, room assignments, transports and the shared activity agenda.',
+      'Answer questions about that data directly — never say you lack access to it.',
       'When the user asks to modify trip data, output a JSON action block that the app will execute.',
+      todayLine,
       '',
       '### Creating a new trip vs editing this one',
       '- Use **createTrip** when the user wants a **new** trip (a separate row in their trip list).',
@@ -89,9 +229,9 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       `- Name: ${currentTrip.name}`,
       `- Location: ${currentTrip.location ?? 'Not set'}`,
       `- Dates: ${currentTrip.startDate} to ${currentTrip.endDate}`,
-      currentTrip.description
-        ? `- Description: ${currentTrip.description}`
-        : '',
+      ...(currentTrip.description
+        ? [`- Description: ${currentTrip.description}`]
+        : []),
       ...tripsListLines,
     ];
 
@@ -109,13 +249,18 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
 
     // Guests
     if (persons.length > 0) {
-      parts.push('', '## Guests');
+      const totalHeadcount = persons.reduce(
+        (total, person) => total + getPersonHeadcount(person),
+        0,
+      );
+      const entryLabel = persons.length === 1 ? 'entry' : 'entries';
+      const peopleLabel = totalHeadcount === 1 ? 'person' : 'people';
+      parts.push(
+        '',
+        `## Guests (${persons.length} ${entryLabel}, ${totalHeadcount} ${peopleLabel})`,
+      );
       for (const person of persons) {
-        const stay =
-          person.stayStartDate && person.stayEndDate
-            ? ` (stay: ${person.stayStartDate} to ${person.stayEndDate})`
-            : '';
-        parts.push(`- "${person.name}" (id: ${person.id})${stay}`);
+        parts.push(formatGuestLine(person));
       }
     } else {
       parts.push('', '## Guests', 'No guests added yet.');
@@ -140,19 +285,49 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       parts.push('', '## Transports');
       for (const transport of transports) {
         const person = persons.find((p) => p.id === transport.personId);
+        const driver = transport.driverId
+          ? persons.find((p) => p.id === transport.driverId)
+          : undefined;
         parts.push(
-          `- ${person?.name ?? 'Unknown'}: ${transport.type} at ${transport.location} on ${transport.datetime}${transport.transportMode ? ` (${transport.transportMode})` : ''}${transport.transportNumber ? ` #${transport.transportNumber}` : ''}`,
+          `- ${person?.name ?? 'Unknown'}: ${transport.type} at ${transport.location} on ${transport.datetime}${transport.transportMode ? ` (${transport.transportMode})` : ''}${transport.transportNumber ? ` #${transport.transportNumber}` : ''}${transport.needsPickup ? ' — needs pickup' : ''}${driver ? ` — driver: ${driver.name}` : ''}${transport.notes ? ` — notes: ${transport.notes}` : ''}`,
         );
       }
     } else {
       parts.push('', '## Transports', 'No transport plans yet.');
     }
 
+    // Activities (shared agenda)
+    if (activities.length > 0) {
+      parts.push(
+        '',
+        '## Activities (shared agenda, sorted by start, dates are local calendar days)',
+        'Activities happening on today\'s date are tagged with "TODAY".',
+      );
+      for (const activity of activities) {
+        parts.push(formatActivityLine(activity, persons, todayIso));
+      }
+    } else {
+      parts.push(
+        '',
+        '## Activities (shared agenda)',
+        'No activities planned yet.',
+      );
+    }
+
     // Modification action instructions — generated from the shared schema
     parts.push(...generateActionPrompt());
 
-    return parts.filter(Boolean).join('\n');
-  }, [currentTrip, trips, rooms, persons, assignments, transports]);
+    return parts.join('\n');
+  }, [
+    currentTrip,
+    trips,
+    rooms,
+    persons,
+    assignments,
+    transports,
+    activities,
+    todayIso,
+  ]);
 
   return {
     systemPrompt,

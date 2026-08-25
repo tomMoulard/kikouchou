@@ -15,25 +15,35 @@ import { toast } from 'sonner';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import {
+  createActivity,
   createAssignment,
   createPerson,
   createRoom,
   createTransport,
   createTrip,
+  deleteActivityWithOwnershipCheck,
   deleteAssignmentWithOwnershipCheck,
   deletePersonWithOwnershipCheck,
   deleteRoomWithOwnershipCheck,
   deleteTransportWithOwnershipCheck,
+  getActivityById,
   getAssignmentById,
   getPersonById,
   getRoomById,
   getTransportById,
   getTripById,
+  setActivityParticipation,
   setCurrentTrip,
+  updateActivityWithOwnershipCheck,
   updateTrip,
 } from '@/lib/db';
+import { ActivityFormDataSchema } from '@/lib/validation/schemas';
 import {
   getDefaultPersonColor,
+  type Activity,
+  type ActivityCategory,
+  type ActivityFormData,
+  type ActivityId,
   type ISODateString,
   type ISODateTimeString,
   type PersonId,
@@ -140,6 +150,73 @@ function parseActionBlocks(response: string): LLMAction[] {
   }
 
   return actions;
+}
+
+// ============================================================================
+// Activity Helpers
+// ============================================================================
+
+/**
+ * Ids of every guest in a trip, used to drop hallucinated person ids before
+ * they end up stored on an activity.
+ *
+ * @param tripId - The trip to read guests from
+ * @returns A set of the trip's person ids
+ */
+async function getTripGuestIds(tripId: TripId): Promise<Set<PersonId>> {
+  const guests = await db.persons.where('tripId').equals(tripId).toArray();
+  return new Set(guests.map((guest) => guest.id));
+}
+
+/**
+ * Keeps only the participant ids that belong to the trip.
+ *
+ * @param raw - The `participantIds` value from the parsed action
+ * @param knownGuestIds - Ids of the trip's guests
+ * @returns The participant ids that exist in the trip
+ */
+function keepKnownGuestIds(
+  raw: unknown,
+  knownGuestIds: Set<PersonId>,
+): PersonId[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter(
+    (id): id is PersonId =>
+      typeof id === 'string' && knownGuestIds.has(id as PersonId),
+  );
+}
+
+/**
+ * Projects a stored activity back onto its form shape, so a partial update
+ * can be validated as a whole record before it is written.
+ *
+ * @param activity - The stored activity
+ * @returns The equivalent form data
+ */
+function toActivityFormData(activity: Activity): ActivityFormData {
+  return {
+    title: activity.title,
+    category: activity.category,
+    startDatetime: activity.startDatetime,
+    allDay: activity.allDay,
+    participantIds: [...activity.participantIds],
+    ...(activity.endDatetime !== undefined && {
+      endDatetime: activity.endDatetime,
+    }),
+    ...(activity.location !== undefined && { location: activity.location }),
+    ...(activity.coordinates !== undefined && {
+      coordinates: activity.coordinates,
+    }),
+    ...(activity.organizerId !== undefined && {
+      organizerId: activity.organizerId,
+    }),
+    ...(activity.maxParticipants !== undefined && {
+      maxParticipants: activity.maxParticipants,
+    }),
+    ...(activity.notes !== undefined && { notes: activity.notes }),
+  };
 }
 
 // ============================================================================
@@ -278,6 +355,10 @@ export function useTripActions(): UseTripActionsReturn {
                 ...(d.stayEndDate !== undefined && {
                   stayEndDate: d.stayEndDate as ISODateString,
                 }),
+                ...(d.headcount !== undefined && {
+                  headcount: d.headcount as number,
+                }),
+                ...(d.notes !== undefined && { notes: d.notes as string }),
               });
               toast.success(t('persons.createSuccess'));
               executedCount++;
@@ -461,6 +542,186 @@ export function useTripActions(): UseTripActionsReturn {
                   label,
                   defaultValue: 'Removed transport: {{label}}',
                 }),
+              );
+              break;
+            }
+
+            case 'addActivity': {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              const knownGuestIds = await getTripGuestIds(tid);
+              const formData: ActivityFormData = {
+                title: d.title as string,
+                category: d.category as ActivityCategory,
+                startDatetime: d.startDatetime as ISODateTimeString,
+                allDay: (d.allDay as boolean | undefined) ?? false,
+                participantIds: keepKnownGuestIds(
+                  d.participantIds,
+                  knownGuestIds,
+                ),
+                ...(d.endDatetime !== undefined && {
+                  endDatetime: d.endDatetime as ISODateTimeString,
+                }),
+                ...(d.location !== undefined && {
+                  location: d.location as string,
+                }),
+                ...(d.organizerId !== undefined &&
+                  knownGuestIds.has(d.organizerId as PersonId) && {
+                    organizerId: d.organizerId as PersonId,
+                  }),
+                ...(d.maxParticipants !== undefined && {
+                  maxParticipants: d.maxParticipants as number,
+                }),
+                ...(d.notes !== undefined && { notes: d.notes as string }),
+              };
+
+              const validation = ActivityFormDataSchema.safeParse(formData);
+              if (!validation.success) {
+                console.warn(
+                  '[AI Assistant] Rejected addActivity:',
+                  validation.error.issues,
+                );
+                toast.error(t('assistant.invalidActivity'));
+                break;
+              }
+
+              await createActivity(tid, formData);
+              toast.success(t('activities.createSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.addActivity', {
+                  title: formData.title,
+                  defaultValue: 'Added activity: {{title}}',
+                }),
+              );
+              break;
+            }
+
+            case 'updateActivity': {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              const aid = d.activityId as ActivityId;
+              const existing = await getActivityById(aid);
+              if (!existing || existing.tripId !== tid) {
+                toast.error(t('assistant.activityNotFound'));
+                break;
+              }
+
+              const knownGuestIds = await getTripGuestIds(tid);
+              const patch: Partial<ActivityFormData> = {
+                ...(d.title !== undefined && { title: d.title as string }),
+                ...(d.category !== undefined && {
+                  category: d.category as ActivityCategory,
+                }),
+                ...(d.startDatetime !== undefined && {
+                  startDatetime: d.startDatetime as ISODateTimeString,
+                }),
+                ...(d.endDatetime !== undefined && {
+                  endDatetime: d.endDatetime as ISODateTimeString,
+                }),
+                ...(d.allDay !== undefined && {
+                  allDay: d.allDay as boolean,
+                }),
+                ...(d.location !== undefined && {
+                  location: d.location as string,
+                }),
+                ...(d.organizerId !== undefined &&
+                  knownGuestIds.has(d.organizerId as PersonId) && {
+                    organizerId: d.organizerId as PersonId,
+                  }),
+                ...(d.maxParticipants !== undefined && {
+                  maxParticipants: d.maxParticipants as number,
+                }),
+                ...(d.notes !== undefined && { notes: d.notes as string }),
+              };
+
+              const changedFields = Object.keys(patch);
+              if (changedFields.length === 0) {
+                break;
+              }
+
+              // Validate the merged record so a patch can never leave the
+              // activity in a state the form itself would reject.
+              const merged = { ...toActivityFormData(existing), ...patch };
+              const mergedValidation = ActivityFormDataSchema.safeParse(merged);
+              if (!mergedValidation.success) {
+                console.warn(
+                  '[AI Assistant] Rejected updateActivity:',
+                  mergedValidation.error.issues,
+                );
+                toast.error(t('assistant.invalidActivity'));
+                break;
+              }
+
+              await updateActivityWithOwnershipCheck(aid, tid, patch);
+              toast.success(t('activities.updateSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.updateActivity', {
+                  title: merged.title,
+                  fields: changedFields.join(', '),
+                  defaultValue: 'Updated activity {{title}} ({{fields}})',
+                }),
+              );
+              break;
+            }
+
+            case 'removeActivity': {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const aid = action.data.activityId as ActivityId;
+              const activity = await getActivityById(aid);
+              await deleteActivityWithOwnershipCheck(aid, tid);
+              toast.success(t('activities.deleteSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.removeActivity', {
+                  title: activity?.title ?? String(aid),
+                  defaultValue: 'Removed activity: {{title}}',
+                }),
+              );
+              break;
+            }
+
+            case 'joinActivity':
+            case 'leaveActivity': {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const joining = action.action === 'joinActivity';
+              const aid = action.data.activityId as ActivityId;
+              const pid = action.data.personId as PersonId;
+              const activity = await getActivityById(aid);
+              const person = await getPersonById(pid);
+              await setActivityParticipation(aid, tid, pid, joining);
+              toast.success(t('activities.participationUpdated'));
+              executedCount++;
+              summaries.push(
+                t(
+                  joining
+                    ? 'assistant.actionDetails.joinActivity'
+                    : 'assistant.actionDetails.leaveActivity',
+                  {
+                    person: person?.name ?? String(pid),
+                    title: activity?.title ?? String(aid),
+                    defaultValue: joining
+                      ? '{{person}} joined {{title}}'
+                      : '{{person}} left {{title}}',
+                  },
+                ),
               );
               break;
             }

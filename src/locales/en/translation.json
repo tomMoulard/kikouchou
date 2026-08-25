@@ -344,6 +344,7 @@
     "createSuccess": "Activity created successfully",
     "updateSuccess": "Activity updated successfully",
     "deleteSuccess": "Activity deleted successfully",
+    "participationUpdated": "Sign-ups updated",
     "view": {
       "ariaLabel": "Agenda view",
       "list": "List",
@@ -616,6 +617,8 @@
     "changesApplied_other": "{{count}} changes applied",
     "noTripForAction": "Select or create a trip first.",
     "selectTripNotFound": "That trip was not found.",
+    "activityNotFound": "That activity was not found.",
+    "invalidActivity": "Those activity details are invalid, nothing was saved.",
     "tripSwitched": "Switched to {{name}}",
     "models": {
       "gemma-3-1b": {
@@ -652,7 +655,12 @@
       "assignRoom": "Assigned {{person}} → {{room}} ({{start}} – {{end}})",
       "removeAssignment": "Removed assignment: {{person}} ↔ {{room}}",
       "addTransport": "Added {{type}} for {{person}} — {{location}}",
-      "removeTransport": "Removed transport: {{label}}"
+      "removeTransport": "Removed transport: {{label}}",
+      "addActivity": "Added activity: {{title}}",
+      "updateActivity": "Updated activity {{title}} ({{fields}})",
+      "removeActivity": "Removed activity: {{title}}",
+      "joinActivity": "{{person}} joined {{title}}",
+      "leaveActivity": "{{person}} left {{title}}"
     },
     "initializingCachedLoader": "Initializing cached model…",
     "loadingCachedModelFiles": "Loading cached model files…"
