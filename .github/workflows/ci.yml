@@ -83,8 +83,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # `tsc --noEmit` resolves ZERO files here: the root tsconfig.json is a
+      # solution file (`"files": []` + `references`), and references are only
+      # honoured in --build mode. `tsc -b` is the only form that type-checks.
       - name: Run TypeScript compiler
-        run: bunx tsc --noEmit
+        run: bunx tsc -b --force
 
   # ============================================================================
   # Unit Tests - Run Vitest unit tests
