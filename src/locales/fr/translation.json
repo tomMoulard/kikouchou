@@ -618,6 +618,7 @@
     "noTripForAction": "Sélectionnez ou créez d'abord un voyage.",
     "selectTripNotFound": "Ce voyage est introuvable.",
     "activityNotFound": "Cette activité est introuvable.",
+    "guestNotFound": "Cette personne est introuvable.",
     "invalidActivity": "Ces informations d'activité sont invalides, rien n'a été enregistré.",
     "tripSwitched": "Passage à {{name}}",
     "models": {

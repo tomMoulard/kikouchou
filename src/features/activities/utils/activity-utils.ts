@@ -10,7 +10,76 @@ import { format, isValid, parseISO } from 'date-fns';
 import type { Locale } from 'date-fns/locale';
 
 import { toLocalISODateString } from '@/lib/db/utils';
-import type { Activity, ISODateString } from '@/types';
+import type { Activity, ISODateString, ISODateTimeString } from '@/types';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Matches a bare local calendar day, as produced by a `date` input. */
+const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+// ============================================================================
+// Storage Normalisation
+// ============================================================================
+
+/**
+ * Normalises any parseable datetime into the single representation activities
+ * are stored in: a UTC ISO instant.
+ *
+ * Every write path must go through this. Activity instants are compared as
+ * plain strings (`ActivityContext.upcomingActivities`) and ordered by the
+ * `[tripId+startDatetime]` index, so a naive `2026-04-20T09:00:00` stored
+ * next to a `…Z` value silently breaks both.
+ *
+ * @param value - A datetime string, with or without an offset
+ * @returns The UTC ISO instant, or undefined when the value is unparseable
+ */
+export function toActivityInstant(
+  value: string,
+): ISODateTimeString | undefined {
+  const date = new Date(value);
+  return isValid(date) ? (date.toISOString() as ISODateTimeString) : undefined;
+}
+
+/**
+ * Snaps a value to the start or end of its **local** calendar day.
+ *
+ * All-day activities are stored as a real instant range so ordering, "is it
+ * over?" checks and the timeline all work without a separate date-only path.
+ * Accepts both a bare `yyyy-MM-dd` (from the form's `date` input) and a full
+ * datetime (which an LLM action may carry), taking the local day of the latter.
+ *
+ * @param value - A `yyyy-MM-dd` day or a full datetime string
+ * @param edge - Which end of the day to snap to
+ * @returns The UTC ISO instant, or undefined when the value is unparseable
+ */
+export function toAllDayActivityInstant(
+  value: string,
+  edge: 'start' | 'end',
+): ISODateTimeString | undefined {
+  let dayKey = value;
+
+  if (!DAY_KEY_PATTERN.test(value)) {
+    const parsed = new Date(value);
+    if (!isValid(parsed)) {
+      return undefined;
+    }
+    dayKey = toLocalISODateString(parsed);
+  }
+
+  const [year, month, day] = dayKey.split('-').map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  const date =
+    edge === 'start'
+      ? new Date(year, month - 1, day, 0, 0, 0, 0)
+      : new Date(year, month - 1, day, 23, 59, 59, 999);
+
+  return isValid(date) ? (date.toISOString() as ISODateTimeString) : undefined;
+}
 
 // ============================================================================
 // Date & Time Helpers

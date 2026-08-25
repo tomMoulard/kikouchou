@@ -6,12 +6,18 @@
  *
  * Every user-facing trip feature must be represented here, otherwise the
  * assistant answers "I don't have access to that" — see AGENTS.md
- * ("Keeping the AI assistant in sync").
+ * ("AI Assistant — Keep It In Sync").
+ *
+ * Trip records sync between guests, so every free-text field interpolated here
+ * is untrusted input: pass it through {@link toPromptText} so it cannot forge
+ * prompt structure.
  *
  * @module features/assistant/hooks/useTripSystemPrompt
  */
 
 import { useMemo } from 'react';
+
+import { format, isValid, parseISO } from 'date-fns';
 
 import {
   getActivityEndDayKey,
@@ -48,20 +54,44 @@ export interface UseTripSystemPromptReturn {
 }
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/** Longest free-text value copied into a single prompt line. */
+const MAX_PROMPT_FIELD_LENGTH = 200;
+
+// ============================================================================
 // Formatting Helpers
 // ============================================================================
 
 /**
+ * Makes a user-authored string safe to interpolate into the prompt.
+ *
+ * Trip data is synced between guests, so titles, locations and notes are not
+ * necessarily written by the person chatting with the assistant. Collapsing
+ * whitespace keeps one record on one line — a newline would let a note forge a
+ * `## Section` heading or an action block in a prompt whose replies get
+ * executed — and the length cap stops one record flooding the context.
+ *
+ * @param value - The raw, user-authored value
+ * @returns A single-line, length-capped rendering
+ */
+function toPromptText(value: string): string {
+  const collapsed = value.replace(/\s+/g, ' ').trim();
+  return collapsed.length > MAX_PROMPT_FIELD_LENGTH
+    ? `${collapsed.slice(0, MAX_PROMPT_FIELD_LENGTH)}…`
+    : collapsed;
+}
+
+/**
  * Local clock time (HH:MM) of an ISO datetime, or undefined when unparseable.
+ *
+ * Uses `parseISO` so a date-only record resolves to the same instant the day
+ * keys are derived from; `new Date()` would read it as UTC midnight instead.
  */
 function formatLocalTime(datetime: string): string | undefined {
-  const date = new Date(datetime);
-  if (Number.isNaN(date.getTime())) {
-    return undefined;
-  }
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes}`;
+  const date = parseISO(datetime);
+  return isValid(date) ? format(date, 'HH:mm') : undefined;
 }
 
 /**
@@ -120,8 +150,10 @@ function formatActivityLine(
     startDay <= todayIso &&
     endDay >= todayIso;
 
-  const nameOf = (personId: string): string =>
-    persons.find((person) => person.id === personId)?.name ?? 'Unknown';
+  const nameOf = (personId: string): string => {
+    const person = persons.find((candidate) => candidate.id === personId);
+    return person ? toPromptText(person.name) : 'Unknown';
+  };
 
   const participants = activity.participantIds ?? [];
   const cap =
@@ -130,18 +162,18 @@ function formatActivityLine(
       : '';
 
   const segments = [
-    `- "${activity.title}" (id: ${activity.id})`,
+    `- "${toPromptText(activity.title)}" (id: ${activity.id})`,
     activity.category,
     formatActivityWhen(activity),
     isToday ? 'TODAY' : '',
-    activity.location ? `at ${activity.location}` : '',
+    activity.location ? `at ${toPromptText(activity.location)}` : '',
     activity.organizerId
       ? `organizer: ${nameOf(activity.organizerId)}`
       : '',
     participants.length > 0
       ? `signed up (${participants.length}${cap}): ${participants.map(nameOf).join(', ')}`
       : `signed up (0${cap}): nobody yet`,
-    activity.notes ? `notes: ${activity.notes}` : '',
+    activity.notes ? `notes: ${toPromptText(activity.notes)}` : '',
   ].filter(Boolean);
 
   return segments.join(' — ');
@@ -158,9 +190,11 @@ function formatGuestLine(person: Person): string {
       : '';
   const headcount = getPersonHeadcount(person);
   const headcountLabel = headcount > 1 ? ` — counts as ${headcount} people` : '';
-  const notes = person.notes ? ` — notes: ${person.notes}` : '';
+  const notes = person.notes
+    ? ` — notes: ${toPromptText(person.notes)}`
+    : '';
 
-  return `- "${person.name}" (id: ${person.id})${stay}${headcountLabel}${notes}`;
+  return `- "${toPromptText(person.name)}" (id: ${person.id})${stay}${headcountLabel}${notes}`;
 }
 
 // ============================================================================
@@ -194,7 +228,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
             '## All trips (use trip id with the selectTrip action)',
             ...trips.map(
               (trip) =>
-                `- "${trip.name}" — id: \`${trip.id}\` — ${trip.startDate} to ${trip.endDate}${trip.location ? ` — ${trip.location}` : ''}`,
+                `- "${toPromptText(trip.name)}" — id: \`${trip.id}\` — ${trip.startDate} to ${trip.endDate}${trip.location ? ` — ${toPromptText(trip.location)}` : ''}`,
             ),
           ]
         : [];
@@ -226,11 +260,11 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       '- Use **selectTrip** with a trip id from "All trips" to switch which trip is active before other actions.',
       '',
       '## Current trip (selected)',
-      `- Name: ${currentTrip.name}`,
-      `- Location: ${currentTrip.location ?? 'Not set'}`,
+      `- Name: ${toPromptText(currentTrip.name)}`,
+      `- Location: ${currentTrip.location ? toPromptText(currentTrip.location) : 'Not set'}`,
       `- Dates: ${currentTrip.startDate} to ${currentTrip.endDate}`,
       ...(currentTrip.description
-        ? [`- Description: ${currentTrip.description}`]
+        ? [`- Description: ${toPromptText(currentTrip.description)}`]
         : []),
       ...tripsListLines,
     ];
@@ -240,7 +274,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       parts.push('', '## Rooms');
       for (const room of rooms) {
         parts.push(
-          `- "${room.name}" (id: ${room.id}): ${room.capacity} bed(s)${room.description ? ` — ${room.description}` : ''}`,
+          `- "${toPromptText(room.name)}" (id: ${room.id}): ${room.capacity} bed(s)${room.description ? ` — ${toPromptText(room.description)}` : ''}`,
         );
       }
     } else {
@@ -273,7 +307,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
         const person = persons.find((p) => p.id === assignment.personId);
         const room = rooms.find((r) => r.id === assignment.roomId);
         parts.push(
-          `- ${person?.name ?? 'Unknown'} → ${room?.name ?? 'Unknown'} (${assignment.startDate} to ${assignment.endDate})`,
+          `- ${person ? toPromptText(person.name) : 'Unknown'} → ${room ? toPromptText(room.name) : 'Unknown'} (${assignment.startDate} to ${assignment.endDate})`,
         );
       }
     } else {
@@ -289,7 +323,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
           ? persons.find((p) => p.id === transport.driverId)
           : undefined;
         parts.push(
-          `- ${person?.name ?? 'Unknown'}: ${transport.type} at ${transport.location} on ${transport.datetime}${transport.transportMode ? ` (${transport.transportMode})` : ''}${transport.transportNumber ? ` #${transport.transportNumber}` : ''}${transport.needsPickup ? ' — needs pickup' : ''}${driver ? ` — driver: ${driver.name}` : ''}${transport.notes ? ` — notes: ${transport.notes}` : ''}`,
+          `- ${person ? toPromptText(person.name) : 'Unknown'}: ${transport.type} at ${toPromptText(transport.location)} on ${transport.datetime}${transport.transportMode ? ` (${transport.transportMode})` : ''}${transport.transportNumber ? ` #${toPromptText(transport.transportNumber)}` : ''}${transport.needsPickup ? ' — needs pickup' : ''}${driver ? ` — driver: ${toPromptText(driver.name)}` : ''}${transport.notes ? ` — notes: ${toPromptText(transport.notes)}` : ''}`,
         );
       }
     } else {

@@ -12,6 +12,11 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
+import {
+  toActivityInstant,
+  toAllDayActivityInstant,
+} from '@/features/activities/utils/activity-utils';
+
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import {
@@ -29,6 +34,7 @@ import {
   getActivityById,
   getAssignmentById,
   getPersonById,
+  getPersonsByTripId,
   getRoomById,
   getTransportById,
   getTripById,
@@ -157,23 +163,16 @@ function parseActionBlocks(response: string): LLMAction[] {
 // ============================================================================
 
 /**
- * Ids of every guest in a trip, used to drop hallucinated person ids before
- * they end up stored on an activity.
+ * Keeps only the participant ids that belong to the trip, de-duplicated.
  *
- * @param tripId - The trip to read guests from
- * @returns A set of the trip's person ids
- */
-async function getTripGuestIds(tripId: TripId): Promise<Set<PersonId>> {
-  const guests = await db.persons.where('tripId').equals(tripId).toArray();
-  return new Set(guests.map((guest) => guest.id));
-}
-
-/**
- * Keeps only the participant ids that belong to the trip.
+ * Dropping duplicates here (rather than leaving it to `sanitizeActivityData`)
+ * matters because the seat-cap check in `ActivityFormDataSchema` runs on this
+ * array: a model that repeats an id would otherwise blow a cap it never
+ * actually exceeds.
  *
  * @param raw - The `participantIds` value from the parsed action
  * @param knownGuestIds - Ids of the trip's guests
- * @returns The participant ids that exist in the trip
+ * @returns The distinct participant ids that exist in the trip
  */
 function keepKnownGuestIds(
   raw: unknown,
@@ -182,10 +181,33 @@ function keepKnownGuestIds(
   if (!Array.isArray(raw)) {
     return [];
   }
-  return raw.filter(
+  const kept = raw.filter(
     (id): id is PersonId =>
       typeof id === 'string' && knownGuestIds.has(id as PersonId),
   );
+  return Array.from(new Set(kept));
+}
+
+/**
+ * Normalises a datetime an action carried into the instant activities are
+ * stored as, matching what the form writes.
+ *
+ * @param value - The raw value from the parsed action data
+ * @param allDay - Whether the activity covers whole days
+ * @param edge - Which end of the day an all-day value snaps to
+ * @returns The stored instant, or undefined when the value is unusable
+ */
+function activityInstant(
+  value: unknown,
+  allDay: boolean,
+  edge: 'start' | 'end',
+): ISODateTimeString | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  return allDay
+    ? toAllDayActivityInstant(value, edge)
+    : toActivityInstant(value);
 }
 
 /**
@@ -244,6 +266,22 @@ export function useTripActions(): UseTripActionsReturn {
 
       /** Tracks which trip mutations apply to (supports createTrip/selectTrip mid-batch). */
       let activeTripId: TripId | null = currentTrip?.id ?? null;
+
+      /**
+       * Guest ids per trip, resolved once per reply. Invalidated whenever this
+       * batch adds or removes a guest so later actions see the new roster.
+       */
+      const guestIdCache = new Map<TripId, Set<PersonId>>();
+      const guestIdsFor = async (tripId: TripId): Promise<Set<PersonId>> => {
+        const cached = guestIdCache.get(tripId);
+        if (cached) {
+          return cached;
+        }
+        const guests = await getPersonsByTripId(tripId);
+        const ids = new Set(guests.map((guest) => guest.id));
+        guestIdCache.set(tripId, ids);
+        return ids;
+      };
 
       let executedCount = 0;
       const summaries: string[] = [];
@@ -360,6 +398,7 @@ export function useTripActions(): UseTripActionsReturn {
                 }),
                 ...(d.notes !== undefined && { notes: d.notes as string }),
               });
+              guestIdCache.delete(tid);
               toast.success(t('persons.createSuccess'));
               executedCount++;
               summaries.push(
@@ -380,6 +419,7 @@ export function useTripActions(): UseTripActionsReturn {
               const pid = action.data.personId as PersonId;
               const guest = await getPersonById(pid);
               await deletePersonWithOwnershipCheck(pid, tid);
+              guestIdCache.delete(tid);
               toast.success(t('persons.deleteSuccess'));
               executedCount++;
               summaries.push(
@@ -553,19 +593,34 @@ export function useTripActions(): UseTripActionsReturn {
                 break;
               }
               const d = action.data as Record<string, unknown>;
-              const knownGuestIds = await getTripGuestIds(tid);
+              const knownGuestIds = await guestIdsFor(tid);
+              const allDay = (d.allDay as boolean | undefined) ?? false;
+
+              const startDatetime = activityInstant(
+                d.startDatetime,
+                allDay,
+                'start',
+              );
+              if (!startDatetime) {
+                toast.error(t('assistant.invalidActivity'));
+                break;
+              }
+              // All-day spans need a real end instant, or they read as "over"
+              // at midnight; default it to the end of the starting day.
+              const endDatetime =
+                activityInstant(d.endDatetime, allDay, 'end') ??
+                (allDay ? activityInstant(d.startDatetime, true, 'end') : undefined);
+
               const formData: ActivityFormData = {
                 title: d.title as string,
                 category: d.category as ActivityCategory,
-                startDatetime: d.startDatetime as ISODateTimeString,
-                allDay: (d.allDay as boolean | undefined) ?? false,
+                startDatetime,
+                allDay,
                 participantIds: keepKnownGuestIds(
                   d.participantIds,
                   knownGuestIds,
                 ),
-                ...(d.endDatetime !== undefined && {
-                  endDatetime: d.endDatetime as ISODateTimeString,
-                }),
+                ...(endDatetime !== undefined && { endDatetime }),
                 ...(d.location !== undefined && {
                   location: d.location as string,
                 }),
@@ -615,18 +670,46 @@ export function useTripActions(): UseTripActionsReturn {
                 break;
               }
 
-              const knownGuestIds = await getTripGuestIds(tid);
+              const knownGuestIds = await guestIdsFor(tid);
+
+              // Datetimes are re-derived through the merged all-day flag, so
+              // toggling all-day re-snaps the instants even when the caller
+              // sent no new dates.
+              const mergedAllDay =
+                (d.allDay as boolean | undefined) ?? existing.allDay;
+              const allDayChanged =
+                d.allDay !== undefined && d.allDay !== existing.allDay;
+              const wantsStart = d.startDatetime !== undefined || allDayChanged;
+              const wantsEnd =
+                d.endDatetime !== undefined ||
+                (allDayChanged && existing.endDatetime !== undefined);
+
+              const nextStart = wantsStart
+                ? activityInstant(
+                    d.startDatetime ?? existing.startDatetime,
+                    mergedAllDay,
+                    'start',
+                  )
+                : undefined;
+              if (wantsStart && !nextStart) {
+                toast.error(t('assistant.invalidActivity'));
+                break;
+              }
+              const nextEnd = wantsEnd
+                ? activityInstant(
+                    d.endDatetime ?? existing.endDatetime,
+                    mergedAllDay,
+                    'end',
+                  )
+                : undefined;
+
               const patch: Partial<ActivityFormData> = {
                 ...(d.title !== undefined && { title: d.title as string }),
                 ...(d.category !== undefined && {
                   category: d.category as ActivityCategory,
                 }),
-                ...(d.startDatetime !== undefined && {
-                  startDatetime: d.startDatetime as ISODateTimeString,
-                }),
-                ...(d.endDatetime !== undefined && {
-                  endDatetime: d.endDatetime as ISODateTimeString,
-                }),
+                ...(nextStart !== undefined && { startDatetime: nextStart }),
+                ...(nextEnd !== undefined && { endDatetime: nextEnd }),
                 ...(d.allDay !== undefined && {
                   allDay: d.allDay as boolean,
                 }),
@@ -682,6 +765,10 @@ export function useTripActions(): UseTripActionsReturn {
               }
               const aid = action.data.activityId as ActivityId;
               const activity = await getActivityById(aid);
+              if (!activity || activity.tripId !== tid) {
+                toast.error(t('assistant.activityNotFound'));
+                break;
+              }
               await deleteActivityWithOwnershipCheck(aid, tid);
               toast.success(t('activities.deleteSuccess'));
               executedCount++;
@@ -704,9 +791,33 @@ export function useTripActions(): UseTripActionsReturn {
               const joining = action.action === 'joinActivity';
               const aid = action.data.activityId as ActivityId;
               const pid = action.data.personId as PersonId;
+
               const activity = await getActivityById(aid);
+              if (!activity || activity.tripId !== tid) {
+                toast.error(t('assistant.activityNotFound'));
+                break;
+              }
+
+              // The repository only checks the activity's trip, so an id the
+              // model invented would otherwise be written as a participant.
               const person = await getPersonById(pid);
-              await setActivityParticipation(aid, tid, pid, joining);
+              if (!person || person.tripId !== tid) {
+                toast.error(t('assistant.guestNotFound'));
+                break;
+              }
+
+              const before = activity.participantIds ?? [];
+              const after = await setActivityParticipation(
+                aid,
+                tid,
+                pid,
+                joining,
+              );
+              if (after.length === before.length) {
+                // Already in that state — do not report a change that did not happen.
+                break;
+              }
+
               toast.success(t('activities.participationUpdated'));
               executedCount++;
               summaries.push(

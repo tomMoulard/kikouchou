@@ -34,6 +34,11 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ActivityCategoryIcon } from '@/components/shared/ActivityCategoryIcon';
 import { LocationPicker, type Coordinates } from '@/components/shared/LocationPicker';
+import {
+  toActivityInstant,
+  toAllDayActivityInstant,
+} from '@/features/activities/utils/activity-utils';
+
 import { cn } from '@/lib/utils';
 import { ACTIVITY_CATEGORIES, DEFAULT_ACTIVITY_CATEGORY } from '@/types';
 import type {
@@ -126,6 +131,9 @@ function toDatetimeLocalValue(isoDatetime: string | undefined): string {
   return isValid(date) ? format(date, "yyyy-MM-dd'T'HH:mm") : '';
 }
 
+/** Matches a bare local calendar day, as produced by a `date` input. */
+const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
  * Converts an ISO datetime to the `date` input format (local day).
  */
@@ -138,33 +146,23 @@ function toDateValue(isoDatetime: string | undefined): string {
 }
 
 /**
- * Converts a `datetime-local` value to an ISO datetime string.
+ * Converts a `datetime-local` value to the stored UTC ISO instant.
  */
 function fromDatetimeLocalValue(value: string): string {
   if (!value) {
     return '';
   }
-  const date = new Date(value);
-  return isValid(date) ? date.toISOString() : '';
+  return toActivityInstant(value) ?? '';
 }
 
 /**
  * Converts a `date` value to an ISO datetime at the start or end of that local day.
- *
- * All-day activities are stored as a real instant range so ordering, "is it
- * over?" checks and the timeline all work without a separate date-only path.
  */
 function fromDateValue(value: string, edge: 'start' | 'end'): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  if (!DAY_KEY_PATTERN.test(value)) {
     return '';
   }
-  const [year, month, day] = value.split('-').map(Number) as [number, number, number];
-  const date =
-    edge === 'start'
-      ? new Date(year, month - 1, day, 0, 0, 0, 0)
-      : new Date(year, month - 1, day, 23, 59, 59, 999);
-
-  return isValid(date) ? date.toISOString() : '';
+  return toAllDayActivityInstant(value, edge) ?? '';
 }
 
 /**
