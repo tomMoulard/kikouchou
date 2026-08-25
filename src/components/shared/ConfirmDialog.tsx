@@ -137,9 +137,15 @@ const ConfirmDialog = memo(function ConfirmDialog({
   }, [open]);
 
   // Cleanup on unmount
-  useEffect(() => () => {
+  useEffect(() => {
+    // Set on setup, not only in cleanup: StrictMode's dev-time
+    // mount -> cleanup -> mount cycle would otherwise latch this false
+    // forever, silently turning every guarded setState into a no-op.
+    isMountedRef.current = true;
+    return () => {
       isMountedRef.current = false;
-    }, []);
+    };
+  }, []);
 
   // Get button labels with i18n fallbacks
   const resolvedConfirmLabel = confirmLabel ?? t('common.confirm', 'Confirm'),

@@ -207,9 +207,15 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
   /**
    * Cleanup effect to track component unmount.
    */
-  useEffect(() => () => {
-    isMountedRef.current = false;
-    if (successTimerRef.current !== undefined) clearTimeout(successTimerRef.current);
+  useEffect(() => {
+    // Set on setup, not only in cleanup: StrictMode's dev-time
+    // mount -> cleanup -> mount cycle would otherwise latch this false
+    // forever, silently turning every guarded setState into a no-op.
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (successTimerRef.current !== undefined) clearTimeout(successTimerRef.current);
+    };
   }, []);
 
   /**

@@ -176,12 +176,18 @@ export function useOnlineStatus(): UseOnlineStatusResult {
   /**
    * Cleanup effect to track component unmount.
    */
-  useEffect(() => () => {
+  useEffect(() => {
+    // Set on setup, not only in cleanup: StrictMode's dev-time
+    // mount -> cleanup -> mount cycle would otherwise latch this false
+    // forever, silently turning every guarded setState into a no-op.
+    isMountedRef.current = true;
+    return () => {
       isMountedRef.current = false;
       if (recentChangeTimerRef.current) {
         clearTimeout(recentChangeTimerRef.current);
       }
-    }, []);
+    };
+  }, []);
 
   /**
    * Detect status changes and update hasRecentlyChanged.
