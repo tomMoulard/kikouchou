@@ -13,6 +13,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 import { type TFunction } from 'i18next';
 
 import { cn } from '@/lib/utils';
@@ -44,6 +45,12 @@ interface ErrorBoundaryProps {
 interface ErrorBoundaryClassProps extends ErrorBoundaryProps {
   /** Translation function from react-i18next */
   readonly t: TFunction;
+  /**
+   * Route identity. When this changes while an error is displayed, the
+   * boundary clears itself — otherwise a caught error is sticky for the
+   * whole session on any route the element is reused for.
+   */
+  readonly resetKey?: string;
 }
 
 /**
@@ -65,6 +72,26 @@ interface ErrorBoundaryState {
 /**
  * Initial state for the error boundary.
  */
+/**
+ * Whether an error is a failed dynamic `import()` of an app chunk.
+ *
+ * Browsers word this differently, hence the several needles.
+ *
+ * @param error - The caught error, if any
+ * @returns True when a reload is the only way to recover
+ */
+function isModuleLoadError(error: Error | null): boolean {
+  if (!error) return false;
+  const message = `${error.name} ${error.message}`.toLowerCase();
+  return (
+    message.includes('dynamically imported module') ||
+    message.includes('importing a module script failed') ||
+    message.includes('failed to fetch dynamically') ||
+    message.includes('error loading chunk') ||
+    message.includes('chunkloaderror')
+  );
+}
+
 const INITIAL_STATE: ErrorBoundaryState = {
   hasError: false,
   error: null,
@@ -94,6 +121,24 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
    * Update state when an error is caught during rendering.
    * Called during the "render" phase, so side-effects are not permitted.
    */
+  /**
+   * Clears a caught error when the route identity changes.
+   *
+   * Every route element is built once as a referentially stable object, so
+   * navigating between two paths that match the same route (e.g. a different
+   * `:tripId`) re-renders through the *same* element and React never remounts
+   * this boundary — leaving one page's error on screen for the rest of the
+   * session. Without this, `hasError` is sticky for the whole session.
+   */
+  componentDidUpdate(prevProps: ErrorBoundaryClassProps): void {
+    if (
+      this.state.hasError &&
+      prevProps.resetKey !== this.props.resetKey
+    ) {
+      this.setState(INITIAL_STATE);
+    }
+  }
+
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return {
       hasError: true,
@@ -154,6 +199,16 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
         // Log but don't prevent reset
         console.error('ErrorBoundary: onReset callback threw an error:', callbackError);
       }
+    }
+
+    // A failed dynamic import cannot be retried in place: React caches the
+    // rejected promise on the module-level lazy() reference forever, so
+    // re-rendering re-throws the identical error. This is the common case after
+    // a deploy, because the service worker claims the tab while it still holds
+    // the old chunk names. Only a reload can recover.
+    if (isModuleLoadError(this.state.error)) {
+      window.location.reload();
+      return;
     }
 
     // Reset internal state
@@ -335,10 +390,13 @@ function ErrorBoundary({
   className,
 }: ErrorBoundaryProps): React.ReactElement {
   const { t } = useTranslation();
+  // Route identity, so a caught error does not outlive the page it came from.
+  const { pathname } = useLocation();
 
   return (
     <ErrorBoundaryClass
       t={t}
+      resetKey={pathname}
       fallback={fallback}
       onError={onError}
       onReset={onReset}

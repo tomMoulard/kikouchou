@@ -14,6 +14,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@/test/utils';
 
+import { Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import type { ReactElement } from 'react';
+
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 
 // ============================================================================
@@ -188,3 +191,60 @@ describe('ErrorBoundary', () => {
 
 // Need beforeEach/afterEach at module level for the import
 import { beforeEach, afterEach } from 'vitest';
+
+// ============================================================================
+// Reset on route change
+// ============================================================================
+
+describe('ErrorBoundary reset on navigation', () => {
+  /** Throws for trip "a" only, so the same route element can succeed later. */
+  function MaybeBoom(): ReactElement {
+    const { tripId } = useParams<'tripId'>();
+    if (tripId === 'a') {
+      throw new Error('boom');
+    }
+    return <div>rooms ok</div>;
+  }
+
+  // The route element is built once and is referentially stable, so navigating
+  // from /trips/a/rooms to /trips/b/rooms re-renders through the SAME element
+  // and React never remounts the boundary. Before the fix, hasError stayed true
+  // and the fallback was shown for the rest of the session.
+  function Harness(): ReactElement {
+    const navigate = useNavigate();
+    return (
+      <>
+        <button type="button" onClick={() => navigate('/trips/b/rooms')}>
+          go to trip b
+        </button>
+        <Routes>
+          <Route
+            path="/trips/:tripId/rooms"
+            element={
+              <ErrorBoundary>
+                <MaybeBoom />
+              </ErrorBoundary>
+            }
+          />
+        </Routes>
+      </>
+    );
+  }
+
+  it('clears a caught error when the route changes', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { user } = render(<Harness />, {
+      withProviders: false,
+      initialRoute: '/trips/a/rooms',
+    });
+
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'go to trip b' }));
+
+    expect(await screen.findByText('rooms ok')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    spy.mockRestore();
+  });
+});
