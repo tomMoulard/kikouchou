@@ -21,20 +21,26 @@ const SIGNALING_TIMEOUT_MS = 15_000;
 async function resolveTripFromDoc(
   doc: NonNullable<ReturnType<typeof useYjsContext>>['doc'],
   roomId: string,
+  encryptionKey: string,
 ): Promise<TripId | undefined> {
   const tripId = doc.getMap('meta').get('id') as TripId | undefined;
   if (!tripId) {
     return undefined;
   }
 
-  await applyDocToDexie(doc, roomId);
+  // The key is handed over explicitly: the bridge must not read the URL, or any
+  // in-page anchor (the a11y skip link included) overwrites it.
+  await applyDocToDexie(doc, roomId, encryptionKey);
   return tripId;
 }
 
 const P2PTripInner = memo(function P2PTripInner({
   roomId,
+  encryptionKey,
 }: {
   roomId: string;
+  /** Read from the share link by the outer component; never re-read here. */
+  encryptionKey: string;
 }): ReactElement {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -96,7 +102,7 @@ const P2PTripInner = memo(function P2PTripInner({
           return;
         }
 
-        const resolvedTripId = await resolveTripFromDoc(doc, roomId);
+        const resolvedTripId = await resolveTripFromDoc(doc, roomId, encryptionKey);
         if (cancelled) {
           return;
         }
@@ -121,7 +127,7 @@ const P2PTripInner = memo(function P2PTripInner({
     return () => {
       cancelled = true;
     };
-  }, [navigate, roomId, setCurrentTrip, yjs]);
+  }, [encryptionKey, navigate, roomId, setCurrentTrip, yjs]);
 
   useEffect(() => {
     if (status !== 'waiting' || !yjs?.doc || resolvedRef.current) {
@@ -135,7 +141,7 @@ const P2PTripInner = memo(function P2PTripInner({
         return;
       }
 
-      void resolveTripFromDoc(yjs.doc, roomId)
+      void resolveTripFromDoc(yjs.doc, roomId, encryptionKey)
         .then(async (tripId) => {
           if (!tripId || cancelled || resolvedRef.current) {
             return;
@@ -159,7 +165,7 @@ const P2PTripInner = memo(function P2PTripInner({
       cancelled = true;
       yjs.doc.off('update', handleUpdate);
     };
-  }, [navigate, roomId, setCurrentTrip, status, yjs?.doc]);
+  }, [encryptionKey, navigate, roomId, setCurrentTrip, status, yjs?.doc]);
 
   const handleGoHome = useCallback(() => {
     navigate('/trips');
@@ -321,7 +327,7 @@ const P2PTripPage = memo(function P2PTripPage(): ReactElement {
 
   return (
     <YjsProvider roomId={roomId} encryptionKey={encryptionKey}>
-      <P2PTripInner roomId={roomId} />
+      <P2PTripInner roomId={roomId} encryptionKey={encryptionKey} />
     </YjsProvider>
   );
 });
