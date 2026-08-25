@@ -295,12 +295,16 @@ describe('Datetime Edge Cases', () => {
     // The actual DST handling depends on the local timezone
     
     it('handles spring forward date correctly', () => {
-      // March (typical spring forward month in Northern Hemisphere)
-      const springDate = '2024-03-10T02:30';
+      // 2024-03-10 is the US spring-forward day, where 02:00-03:00 local time
+      // DOES NOT EXIST: `new Date('2024-03-10T02:30')` normalises to 03:30, so
+      // asserting a 02:30 round-trip only held in zones that shift on another
+      // date (Europe shifts on the 31st). 04:30 exists everywhere on that date
+      // and still exercises the transition day.
+      const springDate = '2024-03-10T04:30';
       const iso = toISODatetime(springDate);
       const display = formatTime(iso);
       // Should round-trip correctly regardless of DST
-      expect(display).toBe('02:30');
+      expect(display).toBe('04:30');
     });
 
     it('handles fall back date correctly', () => {
