@@ -22,6 +22,7 @@ import {
   type ShareDialogSyncState,
 } from '@/features/sharing';
 import { useTripContext } from '@/contexts/TripContext';
+import { RemoteTripsSection } from '../components/RemoteTripsSection';
 import { TripYjsSyncBinding, resolveTripPresenceProfile } from '@/lib/yjs';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/db/database';
@@ -329,6 +330,10 @@ const TripListPage = memo(function TripListPage() {
               }}
             />
           </div>
+          {/* Load-bearing here specifically: joining on a phone and then opening
+              a laptop leaves this device with no local trips at all, and without
+              this the laptop offers no way into the trip. */}
+          <RemoteTripsSection localTripCount={0} />
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
         {sharedTripSync}
@@ -382,6 +387,8 @@ const TripListPage = memo(function TripListPage() {
             ))}
           </div>
         )}
+
+        <RemoteTripsSection localTripCount={trips.length} />
 
         {/* Floating actions — mobile */}
         <Button

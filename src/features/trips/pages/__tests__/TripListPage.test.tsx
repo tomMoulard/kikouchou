@@ -102,6 +102,13 @@ vi.mock('@/features/trips/components/TripsLocationMap', () => ({
   ),
 }));
 
+// Stub the "joined elsewhere" section: it needs AuthProvider, which
+// withProviders:false does not supply, and its own states are covered in
+// features/trips/components/__tests__.
+vi.mock('../../components/RemoteTripsSection', () => ({
+  RemoteTripsSection: () => <div data-testid="remote-trips-section" />,
+}));
+
 vi.mock('@/lib/db/database', () => ({
   db: {
     persons: {
