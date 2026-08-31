@@ -120,11 +120,24 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
         setError(t('sharing.join.identityTaken', 'Somebody else just took that name.'));
         return;
       }
+      if (result.status === 'not-a-member') {
+        // The server has no roster row for this account, so nothing was
+        // recorded. Navigating anyway would leave the participant looking free
+        // to whoever joins next.
+        setError(
+          t(
+            'sharing.join.notOnRoster',
+            'Your invitation has not been accepted yet. Open the invite link again.',
+          ),
+        );
+        return;
+      }
       if (result.status === 'error') {
         setError(result.message ?? t('errors.generic', 'Something went wrong'));
         return;
       }
 
+      // Only on a confirmed claim.
       void navigate(`/trips/${tripId}/calendar`);
     },
     [navigate, remoteTripId, t, tripId, user],
