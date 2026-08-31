@@ -22,6 +22,24 @@ export {
   syncRemoteTripMetadata,
   type EnsureRemoteTripResult,
 } from './remote-trip';
+export {
+  buildInviteUrl,
+  createInvite,
+  extractInviteToken,
+  isInviteUsable,
+  listInvites,
+  redeemInvite,
+  revokeInvite,
+  type CreateInviteResult,
+  type RedeemInviteResult,
+  type TripInvite,
+} from './invites';
+export {
+  claimParticipant,
+  fetchClaimedParticipants,
+  materialiseJoinedTrip,
+  type JoinTripResult,
+} from './join-trip';
 export { useTripSync, type UseTripSyncOptions } from './useTripSync';
 export {
   SupabaseTripSync,
