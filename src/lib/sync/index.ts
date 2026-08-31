@@ -16,6 +16,19 @@ export {
   type SyncCursor,
 } from './cursors';
 export {
+  ensureRemoteTrip,
+  linkJoinedTrip,
+  listRemoteTripsMissingLocally,
+  syncRemoteTripMetadata,
+  type EnsureRemoteTripResult,
+} from './remote-trip';
+export { useTripSync, type UseTripSyncOptions } from './useTripSync';
+export {
+  SupabaseTripSync,
+  useSyncStatus,
+  type SyncStatusContextValue,
+} from './SupabaseTripSync';
+export {
   ORIGIN_REMOTE,
   SupabaseYjsProvider,
   type SupabaseYjsProviderOptions,

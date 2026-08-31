@@ -18,7 +18,7 @@ import type * as Y from 'yjs';
 import type { WebrtcProvider } from 'y-webrtc';
 
 import { getPresenceProfile } from './presence';
-import { useYjsSync } from './useYjsSync';
+import { useYjsSync, type YjsTransport } from './useYjsSync';
 
 export interface OnlineUser {
   readonly clientId: number;
@@ -50,6 +50,8 @@ interface YjsProviderProps {
   readonly encryptionKey: string | null | undefined;
   readonly userName?: string;
   readonly userColor?: string;
+  /** Defaults to the legacy WebRTC transport; `'none'` for server-synced trips. */
+  readonly transport?: YjsTransport;
   readonly children: ReactNode;
 }
 
@@ -100,10 +102,11 @@ export function YjsProvider({
   encryptionKey,
   userName,
   userColor,
+  transport = 'webrtc',
   children,
 }: YjsProviderProps): ReactElement {
   const { doc, provider, awareness, connected, signalingConnected, synced, peerCount, loaded } =
-    useYjsSync(roomId, encryptionKey);
+    useYjsSync(roomId, encryptionKey, transport);
   const onlineUsersSnapshotRef = useRef<{
     key: string;
     users: readonly OnlineUser[];
