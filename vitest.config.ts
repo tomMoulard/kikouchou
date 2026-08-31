@@ -25,6 +25,26 @@ export default defineConfig({
     // Setup files to run before each test file
     setupFiles: ['./src/test/setup.ts'],
 
+    /**
+     * Blank the Supabase configuration for the whole suite.
+     *
+     * Vite loads `.env.local` in tests too, so without this the developer's real
+     * project URL and key reach `import.meta.env`. `isSupabaseConfigured()` then
+     * returns true, `AuthProvider` constructs a live client against
+     * **production** on every test that mounts `AppProviders`, and each one reads
+     * localStorage, runs `detectSessionInUrl` and starts a token-refresh timer.
+     * That was the source of an intermittent failure in the assistant prompt
+     * tests.
+     *
+     * Local-only is also the right default to test: it is the mode a first
+     * launch runs in. The few tests that need a configured backend stub the env
+     * themselves with `vi.stubEnv`.
+     */
+    env: {
+      VITE_SUPABASE_URL: '',
+      VITE_SUPABASE_PUBLISHABLE_KEY: '',
+    },
+
     // Test file patterns
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
 
