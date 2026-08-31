@@ -30,7 +30,7 @@ import { roomRoutes } from '@/features/rooms/routes';
 import { personRoutes } from '@/features/persons/routes';
 import { transportRoutes } from '@/features/transports/routes';
 import { activityRoutes } from '@/features/activities/routes';
-import { sharingRoutes, sharingSyncRoutes } from '@/features/sharing/routes';
+import { joinRoutes, sharingRoutes, sharingSyncRoutes } from '@/features/sharing/routes';
 import { assistantRoutes } from '@/features/assistant/routes';
 import { analyticsRoutes } from '@/features/analytics/routes';
 
@@ -269,6 +269,7 @@ const settingsRoute: RouteObject = {
  * Combines public routes (sharing) and authenticated routes (main app).
  *
  * Route Structure:
+ * - `/join/:token` - Invite link: redeem, download the trip, pick who you are
  * - `/share/:shareId` - Public sharing page (no navigation)
  * - `/` - Main app root (with navigation)
  *   - `/trips` - Trip list
@@ -299,6 +300,10 @@ export const router = createBrowserRouter(
   [
     // Public routes (outside Layout)
     publicRoutes,
+
+    // Invite links: /join/:token. Outside Layout — somebody arriving from a
+    // message has no trip selected and no navigation to use yet.
+    ...joinRoutes.map((route) => ({ ...route, errorElement: <ErrorPage /> })),
 
     // P2P real-time collaboration route
     p2pRoute,

@@ -597,6 +597,27 @@
       "waitingDescription": "Le propriétaire du voyage doit garder l'application ouverte pour que la synchronisation fonctionne.",
       "signalingFailed": "Serveur de signalisation inaccessible",
       "signalingFailedDescription": "Impossible de se connecter au serveur de signalisation. Le serveur est peut-être hors service ou votre réseau bloque les connexions WebSocket."
+    },
+    "join": {
+      "title": "Vous êtes invité à un séjour",
+      "needsAccount": "Créez un compte pour que les autres voient votre chambre et vos horaires de trajet.",
+      "signInReason": "Connectez-vous pour rejoindre ce séjour et le modifier avec les autres.",
+      "joining": "Connexion au séjour…",
+      "joined": "C'est fait",
+      "openTrip": "Ouvrir le séjour",
+      "downloading": "Récupération du séjour…",
+      "downloadingHint": "Vous y êtes. On récupère qui vient et qui dort où.",
+      "whoAreYou": "Lequel êtes-vous ?",
+      "whoAreYouHint": "Pour que le séjour affiche votre chambre et vos trajets, pas seulement ceux des autres.",
+      "identityTaken": "Quelqu'un vient de prendre ce nom.",
+      "allTaken": "Tous les noms de la liste sont déjà pris. Continuez sans en choisir un : vous pouvez tout de même voir et modifier le séjour.",
+      "notListed": "Je ne suis pas dans la liste",
+      "notFound": "Ce lien d'invitation n'est pas valide.",
+      "revoked": "Ce lien d'invitation a été retiré.",
+      "expired": "Ce lien d'invitation a expiré.",
+      "exhausted": "Ce lien d'invitation a déjà servi au maximum.",
+      "askAgain": "Demandez un nouveau lien à la personne qui vous a invité.",
+      "failed": "Impossible de rejoindre le séjour"
     }
   },
   "assistant": {

@@ -597,6 +597,27 @@
       "waitingDescription": "The trip owner needs to have the app open for you to sync.",
       "signalingFailed": "Signaling server unreachable",
       "signalingFailedDescription": "Could not connect to the signaling server. The server may be down or your network may be blocking WebSocket connections."
+    },
+    "join": {
+      "title": "You've been invited to a trip",
+      "needsAccount": "Create an account so the others can see your room and your travel times.",
+      "signInReason": "Sign in to join this trip and edit it with the others.",
+      "joining": "Joining the trip…",
+      "joined": "You're in",
+      "openTrip": "Open the trip",
+      "downloading": "Getting the trip…",
+      "downloadingHint": "You're in. Fetching who's coming and where they're sleeping.",
+      "whoAreYou": "Which one are you?",
+      "whoAreYouHint": "So the trip can show your room and your travel, not just everyone else's.",
+      "identityTaken": "Somebody else just took that name.",
+      "allTaken": "Everyone on the list is already claimed. Carry on without picking one — you can still see and edit the trip.",
+      "notListed": "I'm not on the list",
+      "notFound": "This invite link isn't valid.",
+      "revoked": "This invite link has been withdrawn.",
+      "expired": "This invite link has expired.",
+      "exhausted": "This invite link has been used up.",
+      "askAgain": "Ask whoever invited you for a fresh link.",
+      "failed": "Couldn't join the trip"
     }
   },
   "assistant": {
