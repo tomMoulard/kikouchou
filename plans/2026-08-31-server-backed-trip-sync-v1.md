@@ -242,6 +242,22 @@ create table trip_doc_snapshots (
 
 **Why `text`/base64 rather than `bytea`:** PostgREST and Realtime render `bytea` as hex-escaped `\x…`, which is one more encoding to get right on three paths (REST read, Realtime payload, insert). Base64 costs ~33% more bytes on a budget using under 1% of quota. Not worth the ambiguity.
 
+### What the Supabase advisors were worth
+
+Four rounds of findings during Phases 3–4. The pattern worth remembering: **the advisor is a good detector and an unreliable prescriber.**
+
+| Finding | Verdict |
+|---|---|
+| `add_owner_as_trip_member` callable by `anon` | **Real defect.** I revoked three functions and missed this one |
+| `is_trip_member` callable by `authenticated` | **False positive, and the suggested fix breaks the app.** Revoking EXECUTE makes a plain `select from trips` fail — RLS expressions are privilege-checked against the invoking role |
+| `redeem_invite` / `revoke_invite` callable | **Intentional.** They *are* the API, and each authorises its own caller |
+| 7× bare `auth.uid()` in policies | **Real**, and led to a bigger unflagged problem (39× on the hot read) |
+| 3× unindexed foreign key | **One real** — `trip_members.user_id` backs every RLS check |
+| 2× "unused index" | **Noise.** Zero-row tables have no usage statistics |
+| Leaked-password protection off | **Not applicable.** No password auth exists |
+
+So: measure every finding before acting on it, and record the triage in the migration so the next run does not re-litigate it. Acting on the `is_trip_member` finding as written would have taken the app down.
+
 ### Grants: revoke before granting
 
 Supabase applies `alter default privileges … grant all on tables to anon, authenticated, service_role`, so a newly created table in `public` arrives with SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES and TRIGGER already granted to both client roles. **An additive `grant select, insert` on top of that is a no-op that reads like a restriction.**
@@ -355,7 +371,7 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 - `supabase/migrations/` — tables, indexes, `is_trip_member`, policies, `redeem_invite`, Realtime publication, daily compaction cron.
 - RLS tests: a non-member can read nothing; a member cannot update or delete a log row; an invite row is invisible to everyone; a revoked or expired token fails to redeem; the `(trip_id, person_id)` unique constraint rejects a double claim.
 
-### Phase 4 — The sync provider (~3–5 days) · **the core**
+### Phase 4 — The sync provider · **DONE**
 
 - `src/lib/sync/SupabaseYjsProvider.ts`, surface-compatible with `WebrtcProvider` (`connected`, `synced`, `awareness`, `destroy()`) so `useYjsSync` changes minimally:
   - **start** — apply the local doc, fetch snapshot + rows after the cursor, apply, subscribe to Realtime, flush the outbox.
@@ -366,7 +382,7 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 - Apply the `AGENTS.md` untrusted-input invariants to the server peer exactly as to a WebRTC peer: resolve the trip locally via `remoteTripId`, reject a doc whose `meta.id` disagrees, never adopt a remote `shareId`, bound every field, drop bad records individually.
 - Keep the `y-webrtc` path behind a flag for one release.
 
-### Phase 5 — Share and join UX (~2–3 days)
+### Phase 5 — Share and join UX · **DONE**
 
 - `ShareDialog`: if signed out → `SignInSheet` → ensure the remote trip exists → create an invite → QR + copy link + Web Share API.
 - New `/join/:token` → `JoinTripPage`: require sign-in → `redeem_invite` → hydrate the doc → hand off to the existing identity wizard.
