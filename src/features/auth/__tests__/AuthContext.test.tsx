@@ -38,9 +38,6 @@ vi.mock('@/lib/supabase/client', () => ({
 vi.mock('@/lib/supabase/auth-callback', () => ({
   consumeAuthCode: vi.fn(() => null),
   getCapturedAuthError: vi.fn(() => null),
-  hasCapturedAuthCode: vi.fn(() => false),
-  isAuthCallback: vi.fn(() => false),
-  resetAuthCallbackForTests: vi.fn(),
 }));
 
 const mockedGetClient = vi.mocked(getSupabaseClient);

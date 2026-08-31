@@ -17,11 +17,15 @@ import {
   type ReactNode,
   createContext,
   useContext,
+  useEffect,
   useMemo,
 } from 'react';
 
+import { useTripContext } from '@/contexts/TripContext';
 import { useAuth } from '@/features/auth/AuthContext';
+import { getSupabaseClient } from '@/lib/supabase/client';
 import { useYjsContext } from '@/lib/yjs/YjsProvider';
+import { syncRemoteTripMetadata } from './remote-trip';
 import type { SyncState } from './SupabaseYjsProvider';
 import { useTripSync } from './useTripSync';
 import type { TripId } from '@/types';
@@ -82,6 +86,40 @@ export function SupabaseTripSync({
     remoteTripId: remoteTripId ?? null,
     isSignedIn: session !== null,
   });
+
+  // Keep the server's denormalised preview in step with the document.
+  //
+  // The trip list on another device renders name and dates before the document
+  // has downloaded, so without this a renamed trip shows its old name there
+  // until that device hydrates. Cosmetic, and deliberately fire-and-forget: a
+  // stale preview must never hold up an edit.
+  const { currentTrip } = useTripContext();
+  const previewKey =
+    currentTrip && currentTrip.id === tripId && remoteTripId !== undefined
+      ? `${currentTrip.name}|${currentTrip.startDate}|${currentTrip.endDate}`
+      : null;
+
+  useEffect(() => {
+    if (previewKey === null || !currentTrip) {
+      return;
+    }
+    let cancelled = false;
+
+    void (async () => {
+      const client = await getSupabaseClient();
+      if (cancelled) {
+        return;
+      }
+      await syncRemoteTripMetadata(client, currentTrip);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Keyed on the three fields the preview holds, so an unrelated edit — a room,
+    // a guest — does not fire a pointless update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewKey]);
 
   const value = useMemo<SyncStatusContextValue>(
     () => ({ state, syncNow }),

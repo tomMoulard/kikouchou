@@ -12,12 +12,10 @@ export {
   advanceCursor,
   readCursor,
   recordServerState,
-  resetCursor,
   type SyncCursor,
 } from './cursors';
 export {
   ensureRemoteTrip,
-  linkJoinedTrip,
   listRemoteTripsMissingLocally,
   syncRemoteTripMetadata,
   type EnsureRemoteTripResult,

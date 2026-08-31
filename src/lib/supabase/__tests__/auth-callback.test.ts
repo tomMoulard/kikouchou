@@ -71,7 +71,6 @@ describe('auth-callback capture', () => {
     const module = await importFresh();
 
     expect(module.consumeAuthCode()).toBe('auth-code-123');
-    expect(module.isAuthCallback()).toBe(true);
   });
 
   it('captures a provider error in place of a code', async () => {
@@ -82,7 +81,6 @@ describe('auth-callback capture', () => {
     // error_description is the readable one, so it wins over the bare code.
     expect(module.getCapturedAuthError()).toBe('User cancelled');
     expect(module.consumeAuthCode()).toBeNull();
-    expect(module.isAuthCallback()).toBe(true);
   });
 
   it('falls back to the bare error code when there is no description', async () => {
@@ -100,7 +98,6 @@ describe('auth-callback capture', () => {
 
     expect(module.consumeAuthCode()).toBeNull();
     expect(module.getCapturedAuthError()).toBeNull();
-    expect(module.isAuthCallback()).toBe(false);
     // And leaves a normal URL alone.
     expect(replaceState).not.toHaveBeenCalled();
   });
@@ -176,15 +173,5 @@ describe('auth-callback capture', () => {
     expect(module.consumeAuthCode()).toBeNull();
   });
 
-  it('still reports that a code arrived after it has been consumed', async () => {
-    atUrl('https://kikoushou.app/?code=auth-code-123');
 
-    const module = await importFresh();
-    module.consumeAuthCode();
-
-    // Rendering decisions need to know a callback happened even once the code
-    // itself is spent.
-    expect(module.hasCapturedAuthCode()).toBe(true);
-    expect(module.isAuthCallback()).toBe(true);
-  });
 });
