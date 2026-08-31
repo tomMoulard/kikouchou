@@ -121,39 +121,19 @@ async function createTestTrip(page: Page): Promise<{ tripId: string; shareId: st
  * Opens the share dialog for the current trip.
  * The share button is typically in the trip edit page or header.
  */
-async function openShareDialog(page: Page, tripId: string): Promise<void> {
-  // Navigate to the trip edit page where share functionality is typically available
-  await page.goto(`/trips/${tripId}/edit`);
-  await page.waitForLoadState('load');
-
-  // Look for a share button - it might be in the header or as a separate action
-  // The ShareDialog is a standalone component, so we need to find where it's triggered
-  // Based on the codebase analysis, it seems the share dialog might be opened via a share button
-  
-  // First, check if there's a share button on the edit page
-  const shareButton = page.getByRole('button', { name: /share|partager/i });
-  
-  if (await shareButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await shareButton.click();
-  } else {
-    // If no share button on edit page, try the calendar page header
-    await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('load');
-    
-    // Look for share button in the page header or actions
-    const calendarShareButton = page.getByRole('button', { name: /share|partager/i });
-    if (await calendarShareButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await calendarShareButton.click();
-    } else {
-      // As a fallback, we'll directly test the share URL construction
-      // The ShareDialog component uses the trip's shareId to construct URLs
-      // This test will verify the URL format is correct by navigating to the share import page
-      throw new Error('Share button not found - ShareDialog may not be integrated yet');
-    }
-  }
-
-  // Wait for the share dialog to open
-  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+async function openShareDialog(page: Page): Promise<void> {
+  // The share control lives on the trip card in the list, not on the trip's own
+  // pages — the previous version of this helper looked on `/trips/:id/edit` and
+  // `/trips/:id/calendar`, found nothing, and threw its own error, which is why
+  // every caller wrapped it in a try/catch and passed regardless.
+  //
+  // Matched on `/share trip/i`: the list also carries an "Import a shared trip
+  // using a QR code" button, and a looser pattern opens that instead.
+  await page.goto('/');
+  await page.getByRole('button', { name: /share trip/i }).first().click();
+  await expect(page.getByRole('dialog', { name: /share/i })).toBeVisible({
+    timeout: 10000,
+  });
 }
 
 // ============================================================================
@@ -188,9 +168,9 @@ test.describe('Sharing Flow', () => {
   test('says the trip cannot be shared when no sync server is configured', async ({
     page,
   }) => {
-    const { tripId } = await createTestTrip(page);
+    await createTestTrip(page);
 
-    await openShareDialog(page, tripId);
+    await openShareDialog(page);
 
     const dialog = page.getByRole('dialog');
     // An explanation, not a spinner: this state has nothing to wait for.
@@ -223,16 +203,13 @@ test.describe('Sharing Flow', () => {
     await expect(inviteMessage).toBeVisible();
 
     // Click the "View this trip" button
-    const viewTripButton = page.getByRole('button', { name: /view.*trip|voir.*voyage/i });
+    const viewTripButton = page.getByRole('button', { name: /get started|commencer/i });
     await expect(viewTripButton).toBeVisible();
     await viewTripButton.click();
 
-    // Verify navigation to the calendar page
-    await expect(page).toHaveURL(/\/calendar/, { timeout: 10000 });
-
-    // Verify the trip is now set as current (calendar should show the trip)
-    // The calendar page shows the trip name in the header (use first() to handle multiple matches)
-    await expect(page.getByText(TEST_DATA.trip.name).first()).toBeVisible({ timeout: 5000 });
+    // Into the onboarding wizard's identity step. The test used to expect
+    // `/calendar`, which the CTA has not gone to since the wizard was added.
+    await expect(page).toHaveURL(/\/share\/[^/]+\/identity/, { timeout: 10000 });
   });
 
   // --------------------------------------------------------------------------
@@ -248,11 +225,11 @@ test.describe('Sharing Flow', () => {
 
     // Verify error message is displayed
     // The ShareImportPage shows an ErrorDisplay component for not found trips
-    const notFoundText = page.getByText(/not.*found|introuvable|could not be found/i);
+    const notFoundText = page.getByText(/doesn't seem to work|ne semble pas fonctionner/i);
     await expect(notFoundText).toBeVisible({ timeout: 10000 });
 
     // Verify helpful description is shown
-    const description = page.getByText(/expired|deleted|expiré|supprimé/i);
+    const description = page.getByText(/may be incorrect|no longer exist|incorrect|n'existe plus/i);
     await expect(description).toBeVisible();
 
     // Verify there's a way to go back to trips list

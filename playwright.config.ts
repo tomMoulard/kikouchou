@@ -54,13 +54,21 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      // Offline behaviour cannot be observed here; see the `offline` project.
-      testIgnore: /offline-first\.spec\.ts/,
+      /**
+       * Two specs belong to projects of their own and must not also run here.
+       *
+       * Offline behaviour cannot be observed against the dev server at all — see
+       * the `offline` project. The sharing journey needs `VITE_SUPABASE_*`
+       * pointing at the stub host, which this project deliberately does not have;
+       * running it here failed every one of its tests against a server with no
+       * backend configured.
+       */
+      testIgnore: /offline-first\.spec\.ts|trip-sharing-sync\.spec\.ts/,
     },
     {
       name: 'Mobile Chrome',
       use: { ...devices['Pixel 5'] },
-      testIgnore: /offline-first\.spec\.ts/,
+      testIgnore: /offline-first\.spec\.ts|trip-sharing-sync\.spec\.ts/,
     },
     {
       /**
