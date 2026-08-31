@@ -84,6 +84,23 @@ const PULL_DEBOUNCE_MS = 750;
 /** Backoff schedule for a failed flush or pull, in milliseconds. */
 const BACKOFF_MS = [1_000, 2_000, 5_000, 15_000, 30_000, 60_000];
 
+/**
+ * Retry schedule for a document that started empty, in milliseconds.
+ *
+ * A cold join can win a race it has no way to detect: the invitee's provider
+ * starts, pulls, and finds nothing because the owner's first upload has not
+ * landed yet. Nothing then asks again — the retry schedule above only covers
+ * *failures*, and a pull that correctly returns zero rows is not one — so the
+ * invitee sits on "Getting the trip…" until the page is reloaded.
+ *
+ * Realtime would ordinarily cover this, which is exactly why it must not be the
+ * only thing that does: a blocked WebSocket is ordinary on hotel, café and
+ * corporate networks, which is where this app gets used. Bounded rather than
+ * indefinite, because a genuinely empty trip is a legitimate state and must not
+ * be polled forever.
+ */
+const HYDRATION_RETRY_MS = [750, 1_500, 3_000, 6_000, 12_000];
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -153,6 +170,8 @@ export class SupabaseYjsProvider {
    */
   private unqueued = 0;
   private reconciling = false;
+  private hydrationAttempt = 0;
+  private hydrationTimer: ReturnType<typeof setTimeout> | null = null;
   private pullTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private state: SyncState = { status: 'local', pendingCount: 0 };
@@ -212,6 +231,39 @@ export class SupabaseYjsProvider {
     this.subscribe();
 
     await this.refreshPending();
+
+    // Nothing arrived and nothing local either: this is either a brand-new trip
+    // or a cold join that outran the first upload, and the two are
+    // indistinguishable from here. Ask again a few times.
+    this.scheduleHydrationRetry();
+  }
+
+  /**
+   * Pulls again while the document is still empty, on a bounded schedule.
+   *
+   * Stops at the first sign of content, on teardown, or when the schedule runs
+   * out — an empty trip is a legitimate state, not something to poll forever.
+   */
+  private scheduleHydrationRetry(): void {
+    if (this.destroyed || this.hydrationTimer !== null) {
+      return;
+    }
+    if (!isEmptyUpdate(Y.encodeStateAsUpdate(this.doc))) {
+      this.hydrationAttempt = 0;
+      return;
+    }
+    const delay = HYDRATION_RETRY_MS[this.hydrationAttempt];
+    if (delay === undefined) {
+      return;
+    }
+    this.hydrationAttempt += 1;
+
+    this.hydrationTimer = setTimeout(() => {
+      this.hydrationTimer = null;
+      void this.pull().then(() => {
+        this.scheduleHydrationRetry();
+      });
+    }, delay);
   }
 
   /** Detaches every listener and timer. Safe to call more than once. */
@@ -228,6 +280,10 @@ export class SupabaseYjsProvider {
     if (this.retryTimer !== null) {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
+    }
+    if (this.hydrationTimer !== null) {
+      clearTimeout(this.hydrationTimer);
+      this.hydrationTimer = null;
     }
     if (this.channel) {
       void this.client.removeChannel(this.channel);

@@ -437,6 +437,31 @@ describe('start — joining a trip that already exists', () => {
     expect((await readCursor(TRIP_ID)).lastSeenUpdateId).toBeLessThan(100);
   });
 
+  it('keeps trying when it starts empty and the rows arrive afterwards', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+
+    // A cold join that wins the race: the invitee's provider starts before the
+    // owner's first upload has landed, so the first pull returns nothing.
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    expect(guestNames(doc)).toEqual([]);
+
+    // The owner uploads now. No Realtime delivery — the socket is exactly what
+    // cannot be relied on, and a blocked WebSocket is ordinary on the sort of
+    // network this app gets used on.
+    const seed = new Y.Doc();
+    addGuest(seed, 'p1', 'Alice');
+    server.append(Y.encodeStateAsUpdate(seed));
+
+    // Without a retry the invitee sits on "Getting the trip…" until something
+    // reloads the page.
+    // 2 ms per attempt, so this allows a little over three seconds — enough for
+    // the first hydration retry plus its backoff.
+    await waitUntil(() => guestNames(doc).length === 1, 'Alice to arrive', 1_800);
+    expect(guestNames(doc)).toEqual(['Alice']);
+  });
+
   it('pages through a log longer than one request', async () => {
     const server = new FakeServer();
     const seed = new Y.Doc();
