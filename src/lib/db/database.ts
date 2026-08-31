@@ -425,30 +425,44 @@ export class KikoushouDatabase extends Dexie {
             }
           });
 
+        // Read out, clear, write back — deliberately NOT `Collection.modify`.
+        //
+        // `modify` round-trips each row through a clone that loses the
+        // Uint8Array prototype: the stored value comes back as a plain
+        // `{0:1, 1:2, …}` object, so `Y.applyUpdate` can no longer read it and
+        // every trip's CRDT history is silently destroyed while the rows
+        // themselves look fine. Measured, and pinned in
+        // `dexie-binary-rows.test.ts`. The ordinary write path preserves the
+        // typed array, so the rows are re-added rather than edited in place.
         const updates = transaction.table('yjsUpdates');
-        const orphans: number[] = [];
-        await updates.toCollection().modify((row: Record<string, unknown>, ref) => {
-          const roomId = row.roomId;
+        const existing = (await updates.toArray()) as {
+          roomId?: unknown;
+          update: Uint8Array;
+        }[];
+
+        const rekeyed: { tripId: string; update: Uint8Array }[] = [];
+        let dropped = 0;
+        for (const row of existing) {
           const tripId =
-            typeof roomId === 'string' ? roomToTrip.get(roomId) : undefined;
-
+            typeof row.roomId === 'string' ? roomToTrip.get(row.roomId) : undefined;
           if (tripId === undefined) {
-            // No trip owns this room any more. Nothing could read it.
-            if (typeof row.id === 'number') {
-              orphans.push(row.id);
-            }
-            delete ref.value;
-            return;
+            // No trip owns this room any more, so nothing could ever read it.
+            dropped += 1;
+            continue;
           }
+          rekeyed.push({ tripId, update: row.update });
+        }
 
-          row.tripId = tripId;
-          delete row.roomId;
-        });
+        await updates.clear();
+        if (rekeyed.length > 0) {
+          // Auto-increment assigns fresh ids; nothing references the old ones.
+          await updates.bulkAdd(rekeyed);
+        }
 
-        if (orphans.length > 0) {
+        if (dropped > 0) {
           console.info(
             '[db] schema 8 dropped %d Yjs updates whose trip no longer exists',
-            orphans.length,
+            dropped,
           );
         }
       });
