@@ -109,3 +109,4 @@ export { MultiFrameQR } from './MultiFrameQR';
 
 export { TripTimelineFrame } from './TripTimelineFrame';
 export type { TripTimelineFrameProps, TripTimelineViewportContext } from './TripTimelineFrame';
+export { SyncStatusBadge, type SyncStatusBadgeProps } from './SyncStatusBadge';

@@ -41,6 +41,10 @@ import {
 } from 'react';
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
 
+import {
+  consumeAuthCode,
+  getCapturedAuthError,
+} from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 // ============================================================================
@@ -84,6 +88,15 @@ export interface AuthContextValue {
 
   /** Signs out locally. Safe to call offline: the local session is cleared. */
   readonly signOut: () => Promise<void>;
+
+  /**
+   * Why the last sign-in attempt did not produce a session.
+   *
+   * Set when the provider redirected back with an error, or when exchanging the
+   * authorization code failed. Without it a failed callback is indistinguishable
+   * from never having tried.
+   */
+  readonly lastAuthError: string | null;
 }
 
 // ============================================================================
@@ -133,7 +146,20 @@ export function AuthProvider({
   const [hasSeenAuthEvent, setHasSeenAuthEvent] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [client, setClient] = useState<SupabaseClient | null>(null);
+  /** Set from the async exchange; a callback, so not an effect-body write. */
+  const [exchangeError, setExchangeError] = useState<string | null>(null);
   const isMountedRef = useRef(true);
+
+  /**
+   * An error the provider redirected back with — usually a cancelled consent
+   * screen.
+   *
+   * Captured at module import and constant for this document, so it is derived
+   * rather than stored. Writing it into state from an effect would be a
+   * cascading render carrying information that was already available on the
+   * first one.
+   */
+  const providerError = useMemo(() => getCapturedAuthError(), []);
 
   // Environment-only, so it is correct on the first render — before the client
   // module has loaded. Whether a backend exists cannot change at runtime.
@@ -164,30 +190,62 @@ export function AuthProvider({
     let unsubscribe: (() => void) | null = null;
     let cancelled = false;
 
+    const attach = async (resolvedClient: SupabaseClient): Promise<void> => {
+      // Subscribe *before* exchanging, so the SIGNED_IN the exchange produces is
+      // observed rather than missed.
+      const { data } = resolvedClient.auth.onAuthStateChange((event, nextSession) => {
+        if (!isMountedRef.current) {
+          return;
+        }
+        if (import.meta.env.DEV) {
+          console.info('[auth] %s, session: %s', event, nextSession ? 'yes' : 'none');
+        }
+        setSession(nextSession);
+        setHasSeenAuthEvent(true);
+        setIsSigningIn(false);
+      });
+      unsubscribe = () => data.subscription.unsubscribe();
+
+      // The authorization code, captured synchronously at import before the
+      // router could normalise it away. Taken *once*: StrictMode remounts this
+      // effect, and a second exchange of the same code fails with "PKCE code
+      // verifier not found" because the first one consumed the verifier.
+      const code = consumeAuthCode();
+      if (code !== null) {
+        const { error } = await resolvedClient.auth.exchangeCodeForSession(code);
+        if (error && isMountedRef.current) {
+          // A spent or mismatched code — a reload of the callback URL, or a
+          // verifier lost with the browser's storage.
+          console.error('[auth] code exchange failed:', error.message);
+          setExchangeError(error.message);
+        }
+        // Either way the subscription above has the outcome; nothing else to do.
+        return;
+      }
+
+      // No callback to process, so read whatever session is persisted.
+      //
+      // This is a fallback, not the primary path, and it exists because relying
+      // on a single INITIAL_SESSION event with nothing behind it strands the UI
+      // permanently if that event ever reports null for a reason we did not
+      // anticipate. A null here never overrides a session already in hand.
+      const { data: sessionData } = await resolvedClient.auth.getSession();
+      if (!isMountedRef.current || cancelled) {
+        return;
+      }
+      setSession((current) => current ?? sessionData.session);
+      setHasSeenAuthEvent(true);
+    };
+
     void getSupabaseClient()
-      .then((resolvedClient) => {
+      .then(async (resolvedClient) => {
         // Unmounted while the library was loading: never subscribe at all,
         // rather than subscribing and immediately tearing it down.
         if (cancelled || !resolvedClient || !isMountedRef.current) {
           return;
         }
         setClient(resolvedClient);
-
-        // `onAuthStateChange` fires an INITIAL_SESSION event covering both the
-        // stored session and a PKCE code exchanged out of the URL, so
-        // subscribing is enough — a separate getSession() would race it and
-        // could resolve with a stale null.
-        const { data } = resolvedClient.auth.onAuthStateChange(
-          (_event, nextSession) => {
-            if (!isMountedRef.current) {
-              return;
-            }
-            setSession(nextSession);
-            setHasSeenAuthEvent(true);
-            setIsSigningIn(false);
-          },
-        );
-        unsubscribe = () => data.subscription.unsubscribe();
+        await attach(resolvedClient);
       })
       .catch((error: unknown) => {
         // A chunk that will not load — offline on a cold launch, or a stale
@@ -207,6 +265,7 @@ export function AuthProvider({
     }
 
     setIsSigningIn(true);
+    setExchangeError(null);
     try {
       // Usually already resolved by the mount effect; awaited here so a click
       // that lands before the chunk finishes loading still works.
@@ -271,8 +330,20 @@ export function AuthProvider({
       isSigningIn,
       signInWithGoogle,
       signOut,
+      // The exchange's own failure is more specific than the redirect's, so it
+      // wins when both are present.
+      lastAuthError: exchangeError ?? providerError,
     }),
-    [isAvailable, isResolved, isSigningIn, session, signInWithGoogle, signOut],
+    [
+      exchangeError,
+      providerError,
+      isAvailable,
+      isResolved,
+      isSigningIn,
+      session,
+      signInWithGoogle,
+      signOut,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

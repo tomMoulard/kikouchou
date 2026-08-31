@@ -37,6 +37,7 @@ function authState(overrides: Partial<AuthContextValue> = {}): AuthContextValue 
     isSigningIn: false,
     signInWithGoogle: vi.fn(async () => ({ status: 'redirecting' as const })),
     signOut: vi.fn(async () => undefined),
+    lastAuthError: null,
     ...overrides,
   };
 }
