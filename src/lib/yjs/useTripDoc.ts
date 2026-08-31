@@ -44,10 +44,22 @@ export interface TripDocState {
 // ============================================================================
 
 export function useTripDoc(tripId: TripId | null | undefined): TripDocState {
-  const [state, setState] = useState<TripDocState>(() => ({
-    doc: new Y.Doc(),
-    loaded: false,
-  }));
+  /**
+   * The document, tagged with the trip it belongs to.
+   *
+   * The tag is what makes `loaded` safe. Switching trips runs the previous
+   * effect's cleanup — which destroys that document — before the next one has
+   * finished loading, so a `loaded` flag on its own stays true across the gap
+   * and hands consumers a **destroyed** document. Comparing the tag closes that
+   * window: `loaded` is false until the state actually describes the trip being
+   * asked about.
+   */
+  const [state, setState] = useState<{
+    tripId: TripId | null;
+    doc: Y.Doc;
+    loaded: boolean;
+  }>(() => ({ tripId: null, doc: new Y.Doc(), loaded: false }));
+
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -56,9 +68,16 @@ export function useTripDoc(tripId: TripId | null | undefined): TripDocState {
     }
 
     let cancelled = false;
+    let destroyed = false;
     const doc = new Y.Doc();
 
-    const cleanup = (): void => {
+    const destroy = (): void => {
+      // Guarded: cleanup and the cancelled branch of initialise can both reach
+      // here for the same document.
+      if (destroyed) {
+        return;
+      }
+      destroyed = true;
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       doc.destroy();
@@ -67,26 +86,33 @@ export function useTripDoc(tripId: TripId | null | undefined): TripDocState {
     const initialise = async (): Promise<void> => {
       await loadPersistedUpdates(doc, tripId);
       if (cancelled) {
-        doc.destroy();
+        destroy();
         return;
       }
 
       // Subscribed after the replay so the replay itself is not written straight
       // back out row by row.
       unsubscribeRef.current = subscribeToUpdates(doc, tripId);
-      setState({ doc, loaded: true });
+      setState({ tripId, doc, loaded: true });
     };
 
     void initialise().catch((error: unknown) => {
       console.error('[yjs] failed to open the trip document:', error);
-      cleanup();
+      destroy();
     });
 
     return () => {
       cancelled = true;
-      cleanup();
+      destroy();
     };
   }, [tripId]);
 
-  return state;
+  const matches = state.tripId !== null && state.tripId === (tripId ?? null);
+
+  return {
+    doc: state.doc,
+    // Never true for a document belonging to a different trip, or for the
+    // placeholder created before the first load.
+    loaded: matches && state.loaded,
+  };
 }

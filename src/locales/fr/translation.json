@@ -623,6 +623,7 @@
       "whoAreYou": "Lequel êtes-vous ?",
       "whoAreYouHint": "Pour que le séjour affiche votre chambre et vos trajets, pas seulement ceux des autres.",
       "identityTaken": "Quelqu'un vient de prendre ce nom.",
+      "notOnRoster": "Votre invitation n'a pas encore été acceptée. Ouvrez à nouveau le lien d'invitation.",
       "allTaken": "Tous les noms de la liste sont déjà pris. Continuez sans en choisir un : vous pouvez tout de même voir et modifier le séjour.",
       "notListed": "Je ne suis pas dans la liste",
       "notFound": "Ce lien d'invitation n'est pas valide.",

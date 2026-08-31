@@ -623,6 +623,7 @@
       "whoAreYou": "Which one are you?",
       "whoAreYouHint": "So the trip can show your room and your travel, not just everyone else's.",
       "identityTaken": "Somebody else just took that name.",
+      "notOnRoster": "Your invitation has not been accepted yet. Open the invite link again.",
       "allTaken": "Everyone on the list is already claimed. Carry on without picking one — you can still see and edit the trip.",
       "notListed": "I'm not on the list",
       "notFound": "This invite link isn't valid.",

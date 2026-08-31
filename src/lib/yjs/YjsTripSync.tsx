@@ -35,14 +35,23 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
   readonly tripId: TripId;
 }): null {
   const yjs = useYjsContext();
-  const initializedRef = useRef(false);
+  /**
+   * Which trip has been populated, not merely *whether* one has.
+   *
+   * A plain boolean latched true on the first trip and never reset, because this
+   * component is reused across trips rather than remounted. The second trip's
+   * document then never had `meta.id` set — and `syncTripMetaToDoc` deliberately
+   * never sets it — so `syncDocToDexie` rejected every remote update for it, and
+   * that trip silently stopped receiving other people's changes.
+   */
+  const populatedForRef = useRef<TripId | null>(null);
 
   useEffect(() => {
-    if (!yjs?.loaded || initializedRef.current) {
+    if (!yjs?.loaded || populatedForRef.current === tripId) {
       return;
     }
 
-    initializedRef.current = true;
+    populatedForRef.current = tripId;
     const meta = yjs.doc.getMap('meta');
     if (meta.get('id')) {
       return;

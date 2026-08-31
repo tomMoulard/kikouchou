@@ -173,44 +173,69 @@ describe('materialiseJoinedTrip', () => {
 // ============================================================================
 
 describe('claimParticipant', () => {
-  function clientWithUpdate(error: unknown) {
-    const update = vi.fn(() => ({
-      eq: () => ({ eq: async () => ({ error }) }),
-    }));
+  /**
+   * Models PostgREST honestly, which the previous double did not: the builder
+   * is awaitable on its own, and `select()` is what makes the affected rows
+   * come back. An UPDATE with no `select()` compiles to a plain UPDATE, and in
+   * SQL that succeeds with zero rows affected and reports no error — so a fake
+   * that terminated at `eq()` could not express the case that mattered.
+   */
+  function clientWithUpdate(
+    result: { rows?: unknown[] | null; error?: unknown } = {},
+  ) {
+    const { rows = [{ person_id: 'person-alice' }], error = null } = result;
+    const terminal = {
+      select: () => Promise.resolve({ data: rows, error }),
+      then: (resolve: (value: { data: null; error: unknown }) => unknown) =>
+        resolve({ data: null, error }),
+    };
+    const update = vi.fn(() => ({ eq: () => ({ eq: () => terminal }) }));
     return { client: { from: () => ({ update }) } as never, update };
   }
 
-  it('reports success', async () => {
-    const { client } = clientWithUpdate(null);
+  const claim = (client: never) =>
+    claimParticipant(client, REMOTE_TRIP_ID, 'user-1', 'person-alice');
 
-    await expect(
-      claimParticipant(client, REMOTE_TRIP_ID, 'user-1', 'person-alice'),
-    ).resolves.toEqual({ status: 'claimed' });
+  it('confirms the claim from the row the server actually wrote', async () => {
+    const { client } = clientWithUpdate();
+
+    await expect(claim(client)).resolves.toEqual({ status: 'claimed' });
+  });
+
+  it('does not report success when the update matched no row', async () => {
+    // Happens whenever the roster row is not visible to this account: redeem
+    // never completed, the session belongs to a different user than the one
+    // that redeemed, or RLS filters the row out. Reporting success would leave
+    // the identity null while the UI moved on, and an unclaimed participant
+    // still looks free — so the next person to join could claim the same name.
+    const { client } = clientWithUpdate({ rows: [] });
+
+    await expect(claim(client)).resolves.toEqual({ status: 'not-a-member' });
   });
 
   it('reports a taken participant rather than an opaque error', async () => {
-    const { client } = clientWithUpdate({ code: '23505', message: 'duplicate key' });
-
     // The unique constraint is the enforcement point, so a conflict is an
     // expected outcome to explain — not a bug to pre-check for, which would
     // leave a race between the check and the write.
-    await expect(
-      claimParticipant(client, REMOTE_TRIP_ID, 'user-1', 'person-alice'),
-    ).resolves.toEqual({ status: 'taken' });
+    const { client } = clientWithUpdate({
+      error: { code: '23505', message: 'duplicate key' },
+    });
+
+    await expect(claim(client)).resolves.toEqual({ status: 'taken' });
   });
 
   it('surfaces any other failure', async () => {
-    const { client } = clientWithUpdate({ code: '42501', message: 'denied' });
+    const { client } = clientWithUpdate({
+      error: { code: '42501', message: 'denied' },
+    });
 
-    await expect(
-      claimParticipant(client, REMOTE_TRIP_ID, 'user-1', 'person-alice'),
-    ).resolves.toEqual({ status: 'error', message: 'denied' });
+    await expect(claim(client)).resolves.toEqual({ status: 'error', message: 'denied' });
   });
 
   it('writes only the person id', async () => {
-    const { client, update } = clientWithUpdate(null);
+    const { client, update } = clientWithUpdate();
 
-    await claimParticipant(client, REMOTE_TRIP_ID, 'user-1', 'person-alice');
+    await claim(client);
 
     const [values] = update.mock.calls[0] as unknown as [Record<string, unknown>];
     expect(values).toEqual({ person_id: 'person-alice' });

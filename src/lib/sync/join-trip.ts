@@ -147,28 +147,50 @@ export async function materialiseJoinedTrip(
  * accounts claiming the same person, so a conflict here is an expected outcome
  * to report, not a bug to guard against beforehand — checking first would leave
  * a race between the check and the write.
+ *
+ * Confirmed against the row the server returns, never against the absence of an
+ * error. An UPDATE matching nothing is not a failure in SQL: it succeeds, having
+ * changed no rows, and reports no error. That is the normal outcome whenever the
+ * roster row is not visible to this account — redemption never completed, the
+ * session belongs to a different user than the one that redeemed, or the RLS
+ * `user_id = auth.uid()` check filters it out. Trusting the missing error would
+ * leave the identity null while the UI moved on, and an unclaimed participant
+ * still looks free, so the next person to join could claim the same name.
+ *
+ * `select()` is safe to add here even though `RETURNING` is subject to the
+ * SELECT policy: that policy is `is_trip_member(trip_id)`, and an account
+ * claiming an identity is by definition on the roster it is updating.
  */
 export async function claimParticipant(
   client: SupabaseClient,
   remoteTripId: string,
   userId: string,
   personId: string,
-): Promise<{ readonly status: 'claimed' | 'taken' | 'error'; readonly message?: string }> {
+): Promise<{
+  readonly status: 'claimed' | 'taken' | 'not-a-member' | 'error';
+  readonly message?: string;
+}> {
   try {
-    const { error } = await client
+    const { data, error } = await client
       .from('trip_members')
       .update({ person_id: personId })
       .eq('trip_id', remoteTripId)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .select('person_id');
 
-    if (!error) {
-      return { status: 'claimed' };
+    if (error) {
+      // 23505 is unique_violation: somebody else is already this participant.
+      if (error.code === '23505') {
+        return { status: 'taken' };
+      }
+      return { status: 'error', message: error.message };
     }
-    // 23505 is unique_violation: somebody else is already this participant.
-    if (error.code === '23505') {
-      return { status: 'taken' };
+
+    if (!Array.isArray(data) || data.length === 0) {
+      return { status: 'not-a-member' };
     }
-    return { status: 'error', message: error.message };
+
+    return { status: 'claimed' };
   } catch (error: unknown) {
     return {
       status: 'error',
