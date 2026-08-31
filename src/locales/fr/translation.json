@@ -603,12 +603,8 @@
       "waitingForData": "En attente des données du voyage...",
       "syncedWithPeers": "Synchronisé avec {{count}} pair(s)",
       "syncingWithPeers": "Synchronisation avec {{count}} pair(s)...",
-      "connectedWaitingPeers": "Connecté au serveur de signalisation, en attente des pairs...",
-      "waitingForPeers": "Connexion au serveur de signalisation...",
-      "waitingDescription": "Le propriétaire du voyage doit garder l'application ouverte pour que la synchronisation fonctionne.",
-      "signalingFailed": "Serveur de signalisation inaccessible",
-      "signalingFailedDescription": "Impossible de se connecter au serveur de signalisation. Le serveur est peut-être hors service ou votre réseau bloque les connexions WebSocket.",
       "needsAccount": "Le partage nécessite un compte, pour que les personnes invitées continuent de voir vos modifications.",
+      "unavailable": "Cette copie de l'application n'a pas de serveur de synchronisation configuré, les voyages ne peuvent donc pas être partagés depuis celle-ci.",
       "signInReason": "Connectez-vous pour partager ce séjour et le modifier ensemble."
     },
     "join": {

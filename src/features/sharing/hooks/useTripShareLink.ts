@@ -4,9 +4,11 @@
  * Three outcomes, chosen in this order, because each is the best available given
  * what exists:
  *
- * 1. **No backend configured** — the legacy peer-to-peer link. A build with no
- *    server can still share on a LAN, and taking that away would be a
- *    regression for anyone self-hosting.
+ * 1. **No backend configured** — nothing to offer, said plainly. This used to
+ *    fall back to a peer-to-peer link; that transport is gone, so there is no
+ *    link a server-less build can hand out. Reporting it is the whole job here,
+ *    because the alternative is a dialog that waits for something that is never
+ *    coming.
  * 2. **Backend, but signed out** — no link. Sharing needs an account, and
  *    saying so is better than handing over a link that syncs with nobody.
  * 3. **Signed in** — an account-backed invite: revocable, and it works between
@@ -42,8 +44,13 @@ export type ShareLinkState =
   | { readonly kind: 'invite'; readonly url: string; readonly token: string }
   /** No account yet: the dialog should offer to sign in. */
   | { readonly kind: 'needs-account' }
-  /** No backend in this build: the peer-to-peer link is all there is. */
-  | { readonly kind: 'legacy' }
+  /**
+   * No backend in this build, so there is no link to give.
+   *
+   * Distinct from `error`: nothing failed, the capability is simply absent, and
+   * no amount of retrying will change that.
+   */
+  | { readonly kind: 'unavailable' }
   | { readonly kind: 'error'; readonly message: string };
 
 // ============================================================================
@@ -77,10 +84,10 @@ export function useTripShareLink(
       return;
     }
 
-    // A build with no server keeps the peer-to-peer link. Decided before the
-    // session is consulted, because there is no session to wait for.
+    // Decided before the session is consulted, because there is no session to
+    // wait for.
     if (!isAvailable) {
-      setState({ kind: 'legacy' });
+      setState({ kind: 'unavailable' });
       return;
     }
 
@@ -105,7 +112,9 @@ export function useTripShareLink(
         return;
       }
       if (!client) {
-        setState({ kind: 'legacy' });
+        // Configured but unusable — a malformed URL or key. Same outcome for the
+        // user as no backend at all.
+        setState({ kind: 'unavailable' });
         return;
       }
 
