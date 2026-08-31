@@ -32,7 +32,7 @@ import {
   listInvites,
 } from '@/lib/sync/invites';
 import { ensureRemoteTrip } from '@/lib/sync/remote-trip';
-import type { Trip, TripId } from '@/types';
+import type { Trip } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -70,6 +70,24 @@ export function useTripShareLink(
   const [attempt, setAttempt] = useState(0);
   const isMountedRef = useRef(true);
 
+  /**
+   * Identities, not objects.
+   *
+   * `trip` arrives from a Dexie live query, and the sync provider writes to the
+   * `trips` table every time it projects a remote update — so the object is a
+   * new one for reasons that have nothing to do with which trip is being shared.
+   * Keyed on the object, the effect below restarted on each of those writes,
+   * and since it opens by setting `loading`, the dialog dropped back to a
+   * spinner over and over for as long as sync had anything to deliver. Each
+   * restart also repeated the server work: `ensureRemoteTrip`, then a
+   * `listInvites`, then possibly another mint.
+   *
+   * `user` is memoised by `AuthProvider` today, but reading the id here means
+   * this hook no longer depends on that staying true.
+   */
+  const tripId = trip?.id ?? null;
+  const userId = user?.id ?? null;
+
   useEffect(() => {
     // Set on setup, not only in cleanup: StrictMode's dev-time
     // mount -> cleanup -> mount cycle would otherwise latch this false forever.
@@ -80,7 +98,7 @@ export function useTripShareLink(
   }, []);
 
   useEffect(() => {
-    if (!enabled || !trip) {
+    if (!enabled || tripId === null) {
       return;
     }
 
@@ -98,7 +116,7 @@ export function useTripShareLink(
       return;
     }
 
-    if (!user) {
+    if (userId === null) {
       setState({ kind: 'needs-account' });
       return;
     }
@@ -118,7 +136,7 @@ export function useTripShareLink(
         return;
       }
 
-      const remote = await ensureRemoteTrip(client, user.id, trip.id as TripId);
+      const remote = await ensureRemoteTrip(client, userId, tripId);
       if (cancelled || !isMountedRef.current) {
         return;
       }
@@ -148,7 +166,7 @@ export function useTripShareLink(
 
       const token = existing
         ? existing.token
-        : await mintToken(client, remote.remoteTripId, user.id);
+        : await mintToken(client, remote.remoteTripId, userId);
       if (cancelled || !isMountedRef.current) {
         return;
       }
@@ -181,7 +199,7 @@ export function useTripShareLink(
     return () => {
       cancelled = true;
     };
-  }, [attempt, enabled, isAvailable, isResolved, trip, user]);
+  }, [attempt, enabled, isAvailable, isResolved, tripId, userId]);
 
   const refresh = useCallback(() => {
     setAttempt((current) => current + 1);
