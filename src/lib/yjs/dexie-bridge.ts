@@ -6,12 +6,25 @@
  * Also syncs the CRDT state back into the existing Dexie tables so the
  * rest of the application continues reading Dexie as before.
  *
+ * The document's shape lives in `./doc-model` — this module only moves data
+ * between it and Dexie, and owns the trust boundary in `syncDocToDexie`.
+ *
  * @module lib/yjs/dexie-bridge
  */
 
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
+import {
+  DOC_SCHEMA_VERSION,
+  type DocCollectionName,
+  isDeepEqual,
+  migrateLegacyArrayCollections,
+  readDocCollection,
+  readDocSchemaVersion,
+  replaceDocCollection,
+  stampDocSchemaVersion,
+} from './doc-model';
 import type {
   Activity,
   Person,
@@ -28,84 +41,14 @@ const COMPACTION_THRESHOLD = 100;
 
 export const ORIGIN_DEXIE_SYNC = 'dexie-sync';
 
-export type SharedCollectionName =
-  | 'guests'
-  | 'rooms'
-  | 'roomAssignments'
-  | 'transport'
-  | 'activities';
-export type DocCollectionName = SharedCollectionName;
+export type SharedCollectionName = DocCollectionName;
+export type { DocCollectionName };
 type SharedRecord = Record<string, unknown>;
-
-function normalizeValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(normalizeValue);
-  }
-
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, nested]) => [key, normalizeValue(nested)]),
-    );
-  }
-
-  return value;
-}
-
-function areEqual(left: unknown, right: unknown): boolean {
-  return JSON.stringify(normalizeValue(left)) === JSON.stringify(normalizeValue(right));
-}
 
 function stripTripId<T extends { tripId: TripId }>(record: T): SharedRecord {
   const nextRecord = { ...record } as Record<string, unknown>;
   delete nextRecord.tripId;
   return nextRecord;
-}
-
-function sortCollection(
-  collection: SharedCollectionName,
-  items: ReadonlyArray<SharedRecord>,
-): SharedRecord[] {
-  const nextItems = [...items];
-
-  switch (collection) {
-    case 'guests':
-      return nextItems.sort((left, right) => String(left.id).localeCompare(String(right.id)));
-    case 'rooms':
-      return nextItems.sort((left, right) => {
-        const leftOrder = Number(left.order ?? 0);
-        const rightOrder = Number(right.order ?? 0);
-        return leftOrder === rightOrder
-          ? String(left.id).localeCompare(String(right.id))
-          : leftOrder - rightOrder;
-      });
-    case 'roomAssignments':
-      return nextItems.sort((left, right) => {
-        const dateCompare = String(left.startDate ?? '').localeCompare(String(right.startDate ?? ''));
-        return dateCompare === 0
-          ? String(left.id).localeCompare(String(right.id))
-          : dateCompare;
-      });
-    case 'transport':
-      return nextItems.sort((left, right) => {
-        const datetimeCompare = String(left.datetime ?? '').localeCompare(String(right.datetime ?? ''));
-        return datetimeCompare === 0
-          ? String(left.id).localeCompare(String(right.id))
-          : datetimeCompare;
-      });
-    case 'activities':
-      return nextItems.sort((left, right) => {
-        const startCompare = String(left.startDatetime ?? '').localeCompare(
-          String(right.startDatetime ?? ''),
-        );
-        return startCompare === 0
-          ? String(left.id).localeCompare(String(right.id))
-          : startCompare;
-      });
-  }
-
-  return nextItems;
 }
 
 function getMeta(doc: Y.Doc): Y.Map<unknown> {
@@ -188,7 +131,7 @@ function buildTripRecord(
 }
 
 function readCollection(doc: Y.Doc, name: SharedCollectionName): SharedRecord[] {
-  return sortCollection(name, doc.getArray(name).toArray() as SharedRecord[]);
+  return readDocCollection(doc, name);
 }
 
 async function replaceTripScopedRows<T extends { id: string; tripId: TripId }>(
@@ -219,6 +162,14 @@ export async function loadPersistedUpdates(doc: Y.Doc, roomId: string): Promise<
       Y.applyUpdate(doc, row.update);
     }
   });
+
+  // A document persisted by an older build stores its collections as arrays.
+  // Convert before anything reads it, so the first projection to Dexie sees the
+  // trip's real contents rather than five empty maps. Idempotent, and safe to
+  // run on every device: the conversion is keyed on each record's own id.
+  if (readDocSchemaVersion(doc) < DOC_SCHEMA_VERSION) {
+    migrateLegacyArrayCollections(doc);
+  }
 
   if (rows.length >= COMPACTION_THRESHOLD) {
     await compactUpdates(doc, roomId);
@@ -295,6 +246,22 @@ export async function syncDocToDexie(
       roomId,
       'belongs to',
       ownerTrip.id,
+    );
+    return null;
+  }
+
+  // A document written by an older build keeps its collections in `Y.Array`s,
+  // so every `…ById` map reads as legitimately empty. Projecting that would
+  // delete every guest, room, assignment, transport and activity of a trip
+  // whose data is intact — the emptiness is a schema mismatch, not a deletion.
+  // `loadPersistedUpdates` converts local documents on open; this guards the
+  // remaining case, a peer that has not upgraded yet.
+  const schemaVersion = readDocSchemaVersion(doc);
+  if (schemaVersion < DOC_SCHEMA_VERSION) {
+    console.warn(
+      '[yjs] refusing remote update: doc schema v%d predates v%d',
+      schemaVersion,
+      DOC_SCHEMA_VERSION,
     );
     return null;
   }
@@ -432,53 +399,62 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
     if (trip.description !== undefined) meta.set('description', trip.description);
     if (trip.coordinates !== undefined) meta.set('coordinates', trip.coordinates);
 
-    const guestsArray = doc.getArray('guests');
-    sortCollection('guests', guests.map((guest) => stripTripId(guest))).forEach((guest) => {
-      guestsArray.push([guest]);
-    });
+    stampDocSchemaVersion(doc);
 
-    const roomsArray = doc.getArray('rooms');
-    sortCollection('rooms', rooms.map((room) => stripTripId(room))).forEach((room) => {
-      roomsArray.push([room]);
-    });
-
-    const assignmentsArray = doc.getArray('roomAssignments');
-    sortCollection('roomAssignments', assignments.map((assignment) => stripTripId(assignment))).forEach((assignment) => {
-      assignmentsArray.push([assignment]);
-    });
-
-    const transportArray = doc.getArray('transport');
-    sortCollection('transport', transport.map((item) => stripTripId(item))).forEach((item) => {
-      transportArray.push([item]);
-    });
-
-    const activitiesArray = doc.getArray('activities');
-    sortCollection('activities', activities.map((item) => stripTripId(item))).forEach((item) => {
-      activitiesArray.push([item]);
-    });
+    replaceDocCollection(
+      doc,
+      'guests',
+      guests.map((guest) => stripTripId(guest) as SharedRecord & { id: string }),
+    );
+    replaceDocCollection(
+      doc,
+      'rooms',
+      rooms.map((room) => stripTripId(room) as SharedRecord & { id: string }),
+    );
+    replaceDocCollection(
+      doc,
+      'roomAssignments',
+      assignments.map(
+        (assignment) => stripTripId(assignment) as SharedRecord & { id: string },
+      ),
+    );
+    replaceDocCollection(
+      doc,
+      'transport',
+      transport.map((item) => stripTripId(item) as SharedRecord & { id: string }),
+    );
+    replaceDocCollection(
+      doc,
+      'activities',
+      activities.map((item) => stripTripId(item) as SharedRecord & { id: string }),
+    );
   });
 }
 
+/**
+ * Pushes a Dexie collection into the document, upserting each row and removing
+ * the ids that are gone.
+ *
+ * This used to clear the whole `Y.Array` and rebuild it, which made every local
+ * change collide with every concurrent remote one: the merge kept both peers'
+ * deletions and both peers' inserts, and `bulkPut` then silently dropped an
+ * edit or restored a deleted row. Per-entity writes keep unrelated edits out of
+ * each other's way — see `./doc-model`.
+ */
 export function syncDexieToDoc(
   doc: Y.Doc,
   table: SharedCollectionName,
   items: SharedRecord[],
 ): void {
-  const array = doc.getArray(table);
-  const nextItems = sortCollection(table, items);
-  const currentItems = sortCollection(table, array.toArray() as SharedRecord[]);
-
-  if (areEqual(currentItems, nextItems)) {
-    return;
-  }
+  const entities = items.filter(
+    (item): item is SharedRecord & { id: string } =>
+      typeof item.id === 'string' && item.id.length > 0,
+  );
 
   Y.transact(
     doc,
     () => {
-      array.delete(0, array.length);
-      for (const item of nextItems) {
-        array.push([item]);
-      }
+      replaceDocCollection(doc, table, entities);
     },
     ORIGIN_DEXIE_SYNC,
   );
@@ -494,7 +470,7 @@ export function syncTripMetaToDoc(doc: Y.Doc, updates: Record<string, unknown>):
     if (value === undefined) {
       return meta.has(key);
     }
-    return !areEqual(meta.get(key), value);
+    return !isDeepEqual(meta.get(key), value);
   });
 
   if (!hasChanges) {

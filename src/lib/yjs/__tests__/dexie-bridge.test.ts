@@ -14,17 +14,26 @@ import * as Y from 'yjs';
 import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { syncDocToDexie } from '@/lib/yjs/dexie-bridge';
+import { DOC_SCHEMA_VERSION } from '@/lib/yjs/doc-model';
 import { isoDate } from '@/test/utils';
-import type { TripId } from '@/types';
+import type { Person, TripId } from '@/types';
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-/** Builds a Y.Doc the way a remote peer would present one. */
+/**
+ * Builds a Y.Doc the way a remote peer would present one.
+ *
+ * The schema stamp is part of that: a peer running the current build always
+ * declares it, and `syncDocToDexie` refuses a document that does not, so
+ * omitting it here would exercise the version guard instead of the assertion
+ * each test is actually about. Pass `schema` explicitly to test the guard.
+ */
 function makeDoc(meta: Record<string, unknown>): Y.Doc {
   const doc = new Y.Doc();
   const map = doc.getMap('meta');
+  map.set('schema', DOC_SCHEMA_VERSION);
   for (const [key, value] of Object.entries(meta)) {
     map.set(key, value);
   }
@@ -152,6 +161,34 @@ describe('syncDocToDexie — trust boundary', () => {
 
     const stored = await db.trips.get('brand-new-trip' as TripId);
     expect(stored?.p2pEncryptionKey).toBe('key-from-share-link');
+  });
+
+  it('refuses a doc from a peer on the older array-based schema', async () => {
+    const trip = await createTrip({
+      name: 'Shared trip',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-20'),
+    });
+    await db.trips.update(trip.id, { p2pRoomId: 'room-legacy' });
+    await db.persons.add({
+      id: 'keep-me' as Person['id'],
+      tripId: trip.id,
+      name: 'Alice',
+      color: '#ff0000' as Person['color'],
+    });
+
+    // A v1 peer keeps its collections in Y.Arrays, so every `…ById` map reads
+    // as empty. Projecting that would wipe a trip whose data is intact.
+    const legacy = makeDoc({
+      schema: 1,
+      id: trip.id,
+      name: 'Shared trip',
+      startDate: '2024-07-15',
+      endDate: '2024-07-20',
+    });
+
+    await expect(syncDocToDexie(legacy, 'room-legacy')).resolves.toBeNull();
+    expect(await db.persons.where('tripId').equals(trip.id).count()).toBe(1);
   });
 
   it('ignores a doc with a non-string meta.id instead of rejecting', async () => {
