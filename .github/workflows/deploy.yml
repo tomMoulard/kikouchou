@@ -50,7 +50,6 @@ jobs:
         run: bun run build
         env:
           VITE_APP_VERSION: ${{ github.ref_name }}@${{ github.sha }}
-          VITE_SIGNALING_URL: wss://kikoushou.cyprin.eu
           # Secret names keep their NEXT_PUBLIC_ prefix in GitHub; Vite only
           # exposes VITE_* to import.meta.env, so map them here rather than
           # renaming the secrets.

@@ -284,11 +284,6 @@ export async function deleteTrip(id: TripId): Promise<void> {
       db.tripMembers,
     ],
     async () => {
-      // The trip's own row is read first: purging the CRDT log needs its
-      // p2pRoomId, and without that purge a deleted trip re-materialises in
-      // full the next time its share link is opened.
-      const trip = await db.trips.get(id);
-
       // Delete related records in parallel for better performance
       // Within a transaction, all operations are atomic regardless of order
       await Promise.all([
@@ -303,11 +298,12 @@ export async function deleteTrip(id: TripId): Promise<void> {
         db.yjsOutbox.where('tripId').equals(id).delete(),
         db.syncCursors.where('tripId').equals(id).delete(),
         db.tripMembers.where('tripId').equals(id).delete(),
+        // The CRDT log is keyed on the trip since schema 8. It used to be keyed
+        // on a WebRTC room id, so purging it needed the trip's credentials read
+        // out first — and without that purge a deleted trip re-materialised in
+        // full the next time its share link was opened.
+        db.yjsUpdates.where('tripId').equals(id).delete(),
       ]);
-
-      if (trip?.p2pRoomId) {
-        await db.yjsUpdates.where('roomId').equals(trip.p2pRoomId).delete();
-      }
 
       // Delete the trip itself after related data is removed
       await db.trips.delete(id);

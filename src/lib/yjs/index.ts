@@ -3,15 +3,13 @@
  * @module lib/yjs
  */
 
-export { useYjsSync, type YjsSyncState } from './useYjsSync';
+export { useTripDoc, type TripDocState } from './useTripDoc';
 export {
   YjsProvider,
   useYjsContext,
   useRequiredYjsContext,
-  type OnlineUser,
   type YjsContextValue,
 } from './YjsProvider';
-export { P2PSyncPresence } from './P2PSyncPresence';
 export {
   DOC_COLLECTION_NAMES,
   DOC_SCHEMA_VERSION,
@@ -38,13 +36,4 @@ export {
   syncDexieToDoc,
   syncTripMetaToDoc,
 } from './dexie-bridge';
-export {
-  getPresenceProfile,
-  resolveTripPresenceProfile,
-  type PresenceProfile,
-} from './presence';
 export { TripYjsSyncBinding, YjsTripSync } from './YjsTripSync';
-export {
-  ensureTripP2pCredentials,
-  type TripP2pCredentials,
-} from './ensure-trip-p2p-credentials';

@@ -330,20 +330,6 @@ export interface Trip extends Identifiable, WithTimestamps {
   };
 
   /**
-   * Optional P2P room identifier for real-time collaboration.
-   * Generated when the trip is first shared via the P2P Share modal.
-   * 12-character nanoid used as the y-webrtc room name and URL slug.
-   */
-  p2pRoomId?: string;
-
-  /**
-   * Optional encryption key for P2P sync.
-   * Stored in the URL fragment (never sent to server).
-   * Used as the y-webrtc password to encrypt all CRDT updates.
-   */
-  p2pEncryptionKey?: string;
-
-  /**
    * Server-side `trips.id` once this trip has been uploaded.
    *
    * Absent means local-only, which is the normal state for a trip nobody has

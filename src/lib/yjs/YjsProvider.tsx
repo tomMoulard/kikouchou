@@ -1,5 +1,11 @@
 /**
- * @fileoverview Yjs context provider for P2P real-time collaboration.
+ * @fileoverview Puts the trip's document in context.
+ *
+ * Previously this also exposed a `y-webrtc` provider, its awareness and a peer
+ * count. All three are gone with the transport: the server is the peer now, and
+ * "is anyone else here" is answered by the sync badge rather than by WebRTC
+ * awareness. What remains is the document and whether it has finished loading.
+ *
  * @module lib/yjs/YjsProvider
  */
 /* eslint-disable react-refresh/only-export-components */
@@ -9,194 +15,54 @@ import {
   type ReactNode,
   createContext,
   useContext,
-  useEffect,
   useMemo,
-  useRef,
-  useSyncExternalStore,
 } from 'react';
 import type * as Y from 'yjs';
-import type { WebrtcProvider } from 'y-webrtc';
 
-import { getPresenceProfile } from './presence';
-import { useYjsSync, type YjsTransport } from './useYjsSync';
+import { useTripDoc } from './useTripDoc';
+import type { TripId } from '@/types';
 
-export interface OnlineUser {
-  readonly clientId: number;
-  readonly name: string;
-  readonly color: string;
-  readonly isLocal: boolean;
-}
+// ============================================================================
+// Type Definitions
+// ============================================================================
 
 export interface YjsContextValue {
   readonly doc: Y.Doc;
-  readonly provider: WebrtcProvider | null;
-  readonly awareness: WebrtcProvider['awareness'] | null;
-  /** Whether the provider is active (looking for peers). */
-  readonly connected: boolean;
-  /** Whether at least one signaling WebSocket is actually open. */
-  readonly signalingConnected: boolean;
-  readonly synced: boolean;
-  readonly peerCount: number;
+  /** Whether the persisted updates have been replayed. */
   readonly loaded: boolean;
-  readonly roomId: string | null;
-  readonly onlineUsers: readonly OnlineUser[];
+  readonly tripId: TripId | null;
 }
+
+// ============================================================================
+// Context
+// ============================================================================
 
 const YjsContext = createContext<YjsContextValue | null>(null);
 YjsContext.displayName = 'YjsContext';
 
+// ============================================================================
+// Provider
+// ============================================================================
+
 interface YjsProviderProps {
-  readonly roomId: string | null | undefined;
-  readonly encryptionKey: string | null | undefined;
-  readonly userName?: string;
-  readonly userColor?: string;
-  /** Defaults to the legacy WebRTC transport; `'none'` for server-synced trips. */
-  readonly transport?: YjsTransport;
+  readonly tripId: TripId | null | undefined;
   readonly children: ReactNode;
 }
 
-function isAwarenessUser(value: unknown): value is { name?: unknown; color?: unknown } {
-  return typeof value === 'object' && value !== null;
-}
-
-function readOnlineUsers(
-  awareness: WebrtcProvider['awareness'] | null,
-  clientId: number,
-): readonly OnlineUser[] {
-  if (!awareness) {
-    return [];
-  }
-
-  return Array.from(awareness.getStates().entries())
-    .flatMap(([stateClientId, state]) => {
-      if (!isAwarenessUser(state)) {
-        return [];
-      }
-
-      const name = typeof state.name === 'string' ? state.name : undefined;
-      const color = typeof state.color === 'string' ? state.color : undefined;
-      if (!name || !color) {
-        return [];
-      }
-
-      return [{
-        clientId: stateClientId,
-        name,
-        color,
-        isLocal: stateClientId === clientId,
-      } satisfies OnlineUser];
-    })
-    .sort((left, right) => {
-      if (left.isLocal !== right.isLocal) {
-        return left.isLocal ? -1 : 1;
-      }
-      return left.name.localeCompare(right.name);
-    });
-}
-
-/**
- * Provides Yjs context to child components for P2P collaboration.
- */
-export function YjsProvider({
-  roomId,
-  encryptionKey,
-  userName,
-  userColor,
-  transport = 'webrtc',
-  children,
-}: YjsProviderProps): ReactElement {
-  const { doc, provider, awareness, connected, signalingConnected, synced, peerCount, loaded } =
-    useYjsSync(roomId, encryptionKey, transport);
-  const onlineUsersSnapshotRef = useRef<{
-    key: string;
-    users: readonly OnlineUser[];
-  }>({
-    key: '',
-    users: [],
-  });
-
-  const presenceProfile = useMemo(() => {
-    const stored = getPresenceProfile();
-    return {
-      name: userName ?? stored.name,
-      color: userColor ?? stored.color,
-    };
-  }, [userColor, userName]);
-
-  const onlineUsers = useSyncExternalStore(
-    (onStoreChange) => {
-      if (!awareness) {
-        return () => undefined;
-      }
-
-      awareness.on('change', onStoreChange);
-      return () => {
-        awareness.off('change', onStoreChange);
-      };
-    },
-    () => {
-      const nextUsers = readOnlineUsers(awareness, doc.clientID);
-      const nextKey = JSON.stringify(nextUsers);
-      const currentSnapshot = onlineUsersSnapshotRef.current;
-
-      if (currentSnapshot.key === nextKey) {
-        return currentSnapshot.users;
-      }
-
-      onlineUsersSnapshotRef.current = {
-        key: nextKey,
-        users: nextUsers,
-      };
-
-      return nextUsers;
-    },
-    () => [],
-  );
-
-  useEffect(() => {
-    if (!awareness) {
-      return;
-    }
-
-    awareness.setLocalState({
-      name: presenceProfile.name,
-      color: presenceProfile.color,
-    });
-
-    return () => {
-      awareness.setLocalState(null);
-    };
-  }, [awareness, presenceProfile.color, presenceProfile.name]);
+export function YjsProvider({ tripId, children }: YjsProviderProps): ReactElement {
+  const { doc, loaded } = useTripDoc(tripId);
 
   const value = useMemo<YjsContextValue>(
-    () => ({
-      doc,
-      provider,
-      awareness,
-      connected,
-      signalingConnected,
-      synced,
-      peerCount,
-      loaded,
-      roomId: roomId ?? null,
-      onlineUsers,
-    }),
-    [
-      awareness,
-      connected,
-      doc,
-      loaded,
-      onlineUsers,
-      peerCount,
-      provider,
-      roomId,
-      signalingConnected,
-      synced,
-    ],
+    () => ({ doc, loaded, tripId: tripId ?? null }),
+    [doc, loaded, tripId],
   );
 
   return <YjsContext.Provider value={value}>{children}</YjsContext.Provider>;
 }
+
+// ============================================================================
+// Hooks
+// ============================================================================
 
 export function useYjsContext(): YjsContextValue | null {
   return useContext(YjsContext);
@@ -209,3 +75,5 @@ export function useRequiredYjsContext(): YjsContextValue {
   }
   return context;
 }
+
+export { YjsContext };

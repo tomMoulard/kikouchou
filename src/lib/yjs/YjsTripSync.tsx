@@ -12,16 +12,12 @@ import Dexie from 'dexie';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useTripContext } from '@/contexts/TripContext';
-import { useAuth } from '@/features/auth/AuthContext';
 import { db } from '@/lib/db/database';
 import { SupabaseTripSync } from '@/lib/sync/SupabaseTripSync';
 import type { Activity, Person, Room, RoomAssignment, Transport, TripId } from '@/types';
 
-import { ensureTripP2pCredentials } from './ensure-trip-p2p-credentials';
-import { P2PSyncPresence } from './P2PSyncPresence';
 import { YjsProvider, useYjsContext } from './YjsProvider';
 import { populateDocFromDexie, syncDexieToDoc, syncTripMetaToDoc } from './dexie-bridge';
-import { resolveTripPresenceProfile } from './presence';
 
 function stripTripId<T extends { tripId?: unknown }>(
   items: readonly T[],
@@ -179,46 +175,26 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
 
 interface TripYjsSyncBindingProps {
   readonly tripId: TripId;
-  readonly roomId: string;
-  readonly encryptionKey: string;
-  readonly userName?: string;
-  readonly userColor?: string;
-  readonly showPresence?: boolean;
-  /**
-   * Server `trips.id`. When set and the user is signed in, the trip syncs
-   * through the server and the WebRTC transport is left switched off.
-   */
+  /** Server `trips.id`. Absent means the trip is local-only. */
   readonly remoteTripId?: string;
   readonly children?: ReactNode;
 }
 
+/**
+ * Opens the trip's document and attaches the server sync to it.
+ *
+ * There is one transport now, so there is nothing to choose between: the
+ * document is always local and durable, and the server provider mounts on top
+ * when the trip has been shared and somebody is signed in.
+ */
 const TripYjsSyncBinding = memo(function TripYjsSyncBinding({
   tripId,
-  roomId,
-  encryptionKey,
-  userName,
-  userColor,
-  showPresence = false,
   remoteTripId,
   children,
 }: TripYjsSyncBindingProps): ReactElement {
-  const { session } = useAuth();
-
-  // One transport at a time. Running both would still converge — Yjs does not
-  // care how an update arrived — but it would do every write twice and make the
-  // presence indicator mean two different things at once.
-  const serverSynced = remoteTripId !== undefined && session !== null;
-
   return (
-    <YjsProvider
-      roomId={roomId}
-      encryptionKey={encryptionKey}
-      userName={userName}
-      userColor={userColor}
-      transport={serverSynced ? 'none' : 'webrtc'}
-    >
+    <YjsProvider tripId={tripId}>
       <YjsSyncObserver tripId={tripId} />
-      {showPresence && !serverSynced ? <P2PSyncPresence /> : null}
       <SupabaseTripSync tripId={tripId} remoteTripId={remoteTripId}>
         {children}
       </SupabaseTripSync>
@@ -233,52 +209,16 @@ const YjsTripSync = memo(function YjsTripSync({
 }): ReactElement {
   const { currentTrip } = useTripContext();
 
-  /** Create P2P room credentials as soon as a trip is selected so Yjs can connect without opening Share. */
-  useEffect(() => {
-    if (!currentTrip?.id) {
-      return;
-    }
-    if (currentTrip.p2pRoomId && currentTrip.p2pEncryptionKey) {
-      return;
-    }
-
-    let cancelled = false;
-    void ensureTripP2pCredentials(currentTrip.id).catch((err) => {
-      if (!cancelled) {
-        console.error('[YjsTripSync] Failed to ensure P2P credentials:', err);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    currentTrip?.id,
-    currentTrip?.p2pRoomId,
-    currentTrip?.p2pEncryptionKey,
-  ]);
-
-  const presence = useLiveQuery(
-    async () => (currentTrip ? resolveTripPresenceProfile(currentTrip) : null),
-    [currentTrip?.id, currentTrip?.shareId, currentTrip?.updatedAt],
-  );
-
-  if (
-    !currentTrip?.id ||
-    !currentTrip.p2pRoomId ||
-    !currentTrip.p2pEncryptionKey
-  ) {
+  // Every trip gets a document, shared or not: it is the local durability layer,
+  // not a feature of sharing. Previously this had to mint WebRTC credentials
+  // first, which coupled offline persistence to a transport.
+  if (!currentTrip?.id) {
     return <>{children}</>;
   }
 
   return (
     <TripYjsSyncBinding
       tripId={currentTrip.id}
-      roomId={currentTrip.p2pRoomId}
-      encryptionKey={currentTrip.p2pEncryptionKey}
-      userName={presence?.name}
-      userColor={presence?.color}
-      showPresence={true}
       {...(currentTrip.remoteTripId ? { remoteTripId: currentTrip.remoteTripId } : {})}
     >
       {children}

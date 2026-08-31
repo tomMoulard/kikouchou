@@ -19,7 +19,7 @@ import type {
 } from '@/types';
 
 /** Current database schema version */
-export const DB_VERSION = 7;
+export const DB_VERSION = 8;
 
 // ============================================================================
 // Yjs Persistence Types
@@ -32,8 +32,15 @@ export const DB_VERSION = 7;
 export interface YjsUpdateRow {
   /** Auto-incremented primary key */
   id?: number;
-  /** The P2P room ID this update belongs to */
-  roomId: string;
+  /**
+   * The trip this update belongs to.
+   *
+   * Was the WebRTC room id until schema 8. Keying on the trip is what it should
+   * always have been: the document is per-trip, and routing it through a room id
+   * meant the local persistence layer could not be read without first resolving
+   * a credential that only existed because of the transport.
+   */
+  tripId: string;
   /** Raw Yjs binary update (Uint8Array) */
   update: Uint8Array;
 }
@@ -370,6 +377,74 @@ export class KikoushouDatabase extends Dexie {
       syncCursors: 'tripId',
       tripMembers: '[tripId+userId], tripId, userId',
     });
+
+    /**
+     * Schema Version 8 - Retire the WebRTC transport
+     *
+     * Changed:
+     * - yjsUpdates is keyed on `tripId` rather than the WebRTC `roomId`, and
+     *   existing rows are re-keyed by resolving each room id back to its trip
+     * - trips loses the p2pRoomId index
+     *
+     * A row whose room id matches no trip is dropped: it belonged to a trip that
+     * no longer exists, and without a trip there is nothing to project it into.
+     */
+    this.version(8)
+      .stores({
+        trips: 'id, &shareId, remoteTripId, startDate, createdAt',
+        rooms: 'id, [tripId+order]',
+        persons: 'id, tripId, [tripId+name]',
+        roomAssignments:
+          'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+        transports: 'id, personId, driverId, [tripId+datetime], [tripId+personId], [tripId+type]',
+        activities:
+          'id, tripId, organizerId, *participantIds, [tripId+startDatetime], [tripId+category]',
+        settings: 'id',
+        yjsUpdates: '++id, tripId',
+        yjsOutbox: '++id, tripId',
+        syncCursors: 'tripId',
+        tripMembers: '[tripId+userId], tripId, userId',
+      })
+      .upgrade(async (transaction) => {
+        // Build room id -> trip id from the rows that still carry it. Read
+        // through the raw table because `p2pRoomId` is gone from the Trip type.
+        const roomToTrip = new Map<string, string>();
+        await transaction
+          .table('trips')
+          .toCollection()
+          .each((trip: { id: string; p2pRoomId?: string }) => {
+            if (typeof trip.p2pRoomId === 'string' && trip.p2pRoomId.length > 0) {
+              roomToTrip.set(trip.p2pRoomId, trip.id);
+            }
+          });
+
+        const updates = transaction.table('yjsUpdates');
+        const orphans: number[] = [];
+        await updates.toCollection().modify((row: Record<string, unknown>, ref) => {
+          const roomId = row.roomId;
+          const tripId =
+            typeof roomId === 'string' ? roomToTrip.get(roomId) : undefined;
+
+          if (tripId === undefined) {
+            // No trip owns this room any more. Nothing could read it.
+            if (typeof row.id === 'number') {
+              orphans.push(row.id);
+            }
+            delete ref.value;
+            return;
+          }
+
+          row.tripId = tripId;
+          delete row.roomId;
+        });
+
+        if (orphans.length > 0) {
+          console.info(
+            '[db] schema 8 dropped %d Yjs updates whose trip no longer exists',
+            orphans.length,
+          );
+        }
+      });
 
     // An idle tab holding an older schema version blocks a newer tab's upgrade
     // transaction indefinitely. Without these two handlers the newer tab's

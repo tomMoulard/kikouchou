@@ -69,15 +69,12 @@ import type { HexColor, Person, PersonId, Trip, TripId } from '@/types';
 // Helpers
 // ============================================================================
 
-const ROOM_ID = 'room-shared';
-
 async function seedSharedTrip(): Promise<Trip> {
   const trip = await createTrip({
     name: 'Shared trip',
     startDate: isoDate('2024-07-15'),
     endDate: isoDate('2024-07-20'),
   });
-  await db.trips.update(trip.id, { p2pRoomId: ROOM_ID });
   return (await db.trips.get(trip.id)) as Trip;
 }
 
@@ -151,7 +148,7 @@ describe('concurrent edits from two peers', () => {
     pushGuests(peer, [guest('p1', 'Alice'), guest('p2', 'Bobby', '#00ff00')]);
 
     reconcile(host, peer);
-    await syncDocToDexie(host, ROOM_ID);
+    await syncDocToDexie(host, trip.id);
 
     expect(await personNames(trip.id)).toEqual(['Alice', 'Bobby', 'Carol']);
   });
@@ -167,9 +164,9 @@ describe('concurrent edits from two peers', () => {
 
     reconcile(host, peer);
 
-    await syncDocToDexie(host, ROOM_ID);
+    await syncDocToDexie(host, trip.id);
     const fromHost = await personNames(trip.id);
-    await syncDocToDexie(peer, ROOM_ID);
+    await syncDocToDexie(peer, trip.id);
     const fromPeer = await personNames(trip.id);
 
     expect(fromHost).toEqual(['Alice', 'Bob', 'Carol']);
@@ -190,7 +187,7 @@ describe('concurrent edits from two peers', () => {
     pushGuests(peer, [guest('p1', 'Alicia'), guest('p2', 'Bob', '#00ff00')]);
 
     reconcile(host, peer);
-    await syncDocToDexie(host, ROOM_ID);
+    await syncDocToDexie(host, trip.id);
 
     expect(await personNames(trip.id)).toEqual(['Alicia']);
   });
@@ -212,7 +209,7 @@ describe('concurrent edits from two peers', () => {
     }
 
     reconcile(host, peer);
-    await syncDocToDexie(host, ROOM_ID);
+    await syncDocToDexie(host, trip.id);
 
     // 1 shared + 10 + 10, nothing lost, nothing doubled.
     const names = await personNames(trip.id);
