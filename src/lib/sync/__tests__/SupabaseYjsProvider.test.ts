@@ -60,6 +60,11 @@ class FakeServer {
   failWrites = 0;
   /** Set to fail the next N reads. */
   failReads = 0;
+  /** Lowest surviving log id, as compaction's pruning would leave it. */
+  prunedBelow = 0;
+
+  private writeGate: Promise<void> | null = null;
+  private releaseGate: (() => void) | null = null;
 
   insertCalls = 0;
   readCalls = 0;
@@ -69,6 +74,24 @@ class FakeServer {
 
   private realtimeHandler: RealtimeHandler | null = null;
   private subscribeCallback: ((status: string) => void) | null = null;
+
+  /**
+   * Holds every write open until the returned function is called.
+   *
+   * Widens a window that is real but narrow in production: the document emits
+   * synchronously while the queue row is written asynchronously, so a flush can
+   * be in flight at the moment an edit exists in the document and nowhere else.
+   */
+  gateWrites(): () => void {
+    this.writeGate = new Promise<void>((resolve) => {
+      this.releaseGate = resolve;
+    });
+    return () => {
+      this.writeGate = null;
+      this.releaseGate?.();
+      this.releaseGate = null;
+    };
+  }
 
   /** Appends the way the server does, assigning the next id. */
   append(update: Uint8Array): FakeRow {
@@ -139,7 +162,7 @@ class FakeServer {
                       return { data: null, error: { message: 'read boom' } };
                     }
                     const page = this.rows
-                      .filter((row) => row.id > afterId)
+                      .filter((row) => row.id > afterId && row.id > this.prunedBelow)
                       .sort((left, right) => left.id - right.id)
                       .slice(0, count);
                     return { data: page, error: null };
@@ -150,6 +173,9 @@ class FakeServer {
           }),
           insert: async (values: { update: string }) => {
             this.insertCalls += 1;
+            if (this.writeGate) {
+              await this.writeGate;
+            }
             if (this.failWrites > 0) {
               this.failWrites -= 1;
               return { error: { message: 'write boom' } };
@@ -369,6 +395,31 @@ describe('start — joining a trip that already exists', () => {
     expect(guestNames(doc)).toEqual(['Alice']);
   });
 
+  it('refuses to claim it is synced when an unreadable snapshot hides pruned rows', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+
+    // Compaction folded rows 1..100 and pruned them, and the snapshot that
+    // replaced them will not decode. Unlike the intact-log case above, the log
+    // cannot reconstruct anything: rows 1..100 exist nowhere the client can
+    // reach, so the document is permanently incomplete.
+    server.snapshot = { state: 'not valid base64!!', through_id: 100 };
+    server.prunedBelow = 100;
+    server.rows.push({ id: 101, update: encodeUpdate(Y.encodeStateAsUpdate(new Y.Doc())) });
+    server.nextId = 102;
+
+    const provider = track(makeProvider(server, doc));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await provider.start();
+    warn.mockRestore();
+
+    // Reporting 'synced' here would tell the user their trip is up to date while
+    // silently missing everything the snapshot swallowed.
+    expect(provider.getState().status).toBe('offline');
+    // And the cursor must not move past the gap, so a later retry still tries.
+    expect((await readCursor(TRIP_ID)).lastSeenUpdateId).toBeLessThan(100);
+  });
+
   it('pages through a log longer than one request', async () => {
     const server = new FakeServer();
     const seed = new Y.Doc();
@@ -551,6 +602,41 @@ describe('reconciliation', () => {
       Y.applyUpdate(rebuilt, Uint8Array.from(atob(row.update), (c) => c.charCodeAt(0)));
     }
     expect(guestNames(rebuilt)).toContain('Alice');
+  });
+
+  it('sends an edit whose queue row was lost during a successful flush', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    await track(makeProvider(server, doc)).start();
+    await settle();
+
+    // A write is held open, so a flush is genuinely in flight.
+    const release = server.gateWrites();
+    addGuest(doc, 'p1', 'Alice');
+    await settle(4);
+
+    // While it is in flight, an edit the queue never records. In production this
+    // is the document emitting synchronously while the Dexie write fails or the
+    // tab dies before it lands — the window the gate is widening.
+    const enqueue = vi
+      .spyOn(outbox, 'enqueue')
+      .mockRejectedValueOnce(new Error('storage evicted'));
+    addGuest(doc, 'p2', 'Bob');
+    await settle(4);
+    enqueue.mockRestore();
+
+    release();
+    await settle(24);
+
+    // The flush that completes here sends Alice and finds the queue empty, so
+    // it would record the document's whole state vector as the server's —
+    // including Bob, who exists only on this device. Reconciliation would then
+    // compute an empty diff forever and Bob would never leave.
+    const rebuilt = new Y.Doc();
+    for (const row of server.rows) {
+      Y.applyUpdate(rebuilt, Uint8Array.from(atob(row.update), (c) => c.charCodeAt(0)));
+    }
+    expect(guestNames(rebuilt)).toEqual(['Alice', 'Bob']);
   });
 
   it('does not record server state when the push failed', async () => {
