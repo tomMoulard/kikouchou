@@ -96,6 +96,29 @@ export default defineConfig({
        */
       fullyParallel: false,
     },
+
+    {
+      /**
+       * The server-backed sharing journey.
+       *
+       * Its own dev server because it needs `VITE_SUPABASE_*` pointing at a host
+       * that resolves nowhere, which `e2e/support/supabase-stub` then intercepts.
+       * The other projects must not have a backend configured at all — they
+       * assert local-only behaviour.
+       */
+      name: 'sync',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'http://127.0.0.1:4174',
+      },
+      testMatch: /trip-sharing-sync\.spec\.ts/,
+      /**
+       * Serial. Several tests drive two browser contexts against one stub, and
+       * the stub is a single in-process object — parallel workers would share
+       * nothing but the port and interleave their assertions on `counts`.
+       */
+      fullyParallel: false,
+    },
   ],
 
   /* Servers started before the tests run */
@@ -120,7 +143,8 @@ export default defineConfig({
     },
     {
       // The dev server, for every project except `offline` — which needs a real
-      // service worker and so runs against the production build above.
+      // service worker and so runs against the production build above — and
+      // `sync`, which needs a stubbed backend.
       command: 'bun x vite --host 127.0.0.1 --port 4173',
       url: 'http://127.0.0.1:4173',
       reuseExistingServer: !process.env.CI,
@@ -131,6 +155,37 @@ export default defineConfig({
         // spawns this command with the full ambient env, so CI's own
         // GITHUB_ACTIONS=true would 404 every non-root navigation. Clear it.
         GITHUB_ACTIONS: '',
+
+        /**
+         * Blanked deliberately, and this is a safety measure rather than tidiness.
+         *
+         * Vite loads `.env.local`, which on a developer's machine holds the real
+         * project URL and key — so without these two lines every test in these
+         * projects ran against production, and any that reached a share would
+         * have written to it. A process env var beats `.env.local` (verified
+         * against Vite's own `loadEnv`), so setting them empty is what makes
+         * these projects local-only.
+         */
+        VITE_SUPABASE_URL: '',
+        VITE_SUPABASE_PUBLISHABLE_KEY: '',
+      },
+    },
+
+    {
+      /**
+       * The dev server for the `sync` project: configured for a backend, but one
+       * at a host that resolves nowhere. `supabase-stub` intercepts it, so a
+       * request escaping interception fails loudly instead of reaching anything
+       * real.
+       */
+      command: 'bun x vite --host 127.0.0.1 --port 4174',
+      url: 'http://127.0.0.1:4174',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+      env: {
+        GITHUB_ACTIONS: '',
+        VITE_SUPABASE_URL: 'http://stub.invalid',
+        VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_e2e_stub',
       },
     },
   ],

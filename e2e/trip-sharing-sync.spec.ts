@@ -1,0 +1,513 @@
+/**
+ * @fileoverview E2E tests for the server-backed sharing journey.
+ *
+ * This is the flow the sync migration was for, and the one with no browser
+ * coverage until now: create a trip with no account, share it, hand the link
+ * over, join from a second device, pick an identity, and edit from both sides.
+ *
+ * Every bug that actually reached a user during this work was integration
+ * shaped — boot ordering, an RLS-and-`RETURNING` interaction, a stale effect
+ * dependency that reset a dialog forever. None of them were visible to the 3,000
+ * unit tests, and all of them were visible the moment a real browser drove the
+ * real flow. That is what this file is.
+ *
+ * The backend is `support/supabase-stub`, which implements the REST surface in
+ * the Node process. Two browser contexts pointed at one stub are two devices
+ * talking to one server. It deliberately does not enforce RLS — `supabase/tests`
+ * does that against a real Postgres — and it refuses the Realtime socket, so
+ * what is exercised here is the provider's pull path, which has to work anyway.
+ *
+ * @module e2e/trip-sharing-sync
+ */
+
+import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+
+import { SupabaseStub, type StubUser } from './support/supabase-stub';
+
+// ============================================================================
+// Fixtures
+// ============================================================================
+
+const OWNER: StubUser = { id: 'owner-1', email: 'owner@example.test' };
+const GUEST: StubUser = { id: 'guest-1', email: 'guest@example.test' };
+
+const TRIP = { name: 'Shared Brittany' } as const;
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/** Picks the 15th and 22nd in the trip form, as the offline spec does. */
+async function fillDates(page: Page): Promise<void> {
+  await page.locator('#trip-start-date').click();
+  await page.getByRole('gridcell').filter({ hasText: /^15$/ }).first().click();
+  await page.locator('#trip-end-date').click();
+  await page.getByRole('gridcell').filter({ hasText: /^22$/ }).first().click();
+}
+
+async function createTrip(page: Page, name: string): Promise<void> {
+  await page.getByRole('button', { name: /new trip/i }).first().click();
+  await page.getByLabel(/trip name/i).fill(name);
+  await fillDates(page);
+  await page.getByRole('button', { name: /save/i }).click();
+  await expect(page.getByText(name).first()).toBeVisible({ timeout: 15_000 });
+}
+
+/** Adds a guest, which is what the identity step later offers to claim. */
+async function addGuest(page: Page, name: string): Promise<void> {
+  await page.getByRole('link', { name: /guests/i }).first().click();
+  await page
+    .getByRole('button', { name: /new|add/i })
+    .first()
+    .click();
+  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
+  await page.locator('#person-name').fill(name);
+  await page.getByRole('dialog').getByRole('button', { name: /save/i }).click();
+  await expect(page.getByRole('dialog')).toBeHidden({ timeout: 10_000 });
+  await expect(page.getByText(name).first()).toBeVisible({ timeout: 10_000 });
+}
+
+/** Opens the share dialog from the trip list's row menu. */
+async function openShareDialog(page: Page): Promise<void> {
+  await page.goto('/');
+  const shareButton = page.getByRole('button', { name: /share/i }).first();
+  await shareButton.click();
+  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
+}
+
+/** A fresh context wired to the stub, standing in for a second device. */
+async function newDevice(
+  context: BrowserContext,
+  stub: SupabaseStub,
+  user?: StubUser,
+): Promise<Page> {
+  const page = await context.newPage();
+  await stub.install(page);
+  if (user) {
+    await stub.signIn(page, user);
+  }
+  return page;
+}
+
+// ============================================================================
+// Sharing — what the owner sees
+// ============================================================================
+
+test.describe('sharing a trip', () => {
+  test('asks for an account rather than handing over a link that syncs with nobody', async ({
+    page,
+  }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+
+    await page.goto('/');
+    await createTrip(page, TRIP.name);
+    await openShareDialog(page);
+
+    await expect(
+      page.getByRole('dialog').getByRole('button', { name: /sign in/i }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('share-url')).toHaveCount(0);
+    // Nothing was uploaded: a trip nobody has shared must not touch the network.
+    expect(stub.counts.tripInserts).toBe(0);
+  });
+
+  test('produces an invite link and its QR once signed in', async ({ page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await page.goto('/');
+    await createTrip(page, TRIP.name);
+    await openShareDialog(page);
+
+    const url = page.getByTestId('share-url');
+    await expect(url).toBeVisible({ timeout: 20_000 });
+    await expect(url).toContainText('/join/');
+
+    // The QR encodes the same link, which is the whole point of showing both.
+    await expect(page.getByRole('dialog').locator('svg').first()).toBeVisible();
+
+    expect(stub.counts.tripInserts).toBe(1);
+    expect(stub.counts.inviteInserts).toBe(1);
+  });
+
+  test('settles on the link instead of spinning while sync is active', async ({ page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await page.goto('/');
+    await createTrip(page, TRIP.name);
+    await openShareDialog(page);
+
+    const url = page.getByTestId('share-url');
+    await expect(url).toBeVisible({ timeout: 20_000 });
+    const first = await url.textContent();
+
+    // The trip is now syncing, so the provider is writing to the `trips` table
+    // as it projects. Keyed on the trip object, the dialog's effect restarted on
+    // every one of those writes and dropped back to a spinner for good.
+    await page.waitForTimeout(3_000);
+
+    await expect(url).toBeVisible();
+    expect(await url.textContent()).toBe(first);
+    // And each restart repeated the server work, littering the trip with links.
+    expect(stub.counts.inviteInserts).toBe(1);
+  });
+
+  test('reuses the live invite when the dialog is reopened', async ({ page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await page.goto('/');
+    await createTrip(page, TRIP.name);
+
+    await openShareDialog(page);
+    const firstUrl = await page.getByTestId('share-url').textContent({ timeout: 20_000 });
+
+    await page.keyboard.press('Escape');
+    await openShareDialog(page);
+    const secondUrl = await page.getByTestId('share-url').textContent({ timeout: 20_000 });
+
+    // A link already handed out has to keep working, and three opens must not
+    // leave three live links on the trip.
+    expect(secondUrl).toBe(firstUrl);
+    expect(stub.counts.inviteInserts).toBe(1);
+  });
+
+  test('explains itself when the build has no backend at all', async ({ page }) => {
+    // No stub installed and no session: `isSupabaseConfigured()` is still true
+    // for this project, so the request fails rather than being absent. Either
+    // way the dialog must say something instead of loading forever.
+    await page.goto('/');
+    await createTrip(page, TRIP.name);
+    await openShareDialog(page);
+
+    const dialog = page.getByRole('dialog');
+    await expect(
+      dialog.getByRole('alert').or(dialog.getByRole('button', { name: /sign in/i })),
+    ).toBeVisible({ timeout: 20_000 });
+  });
+});
+
+// ============================================================================
+// Joining — what the invitee sees
+// ============================================================================
+
+test.describe('joining a trip', () => {
+  test('redeems the invite, offers the participants, and opens the trip', async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+    const ownerContext = await browser.newContext();
+    const ownerPage = await newDevice(ownerContext, stub, OWNER);
+
+    await ownerPage.goto('/');
+    await createTrip(ownerPage, TRIP.name);
+    await addGuest(ownerPage, 'Alice');
+    await addGuest(ownerPage, 'Bob');
+
+    await openShareDialog(ownerPage);
+    const inviteUrl = await ownerPage
+      .getByTestId('share-url')
+      .textContent({ timeout: 20_000 });
+    expect(inviteUrl).toBeTruthy();
+    const token = (inviteUrl ?? '').split('/join/')[1] ?? '';
+    expect(token).not.toBe('');
+
+    // A second device, a second account, the same server.
+    const guestContext = await browser.newContext();
+    const guestPage = await newDevice(guestContext, stub, GUEST);
+    await guestPage.goto(`/join/${token}`);
+
+    // Redemption put the account on the roster.
+    await expect
+      .poll(() => stub.members.filter((m) => m.user_id === GUEST.id).length, {
+        timeout: 20_000,
+      })
+      .toBe(1);
+
+    // The identity step can only offer names the document brought down, so this
+    // also proves the trip's contents synced to a device that never had them.
+    await expect(guestPage.getByText(/which one are you/i)).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(guestPage.getByRole('button', { name: /alice/i })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    await guestPage.getByRole('button', { name: /alice/i }).click();
+
+    // Claimed on the server, not merely in the UI.
+    await expect
+      .poll(
+        () =>
+          stub.members.find((m) => m.user_id === GUEST.id)?.person_id ?? null,
+        { timeout: 20_000 },
+      )
+      .not.toBeNull();
+
+    await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+
+    await ownerContext.close();
+    await guestContext.close();
+  });
+
+  test('does not offer a participant another account has claimed', async ({ browser }) => {
+    const stub = new SupabaseStub();
+    const ownerContext = await browser.newContext();
+    const ownerPage = await newDevice(ownerContext, stub, OWNER);
+
+    await ownerPage.goto('/');
+    await createTrip(ownerPage, TRIP.name);
+    await addGuest(ownerPage, 'Alice');
+    await addGuest(ownerPage, 'Bob');
+
+    await openShareDialog(ownerPage);
+    const inviteUrl = await ownerPage
+      .getByTestId('share-url')
+      .textContent({ timeout: 20_000 });
+    const token = (inviteUrl ?? '').split('/join/')[1] ?? '';
+
+    const guestContext = await browser.newContext();
+    const guestPage = await newDevice(guestContext, stub, GUEST);
+    await guestPage.goto(`/join/${token}`);
+    await expect(guestPage.getByText(/which one are you/i)).toBeVisible({
+      timeout: 30_000,
+    });
+
+    // Somebody else takes Alice while this page is open. Offering her anyway
+    // means the claim fails at the last moment with nothing useful to say.
+    const alicePersonId = await guestPage.evaluate(async () => {
+      const request = indexedDB.open('kikoushou');
+      const database = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const rows = await new Promise<{ id: string; name: string }[]>((resolve) => {
+        const all = database.transaction('persons').objectStore('persons').getAll();
+        all.onsuccess = () => resolve(all.result as { id: string; name: string }[]);
+      });
+      return rows.find((row) => row.name === 'Alice')?.id ?? null;
+    });
+    expect(alicePersonId).not.toBeNull();
+
+    stub.addMember(stub.trips[0]!.id, 'someone-else', alicePersonId);
+    await guestPage.reload();
+
+    await expect(guestPage.getByRole('button', { name: /bob/i })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(guestPage.getByRole('button', { name: /^alice$/i })).toHaveCount(0);
+
+    await ownerContext.close();
+    await guestContext.close();
+  });
+
+  test('rejects a token that does not exist', async ({ page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, GUEST);
+
+    await page.goto('/join/doesnotexist12');
+
+    await expect(page.getByText(/link|invite|not/i).first()).toBeVisible({
+      timeout: 20_000,
+    });
+    // Nothing was created for a token the server never issued.
+    expect(stub.members.filter((m) => m.user_id === GUEST.id)).toHaveLength(0);
+  });
+
+  test('rejects a revoked token', async ({ page }) => {
+    const stub = new SupabaseStub();
+    stub.trips.push({
+      id: '00000000-0000-4000-8000-000000000099',
+      local_id: 'local-99',
+      owner_id: OWNER.id,
+      name: TRIP.name,
+      start_date: '2026-07-15',
+      end_date: '2026-07-22',
+    });
+    stub.addMember('00000000-0000-4000-8000-000000000099', OWNER.id);
+    stub.addInvite('00000000-0000-4000-8000-000000000099', OWNER.id, 'revokedtoken1', {
+      revoked_at: new Date().toISOString(),
+    });
+
+    await stub.install(page);
+    await stub.signIn(page, GUEST);
+    await page.goto('/join/revokedtoken1');
+
+    await expect(page.getByText(/revoked|no longer|expired|invalid/i).first()).toBeVisible({
+      timeout: 20_000,
+    });
+    expect(stub.members.filter((m) => m.user_id === GUEST.id)).toHaveLength(0);
+  });
+
+  test('asks an unsigned-in invitee to register first', async ({ page }) => {
+    const stub = new SupabaseStub();
+    stub.trips.push({
+      id: '00000000-0000-4000-8000-000000000098',
+      local_id: 'local-98',
+      owner_id: OWNER.id,
+      name: TRIP.name,
+      start_date: '2026-07-15',
+      end_date: '2026-07-22',
+    });
+    stub.addMember('00000000-0000-4000-8000-000000000098', OWNER.id);
+    stub.addInvite('00000000-0000-4000-8000-000000000098', OWNER.id, 'needsaccount1');
+
+    await stub.install(page);
+    await page.goto('/join/needsaccount1');
+
+    // Joining is one of the two operations allowed to require an account.
+    await expect(page.getByRole('button', { name: /sign in|continue with google/i }).first()).toBeVisible({
+      timeout: 20_000,
+    });
+    expect(stub.counts.redeems).toBe(0);
+  });
+
+  test('opening the same invite twice does not create a second trip', async ({ page }) => {
+    const stub = new SupabaseStub();
+    stub.trips.push({
+      id: '00000000-0000-4000-8000-000000000097',
+      local_id: 'local-97',
+      owner_id: OWNER.id,
+      name: TRIP.name,
+      start_date: '2026-07-15',
+      end_date: '2026-07-22',
+    });
+    stub.addMember('00000000-0000-4000-8000-000000000097', OWNER.id);
+    stub.addInvite('00000000-0000-4000-8000-000000000097', OWNER.id, 'twicetoken12', {
+      max_uses: 1,
+    });
+
+    await stub.install(page);
+    await stub.signIn(page, GUEST);
+
+    await page.goto('/join/twicetoken12');
+    await expect
+      .poll(() => stub.members.filter((m) => m.user_id === GUEST.id).length, {
+        timeout: 20_000,
+      })
+      .toBe(1);
+
+    await page.goto('/join/twicetoken12');
+    await page.waitForTimeout(2_000);
+
+    // Idempotent for an existing member, and the single use is not burned twice.
+    expect(stub.members.filter((m) => m.user_id === GUEST.id)).toHaveLength(1);
+    expect(stub.invites[0]?.uses).toBe(1);
+
+    const localTrips = await page.evaluate(async () => {
+      const request = indexedDB.open('kikoushou');
+      const database = await new Promise<IDBDatabase>((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      return await new Promise<number>((resolve) => {
+        const count = database.transaction('trips').objectStore('trips').count();
+        count.onsuccess = () => resolve(count.result);
+      });
+    });
+    expect(localTrips).toBe(1);
+  });
+});
+
+// ============================================================================
+// Two devices
+// ============================================================================
+
+test.describe('two devices on one trip', () => {
+  test('an edit made on one reaches the other', async ({ browser }) => {
+    const stub = new SupabaseStub();
+    const ownerContext = await browser.newContext();
+    const ownerPage = await newDevice(ownerContext, stub, OWNER);
+
+    await ownerPage.goto('/');
+    await createTrip(ownerPage, TRIP.name);
+    await addGuest(ownerPage, 'Alice');
+
+    await openShareDialog(ownerPage);
+    const inviteUrl = await ownerPage
+      .getByTestId('share-url')
+      .textContent({ timeout: 20_000 });
+    const token = (inviteUrl ?? '').split('/join/')[1] ?? '';
+
+    const guestContext = await browser.newContext();
+    const guestPage = await newDevice(guestContext, stub, GUEST);
+    await guestPage.goto(`/join/${token}`);
+    await expect(guestPage.getByText(/which one are you/i)).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(guestPage.getByRole('button', { name: /alice/i })).toBeVisible({
+      timeout: 30_000,
+    });
+    await guestPage.getByRole('button', { name: /alice/i }).click();
+    await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+
+    // A new guest on the owner's device, after the invitee is already in.
+    await ownerPage.keyboard.press('Escape');
+    await addGuest(ownerPage, 'Carol');
+
+    // The invitee sees it. Reload rather than waiting on a socket: Realtime is
+    // refused by the stub on purpose, so this asserts the pull path — the one
+    // that has to work when the socket is down anyway.
+    await expect
+      .poll(
+        async () => {
+          await guestPage.reload();
+          await guestPage
+            .getByRole('link', { name: /guests/i })
+            .first()
+            .click()
+            .catch(() => undefined);
+          return await guestPage
+            .getByText('Carol')
+            .first()
+            .isVisible()
+            .catch(() => false);
+        },
+        { timeout: 60_000, intervals: [3_000] },
+      )
+      .toBe(true);
+
+    await ownerContext.close();
+    await guestContext.close();
+  });
+
+  test('edits made while the server is unreachable arrive once it is back', async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+    const ownerContext = await browser.newContext();
+    const ownerPage = await newDevice(ownerContext, stub, OWNER);
+
+    await ownerPage.goto('/');
+    await createTrip(ownerPage, TRIP.name);
+    await openShareDialog(ownerPage);
+    await expect(ownerPage.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
+    await ownerPage.keyboard.press('Escape');
+
+    const before = stub.counts.updateInserts;
+
+    // The server goes away. The app must keep taking edits.
+    stub.offline = true;
+    await addGuest(ownerPage, 'Offline Dave');
+    await ownerPage.waitForTimeout(2_000);
+    expect(stub.counts.updateInserts).toBe(before);
+
+    // And send them when it comes back, with no user action.
+    stub.offline = false;
+    await ownerPage.evaluate(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    await expect
+      .poll(() => stub.counts.updateInserts, { timeout: 60_000, intervals: [2_000] })
+      .toBeGreaterThan(before);
+
+    await ownerContext.close();
+  });
+});

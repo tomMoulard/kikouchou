@@ -460,3 +460,76 @@ Reproductions backing §1, run against the installed `yjs`:
 - **Proposed model** — same scenario plus a concurrent recolor of the same entity; after merge both docs hold 3 guests, and Bob carries B's name *and* A's color. A single rename is 33 bytes on the wire.
 
 These become the first two tests of Phase 1.
+
+---
+
+## 9. Review round: what a close read of the finished code found
+
+Written after the implementation was complete and the unit suite was green, so
+every item below is something 3,000 passing tests did not catch. The pattern is
+the same one that produced the bugs users actually hit during this work: each
+lived in how two pieces fit together, not inside either piece.
+
+### Data loss
+
+| Finding | Why the tests missed it |
+|---|---|
+| **The schema 8 migration destroyed every trip's CRDT history.** `Collection.modify` hands its mutator a clone and stores the result, and that round trip loses the `Uint8Array` prototype — the bytes come back as `{0:1, 1:2, …}`. Rows all present, `Y.applyUpdate` unable to read one of them. | The migration had no test at all. It was also untestable by construction: `KikoushouDatabase` hardcoded `super('kikoushou')`, so a v7 fixture under any other name was invisible to the class performing the upgrade. |
+| **The provider recorded server state the server did not hold.** A flush sent the queue, found it empty, and recorded the *document's* state vector. An edit made while that flush was in flight, whose queue row never landed, sat inside that vector — so reconciliation computed an empty diff from then on and the edit never left the device. | The existing lost-queue-row test has the push *fail*, so no vector is recorded and the backstop works. Nothing covered a lost row alongside a *successful* push. |
+| **An unreadable snapshot was assumed harmless** on the grounds that "the log alone reconstructs the document". True only while the log is intact — and compaction upserts the snapshot then deletes exactly the rows it folded. Past that point the provider reported `synced` over a permanent hole. | The one test that existed kept the log intact, so it asserted the recoverable half of the branch and looked like coverage of both. |
+| **An identity claim reported success when it wrote nothing.** `claimParticipant` treated a missing error as a claim, but an UPDATE matching no row succeeds with zero rows and no error — the normal outcome when the roster row is not visible to the account. The page then navigated in, `person_id` stayed null, and an unclaimed participant still looks free, so the next joiner could claim the same name. | Every test asserted the error branch. The double terminated at `eq()`, so it could not express a zero-row update even in principle. |
+
+### Stuck states
+
+| Finding | Why the tests missed it |
+|---|---|
+| **The share dialog restarted itself into a permanent spinner** (user-reported as "stuck in syncing"). Its effect was keyed on the whole `trip` object, which arrives from a Dexie live query — and the sync provider writes to `trips` on every projection. The effect opens by setting `loading`, so each write dropped the dialog back to a spinner and repeated the server work. | No hook test existed. When one was written, passing a fresh object per render — what a live query does — looped until the Vitest worker died of heap exhaustion. |
+| **A build with no backend showed the same spinner forever.** `useTripShareLink` still returned `kind: 'legacy'`, meaning "offer the peer-to-peer link", after that transport and its route were deleted. Nothing consumed the state, so it fell through to the loading branch. | Retirement removed the producer's *reason* without removing the state, and the dialog's tests never rendered that state. |
+| `useJoinTrip` keyed on the `session` object, which Supabase replaces on every token refresh — including one shortly after sign-in, exactly when someone is on the join page. Harmless server-side (`redeem_invite` is idempotent for a member) but it flashed 'joining' over a finished join. | Same class as the above; the flicker is invisible to a test that awaits a settled state. |
+
+### Smaller
+
+- A multi-page pull kept applying pages after `destroy()`, into a document about to be detached.
+- `failures = 0` on a successful pull held a persistently failing push at the first backoff step for as long as reads kept succeeding.
+- Five signaling strings survived the WebRTC retirement in both locale files with zero code references.
+
+### Two rules worth keeping
+
+1. **A missing error is not a success.** Postgres reports no error for an UPDATE
+   that matches nothing, and PostgREST passes that through. Confirm a write
+   against the row it returns — remembering that `RETURNING` is subject to the
+   SELECT policy, which is what bit the `trips` insert earlier in this work.
+2. **Never key an effect on an object from a live query.** Identity changes for
+   reasons unrelated to the effect's subject, and any effect that opens by
+   setting a loading state turns that into a permanent one.
+
+---
+
+## 10. Test strategy, settled
+
+Three layers, each testing what only it can:
+
+| Layer | Count | Owns |
+|---|---|---|
+| Unit (Vitest) | 3,029 | Logic, the CRDT model, the provider's state machine against a fake log |
+| pgTAP | 69 | RLS and the server functions, against a real Postgres |
+| Playwright | 6 offline + 12 sharing | The journeys, in a real browser |
+
+The browser layer exists because every bug that reached a user during this work
+was integration-shaped: boot ordering, an RLS-and-`RETURNING` interaction, a
+stale effect dependency. None were visible to the unit suite; all were visible
+the moment a browser drove the real flow.
+
+`e2e/support/supabase-stub.ts` implements the REST surface in the Node process
+and is installed with `page.route`. Two contexts against one stub are two devices
+on one server. It deliberately does **not** enforce RLS — a passing
+re-implementation would prove nothing about the policies that ship, which is
+pgTAP's job — and it refuses the Realtime socket, so the tests exercise the pull
+path that has to work when the socket is down anyway.
+
+One safety note found while wiring it: Vite loads `.env.local`, so the existing
+Playwright dev server was configured with the developer's **production** project,
+and any test that reached a share would have written to it. Process env vars beat
+`.env.local` (verified against Vite's own `loadEnv`), so the projects now set
+those keys explicitly — blank for the local-only projects, the stub host for the
+sharing one.
