@@ -210,33 +210,38 @@ export async function compactUpdates(doc: Y.Doc, tripId: TripId): Promise<void> 
  * Projects a document into Dexie.
  *
  * @param tripId - Which local trip this document is for. The caller resolves it
- *   locally — from the selected trip — and it is the only id used as a write
- *   key. `meta.id` is remote-controlled and is treated as a claim to verify,
- *   never as an address: trusting it once let any peer overwrite, and wipe, an
- *   unrelated local trip.
+ *   locally — from the selected trip — and it is the **only** id used as a write
+ *   key, which is what stops a document ever reaching a trip it was not opened
+ *   for. Nothing in the payload is an address.
+ *
+ * This used to additionally refuse a document whose `meta.id` did not equal
+ * `tripId`, which looked like defence in depth and was in fact a data-loss bug.
+ * Local trip ids are per-device nanoids: when an invitee joins,
+ * `materialiseJoinedTrip` mints a new one, so a document authored by the owner
+ * carries the owner's id and can never equal the invitee's. The comparison
+ * therefore refused every remote update for every joined trip — and it was a
+ * race rather than a clean failure, because both devices write `meta.id` when
+ * they populate the document from Dexie, so the two ids fought over one key by
+ * last-writer-wins and whichever device lost silently stopped projecting.
+ *
+ * The security property it appeared to provide is provided by the write key
+ * instead, and `meta.id` is no longer written or read at all.
  */
 export async function syncDocToDexie(
   doc: Y.Doc,
   tripId: TripId,
 ): Promise<TripId | null> {
-  const claimedId = getMeta(doc).get('id');
-  if (typeof claimedId !== 'string' || claimedId.length === 0) {
-    // Validated before anything else: a non-string here would make Dexie reject
-    // an invalid key and reject this promise, and callers invoke this as a bare
-    // `void`, producing an unhandled rejection on every remote update.
-    return null;
-  }
-
-  if (claimedId !== tripId) {
-    console.warn(
-      '[yjs] refusing update: doc claims trip %s but is bound to %s',
-      claimedId,
-      tripId,
-    );
-    return null;
-  }
-
   const ownerTrip = await db.trips.get(tripId);
+  if (!ownerTrip) {
+    // Projection updates a trip that already exists; it never creates one.
+    // Creation is `materialiseJoinedTrip`'s job on the join path and the user's
+    // otherwise, both of which establish the local id before any document is
+    // opened for it. Without this, a document could conjure a trip row under any
+    // id a caller passed — which is the constraint the old `meta.id` comparison
+    // was incidentally providing, restored here in a form that does not depend
+    // on two devices agreeing on a local id they cannot agree on.
+    return null;
+  }
 
   // A document written by an older build keeps its collections in `Y.Array`s,
   // so every `…ById` map reads as legitimately empty. Projecting that would
@@ -369,7 +374,10 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
 
   Y.transact(doc, () => {
     const meta = getMeta(doc);
-    meta.set('id', trip.id);
+    // Deliberately no `id`. It was this device's local trip id, which differs
+    // per device for a shared trip, so writing it made two devices contend over
+    // one key for no reader's benefit — and pushed that contention to the
+    // server as a real edit.
     meta.set('name', trip.name);
     meta.set('startDate', trip.startDate);
     meta.set('endDate', trip.endDate);

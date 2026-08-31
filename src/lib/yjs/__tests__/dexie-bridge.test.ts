@@ -51,35 +51,6 @@ function makeDoc(meta: Record<string, unknown>): Y.Doc {
 // ============================================================================
 
 describe('syncDocToDexie — trust boundary', () => {
-  it('refuses a doc whose meta.id names a different local trip', async () => {
-    const victim = await createTrip({
-      name: 'My private trip',
-      startDate: isoDate('2024-07-15'),
-      endDate: isoDate('2024-07-20'),
-    });
-    const shared = await createTrip({
-      name: 'Shared trip',
-      startDate: isoDate('2024-08-01'),
-      endDate: isoDate('2024-08-05'),
-    });
-
-    // A document bound to `shared` claims to be the victim's trip. Trusting
-    // meta.id as the write key let a peer overwrite — and wipe — an unrelated
-    // local trip.
-    const hostile = makeDoc({
-      id: victim.id,
-      name: 'Pwned',
-      startDate: '2024-07-15',
-      endDate: '2024-07-20',
-    });
-
-    const result = await syncDocToDexie(hostile, shared.id);
-
-    expect(result).toBeNull();
-    const stored = await db.trips.get(victim.id);
-    expect(stored?.name).toBe('My private trip');
-  });
-
   it('accepts a doc for the trip it is bound to', async () => {
     const trip = await createTrip({
       name: 'Shared trip',
@@ -98,6 +69,62 @@ describe('syncDocToDexie — trust boundary', () => {
 
     expect(result).toBe(trip.id);
     expect((await db.trips.get(trip.id))?.name).toBe('Renamed by peer');
+  });
+
+  it('projects a joined trip, whose document was created on another device', async () => {
+    // The heart of it: local trip ids are per-device nanoids. When an invitee
+    // joins, `materialiseJoinedTrip` mints a *new* local id, so the document —
+    // authored by the owner — carries the owner's id and can never equal it.
+    const joined = await createTrip({
+      name: 'Placeholder from the invite',
+      startDate: isoDate('2026-07-15'),
+      endDate: isoDate('2026-07-22'),
+    });
+
+    const fromOwner = makeDoc({
+      // The owner's local id. Not this device's, and there is no way for it to
+      // be: the two devices never agreed on one.
+      id: 'owners-local-trip-id',
+      name: 'Brittany',
+      startDate: '2026-07-15',
+      endDate: '2026-07-22',
+    });
+
+    const result = await syncDocToDexie(fromOwner, joined.id);
+
+    // Refusing here is what left an invitee looking at an empty trip. Worse, it
+    // was a race: this device also writes `meta.id` when it populates the
+    // document from Dexie, so the two ids fight over one key by last-writer-wins
+    // and whichever device loses silently stops projecting anything.
+    expect(result).toBe(joined.id);
+    expect((await db.trips.get(joined.id))?.name).toBe('Brittany');
+  });
+
+  it('writes only to the trip the caller named, whatever the document claims', async () => {
+    const victim = await createTrip({
+      name: 'My private trip',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-20'),
+    });
+    const bound = await createTrip({
+      name: 'Shared trip',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+
+    const hostile = makeDoc({
+      id: victim.id,
+      name: 'Pwned',
+      startDate: '2024-07-15',
+      endDate: '2024-07-20',
+    });
+
+    await syncDocToDexie(hostile, bound.id);
+
+    // The property that matters, and the one the old comparison was really
+    // protecting: `meta.id` is never an address. The write key is the trip the
+    // caller resolved locally, so a claim about another trip reaches nothing.
+    expect((await db.trips.get(victim.id))?.name).toBe('My private trip');
   });
 
   it('never adopts a shareId supplied by a peer', async () => {
