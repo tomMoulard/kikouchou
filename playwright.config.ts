@@ -54,15 +54,70 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      // Offline behaviour cannot be observed here; see the `offline` project.
+      testIgnore: /offline-first\.spec\.ts/,
     },
     {
       name: 'Mobile Chrome',
       use: { ...devices['Pixel 5'] },
+      testIgnore: /offline-first\.spec\.ts/,
+    },
+    {
+      /**
+       * The offline contract, against the production build.
+       *
+       * These tests cannot run on the dev server, and running them there was
+       * silently testing nothing. Two reasons, both measured:
+       *
+       *   - vite-plugin-pwa registers no service worker in dev, so a reload with
+       *     the network off fails with ERR_INTERNET_DISCONNECTED rather than
+       *     being served from the precache;
+       *   - route chunks are lazy, so navigating to a page whose chunk has not
+       *     loaded yet needs the network — offline that fails too.
+       *
+       * Both are exactly what the service worker exists to solve, so the only
+       * honest way to assert rule 1 is to serve the built output.
+       */
+      name: 'offline',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'http://127.0.0.1:4175',
+      },
+      testMatch: /offline-first\.spec\.ts/,
+      /**
+       * Serial, unlike every other project here.
+       *
+       * Each test installs a service worker and precaches ~2.5 MB in its own
+       * context. Six of those at once against one preview server contends badly
+       * enough to make clicks miss their 10 s timeout: the same test passed alone
+       * in 1.6 s and failed in parallel at 11.5 s. That is a property of the
+       * environment, not of the tests, so it is fixed here rather than by
+       * inflating every timeout in the spec.
+       */
+      fullyParallel: false,
     },
   ],
 
   /* Run production build preview server and signaling relay before starting tests */
   webServer: [
+    {
+      /**
+       * Production build for the `offline` project: a real service worker and
+       * real precached chunks, which is the only configuration where the
+       * offline-first claims mean anything.
+       *
+       * GITHUB_ACTIONS is cleared for the same reason as the dev server below —
+       * vite.config.ts would otherwise set base to '/kikoushou/' and every
+       * navigation would 404.
+       */
+      command: 'bun run build && bun x vite preview --host 127.0.0.1 --port 4175',
+      url: 'http://127.0.0.1:4175',
+      reuseExistingServer: !process.env.CI,
+      timeout: 180 * 1000,
+      env: {
+        GITHUB_ACTIONS: '',
+      },
+    },
     {
       // Signaling relay for P2P sync tests
       command: 'node relay/server.js',
