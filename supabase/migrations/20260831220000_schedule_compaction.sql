@@ -14,7 +14,10 @@
 -- keeps growing, which is the same state as before this migration.
 
 create extension if not exists pg_cron with schema extensions;
-create extension if not exists pg_net with schema extensions;
+-- pg_net ignores `with schema` and installs into its own `net` schema. Stated
+-- plainly here because getting it wrong produced a 42883 at run time — see the
+-- follow-up migration.
+create extension if not exists pg_net;
 
 -- ===========================================================================
 -- The invoker
