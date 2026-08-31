@@ -242,6 +242,16 @@ create table trip_doc_snapshots (
 
 **Why `text`/base64 rather than `bytea`:** PostgREST and Realtime render `bytea` as hex-escaped `\x…`, which is one more encoding to get right on three paths (REST read, Realtime payload, insert). Base64 costs ~33% more bytes on a budget using under 1% of quota. Not worth the ambiguity.
 
+### Grants: revoke before granting
+
+Supabase applies `alter default privileges … grant all on tables to anon, authenticated, service_role`, so a newly created table in `public` arrives with SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES and TRIGGER already granted to both client roles. **An additive `grant select, insert` on top of that is a no-op that reads like a restriction.**
+
+Measured on the first version of this migration: a member's `update public.trip_doc_updates …` did not raise. RLS merely matched no rows, so it silently affected none — the append-only guarantee rested entirely on the *absence* of a policy, and would have evaporated the day anyone added a permissive one. Two pgTAP cases expecting `42501` caught it by getting no exception at all.
+
+Every table therefore does `revoke all … from anon, authenticated` first, then grants exactly what it needs. `anon` keeps nothing anywhere: the app's local-only mode never talks to this database. `service_role` keeps its defaults, because compaction writes snapshots and prunes the log as that role.
+
+This applies to every table added from here on.
+
 ### Row-Level Security
 
 ```sql
@@ -259,13 +269,15 @@ create or replace function is_trip_member(t uuid) returns boolean
 |---|---|---|---|
 | `trips` | `is_trip_member(id)` | `owner_id = auth.uid()` | owner only |
 | `trip_members` | `is_trip_member(trip_id)` | via `redeem_invite` only | own row (to leave); owner may remove |
-| `trip_invites` | **nobody** | owner only | owner only (revoke) |
+| `trip_invites` | members | members, as self | never — RPCs only |
 | `trip_doc_updates` | `is_trip_member(trip_id)` | `is_trip_member(trip_id) and author_id = auth.uid()` | **nobody** |
 | `trip_doc_snapshots` | `is_trip_member(trip_id)` | service role only | service role only |
 
+**Deviation from the first draft:** invites are readable by members, not by nobody. The share dialog has to be able to re-display a link the user already made rather than minting a new one every time it opens, and a member is already inside the trust boundary. The property that matters — a *stranger* cannot enumerate tokens — is unaffected.
+
 Two consequences worth stating:
 
-- **Invite tokens are never readable, only usable.** Redemption goes through a `security definer` RPC:
+- **Invite tokens are usable without being readable by a stranger.** Redemption goes through a `security definer` RPC:
   `redeem_invite(token text) returns uuid` — validates expiry/uses/revocation, inserts the `trip_members` row, increments `uses`, returns the trip id. A token that leaks cannot be enumerated, and it can be revoked.
 - **The log is append-only for users**, so compaction needs the service role — hence an Edge Function on a schedule rather than a client doing it.
 
@@ -338,7 +350,7 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 - i18n keys in **both** `en` and `fr` (per the `AGENTS.md` invariant that a missing key still renders).
 - Account section in `SettingsPage`: signed-in identity, sign out.
 
-### Phase 3 — Schema, RLS and invites (~1–2 days)
+### Phase 3 — Schema, RLS and invites · **DONE**
 
 - `supabase/migrations/` — tables, indexes, `is_trip_member`, policies, `redeem_invite`, Realtime publication, daily compaction cron.
 - RLS tests: a non-member can read nothing; a member cannot update or delete a log row; an invite row is invisible to everyone; a revoked or expired token fails to redeem; the `(trip_id, person_id)` unique constraint rejects a double claim.
@@ -391,7 +403,7 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 | # | Risk | Severity | Mitigation |
 |---|---|---|---|
 | 1 | Concurrent-edit duplication (§1) | **Critical** — silent corruption | Phase 1 before any backend work; convergence tests as the gate |
-| 2 | Plaintext trip data on a third-party server | Medium, needs a decision | Confirm in Phase 0; schema supports E2E later with no change |
+| 2 | Plaintext trip data on a third-party server | Accepted | Decided in Phase 3; the schema supports E2E later with no change |
 | 3 | Free project paused after ~7 days idle | Low | Weekly GitHub Actions ping |
 | 4 | GitHub Pages 404s deep links | Medium — blocks `/join/:token`, not sign-in | `public/404.html` copy of `index.html`; auth avoids it by redirecting to the app root |
 | 5 | Two accounts claim the same participant | Low | `unique (trip_id, person_id)` + a clear "already taken" path |
@@ -402,7 +414,7 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 
 ### Decisions needed before Phase 3
 
-1. **Plaintext or E2E?** (§3) — the only one that is expensive to reverse.
+1. ~~**Plaintext or E2E?**~~ **Settled: plaintext.** The schema does not change if the update bytes are encrypted later — only compaction moves back to the client — so the door stays open.
 2. ~~**Google only, or Google + Apple?**~~ **Settled: Google only.** Apple needs a paid developer account; magic link needs custom SMTP and a verified sender domain. Both deferred.
 3. **Doc-authoritative or keep the Dexie mirror?** Plan assumes the mirror, with doc-authoritative as later cleanup.
 4. **Does the QR changeset flow survive?** Plan assumes export-only survives, in Phase 8.
