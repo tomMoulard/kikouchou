@@ -78,6 +78,15 @@ const SummaryStepPage = lazy(() =>
 );
 
 /**
+ * Lazy-loaded JoinTripPage — where an invite link lands.
+ */
+const JoinTripPage = lazy(() =>
+  import('./pages/JoinTripPage').then((module) => ({
+    default: module.JoinTripPage,
+  })),
+);
+
+/**
  * Lazy-loaded TripSyncPage component for unified export/import via QR codes.
  */
 const TripSyncPage = lazy(() =>
@@ -157,6 +166,24 @@ export const sharingRoutes: RouteObject[] = [
         element: withSuspense(SummaryStepPage),
       },
     ],
+  },
+];
+
+/**
+ * Route for an invite link: `/join/:token`.
+ *
+ * Deliberately top-level and outside the app chrome — someone arriving from a
+ * message has no trip selected and no navigation to use yet.
+ *
+ * This is a deep link by nature, which is why `dist/404.html` exists: GitHub
+ * Pages has no SPA rewrite, so without that copy a cold load here would 404
+ * before the service worker is installed. See `githubPagesSpaFallback` in
+ * vite.config.ts.
+ */
+export const joinRoutes: RouteObject[] = [
+  {
+    path: 'join/:token',
+    element: withSuspense(JoinTripPage),
   },
 ];
 
