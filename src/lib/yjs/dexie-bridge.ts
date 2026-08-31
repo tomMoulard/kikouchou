@@ -401,33 +401,24 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
 
     stampDocSchemaVersion(doc);
 
-    replaceDocCollection(
-      doc,
-      'guests',
-      guests.map((guest) => stripTripId(guest) as SharedRecord & { id: string }),
-    );
-    replaceDocCollection(
-      doc,
-      'rooms',
-      rooms.map((room) => stripTripId(room) as SharedRecord & { id: string }),
-    );
-    replaceDocCollection(
-      doc,
-      'roomAssignments',
-      assignments.map(
-        (assignment) => stripTripId(assignment) as SharedRecord & { id: string },
-      ),
-    );
-    replaceDocCollection(
-      doc,
-      'transport',
-      transport.map((item) => stripTripId(item) as SharedRecord & { id: string }),
-    );
-    replaceDocCollection(
-      doc,
-      'activities',
-      activities.map((item) => stripTripId(item) as SharedRecord & { id: string }),
-    );
+    const sources: readonly [
+      DocCollectionName,
+      readonly { id: string; tripId: TripId }[],
+    ][] = [
+      ['guests', guests],
+      ['rooms', rooms],
+      ['roomAssignments', assignments],
+      ['transport', transport],
+      ['activities', activities],
+    ];
+
+    for (const [name, rows] of sources) {
+      replaceDocCollection(
+        doc,
+        name,
+        rows.map((row) => stripTripId(row) as SharedRecord & { id: string }),
+      );
+    }
   });
 }
 
