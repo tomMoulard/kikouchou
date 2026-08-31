@@ -1,5 +1,6 @@
+import { copyFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -58,6 +59,11 @@ function manualChunks(id: string): string | undefined {
     return 'vendor-transformers'
 	}
 
+  // Supabase client — auth + Postgres + Realtime, loaded on every page that syncs
+  if (id.includes('@supabase')) {
+    return 'vendor-supabase'
+  }
+
   // Yjs CRDT + sync protocols — P2P sync layer
   if (
     id.includes('node_modules/yjs') ||
@@ -71,6 +77,44 @@ function manualChunks(id: string): string | undefined {
 
   // Let Rollup handle the rest to avoid circular dependencies
   return undefined
+}
+
+/**
+ * GitHub Pages has no SPA rewrite: a cold load of a deep link like
+ * `/kikoushou/join/<token>` asks for a file that does not exist. Pages serves
+ * `404.html` for those, and although the status is 404 the browser still renders
+ * it — so a copy of the built `index.html` boots the app, and the router reads
+ * the real `location.pathname` and resolves the route.
+ *
+ * Share links are deep links by definition, so this is load-bearing for the
+ * join flow, not a nicety. Sign-in does not depend on it: `redirectTo` points at
+ * the app root, which Pages serves normally.
+ *
+ * Only the cold, pre-service-worker load ever fetches it: once the SW is
+ * installed its `navigateFallback` NavigationRoute answers every navigation from
+ * the precached `index.html`, so `404.html` is never requested again. It is
+ * therefore excluded from the precache manifest via `globIgnores` — VitePWA
+ * globs `dist` in its own `closeBundle`, which runs after this one, so without
+ * that entry the same bytes would be precached twice under two names.
+ */
+function githubPagesSpaFallback(): Plugin {
+  let outDir = 'dist'
+
+  return {
+    name: 'kikoushou:github-pages-spa-fallback',
+    apply: 'build',
+    configResolved(config) {
+      outDir = config.build.outDir
+    },
+    closeBundle() {
+      const indexHtml = resolve(outDir, 'index.html')
+      if (!existsSync(indexHtml)) {
+        this.warn(`no ${indexHtml} to copy — skipping 404.html fallback`)
+        return
+      }
+      copyFileSync(indexHtml, resolve(outDir, '404.html'))
+    },
+  }
 }
 
 // https://vite.dev/config/
@@ -110,9 +154,23 @@ export default defineConfig({
         // Exclude the large Transformers.js bundles from precache — the ML
         // runtime now lives in the assistant worker, fetched only when someone
         // actually loads a model.
-        globIgnores: ['**/vendor-transformers*.js', '**/llm.worker*.js'],
+        globIgnores: [
+          '**/vendor-transformers*.js',
+          '**/llm.worker*.js',
+          // Byte-identical to index.html; see githubPagesSpaFallback above.
+          '404.html',
+        ],
         // Runtime caching for external resources
         runtimeCaching: [
+          {
+            // Supabase auth and data must NEVER be served from cache. A stale
+            // session or a stale row read is a correctness bug, not a slow
+            // page: the app's offline story is IndexedDB + the Yjs outbox, not
+            // cached HTTP responses. Listed first so it wins over any later
+            // pattern.
+            urlPattern: /^https:\/\/[a-z0-9-]+\.supabase\.(co|in)\/.*/i,
+            handler: 'NetworkOnly',
+          },
           {
             // Cache OpenStreetMap tiles for offline map viewing
             urlPattern: /^https:\/\/[abc]\.tile\.openstreetmap\.org\/.*/i,
@@ -147,6 +205,7 @@ export default defineConfig({
         ],
       },
     }),
+    githubPagesSpaFallback(),
   ],
   resolve: {
     alias: {
