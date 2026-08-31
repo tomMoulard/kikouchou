@@ -50,7 +50,13 @@
     "syncOnlineCount": "{{count}} en ligne",
     "syncPresenceRegion": "État de la collaboration",
     "tripAnalytics": "Analyses",
-    "activities": "Activités"
+    "activities": "Activités",
+    "syncSynced": "Tout le monde est à jour",
+    "syncSyncing": "Synchronisation…",
+    "syncOffline": "Pas connecté",
+    "syncPending_one": "{{count}} modification pas encore envoyée",
+    "syncPending_other": "{{count}} modifications pas encore envoyées",
+    "syncStatusRegion": "État de la synchronisation"
   },
   "analytics": {
     "tripTitle": "Analyses du voyage",
@@ -128,6 +134,11 @@
       "ariaLabel": "Vue des voyages",
       "list": "Liste",
       "map": "Carte"
+    },
+    "remote": {
+      "title": "Séjours rejoints ailleurs",
+      "description": "Ils sont sur votre compte mais pas encore sur cet appareil.",
+      "download": "Récupérer"
     }
   },
   "rooms": {
@@ -724,7 +735,8 @@
       "signedOut": "Connectez-vous pour partager un séjour et le modifier à plusieurs. Un séjour gardé pour vous n'a besoin d'aucun compte.",
       "signInAction": "Se connecter",
       "signedInAs": "Connecté en tant que",
-      "signOutAction": "Se déconnecter"
+      "signOutAction": "Se déconnecter",
+      "signInFailed": "La dernière connexion n'a pas abouti :"
     },
     "signIn": {
       "title": "Créez un compte pour partager",

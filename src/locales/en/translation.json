@@ -50,7 +50,13 @@
     "syncOnlineCount": "{{count}} online",
     "syncPresenceRegion": "Collaboration status",
     "tripAnalytics": "Analytics",
-    "activities": "Activities"
+    "activities": "Activities",
+    "syncSynced": "Everyone is up to date",
+    "syncSyncing": "Syncing…",
+    "syncOffline": "Not connected",
+    "syncPending_one": "{{count}} change not sent yet",
+    "syncPending_other": "{{count}} changes not sent yet",
+    "syncStatusRegion": "Sync status"
   },
   "analytics": {
     "tripTitle": "Trip analytics",
@@ -128,6 +134,11 @@
       "ariaLabel": "Trips view",
       "list": "List",
       "map": "Map"
+    },
+    "remote": {
+      "title": "Trips you joined elsewhere",
+      "description": "These are on your account but not on this device yet.",
+      "download": "Get it"
     }
   },
   "rooms": {
@@ -724,7 +735,8 @@
       "signedOut": "Sign in to share a trip and edit it together. Trips you keep to yourself need no account.",
       "signInAction": "Sign in",
       "signedInAs": "Signed in as",
-      "signOutAction": "Sign out"
+      "signOutAction": "Sign out",
+      "signInFailed": "The last sign-in did not complete:"
     },
     "signIn": {
       "title": "Create an account to share",
