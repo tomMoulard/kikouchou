@@ -603,12 +603,8 @@
       "waitingForData": "Waiting for trip data...",
       "syncedWithPeers": "Synced with {{count}} peer(s)",
       "syncingWithPeers": "Syncing with {{count}} peer(s)...",
-      "connectedWaitingPeers": "Connected to signaling, waiting for peers...",
-      "waitingForPeers": "Connecting to signaling server...",
-      "waitingDescription": "The trip owner needs to have the app open for you to sync.",
-      "signalingFailed": "Signaling server unreachable",
-      "signalingFailedDescription": "Could not connect to the signaling server. The server may be down or your network may be blocking WebSocket connections.",
       "needsAccount": "Sharing needs an account, so the people you invite keep seeing your changes.",
+      "unavailable": "This copy of the app has no sync server configured, so trips cannot be shared from it.",
       "signInReason": "Sign in to share this trip and edit it together."
     },
     "join": {

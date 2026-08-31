@@ -122,6 +122,23 @@ describe('ShareDialog', () => {
     });
   });
 
+  it('explains itself rather than spinning when the build has no backend', async () => {
+    mockedUseTripShareLink.mockReturnValue({
+      state: { kind: 'unavailable' },
+      refresh: vi.fn(),
+    });
+
+    renderDialog(<ShareDialog open onOpenChange={vi.fn()} trip={baseTrip} />);
+
+    // With the peer-to-peer transport retired there is no link to offer a build
+    // with no server configured. Falling through to the spinner left the dialog
+    // loading forever with nothing to wait for.
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('share-url')).not.toBeInTheDocument();
+  });
+
   it('shows a loading state while the link is being resolved', () => {
     renderDialog(<ShareDialog open onOpenChange={vi.fn()} trip={baseTrip} />);
 

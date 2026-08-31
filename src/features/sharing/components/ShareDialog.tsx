@@ -176,6 +176,16 @@ const ShareDialog = memo(function ShareDialog({
                   )}
                 />
               </div>
+            ) : linkState.kind === 'unavailable' ? (
+              /* Nothing failed and nothing is coming: this build has no server
+                 to mint an invite against. Falling through to the spinner left
+                 the dialog loading forever with nothing to wait for. */
+              <p className="text-sm text-muted-foreground" role="alert">
+                {t(
+                  'sharing.p2p.unavailable',
+                  'This copy of the app has no sync server configured, so trips cannot be shared from it.',
+                )}
+              </p>
             ) : linkState.kind === 'error' ? (
               <p className="text-sm text-destructive" role="alert">
                 {linkState.message}
