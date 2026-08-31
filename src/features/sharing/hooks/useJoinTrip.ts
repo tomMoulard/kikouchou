@@ -51,6 +51,7 @@ export function useJoinTrip(token: string | null): {
   readonly retry: () => void;
 } {
   const { session, isResolved } = useAuth();
+  const hasSession = session !== null;
   const [phase, setPhase] = useState<JoinPhase>({ kind: 'joining' });
   const [attempt, setAttempt] = useState(0);
   const isMountedRef = useRef(true);
@@ -76,7 +77,7 @@ export function useJoinTrip(token: string | null): {
       return;
     }
 
-    if (session === null) {
+    if (!hasSession) {
       setPhase({ kind: 'needs-account' });
       return;
     }
@@ -132,7 +133,13 @@ export function useJoinTrip(token: string | null): {
     return () => {
       cancelled = true;
     };
-  }, [attempt, isResolved, session, token]);
+    // Keyed on whether there is a session, not on the session object. Supabase
+    // replaces it on every token refresh — including one shortly after sign-in,
+    // which is exactly when someone is on this page — and the object identity
+    // would restart the effect, flashing 'joining' over a join that had already
+    // finished. `redeem_invite` is idempotent for an existing member, so the
+    // repeat was harmless server-side; the flicker was not.
+  }, [attempt, hasSession, isResolved, token]);
 
   const retry = useCallback(() => {
     setAttempt((current) => current + 1);
