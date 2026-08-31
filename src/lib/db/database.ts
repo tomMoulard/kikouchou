@@ -19,7 +19,7 @@ import type {
 } from '@/types';
 
 /** Current database schema version */
-export const DB_VERSION = 6;
+export const DB_VERSION = 7;
 
 // ============================================================================
 // Yjs Persistence Types
@@ -36,6 +36,70 @@ export interface YjsUpdateRow {
   roomId: string;
   /** Raw Yjs binary update (Uint8Array) */
   update: Uint8Array;
+}
+
+/**
+ * One local Yjs update awaiting delivery to the server.
+ *
+ * Written on every local edit and deleted once the server accepts it, so edits
+ * made offline survive a closed tab. It is a delivery queue, not the durability
+ * record — `yjsUpdates` is that, and the provider's start-up reconciliation
+ * (diffing the document against the server's known state vector) is what makes a
+ * lost outbox row recoverable rather than lost data.
+ */
+export interface YjsOutboxRow {
+  /** Auto-incremented primary key; also the send order. */
+  id?: number;
+  /** Local trip this update belongs to. */
+  tripId: string;
+  /** Raw Yjs binary update. */
+  update: Uint8Array;
+  /** When it was queued, for diagnostics and stuck-queue detection. */
+  queuedAt: number;
+}
+
+/**
+ * How far this device has consumed a trip's server-side log.
+ */
+export interface SyncCursorRow {
+  /** Local trip id — one cursor per trip. */
+  tripId: string;
+  /**
+   * Highest `trip_doc_updates.id` applied. A pull asks for `id > this`.
+   *
+   * Advanced only by a completed pull, never by a Realtime payload: Realtime can
+   * in principle deliver out of order, and a cursor jumped forward on row 5
+   * would silently skip row 4 forever.
+   */
+  lastSeenUpdateId: number;
+  /**
+   * State vector of everything the server is known to hold.
+   *
+   * Recorded only after a push succeeds with nothing left queued. On the next
+   * start, `Y.encodeStateAsUpdate(doc, thisVector)` is exactly what the server
+   * lacks — which makes the very first upload (no vector stored yet, so the
+   * diff is the whole document) and catching up after a crash the same code.
+   */
+  serverStateVector?: Uint8Array;
+  /** Last time a pull or push completed, for the sync badge. */
+  syncedAt?: number;
+}
+
+/**
+ * A trip participant's account, cached so the roster renders offline.
+ *
+ * The server copy in `trip_members` stays authoritative; this is a projection,
+ * and the unique constraint there is what actually stops two accounts claiming
+ * the same participant.
+ */
+export interface TripMemberRow {
+  /** Local trip id. */
+  tripId: string;
+  /** Supabase auth user id. */
+  userId: string;
+  /** Person id inside the document this account claims to be, if it has. */
+  personId?: string;
+  joinedAt: number;
 }
 
 /**
@@ -124,6 +188,15 @@ export class KikoushouDatabase extends Dexie {
    * Indexes: roomId for loading all updates of a given P2P room
    */
   yjsUpdates!: Table<YjsUpdateRow, number>;
+
+  /** Local updates not yet accepted by the server. See {@link YjsOutboxRow}. */
+  yjsOutbox!: Table<YjsOutboxRow, number>;
+
+  /** Per-trip position in the server log. See {@link SyncCursorRow}. */
+  syncCursors!: Table<SyncCursorRow, string>;
+
+  /** Cached server roster. See {@link TripMemberRow}. */
+  tripMembers!: Table<TripMemberRow, [string, string]>;
 
   constructor() {
     super('kikoushou');
@@ -266,6 +339,36 @@ export class KikoushouDatabase extends Dexie {
         'id, tripId, organizerId, *participantIds, [tripId+startDatetime], [tripId+category]',
       settings: 'id',
       yjsUpdates: '++id, roomId',
+    });
+
+    /**
+     * Schema Version 7 - Server-backed sync
+     *
+     * Added:
+     * - remoteTripId index on trips, linking a local trip to its server row and
+     *   making the first upload idempotent
+     * - yjsOutbox for local updates the server has not accepted yet
+     * - syncCursors for each trip's position in the server log
+     * - tripMembers as an offline-readable projection of the server roster
+     *
+     * p2pRoomId and p2pEncryptionKey stay on Trip for one release so an install
+     * mid-migration is not broken; Phase 8 drops them with the rest of the
+     * WebRTC path.
+     */
+    this.version(7).stores({
+      trips: 'id, &shareId, p2pRoomId, remoteTripId, startDate, createdAt',
+      rooms: 'id, [tripId+order]',
+      persons: 'id, tripId, [tripId+name]',
+      roomAssignments:
+        'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+      transports: 'id, personId, driverId, [tripId+datetime], [tripId+personId], [tripId+type]',
+      activities:
+        'id, tripId, organizerId, *participantIds, [tripId+startDatetime], [tripId+category]',
+      settings: 'id',
+      yjsUpdates: '++id, roomId',
+      yjsOutbox: '++id, tripId',
+      syncCursors: 'tripId',
+      tripMembers: '[tripId+userId], tripId, userId',
     });
 
     // An idle tab holding an older schema version blocks a newer tab's upgrade
