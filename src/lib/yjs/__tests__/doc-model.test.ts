@@ -289,6 +289,32 @@ describe('replaceDocCollection', () => {
     ]);
   });
 
+  it('emits one update carrying the caller origin, despite nesting', () => {
+    const doc = new Y.Doc();
+    const origins: unknown[] = [];
+    doc.on('update', (_update: Uint8Array, origin: unknown) => {
+      origins.push(origin);
+    });
+
+    // `syncDexieToDoc` wraps this in its own transaction tagged
+    // ORIGIN_DEXIE_SYNC, while `replaceDocCollection` and `upsertDocEntity`
+    // each open an untagged one. If a nested transaction reset the origin, the
+    // echo guard in `subscribeToUpdates` would stop recognising local writes
+    // and every edit would round-trip back through Dexie.
+    Y.transact(
+      doc,
+      () => {
+        replaceDocCollection(doc, 'guests', [
+          { id: 'p1', name: 'Alice' },
+          { id: 'p2', name: 'Bob' },
+        ]);
+      },
+      'dexie-sync',
+    );
+
+    expect(origins).toEqual(['dexie-sync']);
+  });
+
   it('emits nothing when the collection already matches', () => {
     const doc = new Y.Doc();
     const guests = [{ id: 'p1', name: 'Alice', color: '#f00' }];
