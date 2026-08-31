@@ -144,20 +144,6 @@ export async function ensureRemoteTrip(
 }
 
 /**
- * Links a local trip to a server row somebody else owns, after joining.
- *
- * The join flow has already redeemed an invite, so membership exists server-side
- * and RLS will admit this device to the log. All that is left is recording which
- * server row this local trip corresponds to.
- */
-export async function linkJoinedTrip(
-  tripId: TripId,
-  remoteTripId: string,
-): Promise<void> {
-  await rememberRemoteTripId(tripId, remoteTripId);
-}
-
-/**
  * Keeps the server's denormalised preview in step with the document.
  *
  * Only the three fields the trip list renders before hydrating: everything else

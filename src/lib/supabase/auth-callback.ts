@@ -134,26 +134,10 @@ export function consumeAuthCode(): string | null {
   return captured.code;
 }
 
-/**
- * Whether this load arrived with a code, without consuming it.
- *
- * For deciding what to render; never for driving the exchange.
- */
-export function hasCapturedAuthCode(): boolean {
-  return captured.code !== null;
-}
 
-/** Lets a test start from a fresh module state. @internal */
-export function resetAuthCallbackForTests(): void {
-  codeConsumed = false;
-}
 
 /** The provider's error for this page load, if it sent one instead of a code. */
 export function getCapturedAuthError(): string | null {
   return captured.error;
 }
 
-/** Whether this load is a sign-in callback at all. */
-export function isAuthCallback(): boolean {
-  return captured.code !== null || captured.error !== null;
-}

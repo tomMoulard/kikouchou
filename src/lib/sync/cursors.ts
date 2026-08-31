@@ -114,14 +114,3 @@ export async function recordServerState(
     await db.syncCursors.put(next);
   });
 }
-
-/**
- * Forgets a trip's position, so the next start re-reads the log from the
- * beginning and re-uploads the whole document.
- *
- * The recovery path for a cursor that is ahead of reality — after restoring a
- * backup, or if the server's log was pruned below it.
- */
-export async function resetCursor(tripId: TripId): Promise<void> {
-  await db.syncCursors.delete(tripId);
-}
