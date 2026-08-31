@@ -13,6 +13,21 @@ export {
 } from './YjsProvider';
 export { P2PSyncPresence } from './P2PSyncPresence';
 export {
+  DOC_COLLECTION_NAMES,
+  DOC_SCHEMA_VERSION,
+  type DocCollectionName,
+  type DocRecord,
+  type IdentifiedDocRecord,
+  deleteDocEntity,
+  isDeepEqual,
+  migrateLegacyArrayCollections,
+  readDocCollection,
+  readDocSchemaVersion,
+  replaceDocCollection,
+  stampDocSchemaVersion,
+  upsertDocEntity,
+} from './doc-model';
+export {
   applyDocToDexie,
   ORIGIN_DEXIE_SYNC,
   compactUpdates,
