@@ -533,3 +533,72 @@ and any test that reached a share would have written to it. Process env vars bea
 `.env.local` (verified against Vite's own `loadEnv`), so the projects now set
 those keys explicitly — blank for the local-only projects, the stub host for the
 sharing one.
+
+---
+
+## 11. What the browser tests found that nothing else could
+
+The E2E suite was written to cover the journey. It paid for itself before it was
+even green: two of its "flakes" were real defects, and both were invisible to
+3,032 unit tests because both live in the gap between devices.
+
+### `meta.id` made joined trips a coin flip — **critical**
+
+`syncDocToDexie` refused any document whose `meta.id` did not equal the local
+trip id. Local trip ids are per-device nanoids, so an invitee's
+`materialiseJoinedTrip` mints a new one and a document authored by the owner
+carries an id that can *never* equal it.
+
+Worse than a clean refusal: both devices wrote `meta.id` while populating the
+document from Dexie, so two different ids contended over one key by
+last-writer-wins — and that contention was pushed to the server as a real edit.
+Whichever device lost silently stopped projecting. An invitee could sit in front
+of an empty trip indefinitely, or watch it work and then stop.
+
+The security property the comparison appeared to give is given by the write key,
+which was already the locally-resolved trip: nothing in the payload is an
+address. The incidental constraint it also gave — that a document cannot conjure
+a trip row under an arbitrary id — is now explicit and device-independent:
+projection updates a trip that already exists and never creates one. `meta.id`
+is neither written nor read.
+
+### A cold join could outrun the first upload — **high**
+
+An invitee's provider starts, pulls, and finds nothing because the owner's first
+upload has not landed. Nothing asked again: the backoff schedule covers
+*failures*, and a pull that correctly returns zero rows is not one. The invitee
+sat on "Getting the trip…" until the page was reloaded.
+
+Realtime would ordinarily cover this, which is exactly why it must not be the
+only thing that does — a blocked WebSocket is ordinary on hotel, café and
+corporate networks, which is where this app gets used. Now a bounded retry
+(750 ms, 1.5 s, 3 s, 6 s, 12 s) that stops at the first content, on teardown, or
+when the schedule runs out; bounded because a genuinely empty trip is legitimate
+and must not be polled forever.
+
+### A note on flaky tests
+
+Both were first seen as *which test fails moves between runs*. The temptation
+was to stabilise the test. Three of the four corrections that run did need were
+genuine test bugs — a locator matching "Import a **shared** trip", an assertion
+listing four words the copy does not use, a gate on row count where the first row
+up is the trip's own metadata, and contexts closed only on the happy path so a
+failure cascaded — but the residue was the product. Worth remembering next time
+the instinct says "add a wait".
+
+### Test-suite state, measured
+
+| Suite | Result |
+|---|---|
+| Unit (Vitest) | 3,032 passed |
+| `sync` project (13 browser tests) | 13 passed, three consecutive full runs |
+| `sharing.spec.ts` (5, local-only) | 5 passed, after repairing drift |
+| `chromium` project (110) | 42 passed, 66 failed — **pre-existing** |
+
+The 66 are the same class of copy drift as `sharing.spec.ts` had: assertions
+written against wording and flows the app has since changed. Confirmed
+pre-existing by running one against a server that *does* have a backend
+configured and watching it fail identically, so blanking `VITE_SUPABASE_*` for
+those projects is not the cause. They deserve their own pass, and until they get
+one this project's signal is close to worthless — which is presumably how the
+sharing tests came to be unfalsifiable in the first place.
