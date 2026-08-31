@@ -20,7 +20,7 @@
  * @module e2e/trip-sharing-sync
  */
 
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 import { SupabaseStub, type StubUser } from './support/supabase-stub';
 
@@ -67,20 +67,74 @@ async function addGuest(page: Page, name: string): Promise<void> {
   await expect(page.getByText(name).first()).toBeVisible({ timeout: 10_000 });
 }
 
-/** Opens the share dialog from the trip list's row menu. */
+/**
+ * Opens the share dialog from the trip card.
+ *
+ * Matched on `/share trip/i`, not `/share/i`: the trip list also carries an
+ * "Import a shared trip using a QR code" button, and the looser pattern opened
+ * that instead — which looks like a share dialog failing to render.
+ */
 async function openShareDialog(page: Page): Promise<void> {
   await page.goto('/');
-  const shareButton = page.getByRole('button', { name: /share/i }).first();
-  await shareButton.click();
-  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: /share trip/i }).first().click();
+  await expect(page.getByRole('dialog', { name: /share/i })).toBeVisible({
+    timeout: 10_000,
+  });
 }
 
-/** A fresh context wired to the stub, standing in for a second device. */
+/**
+ * Waits until a name the invitee will need is actually in the server's log.
+ *
+ * The guests were added before the trip was shared, so they exist only on the
+ * owner's device until the provider mounts and reconciles — the first-upload
+ * path. Opening the join page before that lands leaves the invitee on "Getting
+ * the trip…", and with Realtime refused here nothing prompts another pull, so
+ * the wait has to happen on this side.
+ *
+ * Gated on the *content*, not on `updates.length`: the first row to arrive is
+ * usually the trip's own metadata, so a row count is satisfied well before the
+ * guests are up, which made this race rather than fixing it. Yjs writes string
+ * values as plain UTF-8 inside the update, so the name is findable in the
+ * decoded bytes.
+ *
+ * Worth recording as a product gap rather than a test artefact: in production
+ * Realtime is what rescues that ordering, so a device joining during the window
+ * with a blocked WebSocket sits there until something reloads it.
+ */
+async function waitForNameOnServer(stub: SupabaseStub, name: string): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        stub.updates.some((row) =>
+          Buffer.from(row.update, 'base64').toString('utf8').includes(name),
+        ),
+      { timeout: 30_000, intervals: [250] },
+    )
+    .toBe(true);
+}
+
+/**
+ * Contexts opened by the current test, closed whatever the outcome.
+ *
+ * Closing only on the happy path meant a failing test leaked two contexts into
+ * the next one, and the run degraded from there: the two tests at the tail of a
+ * full run timed out while passing in isolation.
+ */
+const openContexts: BrowserContext[] = [];
+
+test.afterEach(async () => {
+  await Promise.all(openContexts.map((context) => context.close()));
+  openContexts.length = 0;
+});
+
+/** A second device: its own context, wired to the stub and optionally signed in. */
 async function newDevice(
-  context: BrowserContext,
+  browser: Browser,
   stub: SupabaseStub,
   user?: StubUser,
 ): Promise<Page> {
+  const context = await browser.newContext();
+  openContexts.push(context);
   const page = await context.newPage();
   await stub.install(page);
   if (user) {
@@ -201,8 +255,7 @@ test.describe('joining a trip', () => {
     browser,
   }) => {
     const stub = new SupabaseStub();
-    const ownerContext = await browser.newContext();
-    const ownerPage = await newDevice(ownerContext, stub, OWNER);
+    const ownerPage = await newDevice(browser, stub, OWNER);
 
     await ownerPage.goto('/');
     await createTrip(ownerPage, TRIP.name);
@@ -216,10 +269,11 @@ test.describe('joining a trip', () => {
     expect(inviteUrl).toBeTruthy();
     const token = (inviteUrl ?? '').split('/join/')[1] ?? '';
     expect(token).not.toBe('');
+    await waitForNameOnServer(stub, 'Alice');
+    await waitForNameOnServer(stub, 'Bob');
 
     // A second device, a second account, the same server.
-    const guestContext = await browser.newContext();
-    const guestPage = await newDevice(guestContext, stub, GUEST);
+    const guestPage = await newDevice(browser, stub, GUEST);
     await guestPage.goto(`/join/${token}`);
 
     // Redemption put the account on the roster.
@@ -251,14 +305,11 @@ test.describe('joining a trip', () => {
 
     await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
 
-    await ownerContext.close();
-    await guestContext.close();
   });
 
   test('does not offer a participant another account has claimed', async ({ browser }) => {
     const stub = new SupabaseStub();
-    const ownerContext = await browser.newContext();
-    const ownerPage = await newDevice(ownerContext, stub, OWNER);
+    const ownerPage = await newDevice(browser, stub, OWNER);
 
     await ownerPage.goto('/');
     await createTrip(ownerPage, TRIP.name);
@@ -270,9 +321,10 @@ test.describe('joining a trip', () => {
       .getByTestId('share-url')
       .textContent({ timeout: 20_000 });
     const token = (inviteUrl ?? '').split('/join/')[1] ?? '';
+    await waitForNameOnServer(stub, 'Alice');
+    await waitForNameOnServer(stub, 'Bob');
 
-    const guestContext = await browser.newContext();
-    const guestPage = await newDevice(guestContext, stub, GUEST);
+    const guestPage = await newDevice(browser, stub, GUEST);
     await guestPage.goto(`/join/${token}`);
     await expect(guestPage.getByText(/which one are you/i)).toBeVisible({
       timeout: 30_000,
@@ -302,8 +354,6 @@ test.describe('joining a trip', () => {
     });
     await expect(guestPage.getByRole('button', { name: /^alice$/i })).toHaveCount(0);
 
-    await ownerContext.close();
-    await guestContext.close();
   });
 
   test('rejects a token that does not exist', async ({ page }) => {
@@ -339,9 +389,11 @@ test.describe('joining a trip', () => {
     await stub.signIn(page, GUEST);
     await page.goto('/join/revokedtoken1');
 
-    await expect(page.getByText(/revoked|no longer|expired|invalid/i).first()).toBeVisible({
-      timeout: 20_000,
-    });
+    // The app's own words, not a loose alternation: "withdrawn" is the copy, and
+    // a pattern broad enough to miss it is a pattern broad enough to pass on the
+    // wrong screen.
+    await expect(page.getByText(/withdrawn/i).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/fresh link/i).first()).toBeVisible();
     expect(stub.members.filter((m) => m.user_id === GUEST.id)).toHaveLength(0);
   });
 
@@ -422,8 +474,7 @@ test.describe('joining a trip', () => {
 test.describe('two devices on one trip', () => {
   test('an edit made on one reaches the other', async ({ browser }) => {
     const stub = new SupabaseStub();
-    const ownerContext = await browser.newContext();
-    const ownerPage = await newDevice(ownerContext, stub, OWNER);
+    const ownerPage = await newDevice(browser, stub, OWNER);
 
     await ownerPage.goto('/');
     await createTrip(ownerPage, TRIP.name);
@@ -434,9 +485,9 @@ test.describe('two devices on one trip', () => {
       .getByTestId('share-url')
       .textContent({ timeout: 20_000 });
     const token = (inviteUrl ?? '').split('/join/')[1] ?? '';
+    await waitForNameOnServer(stub, 'Alice');
 
-    const guestContext = await browser.newContext();
-    const guestPage = await newDevice(guestContext, stub, GUEST);
+    const guestPage = await newDevice(browser, stub, GUEST);
     await guestPage.goto(`/join/${token}`);
     await expect(guestPage.getByText(/which one are you/i)).toBeVisible({
       timeout: 30_000,
@@ -473,16 +524,13 @@ test.describe('two devices on one trip', () => {
       )
       .toBe(true);
 
-    await ownerContext.close();
-    await guestContext.close();
   });
 
   test('edits made while the server is unreachable arrive once it is back', async ({
     browser,
   }) => {
     const stub = new SupabaseStub();
-    const ownerContext = await browser.newContext();
-    const ownerPage = await newDevice(ownerContext, stub, OWNER);
+    const ownerPage = await newDevice(browser, stub, OWNER);
 
     await ownerPage.goto('/');
     await createTrip(ownerPage, TRIP.name);
@@ -508,6 +556,5 @@ test.describe('two devices on one trip', () => {
       .poll(() => stub.counts.updateInserts, { timeout: 60_000, intervals: [2_000] })
       .toBeGreaterThan(before);
 
-    await ownerContext.close();
   });
 });
