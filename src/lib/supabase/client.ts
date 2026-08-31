@@ -115,12 +115,17 @@ async function createConfiguredClient(
       autoRefreshToken: true,
       storageKey: STORAGE_KEY,
       // PKCE puts the authorization code in the query string of whatever URL we
-      // sent the user back to, and `detectSessionInUrl` exchanges it on load.
-      // Because that URL is the app root, GitHub Pages never has to serve a
-      // deep link for sign-in to work — see `githubPagesSpaFallback` in
-      // vite.config.ts for the deep links that *do* need handling.
+      // sent the user back to. That URL is the app root, so GitHub Pages never
+      // has to serve a deep link for sign-in to work — see
+      // `githubPagesSpaFallback` in vite.config.ts for the deep links that *do*
+      // need handling.
       flowType: 'pkce',
-      detectSessionInUrl: true,
+      // Off deliberately. This client is constructed lazily, in an effect, after
+      // main() has awaited i18n and the database — far too late to find a query
+      // parameter the router may already have normalised away. The code is
+      // captured synchronously at import instead, and exchanged explicitly by
+      // AuthProvider. See lib/supabase/auth-callback.
+      detectSessionInUrl: false,
     },
   });
 

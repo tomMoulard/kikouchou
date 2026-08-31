@@ -14,7 +14,7 @@
 
 import { type ReactElement, memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LogOut } from 'lucide-react';
+import { AlertTriangle, LogOut } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -26,7 +26,7 @@ import { SignInDialog } from './SignInDialog';
 
 export const AccountSection = memo(function AccountSection(): ReactElement {
   const { t } = useTranslation();
-  const { isAvailable, isResolved, user, signOut } = useAuth();
+  const { isAvailable, isResolved, user, signOut, lastAuthError } = useAuth();
   const [signInOpen, setSignInOpen] = useState(false);
 
   const handleSignOut = useCallback(() => {
@@ -65,6 +65,21 @@ export const AccountSection = memo(function AccountSection(): ReactElement {
               'Sign in to share a trip and edit it together. Trips you keep to yourself need no account.',
             )}
           </p>
+          {lastAuthError !== null ? (
+            /* A sign-in that came back and failed looks identical to never
+               having tried, which is the worst possible thing to show somebody
+               who just completed a Google consent screen. */
+            <div
+              className="flex items-start gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+              role="alert"
+            >
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>
+                {t('auth.account.signInFailed', 'The last sign-in did not complete:')}{' '}
+                {lastAuthError}
+              </span>
+            </div>
+          ) : null}
           <Button onClick={openSignIn} className="self-start">
             {t('auth.account.signInAction', 'Sign in')}
           </Button>

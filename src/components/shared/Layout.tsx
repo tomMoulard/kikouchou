@@ -57,6 +57,7 @@ import { cn } from '@/lib/utils';
 import type { Trip } from '@/types';
 
 import { P2PSyncPresence } from './P2PSyncPresence';
+import { SyncStatusBadge } from './SyncStatusBadge';
 
 // ============================================================================
 // Type Definitions
@@ -232,6 +233,7 @@ const Header = memo(function Header({
       <div className="ml-auto flex min-w-0 max-w-full items-center gap-3">
         <div className="shrink-0 md:hidden">
           <P2PSyncPresence />
+          <SyncStatusBadge />
         </div>
         <span className="text-sm text-muted-foreground truncate max-w-[120px] sm:max-w-[200px]">
           {tripName ?? t('trips.empty')}
@@ -689,6 +691,7 @@ const DesktopSidebar = memo(function DesktopSidebar({
 
       {/* Yjs / P2P online count — desktop sidebar only when others are online (mobile: header above) */}
       <P2PSyncPresence collapsed={isCollapsed} layout="sidebar" />
+      <SyncStatusBadge collapsed={isCollapsed} layout="sidebar" />
 
       {/* AI Assistant & Settings - always at bottom */}
       <nav className="border-t py-2" aria-label={t('nav.settingsNavigation', 'Settings navigation')}>

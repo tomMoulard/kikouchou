@@ -19,6 +19,10 @@ import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext';
+import {
+  consumeAuthCode,
+  getCapturedAuthError,
+} from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 
 // ============================================================================
@@ -31,8 +35,18 @@ vi.mock('@/lib/supabase/client', () => ({
   resetSupabaseClientForTests: vi.fn(),
 }));
 
+vi.mock('@/lib/supabase/auth-callback', () => ({
+  consumeAuthCode: vi.fn(() => null),
+  getCapturedAuthError: vi.fn(() => null),
+  hasCapturedAuthCode: vi.fn(() => false),
+  isAuthCallback: vi.fn(() => false),
+  resetAuthCallbackForTests: vi.fn(),
+}));
+
 const mockedGetClient = vi.mocked(getSupabaseClient);
 const mockedIsConfigured = vi.mocked(isSupabaseConfigured);
+const mockedCapturedCode = vi.mocked(consumeAuthCode);
+const mockedCapturedError = vi.mocked(getCapturedAuthError);
 
 type AuthChangeHandler = (event: string, session: unknown) => void;
 
@@ -41,6 +55,8 @@ interface FakeClient {
     onAuthStateChange: ReturnType<typeof vi.fn>;
     signInWithOAuth: ReturnType<typeof vi.fn>;
     signOut: ReturnType<typeof vi.fn>;
+    getSession: ReturnType<typeof vi.fn>;
+    exchangeCodeForSession: ReturnType<typeof vi.fn>;
   };
   readonly unsubscribe: ReturnType<typeof vi.fn>;
   /** Drives the subscribed handler the way supabase-js would. */
@@ -65,6 +81,11 @@ function makeFakeClient(): FakeClient {
       }),
       signInWithOAuth: vi.fn(async () => ({ data: {}, error: null })),
       signOut: vi.fn(async () => ({ error: null })),
+      getSession: vi.fn(async () => ({ data: { session: null }, error: null })),
+      exchangeCodeForSession: vi.fn(async () => ({
+        data: { session: null },
+        error: null,
+      })),
     },
     unsubscribe,
     emit: (event, session) => {
@@ -104,6 +125,10 @@ async function waitForSubscription(client: FakeClient): Promise<void> {
 beforeEach(() => {
   mockedGetClient.mockReset();
   mockedIsConfigured.mockReset();
+  mockedCapturedCode.mockReset();
+  mockedCapturedCode.mockReturnValue(null);
+  mockedCapturedError.mockReset();
+  mockedCapturedError.mockReturnValue(null);
 });
 
 afterEach(() => {
@@ -208,17 +233,49 @@ describe('AuthProvider — state', () => {
     expect(result.current.isResolved).toBe(true);
   });
 
-  it('subscribes once rather than also calling getSession', async () => {
+  it('subscribes once, and reads the persisted session as a fallback', async () => {
     const client = makeFakeClient();
     withBackend(client);
 
     renderHook(() => useAuth(), { wrapper });
     await waitForSubscription(client);
 
-    // onAuthStateChange already fires INITIAL_SESSION for both a stored session
-    // and a PKCE code in the URL. A parallel getSession() would race it and
-    // could resolve with a stale null.
     expect(client.auth.onAuthStateChange).toHaveBeenCalledTimes(1);
+
+    // An earlier version relied on INITIAL_SESSION alone, reasoning that a
+    // parallel getSession() could race it with a stale null. That was wrong in
+    // the direction that matters: if the single event ever reports null, the UI
+    // is stranded signed-out forever with no second chance. getSession is a
+    // backstop, and a null from it never overrides a session already in hand.
+    await waitFor(() => {
+      expect(client.auth.getSession).toHaveBeenCalled();
+    });
+  });
+
+  it('does not let the fallback overwrite a session already received', async () => {
+    const client = makeFakeClient();
+    // The event lands first with a real session; getSession answers later, null.
+    let releaseGetSession: (value: unknown) => void = () => undefined;
+    client.auth.getSession.mockReturnValue(
+      new Promise((resolve) => {
+        releaseGetSession = resolve;
+      }),
+    );
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+    client.emit('SIGNED_IN', SESSION);
+    await waitFor(() => {
+      expect(result.current.user?.id).toBe('user-1');
+    });
+
+    releaseGetSession({ data: { session: null }, error: null });
+
+    // Still signed in: the stale null must lose.
+    await waitFor(() => {
+      expect(result.current.user?.id).toBe('user-1');
+    });
   });
 
   it('unsubscribes on unmount', async () => {
@@ -280,6 +337,88 @@ describe('AuthProvider — state', () => {
     );
 
     consoleError.mockRestore();
+  });
+});
+
+// ============================================================================
+// The OAuth callback
+// ============================================================================
+
+describe('AuthProvider — returning from the provider', () => {
+  it('exchanges a captured authorization code', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+    mockedCapturedCode.mockReturnValue('auth-code-123');
+
+    renderHook(() => useAuth(), { wrapper });
+
+    // The code is captured synchronously at import, because the client is built
+    // lazily in an effect long after the router may have normalised the URL.
+    // Letting supabase-js find it via detectSessionInUrl left sign-in silently
+    // failing: the user existed server-side but the app stayed signed out.
+    await waitFor(() => {
+      expect(client.auth.exchangeCodeForSession).toHaveBeenCalledWith('auth-code-123');
+    });
+  });
+
+  it('subscribes before exchanging, so the resulting event is not missed', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+    mockedCapturedCode.mockReturnValue('auth-code-123');
+
+    renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(client.auth.exchangeCodeForSession).toHaveBeenCalled();
+    });
+    const subscribeOrder = client.auth.onAuthStateChange.mock.invocationCallOrder[0]!;
+    const exchangeOrder = client.auth.exchangeCodeForSession.mock.invocationCallOrder[0]!;
+    expect(subscribeOrder).toBeLessThan(exchangeOrder);
+  });
+
+  it('does not read the persisted session when exchanging a code', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+    mockedCapturedCode.mockReturnValue('auth-code-123');
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => {
+      expect(client.auth.exchangeCodeForSession).toHaveBeenCalled();
+    });
+
+    // The exchange produces the session through the subscription; a getSession
+    // racing it could read the pre-exchange null.
+    expect(client.auth.getSession).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a failed exchange instead of sitting on a spinner', async () => {
+    const client = makeFakeClient();
+    client.auth.exchangeCodeForSession.mockResolvedValue({
+      data: { session: null },
+      error: { message: 'invalid request: both auth code and code verifier should be non-empty' },
+    });
+    withBackend(client);
+    mockedCapturedCode.mockReturnValue('auth-code-123');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.lastAuthError).toMatch(/code verifier/);
+    });
+    consoleError.mockRestore();
+  });
+
+  it("surfaces the provider's own error, e.g. a cancelled consent screen", async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+    mockedCapturedError.mockReturnValue('access_denied');
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.lastAuthError).toBe('access_denied');
+    });
   });
 });
 

@@ -5,6 +5,12 @@
  * @module main
  */
 
+// FIRST. Reads the OAuth `?code=` synchronously at import time, before
+// router.tsx is evaluated and before main() awaits i18n and the database — by
+// which point the query string has had seconds and a router initialisation to
+// disappear in. See lib/supabase/auth-callback for the bug this fixes.
+import '@/lib/supabase/auth-callback';
+
 // Initialize i18n before any React components load.
 import { i18nReady } from '@/lib/i18n';
 
