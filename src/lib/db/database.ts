@@ -205,8 +205,15 @@ export class KikoushouDatabase extends Dexie {
   /** Cached server roster. See {@link TripMemberRow}. */
   tripMembers!: Table<TripMemberRow, [string, string]>;
 
-  constructor() {
-    super('kikoushou');
+  /**
+   * @param name - Database name. Defaults to the real one; a test passes its own
+   *   so it can build a fixture at an older schema version and then observe the
+   *   upgrade. Without this seam the migrations were untestable: every instance
+   *   opened the same database, so a fixture written at v7 under another name was
+   *   invisible to the class that performs the upgrade.
+   */
+  constructor(name = 'kikoushou') {
+    super(name);
 
     /**
      * Schema Version 1 - Initial schema
