@@ -1,16 +1,19 @@
 /**
  * @fileoverview E2E Tests for Trip Sharing Flow
- * Tests the complete sharing workflow in the Kikoushou PWA including:
- * - Generating shareable links
- * - Copying links to clipboard
- * - QR code generation
- * - Importing trips via share links
- * - Error handling for invalid share IDs
+ * Covers the parts of sharing that do not need a backend:
+ * - the share dialog in a build with no sync server configured
+ * - importing a trip through the `/share/:shareId` welcome flow
+ * - error handling for an unknown share id
+ *
+ * The account-backed invite — link, QR, redemption, identity, two-device sync —
+ * lives in `trip-sharing-sync.spec.ts`, which runs against a stubbed backend.
+ * It cannot be asserted here: this project deliberately has no Supabase
+ * configuration, so there is nothing to mint an invite against.
  *
  * @module e2e/sharing
  */
 
-import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 // ============================================================================
 // Database Helpers
@@ -153,13 +156,6 @@ async function openShareDialog(page: Page, tripId: string): Promise<void> {
   await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
 }
 
-/**
- * Grants clipboard permissions for headless browser testing.
- */
-async function grantClipboardPermissions(context: BrowserContext): Promise<void> {
-  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-}
-
 // ============================================================================
 // Test Suite: Sharing Flow
 // ============================================================================
@@ -173,111 +169,33 @@ test.describe('Sharing Flow', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Test 1: Generates shareable link
+  // The share dialog, in a build with no sync server
   // --------------------------------------------------------------------------
-  test('generates shareable link with correct format', async ({ page }) => {
-    // Create a test trip
-    const { tripId, shareId } = await createTestTrip(page);
 
-    // Verify shareId has the expected format (10 character nanoid-like string)
-    expect(shareId).toMatch(/^[a-zA-Z0-9_-]{10,}$/);
-
-    // Attempt to open share dialog
-    try {
-      await openShareDialog(page, tripId);
-
-      // Verify the dialog contains the share URL
-      const shareUrlInput = page.locator('#share-url');
-      await expect(shareUrlInput).toBeVisible();
-      
-      const inputValue = await shareUrlInput.inputValue();
-      expect(inputValue).toContain('/share/');
-      expect(inputValue).toContain(shareId);
-    } catch {
-      // If ShareDialog is not integrated yet, verify the URL format directly
-      // by checking that we can navigate to the share import page
-      await page.goto(`/share/${shareId}`);
-      await page.waitForLoadState('load');
-
-      // The page should show the trip info (not 404)
-      await expect(page.getByText(TEST_DATA.trip.name)).toBeVisible({ timeout: 10000 });
-    }
-  });
-
-  // --------------------------------------------------------------------------
-  // Test 2: Copies link to clipboard
-  // --------------------------------------------------------------------------
-  test('copies link to clipboard', async ({ page, context }) => {
-    // Grant clipboard permissions
-    await grantClipboardPermissions(context);
-
-    // Create a test trip
-    const { tripId, shareId } = await createTestTrip(page);
-
-    try {
-      await openShareDialog(page, tripId);
-
-      // Find and click the copy button
-      const copyButton = page.getByRole('button', { name: /copy|copier/i }).or(
-        page.locator('button').filter({ has: page.locator('svg.lucide-copy') })
-      );
-      await copyButton.click();
-
-      // Verify success feedback (button might change appearance or show toast)
-      // The ShareDialog shows a check icon and/or toast on successful copy
-      const successIndicator = page.locator('svg.lucide-check').or(
-        page.getByText(/copied|copié/i)
-      );
-      await expect(successIndicator.first()).toBeVisible({ timeout: 3000 });
-
-      // Verify clipboard content (may not work in all headless modes)
-      try {
-        const clipboardContent = await page.evaluate(() => navigator.clipboard.readText());
-        expect(clipboardContent).toContain('/share/');
-        expect(clipboardContent).toContain(shareId);
-      } catch {
-        // Clipboard read might fail in headless mode, that's acceptable
-        // The visual feedback confirmation is sufficient
-        console.log('Clipboard read not available in headless mode - visual confirmation passed');
-      }
-    } catch {
-      // If ShareDialog is not integrated, skip this test gracefully
-      test.skip(true, 'ShareDialog not integrated with UI - copy button not accessible');
-    }
-  });
-
-  // --------------------------------------------------------------------------
-  // Test 3: Generates QR code
-  // --------------------------------------------------------------------------
-  test('generates QR code', async ({ page }) => {
-    // Create a test trip
+  /**
+   * This project runs with `VITE_SUPABASE_*` blank, so there is no backend and
+   * no link to hand out. That is the whole assertion: the dialog has to say so.
+   *
+   * The three tests that used to sit here asserted a `#share-url` input holding
+   * a `/share/:shareId` link — a shape that no longer exists, since a share link
+   * is now an account-backed `/join/:token` invite. Each was wrapped in a
+   * try/catch that fell back to navigating to the share page, so all three
+   * passed whether or not the dialog worked at all. The account-backed link, its
+   * QR and the copy button are covered against a real backend in
+   * `trip-sharing-sync.spec.ts`, which is the only place they can be tested
+   * honestly.
+   */
+  test('says the trip cannot be shared when no sync server is configured', async ({
+    page,
+  }) => {
     const { tripId } = await createTestTrip(page);
 
-    try {
-      await openShareDialog(page, tripId);
+    await openShareDialog(page, tripId);
 
-      // Verify QR code canvas is rendered
-      // The ShareDialog uses QRCodeCanvas with id="share-qr-code-canvas"
-      const qrCodeCanvas = page.locator('#share-qr-code-canvas');
-      await expect(qrCodeCanvas).toBeVisible({ timeout: 5000 });
-
-      // Verify it's actually a canvas element
-      const tagName = await qrCodeCanvas.evaluate((el) => el.tagName.toLowerCase());
-      expect(tagName).toBe('canvas');
-
-      // Verify the canvas has dimensions (QR code is rendered)
-      const width = await qrCodeCanvas.evaluate((el: HTMLCanvasElement) => el.width);
-      const height = await qrCodeCanvas.evaluate((el: HTMLCanvasElement) => el.height);
-      expect(width).toBeGreaterThan(0);
-      expect(height).toBeGreaterThan(0);
-
-      // Verify the download button is present
-      const downloadButton = page.getByRole('button', { name: /download.*qr|télécharger.*qr/i });
-      await expect(downloadButton).toBeVisible();
-    } catch {
-      // If ShareDialog is not integrated, skip this test gracefully
-      test.skip(true, 'ShareDialog not integrated with UI - QR code not accessible');
-    }
+    const dialog = page.getByRole('dialog');
+    // An explanation, not a spinner: this state has nothing to wait for.
+    await expect(dialog.getByRole('alert')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('share-url')).toHaveCount(0);
   });
 
   // --------------------------------------------------------------------------
