@@ -390,13 +390,13 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 - Invite management in `SettingsPage`: list, revoke, regenerate.
 - Repoint or retire `/trip/:roomId#key` and `extractP2pTripInviteFromScannedPayload`.
 
-### Phase 6 — Migration and the remote trip list (~1–2 days)
+### Phase 6 — Migration and the remote trip list · **DONE**
 
 - Dexie v7 (§4), plus cascade paths and the test reset helper.
 - `src/lib/sync/migrate-local-trip.ts` — idempotent per trip, keyed on `(owner_id, local_id)`: insert the `trips` row, convert the doc to schema v2, upload the snapshot, insert the owner `trip_members` row, store `remoteTripId`. Run lazily on first share or first sign-in, never as a big-bang.
 - `TripListPage`: merge local trips with the signed-in user's server trips; hydrate a doc on first open. Show which trips are local-only.
 
-### Phase 7 — Offline hardening (~1–2 days)
+### Phase 7 — Offline hardening · **DONE**
 
 - Service worker rule 7; verify `navigateFallback`.
 - Sync badge (rule 8) replacing the peer counter, with pending-change count.
@@ -404,9 +404,14 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 - Playwright E2E with `context.setOffline(true)`: edit offline → reconnect → converge; two browser contexts editing the same trip concurrently → converge without duplicates; cold launch offline.
 - Update the assistant per the `AGENTS.md` checklist if account or sync state becomes user-visible data it should be able to answer about.
 
-### Phase 8 — Compaction and retiring the old path (~1–2 days)
+### Phase 8 — Compaction · **DONE** · retirement **HELD**
 
-- Verify the compaction Edge Function under load; confirm a client whose cursor predates a compaction still converges.
+**Compaction is done.** Two things it turned up:
+
+- **Pruning creates a data-loss hazard the provider had to be fixed for.** Compaction deletes the rows it folds, and the provider only fetched the snapshot when its cursor was 0. A device at cursor 50 when rows 1–100 were folded and pruned would ask for `id > 50`, get 101 onwards, and lose 51–100 permanently — they exist nowhere but the snapshot it never fetched. Silent, and worst for the devices offline longest. The provider now applies any snapshot whose `through_id` is ahead of its cursor, reading the marker alone first because the state can be megabytes.
+- **The schedule cannot carry the service key.** It reads it from Supabase Vault by name; creating those secrets is a one-time manual step, documented in the migration. Verified: the job is scheduled and active, no-ops with a notice when the vault entries are absent, and `authenticated` cannot execute it.
+
+**Retirement is deliberately held.** Deleting `relay/`, `y-webrtc` and the `p2p*` fields removes the only fallback, and the new path has not yet completed a single sync between two real devices against the hosted project. Removing the safety net before the replacement is proven is the wrong order regardless of what the plan said. The trigger for doing it: one successful two-device test, then a release where nothing regresses.
 - Delete `relay/`, `.github/workflows/relay-docker.yml`, the `relay` service in `docker-compose.yml`, `y-webrtc`, `VITE_SIGNALING_URL`, `resolveSignalingServer`, `y-webrtc.d.ts`, and the `p2p*` fields on `Trip`.
 - Decide the QR changeset codec's fate. Recommendation: keep **export** (backup, and handoff to someone who will not register), retire the merge-back UI and `merge-engine.ts` once server sync has run for a while. That removes a conflict-resolution UI that server sync makes unnecessary.
 
