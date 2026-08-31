@@ -150,6 +150,11 @@ class FakeServer {
         }
 
         // trip_doc_updates
+        const surviving = () =>
+          this.rows
+            .filter((row) => row.id > this.prunedBelow)
+            .sort((left, right) => left.id - right.id);
+
         return {
           select: () => ({
             eq: () => ({
@@ -161,13 +166,25 @@ class FakeServer {
                       this.failReads -= 1;
                       return { data: null, error: { message: 'read boom' } };
                     }
-                    const page = this.rows
-                      .filter((row) => row.id > afterId && row.id > this.prunedBelow)
-                      .sort((left, right) => left.id - right.id)
+                    const page = surviving()
+                      .filter((row) => row.id > afterId)
                       .slice(0, count);
                     return { data: page, error: null };
                   },
                 }),
+              }),
+
+              // No `gt`: the floor query, asking for the oldest surviving row.
+              // Used to tell an unreadable snapshot the log can still cover from
+              // one hiding rows that compaction pruned.
+              order: () => ({
+                limit: async (count: number) => {
+                  if (this.failReads > 0) {
+                    this.failReads -= 1;
+                    return { data: null, error: { message: 'floor boom' } };
+                  }
+                  return { data: surviving().slice(0, count), error: null };
+                },
               }),
             }),
           }),

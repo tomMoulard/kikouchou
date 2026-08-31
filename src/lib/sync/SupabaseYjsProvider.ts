@@ -141,6 +141,18 @@ export class SupabaseYjsProvider {
   // actually missing everything the other side has written.
   private pullHealthy = true;
   private pushHealthy = true;
+  /**
+   * Local updates the outbox is not known to hold.
+   *
+   * Raised the instant the document emits and lowered only once the queue row is
+   * durable, so a non-zero value means the document contains an edit the queue
+   * has not recorded. While that is true the document's state vector must not be
+   * recorded as the server's: the diff in `reconcile()` is computed against that
+   * vector, so claiming it would make the missing edit unrecoverable rather than
+   * merely delayed.
+   */
+  private unqueued = 0;
+  private reconciling = false;
   private pullTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private state: SyncState = { status: 'local', pendingCount: 0 };
@@ -162,6 +174,10 @@ export class SupabaseYjsProvider {
       if (origin === ORIGIN_REMOTE) {
         return;
       }
+      // Counted here, synchronously with the document changing, because that is
+      // the moment the edit becomes something this device holds and the server
+      // does not.
+      this.unqueued += 1;
       void this.queueAndFlush(update);
     };
 
@@ -274,6 +290,11 @@ export class SupabaseYjsProvider {
       // Re-read: applySnapshot advances the cursor to the snapshot's through_id.
       let highestApplied = (await readCursor(this.tripId)).lastSeenUpdateId;
       for (;;) {
+        if (this.destroyed) {
+          // Teardown during a multi-page pull: the document is about to be
+          // destroyed, so applying another page would write into a detached doc.
+          break;
+        }
         const rows = await this.fetchLogPage(highestApplied);
         if (rows.length === 0) {
           break;
@@ -292,7 +313,12 @@ export class SupabaseYjsProvider {
       }
 
       this.pullHealthy = true;
-      this.failures = 0;
+      // Only when both directions are healthy. Resetting on a good pull alone
+      // would hold a persistently failing push at the first backoff step for as
+      // long as reads kept succeeding.
+      if (this.pushHealthy) {
+        this.failures = 0;
+      }
       this.setState({ lastSyncedAt: Date.now() });
       this.publishStatus();
     } catch (error: unknown) {
@@ -339,8 +365,24 @@ export class SupabaseYjsProvider {
 
     const bytes = decodeUpdate((data as { state?: unknown }).state);
     if (!bytes) {
-      // A snapshot we cannot read is not fatal: the log alone reconstructs the
-      // document, just more slowly.
+      // Whether this is survivable depends entirely on whether the log still
+      // holds what the snapshot folded. Compaction upserts the snapshot and then
+      // deletes those rows, so if pruning has run they exist nowhere this client
+      // can reach.
+      const cursor = await readCursor(this.tripId);
+      const lowestLogId = await this.fetchLowestLogId();
+      const logCoversTheGap =
+        lowestLogId !== null && lowestLogId <= cursor.lastSeenUpdateId + 1;
+
+      if (!logCoversTheGap) {
+        // Reported as a pull failure so the status says `offline` and the retry
+        // schedule keeps trying. Returning quietly would claim `synced` over a
+        // document missing everything the snapshot swallowed.
+        throw new Error(
+          `snapshot for trip ${this.tripId} did not decode and the log has been pruned past the gap`,
+        );
+      }
+
       console.warn('[sync] snapshot for trip %s did not decode; using the log', this.tripId);
       return;
     }
@@ -351,6 +393,27 @@ export class SupabaseYjsProvider {
     if (typeof throughId === 'number' && throughId > 0) {
       await advanceCursor(this.tripId, throughId);
     }
+  }
+
+  /**
+   * The id of the oldest surviving log row, or null when the log is empty.
+   *
+   * Only used to tell a recoverable snapshot failure from an unrecoverable one.
+   */
+  private async fetchLowestLogId(): Promise<number | null> {
+    const { data, error } = await this.client
+      .from('trip_doc_updates')
+      .select('id')
+      .eq('trip_id', this.remoteTripId)
+      .order('id', { ascending: true })
+      .limit(1);
+
+    if (error) {
+      throw new Error(`log floor read failed: ${error.message}`);
+    }
+    const rows = (data ?? []) as { id?: unknown }[];
+    const first = rows[0]?.id;
+    return typeof first === 'number' ? first : null;
   }
 
   private async fetchLogPage(afterId: number): Promise<LogRow[]> {
@@ -411,10 +474,19 @@ export class SupabaseYjsProvider {
    * recorded.
    */
   private async reconcile(): Promise<void> {
-    if (this.destroyed) {
+    if (this.destroyed || this.reconciling) {
       return;
     }
+    this.reconciling = true;
 
+    try {
+      await this.reconcileOnce();
+    } finally {
+      this.reconciling = false;
+    }
+  }
+
+  private async reconcileOnce(): Promise<void> {
     const cursor = await readCursor(this.tripId);
     const localVector = Y.encodeStateVector(this.doc);
 
@@ -430,6 +502,7 @@ export class SupabaseYjsProvider {
       // Nothing to say. Recording the vector still matters: it is what makes the
       // next start recognise this trip as already uploaded.
       await recordServerState(this.tripId, localVector);
+      this.unqueued = 0;
       this.publishStatus();
       return;
     }
@@ -438,8 +511,11 @@ export class SupabaseYjsProvider {
       await this.insertUpdate(missing);
       // Only now is it true that the server holds this state.
       await recordServerState(this.tripId, localVector);
-      // Anything queued is necessarily included in the diff just sent.
+      // Anything queued is necessarily included in the diff just sent, and so is
+      // anything that never reached the queue — the diff came from the document,
+      // not from the queue, which is what makes this the backstop.
       await outbox.clear(this.tripId);
+      this.unqueued = 0;
       this.pushHealthy = true;
       this.failures = 0;
     } catch (error: unknown) {
@@ -454,8 +530,15 @@ export class SupabaseYjsProvider {
   private async queueAndFlush(update: Uint8Array): Promise<void> {
     try {
       await outbox.enqueue(this.tripId, update);
+      this.unqueued = Math.max(this.unqueued - 1, 0);
     } catch (error: unknown) {
+      // The count stays raised: this edit is in the document and in no queue, so
+      // only a reconciliation that diffs the document can carry it. Left to the
+      // outbox it would be lost outright.
       console.error('[sync] failed to queue an update:', error);
+      await this.refreshPending();
+      await this.reconcile();
+      return;
     }
     await this.refreshPending();
     await this.flush();
@@ -502,12 +585,19 @@ export class SupabaseYjsProvider {
 
       const remaining = await outbox.pendingCount(this.tripId);
       if (remaining === 0 && sent.length > 0) {
-        // The queue is empty and every send succeeded, so the server now holds
-        // the document as it stands. Safe to record.
-        await recordServerState(this.tripId, Y.encodeStateVector(this.doc));
         this.pushHealthy = true;
         this.failures = 0;
         this.setState({ lastSyncedAt: Date.now() });
+
+        // An empty queue is not on its own evidence that the server holds the
+        // document. The document emits synchronously and the queue row is
+        // written asynchronously, so an edit made while this flush was in
+        // flight can be in the document with no row to represent it — and a
+        // vector recorded here would cover it, making `reconcile()` compute an
+        // empty diff and strand it permanently.
+        if (this.unqueued === 0) {
+          await recordServerState(this.tripId, Y.encodeStateVector(this.doc));
+        }
       }
     } finally {
       this.flushing = false;
