@@ -14,6 +14,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 
 import { AppProviders } from '@/contexts/AppProviders';
 import { useTripContext } from '@/contexts/TripContext';
+import { db } from '@/lib/db/database';
 import { createActivity } from '@/lib/db/repositories/activity-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
@@ -110,6 +111,32 @@ describe('useTripSystemPrompt', () => {
     expect(result.current.prompt.systemPrompt).toContain(
       '- Map pin: Not pinned on the map',
     );
+  });
+
+  it('says whether the trip is shared', async () => {
+    const { tripId } = await seedTrip();
+
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('## Current trip');
+    });
+    // A trip nobody has shared is the common case, and the assistant should say
+    // so rather than leaving the user to guess.
+    expect(result.current.prompt.systemPrompt).toContain('private to this device');
+  });
+
+  it('says when the trip is shared', async () => {
+    const { tripId } = await seedTrip();
+    await db.trips.update(tripId, {
+      remoteTripId: 'aaaaaaaa-0000-0000-0000-000000000001',
+    });
+
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('Sharing: shared');
+    });
   });
 
   it("lists the trip's activities with their ids", async () => {

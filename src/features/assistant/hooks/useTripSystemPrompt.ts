@@ -266,6 +266,13 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       `- Location: ${currentTrip.location ? toPromptText(currentTrip.location) : 'Not set'}`,
       `- Map pin: ${hasValidCoordinates(currentTrip.coordinates) ? formatCoordinates(currentTrip.coordinates) : 'Not pinned on the map'}`,
       `- Dates: ${currentTrip.startDate} to ${currentTrip.endDate}`,
+      // Sharing is now visible in the UI (the sync badge), so the assistant has
+      // to be able to answer "is this trip shared?" — per the AGENTS.md rule that
+      // a feature missing from this prompt makes the assistant claim it has no
+      // access to something sitting right there.
+      currentTrip.remoteTripId
+        ? '- Sharing: shared — everyone invited sees changes as they happen'
+        : '- Sharing: private to this device — nobody else can see it until it is shared',
       ...(currentTrip.description
         ? [`- Description: ${toPromptText(currentTrip.description)}`]
         : []),
