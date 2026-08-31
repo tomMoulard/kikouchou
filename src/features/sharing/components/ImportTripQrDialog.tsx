@@ -30,6 +30,7 @@ import {
 } from '@/lib/sharing';
 import type { AppChangeset, MergeResult } from '@/lib/sharing';
 
+import { extractInviteToken } from '@/lib/sync/invites';
 import {
   extractP2pTripInviteFromScannedPayload,
   extractShareIdFromScannedPayload,
@@ -118,6 +119,18 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
         return;
       }
       const trimmed = data.trim();
+
+      // Checked first, because it is what the Share dialog now produces. A
+      // scanner that cannot read the app's own current QR code is worse than no
+      // scanner: the failure looks like a broken camera rather than an
+      // unsupported format.
+      const inviteToken = extractInviteToken(trimmed);
+      if (inviteToken) {
+        handledRef.current = true;
+        onOpenChange(false);
+        navigate(`/join/${inviteToken}`);
+        return;
+      }
 
       const p2pInvite = extractP2pTripInviteFromScannedPayload(trimmed);
       if (p2pInvite) {

@@ -97,6 +97,37 @@ describe('ImportTripQrDialog', () => {
     expect(screen.queryByTestId('qr-scanner')).not.toBeInTheDocument();
   });
 
+  it('navigates to the join page when an invite link is scanned', () => {
+    render(<ImportTripQrDialog open={true} onOpenChange={onOpenChange} />, { withProviders: false });
+    expect(capturedOnScan).not.toBeNull();
+
+    // This is what the Share dialog now produces. A scanner that cannot read the
+    // app's own current QR code looks like a broken camera rather than an
+    // unsupported format, which is why invite tokens are matched first.
+    capturedOnScan!('https://kikoushou.app/join/aBcDeFgHiJkL3456');
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(mockNavigate).toHaveBeenCalledWith('/join/aBcDeFgHiJkL3456');
+  });
+
+  it('navigates to the join page for a bare invite token', () => {
+    render(<ImportTripQrDialog open={true} onOpenChange={onOpenChange} />, { withProviders: false });
+
+    capturedOnScan!('aBcDeFgHiJkL3456');
+
+    expect(mockNavigate).toHaveBeenCalledWith('/join/aBcDeFgHiJkL3456');
+  });
+
+  it('still prefers the legacy formats over a bare-token reading', () => {
+    render(<ImportTripQrDialog open={true} onOpenChange={onOpenChange} />, { withProviders: false });
+
+    // A 10-character share id and a 12-character room id must not be mistaken
+    // for a 16-character invite token now that invites are checked first.
+    capturedOnScan!('https://app.example.com/share/abc123');
+
+    expect(mockNavigate).toHaveBeenCalledWith('/share/abc123');
+  });
+
   it('navigates to share page when share link is scanned', () => {
     render(<ImportTripQrDialog open={true} onOpenChange={onOpenChange} />, { withProviders: false });
     expect(capturedOnScan).not.toBeNull();
