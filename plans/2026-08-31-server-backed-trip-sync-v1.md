@@ -303,6 +303,7 @@ These are testable rules, not aspirations.
 5. **Reconnect is automatic.** Trigger a flush + pull on the `online` event (`useOnlineStatus` already exists), on Realtime resubscribe, and on tab focus, with exponential backoff and jitter.
 6. **Exactly two operations may require network**, both one-time and both explicit: *share a trip* (needs an account and an invite row) and *join a trip* (needs invite redemption). Everything else works offline forever.
 7. **The service worker must never cache the Supabase origin.** Add a `NetworkOnly` runtime-caching rule for `*.supabase.co`. A cached auth or data response is a correctness bug, not a performance win.
+7b. **`supabase-js` must not be on the cold-launch critical path.** It is 218 kB (58 kB gzipped), and `AuthProvider` mounts eagerly, so a static import taxes every launch — including the majority that never sign in. Import it dynamically and let the client arrive a tick after mount; that is free precisely because rule 2 means nothing waits on the session. Check after any change to the auth graph: the chunk must be absent from `index.html` and from its `modulepreload` list.
 8. **Sync state is visible.** The user must be able to tell *Local only* / *Syncing* / *Synced* / *N changes pending* apart. `P2PSyncPresence` becomes a real sync badge instead of a peer counter.
 
 Rule 7 deserves attention: the current `runtimeCaching` covers OSM tiles (`CacheFirst`) and Nominatim (`NetworkFirst`). Adding Supabase without an explicit rule risks it falling under the precache/navigation fallback.
@@ -316,8 +317,8 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 ### Phase 0 — Decisions and spikes · **DONE**
 
 - Confirm Supabase; confirm plaintext vs E2E (§3); create the project.
-- Enable Google + magic link. Register redirect URLs for **both** deployment targets.
-- **Magic link needs custom SMTP.** Supabase's built-in email sender is rate-limited to a handful of messages per hour and is explicitly test-only, so magic link is unusable as a real fallback without it. Wire Resend (free tier covers this scale) under Authentication → SMTP Settings, or treat Google as the only production path.
+- **Google only, decided.** Email signup is off in `config.toml` (`[auth.email] enable_signup = false`) so there is exactly one authentication path rather than a second one nobody tested. Magic link is deferred, not rejected: turning it on means flipping that flag and configuring `[auth.email.smtp]`.
+- **Magic link will need custom SMTP when it lands.** `config.toml` confirms the built-in sender's cap at `[auth.rate_limit] email_sent = 2` per hour, and it is explicitly test-only, so magic link is unusable without Resend (or similar) plus a domain verified for the sender address.
 - **Auth needs no callback route.** Set `redirectTo` to the app root (`https://tommoulard.github.io/kikoushou/`) and let `detectSessionInUrl` pick the PKCE `?code=` off the root URL. `index.html` is served normally there, so the GitHub Pages deep-link problem never applies to sign-in. Drop the `/auth/callback` route from Phase 2.
 - **`public/404.html` is still required**, because `/join/:token` share links are deep links by nature — the entire point of the feature. GitHub Pages serves `404.html` for unknown paths (with a 404 status the browser still renders), preserving path and query, so the SPA router resolves correctly. Ship it as a copy of `index.html`.
 
@@ -329,7 +330,7 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 - **Tests (highest value per line in this plan):** two-`Y.Doc` convergence tests with no server or network — concurrent add vs rename, concurrent edits to different fields of one entity, concurrent delete vs edit, offline divergence then merge. The scenario that currently yields 5 guests from 3 becomes a regression test.
 - Keep Dexie-first writes with a per-entity mirror. Making the doc the sole source of truth and Dexie a pure projection is the cleaner end state, but it is a large refactor of every repository and context; defer it. Watch for echo loops in the meantime — `ORIGIN_DEXIE_SYNC` already guards the round trip.
 
-### Phase 2 — Auth (~2–3 days)
+### Phase 2 — Auth · **DONE**
 
 - `src/lib/supabase/client.ts` — singleton, `persistSession: true`, no top-level throw when env vars are absent (local dev and offline must still boot).
 - `src/features/auth/` — `AuthProvider` (never blocks render, per rule 2), `SignInSheet`, `AuthCallbackPage`, `useAuth`.
@@ -402,7 +403,7 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 ### Decisions needed before Phase 3
 
 1. **Plaintext or E2E?** (§3) — the only one that is expensive to reverse.
-2. **Google only, or Google + Apple?** Apple needs a paid developer account. Magic link additionally needs custom SMTP.
+2. ~~**Google only, or Google + Apple?**~~ **Settled: Google only.** Apple needs a paid developer account; magic link needs custom SMTP and a verified sender domain. Both deferred.
 3. **Doc-authoritative or keep the Dexie mirror?** Plan assumes the mirror, with doc-authoritative as later cleanup.
 4. **Does the QR changeset flow survive?** Plan assumes export-only survives, in Phase 8.
 
