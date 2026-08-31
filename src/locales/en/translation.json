@@ -596,7 +596,9 @@
       "waitingForPeers": "Connecting to signaling server...",
       "waitingDescription": "The trip owner needs to have the app open for you to sync.",
       "signalingFailed": "Signaling server unreachable",
-      "signalingFailedDescription": "Could not connect to the signaling server. The server may be down or your network may be blocking WebSocket connections."
+      "signalingFailedDescription": "Could not connect to the signaling server. The server may be down or your network may be blocking WebSocket connections.",
+      "needsAccount": "Sharing needs an account, so the people you invite keep seeing your changes.",
+      "signInReason": "Sign in to share this trip and edit it together."
     },
     "join": {
       "title": "You've been invited to a trip",
