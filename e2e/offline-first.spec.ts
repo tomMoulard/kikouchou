@@ -58,6 +58,43 @@ async function createTripOffline(page: Page, name: string): Promise<void> {
   await page.getByRole('button', { name: /save/i }).click();
 }
 
+/**
+ * Waits until a service worker controls the page and has finished precaching.
+ *
+ * Without this, going offline right after `load` fails with
+ * ERR_INTERNET_DISCONNECTED: the worker registers asynchronously, does not
+ * control the page that registered it until it claims clients, and has ~2.5 MB
+ * to precache first. Every offline assertion depends on that being done, so it
+ * is waited for explicitly rather than hoped for.
+ */
+async function waitForServiceWorker(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => navigator.serviceWorker?.controller != null,
+    undefined,
+    { timeout: 30_000 },
+  );
+
+  // Controlling is not the same as ready to serve: the precache has to hold the
+  // navigation fallback before a reload can succeed offline.
+  await page.waitForFunction(
+    async () => {
+      if (!('caches' in window)) {
+        return false;
+      }
+      for (const name of await caches.keys()) {
+        const cache = await caches.open(name);
+        const keys = await cache.keys();
+        if (keys.some((request) => request.url.includes('index.html'))) {
+          return true;
+        }
+      }
+      return false;
+    },
+    undefined,
+    { timeout: 30_000 },
+  );
+}
+
 /** Clears app data through the UI, so no test starts on another's leftovers. */
 async function resetApp(page: Page): Promise<void> {
   await page.goto('/settings');
@@ -87,6 +124,7 @@ test.describe('offline-first contract', () => {
     // Warm the service worker so the reload has something to serve from.
     await page.goto('/trips');
     await page.waitForLoadState('load');
+    await waitForServiceWorker(page);
 
     await context.setOffline(true);
     await page.reload();
@@ -100,37 +138,32 @@ test.describe('offline-first contract', () => {
     await context.setOffline(false);
   });
 
-  test('rule 1 and 3: a trip can be created and edited with no network', async ({
+  test('rules 1 and 3: a trip is created offline and survives an offline reload', async ({
     page,
     context,
   }) => {
     await page.goto('/trips');
     await page.waitForLoadState('load');
+    await waitForServiceWorker(page);
+
+    // The list has to have finished rendering before the button is clickable.
+    // Without this the click raced the first paint and failed intermittently on
+    // "waiting for element to be visible, enabled and stable" — a flake in the
+    // test, not the app, and one that only showed up in one of two otherwise
+    // identical cases.
+    await expect(page.getByRole('heading', { name: /my trips/i })).toBeVisible({
+      timeout: 15_000,
+    });
+
     await context.setOffline(true);
 
-    await createTripOffline(page, TRIP.name);
-
-    // Local-first: the write went to IndexedDB and the UI reflects it, with no
+    // Local-first: the write goes to IndexedDB and the UI reflects it with no
     // server involved at any point.
-    await expect(page.getByText(TRIP.name).first()).toBeVisible({ timeout: 15_000 });
-
-    await context.setOffline(false);
-  });
-
-  test('rule 1: an offline trip survives a reload while still offline', async ({
-    page,
-    context,
-  }) => {
-    await page.goto('/trips');
-    await page.waitForLoadState('load');
-    await context.setOffline(true);
-
     await createTripOffline(page, TRIP.name);
     await expect(page.getByText(TRIP.name).first()).toBeVisible({ timeout: 15_000 });
 
+    // And durability is IndexedDB's job, not the server's — still offline.
     await page.reload();
-
-    // Durability is IndexedDB's job, not the server's.
     await expect(page.getByText(TRIP.name).first()).toBeVisible({ timeout: 20_000 });
 
     await context.setOffline(false);
@@ -159,6 +192,7 @@ test.describe('offline-first contract', () => {
   }) => {
     await page.goto('/settings');
     await page.waitForLoadState('load');
+    await waitForServiceWorker(page);
     await context.setOffline(true);
     await page.reload();
 
@@ -180,6 +214,10 @@ test.describe('offline-first contract', () => {
   }) => {
     await page.goto('/trips');
     await page.waitForLoadState('load');
+    await waitForServiceWorker(page);
+    await expect(page.getByRole('heading', { name: /my trips/i })).toBeVisible({
+      timeout: 15_000,
+    });
     await createTripOffline(page, TRIP.name);
     await expect(page.getByText(TRIP.name).first()).toBeVisible({ timeout: 15_000 });
 
@@ -217,7 +255,12 @@ test.describe('offline-first contract', () => {
       for (const name of names) {
         const cache = await caches.open(name);
         for (const request of await cache.keys()) {
-          if (request.url.includes('supabase')) {
+          // Match the *origin*, not the substring. An earlier version checked
+          // `url.includes('supabase')` and flagged the precached
+          // `vendor-supabase-*.js` bundle — which is an app asset that should
+          // absolutely be cached, not an API response that must not be.
+          const { hostname } = new URL(request.url);
+          if (/\.supabase\.(co|in)$/.test(hostname)) {
             hits.push(request.url);
           }
         }
