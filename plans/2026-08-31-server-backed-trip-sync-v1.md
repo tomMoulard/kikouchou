@@ -404,14 +404,24 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 - Playwright E2E with `context.setOffline(true)`: edit offline → reconnect → converge; two browser contexts editing the same trip concurrently → converge without duplicates; cold launch offline.
 - Update the assistant per the `AGENTS.md` checklist if account or sync state becomes user-visible data it should be able to answer about.
 
-### Phase 8 — Compaction · **DONE** · retirement **HELD**
+### Phase 8 — Compaction and retiring the old path · **DONE**
 
 **Compaction is done.** Two things it turned up:
 
 - **Pruning creates a data-loss hazard the provider had to be fixed for.** Compaction deletes the rows it folds, and the provider only fetched the snapshot when its cursor was 0. A device at cursor 50 when rows 1–100 were folded and pruned would ask for `id > 50`, get 101 onwards, and lose 51–100 permanently — they exist nowhere but the snapshot it never fetched. Silent, and worst for the devices offline longest. The provider now applies any snapshot whose `through_id` is ahead of its cursor, reading the marker alone first because the state can be megabytes.
 - **The schedule cannot carry the service key.** It reads it from Supabase Vault by name; creating those secrets is a one-time manual step, documented in the migration. Verified: the job is scheduled and active, no-ops with a notice when the vault entries are absent, and `authenticated` cannot execute it.
 
-**Retirement is deliberately held.** Deleting `relay/`, `y-webrtc` and the `p2p*` fields removes the only fallback, and the new path has not yet completed a single sync between two real devices against the hosted project. Removing the safety net before the replacement is proven is the wrong order regardless of what the plan said. The trigger for doing it: one successful two-device test, then a release where nothing regresses.
+**Retirement is done**, at the user's explicit instruction, with the hold above overridden. The risk stands as stated: there is no fallback now, and no two-device sync has yet succeeded against the hosted project.
+
+The structural part was not the deletion but the **keying**. Local persistence was keyed on the WebRTC room id, so IndexedDB could not be read without first resolving a credential that existed only because of the transport. Dexie 8 re-keys `yjsUpdates` on `tripId` and migrates existing rows by resolving each room id back to its trip.
+
+That let the trust boundary get simpler without weakening: `syncDocToDexie` now takes the trip id the caller already holds from local state instead of finding it via `p2pRoomId`, and `meta.id` stays a claim to verify. It gained an assertion too — a peer must not be able to set `remoteTripId`, which would redirect a trip's whole sync to a row of the attacker's choosing.
+
+Two behaviours were **removed rather than ported**, because the server made them meaningless: the "keep the shared trip online while its dialog is open" binding (WebRTC needed both peers present simultaneously) and WebRTC awareness with its presence badge (the sync badge answers "is anyone else here" now). Realtime Presence could reinstate a live peer list later; that is new work, not a port.
+
+`vendor-yjs` dropped from 192 kB to 78.75 kB.
+
+**Still not done, and it is the only thing left:** one successful sync between two real devices against the hosted project.
 - Delete `relay/`, `.github/workflows/relay-docker.yml`, the `relay` service in `docker-compose.yml`, `y-webrtc`, `VITE_SIGNALING_URL`, `resolveSignalingServer`, `y-webrtc.d.ts`, and the `p2p*` fields on `Trip`.
 - Decide the QR changeset codec's fate. Recommendation: keep **export** (backup, and handoff to someone who will not register), retire the merge-back UI and `merge-engine.ts` once server sync has run for a while. That removes a conflict-resolution UI that server sync makes unnecessary.
 
