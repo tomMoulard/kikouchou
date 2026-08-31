@@ -186,16 +186,16 @@ describe('Cascade Delete Atomicity', () => {
         startDate: isoDate('2024-07-15'),
         endDate: isoDate('2024-07-20'),
       });
-      const roomId = 'p2p-room-abc';
-      await db.trips.update(trip.id, { p2pRoomId: roomId });
-      await db.yjsUpdates.add({ roomId, update: new Uint8Array([1, 2, 3]) });
-      expect(await db.yjsUpdates.where('roomId').equals(roomId).count()).toBe(1);
+      // Keyed on the trip since schema 8. It used to be keyed on the WebRTC
+      // room id, so the cascade had to read the trip's credentials out first.
+      await db.yjsUpdates.add({ tripId: trip.id, update: new Uint8Array([1, 2, 3]) });
+      expect(await db.yjsUpdates.where('tripId').equals(trip.id).count()).toBe(1);
 
       await deleteTrip(trip.id);
 
       // A retained CRDT log re-materialises the whole "deleted" trip the next
-      // time its share link is opened.
-      expect(await db.yjsUpdates.where('roomId').equals(roomId).count()).toBe(0);
+      // time it is opened.
+      expect(await db.yjsUpdates.where('tripId').equals(trip.id).count()).toBe(0);
     });
 
     it('leaves another trip\'s activities untouched', async () => {

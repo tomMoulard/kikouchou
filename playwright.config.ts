@@ -98,7 +98,7 @@ export default defineConfig({
     },
   ],
 
-  /* Run production build preview server and signaling relay before starting tests */
+  /* Servers started before the tests run */
   webServer: [
     {
       /**
@@ -119,21 +119,13 @@ export default defineConfig({
       },
     },
     {
-      // Signaling relay for P2P sync tests
-      command: 'node relay/server.js',
-      port: 4444,
-      reuseExistingServer: false,
-      timeout: 10_000,
-    },
-    {
-      // Run the Vite app against the local signaling relay.
-      // Using the dev server here is more reliable for end-to-end P2P checks.
+      // The dev server, for every project except `offline` — which needs a real
+      // service worker and so runs against the production build above.
       command: 'bun x vite --host 127.0.0.1 --port 4173',
       url: 'http://127.0.0.1:4173',
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
       env: {
-        VITE_SIGNALING_URL: 'ws://127.0.0.1:4444',
         // vite.config.ts sets base='/kikoushou/' when GITHUB_ACTIONS is set,
         // but baseURL and every page.goto('/...') here assume '/'. The plugin
         // spawns this command with the full ambient env, so CI's own

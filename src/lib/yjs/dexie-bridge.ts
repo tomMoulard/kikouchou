@@ -55,23 +55,23 @@ function getMeta(doc: Y.Doc): Y.Map<unknown> {
   return doc.getMap('meta');
 }
 
+/**
+ * @param tripId - The **locally resolved** trip. Never `meta.id`, which is
+ *   remote-controlled: using it as the write key once let any peer overwrite an
+ *   unrelated local trip.
+ */
 function buildTripRecord(
   doc: Y.Doc,
-  roomId: string,
+  tripId: TripId,
   existingTrip?: Trip,
-  encryptionKey?: string,
 ): Trip | null {
   const meta = getMeta(doc);
-  const id = meta.get('id');
-  if (typeof id !== 'string') {
-    return null;
-  }
 
   const createdAt = meta.get('createdAt');
   const updatedAt = meta.get('updatedAt');
 
   const trip: Trip = {
-    id: id as TripId,
+    id: tripId,
     name: (meta.get('name') as string) ?? existingTrip?.name ?? 'Shared Trip',
     startDate:
       (meta.get('startDate') as Trip['startDate']) ??
@@ -84,24 +84,18 @@ function buildTripRecord(
     // NEVER take shareId from a peer: it is a UNIQUE Dexie index, so a value
     // colliding with another local trip aborts the whole write transaction and
     // permanently kills sync for this trip.
-    shareId: existingTrip?.shareId ?? (id.slice(0, 10) as ShareId),
+    shareId: existingTrip?.shareId ?? (tripId.slice(0, 10) as ShareId),
     createdAt:
       ((typeof createdAt === 'number' ? createdAt : existingTrip?.createdAt) as UnixTimestamp | undefined) ??
       (Date.now() as UnixTimestamp),
     updatedAt:
       ((typeof updatedAt === 'number' ? updatedAt : existingTrip?.updatedAt) as UnixTimestamp | undefined) ??
       (Date.now() as UnixTimestamp),
-    p2pRoomId: roomId,
-    // The encryption key is NEVER derived from window.location here. Reading
-    // the URL fragment meant any in-page anchor — the a11y skip link
-    // `#main-content` among them — overwrote the trip's real key on the next
-    // remote update, permanently breaking sync with its existing peers.
-    // The join flow passes the key in explicitly instead.
-    ...(encryptionKey
-      ? { p2pEncryptionKey: encryptionKey }
-      : existingTrip?.p2pEncryptionKey
-        ? { p2pEncryptionKey: existingTrip.p2pEncryptionKey }
-        : {}),
+    // Never adopted from the document: it links this trip to its server row and
+    // is established locally when the trip is shared or joined.
+    ...(existingTrip?.remoteTripId
+      ? { remoteTripId: existingTrip.remoteTripId }
+      : {}),
   };
 
   const location = meta.get('location');
@@ -154,8 +148,8 @@ async function replaceTripScopedRows<T extends { id: string; tripId: TripId }>(
   }
 }
 
-export async function loadPersistedUpdates(doc: Y.Doc, roomId: string): Promise<void> {
-  const rows = await db.yjsUpdates.where('roomId').equals(roomId).toArray();
+export async function loadPersistedUpdates(doc: Y.Doc, tripId: TripId): Promise<void> {
+  const rows = await db.yjsUpdates.where('tripId').equals(tripId).toArray();
 
   Y.transact(doc, () => {
     for (const row of rows) {
@@ -172,28 +166,28 @@ export async function loadPersistedUpdates(doc: Y.Doc, roomId: string): Promise<
   }
 
   if (rows.length >= COMPACTION_THRESHOLD) {
-    await compactUpdates(doc, roomId);
+    await compactUpdates(doc, tripId);
   }
 }
 
-export function subscribeToUpdates(doc: Y.Doc, roomId: string): () => void {
+export function subscribeToUpdates(doc: Y.Doc, tripId: TripId): () => void {
   let updateCount = 0;
 
   const handleUpdate = (update: Uint8Array, origin: unknown): void => {
-    void db.yjsUpdates.add({ roomId, update }).catch((error) => {
+    void db.yjsUpdates.add({ tripId, update }).catch((error) => {
       console.error('[yjs-bridge] Failed to persist update:', error);
     });
 
     updateCount += 1;
     if (updateCount >= COMPACTION_THRESHOLD) {
       updateCount = 0;
-      void compactUpdates(doc, roomId).catch((error) => {
+      void compactUpdates(doc, tripId).catch((error) => {
         console.error('[yjs-bridge] Failed to compact updates:', error);
       });
     }
 
     if (origin !== ORIGIN_DEXIE_SYNC) {
-      void syncDocToDexie(doc, roomId);
+      void syncDocToDexie(doc, tripId);
     }
   };
 
@@ -203,52 +197,46 @@ export function subscribeToUpdates(doc: Y.Doc, roomId: string): () => void {
   };
 }
 
-export async function compactUpdates(doc: Y.Doc, roomId: string): Promise<void> {
+export async function compactUpdates(doc: Y.Doc, tripId: TripId): Promise<void> {
   const snapshot = Y.encodeStateAsUpdate(doc);
 
   await db.transaction('rw', db.yjsUpdates, async () => {
-    await db.yjsUpdates.where('roomId').equals(roomId).delete();
-    await db.yjsUpdates.add({ roomId, update: snapshot });
+    await db.yjsUpdates.where('tripId').equals(tripId).delete();
+    await db.yjsUpdates.add({ tripId, update: snapshot });
   });
 }
 
+/**
+ * Projects a document into Dexie.
+ *
+ * @param tripId - Which local trip this document is for. The caller resolves it
+ *   locally — from the selected trip — and it is the only id used as a write
+ *   key. `meta.id` is remote-controlled and is treated as a claim to verify,
+ *   never as an address: trusting it once let any peer overwrite, and wipe, an
+ *   unrelated local trip.
+ */
 export async function syncDocToDexie(
   doc: Y.Doc,
-  roomId: string,
-  /**
-   * The room's encryption key, supplied by the join flow that read it from the
-   * share link. Only pass this where the key is genuinely known; it must never
-   * be inferred from `window.location` inside this module.
-   */
-  encryptionKey?: string,
+  tripId: TripId,
 ): Promise<TripId | null> {
   const claimedId = getMeta(doc).get('id');
   if (typeof claimedId !== 'string' || claimedId.length === 0) {
-    // Validate before the lookup: an object here would make Dexie reject an
-    // invalid key and reject this promise, and the caller invokes us as a bare
+    // Validated before anything else: a non-string here would make Dexie reject
+    // an invalid key and reject this promise, and callers invoke this as a bare
     // `void`, producing an unhandled rejection on every remote update.
     return null;
   }
 
-  // The trip this room is actually bound to locally. `meta.id` is remote
-  // controlled, so using it as the write key let any peer in this room
-  // overwrite — and wipe the contents of — a DIFFERENT local trip.
-  const ownerTrip = await db.trips
-    .where('p2pRoomId')
-    .equals(roomId)
-    .first();
-
-  if (ownerTrip && ownerTrip.id !== claimedId) {
+  if (claimedId !== tripId) {
     console.warn(
-      '[yjs] refusing remote update: doc claims trip',
+      '[yjs] refusing update: doc claims trip %s but is bound to %s',
       claimedId,
-      'but room',
-      roomId,
-      'belongs to',
-      ownerTrip.id,
+      tripId,
     );
     return null;
   }
+
+  const ownerTrip = await db.trips.get(tripId);
 
   // A document written by an older build keeps its collections in `Y.Array`s,
   // so every `…ById` map reads as legitimately empty. Projecting that would
@@ -266,17 +254,10 @@ export async function syncDocToDexie(
     return null;
   }
 
-  const nextTrip = buildTripRecord(
-    doc,
-    roomId,
-    ownerTrip ?? (await db.trips.get(claimedId as TripId)),
-    encryptionKey,
-  );
+  const nextTrip = buildTripRecord(doc, tripId, ownerTrip);
   if (!nextTrip) {
     return null;
   }
-
-  const tripId = nextTrip.id;
 
   try {
     await db.transaction(

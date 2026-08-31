@@ -14,7 +14,6 @@ import {
   type ReactElement,
   memo,
   useCallback,
-  useEffect,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -33,8 +32,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { useTripContext } from '@/contexts/TripContext';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
 import { useTripShareLink } from '../hooks/useTripShareLink';
-import { ensureTripP2pCredentials } from '@/lib/yjs';
-import type { Trip, TripId } from '@/types';
+import type { Trip } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -53,14 +51,6 @@ export interface ShareDialogProps {
    * `currentTrip` (useful when no trip is selected in context).
    */
   readonly trip?: Trip;
-  /** Called once the trip has usable P2P credentials and can be kept online elsewhere. */
-  readonly onSyncReady?: (sync: ShareDialogSyncState) => void;
-}
-
-export interface ShareDialogSyncState {
-  readonly tripId: TripId;
-  readonly roomId: string;
-  readonly encryptionKey: string;
 }
 
 // ============================================================================
@@ -74,71 +64,26 @@ const ShareDialog = memo(function ShareDialog({
   open,
   onOpenChange,
   trip: tripProp,
-  onSyncReady,
 }: ShareDialogProps): ReactElement {
   const { t } = useTranslation();
   const { currentTrip } = useTripContext();
   const effectiveTrip = tripProp ?? currentTrip ?? undefined;
   const hasTrip = Boolean(effectiveTrip);
 
-  const [p2pUrl, setP2pUrl] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
 
   const { state: linkState } = useTripShareLink(effectiveTrip, open);
 
   /**
-   * The account-backed invite when there is one, the peer-to-peer link when
-   * this build has no server at all.
+   * The invite link, or nothing.
    *
-   * An invite works between two phones on different networks and can be
-   * withdrawn; the P2P link does neither, so it is a fallback rather than a
-   * choice.
+   * There is no peer-to-peer fallback any more: the WebRTC transport is gone,
+   * so a link that is not backed by an account has nothing to sync through.
+   * `linkState` reports why when there is no link.
    */
-  const shareUrl = linkState.kind === 'invite' ? linkState.url : p2pUrl;
-
-  // Generate or retrieve the P2P share URL when dialog opens
-  useEffect(() => {
-    if (!open || !effectiveTrip) {
-      setP2pUrl(null);
-      setCopied(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function ensureP2PCredentials() {
-      setIsGenerating(true);
-      try {
-        const creds = await ensureTripP2pCredentials(effectiveTrip!.id as TripId);
-        if (!creds || cancelled) {
-          return;
-        }
-
-        const origin = window.location.origin;
-        const base = import.meta.env.BASE_URL ?? '/';
-        const url = `${origin}${base}trip/${creds.roomId}#${creds.encryptionKey}`;
-        setP2pUrl(url);
-        onSyncReady?.({
-          tripId: effectiveTrip!.id as TripId,
-          roomId: creds.roomId,
-          encryptionKey: creds.encryptionKey,
-        });
-      } catch (err) {
-        console.error('[ShareDialog] Failed to generate P2P credentials:', err);
-      } finally {
-        if (!cancelled) {
-          setIsGenerating(false);
-        }
-      }
-    }
-
-    ensureP2PCredentials();
-    return () => {
-      cancelled = true;
-    };
-  }, [onSyncReady, open, effectiveTrip]);
+  const shareUrl = linkState.kind === 'invite' ? linkState.url : null;
+  const isGenerating = linkState.kind === 'loading';
 
   const handleCopy = useCallback(async () => {
     if (!shareUrl) return;

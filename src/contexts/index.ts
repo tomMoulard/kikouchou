@@ -93,12 +93,4 @@ export {
   type ActivityContextValue,
 } from './ActivityContext';
 
-// ============================================================================
-// Sync presence (Yjs awareness count for Layout)
-// ============================================================================
 
-export {
-  SyncPresenceProvider,
-  useSyncPresence,
-  type SyncPresenceContextValue,
-} from './SyncPresenceContext';

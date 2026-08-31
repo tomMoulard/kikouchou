@@ -56,7 +56,6 @@ import { toLocalISODateString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
 import type { Trip } from '@/types';
 
-import { P2PSyncPresence } from './P2PSyncPresence';
 import { SyncStatusBadge } from './SyncStatusBadge';
 
 // ============================================================================
@@ -232,7 +231,6 @@ const Header = memo(function Header({
 
       <div className="ml-auto flex min-w-0 max-w-full items-center gap-3">
         <div className="shrink-0 md:hidden">
-          <P2PSyncPresence />
           <SyncStatusBadge />
         </div>
         <span className="text-sm text-muted-foreground truncate max-w-[120px] sm:max-w-[200px]">
@@ -690,7 +688,6 @@ const DesktopSidebar = memo(function DesktopSidebar({
       {!trip && <div className="flex-1" />}
 
       {/* Yjs / P2P online count — desktop sidebar only when others are online (mobile: header above) */}
-      <P2PSyncPresence collapsed={isCollapsed} layout="sidebar" />
       <SyncStatusBadge collapsed={isCollapsed} layout="sidebar" />
 
       {/* AI Assistant & Settings - always at bottom */}

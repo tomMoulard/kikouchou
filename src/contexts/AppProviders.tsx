@@ -13,7 +13,6 @@ import { PersonProvider } from '@/contexts/PersonContext';
 import { AssignmentProvider } from '@/contexts/AssignmentContext';
 import { TransportProvider } from '@/contexts/TransportContext';
 import { ActivityProvider } from '@/contexts/ActivityContext';
-import { SyncPresenceProvider } from '@/contexts/SyncPresenceContext';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import { YjsTripSync } from '@/lib/yjs/YjsTripSync';
 
@@ -46,6 +45,9 @@ interface AppProvidersProps {
  * 4. AssignmentProvider - Manages room assignments (depends on TripProvider)
  * 5. TransportProvider - Manages transports (depends on TripProvider)
  * 6. ActivityProvider - Manages the shared activity agenda (depends on TripProvider)
+ *
+ * The WebRTC awareness provider that used to sit here is gone with the
+ * transport; sync state now comes from SupabaseTripSync inside YjsTripSync.
  *
  * @remarks
  * This nesting order ensures that:
@@ -100,9 +102,7 @@ export function AppProviders({ children }: AppProvidersProps): ReactElement {
             <AssignmentProvider>
               <TransportProvider>
                 <ActivityProvider>
-                  <SyncPresenceProvider>
-                    <YjsTripSync>{children}</YjsTripSync>
-                  </SyncPresenceProvider>
+                  <YjsTripSync>{children}</YjsTripSync>
                 </ActivityProvider>
               </TransportProvider>
             </AssignmentProvider>

@@ -22,9 +22,6 @@ interface ImportMetaEnv {
    */
   readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;
 
-  /** Legacy y-webrtc signaling relay. Retired in Phase 8 of the sync migration. */
-  readonly VITE_SIGNALING_URL?: string;
-
   /** Version string shown in Settings; set by CI from the ref and SHA. */
   readonly VITE_APP_VERSION?: string;
 }

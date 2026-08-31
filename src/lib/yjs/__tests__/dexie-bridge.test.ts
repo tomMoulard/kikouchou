@@ -1,9 +1,15 @@
 /**
  * dexie-bridge trust-boundary tests
  *
- * The bridge writes remote-peer content into IndexedDB, so it is the app's
- * main untrusted-input boundary. These tests pin the invariants that a peer
- * must not be able to break.
+ * The bridge writes remote content into IndexedDB, so it is the app's main
+ * untrusted-input boundary. These pin the invariants a peer must not be able to
+ * break.
+ *
+ * The boundary moved with the WebRTC retirement but did not weaken. It used to
+ * resolve which trip a document belonged to by looking up its `p2pRoomId`; now
+ * the caller passes the trip id it already holds from local state, and `meta.id`
+ * remains a claim to verify rather than an address to write to. Same rule, one
+ * less indirection: never use a remote-supplied id as a write key.
  *
  * @module lib/yjs/__tests__/dexie-bridge.test
  */
@@ -56,9 +62,10 @@ describe('syncDocToDexie — trust boundary', () => {
       startDate: isoDate('2024-08-01'),
       endDate: isoDate('2024-08-05'),
     });
-    await db.trips.update(shared.id, { p2pRoomId: 'room-shared' });
 
-    // A peer in room-shared claims to be the victim's trip.
+    // A document bound to `shared` claims to be the victim's trip. Trusting
+    // meta.id as the write key let a peer overwrite — and wipe — an unrelated
+    // local trip.
     const hostile = makeDoc({
       id: victim.id,
       name: 'Pwned',
@@ -66,21 +73,19 @@ describe('syncDocToDexie — trust boundary', () => {
       endDate: '2024-07-20',
     });
 
-    const result = await syncDocToDexie(hostile, 'room-shared');
+    const result = await syncDocToDexie(hostile, shared.id);
 
     expect(result).toBeNull();
     const stored = await db.trips.get(victim.id);
     expect(stored?.name).toBe('My private trip');
-    expect(stored?.p2pRoomId).toBeUndefined();
   });
 
-  it('accepts a doc for the trip the room actually belongs to', async () => {
+  it('accepts a doc for the trip it is bound to', async () => {
     const trip = await createTrip({
       name: 'Shared trip',
       startDate: isoDate('2024-08-01'),
       endDate: isoDate('2024-08-05'),
     });
-    await db.trips.update(trip.id, { p2pRoomId: 'room-ok' });
 
     const doc = makeDoc({
       id: trip.id,
@@ -89,7 +94,7 @@ describe('syncDocToDexie — trust boundary', () => {
       endDate: '2024-08-05',
     });
 
-    const result = await syncDocToDexie(doc, 'room-ok');
+    const result = await syncDocToDexie(doc, trip.id);
 
     expect(result).toBe(trip.id);
     expect((await db.trips.get(trip.id))?.name).toBe('Renamed by peer');
@@ -106,7 +111,6 @@ describe('syncDocToDexie — trust boundary', () => {
       startDate: isoDate('2024-08-01'),
       endDate: isoDate('2024-08-05'),
     });
-    await db.trips.update(trip.id, { p2pRoomId: 'room-share' });
     const originalShareId = (await db.trips.get(trip.id))?.shareId;
 
     // shareId is a UNIQUE index: adopting a colliding value would abort the
@@ -119,48 +123,54 @@ describe('syncDocToDexie — trust boundary', () => {
       endDate: '2024-08-05',
     });
 
-    await expect(syncDocToDexie(doc, 'room-share')).resolves.toBe(trip.id);
+    await expect(syncDocToDexie(doc, trip.id)).resolves.toBe(trip.id);
     expect((await db.trips.get(trip.id))?.shareId).toBe(originalShareId);
   });
 
-  it('does not derive the encryption key from the page URL', async () => {
+  it('never adopts a remoteTripId supplied by a peer', async () => {
     const trip = await createTrip({
       name: 'Shared trip',
       startDate: isoDate('2024-08-01'),
       endDate: isoDate('2024-08-05'),
     });
-    await db.trips.update(trip.id, {
-      p2pRoomId: 'room-key',
-      p2pEncryptionKey: 'the-real-key',
-    });
+    await db.trips.update(trip.id, { remoteTripId: 'the-real-server-row' });
 
-    // The a11y skip link puts '#main-content' here in normal use.
-    window.location.hash = '#main-content';
-
+    // remoteTripId decides which server row this device reads and writes. A peer
+    // that could set it would redirect this trip's whole sync elsewhere.
     const doc = makeDoc({
       id: trip.id,
+      remoteTripId: 'attacker-controlled-row',
       name: 'Shared trip',
       startDate: '2024-08-01',
       endDate: '2024-08-05',
     });
-    await syncDocToDexie(doc, 'room-key');
 
-    expect((await db.trips.get(trip.id))?.p2pEncryptionKey).toBe('the-real-key');
-    window.location.hash = '';
+    await syncDocToDexie(doc, trip.id);
+
+    expect((await db.trips.get(trip.id))?.remoteTripId).toBe('the-real-server-row');
   });
 
-  it('stores an explicitly supplied key on first join', async () => {
+  it('does not read anything from the page URL', async () => {
+    const trip = await createTrip({
+      name: 'Shared trip',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+
+    // The a11y skip link puts '#main-content' here in normal use. Reading the
+    // fragment inside lib/ once let that overwrite a trip's credential.
+    window.location.hash = '#main-content';
+
     const doc = makeDoc({
-      id: 'brand-new-trip' as TripId,
-      name: 'Invited trip',
+      id: trip.id,
+      name: 'Renamed',
       startDate: '2024-08-01',
       endDate: '2024-08-05',
     });
+    await syncDocToDexie(doc, trip.id);
 
-    await syncDocToDexie(doc, 'room-new', 'key-from-share-link');
-
-    const stored = await db.trips.get('brand-new-trip' as TripId);
-    expect(stored?.p2pEncryptionKey).toBe('key-from-share-link');
+    expect((await db.trips.get(trip.id))?.name).toBe('Renamed');
+    window.location.hash = '';
   });
 
   it('refuses a doc from a peer on the older array-based schema', async () => {
@@ -169,7 +179,6 @@ describe('syncDocToDexie — trust boundary', () => {
       startDate: isoDate('2024-07-15'),
       endDate: isoDate('2024-07-20'),
     });
-    await db.trips.update(trip.id, { p2pRoomId: 'room-legacy' });
     await db.persons.add({
       id: 'keep-me' as Person['id'],
       tripId: trip.id,
@@ -187,7 +196,7 @@ describe('syncDocToDexie — trust boundary', () => {
       endDate: '2024-07-20',
     });
 
-    await expect(syncDocToDexie(legacy, 'room-legacy')).resolves.toBeNull();
+    await expect(syncDocToDexie(legacy, trip.id)).resolves.toBeNull();
     expect(await db.persons.where('tripId').equals(trip.id).count()).toBe(1);
   });
 
@@ -196,6 +205,16 @@ describe('syncDocToDexie — trust boundary', () => {
 
     // The caller invokes this as a bare `void`, so a rejection here would be an
     // unhandled rejection on every remote update.
-    await expect(syncDocToDexie(doc, 'room-bad')).resolves.toBeNull();
+    await expect(
+      syncDocToDexie(doc, 'some-trip' as TripId),
+    ).resolves.toBeNull();
+  });
+
+  it('ignores a doc with no meta.id at all', async () => {
+    const doc = makeDoc({ name: 'no id' });
+
+    await expect(
+      syncDocToDexie(doc, 'some-trip' as TripId),
+    ).resolves.toBeNull();
   });
 });

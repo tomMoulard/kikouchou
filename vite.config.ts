@@ -64,11 +64,10 @@ function manualChunks(id: string): string | undefined {
     return 'vendor-supabase'
   }
 
-  // Yjs CRDT + sync protocols — P2P sync layer
+  // Yjs CRDT — the document model and its local persistence. The y-webrtc and
+  // simple-peer members of this chunk went with the transport.
   if (
     id.includes('node_modules/yjs') ||
-    id.includes('node_modules/y-webrtc') ||
-    id.includes('node_modules/simple-peer') ||
     id.includes('y-protocols') ||
     id.includes('lib0')
   ) {

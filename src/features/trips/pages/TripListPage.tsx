@@ -19,14 +19,11 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import {
   ImportTripQrDialog,
   ShareDialog,
-  type ShareDialogSyncState,
 } from '@/features/sharing';
 import { useTripContext } from '@/contexts/TripContext';
 import { RemoteTripsSection } from '../components/RemoteTripsSection';
-import { TripYjsSyncBinding, resolveTripPresenceProfile } from '@/lib/yjs';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/db/database';
-import { useLiveQuery } from 'dexie-react-hooks';
 import type { Person, Trip, TripId } from '@/types';
 import { TripCard } from '../components/TripCard';
 import { TripsLocationMap } from '../components/TripsLocationMap';
@@ -56,7 +53,7 @@ const MAP_VIEW_HEIGHT = 520;
 const TripListPage = memo(function TripListPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { trips, currentTrip, isLoading, error, setCurrentTrip, checkConnection } =
+  const { trips, isLoading, error, setCurrentTrip, checkConnection } =
     useTripContext();
 
   // Track if we're currently navigating to prevent double-clicks
@@ -89,27 +86,9 @@ const TripListPage = memo(function TripListPage() {
   const [importQrOpen, setImportQrOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharedTripId, setSharedTripId] = useState<TripId | null>(null);
-  const [sharedTripSyncSession, setSharedTripSyncSession] = useState<ShareDialogSyncState | null>(
-    null,
-  );
   const sharedTrip = useMemo(
     () => trips.find((trip) => trip.id === sharedTripId) ?? null,
     [sharedTripId, trips],
-  );
-  const activeSharedTripSyncSession = useMemo<ShareDialogSyncState | null>(() => {
-    if (sharedTrip?.p2pRoomId && sharedTrip?.p2pEncryptionKey) {
-      return {
-        tripId: sharedTrip.id,
-        roomId: sharedTrip.p2pRoomId,
-        encryptionKey: sharedTrip.p2pEncryptionKey,
-      };
-    }
-
-    return sharedTripSyncSession;
-  }, [sharedTrip, sharedTripSyncSession]);
-  const sharedTripPresence = useLiveQuery(
-    async () => (sharedTrip ? resolveTripPresenceProfile(sharedTrip) : null),
-    [sharedTrip?.id, sharedTrip?.shareId, sharedTrip?.updatedAt],
   );
 
   // Persons per trip (map of tripId -> persons)
@@ -215,15 +194,6 @@ const TripListPage = memo(function TripListPage() {
 
   const handleShareTrip = useCallback((trip: Trip) => {
     setSharedTripId(trip.id);
-    setSharedTripSyncSession(
-      trip.p2pRoomId && trip.p2pEncryptionKey
-        ? {
-            tripId: trip.id,
-            roomId: trip.p2pRoomId,
-            encryptionKey: trip.p2pEncryptionKey,
-          }
-        : null,
-    );
     setShareDialogOpen(true);
   }, []);
 
@@ -231,9 +201,6 @@ const TripListPage = memo(function TripListPage() {
     setShareDialogOpen(open);
   }, []);
 
-  const handleShareSyncReady = useCallback((sync: ShareDialogSyncState) => {
-    setSharedTripSyncSession(sync);
-  }, []);
 
   const headerAction = useMemo(
     () => (
@@ -257,20 +224,14 @@ const TripListPage = memo(function TripListPage() {
     [handleCreateClick, openImportQr, t],
   );
 
-  const currentTripOwnsSharedSync =
-    currentTrip?.id === activeSharedTripSyncSession?.tripId &&
-    Boolean(currentTrip?.p2pRoomId && currentTrip?.p2pEncryptionKey);
-
-  const sharedTripSync =
-    activeSharedTripSyncSession && !currentTripOwnsSharedSync ? (
-      <TripYjsSyncBinding
-        tripId={activeSharedTripSyncSession.tripId}
-        roomId={activeSharedTripSyncSession.roomId}
-        encryptionKey={activeSharedTripSyncSession.encryptionKey}
-        userName={sharedTripPresence?.name}
-        userColor={sharedTripPresence?.color}
-      />
-    ) : null;
+  /**
+   * Nothing to keep online any more.
+   *
+   * A second Yjs binding used to be mounted here so a trip stayed connected
+   * while its Share dialog was open — WebRTC needed both peers present at the
+   * same moment. The server holds the log now, so the other side can arrive
+   * whenever it likes and there is nothing to hold open.
+   */
 
   // ============================================================================
   // Render: Loading State
@@ -286,7 +247,6 @@ const TripListPage = memo(function TripListPage() {
           </div>
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
-        {sharedTripSync}
       </>
     );
   }
@@ -305,7 +265,6 @@ const TripListPage = memo(function TripListPage() {
           </div>
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
-        {sharedTripSync}
       </>
     );
   }
@@ -336,7 +295,6 @@ const TripListPage = memo(function TripListPage() {
           <RemoteTripsSection localTripCount={0} />
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
-        {sharedTripSync}
       </>
     );
   }
@@ -421,12 +379,10 @@ const TripListPage = memo(function TripListPage() {
         </Button>
       </div>
       <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
-      {sharedTripSync}
       <ShareDialog
         open={shareDialogOpen}
         onOpenChange={handleShareDialogOpenChange}
         trip={sharedTrip ?? undefined}
-        onSyncReady={handleShareSyncReady}
       />
     </>
   );

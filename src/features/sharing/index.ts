@@ -19,7 +19,7 @@
 // ============================================================================
 
 export { ShareDialog } from './components/ShareDialog';
-export type { ShareDialogProps, ShareDialogSyncState } from './components/ShareDialog';
+export type { ShareDialogProps } from './components/ShareDialog';
 export { TripSyncExportPanel } from './components/TripSyncExportPanel';
 export type { TripSyncExportPanelProps } from './components/TripSyncExportPanel';
 export { ImportTripQrDialog } from './components/ImportTripQrDialog';
@@ -41,7 +41,6 @@ export { RoomSelectionStepPage } from './pages/RoomSelectionStepPage';
 export { TransportEntryStepPage } from './pages/TransportEntryStepPage';
 export { SummaryStepPage } from './pages/SummaryStepPage';
 export { TripSyncPage } from './pages/TripSyncPage';
-export { P2PTripPage } from './pages/P2PTripPage';
 
 // ============================================================================
 // Routes

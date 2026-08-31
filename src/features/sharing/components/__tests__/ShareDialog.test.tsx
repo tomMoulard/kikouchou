@@ -1,20 +1,26 @@
 /**
  * @fileoverview Tests for ShareDialog.
+ *
+ * Rewritten with the WebRTC retirement. The previous tests were entirely about
+ * minting `p2pRoomId` / `p2pEncryptionKey` and rendering a
+ * `/trip/:roomId#key` URL — none of which exists any more. What the dialog does
+ * now is ask `useTripShareLink` for a link and render whichever of its three
+ * outcomes applies, so that is what is asserted.
+ *
  * @module features/sharing/components/__tests__/ShareDialog.test
  */
 
 import type { ReactElement } from 'react';
-
-import { AuthProvider } from '@/features/auth/AuthContext';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
 import { ShareDialog } from '../ShareDialog';
+import { useTripShareLink } from '../../hooks/useTripShareLink';
 import type { ISODateString, ShareId, Trip, TripId } from '@/types';
 
-const mockUpdateTrip = vi.fn();
-const mockWriteText = vi.fn();
-const originalClipboard = window.navigator.clipboard;
+// ============================================================================
+// Test doubles
+// ============================================================================
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -23,29 +29,21 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('nanoid', () => ({
-  nanoid: vi
-    .fn()
-    .mockImplementationOnce(() => 'room-id-1234')
-    .mockImplementationOnce(() => 'secret-key-abcdefghijkl'),
-}));
-
 vi.mock('@/contexts/TripContext', () => ({
-  useTripContext: () => ({
-    currentTrip: null,
-  }),
+  useTripContext: () => ({ currentTrip: null }),
 }));
 
-const mockGetTrip = vi.fn();
-
-vi.mock('@/lib/db/database', () => ({
-  db: {
-    trips: {
-      get: (...args: unknown[]) => mockGetTrip(...args),
-      update: (...args: unknown[]) => mockUpdateTrip(...args),
-    },
-  },
+vi.mock('../../hooks/useTripShareLink', () => ({
+  useTripShareLink: vi.fn(),
 }));
+
+// The sign-in dialog has its own tests; here it only needs to be identifiable.
+vi.mock('@/features/auth/components/SignInDialog', () => ({
+  SignInDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="sign-in-dialog" /> : null,
+}));
+
+const mockedUseTripShareLink = vi.mocked(useTripShareLink);
 
 const baseTrip: Trip = {
   id: 'trip-1' as TripId,
@@ -57,124 +55,90 @@ const baseTrip: Trip = {
   updatedAt: 1,
 };
 
-/**
- * ShareDialog now asks whether an account backend exists before deciding which
- * link to offer. The real provider answers that: the suite runs with the
- * Supabase env blanked (see vitest.config.ts), so `isAvailable` is false and the
- * dialog falls back to the peer-to-peer link — which is the behaviour these
- * tests are about. Wrapping exercises that decision rather than stubbing it.
- */
 function renderDialog(ui: ReactElement) {
-  return render(<AuthProvider>{ui}</AuthProvider>);
+  return render(ui);
 }
 
+beforeEach(() => {
+  mockedUseTripShareLink.mockReset();
+  mockedUseTripShareLink.mockReturnValue({
+    state: { kind: 'loading' },
+    refresh: vi.fn(),
+  });
+});
+
+// ============================================================================
+// Tests
+// ============================================================================
+
 describe('ShareDialog', () => {
-  const onSyncReady = vi.fn();
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockGetTrip.mockResolvedValue(baseTrip);
-    mockUpdateTrip.mockResolvedValue(undefined);
-    mockWriteText.mockResolvedValue(undefined);
-    Object.defineProperty(window.navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: mockWriteText },
+  it('renders the invite link and its QR code', async () => {
+    mockedUseTripShareLink.mockReturnValue({
+      state: {
+        kind: 'invite',
+        url: 'https://kikoushou.app/join/aBcDeFgHiJkL3456',
+        token: 'aBcDeFgHiJkL3456',
+      },
+      refresh: vi.fn(),
     });
-  });
 
-  afterEach(() => {
-    Object.defineProperty(window.navigator, 'clipboard', {
-      configurable: true,
-      value: originalClipboard,
-    });
-  });
-
-  it('generates missing room credentials, persists them, and renders the share URL', async () => {
-    renderDialog(
-      <ShareDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        trip={baseTrip}
-        onSyncReady={onSyncReady}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(mockUpdateTrip).toHaveBeenCalledWith(baseTrip.id, {
-        p2pRoomId: 'room-id-1234',
-        p2pEncryptionKey: 'secret-key-abcdefghijkl',
-      });
-    });
+    renderDialog(<ShareDialog open onOpenChange={vi.fn()} trip={baseTrip} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('share-url')).toHaveTextContent(
-        'http://localhost:3000/trip/room-id-1234#secret-key-abcdefghijkl',
+        'https://kikoushou.app/join/aBcDeFgHiJkL3456',
       );
-    });
-
-    expect(onSyncReady).toHaveBeenCalledWith({
-      tripId: baseTrip.id,
-      roomId: 'room-id-1234',
-      encryptionKey: 'secret-key-abcdefghijkl',
-    });
-    expect(
-      screen.getByText('Anyone with this link can view and edit this trip'),
-    ).toBeInTheDocument();
-  });
-
-  it('reuses existing credentials without regenerating them', async () => {
-    mockGetTrip.mockResolvedValue({
-      ...baseTrip,
-      p2pRoomId: 'existing-room',
-      p2pEncryptionKey: 'existing-secret',
-    });
-
-    renderDialog(
-      <ShareDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        onSyncReady={onSyncReady}
-        trip={{
-          ...baseTrip,
-          p2pRoomId: 'existing-room',
-          p2pEncryptionKey: 'existing-secret',
-        }}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('share-url')).toHaveTextContent(
-        'http://localhost:3000/trip/existing-room#existing-secret',
-      );
-    });
-
-    expect(mockUpdateTrip).not.toHaveBeenCalled();
-    expect(onSyncReady).toHaveBeenCalledWith({
-      tripId: baseTrip.id,
-      roomId: 'existing-room',
-      encryptionKey: 'existing-secret',
     });
   });
 
-  it('renders a copy action for the generated URL', async () => {
-    renderDialog(
-      <ShareDialog
-        open={true}
-        onOpenChange={vi.fn()}
-        trip={{
-          ...baseTrip,
-          p2pRoomId: 'existing-room',
-          p2pEncryptionKey: 'existing-secret',
-        }}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('share-url')).toBeInTheDocument();
+  it('offers sign-in rather than a link when there is no account', async () => {
+    mockedUseTripShareLink.mockReturnValue({
+      state: { kind: 'needs-account' },
+      refresh: vi.fn(),
     });
 
-    expect(
-      screen.getByRole('button', { name: 'Copy link' }),
-    ).toBeInTheDocument();
+    renderDialog(<ShareDialog open onOpenChange={vi.fn()} trip={baseTrip} />);
+
+    // Handing over a link that syncs with nobody would be worse than saying an
+    // account is needed. There is no peer-to-peer fallback to offer any more.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('share-url')).not.toBeInTheDocument();
+  });
+
+  it('surfaces an error instead of a broken link', async () => {
+    mockedUseTripShareLink.mockReturnValue({
+      state: { kind: 'error', message: 'This trip is no longer on this device.' },
+      refresh: vi.fn(),
+    });
+
+    renderDialog(<ShareDialog open onOpenChange={vi.fn()} trip={baseTrip} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'This trip is no longer on this device.',
+      );
+    });
+  });
+
+  it('shows a loading state while the link is being resolved', () => {
+    renderDialog(<ShareDialog open onOpenChange={vi.fn()} trip={baseTrip} />);
+
+    // Creating the server row and minting an invite are two round trips, so the
+    // wait is real and has to be visible.
+    expect(screen.queryByTestId('share-url')).not.toBeInTheDocument();
+  });
+
+  it('says so when no trip is selected', () => {
+    renderDialog(<ShareDialog open onOpenChange={vi.fn()} />);
+
+    expect(screen.getByText(/no trip selected/i)).toBeInTheDocument();
+  });
+
+  it('renders nothing when closed', () => {
+    renderDialog(<ShareDialog open={false} onOpenChange={vi.fn()} trip={baseTrip} />);
+
+    expect(screen.queryByTestId('share-dialog')).not.toBeInTheDocument();
   });
 });

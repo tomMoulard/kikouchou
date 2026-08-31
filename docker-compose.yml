@@ -16,23 +16,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
 
-  relay:
-    build:
-      context: ./relay
-      platforms:
-        - linux/amd64
-        - linux/arm64
-    image: tommoulard/kikoushou-relay:latest
-    expose:
-      - "4444"
-    restart: unless-stopped
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.relay.rule=Host(`kikoushou.cyprin.eu`)
-      - traefik.http.routers.relay.entrypoints=websecure
-      - traefik.http.routers.relay.tls.certresolver=letsencrypt
-      - traefik.http.services.relay.loadbalancer.server.port=4444
-
   app:
     build: .
     expose:
