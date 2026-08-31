@@ -693,6 +693,28 @@
     "initializingCachedLoader": "Initializing cached model…",
     "loadingCachedModelFiles": "Loading cached model files…"
   },
+  "auth": {
+    "account": {
+      "title": "Account",
+      "description": "Needed only to share a trip",
+      "notConfigured": "This build has no account backend, so trips stay on this device.",
+      "signedOut": "Sign in to share a trip and edit it together. Trips you keep to yourself need no account.",
+      "signInAction": "Sign in",
+      "signedInAs": "Signed in as",
+      "signOutAction": "Sign out"
+    },
+    "signIn": {
+      "title": "Create an account to share",
+      "description": "Your trip lives on this device today. An account lets the people you invite see it and edit it with you.",
+      "localDataKept": "Nothing you have already planned is lost — this trip is uploaded as it is.",
+      "offline": "You are offline. Signing in needs a connection — everything else keeps working without one.",
+      "withGoogle": "Continue with Google",
+      "notNow": "Not now"
+    },
+    "errors": {
+      "unavailable": "Sign-in is not configured in this build."
+    }
+  },
   "settings": {
     "title": "Settings",
     "description": "Manage your app preferences",

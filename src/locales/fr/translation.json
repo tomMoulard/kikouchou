@@ -693,6 +693,28 @@
     "initializingCachedLoader": "Initialisation du modèle en cache…",
     "loadingCachedModelFiles": "Chargement des fichiers du modèle depuis le cache…"
   },
+  "auth": {
+    "account": {
+      "title": "Compte",
+      "description": "Utile uniquement pour partager un séjour",
+      "notConfigured": "Cette version n'a pas de service de comptes : les séjours restent sur cet appareil.",
+      "signedOut": "Connectez-vous pour partager un séjour et le modifier à plusieurs. Un séjour gardé pour vous n'a besoin d'aucun compte.",
+      "signInAction": "Se connecter",
+      "signedInAs": "Connecté en tant que",
+      "signOutAction": "Se déconnecter"
+    },
+    "signIn": {
+      "title": "Créez un compte pour partager",
+      "description": "Votre séjour n'existe que sur cet appareil. Un compte permet aux personnes que vous invitez de le voir et de le modifier avec vous.",
+      "localDataKept": "Rien de ce que vous avez déjà préparé n'est perdu : le séjour est envoyé tel quel.",
+      "offline": "Vous êtes hors ligne. La connexion à un compte demande Internet ; tout le reste fonctionne sans.",
+      "withGoogle": "Continuer avec Google",
+      "notNow": "Plus tard"
+    },
+    "errors": {
+      "unavailable": "La connexion n'est pas configurée dans cette version."
+    }
+  },
   "settings": {
     "title": "Paramètres",
     "description": "Gérez vos préférences",

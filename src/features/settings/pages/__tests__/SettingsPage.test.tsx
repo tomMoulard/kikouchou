@@ -72,6 +72,12 @@ vi.mock('@/features/trips/components/TripForm', () => ({
   ),
 }));
 
+// Stub the account panel: it needs AuthProvider, which withProviders:false does
+// not supply, and its states are covered in features/auth/__tests__.
+vi.mock('@/features/auth/components/AccountSection', () => ({
+  AccountSection: () => <div data-testid="account-section" />,
+}));
+
 // Mock ConfirmDialog to capture confirm callback and onOpenChange
 vi.mock('@/components/shared/ConfirmDialog', () => ({
   ConfirmDialog: ({ open, onConfirm, onOpenChange }: { open: boolean; onConfirm: () => Promise<void>; onOpenChange?: (o: boolean) => void }) =>
@@ -103,9 +109,15 @@ describe('SettingsPage', () => {
   it('renders settings page with all sections', () => {
     render(<SettingsPage />, { withProviders: false });
     expect(screen.getByText('settings.title')).toBeInTheDocument();
+    expect(screen.getByText('auth.account.title')).toBeInTheDocument();
     expect(screen.getByText('settings.language')).toBeInTheDocument();
     expect(screen.getByText('settings.about')).toBeInTheDocument();
     expect(screen.getByText('settings.dataManagement')).toBeInTheDocument();
+  });
+
+  it('mounts the account panel', () => {
+    render(<SettingsPage />, { withProviders: false });
+    expect(screen.getByTestId('account-section')).toBeInTheDocument();
   });
 
   it('renders current trip section when trip is selected', () => {
