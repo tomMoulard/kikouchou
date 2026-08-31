@@ -31,6 +31,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { useTripContext } from '@/contexts/TripContext';
+import { SignInDialog } from '@/features/auth/components/SignInDialog';
+import { useTripShareLink } from '../hooks/useTripShareLink';
 import { ensureTripP2pCredentials } from '@/lib/yjs';
 import type { Trip, TripId } from '@/types';
 
@@ -79,14 +81,27 @@ const ShareDialog = memo(function ShareDialog({
   const effectiveTrip = tripProp ?? currentTrip ?? undefined;
   const hasTrip = Boolean(effectiveTrip);
 
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [p2pUrl, setP2pUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
+
+  const { state: linkState } = useTripShareLink(effectiveTrip, open);
+
+  /**
+   * The account-backed invite when there is one, the peer-to-peer link when
+   * this build has no server at all.
+   *
+   * An invite works between two phones on different networks and can be
+   * withdrawn; the P2P link does neither, so it is a fallback rather than a
+   * choice.
+   */
+  const shareUrl = linkState.kind === 'invite' ? linkState.url : p2pUrl;
 
   // Generate or retrieve the P2P share URL when dialog opens
   useEffect(() => {
     if (!open || !effectiveTrip) {
-      setShareUrl(null);
+      setP2pUrl(null);
       setCopied(false);
       return;
     }
@@ -104,7 +119,7 @@ const ShareDialog = memo(function ShareDialog({
         const origin = window.location.origin;
         const base = import.meta.env.BASE_URL ?? '/';
         const url = `${origin}${base}trip/${creds.roomId}#${creds.encryptionKey}`;
-        setShareUrl(url);
+        setP2pUrl(url);
         onSyncReady?.({
           tripId: effectiveTrip!.id as TripId,
           roomId: creds.roomId,
@@ -194,7 +209,33 @@ const ShareDialog = memo(function ShareDialog({
 
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden [-webkit-overflow-scrolling:touch]">
           <div className="space-y-6 px-0 py-2">
-            {isGenerating || !shareUrl ? (
+            {linkState.kind === 'needs-account' ? (
+              /* Handing over a link that syncs with nobody would be worse than
+                 saying an account is needed. */
+              <div className="flex flex-col gap-4">
+                <p className="text-sm text-muted-foreground">
+                  {t(
+                    'sharing.p2p.needsAccount',
+                    'Sharing needs an account, so the people you invite keep seeing your changes.',
+                  )}
+                </p>
+                <Button onClick={() => setSignInOpen(true)}>
+                  {t('auth.account.signInAction', 'Sign in')}
+                </Button>
+                <SignInDialog
+                  open={signInOpen}
+                  onOpenChange={setSignInOpen}
+                  reason={t(
+                    'sharing.p2p.signInReason',
+                    'Sign in to share this trip and edit it together.',
+                  )}
+                />
+              </div>
+            ) : linkState.kind === 'error' ? (
+              <p className="text-sm text-destructive" role="alert">
+                {linkState.message}
+              </p>
+            ) : isGenerating || !shareUrl ? (
               <LoadingState variant="inline" />
             ) : (
               <>

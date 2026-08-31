@@ -3,6 +3,9 @@
  * @module features/sharing/components/__tests__/ShareDialog.test
  */
 
+import type { ReactElement } from 'react';
+
+import { AuthProvider } from '@/features/auth/AuthContext';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
@@ -54,6 +57,17 @@ const baseTrip: Trip = {
   updatedAt: 1,
 };
 
+/**
+ * ShareDialog now asks whether an account backend exists before deciding which
+ * link to offer. The real provider answers that: the suite runs with the
+ * Supabase env blanked (see vitest.config.ts), so `isAvailable` is false and the
+ * dialog falls back to the peer-to-peer link — which is the behaviour these
+ * tests are about. Wrapping exercises that decision rather than stubbing it.
+ */
+function renderDialog(ui: ReactElement) {
+  return render(<AuthProvider>{ui}</AuthProvider>);
+}
+
 describe('ShareDialog', () => {
   const onSyncReady = vi.fn();
 
@@ -76,7 +90,7 @@ describe('ShareDialog', () => {
   });
 
   it('generates missing room credentials, persists them, and renders the share URL', async () => {
-    render(
+    renderDialog(
       <ShareDialog
         open={true}
         onOpenChange={vi.fn()}
@@ -115,7 +129,7 @@ describe('ShareDialog', () => {
       p2pEncryptionKey: 'existing-secret',
     });
 
-    render(
+    renderDialog(
       <ShareDialog
         open={true}
         onOpenChange={vi.fn()}
@@ -143,7 +157,7 @@ describe('ShareDialog', () => {
   });
 
   it('renders a copy action for the generated URL', async () => {
-    render(
+    renderDialog(
       <ShareDialog
         open={true}
         onOpenChange={vi.fn()}
