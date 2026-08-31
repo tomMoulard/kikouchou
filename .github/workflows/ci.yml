@@ -92,6 +92,38 @@ jobs:
   # ============================================================================
   # Unit Tests - Run Vitest unit tests
   # ============================================================================
+  # ============================================================================
+  # Database Tests - RLS policies and invite lifecycle against a real Postgres
+  # ============================================================================
+  db-test:
+    name: Database Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # RLS is the only thing protecting this data — the publishable key ships
+      # inside the client bundle. Policies that nobody exercises rot silently,
+      # and the failure mode is a data leak rather than a red build, so these
+      # run on every push.
+      - name: Start Supabase
+        run: bunx supabase start
+
+      - name: Run pgTAP tests
+        run: bunx supabase test db
+
+      - name: Stop Supabase
+        if: always()
+        run: bunx supabase stop --no-backup
+
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
