@@ -8,7 +8,7 @@
 import { type ReactElement, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Globe, Info, Luggage, Trash2 } from 'lucide-react';
+import { Globe, Info, Luggage, Trash2, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { useOfflineAwareToast } from '@/hooks';
 
@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { AccountSection } from '@/features/auth/components/AccountSection';
 import { TripForm } from '@/features/trips/components/TripForm';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db';
@@ -96,6 +97,38 @@ const LanguageSelector = memo(function LanguageSelector(): ReactElement {
             ))}
           </SelectContent>
         </Select>
+      </CardContent>
+    </Card>
+  );
+});
+
+/**
+ * Account card.
+ *
+ * Placed above Language because it is the only section whose state changes what
+ * the rest of the app can do — sharing a trip is gated on it. Everything else
+ * here is a preference.
+ */
+const AccountCard = memo(function AccountCard(): ReactElement {
+  const { t } = useTranslation();
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
+            <UserRound className="size-5 text-primary" aria-hidden="true" />
+          </div>
+          <div>
+            <CardTitle className="text-base">{t('auth.account.title', 'Account')}</CardTitle>
+            <CardDescription>
+              {t('auth.account.description', 'Needed only to share a trip')}
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <AccountSection />
       </CardContent>
     </Card>
   );
@@ -359,6 +392,7 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement | nu
  * Settings page component.
  *
  * Features:
+ * - Account: sign in with Google, sign out
  * - Language selector (French/English)
  * - App version display
  * - Clear data option with confirmation
@@ -388,6 +422,9 @@ function SettingsPageComponent(): ReactElement {
       <div className="mt-6 space-y-6">
         {/* Current Trip Section - only shown when a trip is selected */}
         <CurrentTripSection />
+
+        {/* Account Section */}
+        <AccountCard />
 
         {/* Language Section */}
         <LanguageSelector />

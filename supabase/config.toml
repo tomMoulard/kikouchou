@@ -221,8 +221,12 @@ web3 = 30
 # secret = ""
 
 [auth.email]
-# Allow/disallow new user signups via email to your project.
-enable_signup = true
+# Google is the only way in for now. Email signup stays off so there is exactly
+# one authentication path to reason about rather than a second one nobody tested
+# — and because the built-in sender is capped at a couple of messages an hour,
+# so an email flow would be broken in practice anyway. Turning magic link on
+# later means flipping this to true and configuring [auth.email.smtp].
+enable_signup = false
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true

@@ -14,6 +14,7 @@ import { AssignmentProvider } from '@/contexts/AssignmentContext';
 import { TransportProvider } from '@/contexts/TransportContext';
 import { ActivityProvider } from '@/contexts/ActivityContext';
 import { SyncPresenceProvider } from '@/contexts/SyncPresenceContext';
+import { AuthProvider } from '@/features/auth/AuthContext';
 import { YjsTripSync } from '@/lib/yjs/YjsTripSync';
 
 // ============================================================================
@@ -36,6 +37,9 @@ interface AppProvidersProps {
  * Composite provider that combines all application context providers in the correct nesting order.
  *
  * Provider nesting order (outermost to innermost):
+ * 0. AuthProvider - Session state. Outermost because it is not trip-scoped and
+ *    must resolve whether or not a trip exists. It never gates rendering: a
+ *    trip is created and edited with no account and no network.
  * 1. TripProvider - Manages current trip selection and trip list
  * 2. RoomProvider - Manages rooms for the current trip (depends on TripProvider)
  * 3. PersonProvider - Manages persons for the current trip (depends on TripProvider)
@@ -89,20 +93,22 @@ interface AppProvidersProps {
  */
 export function AppProviders({ children }: AppProvidersProps): ReactElement {
   return (
-    <TripProvider>
-      <RoomProvider>
-        <PersonProvider>
-          <AssignmentProvider>
-            <TransportProvider>
-              <ActivityProvider>
-                <SyncPresenceProvider>
-                  <YjsTripSync>{children}</YjsTripSync>
-                </SyncPresenceProvider>
-              </ActivityProvider>
-            </TransportProvider>
-          </AssignmentProvider>
-        </PersonProvider>
-      </RoomProvider>
-    </TripProvider>
+    <AuthProvider>
+      <TripProvider>
+        <RoomProvider>
+          <PersonProvider>
+            <AssignmentProvider>
+              <TransportProvider>
+                <ActivityProvider>
+                  <SyncPresenceProvider>
+                    <YjsTripSync>{children}</YjsTripSync>
+                  </SyncPresenceProvider>
+                </ActivityProvider>
+              </TransportProvider>
+            </AssignmentProvider>
+          </PersonProvider>
+        </RoomProvider>
+      </TripProvider>
+    </AuthProvider>
   );
 }
