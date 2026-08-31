@@ -25,7 +25,7 @@ import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
 import { encodeUpdate } from '@/lib/sync/codec';
-import { readCursor } from '@/lib/sync/cursors';
+import { advanceCursor, readCursor } from '@/lib/sync/cursors';
 import * as outbox from '@/lib/sync/outbox';
 import {
   ORIGIN_REMOTE,
@@ -63,6 +63,8 @@ class FakeServer {
 
   insertCalls = 0;
   readCalls = 0;
+  snapshotMarkerReads = 0;
+  snapshotStateReads = 0;
   channelStatus: string | null = null;
 
   private realtimeHandler: RealtimeHandler | null = null;
@@ -97,13 +99,26 @@ class FakeServer {
       from: (table: string) => {
         if (table === 'trip_doc_snapshots') {
           return {
-            select: () => ({
+            // The provider reads `through_id` alone first, then the full state
+            // only if the snapshot is ahead — the state can be megabytes.
+            select: (columns: string) => ({
               eq: () => ({
                 maybeSingle: async () => {
                   if (this.failReads > 0) {
                     this.failReads -= 1;
                     return { data: null, error: { message: 'snapshot boom' } };
                   }
+                  if (this.snapshot === null) {
+                    return { data: null, error: null };
+                  }
+                  if (columns.trim() === 'through_id') {
+                    this.snapshotMarkerReads += 1;
+                    return {
+                      data: { through_id: this.snapshot.through_id },
+                      error: null,
+                    };
+                  }
+                  this.snapshotStateReads += 1;
                   return { data: this.snapshot, error: null };
                 },
               }),
@@ -369,6 +384,56 @@ describe('start — joining a trip that already exists', () => {
 
     expect(doc.getMap('guestsById').size).toBe(1200);
     expect(await readCursor(TRIP_ID)).toMatchObject({ lastSeenUpdateId: 1200 });
+  });
+
+  it('applies a snapshot that is ahead of the cursor, after compaction pruned rows', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+
+    // This device has read up to row 50.
+    await advanceCursor(TRIP_ID, 50);
+
+    // Compaction then folded rows 1..100 into a snapshot and deleted them, so
+    // the guests only exist inside the snapshot now. Row 101 arrived after.
+    const seed = new Y.Doc();
+    addGuest(seed, 'p1', 'Folded Alice');
+    addGuest(seed, 'p2', 'Folded Bob');
+    server.snapshot = {
+      state: encodeUpdate(Y.encodeStateAsUpdate(seed)),
+      through_id: 100,
+    };
+    server.nextId = 101;
+    addGuest(seed, 'p3', 'Later Carol');
+    server.rows.push({ id: 101, update: encodeUpdate(Y.encodeStateAsUpdate(seed)) });
+    server.nextId = 102;
+
+    await track(makeProvider(server, doc)).start();
+
+    // Without applying the snapshot, 51..100 would be lost forever — they exist
+    // nowhere else. Pulling `id > 50` alone would return only row 101.
+    expect(guestNames(doc)).toEqual(['Folded Alice', 'Folded Bob', 'Later Carol']);
+    expect((await readCursor(TRIP_ID)).lastSeenUpdateId).toBe(101);
+  });
+
+  it('reads the snapshot marker without downloading state it does not need', async () => {
+    const server = new FakeServer();
+    const seed = new Y.Doc();
+    addGuest(seed, 'p1', 'Alice');
+    server.snapshot = {
+      state: encodeUpdate(Y.encodeStateAsUpdate(seed)),
+      through_id: 5,
+    };
+    server.nextId = 6;
+
+    // Already past the snapshot.
+    await advanceCursor(TRIP_ID, 10);
+
+    await track(makeProvider(server, new Y.Doc())).start();
+
+    // The marker is cheap; the state can be megabytes, so it must not be
+    // fetched on every start once a device is caught up.
+    expect(server.snapshotMarkerReads).toBeGreaterThan(0);
+    expect(server.snapshotStateReads).toBe(0);
   });
 
   it('skips a row that will not decode rather than failing the batch', async () => {

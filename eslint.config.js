@@ -6,7 +6,16 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'coverage', 'playwright-report', 'test-results', 'src/gen']),
+  globalIgnores([
+    'dist',
+    'coverage',
+    'playwright-report',
+    'test-results',
+    'src/gen',
+    // Deno, not the browser: `Deno.*` globals and jsr:/npm: specifiers that this
+    // config's parser and globals cannot resolve. Deno has its own linter.
+    'supabase/functions',
+  ]),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

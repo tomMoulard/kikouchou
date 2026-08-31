@@ -253,11 +253,26 @@ export class SupabaseYjsProvider {
     try {
       const cursor = await readCursor(this.tripId);
 
-      if (cursor.lastSeenUpdateId === 0) {
+      // Whenever the snapshot is ahead of this device, not merely on a cold
+      // start.
+      //
+      // Compaction folds log rows into the snapshot and then deletes them. A
+      // device sitting at cursor 50 when rows 1..100 are folded and pruned would
+      // otherwise ask for `id > 50`, receive 101 onwards, and silently lose
+      // 51..100 forever — they exist only inside the snapshot it never fetched.
+      //
+      // The marker is read on its own first because the state itself can run to
+      // megabytes, and the common case is that it has nothing new to offer.
+      const snapshotThroughId = await this.fetchSnapshotThroughId();
+      if (
+        snapshotThroughId !== null &&
+        snapshotThroughId > cursor.lastSeenUpdateId
+      ) {
         await this.applySnapshot();
       }
 
-      let highestApplied = cursor.lastSeenUpdateId;
+      // Re-read: applySnapshot advances the cursor to the snapshot's through_id.
+      let highestApplied = (await readCursor(this.tripId)).lastSeenUpdateId;
       for (;;) {
         const rows = await this.fetchLogPage(highestApplied);
         if (rows.length === 0) {
@@ -286,6 +301,26 @@ export class SupabaseYjsProvider {
     } finally {
       this.pulling = false;
     }
+  }
+
+  /**
+   * The snapshot's `through_id`, without downloading the state.
+   *
+   * Null when no snapshot exists yet, which is the ordinary case until
+   * compaction has run for a trip.
+   */
+  private async fetchSnapshotThroughId(): Promise<number | null> {
+    const { data, error } = await this.client
+      .from('trip_doc_snapshots')
+      .select('through_id')
+      .eq('trip_id', this.remoteTripId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`snapshot marker read failed: ${error.message}`);
+    }
+    const throughId = (data as { through_id?: unknown } | null)?.through_id;
+    return typeof throughId === 'number' ? throughId : null;
   }
 
   private async applySnapshot(): Promise<void> {
