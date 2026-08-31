@@ -342,6 +342,19 @@ export interface Trip extends Identifiable, WithTimestamps {
    * Used as the y-webrtc password to encrypt all CRDT updates.
    */
   p2pEncryptionKey?: string;
+
+  /**
+   * Server-side `trips.id` once this trip has been uploaded.
+   *
+   * Absent means local-only, which is the normal state for a trip nobody has
+   * shared — not a pending action. Its presence is what makes the sync provider
+   * mount at all.
+   *
+   * Set once and never changed: the server row is keyed on
+   * `(owner_id, local_id)`, so re-uploading the same trip resolves to the same
+   * row rather than creating a second one.
+   */
+  remoteTripId?: string;
 }
 
 /**

@@ -12,7 +12,9 @@ import Dexie from 'dexie';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import { useTripContext } from '@/contexts/TripContext';
+import { useAuth } from '@/features/auth/AuthContext';
 import { db } from '@/lib/db/database';
+import { SupabaseTripSync } from '@/lib/sync/SupabaseTripSync';
 import type { Activity, Person, Room, RoomAssignment, Transport, TripId } from '@/types';
 
 import { ensureTripP2pCredentials } from './ensure-trip-p2p-credentials';
@@ -182,6 +184,11 @@ interface TripYjsSyncBindingProps {
   readonly userName?: string;
   readonly userColor?: string;
   readonly showPresence?: boolean;
+  /**
+   * Server `trips.id`. When set and the user is signed in, the trip syncs
+   * through the server and the WebRTC transport is left switched off.
+   */
+  readonly remoteTripId?: string;
   readonly children?: ReactNode;
 }
 
@@ -192,18 +199,29 @@ const TripYjsSyncBinding = memo(function TripYjsSyncBinding({
   userName,
   userColor,
   showPresence = false,
+  remoteTripId,
   children,
 }: TripYjsSyncBindingProps): ReactElement {
+  const { session } = useAuth();
+
+  // One transport at a time. Running both would still converge — Yjs does not
+  // care how an update arrived — but it would do every write twice and make the
+  // presence indicator mean two different things at once.
+  const serverSynced = remoteTripId !== undefined && session !== null;
+
   return (
     <YjsProvider
       roomId={roomId}
       encryptionKey={encryptionKey}
       userName={userName}
       userColor={userColor}
+      transport={serverSynced ? 'none' : 'webrtc'}
     >
       <YjsSyncObserver tripId={tripId} />
-      {showPresence ? <P2PSyncPresence /> : null}
-      {children}
+      {showPresence && !serverSynced ? <P2PSyncPresence /> : null}
+      <SupabaseTripSync tripId={tripId} remoteTripId={remoteTripId}>
+        {children}
+      </SupabaseTripSync>
     </YjsProvider>
   );
 });
@@ -261,6 +279,7 @@ const YjsTripSync = memo(function YjsTripSync({
       userName={presence?.name}
       userColor={presence?.color}
       showPresence={true}
+      {...(currentTrip.remoteTripId ? { remoteTripId: currentTrip.remoteTripId } : {})}
     >
       {children}
     </TripYjsSyncBinding>

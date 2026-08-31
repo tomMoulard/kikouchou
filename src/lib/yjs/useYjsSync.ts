@@ -69,9 +69,20 @@ function createInitialState(): YjsSyncState {
   };
 }
 
+/**
+ * Which network transport backs the document.
+ *
+ * `'webrtc'` is the legacy peer-to-peer path, retired in Phase 8 of the sync
+ * migration. `'none'` keeps the document and its IndexedDB persistence but opens
+ * no connection, which is what a trip synced through the server wants: running
+ * both transports would converge correctly but do the work twice.
+ */
+export type YjsTransport = 'webrtc' | 'none';
+
 export function useYjsSync(
   roomId: string | null | undefined,
   encryptionKey: string | null | undefined,
+  transport: YjsTransport = 'webrtc',
 ): YjsSyncState {
   const [state, setState] = useState<YjsSyncState>(() => createInitialState());
   const providerRef = useRef<WebrtcProvider | null>(null);
@@ -113,6 +124,21 @@ export function useYjsSync(
       }
 
       unsubscribeRef.current = subscribeToUpdates(doc, activeRoomId);
+
+      if (transport === 'none') {
+        // The document is live and persisted; something else owns the network.
+        setState({
+          doc,
+          provider: null,
+          awareness: null,
+          connected: false,
+          signalingConnected: false,
+          synced: false,
+          peerCount: 0,
+          loaded: true,
+        });
+        return;
+      }
 
       const provider = new WebrtcProvider(activeRoomId, doc, {
         signaling: [resolveSignalingServer()],
@@ -177,7 +203,7 @@ export function useYjsSync(
       cancelled = true;
       cleanup();
     };
-  }, [roomId, encryptionKey]);
+  }, [roomId, encryptionKey, transport]);
 
   return state;
 }
