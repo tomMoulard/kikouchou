@@ -19,6 +19,7 @@ import { createRoot } from 'react-dom/client';
 
 import { ensureSettings } from '@/lib/db';
 import '@/lib/posthog';
+import { registerServiceWorker } from '@/lib/pwa/register';
 import App from './App.tsx';
 import './index.css';
 
@@ -94,6 +95,11 @@ async function initializeApp(): Promise<void> {
     </StrictMode>,
   );
 }
+
+// Installs the service worker and keeps a long-lived session on the build that
+// is actually deployed. Deliberately outside initializeApp(): it must not wait
+// on i18n or on a database open that can block behind another tab.
+registerServiceWorker();
 
 // Bootstrap the application
 initializeApp().catch((error) => {

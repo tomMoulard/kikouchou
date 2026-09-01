@@ -124,6 +124,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // Registered by `lib/pwa/register` instead of by the script this would
+      // otherwise inject into index.html. That script only ever calls
+      // `navigator.serviceWorker.register`, which installs the worker and then
+      // leaves the running page on whatever build it booted with; the
+      // `virtual:pwa-register` module is the half of `autoUpdate` that reloads
+      // once a new worker activates. See that module for the production bug.
+      injectRegister: null,
       includeAssets: ['icons/*.svg', 'favicon.svg'],
       manifest: {
         name: 'Kikoushou',
