@@ -43,14 +43,29 @@ import { router } from '@/router';
  */
 function App(): ReactElement {
   return (
-    <AppProviders>
-      <RouterProvider router={router} />
+    <>
+      <AppProviders>
+        <RouterProvider router={router} />
+      </AppProviders>
 
-      {/* Global UI components */}
+      {/*
+        Global chrome, deliberately outside AppProviders.
+
+        None of the three reads a trip context — they use `useTheme`,
+        `useInstallPrompt` and `useOnlineStatus`, all app-global. Inside the
+        provider tree they were remounted whenever `YjsTripSync` swapped the
+        element at its position, which it does on the no-trip -> trip
+        transition. A remounted `Toaster` resubscribes to sonner's store, and
+        sonner only forwards toasts published *after* a subscription, so the
+        "Trip created successfully" toast — published moments before the first
+        trip is selected — was in the store but never rendered. Measured:
+        `toast.getToasts()` returned 1 while the document held no
+        `[data-sonner-toaster]` at all.
+      */}
       <Toaster position="bottom-center" richColors closeButton />
       <InstallPrompt />
       <OfflineIndicator />
-    </AppProviders>
+    </>
   );
 }
 

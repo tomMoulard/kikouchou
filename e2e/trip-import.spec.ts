@@ -24,9 +24,15 @@ const ROOMS = ['Living Room', 'Master Bedroom', 'Guest Room'] as const;
 /**
  * Selects a date in the shadcn/ui Calendar popover.
  */
+// Note: the location field is addressed as `#trip-location` throughout, not
+// `getByLabel(/location/i)` — once the autocomplete is open that label also
+// matches the cmdk group headed "Previously used location".
 async function selectDate(page: Page, dateString: string): Promise<void> {
   const targetDate = new Date(dateString + 'T12:00:00');
-  const popover = page.locator('[data-radix-popper-content-wrapper]:visible');
+  // `.last()`: the location autocomplete's own popover can still be open, and
+  // Radix stacks each one in its own wrapper. The calendar is the one that just
+  // opened, so it is last in the DOM; matching both is a strict-mode violation.
+  const popover = page.locator('[data-radix-popper-content-wrapper]:visible').last();
   await popover.waitFor({ state: 'visible' });
   const calendar = popover.locator('[data-slot="calendar"]');
   await navigateToMonth(page, targetDate, calendar);
@@ -98,7 +104,7 @@ async function createTrip(
 ): Promise<void> {
   await page.getByLabel(/trip name/i).fill(tripData.name);
   if (tripData.location) {
-    await page.getByLabel(/location/i).fill(tripData.location);
+    await page.locator('#trip-location').fill(tripData.location);
   }
   await page.locator('#trip-start-date').click();
   await selectDate(page, tripData.startDate);
@@ -116,8 +122,11 @@ async function addRooms(page: Page, roomNames: readonly string[]): Promise<void>
   await page.waitForURL(/\/rooms/);
 
   for (const roomName of roomNames) {
-    // Click the add room button
-    await page.getByRole('button', { name: /add room/i }).click();
+    // "New room", not "Add room" — `rooms.new` is the label the page renders,
+    // and there has never been an "Add room" button for this to find.
+    // `.first()` because the empty rooms page offers the action twice, in the
+    // header and in the empty state, exactly like the trip list.
+    await page.getByRole('button', { name: /new room/i }).first().click();
 
     // Fill in the room name
     await page.getByLabel(/room name/i).fill(roomName);
@@ -126,7 +135,7 @@ async function addRooms(page: Page, roomNames: readonly string[]): Promise<void>
     await page.getByRole('button', { name: /save/i }).click();
 
     // Wait for the room to appear
-    await expect(page.getByText(roomName)).toBeVisible();
+    await expect(page.getByText(roomName).first()).toBeVisible();
   }
 }
 
@@ -149,7 +158,7 @@ test.describe('Trip Import Feature', () => {
 
   test('location autocomplete shows matching trips when typing', async ({ page }) => {
     // Step 1: Create the first trip
-    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).click();
+    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
     await createTrip(page, ORIGINAL_TRIP);
 
@@ -158,37 +167,41 @@ test.describe('Trip Import Feature', () => {
 
     // Step 2: Navigate back to create another trip
     await page.goto('/');
-    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).click();
+    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
 
     // Step 3: Type the matching location
-    const locationInput = page.getByLabel(/location/i);
+    const locationInput = page.locator('#trip-location');
     await locationInput.fill('Vacation');
 
     // Step 4: Verify the autocomplete dropdown appears with the matching trip
-    await expect(page.getByText(ORIGINAL_TRIP.name)).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.getByRole('option').filter({ hasText: ORIGINAL_TRIP.name }),
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('importing a trip pre-fills location and description', async ({ page }) => {
     // Step 1: Create the first trip with a description
-    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).click();
+    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
     await createTrip(page, ORIGINAL_TRIP);
     await page.waitForURL(/\/calendar/);
 
     // Step 2: Navigate to create another trip
     await page.goto('/');
-    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).click();
+    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
 
     // Step 3: Type the matching location and select import
-    const locationInput = page.getByLabel(/location/i);
+    const locationInput = page.locator('#trip-location');
     await locationInput.fill('Vacation');
 
     // Wait for the suggestion to appear and click it
-    const importButton = page.getByRole('button', { name: /import/i }).first();
-    await expect(importButton).toBeVisible({ timeout: 5000 });
-    await importButton.click();
+    // The suggestion is a cmdk `CommandItem`, so `role="option"` — there is no
+    // "import" button for `getByRole('button', { name: /import/i })` to find.
+    const importOption = page.getByRole('option').filter({ hasText: ORIGINAL_TRIP.name }).first();
+    await expect(importOption).toBeVisible({ timeout: 5000 });
+    await importOption.click();
 
     // Step 4: Verify the location field is pre-filled
     await expect(locationInput).toHaveValue(ORIGINAL_TRIP.location);
@@ -199,7 +212,7 @@ test.describe('Trip Import Feature', () => {
 
   test('importing a trip clones rooms to the new trip', async ({ page }) => {
     // Step 1: Create the first trip
-    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).click();
+    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
     await createTrip(page, ORIGINAL_TRIP);
     await page.waitForURL(/\/calendar/);
@@ -209,16 +222,18 @@ test.describe('Trip Import Feature', () => {
 
     // Step 3: Navigate to create another trip
     await page.goto('/');
-    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).click();
+    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
 
     // Step 4: Type the matching location and import
-    const locationInput = page.getByLabel(/location/i);
+    const locationInput = page.locator('#trip-location');
     await locationInput.fill('Vacation');
 
-    const importButton = page.getByRole('button', { name: /import/i }).first();
-    await expect(importButton).toBeVisible({ timeout: 5000 });
-    await importButton.click();
+    // The suggestion is a cmdk `CommandItem`, so `role="option"` — there is no
+    // "import" button for `getByRole('button', { name: /import/i })` to find.
+    const importOption = page.getByRole('option').filter({ hasText: ORIGINAL_TRIP.name }).first();
+    await expect(importOption).toBeVisible({ timeout: 5000 });
+    await importOption.click();
 
     // Step 5: Fill in remaining required fields and save
     await page.getByLabel(/trip name/i).fill('Return to Vacation Home');
@@ -237,28 +252,30 @@ test.describe('Trip Import Feature', () => {
 
     // Step 7: Verify all rooms were cloned
     for (const roomName of ROOMS) {
-      await expect(page.getByText(roomName)).toBeVisible();
+      await expect(page.getByText(roomName).first()).toBeVisible();
     }
   });
 
   test('can dismiss import and type a fresh location', async ({ page }) => {
     // Step 1: Create a trip
-    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).click();
+    await page.getByRole('button', { name: /create.*trip|new.*trip|plan.*trip/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
     await createTrip(page, ORIGINAL_TRIP);
     await page.waitForURL(/\/calendar/);
 
     // Step 2: Navigate to create another trip
     await page.goto('/');
-    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).click();
+    await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
 
     // Step 3: Type a matching location — suggestions appear
-    const locationInput = page.getByLabel(/location/i);
+    const locationInput = page.locator('#trip-location');
     await locationInput.fill('Vacation');
 
     // Wait for suggestions
-    await expect(page.getByText(ORIGINAL_TRIP.name)).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.getByRole('option').filter({ hasText: ORIGINAL_TRIP.name }),
+    ).toBeVisible({ timeout: 5000 });
 
     // Step 4: Clear the input and type something else
     await locationInput.clear();
@@ -268,7 +285,13 @@ test.describe('Trip Import Feature', () => {
     // Give it a moment to search
     await page.waitForTimeout(500);
 
-    // The autocomplete should not show the old trip
-    await expect(page.getByText(ORIGINAL_TRIP.name)).not.toBeVisible();
+    // The autocomplete should not show the old trip.
+    //
+    // Scoped to the listbox: the trip's name is also painted in the header and
+    // the sidebar because it is the current trip, so a bare `getByText` here
+    // matched the chrome and never looked at the suggestions at all.
+    await expect(
+      page.getByRole('option').filter({ hasText: ORIGINAL_TRIP.name }),
+    ).toHaveCount(0);
   });
 });

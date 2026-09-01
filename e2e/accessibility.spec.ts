@@ -397,7 +397,9 @@ test.describe('Page Accessibility', () => {
     await page.goto('/');
     const tripId = await setupTripWithData(page);
 
-    await page.goto(`/trips/${tripId}/calendar`);
+    // Month view: there are no `role="gridcell"`s to walk in the timeline view,
+    // which is what the calendar now defaults to.
+    await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
     await waitForLoading(page);
 

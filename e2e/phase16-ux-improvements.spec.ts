@@ -473,8 +473,9 @@ test.describe('Calendar Multi-Day Events', () => {
       TEST_DATA.multiDayAssignment.endDate,
     );
 
-    // Navigate to calendar
-    await page.goto(`/trips/${tripId}/calendar`);
+    // Navigate to calendar. Month view: the timeline view (the default) renders
+    // no `role="grid"`, so the assertions below never find the calendar.
+    await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
 
     // Wait for calendar to render
@@ -513,8 +514,9 @@ test.describe('Calendar Multi-Day Events', () => {
       TEST_DATA.multiDayAssignment.endDate,
     );
 
-    // Navigate to calendar
-    await page.goto(`/trips/${tripId}/calendar`);
+    // Navigate to calendar. Month view: the timeline view (the default) renders
+    // no `role="grid"`, so the assertions below never find the calendar.
+    await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
 
     // Wait for calendar to render
@@ -542,8 +544,9 @@ test.describe('Calendar Multi-Day Events', () => {
       TEST_DATA.multiDayAssignment.endDate,
     );
 
-    // Navigate to calendar
-    await page.goto(`/trips/${tripId}/calendar`);
+    // Navigate to calendar. Month view: the timeline view (the default) renders
+    // no `role="grid"`, so the assertions below never find the calendar.
+    await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
 
@@ -767,8 +770,9 @@ test.describe('Bug Fix: Assignment Dates (BUG-1)', () => {
     // Assignment from Mar 2 to Mar 5 (3 nights: 2nd, 3rd, 4th)
     await createTestAssignment(page, tripId, roomId, personId, '2026-03-02', '2026-03-05');
 
-    // Navigate to calendar
-    await page.goto(`/trips/${tripId}/calendar`);
+    // Navigate to calendar. Month view: the timeline view (the default) renders
+    // no `role="grid"`, so the assertions below never find the calendar.
+    await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
 
@@ -843,8 +847,9 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
       TEST_DATA.transport.location,
     );
 
-    // Navigate to calendar
-    await page.goto(`/trips/${tripId}/calendar`);
+    // Navigate to calendar. Month view: the timeline view (the default) renders
+    // no `role="grid"`, so the assertions below never find the calendar.
+    await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
 
