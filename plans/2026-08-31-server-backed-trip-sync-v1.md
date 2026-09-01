@@ -602,3 +602,78 @@ configured and watching it fail identically, so blanking `VITE_SUPABASE_*` for
 those projects is not the cause. They deserve their own pass, and until they get
 one this project's signal is close to worthless — which is presumably how the
 sharing tests came to be unfalsifiable in the first place.
+
+---
+
+## 12. Compaction moved to the clients
+
+The Edge Function reconstructed each trip's document by downloading and applying
+every log row, purely to compute a value a connected client already holds:
+`Y.encodeStateAsUpdate(doc)` is free in the browser and costs a full replay on
+the server. The deployment, the service key in Vault, pg_cron and pg_net all
+existed only to put a Yjs runtime somewhere it could do that replay — and two of
+this project's production incidents came from that scaffolding rather than from
+the work it was scaffolding (a Vault secret created with the wrong value, and
+`extensions.http_post` instead of `net.http_post`).
+
+Compaction also wants to happen when a trip is being used, which is exactly when
+a client is connected. A schedule sweeping every busy trip is a worse fit than
+devices doing their own as they go.
+
+### What the clients are and are not trusted with
+
+Clients get **no** new table privileges. `trip_doc_updates` still grants them no
+DELETE and `trip_doc_snapshots` still grants them no write. Everything goes
+through `public.publish_trip_snapshot(uuid, text, bigint)`, `security definer`,
+which does the whole thing in one transaction in the only safe order and gives
+the client no way to express anything else:
+
+| Guard | Why |
+|---|---|
+| Caller is a member | The function bypasses the policies that would otherwise say no |
+| `through_id` monotonic, enforced on the upsert itself | Two devices both finding no snapshot row would otherwise both write, and the one with the *older* cursor could land last and move the head below rows the other had already pruned |
+| `through_id` ≤ the log's max id | A device cannot claim rows that do not exist |
+| Prune only `id <= through_id - 50` | A margin of recent rows survives, so a device that publishes a snapshot its document had got wrong does not take the newest history with it |
+| Snapshot written before the prune, same transaction | The one ordering that loses data outright is pruning first |
+
+The client sends `through_id = its own cursor`, so a snapshot only ever claims
+rows that device has actually applied. Nothing server-side can verify that, which
+is why the margin exists.
+
+### The principle this reverses, stated plainly
+
+The Edge Function's own comment read: *"a member must not be able to rewrite a
+trip's history by replacing its compacted head."* That is now exactly what a
+member does. Accepted because:
+
+- A member can already write any value into the document — the log takes
+  arbitrary updates and the CRDT has no per-field authorization, so "delete every
+  guest" is available today and propagates to every device. Publishing a thin
+  snapshot is **weaker**: devices that applied the real updates keep them, and
+  only a device joining later sees less.
+- History was never durable. Compaction deletes the log either way; the only
+  question was who triggered it.
+
+The genuinely worse case is a buggy client rather than a malicious one, and the
+retention margin is what bounds it.
+
+### Trigger
+
+Traffic-counted — rows applied plus rows sent, threshold 200 — rather than the
+log's true length, which would need a `count(*)` round trip the client does not
+otherwise make. It over-triggers for a device joining a long-established trip and
+under-triggers for one that mostly watches; both are fine, because the server's
+monotonic guard makes a redundant attempt a no-op and any member's device will
+reach the threshold too. Published at the end of a successful pull, the one point
+where the document is known to hold everything up to the cursor — which is
+precisely what the snapshot claims.
+
+### Manual steps this leaves
+
+The migration unschedules the cron job and drops the invoker. Two things it
+deliberately does not touch:
+
+1. The deployed function itself — `bunx supabase functions delete compact-trip-docs`.
+2. The Vault secrets `compaction_service_key` and `compaction_function_url`,
+   which nothing reads any more. Deleting somebody's secrets from a migration is
+   not a migration's business; a secret nothing reads is inert.

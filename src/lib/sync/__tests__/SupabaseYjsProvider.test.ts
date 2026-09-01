@@ -68,6 +68,10 @@ class FakeServer {
 
   insertCalls = 0;
   readCalls = 0;
+  /** Snapshot publishes, as `publish_trip_snapshot` would receive them. */
+  snapshotPublishes: { trip_id: string; state: string; through_id: number }[] = [];
+  /** Set to fail the next N publishes. */
+  failPublishes = 0;
   snapshotMarkerReads = 0;
   snapshotStateReads = 0;
   channelStatus: string | null = null;
@@ -284,6 +288,44 @@ class FakeServer {
       },
 
       removeChannel: async () => undefined,
+
+      /**
+       * `publish_trip_snapshot`, modelling the guards that matter to the client:
+       * monotonic in `through_id`, and never past the log.
+       */
+      rpc: async (
+        name: string,
+        args: { p_trip_id: string; p_state: string; p_through_id: number },
+      ) => {
+        if (name !== 'publish_trip_snapshot') {
+          return { data: null, error: { message: `no such rpc ${name}` } };
+        }
+        if (this.failPublishes > 0) {
+          this.failPublishes -= 1;
+          return { data: null, error: { message: 'publish boom' } };
+        }
+
+        const highest = this.rows.reduce((max, row) => Math.max(max, row.id), 0);
+        if (args.p_through_id > highest) {
+          return {
+            data: null,
+            error: { message: 'through_id is beyond the log' },
+          };
+        }
+        if (this.snapshot !== null && args.p_through_id <= this.snapshot.through_id) {
+          return { data: 0, error: null };
+        }
+
+        this.snapshotPublishes.push({
+          trip_id: args.p_trip_id,
+          state: args.p_state,
+          through_id: args.p_through_id,
+        });
+        this.snapshot = { state: args.p_state, through_id: args.p_through_id };
+        // Keeps a margin, as the migration does.
+        this.rows = this.rows.filter((row) => row.id > args.p_through_id - 50);
+        return { data: 1, error: null };
+      },
     };
   }
 }
@@ -758,6 +800,106 @@ describe('reconciliation', () => {
 
     // Recording it optimistically would mean these edits are never sent again.
     expect((await readCursor(TRIP_ID)).serverStateVector).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// Compaction
+// ============================================================================
+
+describe('compaction', () => {
+  /** Seeds a log long enough to cross COMPACT_AFTER_ROWS. */
+  function seedLog(server: FakeServer, rows: number): void {
+    const seed = new Y.Doc();
+    for (let index = 0; index < rows; index += 1) {
+      addGuest(seed, `p${index}`, `Guest ${index}`);
+      server.append(Y.encodeStateAsUpdate(seed));
+    }
+  }
+
+  it('publishes a snapshot once it has seen enough of the log', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    seedLog(server, 250);
+
+    await track(makeProvider(server, doc)).start();
+    await settle();
+
+    expect(server.snapshotPublishes).toHaveLength(1);
+
+    // The claim is this device's own cursor: only rows it has actually applied.
+    const published = server.snapshotPublishes[0]!;
+    expect(published.through_id).toBe((await readCursor(TRIP_ID)).lastSeenUpdateId);
+    expect(published.trip_id).toBe(REMOTE_TRIP_ID);
+  });
+
+  it('publishes a snapshot the whole document can be rebuilt from', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    seedLog(server, 250);
+
+    await track(makeProvider(server, doc)).start();
+    await settle();
+
+    const published = server.snapshotPublishes[0]!;
+    const rebuilt = new Y.Doc();
+    Y.applyUpdate(
+      rebuilt,
+      Uint8Array.from(atob(published.state), (char) => char.charCodeAt(0)),
+    );
+
+    // Pruning follows the snapshot, so anything missing here is lost outright.
+    expect(rebuilt.getMap('guestsById').size).toBe(250);
+  });
+
+  it('leaves a short log alone', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    seedLog(server, 5);
+
+    await track(makeProvider(server, doc)).start();
+    await settle();
+
+    // Compacting a five-row log costs a write and saves nothing.
+    expect(server.snapshotPublishes).toHaveLength(0);
+  });
+
+  it('does not publish an empty snapshot over a log that has rows', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+
+    // Rows that this document cannot read, so it stays empty while the pull
+    // still advances the cursor past them.
+    for (let index = 0; index < 250; index += 1) {
+      server.rows.push({ id: index + 1, update: 'not valid base64!!' });
+    }
+    server.nextId = 251;
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await track(makeProvider(server, doc)).start();
+    await settle();
+    warn.mockRestore();
+
+    // This is the one move here that could destroy content.
+    expect(server.snapshotPublishes).toHaveLength(0);
+  });
+
+  it('keeps working when a publish is refused', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    seedLog(server, 250);
+    server.failPublishes = 99;
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    await settle();
+    warn.mockRestore();
+
+    // An uncompacted log is a growing table, not a broken trip.
+    expect(server.snapshotPublishes).toHaveLength(0);
+    expect(provider.getState().status).not.toBe('offline');
+    expect(doc.getMap('guestsById').size).toBe(250);
   });
 });
 
