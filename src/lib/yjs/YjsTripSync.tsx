@@ -34,6 +34,45 @@ function stripTripId<T extends { tripId?: unknown }>(
   });
 }
 
+/**
+ * A trip's rows, or `null` when what is in hand does not belong to it.
+ *
+ * `useLiveQuery` does not clear its result when its deps change: `useObservable`
+ * holds the last value in a ref and only seeds it while `hasResult` is false,
+ * which it has not been since the first trip. So for the whole gap between
+ * re-subscribing and the new query emitting, it keeps returning the **previous**
+ * trip's rows under the new trip's id.
+ *
+ * That gap overlaps the document swap, and the overlap is not a narrow one.
+ * `useTripDoc` publishes the new document as soon as `loadPersistedUpdates`
+ * resolves, which for a freshly joined trip is a read of an empty update log —
+ * so it reliably wins the race against a live query going through Dexie's
+ * observability layer. Every sync effect below then fires on exactly the wrong
+ * pair: the trip that was just opened, and the guests of the one just left.
+ *
+ * Writing those into the document is not a display glitch. They become genuine
+ * CRDT content — persisted, queued to the outbox, pushed to every other member —
+ * and the next projection moves them for real, because `syncDocToDexie` writes
+ * back through `bulkPut` keyed on each row's own id and so rewrites the existing
+ * row's `tripId` rather than adding a copy. The trip that was left loses its
+ * guests, its rooms and its transport, for everybody.
+ *
+ * Tagging the result with the trip it was read for is what closes that window: a
+ * stale value can then be recognised as stale rather than merely looking like a
+ * plausible one.
+ */
+function useTripScopedRows<T>(
+  tripId: TripId,
+  read: (tripId: TripId) => Promise<T[]>,
+): readonly T[] | null {
+  const result = useLiveQuery(
+    async () => ({ tripId, rows: await read(tripId) }),
+    [tripId],
+  );
+
+  return result?.tripId === tripId ? result.rows : null;
+}
+
 const YjsSyncObserver = memo(function YjsSyncObserver({
   tripId,
 }: {
@@ -68,45 +107,39 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
   }, [tripId, yjs?.doc, yjs?.loaded]);
 
   const trip = useLiveQuery(() => db.trips.get(tripId), [tripId]);
-  const persons = useLiveQuery(
-    () => db.persons.where('tripId').equals(tripId).toArray(),
-    [tripId],
+  const persons = useTripScopedRows<Person>(tripId, (id) =>
+    db.persons.where('tripId').equals(id).toArray(),
   );
-  const rooms = useLiveQuery(
-    () =>
-      db.rooms
-        .where('[tripId+order]')
-        .between([tripId, Dexie.minKey], [tripId, Dexie.maxKey])
-        .toArray(),
-    [tripId],
+  const rooms = useTripScopedRows<Room>(tripId, (id) =>
+    db.rooms
+      .where('[tripId+order]')
+      .between([id, Dexie.minKey], [id, Dexie.maxKey])
+      .toArray(),
   );
-  const roomAssignments = useLiveQuery(
-    () =>
-      db.roomAssignments
-        .where('[tripId+startDate]')
-        .between([tripId, Dexie.minKey], [tripId, Dexie.maxKey])
-        .toArray(),
-    [tripId],
+  const roomAssignments = useTripScopedRows<RoomAssignment>(tripId, (id) =>
+    db.roomAssignments
+      .where('[tripId+startDate]')
+      .between([id, Dexie.minKey], [id, Dexie.maxKey])
+      .toArray(),
   );
-  const transports = useLiveQuery(
-    () =>
-      db.transports
-        .where('[tripId+datetime]')
-        .between([tripId, Dexie.minKey], [tripId, Dexie.maxKey])
-        .toArray(),
-    [tripId],
+  const transports = useTripScopedRows<Transport>(tripId, (id) =>
+    db.transports
+      .where('[tripId+datetime]')
+      .between([id, Dexie.minKey], [id, Dexie.maxKey])
+      .toArray(),
   );
-  const activities = useLiveQuery(
-    () =>
-      db.activities
-        .where('[tripId+startDatetime]')
-        .between([tripId, Dexie.minKey], [tripId, Dexie.maxKey])
-        .toArray(),
-    [tripId],
+  const activities = useTripScopedRows<Activity>(tripId, (id) =>
+    db.activities
+      .where('[tripId+startDatetime]')
+      .between([id, Dexie.minKey], [id, Dexie.maxKey])
+      .toArray(),
   );
 
   useEffect(() => {
-    if (!yjs?.loaded || !trip) {
+    // The trip carries its own id, so it needs no tagging to be checked — but it
+    // goes stale in exactly the same window, and writing the previous trip's
+    // name and dates into this document renames the trip for every member.
+    if (!yjs?.loaded || trip?.id !== tripId) {
       return;
     }
 
@@ -128,6 +161,7 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
     trip?.name,
     trip?.startDate,
     trip?.updatedAt,
+    tripId,
     yjs?.doc,
     yjs?.loaded,
   ]);
@@ -137,7 +171,7 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       return;
     }
 
-    syncDexieToDoc(yjs.doc, 'guests', stripTripId(persons as readonly Person[]), {
+    syncDexieToDoc(yjs.doc, 'guests', stripTripId(persons), {
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
   }, [persons, tripId, yjs?.doc, yjs?.loaded]);
@@ -147,7 +181,7 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       return;
     }
 
-    syncDexieToDoc(yjs.doc, 'rooms', stripTripId(rooms as readonly Room[]), {
+    syncDexieToDoc(yjs.doc, 'rooms', stripTripId(rooms), {
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
   }, [rooms, tripId, yjs?.doc, yjs?.loaded]);
@@ -157,12 +191,9 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       return;
     }
 
-    syncDexieToDoc(
-      yjs.doc,
-      'roomAssignments',
-      stripTripId(roomAssignments as readonly RoomAssignment[]),
-      { allowDeletions: isDexieTrustedMirror(yjs.doc, tripId) },
-    );
+    syncDexieToDoc(yjs.doc, 'roomAssignments', stripTripId(roomAssignments), {
+      allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
+    });
   }, [roomAssignments, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
@@ -170,12 +201,9 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       return;
     }
 
-    syncDexieToDoc(
-      yjs.doc,
-      'transport',
-      stripTripId(transports as readonly Transport[]),
-      { allowDeletions: isDexieTrustedMirror(yjs.doc, tripId) },
-    );
+    syncDexieToDoc(yjs.doc, 'transport', stripTripId(transports), {
+      allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
+    });
   }, [transports, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
@@ -183,12 +211,9 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       return;
     }
 
-    syncDexieToDoc(
-      yjs.doc,
-      'activities',
-      stripTripId(activities as readonly Activity[]),
-      { allowDeletions: isDexieTrustedMirror(yjs.doc, tripId) },
-    );
+    syncDexieToDoc(yjs.doc, 'activities', stripTripId(activities), {
+      allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
+    });
   }, [activities, tripId, yjs?.doc, yjs?.loaded]);
 
   return null;
