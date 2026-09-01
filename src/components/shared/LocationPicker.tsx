@@ -7,7 +7,6 @@
  */
 
 import {
-  type ReactElement,
   memo,
   useCallback,
   useEffect,
@@ -17,26 +16,24 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Loader2, MapPin, X } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
-import { type LatLng, divIcon } from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { Loader2, MapPin, X } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { LocationMapConfirm } from '@/components/shared/LocationMapConfirm';
+import { cn } from '@/lib/utils';
+import {
+  GEOCODING_DEBOUNCE_MS,
+  GEOCODING_MIN_QUERY_LENGTH,
+  GeocodingError,
+  type Coordinates,
+  type GeocodingPlace,
+  searchPlaces,
+} from '@/lib/geocoding';
 
 // ============================================================================
 // Types
 // ============================================================================
-
-/**
- * Coordinates returned from location selection.
- */
-export interface Coordinates {
-  readonly lat: number;
-  readonly lon: number;
-}
 
 /**
  * Props for the LocationPicker component.
@@ -63,283 +60,12 @@ export interface LocationPickerProps {
 }
 
 /**
- * Result from Nominatim API search.
- */
-interface NominatimResult {
-  place_id: number;
-  display_name: string;
-  lat: string;
-  lon: string;
-  type: string;
-  class: string;
-  address?: {
-    city?: string;
-    town?: string;
-    village?: string;
-    state?: string;
-    country?: string;
-  };
-}
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const DEBOUNCE_MS = 300;
-const MIN_QUERY_LENGTH = 3;
-const MAX_RESULTS = 5;
-const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org/search';
-const MAP_PREVIEW_HEIGHT = 200;
-const MAP_PREVIEW_ZOOM = 15;
-
-/**
  * Pending location selection before user confirmation.
  */
 interface PendingSelection {
   displayName: string;
   coordinates: Coordinates;
 }
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-/**
- * Formats a Nominatim result for display.
- */
-function formatResultDisplay(result: NominatimResult): string {
-  const parts = result.display_name.split(', ');
-  // Return first 3 parts for a cleaner display
-  return parts.slice(0, 3).join(', ');
-}
-
-/**
- * Gets a short type label from Nominatim result.
- */
-function getTypeLabel(result: NominatimResult): string {
-  const typeMap: Record<string, string> = {
-    city: 'City',
-    town: 'Town',
-    village: 'Village',
-    house: 'Address',
-    building: 'Building',
-    railway: 'Station',
-    aerodrome: 'Airport',
-    bus_station: 'Bus Station',
-  };
-  return typeMap[result.type] || result.class || 'Place';
-}
-
-/**
- * Creates a custom draggable marker icon.
- */
-function createDraggableMarkerIcon(): ReturnType<typeof divIcon> {
-  const html = `
-    <div style="
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      background-color: #3b82f6;
-      border: 3px solid white;
-      border-radius: 50%;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-      cursor: grab;
-      transition: transform 0.1s ease;
-    ">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="white"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-        <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-      </svg>
-    </div>
-  `;
-
-  return divIcon({
-    html,
-    className: 'draggable-marker-icon',
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-  });
-}
-
-// ============================================================================
-// DraggableMarker Component
-// ============================================================================
-
-/**
- * Props for the DraggableMarker component.
- */
-interface DraggableMarkerProps {
-  readonly position: [number, number];
-  readonly onPositionChange: (lat: number, lon: number) => void;
-}
-
-/**
- * A draggable marker component that updates position on drag end.
- */
-function DraggableMarker({ position, onPositionChange }: DraggableMarkerProps): ReactElement {
-  const markerIcon = useMemo(() => createDraggableMarkerIcon(), []);
-
-  const eventHandlers = useMemo(
-    () => ({
-      dragend: (e: { target: { getLatLng: () => LatLng } }) => {
-        const latlng = e.target.getLatLng();
-        onPositionChange(latlng.lat, latlng.lng);
-      },
-    }),
-    [onPositionChange]
-  );
-
-  return (
-    <Marker
-      position={position}
-      draggable={true}
-      icon={markerIcon}
-      eventHandlers={eventHandlers}
-    />
-  );
-}
-
-// ============================================================================
-// MapClickHandler Component
-// ============================================================================
-
-/**
- * Component that handles map clicks to reposition the marker.
- */
-interface MapClickHandlerProps {
-  readonly onMapClick: (lat: number, lon: number) => void;
-}
-
-function MapClickHandler({ onMapClick }: MapClickHandlerProps): null {
-  useMapEvents({
-    click: (e) => {
-      onMapClick(e.latlng.lat, e.latlng.lng);
-    },
-  });
-  return null;
-}
-
-// ============================================================================
-// DraggableMapPreview Component
-// ============================================================================
-
-/**
- * Props for the DraggableMapPreview component.
- */
-interface DraggableMapPreviewProps {
-  readonly coordinates: Coordinates;
-  readonly locationName: string;
-  readonly onCoordinatesChange: (coordinates: Coordinates) => void;
-  readonly onConfirm: () => void;
-  readonly onCancel: () => void;
-}
-
-/**
- * Map preview with draggable marker for fine-tuning location.
- */
-const DraggableMapPreview = memo(function DraggableMapPreview({
-  coordinates,
-  locationName,
-  onCoordinatesChange,
-  onConfirm,
-  onCancel,
-}: DraggableMapPreviewProps): ReactElement {
-  const { t } = useTranslation();
-
-  const handlePositionChange = useCallback(
-    (lat: number, lon: number) => {
-      onCoordinatesChange({ lat, lon });
-    },
-    [onCoordinatesChange]
-  );
-
-  const position: [number, number] = [coordinates.lat, coordinates.lon];
-
-  return (
-    <div className="mt-2 rounded-md border border-border overflow-hidden">
-      {/* Map container */}
-      <div className="relative" style={{ height: MAP_PREVIEW_HEIGHT }}>
-        <MapContainer
-          center={position}
-          zoom={MAP_PREVIEW_ZOOM}
-          zoomControl={true}
-          dragging={true}
-          touchZoom={true}
-          doubleClickZoom={false}
-          scrollWheelZoom={true}
-          className="h-full w-full"
-          attributionControl={false}
-        >
-          <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          />
-          <DraggableMarker
-            position={position}
-            onPositionChange={handlePositionChange}
-          />
-          <MapClickHandler onMapClick={handlePositionChange} />
-        </MapContainer>
-
-        {/* Instruction overlay */}
-        <div className="absolute top-2 left-2 right-2 z-[1000] pointer-events-none">
-          <div className="bg-background/90 backdrop-blur-sm rounded-md px-2 py-1 text-xs text-muted-foreground text-center">
-            {t('locationPicker.dragToAdjust', 'Drag marker or click to adjust location')}
-          </div>
-        </div>
-      </div>
-
-      {/* Location info and actions */}
-      <div className="p-3 bg-muted/30 space-y-3">
-        {/* Location name */}
-        <div className="flex items-start gap-2">
-          <MapPin className="size-4 shrink-0 text-primary mt-0.5" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium truncate">{locationName}</p>
-            <p className="text-xs text-muted-foreground">
-              {coordinates.lat.toFixed(6)}, {coordinates.lon.toFixed(6)}
-            </p>
-          </div>
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onCancel}
-            className="flex-1"
-          >
-            <X className="size-4 mr-1" aria-hidden="true" />
-            {t('common.cancel')}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={onConfirm}
-            className="flex-1"
-          >
-            <Check className="size-4 mr-1" aria-hidden="true" />
-            {t('locationPicker.confirmLocation', 'Confirm')}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-});
 
 // ============================================================================
 // Main Component
@@ -381,7 +107,7 @@ export const LocationPicker = memo(function LocationPicker({
   // ============================================================================
 
   const [inputValue, setInputValue] = useState(value);
-  const [results, setResults] = useState<NominatimResult[]>([]);
+  const [results, setResults] = useState<readonly GeocodingPlace[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -411,69 +137,43 @@ export const LocationPicker = memo(function LocationPicker({
   // ============================================================================
 
   const search = useCallback(async (query: string) => {
-    if (query.length < MIN_QUERY_LENGTH) {
+    if (query.length < GEOCODING_MIN_QUERY_LENGTH) {
       setResults([]);
       setIsOpen(false);
       return;
     }
 
     // Cancel any pending request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
+    abortControllerRef.current?.abort();
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
-
-    // Add 10 second timeout to fetch (IMP-1 fix)
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const params = new URLSearchParams({
-        format: 'json',
-        q: query,
-        limit: String(MAX_RESULTS),
-        addressdetails: '1',
-      });
-
-      const response = await fetch(`${NOMINATIM_BASE_URL}?${params}`, {
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json',
-          // Nominatim requires a User-Agent (with contact info per usage policy)
-          'User-Agent': 'Kikoushou/1.0 (https://github.com/tomMoulard/kikoushou)',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Search failed: ${response.status}`);
-      }
-
-      const data = (await response.json()) as NominatimResult[];
-      setResults(data);
+      const places = await searchPlaces(query, { signal: controller.signal });
+      setResults(places);
       // Keep dropdown open to show results or "no results" message
       setIsOpen(true);
       setHighlightedIndex(-1);
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        // Request was cancelled or timed out
-        // If it was a timeout, show a timeout-specific message
-        if (!abortControllerRef.current || abortControllerRef.current === controller) {
-          setError(t('locationPicker.timeoutError', 'Search timed out. Please try again.'));
-          setResults([]);
-          setIsOpen(false);
-        }
+      if (err instanceof GeocodingError && err.kind === 'aborted') {
+        // Superseded by a newer query, or the component went away.
         return;
       }
-      console.error('Location search error:', err);
-      setError(t('locationPicker.searchError', 'Search failed. Please try again.'));
+      const message =
+        err instanceof GeocodingError && err.kind === 'timeout'
+          ? t('locationPicker.timeoutError', 'Search timed out. Please try again.')
+          : t('locationPicker.searchError', 'Search failed. Please try again.');
+      if (!(err instanceof GeocodingError)) {
+        console.error('Location search error:', err);
+      }
+      setError(message);
       setResults([]);
       setIsOpen(false);
     } finally {
-      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   }, [t]);
@@ -489,8 +189,8 @@ export const LocationPicker = memo(function LocationPicker({
       }
 
       debounceRef.current = setTimeout(() => {
-        search(query);
-      }, DEBOUNCE_MS);
+        void search(query);
+      }, GEOCODING_DEBOUNCE_MS);
     },
     [search]
   );
@@ -504,9 +204,7 @@ export const LocationPicker = memo(function LocationPicker({
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
       }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      abortControllerRef.current?.abort();
     };
   }, []);
 
@@ -524,16 +222,13 @@ export const LocationPicker = memo(function LocationPicker({
   );
 
   const handleSelect = useCallback(
-    (result: NominatimResult) => {
-      const displayName = formatResultDisplay(result);
-      const coordinates: Coordinates = {
-        lat: parseFloat(result.lat),
-        lon: parseFloat(result.lon),
-      };
-
+    (place: GeocodingPlace) => {
       // Set pending selection to show map preview
-      setPendingSelection({ displayName, coordinates });
-      setInputValue(displayName);
+      setPendingSelection({
+        displayName: place.label,
+        coordinates: place.coordinates,
+      });
+      setInputValue(place.label);
       setIsOpen(false);
       setResults([]);
       setHighlightedIndex(-1);
@@ -737,9 +432,9 @@ export const LocationPicker = memo(function LocationPicker({
           aria-label={t('locationPicker.resultsLabel', 'Search results')}
           className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border bg-popover shadow-md"
         >
-          {results.map((result, index) => (
+          {results.map((place, index) => (
             <li
-              key={result.place_id}
+              key={place.id}
               id={`${inputId}-option-${index}`}
               role="option"
               aria-selected={highlightedIndex === index}
@@ -749,19 +444,17 @@ export const LocationPicker = memo(function LocationPicker({
                   ? 'bg-accent text-accent-foreground'
                   : 'hover:bg-accent/50'
               )}
-              onMouseDown={() => handleSelect(result)}
+              onMouseDown={() => handleSelect(place)}
               onMouseEnter={() => setHighlightedIndex(index)}
             >
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-medium">
-                  {formatResultDisplay(result)}
-                </span>
+                <span className="truncate font-medium">{place.label}</span>
                 <span className="shrink-0 text-xs text-muted-foreground">
-                  {getTypeLabel(result)}
+                  {place.typeLabel}
                 </span>
               </div>
               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {result.display_name}
+                {place.fullName}
               </p>
             </li>
           ))}
@@ -769,7 +462,10 @@ export const LocationPicker = memo(function LocationPicker({
       )}
 
       {/* No results message */}
-      {isOpen && results.length === 0 && !isLoading && inputValue.length >= MIN_QUERY_LENGTH && (
+      {isOpen &&
+        results.length === 0 &&
+        !isLoading &&
+        inputValue.length >= GEOCODING_MIN_QUERY_LENGTH && (
         <div
           className="absolute z-50 mt-1 w-full rounded-md border bg-popover p-3 text-sm text-muted-foreground shadow-md"
           role="status"
@@ -780,7 +476,7 @@ export const LocationPicker = memo(function LocationPicker({
 
       {/* Map preview for confirming selected location */}
       {pendingSelection && (
-        <DraggableMapPreview
+        <LocationMapConfirm
           coordinates={pendingSelection.coordinates}
           locationName={pendingSelection.displayName}
           onCoordinatesChange={handleCoordinatesChange}
@@ -792,4 +488,10 @@ export const LocationPicker = memo(function LocationPicker({
   );
 });
 
+// ============================================================================
+// Exports
+// ============================================================================
 
+// Re-exported so existing `import { type Coordinates } from '.../LocationPicker'`
+// call sites keep working now that the type lives in lib/geocoding.
+export type { Coordinates };

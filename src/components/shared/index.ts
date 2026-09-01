@@ -73,6 +73,9 @@ export type { DateRangePickerProps, DateRange } from './DateRangePicker';
 export { LocationPicker } from './LocationPicker';
 export type { LocationPickerProps, Coordinates } from './LocationPicker';
 
+export { LocationMapConfirm } from './LocationMapConfirm';
+export type { LocationMapConfirmProps } from './LocationMapConfirm';
+
 // ============================================================================
 // Display Components
 // ============================================================================
