@@ -502,28 +502,24 @@ test.describe('two devices on one trip', () => {
     await ownerPage.keyboard.press('Escape');
     await addGuest(ownerPage, 'Carol');
 
-    // The invitee sees it. Reload rather than waiting on a socket: Realtime is
-    // refused by the stub on purpose, so this asserts the pull path — the one
-    // that has to work when the socket is down anyway.
-    await expect
-      .poll(
-        async () => {
-          await guestPage.reload();
-          await guestPage
-            .getByRole('link', { name: /guests/i })
-            .first()
-            .click()
-            .catch(() => undefined);
-          return await guestPage
-            .getByText('Carol')
-            .first()
-            .isVisible()
-            .catch(() => false);
-        },
-        { timeout: 60_000, intervals: [3_000] },
-      )
-      .toBe(true);
+    // On the server before the invitee is asked to see it, so a failure below is
+    // about delivery rather than about the owner not having pushed yet.
+    await waitForNameOnServer(stub, 'Carol');
 
+    // Nudge the invitee instead of reloading it. Realtime is refused by the stub
+    // on purpose, so what has to work here is the pull path — and `online` is
+    // exactly what triggers it in production when connectivity returns. The
+    // earlier version reloaded the whole app on every poll attempt, which boots
+    // the bundle each time: it passed alone in 22 s and timed out inside a full
+    // run, which is a property of the harness rather than of the app.
+    await guestPage.getByRole('link', { name: /guests/i }).first().click();
+    await guestPage.evaluate(() => {
+      window.dispatchEvent(new Event('online'));
+    });
+
+    await expect(guestPage.getByText('Carol').first()).toBeVisible({
+      timeout: 30_000,
+    });
   });
 
   test('edits made while the server is unreachable arrive once it is back', async ({
