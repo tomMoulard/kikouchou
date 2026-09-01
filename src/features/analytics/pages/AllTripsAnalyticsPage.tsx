@@ -16,7 +16,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AnalyticsScopeSelector } from '@/features/analytics/components/AnalyticsScopeSelector';
-import { TripsLocationMap } from '@/features/analytics/components/TripsLocationMap';
+import { TripsLocationMap } from '@/features/trips/components/TripsLocationMap';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { getPersonHeadcount } from '@/types';

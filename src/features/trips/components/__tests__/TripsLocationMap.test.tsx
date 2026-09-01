@@ -4,13 +4,13 @@
  * MapView is stubbed so the assertions are about *which* trips reach the map,
  * not about Leaflet rendering (covered by MapView's own tests).
  *
- * @module features/analytics/components/__tests__/TripsLocationMap.test
+ * @module features/trips/components/__tests__/TripsLocationMap.test
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
-import { TripsLocationMap } from '@/features/analytics/components/TripsLocationMap';
+import { TripsLocationMap } from '@/features/trips/components/TripsLocationMap';
 import type { MapMarkerData } from '@/components/shared/MapView';
 import type { ISODateString, ShareId, Trip, TripId } from '@/types';
 
