@@ -26,8 +26,21 @@ import { useAuth } from '@/features/auth/AuthContext';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { claimParticipant, fetchClaimedParticipants } from '@/lib/sync/join-trip';
+import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
 import { useJoinTrip } from '../hooks/useJoinTrip';
 import type { PersonId, TripId } from '@/types';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * How long to keep waiting for participants before saying there are none.
+ *
+ * Long enough to cover a slow first pull, short enough that nobody concludes the
+ * app is broken. Only reached when sync never reports itself settled.
+ */
+const EMPTY_TRIP_GRACE_MS = 15_000;
 
 // ============================================================================
 // Shell
@@ -61,6 +74,7 @@ interface IdentityStepProps {
  * list would otherwise look like a trip with nobody in it.
  */
 function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement {
+  const { state: syncState } = useSyncStatus();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -147,19 +161,71 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
     void navigate(`/trips/${tripId}/calendar`);
   }, [navigate, tripId]);
 
+  /**
+   * Whether the document might still be arriving.
+   *
+   * `syncing` and `local` both mean "no answer yet" — the second because the
+   * provider may not have mounted for this trip at the moment of render. Anything
+   * else is settled: whatever the trip contains, it has arrived.
+   */
+  const settled = syncState.status === 'synced' || syncState.status === 'offline';
+
+  /**
+   * A hard bound on the wait, independent of what sync reports.
+   *
+   * The reason this exists rather than trusting `settled`: the screen must reach
+   * an end. Three separate bugs in this flow have been a spinner with no terminal
+   * state, and one of them was reported by a user whose trip had already
+   * downloaded in full and simply had no guests in it. If sync never says it is
+   * settled, that is a reason to stop waiting, not to wait forever.
+   */
+  const [waitedLongEnough, setWaitedLongEnough] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setWaitedLongEnough(true);
+    }, EMPTY_TRIP_GRACE_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, []);
+
   if (persons.length === 0) {
+    if (!settled && !waitedLongEnough) {
+      return (
+        <div className="flex flex-col items-center gap-3 text-center">
+          <Loader2
+            className="size-6 animate-spin text-muted-foreground"
+            aria-hidden="true"
+          />
+          <CardTitle className="text-lg">
+            {t('sharing.join.downloading', 'Getting the trip…')}
+          </CardTitle>
+          <CardDescription>
+            {t(
+              'sharing.join.downloadingHint',
+              "You're in. Fetching who's coming and where they're sleeping.",
+            )}
+          </CardDescription>
+        </div>
+      );
+    }
+
+    // Downloaded, and there is genuinely nobody to pick. An ordinary state for a
+    // trip whose owner has not added anyone yet, and the one this screen used to
+    // treat as a download that had not finished.
     return (
       <div className="flex flex-col items-center gap-3 text-center">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
+        <UserRound className="size-6 text-muted-foreground" aria-hidden="true" />
         <CardTitle className="text-lg">
-          {t('sharing.join.downloading', 'Getting the trip…')}
+          {t('sharing.join.noParticipants', 'Nobody has been added to this trip yet')}
         </CardTitle>
         <CardDescription>
           {t(
-            'sharing.join.downloadingHint',
-            "You're in. Fetching who's coming and where they're sleeping.",
+            'sharing.join.noParticipantsHint',
+            'Open it and add yourself — everyone on the trip sees the change.',
           )}
         </CardDescription>
+        <Button onClick={skip}>{t('sharing.join.openTrip', 'Open the trip')}</Button>
       </div>
     );
   }

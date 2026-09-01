@@ -617,6 +617,8 @@
       "openTrip": "Ouvrir le séjour",
       "downloading": "Récupération du séjour…",
       "downloadingHint": "Vous y êtes. On récupère qui vient et qui dort où.",
+      "noParticipants": "Personne n'a encore été ajouté à ce séjour",
+      "noParticipantsHint": "Ouvrez-le et ajoutez-vous — tout le monde sur le séjour verra le changement.",
       "whoAreYou": "Lequel êtes-vous ?",
       "whoAreYouHint": "Pour que le séjour affiche votre chambre et vos trajets, pas seulement ceux des autres.",
       "identityTaken": "Quelqu'un vient de prendre ce nom.",
