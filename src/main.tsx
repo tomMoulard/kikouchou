@@ -12,6 +12,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { ensureSettings } from '@/lib/db';
+import '@/lib/posthog';
 import App from './App.tsx';
 import './index.css';
 
