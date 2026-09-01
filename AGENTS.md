@@ -25,14 +25,31 @@ bun run test src/features/trips/components/__tests__/TripForm.test.tsx  # Single
 bun run test -t "TripForm"    # Pattern match (vitest has no --grep)
 
 # E2E tests (Playwright)
-bun run test:e2e              # Headless
+bun run test:e2e              # Headless (sets PW_CHANNEL=chrome, see below)
 bun run test:e2e:headed       # With browser
-npx playwright test e2e/trip-lifecycle.spec.ts  # Single file
+bun run test:e2e:install      # Fetch Playwright's own Chromium
+npx playwright test --project=sync                   # Sharing/join/two-device flows
+npx playwright test --project=offline                # Offline contract (production build)
+npx playwright test e2e/trip-lifecycle.spec.ts       # Single file
 npx playwright test -g "user can create a new trip"  # Single test
+
+# Supabase (local stack: Docker required)
+bunx supabase start           # Postgres + auth + realtime + studio on :54321-54323
+bunx supabase stop            # Ten containers; stop them when you are done
+bunx supabase test db         # pgTAP — RLS and the SQL functions
+bunx supabase db reset        # Reapply every migration to a clean database
+bunx supabase db push         # Apply pending migrations to the LINKED project
+bun run db:types              # Regenerate src/lib/supabase/database.types.ts
 
 # Type check
 tsc -b                        # The ONLY form that checks anything (see below)
 ```
+
+> **`PW_CHANNEL=chrome` drives the machine's installed Chrome** instead of
+> Playwright's own build, which is what the `test:e2e*` scripts set. Unset is the
+> default in `playwright.config.ts` and what CI uses, so the browser version
+> moves with the dependency and a Chrome auto-update cannot change a result.
+> Set it when `playwright install` has not run locally.
 
 > **`tsc --noEmit` type-checks ZERO files in this repo.** The root
 > `tsconfig.json` is a solution file (`"files": []` + `references`), and project
@@ -166,12 +183,18 @@ negative offsets.
 
 ### Untrusted input: remote data is not app data
 
-Three surfaces write to IndexedDB — UI forms, P2P sync (`lib/yjs`), and QR
-changeset import (`lib/sharing`). Only the first has a user in the loop.
+Three surfaces write to IndexedDB — UI forms, server sync (`lib/sync` applying
+into `lib/yjs`), and QR changeset import (`lib/sharing`). Only the first has a
+user in the loop. WebRTC peers are gone; the server is the only peer now, and it
+carries other members' writes, so it is exactly as untrusted as a peer was.
 
-- **Never use a remote-supplied id as a write key.** Resolve the target locally
-  (e.g. `db.trips.where('p2pRoomId').equals(roomId)`) and reject a doc that
-  disagrees. Trusting `meta.id` let any peer wipe an unrelated local trip.
+- **Never use a remote-supplied id as a write key.** The caller resolves the
+  target trip locally and that id is the only write key. `meta.id` used to be
+  compared against it as a check, which was itself a bug — local trip ids are
+  per-device nanoids, so a joined trip's document can never match, and every
+  remote update for it was refused. The constraint that check was incidentally
+  providing is now explicit: a projection updates a trip that already exists and
+  never creates one.
 - **Never adopt a remote value for a unique index** (`shareId`): a collision
   aborts the whole transaction and permanently kills sync.
 - **Never read `window.location` inside `lib/`.** Pass URL-derived values in as
@@ -254,6 +277,69 @@ If you touch `vite.config.ts`'s `base`, `playwright.config.ts`'s `webServer`, or
 a `validate`/CI script, prove the gate still fails on a deliberate error.
 
 ---
+
+## Supabase — RLS is the only thing protecting the data
+
+The app ships no server. The publishable key is embedded in the client bundle by
+design, so **Row-Level Security is the entire security boundary** — anyone can
+call the REST API with that key.
+
+- **Every table gets RLS enabled in the migration that creates it.** Not a
+  follow-up migration. A table without it is world-writable to anyone who reads
+  the bundle.
+- **Grants are revoke-first.** Supabase's default `grant all` means an additive
+  `grant select, insert` leaves `delete` and `truncate` in place. Two pgTAP tests
+  expecting `42501` got no exception at all before this was fixed:
+  `revoke all on <table> from anon, authenticated;` then grant what is wanted.
+- **A privileged write users must be able to make goes in a `security definer`
+  function, never a policy.** `redeem_invite` writes `trip_members`, which has no
+  INSERT policy — joining requires a token, and that *is* the security property.
+  `publish_trip_snapshot` deletes from the append-only log, which clients hold no
+  DELETE on. Each function checks `auth.uid()` and membership as its first act,
+  because definer rights bypass the policies that would otherwise say no.
+- **`RETURNING` is subject to the SELECT policy.** `.insert().select().single()`
+  compiles to `INSERT … RETURNING`, so a row you may create but not read fails
+  the insert. This broke trip creation: the owner's roster row comes from an
+  AFTER INSERT trigger, so the SELECT policy had to admit the owner directly.
+- **A missing error is not a success.** An UPDATE matching no row succeeds with
+  zero rows and no error. Ask for the affected rows and check them —
+  `claimParticipant` reported a claim it had not made, leaving a participant
+  looking unclaimed to the next person who joined.
+- **Never paste the database password or the `service_role` key into a chat or a
+  migration.** `supabase link` / `db push` are run by a human. Secrets that a
+  migration needs live in Supabase Vault.
+- **Types are generated, not written.** `bun run db:types` reads the *linked*
+  project, so `src/lib/supabase/database.types.ts` describes what is deployed
+  rather than what the migrations would produce; the difference is worth seeing.
+  Consumers take `TypedSupabaseClient` from `lib/supabase/client`.
+
+The advisor is a good detector and an unreliable prescriber. It flagged
+`is_trip_member`'s EXECUTE grant; revoking it made every `select` from `trips`
+fail with `permission denied for function is_trip_member`. Treat a finding as a
+prompt to check something, not an instruction. `plans/` records the triage.
+
+## PostHog — analytics that must never break the app
+
+`lib/posthog` default-exports a client that is **`undefined`** whenever
+`VITE_POSTHOG_KEY` / `VITE_POSTHOG_HOST` are absent — a fresh clone, a fork's CI,
+every unit test.
+
+- **Always `posthog?.capture(...)`.** Never assume the client exists.
+- **That module must never throw.** `main.tsx` imports it at module scope, and so
+  transitively does every component test, so a throw blanks the app and fails
+  test collection rather than merely losing an event.
+- **Captures are anonymous.** Nothing is passed to `identify()`: the app has no
+  accounts, trip guests are domain records rather than identities, and a shared
+  browser would misattribute events.
+- **Send counts and enum values, not user content.** One capture breaks this
+  deliberately — `assistant_prompt_sent` carries the prompt text, because what
+  people ask is the only way to tell whether the assistant answers it. A prompt
+  routinely names a trip's guests and where they are sleeping, and those people
+  are not users of this app. `prompt_length` rides alongside so dropping `prompt`
+  costs no other insight. Do not add a second exception without deciding to.
+- **Mock it to test a capture.** The real export is `undefined` in tests, so an
+  assertion on `capture` passes vacuously without
+  `vi.mock('@/lib/posthog', () => ({ default: { capture: … } }))`.
 
 ## Styling
 
@@ -341,12 +427,30 @@ src/
 │   ├── db/          # Dexie database, repositories, utils
 │   ├── i18n/        # i18next setup
 │   ├── map/         # Leaflet helpers
+│   ├── posthog.ts   # Analytics client (undefined without env config)
+│   ├── supabase/    # Client, generated database.types.ts, auth callback
+│   ├── sync/        # Server sync: provider, cursors, outbox, invites, join
 │   ├── utils/       # Shared utilities
-│   └── validation/  # Zod schemas
+│   ├── validation/  # Zod schemas
+│   └── yjs/         # CRDT doc model and the Dexie bridge
 ├── locales/         # en/ · fr/
 ├── test/            # setup.ts · utils.tsx (test helpers)
 ├── types/           # index.ts (all branded types + entity interfaces)
 └── router.tsx
 ```
 
-For detailed convention rationale, see `CONVENTIONS.md`.
+Plus, outside `src/`:
+
+```
+supabase/
+├── config.toml      # Local stack configuration
+├── migrations/      # Ordered SQL; RLS enabled in the same file as the table
+└── tests/           # pgTAP — run with `bunx supabase test db`
+e2e/
+├── support/         # supabase-stub.ts: the REST surface, for the sync project
+└── *.spec.ts        # See playwright.config.ts for which project runs which
+```
+
+For detailed convention rationale, see `CONVENTIONS.md`. For why the sync
+architecture is shaped as it is, and the bugs that shaped it, see
+`plans/2026-08-31-server-backed-trip-sync-v1.md`.
