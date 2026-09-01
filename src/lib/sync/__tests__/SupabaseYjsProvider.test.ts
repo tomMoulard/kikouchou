@@ -73,7 +73,11 @@ class FakeServer {
   channelStatus: string | null = null;
 
   private realtimeHandler: RealtimeHandler | null = null;
+  private presenceHandler: (() => void) | null = null;
   private subscribeCallback: ((status: string) => void) | null = null;
+  /** Presence keys currently on the channel, as Realtime would hold them. */
+  private presence = new Map<string, unknown>();
+  private presenceKey: string | null = null;
 
   /**
    * Holds every write open until the returned function is called.
@@ -109,6 +113,28 @@ class FakeServer {
   /** Reports the channel as (re)subscribed. */
   reportSubscribed(): void {
     this.subscribeCallback?.('SUBSCRIBED');
+  }
+
+  /** Reports the channel as gone, the way a dropped socket does. */
+  reportChannelStatus(status: string): void {
+    this.subscribeCallback?.(status);
+  }
+
+  /** The presence key this provider joined under, if any. */
+  get joinedPresenceKey(): string | null {
+    return this.presenceKey;
+  }
+
+  /** Another device joins, as Realtime would report. */
+  addPresence(key: string): void {
+    this.presence.set(key, { joinedAt: Date.now() });
+    this.presenceHandler?.();
+  }
+
+  /** Another device leaves. */
+  removePresence(key: string): void {
+    this.presence.delete(key);
+    this.presenceHandler?.();
   }
 
   /**
@@ -204,10 +230,32 @@ class FakeServer {
         };
       },
 
-      channel: () => {
+      channel: (
+        _name: string,
+        options?: { config?: { presence?: { key?: string } } },
+      ) => {
+        // Captured so a test can assert two tabs of one account collapse to a
+        // single presence key rather than counting twice.
+        this.presenceKey = options?.config?.presence?.key ?? null;
+
         const channel = {
-          on: (_event: string, _filter: unknown, handler: RealtimeHandler) => {
-            this.realtimeHandler = handler;
+          /**
+           * Dispatches by event name, which the previous version did not.
+           *
+           * It stored every handler in one slot, so adding a presence listener
+           * silently replaced the postgres_changes one and row delivery stopped
+           * working — a fake that quietly diverges from the real channel.
+           */
+          on: (
+            event: string,
+            _filter: unknown,
+            handler: RealtimeHandler | (() => void),
+          ) => {
+            if (event === 'presence') {
+              this.presenceHandler = handler as () => void;
+            } else {
+              this.realtimeHandler = handler as RealtimeHandler;
+            }
             return channel;
           },
           subscribe: (callback?: (status: string) => void) => {
@@ -215,8 +263,22 @@ class FakeServer {
               this.subscribeCallback = callback;
             }
             this.channelStatus = 'SUBSCRIBED';
+            callback?.('SUBSCRIBED');
             return channel;
           },
+          track: async (payload: unknown) => {
+            // Realtime keys by the configured presence key, falling back to a
+            // per-connection one.
+            this.presence.set(this.presenceKey ?? 'anon-connection', payload);
+            this.presenceHandler?.();
+            return 'ok';
+          },
+          untrack: async () => {
+            this.presence.delete(this.presenceKey ?? 'anon-connection');
+            this.presenceHandler?.();
+            return 'ok';
+          },
+          presenceState: () => Object.fromEntries(this.presence),
         };
         return channel;
       },
@@ -233,13 +295,18 @@ class FakeServer {
 const TRIP_ID = 'trip-local-1' as TripId;
 const REMOTE_TRIP_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
 
-function makeProvider(server: FakeServer, doc: Y.Doc): SupabaseYjsProvider {
+function makeProvider(
+  server: FakeServer,
+  doc: Y.Doc,
+  userId?: string,
+): SupabaseYjsProvider {
   return new SupabaseYjsProvider({
     // The fake implements exactly the surface the provider uses.
     client: server.client as never,
     doc,
     tripId: TRIP_ID,
     remoteTripId: REMOTE_TRIP_ID,
+    ...(userId === undefined ? {} : { userId }),
   });
 }
 
@@ -775,6 +842,63 @@ describe('realtime', () => {
 // ============================================================================
 
 describe('failure handling', () => {
+  it('counts the people on the trip, this device included', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc, 'user-1'));
+    await provider.start();
+    await settle();
+
+    // Just this device so far.
+    expect(provider.getState().onlineCount).toBe(1);
+
+    server.addPresence('someone-else');
+    await settle(2);
+    expect(provider.getState().onlineCount).toBe(2);
+
+    server.removePresence('someone-else');
+    await settle(2);
+    expect(provider.getState().onlineCount).toBe(1);
+  });
+
+  it('keys presence per account and per trip, and carries nothing identifying', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    await track(makeProvider(server, doc, 'user-1')).start();
+    await settle();
+
+    const key = server.joinedPresenceKey;
+    expect(key).not.toBeNull();
+
+    // The channel is public: Postgres Changes payloads on it are filtered by
+    // RLS but presence is not, so anyone with the publishable key who knows the
+    // trip's uuid could read this. The account id must not be in it.
+    expect(key).not.toContain('user-1');
+
+    // Stable for the same account on the same trip, so two tabs count once...
+    const secondDoc = new Y.Doc();
+    const secondServer = new FakeServer();
+    await track(makeProvider(secondServer, secondDoc, 'user-1')).start();
+    await settle();
+    expect(secondServer.joinedPresenceKey).toBe(key);
+  });
+
+  it('reports the head count as unknown rather than zero when the channel drops', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc, 'user-1'));
+    await provider.start();
+    await settle();
+    expect(provider.getState().onlineCount).toBe(1);
+
+    server.reportChannelStatus('CHANNEL_ERROR');
+    await settle(2);
+
+    // Nobody left the trip — we simply cannot see them any more. Saying zero
+    // would be a claim about other people rather than about the connection.
+    expect(provider.getState().onlineCount).toBeNull();
+  });
+
   it('reports offline on a read failure without throwing', async () => {
     const server = new FakeServer();
     server.failReads = 99;

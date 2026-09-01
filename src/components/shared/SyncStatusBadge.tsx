@@ -1,22 +1,31 @@
 /**
- * @fileoverview Whether this trip's changes have reached the server.
+ * @fileoverview Who is on this trip, and whether your changes have landed.
  *
- * Offline-first rule 8: the four states have to be distinguishable, because they
- * mean very different things to somebody about to close the tab. "Synced" says
- * the others can see it; "3 pending" says they cannot yet, but nothing is lost;
- * "Local only" says this trip was never shared and no amount of waiting will
- * change that.
+ * Two different questions, and only one of them is interesting most of the time.
+ * "Syncing…" answers a question nobody asked — of course it is syncing — whereas
+ * "2 online" is the thing a person actually wants to know when they are editing
+ * a trip with someone else.
+ *
+ * So the head count is the default face of this badge, and the sync state shows
+ * through only when it has something to say. That ordering matters and is
+ * deliberate: offline-first rule 8 still holds, because the one sync state a
+ * person must never miss is *your changes have not been sent*. That keeps
+ * priority over the count — a cheerful "3 online" above unsent edits would be
+ * worse than the spinner it replaced.
  *
  * A trip that does not sync shows nothing at all. Most trips are never shared,
- * and a permanent "not syncing" chip on all of them would be noise reporting a
- * non-problem.
+ * and a permanent chip on all of them would be noise reporting a non-problem.
+ *
+ * `onlineCount` is `null` when Realtime is not connected, which is not the same
+ * as nobody being there — so the badge falls back to the plain sync state rather
+ * than claiming the trip is empty.
  *
  * @module components/shared/SyncStatusBadge
  */
 
 import { type ReactElement, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, Check, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, Loader2, Users } from 'lucide-react';
 
 import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
 import { cn } from '@/lib/utils';
@@ -51,8 +60,33 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
 
   const pending = state.pendingCount;
 
-  const appearance =
-    state.status === 'offline'
+  /**
+   * Whether the head count may take the badge over.
+   *
+   * Never while something is unsent or the connection is down: those are the
+   * cases where the sync state is the message.
+   */
+  const showCount =
+    state.onlineCount !== null && state.status !== 'offline' && pending === 0;
+
+  const appearance = showCount
+    ? {
+        icon: <Users className="size-3.5 shrink-0" aria-hidden="true" />,
+        tone: 'text-green-600 dark:text-green-500',
+        dot: 'bg-green-500',
+        label:
+          (state.onlineCount ?? 0) <= 1
+            ? // "1 online" invites the question "online with whom?". Naming it as
+              // just you answers that, and reads as calm rather than broken.
+              t('nav.syncOnlineJustYou', 'Just you right now')
+            : t('nav.syncOnlineCount', {
+                count: state.onlineCount ?? 0,
+                // Matches the shipped string, so the inline fallback and the
+                // locale file cannot drift apart.
+                defaultValue: '{{count}} people online',
+              }),
+      }
+    : state.status === 'offline'
       ? {
           icon: <AlertCircle className="size-3.5 shrink-0" aria-hidden="true" />,
           tone: 'text-amber-600 dark:text-amber-500',
@@ -80,6 +114,10 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
             dot: 'bg-green-500',
             label: t('nav.syncSynced', 'Everyone is up to date'),
           };
+
+  const regionLabel = showCount
+    ? t('nav.syncPresenceRegion', 'Collaboration status')
+    : t('nav.syncStatusRegion', 'Sync status');
 
   // Only worth offering when something is actually stuck.
   const canRetry = state.status === 'offline';
@@ -121,7 +159,7 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
       <div
         className="border-t border-border px-3 py-2"
         role="status"
-        aria-label={t('nav.syncStatusRegion', 'Sync status')}
+        aria-label={regionLabel}
       >
         {body}
       </div>
@@ -129,7 +167,7 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
   }
 
   return (
-    <div role="status" aria-label={t('nav.syncStatusRegion', 'Sync status')}>
+    <div role="status" aria-label={regionLabel}>
       {body}
     </div>
   );
