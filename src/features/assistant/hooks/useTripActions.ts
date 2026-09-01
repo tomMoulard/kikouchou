@@ -357,7 +357,13 @@ export function useTripActions(): UseTripActionsReturn {
                 .join(', ');
               await updateTrip(tid, {
                 ...(d.name !== undefined && { name: d.name as string }),
-                ...(d.location !== undefined && { location: d.location as string }),
+                // A new location name invalidates the pin resolved from the old
+                // one; clearing it beats leaving the trip pinned elsewhere on
+                // the analytics map. The user re-picks the place in the form.
+                ...(d.location !== undefined && {
+                  location: d.location as string,
+                  coordinates: undefined,
+                }),
                 ...(d.startDate !== undefined && { startDate: d.startDate as ISODateString }),
                 ...(d.endDate !== undefined && { endDate: d.endDate as ISODateString }),
                 ...(d.description !== undefined && { description: d.description as string }),

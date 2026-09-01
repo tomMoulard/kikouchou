@@ -88,6 +88,30 @@ describe('useTripSystemPrompt', () => {
     );
   });
 
+  it('states the map pin so the assistant can answer whether the trip is located', async () => {
+    const trip = await createTrip({
+      name: 'Pinned Trip',
+      location: 'Brest, Bretagne',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-30'),
+      coordinates: { lat: 48.3904, lon: -4.4861 },
+    });
+    const result = await renderWithTrip(trip.id);
+
+    expect(result.current.prompt.systemPrompt).toContain(
+      '- Map pin: 48.390400, -4.486100',
+    );
+  });
+
+  it('says the trip is unpinned rather than omitting the line', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    expect(result.current.prompt.systemPrompt).toContain(
+      '- Map pin: Not pinned on the map',
+    );
+  });
+
   it("lists the trip's activities with their ids", async () => {
     const { tripId, personId } = await seedTrip();
     await createActivity(tripId, {
