@@ -63,7 +63,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ViewSwitcher } from '@/components/ui/view-switcher';
 import { cn } from '@/lib/utils';
 import { ASSISTANT_MODEL_PRESETS } from '@/features/assistant/models';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
@@ -1212,12 +1212,16 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           action={headerAction}
         />
 
-      <Tabs value={currentView} onValueChange={handleViewChange} className="mb-4">
-        <TabsList aria-label={t('rooms.view.ariaLabel', 'Rooms view')}>
-          <TabsTrigger value="card">{t('rooms.view.cards', 'Cards')}</TabsTrigger>
-          <TabsTrigger value="timeline">{t('rooms.view.timeline', 'Timeline')}</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <ViewSwitcher
+        className="mb-4"
+        value={currentView}
+        onValueChange={handleViewChange}
+        ariaLabel={t('rooms.view.ariaLabel', 'Rooms view')}
+        options={[
+          { value: 'card', label: t('rooms.view.cards', 'Cards') },
+          { value: 'timeline', label: t('rooms.view.timeline', 'Timeline') },
+        ]}
+      />
 
       {/* Date range filter for room availability (cards view only) */}
       {currentView === 'card' && rooms.length > 0 && currentTrip && (

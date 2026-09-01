@@ -8,7 +8,7 @@ import { type ReactElement, memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ViewSwitcher } from '@/components/ui/view-switcher';
 
 // ============================================================================
 // Types
@@ -46,20 +46,16 @@ const AnalyticsScopeSelector = memo(function AnalyticsScopeSelector({
   );
 
   return (
-    <Tabs
+    <ViewSwitcher
+      className="mb-4"
       value={active === 'trip' ? 'trip' : 'all'}
       onValueChange={handleValueChange}
-      className="mb-4"
-    >
-      <TabsList aria-label={t('analytics.scopeAriaLabel')}>
-        <TabsTrigger value="trip" className="px-1.5 sm:px-2">
-          {t('analytics.scopeThisTrip')}
-        </TabsTrigger>
-        <TabsTrigger value="all" className="px-1.5 sm:px-2">
-          {t('analytics.scopeAllTrips')}
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
+      ariaLabel={t('analytics.scopeAriaLabel')}
+      options={[
+        { value: 'trip', label: t('analytics.scopeThisTrip') },
+        { value: 'all', label: t('analytics.scopeAllTrips') },
+      ]}
+    />
   );
 });
 

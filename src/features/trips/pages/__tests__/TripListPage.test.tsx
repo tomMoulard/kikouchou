@@ -413,9 +413,9 @@ describe('TripListPage', () => {
       render(<TripListPage />, { withProviders: false });
 
       await waitFor(() => {
-        expect(screen.getByRole('tab', { name: 'trips.view.list' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: 'trips.view.list' })).toBeInTheDocument();
       });
-      expect(screen.getByRole('tab', { name: 'trips.view.map' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'trips.view.map' })).toBeInTheDocument();
     });
 
     it('swaps the cards for the map when the map tab is picked', async () => {
@@ -423,7 +423,7 @@ describe('TripListPage', () => {
       const user = userEvent.setup();
       render(<TripListPage />, { withProviders: false });
 
-      await user.click(screen.getByRole('tab', { name: 'trips.view.map' }));
+      await user.click(screen.getByRole('radio', { name: 'trips.view.map' }));
 
       await waitFor(() => {
         expect(screen.getByTestId('trips-location-map')).toBeInTheDocument();
@@ -436,7 +436,7 @@ describe('TripListPage', () => {
       const user = userEvent.setup();
       render(<TripListPage />, { withProviders: false });
 
-      await user.click(screen.getByRole('tab', { name: 'trips.view.map' }));
+      await user.click(screen.getByRole('radio', { name: 'trips.view.map' }));
 
       await waitFor(() => {
         expect(screen.getByTestId('trips-location-map')).toHaveAttribute(
@@ -460,8 +460,8 @@ describe('TripListPage', () => {
       await waitFor(() => {
         expect(screen.getByTestId('trips-location-map')).toBeInTheDocument();
       });
-      expect(screen.getByRole('tab', { name: 'trips.view.map' })).toHaveAttribute(
-        'aria-selected',
+      expect(screen.getByRole('radio', { name: 'trips.view.map' })).toHaveAttribute(
+        'aria-checked',
         'true',
       );
     });
@@ -491,7 +491,7 @@ describe('TripListPage', () => {
       render(<TripListPage />, { withProviders: false });
 
       expect(screen.getByText('trips.empty')).toBeInTheDocument();
-      expect(screen.queryByRole('tab', { name: 'trips.view.map' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio', { name: 'trips.view.map' })).not.toBeInTheDocument();
     });
   });
 

@@ -304,7 +304,16 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         )}
       </div>
 
+      {/*
+        `role="group"` is what makes the label legal. ARIA prohibits `aria-label`
+        on a generic element, so axe flagged this as `aria-prohibited-attr`
+        ("aria-label attribute cannot be used on a div with no valid role
+        attribute") and the name was dropped on the floor by assistive tech
+        rather than announced. The element is a container of this person's stay
+        bars, which is what `group` describes.
+      */}
       <div
+        role="group"
         className="relative min-w-0 overflow-hidden bg-background"
         style={{ width: canvasWidth, height: rowHeight }}
         aria-label={t('calendar.timeline.personRow', '{{name}} timeline', { name: personLabel })}

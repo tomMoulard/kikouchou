@@ -122,12 +122,12 @@ describe('CalendarPage accessibility', () => {
     );
 
     // View toggle should be present (Month / Timeline)
-    expect(screen.getByRole('tablist', { name: 'calendar.view.ariaLabel' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'calendar.view.month' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'calendar.view.timeline' })).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: 'calendar.view.ariaLabel' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'calendar.view.month' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'calendar.view.timeline' })).toBeInTheDocument();
 
     // Default view is timeline; switch to month (card) to validate grid behavior
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
 
     const grid = screen.getByRole('grid', { name: 'calendar.monthView' });
     expect(grid).toBeInTheDocument();

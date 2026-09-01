@@ -58,7 +58,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ViewSwitcher } from '@/components/ui/view-switcher';
 import { AssignmentFormDialog } from '@/features/rooms/components/RoomAssignmentSection';
 import { toISODateString, toLocalISODateString } from '@/lib/db/utils';
 import { getActivityCategoryColor } from '@/types';
@@ -1031,12 +1031,16 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         description={currentTrip.name}
       />
 
-      <Tabs value={currentView} onValueChange={handleViewChange} className="mb-4">
-        <TabsList aria-label={t('calendar.view.ariaLabel', 'Calendar view')}>
-          <TabsTrigger value="card">{t('calendar.view.month', 'Month')}</TabsTrigger>
-          <TabsTrigger value="timeline">{t('calendar.view.timeline', 'Timeline')}</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <ViewSwitcher
+        className="mb-4"
+        value={currentView}
+        onValueChange={handleViewChange}
+        ariaLabel={t('calendar.view.ariaLabel', 'Calendar view')}
+        options={[
+          { value: 'card', label: t('calendar.view.month', 'Month') },
+          { value: 'timeline', label: t('calendar.view.timeline', 'Timeline') },
+        ]}
+      />
 
       {/* Calendar navigation header */}
       {currentView === 'card' && (
