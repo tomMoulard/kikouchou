@@ -39,7 +39,7 @@ export interface SyncStatusContextValue {
   readonly syncNow: () => void;
 }
 
-const LOCAL_STATE: SyncState = { status: 'local', pendingCount: 0 };
+const LOCAL_STATE: SyncState = { status: 'local', pendingCount: 0, onlineCount: null };
 
 const SyncStatusContext = createContext<SyncStatusContextValue>({
   state: LOCAL_STATE,
@@ -76,6 +76,9 @@ export function SupabaseTripSync({
 }: SupabaseTripSyncProps): ReactElement {
   const yjs = useYjsContext();
   const { session } = useAuth();
+  // The id, not the session object: the object is replaced on every token
+  // refresh and would remount the provider each time.
+  const userId = session?.user.id ?? null;
 
   const { state, syncNow } = useTripSync({
     // `loaded` gates on the document having replayed its persisted updates.
@@ -85,6 +88,7 @@ export function SupabaseTripSync({
     tripId,
     remoteTripId: remoteTripId ?? null,
     isSignedIn: session !== null,
+    userId,
   });
 
   // Keep the server's denormalised preview in step with the document.

@@ -20,10 +20,10 @@ import type { TripId } from '@/types';
 // Constants
 // ============================================================================
 
-const LOCAL_STATE: SyncState = { status: 'local', pendingCount: 0 };
+const LOCAL_STATE: SyncState = { status: 'local', pendingCount: 0, onlineCount: null };
 
 /** Reported between mounting a provider and its first status callback. */
-const STARTING_STATE: SyncState = { status: 'syncing', pendingCount: 0 };
+const STARTING_STATE: SyncState = { status: 'syncing', pendingCount: 0, onlineCount: null };
 
 // ============================================================================
 // Hook
@@ -36,6 +36,8 @@ export interface UseTripSyncOptions {
   readonly remoteTripId: string | null | undefined;
   /** Whether a session exists. Sync is pointless without one. */
   readonly isSignedIn: boolean;
+  /** The signed-in account, so presence counts people rather than tabs. */
+  readonly userId?: string | null | undefined;
 }
 
 /**
@@ -46,6 +48,7 @@ export function useTripSync({
   tripId,
   remoteTripId,
   isSignedIn,
+  userId,
 }: UseTripSyncOptions): {
   readonly state: SyncState;
   readonly syncNow: () => void;
@@ -114,6 +117,9 @@ export function useTripSync({
         doc,
         tripId,
         remoteTripId,
+        // Conditional rather than `userId: userId ?? undefined`, because
+        // `exactOptionalPropertyTypes` distinguishes absent from undefined.
+        ...(typeof userId === 'string' && userId.length > 0 ? { userId } : {}),
         onStateChange: (next) => {
           if (!cancelled && isMountedRef.current) {
             setReported({ key: activeKey, state: next });
@@ -145,7 +151,7 @@ export function useTripSync({
         providerRef.current = null;
       }
     };
-  }, [doc, isSignedIn, remoteTripId, tripId, syncKey]);
+  }, [doc, isSignedIn, remoteTripId, tripId, syncKey, userId]);
 
   // Coming back to the tab is the cheapest signal that time has passed and the
   // log may have moved on. The provider also listens for `online` itself.

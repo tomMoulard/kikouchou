@@ -81,6 +81,38 @@ function isEmptyUpdate(update: Uint8Array): boolean {
 /** Quiet period after a Realtime row before the reconciling pull runs. */
 const PULL_DEBOUNCE_MS = 750;
 
+/**
+ * A stable, per-trip, non-identifying presence key for an account.
+ *
+ * Presence keys are visible to everyone on the channel, and this channel is
+ * **public** — Postgres Changes payloads on it are filtered by RLS, but presence
+ * is not, so anyone holding the publishable key who knows a trip's uuid could
+ * read whatever is put here. So nothing identifying goes in: no email, no name,
+ * and not the account id either.
+ *
+ * Salting with the trip id is the point. The same account on two tabs hashes
+ * alike, so the count is people rather than connections; the same account on two
+ * different trips does not, so presence cannot be used to follow somebody
+ * between trips.
+ *
+ * This is obfuscation, not authorization — someone who already has a candidate
+ * account id can confirm it by hashing. The real fix is a private channel with
+ * RLS on `realtime.messages`, which is a migration and a deployment step; this
+ * keeps the exposure to "how many people are on trip X" until then.
+ */
+function presenceKeyFor(userId: string, remoteTripId: string): string {
+  // FNV-1a. Deliberately not a crypto hash: `crypto.subtle` is async, and the
+  // property needed here is a stable mapping, not preimage resistance, which
+  // truncating SHA-256 would not buy against a candidate id either.
+  let hash = 0x81_1c_9d_c5;
+  const input = `${userId}:${remoteTripId}`;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01_00_01_93) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
 /** Backoff schedule for a failed flush or pull, in milliseconds. */
 const BACKOFF_MS = [1_000, 2_000, 5_000, 15_000, 30_000, 60_000];
 
@@ -120,6 +152,15 @@ export interface SyncState {
   readonly pendingCount: number;
   readonly lastSyncedAt?: number;
   readonly lastError?: string;
+  /**
+   * People currently on this trip, this device included.
+   *
+   * `null` means unknown rather than nobody: Realtime is not connected, so the
+   * honest answer is that we cannot say. A blocked WebSocket is ordinary on the
+   * networks this app gets used on, and reporting "0 online" there would be a
+   * lie about other people rather than about the connection.
+   */
+  readonly onlineCount: number | null;
 }
 
 export interface SupabaseYjsProviderOptions {
@@ -129,6 +170,13 @@ export interface SupabaseYjsProviderOptions {
   readonly tripId: TripId;
   /** Server `trips.id`. */
   readonly remoteTripId: string;
+  /**
+   * The signed-in account, used only to derive a presence key.
+   *
+   * Optional: without it presence still works, it just counts connections
+   * instead of people, so two tabs read as two.
+   */
+  readonly userId?: string;
   readonly onStateChange?: (state: SyncState) => void;
 }
 
@@ -172,9 +220,10 @@ export class SupabaseYjsProvider {
   private reconciling = false;
   private hydrationAttempt = 0;
   private hydrationTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly userId: string | undefined;
   private pullTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
-  private state: SyncState = { status: 'local', pendingCount: 0 };
+  private state: SyncState = { status: 'local', pendingCount: 0, onlineCount: null };
 
   private readonly handleDocUpdate: (update: Uint8Array, origin: unknown) => void;
   private readonly handleOnline: () => void;
@@ -184,6 +233,7 @@ export class SupabaseYjsProvider {
     this.doc = options.doc;
     this.tripId = options.tripId;
     this.remoteTripId = options.remoteTripId;
+    this.userId = options.userId;
     if (options.onStateChange) {
       this.onStateChange = options.onStateChange;
     }
@@ -286,9 +336,12 @@ export class SupabaseYjsProvider {
       this.hydrationTimer = null;
     }
     if (this.channel) {
+      // `removeChannel` untracks presence as part of unsubscribing, so the other
+      // devices see this one leave rather than waiting for a timeout.
       void this.client.removeChannel(this.channel);
       this.channel = null;
     }
+    this.state = { ...this.state, onlineCount: null };
   }
 
   /** Pull then flush, immediately. Used on reconnect and on tab focus. */
@@ -690,8 +743,23 @@ export class SupabaseYjsProvider {
       return;
     }
 
-    this.channel = this.client
-      .channel(`trip-doc:${this.remoteTripId}`)
+    const presenceKey =
+      this.userId === undefined
+        ? undefined
+        : presenceKeyFor(this.userId, this.remoteTripId);
+
+    const channelName = `trip-doc:${this.remoteTripId}`;
+    // Without a key Realtime assigns one per connection, which counts tabs
+    // rather than people. Built as two calls rather than a conditional spread:
+    // `exactOptionalPropertyTypes` will not accept a possibly-undefined `config`.
+    const joined =
+      presenceKey === undefined
+        ? this.client.channel(channelName)
+        : this.client.channel(channelName, {
+            config: { presence: { key: presenceKey } },
+          });
+
+    const channel = joined
       .on(
         'postgres_changes',
         {
@@ -704,13 +772,35 @@ export class SupabaseYjsProvider {
           this.onRealtimeInsert(payload);
         },
       )
-      .subscribe((status: string) => {
+      // Fires on join, leave and the initial state, so one handler covers all
+      // three: the count is always read from the channel rather than tallied.
+      .on('presence', { event: 'sync' }, () => {
+        this.publishPresence();
+      });
+
+    // Assigned *before* subscribing. `subscribe` is free to invoke its callback
+    // synchronously, and with the assignment at the end of the chain the
+    // callback then ran while `this.channel` was still null — so this device
+    // never announced itself and the head count stayed unknown.
+    this.channel = channel;
+
+    channel.subscribe((status: string) => {
+      if (status === 'SUBSCRIBED') {
         // A resubscribe means the socket dropped and came back, so anything
         // missed while it was down has to be pulled.
-        if (status === 'SUBSCRIBED') {
-          this.schedulePull();
-        }
-      });
+        this.schedulePull();
+        // Announced only once the channel is actually joined; tracking earlier
+        // is dropped on the floor.
+        void channel.track({ joinedAt: Date.now() });
+        this.publishPresence();
+        return;
+      }
+
+      if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        // Unknown, not zero — see `SyncState.onlineCount`.
+        this.setState({ onlineCount: null });
+      }
+    });
   }
 
   private onRealtimeInsert(
@@ -732,6 +822,25 @@ export class SupabaseYjsProvider {
     // Whether or not the payload was usable, a row exists that the cursor has
     // not accounted for.
     this.schedulePull();
+  }
+
+  /**
+   * Reads the channel's presence state and publishes the head count.
+   *
+   * Counted from the keys, so two tabs of one account collapse to one person.
+   */
+  private publishPresence(): void {
+    if (this.destroyed || !this.channel) {
+      return;
+    }
+    try {
+      const present = this.channel.presenceState();
+      this.setState({ onlineCount: Object.keys(present).length });
+    } catch (error: unknown) {
+      // Presence is a nicety; never let it take sync down.
+      console.warn('[sync] could not read presence:', error);
+      this.setState({ onlineCount: null });
+    }
   }
 
   private schedulePull(): void {
