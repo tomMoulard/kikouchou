@@ -123,7 +123,12 @@
     "placeSuggestions": "Places on the map",
     "pinnedAt": "Pinned at {{coordinates}}",
     "adjustPin": "Adjust",
-    "removePin": "Remove map pin"
+    "removePin": "Remove map pin",
+    "view": {
+      "ariaLabel": "Trips view",
+      "list": "List",
+      "map": "Map"
+    }
   },
   "rooms": {
     "title": "Rooms",

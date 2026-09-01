@@ -83,6 +83,25 @@ vi.mock('@/lib/yjs', () => ({
   resolveTripPresenceProfile: (...args: unknown[]) => mockResolveTripPresenceProfile(...args),
 }));
 
+vi.mock('@/features/trips/components/TripsLocationMap', () => ({
+  TripsLocationMap: ({
+    trips,
+    asCard,
+    height,
+  }: {
+    trips: readonly Trip[];
+    asCard?: boolean;
+    height?: number;
+  }) => (
+    <div
+      data-testid="trips-location-map"
+      data-trip-count={trips.length}
+      data-as-card={String(asCard)}
+      data-height={height}
+    />
+  ),
+}));
+
 vi.mock('@/lib/db/database', () => ({
   db: {
     persons: {
@@ -376,4 +395,105 @@ describe('TripListPage', () => {
     expect(screen.queryByTestId('share-dialog')).not.toBeInTheDocument();
     expect(screen.getByTestId('trip-yjs-sync-binding')).toHaveTextContent('trip-1:room-1:key-1');
   });
+
+  // ==========================================================================
+  // View Tabs
+  // ==========================================================================
+
+  describe('view tabs', () => {
+    it('shows the trip cards by default', async () => {
+      render(<TripListPage />, { withProviders: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Trip')).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('trips-location-map')).not.toBeInTheDocument();
+    });
+
+    it('offers a list tab and a map tab', async () => {
+      render(<TripListPage />, { withProviders: false });
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'trips.view.list' })).toBeInTheDocument();
+      });
+      expect(screen.getByRole('tab', { name: 'trips.view.map' })).toBeInTheDocument();
+    });
+
+    it('swaps the cards for the map when the map tab is picked', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<TripListPage />, { withProviders: false });
+
+      await user.click(screen.getByRole('tab', { name: 'trips.view.map' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('trips-location-map')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Test Trip')).not.toBeInTheDocument();
+    });
+
+    it('hands the map every trip', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<TripListPage />, { withProviders: false });
+
+      await user.click(screen.getByRole('tab', { name: 'trips.view.map' }));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('trips-location-map')).toHaveAttribute(
+          'data-trip-count',
+          '1',
+        );
+      });
+      // The tab already says "map"; the card's own heading would repeat it.
+      expect(screen.getByTestId('trips-location-map')).toHaveAttribute(
+        'data-as-card',
+        'false',
+      );
+    });
+
+    it('opens straight into the map when the URL asks for it', async () => {
+      render(<TripListPage />, {
+        withProviders: false,
+        initialEntries: ['/trips?view=map'],
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('trips-location-map')).toBeInTheDocument();
+      });
+      expect(screen.getByRole('tab', { name: 'trips.view.map' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+    });
+
+    it('falls back to the list for an unknown view', async () => {
+      render(<TripListPage />, {
+        withProviders: false,
+        initialEntries: ['/trips?view=elsewhere'],
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Trip')).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId('trips-location-map')).not.toBeInTheDocument();
+    });
+
+    it('shows no tabs at all when there are no trips to view', () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        trips: [],
+        isLoading: false,
+        error: null,
+        currentTrip: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        checkConnection: mockCheckConnection,
+      });
+
+      render(<TripListPage />, { withProviders: false });
+
+      expect(screen.getByText('trips.empty')).toBeInTheDocument();
+      expect(screen.queryByRole('tab', { name: 'trips.view.map' })).not.toBeInTheDocument();
+    });
+  });
+
 });

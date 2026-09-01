@@ -36,6 +36,13 @@ export interface TripsLocationMapProps {
   readonly trips: readonly Trip[];
   /** Map height in pixels (default: 400) */
   readonly height?: number;
+  /**
+   * Wrap the map in a titled Card (default: true).
+   *
+   * Pass `false` where the surrounding view already says this is the map —
+   * a "Map" tab, say — so the heading is not repeated.
+   */
+  readonly asCard?: boolean;
 }
 
 /**
@@ -80,6 +87,7 @@ const FIT_BOUNDS_DELAY_MS = 100;
 export const TripsLocationMap = memo(function TripsLocationMap({
   trips,
   height = DEFAULT_HEIGHT,
+  asCard = true,
 }: TripsLocationMapProps): ReactElement {
   const { t, i18n } = useTranslation();
   const mapRef = useRef<MapViewRef>(null);
@@ -164,6 +172,42 @@ export const TripsLocationMap = memo(function TripsLocationMap({
 
   const unpinnedCount = trips.length - locatedTrips.length;
 
+  const body =
+    locatedTrips.length === 0 ? (
+      <p className="py-6 text-center text-sm text-muted-foreground">
+        {t('analytics.tripsMapEmpty')}
+      </p>
+    ) : (
+      <>
+        <div className="overflow-hidden rounded-md border border-border">
+          <MapView
+            ref={mapRef}
+            center={center}
+            zoom={markers.length === 1 ? SINGLE_MARKER_ZOOM : MULTI_MARKER_ZOOM}
+            markers={markers}
+            interactive={true}
+            showZoomControl={true}
+            showAttribution={true}
+            height={height}
+            aria-label={t('analytics.tripsMapAriaLabel')}
+          />
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          {t('analytics.tripsMapSummary', { count: locatedTrips.length })}
+          {unpinnedCount > 0 && (
+            <>
+              {' · '}
+              {t('analytics.tripsMapUnpinned', { count: unpinnedCount })}
+            </>
+          )}
+        </p>
+      </>
+    );
+
+  if (!asCard) {
+    return <div>{body}</div>;
+  }
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -172,38 +216,7 @@ export const TripsLocationMap = memo(function TripsLocationMap({
           {t('analytics.tripsMapTitle')}
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        {locatedTrips.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            {t('analytics.tripsMapEmpty')}
-          </p>
-        ) : (
-          <>
-            <div className="overflow-hidden rounded-md border border-border">
-              <MapView
-                ref={mapRef}
-                center={center}
-                zoom={markers.length === 1 ? SINGLE_MARKER_ZOOM : MULTI_MARKER_ZOOM}
-                markers={markers}
-                interactive={true}
-                showZoomControl={true}
-                showAttribution={true}
-                height={height}
-                aria-label={t('analytics.tripsMapAriaLabel')}
-              />
-            </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              {t('analytics.tripsMapSummary', { count: locatedTrips.length })}
-              {unpinnedCount > 0 && (
-                <>
-                  {' · '}
-                  {t('analytics.tripsMapUnpinned', { count: unpinnedCount })}
-                </>
-              )}
-            </p>
-          </>
-        )}
-      </CardContent>
+      <CardContent>{body}</CardContent>
     </Card>
   );
 });

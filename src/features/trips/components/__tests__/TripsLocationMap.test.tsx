@@ -214,6 +214,35 @@ describe('TripsLocationMap', () => {
     expect(screen.getByText('analytics.tripsMapEmpty')).toBeInTheDocument();
   });
 
+  it('carries its own heading by default', () => {
+    renderMap([createTrip()]);
+
+    expect(screen.getByText('analytics.tripsMapTitle')).toBeInTheDocument();
+  });
+
+  it('drops the heading when the surrounding view already names it', () => {
+    render(
+      <MemoryRouter>
+        <TripsLocationMap trips={[createTrip()]} asCard={false} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText('analytics.tripsMapTitle')).not.toBeInTheDocument();
+    // Everything else still renders.
+    expect(screen.getByTestId('mock-marker-trip-1')).toBeInTheDocument();
+    expect(screen.getByText(/analytics\.tripsMapSummary/)).toBeInTheDocument();
+  });
+
+  it('still shows the empty hint without its heading', () => {
+    render(
+      <MemoryRouter>
+        <TripsLocationMap trips={[createTrip({ coordinates: undefined })]} asCard={false} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('analytics.tripsMapEmpty')).toBeInTheDocument();
+  });
+
   it('centres on the single trip and zooms in when there is only one', () => {
     renderMap([createTrip()]);
 

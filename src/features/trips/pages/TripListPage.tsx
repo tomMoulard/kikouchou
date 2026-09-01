@@ -6,11 +6,12 @@
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Luggage, Plus, QrCode } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -27,6 +28,14 @@ import { db } from '@/lib/db/database';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { Person, Trip, TripId } from '@/types';
 import { TripCard } from '../components/TripCard';
+import { TripsLocationMap } from '../components/TripsLocationMap';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Height of the map view on the trip list, in pixels. */
+const MAP_VIEW_HEIGHT = 520;
 
 // ============================================================================
 // TripListPage Component
@@ -53,6 +62,29 @@ const TripListPage = memo(function TripListPage() {
   // Using ref for guard check to avoid stale closure issues
   const isNavigatingRef = useRef(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // The chosen view lives in the URL, like the rooms page: opening a trip and
+  // coming back lands on the same view instead of snapping back to the list.
+  const currentView = useMemo(
+    () => (searchParams.get('view') === 'map' ? 'map' : 'list'),
+    [searchParams],
+  );
+
+  const handleViewChange = useCallback(
+    (nextValue: string) => {
+      const view = nextValue === 'map' ? 'map' : 'list';
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('view', view);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
   const [importQrOpen, setImportQrOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharedTripId, setSharedTripId] = useState<TripId | null>(null);
@@ -313,29 +345,43 @@ const TripListPage = memo(function TripListPage() {
       <div className="flex flex-col">
         <PageHeader title={t('trips.title')} action={headerAction} />
 
-        {/* Trip grid */}
-        <div
-          className={cn(
-            'grid gap-4',
-            'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-            // Extra bottom padding for stacked FABs on mobile
-            'pb-52 sm:pb-4',
-          )}
-          role="list"
-          aria-label={t('trips.title')}
-        >
-          {trips.map((trip) => (
-            <div key={trip.id} role="listitem">
-              <TripCard
-                trip={trip}
-                persons={personsByTrip.get(trip.id) ?? []}
-                onClick={handleTripSelect}
-                onShare={handleShareTrip}
-                isDisabled={isNavigating}
-              />
-            </div>
-          ))}
-        </div>
+        <Tabs value={currentView} onValueChange={handleViewChange} className="mb-4">
+          <TabsList aria-label={t('trips.view.ariaLabel', 'Trips view')}>
+            <TabsTrigger value="list">{t('trips.view.list', 'List')}</TabsTrigger>
+            <TabsTrigger value="map">{t('trips.view.map', 'Map')}</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {currentView === 'map' ? (
+          /* Extra bottom padding for stacked FABs on mobile */
+          <div className="pb-52 sm:pb-4">
+            <TripsLocationMap trips={trips} height={MAP_VIEW_HEIGHT} asCard={false} />
+          </div>
+        ) : (
+          /* Trip grid */
+          <div
+            className={cn(
+              'grid gap-4',
+              'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+              // Extra bottom padding for stacked FABs on mobile
+              'pb-52 sm:pb-4',
+            )}
+            role="list"
+            aria-label={t('trips.title')}
+          >
+            {trips.map((trip) => (
+              <div key={trip.id} role="listitem">
+                <TripCard
+                  trip={trip}
+                  persons={personsByTrip.get(trip.id) ?? []}
+                  onClick={handleTripSelect}
+                  onShare={handleShareTrip}
+                  isDisabled={isNavigating}
+                />
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Floating actions — mobile */}
         <Button
