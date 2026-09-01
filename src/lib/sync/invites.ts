@@ -14,7 +14,7 @@
  * @module lib/sync/invites
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import { nanoid } from 'nanoid';
 
 // ============================================================================
@@ -144,7 +144,7 @@ function safePathname(url: string): string | null {
  * @param options - Optional expiry and use cap
  */
 export async function createInvite(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   remoteTripId: string,
   userId: string,
   options: { readonly expiresAt?: Date; readonly maxUses?: number } = {},
@@ -181,7 +181,7 @@ export async function createInvite(
  * link stopped working.
  */
 export async function listInvites(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   remoteTripId: string,
 ): Promise<TripInvite[]> {
   try {
@@ -223,7 +223,7 @@ export function isInviteUsable(invite: TripInvite, now = new Date()): boolean {
  * showing a raw Postgres message.
  */
 export async function redeemInvite(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   token: string,
 ): Promise<RedeemInviteResult> {
   try {
@@ -245,7 +245,7 @@ export async function redeemInvite(
 
 /** Withdraws an invite. Any member of the trip may. */
 export async function revokeInvite(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   token: string,
 ): Promise<{ readonly ok: boolean; readonly message?: string }> {
   try {

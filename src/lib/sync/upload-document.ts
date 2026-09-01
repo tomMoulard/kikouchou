@@ -22,7 +22,7 @@
  * @module lib/sync/upload-document
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import * as Y from 'yjs';
 
 import { loadPersistedUpdates, populateDocFromDexie } from '@/lib/yjs/dexie-bridge';
@@ -51,7 +51,7 @@ export type UploadResult =
  * @param remoteTripId - Server `trips.id`
  */
 export async function uploadTripDocument(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   tripId: TripId,
   remoteTripId: string,
 ): Promise<UploadResult> {
@@ -149,7 +149,7 @@ export async function uploadTripDocument(
  * upload rather than to skip.
  */
 async function serverHasDocument(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   remoteTripId: string,
 ): Promise<boolean | null> {
   try {

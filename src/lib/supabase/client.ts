@@ -25,6 +25,19 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import type { Database } from './database.types';
+
+/**
+ * The client, typed against the generated schema.
+ *
+ * Exported because every consumer wants this rather than the bare
+ * `SupabaseClient`: with the generic in place, a column or an RPC argument that
+ * does not exist is a compile error instead of an `undefined` found at run time.
+ * The sync layer carried a hand-written cast at each call site to stand in for
+ * it.
+ */
+export type TypedSupabaseClient = SupabaseClient<Database>;
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -63,9 +76,9 @@ function readConfig(): SupabaseConfig | null {
 // Client
 // ============================================================================
 
-let cachedClient: SupabaseClient | null = null;
+let cachedClient: TypedSupabaseClient | null = null;
 /** In-flight creation, so concurrent callers share one client. */
-let pending: Promise<SupabaseClient | null> | null = null;
+let pending: Promise<TypedSupabaseClient | null> | null = null;
 
 /**
  * Returns the shared Supabase client, or `null` when the app is not configured
@@ -84,7 +97,7 @@ let pending: Promise<SupabaseClient | null> | null = null;
  * }
  * ```
  */
-export function getSupabaseClient(): Promise<SupabaseClient | null> {
+export function getSupabaseClient(): Promise<TypedSupabaseClient | null> {
   if (cachedClient) {
     return Promise.resolve(cachedClient);
   }
@@ -107,7 +120,7 @@ async function createConfiguredClient(
   // Dynamic so the library stays off the cold-launch critical path.
   const { createClient } = await import('@supabase/supabase-js');
 
-  cachedClient = createClient(config.url, config.publishableKey, {
+  cachedClient = createClient<Database>(config.url, config.publishableKey, {
     auth: {
       // The session outlives the tab: a trip is edited over days, and being
       // signed out by a reload would make sharing feel broken.

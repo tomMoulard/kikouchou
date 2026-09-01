@@ -14,7 +14,7 @@
  * @module lib/sync/join-trip
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import { nanoid } from 'nanoid';
 
 import { db } from '@/lib/db/database';
@@ -42,7 +42,7 @@ interface RemoteTripPreview {
 // ============================================================================
 
 async function fetchRemoteTripPreview(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   remoteTripId: string,
 ): Promise<RemoteTripPreview | null> {
   const { data, error } = await client
@@ -100,7 +100,7 @@ function sanitisePreview(preview: RemoteTripPreview | null): RemoteTripPreview {
  * @param remoteTripId - Server `trips.id`, as returned by `redeem_invite`
  */
 export async function materialiseJoinedTrip(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   remoteTripId: string,
 ): Promise<JoinTripResult> {
   try {
@@ -162,7 +162,7 @@ export async function materialiseJoinedTrip(
  * claiming an identity is by definition on the roster it is updating.
  */
 export async function claimParticipant(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   remoteTripId: string,
   userId: string,
   personId: string,
@@ -206,7 +206,7 @@ export async function claimParticipant(
  * a choice, or the claim fails at the last moment with nothing useful to say.
  */
 export async function fetchClaimedParticipants(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   remoteTripId: string,
   currentUserId: string,
 ): Promise<Set<string>> {
