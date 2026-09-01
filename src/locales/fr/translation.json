@@ -123,7 +123,12 @@
     "placeSuggestions": "Lieux sur la carte",
     "pinnedAt": "Épinglé à {{coordinates}}",
     "adjustPin": "Ajuster",
-    "removePin": "Retirer le point sur la carte"
+    "removePin": "Retirer le point sur la carte",
+    "view": {
+      "ariaLabel": "Vue des voyages",
+      "list": "Liste",
+      "map": "Carte"
+    }
   },
   "rooms": {
     "title": "Chambres",
