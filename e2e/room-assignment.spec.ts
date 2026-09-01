@@ -285,7 +285,10 @@ async function createAssignmentViaDB(
  * Navigates to the rooms page for a given trip.
  */
 async function navigateToRooms(page: Page, tripId: string): Promise<void> {
-  await page.goto(`/trips/${tripId}/rooms`);
+  // `?view=card` for the same reason as the calendar: the rooms page defaults
+  // to the timeline view, which renders no room cards — so the
+  // `[role="listitem"]` a caller clicks to expand a room does not exist there.
+  await page.goto(`/trips/${tripId}/rooms?view=card`);
   await page.waitForLoadState('load');
   // Wait for loading to complete
   await page.waitForFunction(() => {
@@ -307,10 +310,14 @@ async function navigateToPersons(page: Page, tripId: string): Promise<void> {
 }
 
 /**
- * Navigates to the calendar page for a given trip.
+ * Navigates to the calendar page for a given trip, in month view.
+ *
+ * `?view=card` is not decoration. The calendar defaults to the timeline view,
+ * which renders no `role="grid"` at all, so callers waiting for the month grid
+ * waited out their timeout instead.
  */
 async function navigateToCalendar(page: Page, tripId: string): Promise<void> {
-  await page.goto(`/trips/${tripId}/calendar`);
+  await page.goto(`/trips/${tripId}/calendar?view=card`);
   await page.waitForLoadState('load');
   await page.waitForFunction(() => {
     return !document.body.textContent?.toLowerCase().includes('loading');
@@ -493,8 +500,10 @@ test.describe('Room Assignment Flow', () => {
     // Wait for calendar grid to be visible
     await page.waitForSelector('[role="grid"]', { state: 'visible', timeout: 10000 });
 
-    // The calendar should show the assignment (person's name in a pill/badge)
-    await expect(page.getByText(new RegExp(TEST_DATA.person.name, 'i'))).toBeVisible({ timeout: 10000 });
+    // The calendar should show the assignment (person's name in a pill/badge).
+    // `.first()`: a multi-day stay renders one bar segment per spanned cell, so
+    // this legitimately matches more than one element.
+    await expect(page.getByText(new RegExp(TEST_DATA.person.name, 'i')).first()).toBeVisible({ timeout: 10000 });
 
     // Also verify on rooms page - expand room to see assignment
     await navigateToRooms(page, tripId);
@@ -593,8 +602,19 @@ test.describe('Room Assignment Flow', () => {
       expect(dialogStillOpen || await errorAfterSubmit.isVisible().catch(() => false)).toBe(true);
     }
 
-    // Close the dialog
+    // Close the dialog.
+    //
+    // Escape alone is not enough: the form is dirty by this point, so closing
+    // it raises a "Discard changes?" confirmation, which is itself a
+    // `role="dialog"`. The old assertion saw that second dialog and reported
+    // the first one as never having closed.
     await page.keyboard.press('Escape');
+
+    const discardButton = page.getByRole('button', { name: /^discard$/i });
+    if (await discardButton.isVisible().catch(() => false)) {
+      await discardButton.click();
+    }
+
     await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5000 });
   });
 

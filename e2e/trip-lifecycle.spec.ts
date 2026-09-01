@@ -180,7 +180,7 @@ async function createTrip(
 
   // Fill in location if provided
   if (tripData.location) {
-    await page.getByLabel(/location/i).fill(tripData.location);
+    await page.locator('#trip-location').fill(tripData.location);
   }
 
   // Open start date picker and select date
@@ -248,10 +248,15 @@ test.describe('Trip Lifecycle', () => {
     await expect(
       page.getByRole('heading', { name: /no trips/i }),
     ).toBeVisible();
-    await expect(page.getByText(/create your first trip/i)).toBeVisible();
+    await expect(page.getByText(/plan your next getaway/i)).toBeVisible();
 
-    // Click the "New trip" button in the empty state
-    await page.getByRole('button', { name: /new trip/i }).click();
+    // Click the "New trip" button in the empty state.
+    //
+    // `.first()` because the empty state offers this action twice — once in the
+    // page header and once in the `EmptyState` body — and both carry the
+    // `trips.new` label, so an unqualified match is a strict-mode violation.
+    // They are the same action, so either will do.
+    await page.getByRole('button', { name: /new trip/i }).first().click();
 
     // Verify we're on the create trip page
     await expect(page).toHaveURL('/trips/new');
@@ -381,7 +386,7 @@ test.describe('Trip Lifecycle', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     await expect(
-      page.getByText(/are you sure you want to delete this trip/i),
+      page.getByText(/this will permanently delete the trip/i),
     ).toBeVisible();
 
     // Wait for the dialog Delete button to be enabled (not in loading state)
@@ -450,7 +455,7 @@ test.describe('Trip Lifecycle', () => {
     await page.goto('/trips');
 
     // Create the second trip
-    await page.getByRole('button', { name: /new trip/i }).click();
+    await page.getByRole('button', { name: /new trip/i }).first().click();
     await createTrip(page, SECOND_TRIP);
     await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
 
@@ -528,14 +533,14 @@ test.describe('Trip Lifecycle', () => {
 
     // Verify form is populated with correct data
     await expect(page.getByLabel(/trip name/i)).toHaveValue(TEST_TRIP.name);
-    await expect(page.getByLabel(/location/i)).toHaveValue(TEST_TRIP.location);
+    await expect(page.locator('#trip-location')).toHaveValue(TEST_TRIP.location);
 
     // Reload again from the edit page
     await page.reload();
 
     // Verify data is still there after another reload
     await expect(page.getByLabel(/trip name/i)).toHaveValue(TEST_TRIP.name);
-    await expect(page.getByLabel(/location/i)).toHaveValue(TEST_TRIP.location);
+    await expect(page.locator('#trip-location')).toHaveValue(TEST_TRIP.location);
   });
 
   // ============================================================================
@@ -547,7 +552,7 @@ test.describe('Trip Lifecycle', () => {
     await page.goto('/trips');
 
     // Click new trip button from empty state
-    await page.getByRole('button', { name: /new trip/i }).click();
+    await page.getByRole('button', { name: /new trip/i }).first().click();
 
     // Fill in some data
     await page.getByLabel(/trip name/i).fill('Cancelled Trip');
@@ -603,7 +608,7 @@ test.describe('Trip Lifecycle', () => {
 
     // Verify dialog is open
     await expect(
-      page.getByText(/are you sure you want to delete this trip/i),
+      page.getByText(/this will permanently delete the trip/i),
     ).toBeVisible();
 
     // Click cancel
@@ -611,7 +616,7 @@ test.describe('Trip Lifecycle', () => {
 
     // Verify dialog closed and we're still on edit page
     await expect(
-      page.getByText(/are you sure you want to delete this trip/i),
+      page.getByText(/this will permanently delete the trip/i),
     ).not.toBeVisible();
     await expect(page).toHaveURL(`/trips/${tripId}/edit`);
 

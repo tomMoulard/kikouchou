@@ -542,8 +542,10 @@ test.describe('Performance Tests', () => {
       TEST_CONFIG.ASSIGNMENT_COUNT,
     );
 
-    // Navigate to calendar and measure render time
-    const calendarUrl = `/trips/${tripId}/calendar`;
+    // Navigate to calendar and measure render time.
+    // `?view=card` because the calendar defaults to the timeline view, which
+    // renders no `role="grid"` — the wait below would never resolve.
+    const calendarUrl = `/trips/${tripId}/calendar?view=card`;
 
     // Measure calendar render time
     const renderTime = await measureDuration(async () => {
@@ -766,8 +768,10 @@ test.describe('Performance Tests', () => {
     const roomIds = await createBulkRooms(page, tripId, 3);
     await createBulkAssignments(page, tripId, personIds, roomIds, 15);
 
-    // Navigate to calendar
-    await page.goto(`/trips/${tripId}/calendar`);
+    // Navigate to calendar. Month view specifically: the month-navigation
+    // buttons this test hammers only exist there, and the timeline view (the
+    // default) renders no `role="grid"`.
+    await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
     await waitForLoading(page);
     await page.waitForSelector('[role="grid"]', { state: 'visible', timeout: 10000 });
@@ -910,8 +914,13 @@ test.describe('Mobile Performance', () => {
     await page.waitForLoadState('load');
     await waitForLoading(page);
 
-    // Find and click bottom navigation items
-    const nav = page.locator('nav[aria-label="Main navigation"]');
+    // Find and click bottom navigation items.
+    //
+    // "Mobile navigation", not "Main navigation": the bottom bar is the only
+    // `nav` on a mobile viewport, and "Main navigation" labels the desktop
+    // sidebar, which is an `aside` — so `nav[aria-label="Main navigation"]`
+    // matched nothing at any viewport.
+    const nav = page.locator('nav[aria-label="Mobile navigation"]');
     await expect(nav).toBeVisible();
 
     const navLinks = nav.locator('a');
