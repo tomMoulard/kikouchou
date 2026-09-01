@@ -790,3 +790,35 @@ the Leaflet container error cannot be reached; the channel fake stored every
 handler in one slot, so adding presence silently broke row delivery; and the
 PostgREST fake terminated at `eq()`, so a zero-row update could not be expressed.
 A fake that cannot express the failure guarantees the test suite cannot see it.
+
+---
+
+## 15. pgTAP, finally executed
+
+The snapshot suite had been written but never run — the one part of the
+client-side compaction work with no execution behind it. Running it found three
+defects, all in the test file and none in the function:
+
+1. `log_ids` is a temp table created while privileged and read while acting as a
+   member, so it needed `grant select ... to authenticated`. Without it ten
+   assertions died with `permission denied` and the file aborted after four.
+2. The last assertion read the snapshot head as the *stranger*, who cannot see
+   it — `trip_doc_snapshots` restricts SELECT to members — so it returned NULL
+   and was asserting the policy rather than the head.
+3. Deriving row ids instead of assuming they start at 1 mattered in practice: the
+   first run saw ids near 226, the post-reset run saw them from 1.
+
+**83 tests across 5 files, passing, and passing again from a freshly reset
+database** — which also proves all ten migrations apply to a virgin database,
+including the guarded `cron.unschedule` in the compaction migration.
+
+Every suite now has execution behind it:
+
+| Suite | Result |
+|---|---|
+| Unit (Vitest) | 3,129 across 161 files |
+| pgTAP | 83 across 5 files, incl. from a clean database |
+| Playwright `sync` | 15 |
+| Playwright `sharing.spec.ts` | 5 |
+
+Run pgTAP with `bunx supabase start` then `bunx supabase test db`.
