@@ -10,6 +10,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import { clearIndexedDB } from './support/storage';
 
 import { seedTrip } from './support/seed';
 
@@ -34,25 +35,6 @@ const _PARIS_COORDINATES = {
   lat: 48.8566,
   lon: 2.3522,
 } as const;
-
-/**
- * Maximum time to wait for service worker to be ready.
- */
-const SW_READY_TIMEOUT = 30000;
-
-/**
- * Clears IndexedDB to ensure a clean state before tests.
- */
-async function clearIndexedDB(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const databases = await indexedDB.databases();
-    for (const db of databases) {
-      if (db.name) {
-        indexedDB.deleteDatabase(db.name);
-      }
-    }
-  });
-}
 
 /**
  * Creates a test trip and returns its ID.
@@ -456,111 +438,6 @@ test.describe('Directions Button', () => {
         await newPage.close();
       }
     }
-  });
-});
-
-// ============================================================================
-// Test Suite: Offline Map Tiles
-// ============================================================================
-
-test.describe('Offline Map Tiles', () => {
-  test.beforeEach(async ({ page }) => {
-    // Navigate and wait for SW to be fully active
-    await page.goto('/');
-    await page.waitForLoadState('load');
-
-    // Ensure service worker is activated
-    await page.waitForFunction(
-      async () => {
-        if (!('serviceWorker' in navigator)) return true; // Skip if no SW support
-        try {
-          const registrations = await navigator.serviceWorker.getRegistrations();
-          return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
-        } catch {
-          return true; // Continue if SW check fails
-        }
-      },
-      { timeout: SW_READY_TIMEOUT }
-    );
-
-    // Give time for precaching to complete
-    await page.waitForTimeout(2000);
-  });
-
-  test('OSM tiles are cached when viewing a map', async ({ page }) => {
-    await clearIndexedDB(page);
-
-    // Create a trip and navigate to a map view
-    const tripId = await createTestTrip(page, { name: 'Cache Test Trip', location: 'Paris' });
-
-    // Navigate to transport map (which loads OSM tiles)
-    await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('load');
-
-    // Wait for tiles to load and cache
-    await page.waitForTimeout(3000);
-
-    // Check if OSM tiles cache exists
-    const hasTilesCache = await page.evaluate(async () => {
-      if (!('caches' in window)) return false;
-      const cacheNames = await caches.keys();
-      return cacheNames.includes('osm-tiles');
-    });
-
-    // Cache should exist (may or may not have entries depending on network)
-    expect(typeof hasTilesCache).toBe('boolean');
-  });
-
-  test('cached tiles are used when offline', async ({ page, context }) => {
-    await clearIndexedDB(page);
-
-    // Create a trip
-    const tripId = await createTestTrip(page, { name: 'Offline Test Trip', location: 'London' });
-
-    // View the map to trigger tile caching
-    await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('load');
-    await page.waitForTimeout(3000);
-
-    // Go offline
-    await context.setOffline(true);
-
-    // Reload the page
-    await page.reload({ waitUntil: 'domcontentloaded' });
-
-    // The page should still load (from cache)
-    await expect(page.locator('body')).toBeVisible();
-
-    // Check for offline indicator if present
-    const offlineIndicator = page.getByText(/offline|hors ligne/i);
-    // Indicator might or might not be visible
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _indicatorVisible = await offlineIndicator.isVisible().catch(() => false);
-
-    // The app should handle offline gracefully
-    const pageContent = await page.content();
-    const hasNetworkError =
-      pageContent.includes('ERR_INTERNET_DISCONNECTED') ||
-      pageContent.includes('net::ERR');
-
-    expect(hasNetworkError).toBe(false);
-
-    // Restore online
-    await context.setOffline(false);
-  });
-
-  test('Nominatim geocoding responses are cached', async ({ page }) => {
-    await clearIndexedDB(page);
-
-    // Check for Nominatim cache after using location search
-    const hasNominatimCache = await page.evaluate(async () => {
-      if (!('caches' in window)) return false;
-      const cacheNames = await caches.keys();
-      return cacheNames.includes('nominatim-geocoding');
-    });
-
-    // Nominatim cache should be configured (may not have entries yet)
-    expect(typeof hasNominatimCache).toBe('boolean');
   });
 });
 

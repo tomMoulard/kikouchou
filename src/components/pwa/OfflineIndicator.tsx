@@ -110,6 +110,13 @@ export const OfflineIndicator = memo(function OfflineIndicator({
       className={cn(
         // Position below the sticky header (h-14 = 56px) to avoid overlap
         'fixed top-14 inset-x-0 z-50 flex justify-center px-4 py-2',
+        // The wrapper is full-bleed but only the centred pill is visible, so
+        // without this it swallows every click along a full-width strip of the
+        // page at z-50. While offline that strip sits directly over the trip
+        // list's primary actions: "New trip" became unclickable for as long as
+        // the banner was up. The pill is purely informational — nothing in here
+        // is meant to take a pointer.
+        'pointer-events-none',
         // Animation classes — motion-safe prefix for NFR12 compliance
         'motion-safe:transition-all motion-safe:duration-300 motion-safe:ease-out',
         isVisible

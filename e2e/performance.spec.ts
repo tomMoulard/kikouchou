@@ -11,6 +11,7 @@
  */
 
 import { test, expect, type Page, type CDPSession } from '@playwright/test';
+import { clearIndexedDB } from './support/storage';
 
 // ============================================================================
 // Test Configuration & Constants
@@ -197,20 +198,6 @@ async function getMemoryUsage(
 // ============================================================================
 // Database Helpers
 // ============================================================================
-
-/**
- * Clears IndexedDB to ensure a clean state.
- */
-async function clearIndexedDB(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const databases = await indexedDB.databases();
-    for (const db of databases) {
-      if (db.name) {
-        indexedDB.deleteDatabase(db.name);
-      }
-    }
-  });
-}
 
 /**
  * Waits for loading state to finish.

@@ -11,6 +11,9 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import { clearIndexedDB } from './support/storage';
+import { waitForActivatedServiceWorker } from './support/service-worker';
+import { stubExternalMapServices } from './support/external-services';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -20,20 +23,6 @@ import { test, expect, type Page } from '@playwright/test';
  * Maximum time to wait for service worker to be ready.
  */
 const SW_READY_TIMEOUT = 30000;
-
-/**
- * Clears IndexedDB to ensure a clean state before tests.
- */
-async function clearIndexedDB(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const databases = await indexedDB.databases();
-    for (const db of databases) {
-      if (db.name) {
-        indexedDB.deleteDatabase(db.name);
-      }
-    }
-  });
-}
 
 /**
  * Waits for the service worker to be registered and activated.
@@ -169,6 +158,11 @@ async function isUrlCached(page: Page, urlPattern: string): Promise<boolean> {
  * @returns The created trip's ID
  */
 async function createTestTrip(page: Page): Promise<string> {
+  // Before the form loads: the location field debounces into a live Nominatim
+  // search, and its suggestion popover renders over the date pickers and eats
+  // the click on the day cell.
+  await stubExternalMapServices(page);
+
   await page.goto('/trips/new');
   await page.waitForLoadState('load');
 
@@ -235,32 +229,20 @@ test.describe('Service Worker Registration', () => {
     await page.goto('/');
     await page.waitForLoadState('load');
 
-    // Wait for service worker to be ready
+    await waitForActivatedServiceWorker(page);
+
     const swRegistration = await page.evaluate(async () => {
-      // First check if service worker is supported
       if (!('serviceWorker' in navigator)) {
         return { supported: false, active: false, state: null };
       }
 
-      try {
-        // Wait for SW to be ready (with timeout)
-        const reg = await Promise.race([
-          navigator.serviceWorker.ready,
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 30000)),
-        ]);
+      const registration = await navigator.serviceWorker.ready;
 
-        if (!reg) {
-          return { supported: true, active: false, state: 'timeout' };
-        }
-
-        return {
-          supported: true,
-          active: !!reg.active,
-          state: reg.active?.state ?? null,
-        };
-      } catch {
-        return { supported: true, active: false, state: 'error' };
-      }
+      return {
+        supported: true,
+        active: !!registration.active,
+        state: registration.active?.state ?? null,
+      };
     });
 
     expect(swRegistration.supported).toBe(true);
@@ -272,29 +254,31 @@ test.describe('Service Worker Registration', () => {
     await page.goto('/');
     await page.waitForLoadState('load');
 
-    // Wait for SW registration
-    await page.waitForFunction(
-      async () => {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
-      },
-      { timeout: SW_READY_TIMEOUT },
-    );
+    await waitForActivatedServiceWorker(page);
 
     const swInfo = await getServiceWorkerInfo(page);
 
     expect(swInfo.hasServiceWorker).toBe(true);
     expect(swInfo.registrations.length).toBeGreaterThan(0);
 
-    // The scope should be the base URL of the app
-    const registration = swInfo.registrations[0];
-    expect(registration.active).toBe(true);
-    expect(registration.activeState).toBe('activated');
+    /**
+     * The activated one, not `registrations[0]`.
+     *
+     * `beforeEach` unregisters whatever the previous test left behind, and for a
+     * moment afterwards `getRegistrations()` can still hand back that dying
+     * registration alongside the fresh one — in whichever order it likes. Index
+     * 0 therefore sometimes named a registration with no active worker, which is
+     * how this assertion failed right after a wait that had just confirmed an
+     * activated worker existed.
+     */
+    const registration = swInfo.registrations.find((candidate) => candidate.active);
+    expect(registration).toBeDefined();
+    expect(registration?.activeState).toBe('activated');
 
     // Scope should contain the base path
     const baseUrl = page.url();
     const expectedScopeBase = new URL(baseUrl).origin;
-    expect(registration.scope).toContain(expectedScopeBase);
+    expect(registration?.scope).toContain(expectedScopeBase);
   });
 
   test('service worker script URL is correct', async ({ page }) => {
@@ -322,14 +306,7 @@ test.describe('Offline Capability', () => {
     await page.waitForLoadState('load');
 
     // Ensure service worker is activated
-    await page.waitForFunction(
-      async () => {
-        if (!('serviceWorker' in navigator)) return false;
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
-      },
-      { timeout: SW_READY_TIMEOUT },
-    );
+    await waitForActivatedServiceWorker(page);
 
     // Give time for precaching to complete
     await page.waitForTimeout(2000);
@@ -577,23 +554,13 @@ test.describe('App Updates', () => {
     await page.goto('/');
     await page.waitForLoadState('load');
 
-    // Wait for SW to be active
-    await page.waitForFunction(
-      async () => {
-        if (!('serviceWorker' in navigator)) return false;
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
-      },
-      { timeout: SW_READY_TIMEOUT },
-    );
+    await waitForActivatedServiceWorker(page);
 
     // With autoUpdate, VitePWA checks for updates automatically
     // We can verify the SW is registered with the correct update behavior
     const updateInfo = await page.evaluate(async () => {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      if (registrations.length === 0) return null;
+      const registration = await navigator.serviceWorker.ready;
 
-      const registration = registrations[0];
       return {
         hasActive: !!registration.active,
         hasWaiting: !!registration.waiting,
@@ -611,14 +578,7 @@ test.describe('App Updates', () => {
     await page.waitForLoadState('load');
 
     // Wait for SW to be active
-    await page.waitForFunction(
-      async () => {
-        if (!('serviceWorker' in navigator)) return false;
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
-      },
-      { timeout: SW_READY_TIMEOUT },
-    );
+    await waitForActivatedServiceWorker(page);
 
     // Trigger an update check
     const updateResult = await page.evaluate(async () => {
@@ -689,14 +649,7 @@ test.describe('Precaching', () => {
     await page.waitForLoadState('load');
 
     // Wait for SW and precaching to complete
-    await page.waitForFunction(
-      async () => {
-        if (!('serviceWorker' in navigator)) return false;
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        return registrations.length > 0 && registrations[0]?.active?.state === 'activated';
-      },
-      { timeout: SW_READY_TIMEOUT },
-    );
+    await waitForActivatedServiceWorker(page);
 
     // Additional wait for precaching
     await page.waitForTimeout(3000);
