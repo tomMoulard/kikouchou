@@ -74,7 +74,14 @@
     "tripBreakdown": "Par voyage",
     "rowSummary": "{{guests}} invités · {{rooms}} chambres · {{transports}} trajets · {{assignments}} affectations",
     "openTrip": "Analyses du voyage",
-    "emptyTrips": "Aucun voyage à analyser"
+    "emptyTrips": "Aucun voyage à analyser",
+    "tripsMapTitle": "Lieux des voyages",
+    "tripsMapEmpty": "Aucun voyage n'est encore épinglé sur la carte. Choisissez un lieu sur la carte en créant ou modifiant un voyage pour le voir ici.",
+    "tripsMapAriaLabel": "Carte de tous les lieux de voyage",
+    "tripsMapSummary_one": "1 voyage sur la carte",
+    "tripsMapSummary_other": "{{count}} voyages sur la carte",
+    "tripsMapUnpinned_one": "1 voyage sans point sur la carte",
+    "tripsMapUnpinned_other": "{{count}} voyages sans point sur la carte"
   },
   "trips": {
     "title": "Mes voyages",
