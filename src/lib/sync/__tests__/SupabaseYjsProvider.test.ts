@@ -30,6 +30,7 @@ import * as outbox from '@/lib/sync/outbox';
 import {
   ORIGIN_REMOTE,
   SupabaseYjsProvider,
+  type SyncState,
 } from '@/lib/sync/SupabaseYjsProvider';
 import type { TripId } from '@/types';
 
@@ -800,6 +801,75 @@ describe('reconciliation', () => {
 
     // Recording it optimistically would mean these edits are never sent again.
     expect((await readCursor(TRIP_ID)).serverStateVector).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// State churn
+// ============================================================================
+
+describe('state publication', () => {
+  it('does not publish a change when nothing a consumer can see has changed', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const seen: SyncState[] = [];
+
+    const provider = track(
+      new SupabaseYjsProvider({
+        client: server.client as never,
+        doc,
+        tripId: TRIP_ID,
+        remoteTripId: REMOTE_TRIP_ID,
+        onStateChange: (next) => {
+          seen.push(next);
+        },
+      }),
+    );
+
+    await provider.start();
+    await settle();
+    const afterStart = seen.length;
+
+    // Repeated pulls that find nothing. Each one used to publish a new state,
+    // because `lastSyncedAt` moves every time — and this state feeds a context
+    // wrapping the whole app, so every quiet pull re-rendered the entire tree.
+    // With a document that is still empty the hydration retry does exactly this
+    // on a timer, which is visible as flicker.
+    await provider.syncNow();
+    await provider.syncNow();
+    await provider.syncNow();
+    await settle();
+
+    expect(seen.length).toBe(afterStart);
+  });
+
+  it('still publishes a change a consumer can see', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const seen: SyncState[] = [];
+
+    const provider = track(
+      new SupabaseYjsProvider({
+        client: server.client as never,
+        doc,
+        tripId: TRIP_ID,
+        remoteTripId: REMOTE_TRIP_ID,
+        onStateChange: (next) => {
+          seen.push(next);
+        },
+      }),
+    );
+    await provider.start();
+    await settle();
+    const afterStart = seen.length;
+
+    // A failure is worth telling anyone about.
+    server.failReads = 99;
+    await provider.syncNow();
+    await settle();
+
+    expect(seen.length).toBeGreaterThan(afterStart);
+    expect(provider.getState().status).toBe('offline');
   });
 });
 
