@@ -734,3 +734,59 @@ dropping anything. "Never used" here mostly means "never exercised".
 Google SSO is the only provider, so there are no passwords in the system to
 check against HaveIBeenPwned. Enabling it costs nothing and protects nothing
 until a password provider is added — at which point it should go on.
+
+---
+
+## 14. The reported bugs, and what they were actually about
+
+Four rounds of "the invitee is stuck", all reported from the running app. Worth
+recording as a set, because the shape repeats and because two of the four fixes
+were for real bugs that were not the reported one.
+
+| Reported | Cause | Where it lived |
+|---|---|---|
+| Invitee stuck on "récupération du séjour", trip present but empty | `IdentityStep` read participants from `PersonContext`, scoped to the *currently open* trip, while being handed the joined trip's id as a prop it ignored | One line, in the component |
+| Same screen, now offering people from a *different* trip | Same bug. When the open trip had people they were offered for the wrong trip; when it had none the screen said there were no participants | — |
+| Sharing a trip fails with an RLS error on `trip_doc_updates` | The local `remoteTripId` pointed at a `trips` row deleted in the dashboard. Its `trip_members` row cascaded away, so the insert policy correctly refused a non-member | `ensureRemoteTrip` trusting a cached pointer |
+| The shared trip blinks | Sync state republished on every quiet pull, and `publishStatus()` ran before `pulling` was cleared so each pull flipped `syncing` → `synced`. That state feeds a context wrapping the whole app | `setState` and `pull` |
+
+Found on the way, and real, but not what was reported:
+
+- A trip shared while a *different* trip was open never uploaded its document,
+  because sync is mounted for the open trip only.
+- The gate added for that then made the state unrepairable: it skipped the upload
+  whenever a server state vector had been recorded, and reconciliation records
+  one even when it has nothing to send.
+- `syncDocToDexie` refused every remote update for a joined trip, because it
+  compared the document's `meta.id` against the local trip id — per-device
+  nanoids that can never match.
+- A cold join could outrun the owner's first upload with nothing to ask again.
+
+### What actually found them
+
+One SQL row and one console dump. Reasoning from the code produced three
+confident wrong answers first; the query that returned `log_rows = 12,
+members = 2` eliminated the entire upload path in one step, and the console dump
+showing `lastSeenUpdateId: 220` with `persons: 1` eliminated the pull path.
+
+The inference error worth remembering: `persons: 1` across four trips was read as
+"the trips are empty" when it equally meant "projection is failing". Both
+readings fit; nothing was done to distinguish them, and two fixes went to the
+wrong half of the problem.
+
+### Three spinners with no terminal state
+
+The share dialog on a retired `legacy` branch, the share dialog keyed on a
+live-query object, and the identity step with no participants. Same failure mode
+three times in one flow, which makes it a pattern rather than a coincidence:
+**every waiting state needs a reason to stop waiting**, and a bounded one, since
+the condition it waits for may never arrive.
+
+### A note on the test doubles
+
+Three bugs this round were invisible to the unit suite because the double was
+kinder than reality: `react-leaflet` is mocked wherever `MapView` is tested, so
+the Leaflet container error cannot be reached; the channel fake stored every
+handler in one slot, so adding presence silently broke row delivery; and the
+PostgREST fake terminated at `eq()`, so a zero-row update could not be expressed.
+A fake that cannot express the failure guarantees the test suite cannot see it.
