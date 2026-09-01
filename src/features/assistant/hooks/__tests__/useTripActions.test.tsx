@@ -583,3 +583,59 @@ describe('useTripActions — cross-trip references', () => {
     expect(await db.roomAssignments.where('tripId').equals(tripId).count()).toBe(1);
   });
 });
+
+// ============================================================================
+// Trip Map Pin
+// ============================================================================
+
+describe('useTripActions — trip map pin', () => {
+  it('drops the map pin when the assistant renames the location', async () => {
+    const trip = await createTrip({
+      name: 'Pinned Trip',
+      location: 'Brest, Bretagne',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-30'),
+      coordinates: { lat: 48.3904, lon: -4.4861 },
+    });
+    const result = await renderWithTrip(trip.id);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'updateTrip',
+        data: { location: 'Annecy, Haute-Savoie' },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+
+    // The pin was resolved from the old name; keeping it would leave the trip
+    // showing in Brittany on the analytics map.
+    const updated = await db.trips.get(trip.id);
+    expect(updated?.location).toBe('Annecy, Haute-Savoie');
+    expect(updated?.coordinates).toBeUndefined();
+  });
+
+  it('keeps the map pin when the assistant edits another field', async () => {
+    const trip = await createTrip({
+      name: 'Pinned Trip',
+      location: 'Brest, Bretagne',
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-30'),
+      coordinates: { lat: 48.3904, lon: -4.4861 },
+    });
+    const result = await renderWithTrip(trip.id);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'updateTrip',
+        data: { name: 'Renamed Trip' },
+      }),
+    );
+
+    const updated = await db.trips.get(trip.id);
+    expect(updated?.name).toBe('Renamed Trip');
+    expect(updated?.coordinates).toEqual({ lat: 48.3904, lon: -4.4861 });
+  });
+});
