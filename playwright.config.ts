@@ -4,6 +4,39 @@ import { defineConfig, devices } from '@playwright/test';
  * Playwright configuration for Kikoushou E2E tests.
  * @see https://playwright.dev/docs/test-configuration
  */
+
+/**
+ * Which Chromium build to drive.
+ *
+ * Playwright speaks CDP to Chromium either way — the only question is whose
+ * binary is on the other end.
+ *
+ * Unset, the default, uses Playwright's own pinned build. That is what CI wants:
+ * the version moves with the dependency, so a Chrome auto-update cannot change a
+ * test result underneath you.
+ *
+ * `PW_CHANNEL=chrome` drives the machine's installed Google Chrome instead,
+ * which is how to run this suite on a machine where `playwright install` has not
+ * finished — no multi-hundred-megabyte download, and the browser is already
+ * there. Expect small rendering and timing differences from the pinned build;
+ * treat a failure that only appears under one of them as information about the
+ * environment, not a verdict on the code.
+ */
+const channel = ((): 'chrome' | 'msedge' | undefined => {
+  const requested = process.env.PW_CHANNEL;
+  if (requested === undefined || requested === '') {
+    return undefined;
+  }
+  if (requested === 'chrome' || requested === 'msedge') {
+    return requested;
+  }
+  // Loud rather than silently ignored: a typo here would quietly run the whole
+  // suite against a different browser than the one asked for.
+  throw new Error(
+    `PW_CHANNEL must be 'chrome' or 'msedge' (or unset for Playwright's own Chromium), got '${requested}'`,
+  );
+})();
+
 export default defineConfig({
   testDir: './e2e',
 
@@ -47,6 +80,9 @@ export default defineConfig({
 
     /* Take screenshot on failure */
     screenshot: 'only-on-failure',
+
+    // Applied to every project below, none of which sets its own channel.
+    ...(channel === undefined ? {} : { channel }),
   },
 
   /* Configure projects for major browsers */
