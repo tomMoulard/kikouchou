@@ -136,6 +136,12 @@ async function addRooms(page: Page, roomNames: readonly string[]): Promise<void>
 
 test.describe('Trip Import Feature', () => {
   test.beforeEach(async ({ page }) => {
+    // The trip location field searches OpenStreetMap for places; keep that off
+    // the wire so these tests stay deterministic and don't depend on Nominatim.
+    await page.route('**/nominatim.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+
     await page.goto('/');
     // Wait for the app to load
     await page.waitForLoadState('load');

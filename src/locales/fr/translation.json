@@ -112,7 +112,11 @@
     "importQrMergeSuccess": "Données du voyage importées et fusionnées.",
     "importQrSnapshotRequired": "Cet export est trop ancien pour être importé ici (détails du voyage manquants). Réexportez depuis Paramètres → Sync sur l'appareil source, puis scannez le nouveau QR.",
     "importQrMergeFailed": "Impossible d'importer ces données. Réessayez ou ouvrez un voyage et utilisez Paramètres → Sync → Importer.",
-    "shareTripAria": "Partager le voyage — lien et QR code"
+    "shareTripAria": "Partager le voyage — lien et QR code",
+    "placeSuggestions": "Lieux sur la carte",
+    "pinnedAt": "Épinglé à {{coordinates}}",
+    "adjustPin": "Ajuster",
+    "removePin": "Retirer le point sur la carte"
   },
   "rooms": {
     "title": "Chambres",

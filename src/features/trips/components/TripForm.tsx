@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { toISODateStringFromString } from '@/lib/db/utils';
+import type { Coordinates } from '@/lib/geocoding';
 import {
   LocationAutocomplete,
   ImportBadge,
@@ -119,6 +120,20 @@ function formatToISO(date: Date | undefined): string {
   return format(date, ISO_DATE_FORMAT);
 }
 
+/**
+ * Compares two optional coordinate pairs by value.
+ *
+ * The picker hands back a fresh object every time the marker moves, so
+ * reference equality would report every render as a change.
+ */
+function isSameCoordinates(
+  a: Coordinates | undefined,
+  b: Coordinates | undefined,
+): boolean {
+  if (!a || !b) {return a === b;}
+  return a.lat === b.lat && a.lon === b.lon;
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -186,6 +201,7 @@ const TripForm = memo(function TripForm({
       startDate: trip?.startDate ?? '',
       endDate: trip?.endDate ?? '',
       description: trip?.description ?? '',
+      coordinates: trip?.coordinates,
     }),
     [trip],
   );
@@ -196,17 +212,22 @@ const TripForm = memo(function TripForm({
   const [startDate, setStartDate] = useState<string>(initialValues.startDate);
   const [endDate, setEndDate] = useState<string>(initialValues.endDate);
   const [description, setDescription] = useState(initialValues.description);
-  const [coordinates, setCoordinates] = useState(trip?.coordinates);
+  const [coordinates, setCoordinates] = useState<Coordinates | undefined>(
+    initialValues.coordinates,
+  );
 
-  // Compute dirty state: any field differs from initial values
+  // Compute dirty state: any field differs from initial values. Coordinates
+  // count: nudging the map pin is the only edit some trips need, and without
+  // this the unsaved-changes guard would let it be navigated away silently.
   const isDirty = useMemo(
     () =>
       name !== initialValues.name ||
       location !== initialValues.location ||
       startDate !== initialValues.startDate ||
       endDate !== initialValues.endDate ||
-      description !== initialValues.description,
-    [name, location, startDate, endDate, description, initialValues],
+      description !== initialValues.description ||
+      !isSameCoordinates(coordinates, initialValues.coordinates),
+    [name, location, startDate, endDate, description, coordinates, initialValues],
   );
 
   // Notify parent of dirty state changes
@@ -342,11 +363,15 @@ const TripForm = memo(function TripForm({
   }, [name, validateName]);
 
   /**
-   * Handles location input change from the autocomplete component.
+   * Handles location changes from the autocomplete component.
+   *
+   * Coordinates always travel with the name: free text arrives with none, a
+   * place confirmed on the map arrives with its pin.
    */
   const handleLocationChange = useCallback(
-    (value: string) => {
+    (value: string, nextCoordinates?: Coordinates) => {
       setLocation(value);
+      setCoordinates(nextCoordinates);
     },
     [],
   );
@@ -359,9 +384,11 @@ const TripForm = memo(function TripForm({
     (data: TripImportData) => {
       const { trip: sourceTip, rooms } = data;
 
-      // Pre-fill location
+      // Pre-fill location, and its pin alongside it — adopting the name while
+      // keeping an older trip's coordinates would pin the new trip elsewhere.
       if (sourceTip.location) {
         setLocation(sourceTip.location);
+        setCoordinates(sourceTip.coordinates);
       }
 
       // Pre-fill description only if current description is empty
@@ -371,11 +398,6 @@ const TripForm = memo(function TripForm({
         }
         return prev;
       });
-
-      // Pre-fill coordinates
-      if (sourceTip.coordinates) {
-        setCoordinates(sourceTip.coordinates);
-      }
 
       // Store import source info for the badge and for room cloning on submit
       const source = {
@@ -533,6 +555,7 @@ const TripForm = memo(function TripForm({
         <LocationAutocomplete
           id="trip-location"
           value={location}
+          coordinates={coordinates}
           onChange={handleLocationChange}
           onImportTrip={handleImportTrip}
           placeholder={t('trips.locationPlaceholder')}
