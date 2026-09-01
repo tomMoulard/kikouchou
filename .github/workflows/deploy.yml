@@ -47,6 +47,13 @@ jobs:
         env:
           VITE_APP_VERSION: ${{ github.ref_name }}@${{ github.sha }}
           VITE_SIGNALING_URL: wss://kikoushou.cyprin.eu
+          # The repository secrets are named NEXT_PUBLIC_*; Vite only inlines
+          # VITE_-prefixed variables into import.meta.env, so they are mapped
+          # here. Rename the secrets and both sides if that ever gets confusing.
+          # Absent values are not fatal: src/lib/posthog.ts leaves the client
+          # undefined and every capture becomes a no-op.
+          VITE_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
