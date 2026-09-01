@@ -25,6 +25,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
+import posthog from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -209,6 +210,9 @@ export const InstallPrompt = memo(function InstallPrompt({
    */
   const handleInstall = useCallback(async (): Promise<void> => {
     const success = await install();
+    if (success) {
+      posthog?.capture('pwa_install_completed');
+    }
     // Success toast is handled in the effect when isInstalled becomes true
     // Show error feedback if installation failed and app is not installed
     if (!success && !isInstalled) {

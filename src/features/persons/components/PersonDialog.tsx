@@ -27,6 +27,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { PersonForm } from '@/features/persons/components/PersonForm';
+import posthog from '@/lib/posthog';
 import type { ISODateString, Person, PersonFormData, PersonId } from '@/types';
 
 // ============================================================================
@@ -165,9 +166,19 @@ const PersonDialog = memo(function PersonDialog({
         }
 
         successToast(t('persons.updateSuccess', 'Participant updated successfully'));
+        posthog?.capture('person_saved', {
+          operation: 'updated',
+          headcount: data.headcount,
+          has_stay_dates: Boolean(data.stayStartDate && data.stayEndDate),
+        });
       } else {
         await createPerson(data);
         successToast(t('persons.createSuccess', 'Participant added successfully'));
+        posthog?.capture('person_saved', {
+          operation: 'created',
+          headcount: data.headcount,
+          has_stay_dates: Boolean(data.stayStartDate && data.stayEndDate),
+        });
       }
       onOpenChange(false);
     },
