@@ -15,6 +15,8 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
+import { seedTrip, type SeededTrip } from './support/seed';
+
 // ============================================================================
 // Database Helpers
 // ============================================================================
@@ -58,63 +60,8 @@ const TEST_DATA = {
  * Creates a new trip directly via IndexedDB for testing purposes.
  * Returns the trip ID and shareId from the created trip.
  */
-async function createTestTrip(page: Page): Promise<{ tripId: string; shareId: string }> {
-  // Navigate to trips page to ensure the database is initialized
-  await page.goto('/trips');
-  await page.waitForLoadState('load');
-
-  // Create trip directly in IndexedDB
-  const { tripId, shareId } = await page.evaluate(
-    async ({ startDate, endDate, name, location }) => {
-      const id = `share-trip-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const shareId = `share-${Math.random().toString(36).substr(2, 10)}`;
-      const now = Date.now();
-
-      return new Promise<{ tripId: string; shareId: string }>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
-        dbRequest.onerror = () => reject(new Error('Failed to open database'));
-        dbRequest.onsuccess = () => {
-          const db = dbRequest.result;
-          const tx = db.transaction('trips', 'readwrite');
-          const store = tx.objectStore('trips');
-
-          const trip = {
-            id,
-            shareId,
-            name,
-            location,
-            startDate,
-            endDate,
-            createdAt: now,
-            updatedAt: now,
-          };
-
-          store.add(trip);
-
-          tx.oncomplete = () => {
-            db.close();
-            resolve({ tripId: id, shareId });
-          };
-          tx.onerror = () => {
-            db.close();
-            reject(new Error('Failed to create trip'));
-          };
-        };
-      });
-    },
-    {
-      startDate: TEST_DATA.trip.startDate,
-      endDate: TEST_DATA.trip.endDate,
-      name: TEST_DATA.trip.name,
-      location: TEST_DATA.trip.location,
-    },
-  );
-
-  expect(tripId).toBeTruthy();
-
-  expect(shareId).toBeTruthy();
-
-  return { tripId, shareId };
+async function createTestTrip(page: Page): Promise<SeededTrip> {
+  return seedTrip(page, TEST_DATA.trip);
 }
 
 /**

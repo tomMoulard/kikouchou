@@ -11,6 +11,8 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
+import { seedTrip } from './support/seed';
+
 // ============================================================================
 // Test Configuration & Helpers
 // ============================================================================
@@ -690,5 +692,131 @@ test.describe('Map Error Handling', () => {
 
     // Restore online
     await context.setOffline(false);
+  });
+});
+
+// ============================================================================
+// Test Suite: Maps under modal dialogs
+// ============================================================================
+
+/**
+ * Trips pinned on the map, so the list renders a preview on every card.
+ */
+const MAPPED_TRIPS = [
+  {
+    name: 'Stacking Trip Paris',
+    location: 'Paris, France',
+    startDate: '2026-06-01',
+    endDate: '2026-06-10',
+    coordinates: { lat: 48.8566, lon: 2.3522 },
+  },
+  {
+    name: 'Stacking Trip Lisbon',
+    location: 'Lisbon, Portugal',
+    startDate: '2026-07-01',
+    endDate: '2026-07-08',
+    coordinates: { lat: 38.7223, lon: -9.1393 },
+  },
+] as const;
+
+/**
+ * A map element hit-tested at its own centre, and whatever the browser found
+ * painted on top of it there.
+ */
+interface StackingProbe {
+  /** The map element that was probed, named for the failure message. */
+  readonly probe: string;
+  /** The topmost element at that point. */
+  readonly hit: string;
+  /** Whether that topmost element belongs to a map. */
+  readonly hitsMap: boolean;
+}
+
+test.describe('Maps under modal dialogs', () => {
+  test.beforeEach(async ({ page }) => {
+    // Tiles and geocoding never leave the browser: this suite must not depend
+    // on OpenStreetMap being reachable, or on how fast it answers.
+    await page.route('**/tile.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
+    );
+    await page.route('**/nominatim.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+
+    await page.goto('/');
+    await page.waitForLoadState('load');
+    await clearIndexedDB(page);
+  });
+
+  /**
+   * Leaflet numbers its own layers from 200 (tiles) up to 1000 (controls), and
+   * the dialog sits at 50. Those two scales only ever meet if the map container
+   * fails to contain its own — which is what happened: opening the share dialog
+   * on the trips list left every trip's map painted on top of it.
+   *
+   * Markers are the probe rather than tiles because they are plain DOM
+   * (`divIcon`), so the assertion holds whether or not a tile ever loads.
+   */
+  test('the share dialog covers the trip maps, not the other way round', async ({
+    page,
+  }) => {
+    for (const trip of MAPPED_TRIPS) {
+      await seedTrip(page, trip);
+    }
+
+    await page.goto('/trips');
+    await page.waitForLoadState('load');
+
+    // Card previews are lazy; wait for the markers the assertion probes.
+    await expect(page.locator('.leaflet-marker-icon').first()).toBeVisible({
+      timeout: 15000,
+    });
+
+    await page.getByRole('button', { name: /share trip/i }).first().click();
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10000 });
+    // `toBeVisible` resolves the moment the dialog is laid out, which is the
+    // start of its 200 ms open animation. Probe the resting state instead.
+    await page.waitForTimeout(500);
+
+    const probes = await page.evaluate((): StackingProbe[] => {
+      const describe = (element: Element | null): string => {
+        if (element === null) {
+          return '<nothing>';
+        }
+        const classes = element.getAttribute('class');
+        const suffix = classes === null ? '' : '.' + classes.trim().split(/\s+/).join('.');
+        return element.tagName.toLowerCase() + suffix;
+      };
+
+      const results: StackingProbe[] = [];
+      // Markers and controls are the map's own DOM, and both carry a real box.
+      const targets = document.querySelectorAll('.leaflet-marker-icon, .leaflet-control');
+
+      for (const target of targets) {
+        const rect = target.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) {
+          continue;
+        }
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
+          continue;
+        }
+
+        const hit = document.elementFromPoint(x, y);
+        results.push({
+          probe: describe(target),
+          hit: describe(hit),
+          hitsMap: hit !== null && hit.closest('.leaflet-container') !== null,
+        });
+      }
+
+      return results;
+    });
+
+    // Guard against a vacuous pass: with no map on screen there is nothing to
+    // cover, and the assertion below would hold for the wrong reason.
+    expect(probes.length).toBeGreaterThan(0);
+    expect(probes.filter((probe) => probe.hitsMap)).toEqual([]);
   });
 });
