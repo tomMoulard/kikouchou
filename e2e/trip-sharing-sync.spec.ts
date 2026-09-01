@@ -361,6 +361,37 @@ test.describe('joining a trip', () => {
 
   });
 
+  test('lets an invitee into a trip that has no participants', async ({ browser }) => {
+    const stub = new SupabaseStub();
+    const ownerPage = await newDevice(browser, stub, OWNER);
+
+    // No guests at all. The reported case: the owner shares a trip before adding
+    // anyone, which is the natural order — you share it *so that* people get
+    // added.
+    await ownerPage.goto('/');
+    await createTrip(ownerPage, TRIP.name);
+
+    await openShareDialog(ownerPage);
+    const inviteUrl = await ownerPage
+      .getByTestId('share-url')
+      .textContent({ timeout: 20_000 });
+    const token = (inviteUrl ?? '').split('/join/')[1] ?? '';
+    expect(token).not.toBe('');
+
+    const guestPage = await newDevice(browser, stub, GUEST);
+    await guestPage.goto(`/join/${token}`);
+
+    // The identity step has nobody to offer, and used to spin on "Getting the
+    // trip…" indefinitely waiting for participants that did not exist. It has to
+    // reach an end and let them in.
+    await expect(
+      guestPage.getByRole('button', { name: /open the trip/i }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    await guestPage.getByRole('button', { name: /open the trip/i }).click();
+    await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+  });
+
   test('does not offer a participant another account has claimed', async ({ browser }) => {
     const stub = new SupabaseStub();
     const ownerPage = await newDevice(browser, stub, OWNER);
