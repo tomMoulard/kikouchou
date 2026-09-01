@@ -210,6 +210,51 @@ test.describe('sharing a trip', () => {
     expect(stub.counts.inviteInserts).toBe(1);
   });
 
+  test('uploads the document of a trip that is not the one currently open', async ({
+    page,
+  }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await page.goto('/');
+    await createTrip(page, 'Brittany');
+    await addGuest(page, 'Alice');
+
+    // A second trip, which becomes the open one. Now the trip about to be
+    // shared is not the current trip — the ordinary case when someone shares
+    // from the list rather than from inside the trip.
+    await page.goto('/');
+    await createTrip(page, 'Corsica');
+
+    // Scoped to Brittany's own card. `.first()` would be whichever card the list
+    // happens to order first, and sharing Corsica instead would make the
+    // assertion below meaningless rather than failing honestly.
+    await page.goto('/');
+    const brittanyCard = page
+      .getByRole('button')
+      .filter({ hasText: 'Brittany' })
+      .first();
+    await brittanyCard
+      .getByRole('button', { name: /share trip/i })
+      .click();
+    await expect(page.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
+
+    // Whichever of the two was shared, its contents have to reach the server:
+    // handing over an invite whose document is empty leaves the invitee on
+    // "Getting the trip…" forever, with only the name and dates showing because
+    // those come from the preview row rather than from the document.
+    await expect
+      .poll(
+        () =>
+          stub.updates.some((row) =>
+            Buffer.from(row.update, 'base64').toString('utf8').includes('Alice'),
+          ),
+        { timeout: 20_000, intervals: [500] },
+      )
+      .toBe(true);
+  });
+
   test('reuses the live invite when the dialog is reopened', async ({ page }) => {
     const stub = new SupabaseStub();
     await stub.install(page);

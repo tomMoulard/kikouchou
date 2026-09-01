@@ -32,6 +32,7 @@ import {
   listInvites,
 } from '@/lib/sync/invites';
 import { ensureRemoteTrip } from '@/lib/sync/remote-trip';
+import { uploadTripDocument } from '@/lib/sync/upload-document';
 import type { Trip } from '@/types';
 
 // ============================================================================
@@ -151,6 +152,28 @@ export function useTripShareLink(
             remote.status === 'missing'
               ? 'This trip is no longer on this device.'
               : remote.message,
+        });
+        return;
+      }
+
+      // Put the document on the server before handing out a link to it.
+      //
+      // Sync is mounted for the open trip only, so a trip shared from the list
+      // while a different trip is open would otherwise get a server row and an
+      // invite with no document behind them — and the invitee would sit on
+      // "Getting the trip…" indefinitely, seeing the name and dates from the
+      // preview row and none of the contents.
+      //
+      // Awaited, and a failure is reported rather than swallowed: a link to an
+      // empty trip is worse than being told the share did not work.
+      const uploaded = await uploadTripDocument(client, tripId, remote.remoteTripId);
+      if (cancelled || !isMountedRef.current) {
+        return;
+      }
+      if (uploaded.status === 'error') {
+        setState({
+          kind: 'error',
+          message: uploaded.message,
         });
         return;
       }
