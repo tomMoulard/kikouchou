@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import posthog from '@/lib/posthog';
 import { useAuth } from '@/features/auth/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { redeemInvite, type RedeemInviteResult } from '@/lib/sync/invites';
@@ -78,6 +79,10 @@ export function useJoinTrip(token: string | null): {
     }
 
     if (!hasSession) {
+      // Joining is one of the two operations allowed to require an account, so
+      // this is an expected step rather than a failure — but it is also the most
+      // likely place for an invitee to give up, which is worth being able to see.
+      posthog?.capture('trip_join_blocked', { reason: 'needs-account' });
       setPhase({ kind: 'needs-account' });
       return;
     }
@@ -103,6 +108,10 @@ export function useJoinTrip(token: string | null): {
         return;
       }
       if (redeemed.status !== 'joined') {
+        // The reason is the whole point: a revoked link and an exhausted one are
+        // the same dead end to the person holding it and completely different
+        // problems to fix.
+        posthog?.capture('trip_join_failed', { reason: redeemed.status });
         setPhase(toFailurePhase(redeemed));
         return;
       }
@@ -118,6 +127,7 @@ export function useJoinTrip(token: string | null): {
 
       // 'joined' and 'already-local' are the same outcome from here: the trip is
       // on the device and linked to the server row.
+      posthog?.capture('trip_joined', { already_local: local.status === 'already-local' });
       setPhase({ kind: 'joined', tripId: local.tripId });
     };
 

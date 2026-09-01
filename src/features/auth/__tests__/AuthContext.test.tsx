@@ -29,6 +29,19 @@ import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 // Test doubles
 // ============================================================================
 
+const mockIdentify = vi.fn();
+const mockReset = vi.fn();
+const mockRegister = vi.fn();
+vi.mock('@/lib/posthog', () => ({
+  // The real module exports `undefined` without env config, which is the case in
+  // tests, so nothing here could observe a call without this.
+  default: {
+    identify: (...args: unknown[]) => mockIdentify(...args),
+    reset: (...args: unknown[]) => mockReset(...args),
+    register: (...args: unknown[]) => mockRegister(...args),
+  },
+}));
+
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseClient: vi.fn(),
   isSupabaseConfigured: vi.fn(),
@@ -228,6 +241,79 @@ describe('AuthProvider — state', () => {
       expect(result.current.user?.id).toBe('user-1');
     });
     expect(result.current.isResolved).toBe(true);
+  });
+
+  it('identifies analytics with the Supabase user id', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    client.emit('SIGNED_IN', SESSION);
+
+    // The same id on both sides is the point: it is what lets one person's
+    // events line up across their devices.
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledWith('user-1');
+    });
+    expect(mockRegister).toHaveBeenCalledWith({ signed_in: true });
+  });
+
+  it('does not re-identify on a token refresh', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    client.emit('SIGNED_IN', SESSION);
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledTimes(1);
+    });
+
+    // This handler runs on every refresh, and Supabase refreshes hourly.
+    client.emit('TOKEN_REFRESHED', SESSION);
+    client.emit('TOKEN_REFRESHED', SESSION);
+
+    expect(mockIdentify).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reset analytics for a visitor who was never signed in', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    client.emit('INITIAL_SESSION', null);
+    await waitFor(() => {
+      expect(mockRegister).toHaveBeenCalledWith({ signed_in: false });
+    });
+
+    // `reset()` mints a fresh anonymous id, so calling it on every cold load
+    // would give a signed-out visitor a different identity each time and inflate
+    // the unique-user count.
+    expect(mockReset).not.toHaveBeenCalled();
+  });
+
+  it('resets analytics on sign-out, so a shared browser does not inherit an identity', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    client.emit('SIGNED_IN', SESSION);
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledWith('user-1');
+    });
+
+    client.emit('SIGNED_OUT', null);
+
+    await waitFor(() => {
+      expect(mockReset).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('subscribes once, and reads the persisted session as a fallback', async () => {

@@ -19,10 +19,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
 } from 'react';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { useAuth } from '@/features/auth/AuthContext';
+import posthog from '@/lib/posthog';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { useYjsContext } from '@/lib/yjs/YjsProvider';
 import { syncRemoteTripMetadata } from './remote-trip';
@@ -124,6 +126,34 @@ export function SupabaseTripSync({
     // a guest — does not fire a pointless update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewKey]);
+
+  /**
+   * Reports sync falling over and coming back, on the transition only.
+   *
+   * Transitions rather than states, because a state would fire on every
+   * re-render and drown the project. `status` only changes when something a user
+   * could notice changed, so this is a handful of events per session at most.
+   *
+   * Worth having because sync failing is invisible from the outside: the app
+   * keeps working offline by design, so a person whose changes never reach
+   * anybody looks exactly like a person who is simply editing.
+   */
+  const lastStatusRef = useRef<SyncState['status'] | null>(null);
+  useEffect(() => {
+    const previous = lastStatusRef.current;
+    lastStatusRef.current = state.status;
+
+    if (previous === null || previous === state.status) {
+      return;
+    }
+    if (state.status === 'offline') {
+      posthog?.capture('trip_sync_offline', { pending_count: state.pendingCount });
+      return;
+    }
+    if (previous === 'offline' && state.status === 'synced') {
+      posthog?.capture('trip_sync_recovered', { pending_count: state.pendingCount });
+    }
+  }, [state.status, state.pendingCount]);
 
   const value = useMemo<SyncStatusContextValue>(
     () => ({ state, syncNow }),
