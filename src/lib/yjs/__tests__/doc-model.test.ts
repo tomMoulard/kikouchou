@@ -276,12 +276,16 @@ describe('replaceDocCollection', () => {
     replaceDocCollection(doc, 'guests', [
       { id: 'p1', name: 'Alice' },
       { id: 'p2', name: 'Bob' },
-    ]);
+    ],
+      { allowDeletions: true },
+    );
 
     replaceDocCollection(doc, 'guests', [
       { id: 'p1', name: 'Alicia' },
       { id: 'p3', name: 'Carol' },
-    ]);
+    ],
+      { allowDeletions: true },
+    );
 
     expect(readDocCollection(doc, 'guests')).toEqual([
       { id: 'p1', name: 'Alicia' },
@@ -307,7 +311,9 @@ describe('replaceDocCollection', () => {
         replaceDocCollection(doc, 'guests', [
           { id: 'p1', name: 'Alice' },
           { id: 'p2', name: 'Bob' },
-        ]);
+        ],
+          { allowDeletions: true },
+        );
       },
       'dexie-sync',
     );
@@ -318,13 +324,13 @@ describe('replaceDocCollection', () => {
   it('emits nothing when the collection already matches', () => {
     const doc = new Y.Doc();
     const guests = [{ id: 'p1', name: 'Alice', color: '#f00' }];
-    replaceDocCollection(doc, 'guests', guests);
+    replaceDocCollection(doc, 'guests', guests, { allowDeletions: true });
 
     let updates = 0;
     doc.on('update', () => {
       updates += 1;
     });
-    replaceDocCollection(doc, 'guests', guests);
+    replaceDocCollection(doc, 'guests', guests, { allowDeletions: true });
 
     // `YjsTripSync` re-pushes on every useLiveQuery emission, so an unchanged
     // collection must not put a byte on the wire.

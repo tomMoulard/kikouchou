@@ -22,6 +22,7 @@ import {
   migrateLegacyArrayCollections,
   readDocCollection,
   readDocSchemaVersion,
+  type ReplaceDocCollectionOptions,
   replaceDocCollection,
   stampDocSchemaVersion,
 } from './doc-model';
@@ -168,6 +169,36 @@ export async function loadPersistedUpdates(doc: Y.Doc, tripId: TripId): Promise<
   if (rows.length >= COMPACTION_THRESHOLD) {
     await compactUpdates(doc, tripId);
   }
+}
+
+/**
+ * Which trips this document has successfully projected into Dexie.
+ *
+ * A `WeakMap` on the document, so the answer resets whenever the document is
+ * recreated — a trip switch, a reload, a fresh join. That is the right lifetime:
+ * a new document has not yet shown that Dexie mirrors it, so it must earn the
+ * right to prune again rather than inherit it.
+ *
+ * This is what stops an invitee's empty Dexie deleting the owner's trip. Until a
+ * projection has actually landed, Dexie is not known to be a complete mirror, so
+ * nothing derived from it may delete.
+ */
+const projectedTrips = new WeakMap<Y.Doc, Set<string>>();
+
+function markProjected(doc: Y.Doc, tripId: TripId): void {
+  const trips = projectedTrips.get(doc) ?? new Set<string>();
+  trips.add(tripId);
+  projectedTrips.set(doc, trips);
+}
+
+/**
+ * Whether Dexie can be trusted as a complete mirror of this document's trip.
+ *
+ * Exported so the caller that syncs Dexie back into the document can ask rather
+ * than assume.
+ */
+export function isDexieTrustedMirror(doc: Y.Doc, tripId: TripId): boolean {
+  return projectedTrips.get(doc)?.has(tripId) === true;
 }
 
 export function subscribeToUpdates(doc: Y.Doc, tripId: TripId): () => void {
@@ -341,6 +372,10 @@ export async function syncDocToDexie(
     console.error('[yjs-bridge] Failed to sync Y.Doc → Dexie:', error);
   }
 
+  // Dexie now mirrors this document for this trip, which is the only basis on
+  // which anything derived from Dexie may delete from it.
+  markProjected(doc, tripId);
+
   return tripId;
 }
 
@@ -402,39 +437,63 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
     ];
 
     for (const [name, rows] of sources) {
+      // Seeding, never reconciling. This runs on mount with whatever Dexie
+      // happens to hold, which on a freshly joined device is nothing while the
+      // document may already carry the owner's whole trip. Pruning here deleted
+      // it for everybody.
       replaceDocCollection(
         doc,
         name,
         rows.map((row) => stripTripId(row) as SharedRecord & { id: string }),
+        { allowDeletions: false },
       );
     }
   });
 }
 
 /**
- * Pushes a Dexie collection into the document, upserting each row and removing
- * the ids that are gone.
+ * Pushes a Dexie collection into the document, upserting each row and — only
+ * when the mirror is trustworthy — removing the ids that are gone.
  *
  * This used to clear the whole `Y.Array` and rebuild it, which made every local
  * change collide with every concurrent remote one: the merge kept both peers'
  * deletions and both peers' inserts, and `bulkPut` then silently dropped an
  * edit or restored a deleted row. Per-entity writes keep unrelated edits out of
  * each other's way — see `./doc-model`.
+ *
+ * The removal half is gated on this document having actually projected into
+ * Dexie for this trip. Before that, Dexie is not known to mirror the document,
+ * and pruning it would delete the owner's rooms and guests for every member —
+ * an invitee whose projection was refused, or had not run yet, has an empty
+ * Dexie and a full document, and the difference is not a deletion anyone asked
+ * for.
+ *
+ * The decision is the caller's, not this function's: whoever holds the trip id
+ * asks {@link isDexieTrustedMirror} and passes the answer. Hiding that policy in
+ * here would make it invisible at the call sites whose data it protects, and
+ * would leave a legitimately synced device unable to state that it is one.
  */
 export function syncDexieToDoc(
   doc: Y.Doc,
   table: SharedCollectionName,
   items: SharedRecord[],
+  { allowDeletions }: ReplaceDocCollectionOptions,
 ): void {
   const entities = items.filter(
     (item): item is SharedRecord & { id: string } =>
       typeof item.id === 'string' && item.id.length > 0,
   );
 
+  if (!allowDeletions && entities.length === 0) {
+    // Nothing to add and no standing to remove: the whole call is a no-op, and
+    // saying so beats writing an empty transaction on every live-query tick.
+    return;
+  }
+
   Y.transact(
     doc,
     () => {
-      replaceDocCollection(doc, table, entities);
+      replaceDocCollection(doc, table, entities, { allowDeletions });
     },
     ORIGIN_DEXIE_SYNC,
   );

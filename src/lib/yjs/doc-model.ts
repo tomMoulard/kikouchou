@@ -291,10 +291,36 @@ export function deleteDocEntity(
  * touches only what differs, so an unrelated concurrent edit is never in the
  * blast radius and a one-field change costs a one-field update on the wire.
  */
+export interface ReplaceDocCollectionOptions {
+  /**
+   * Whether `entities` may be treated as the complete set.
+   *
+   * Required, with no default, because getting it wrong destroys other people's
+   * data and the safe answer is not obvious from the call site. `true` deletes
+   * every entry not in `entities`; `false` upserts and removes nothing.
+   *
+   * Only pass `true` when the caller can assert that `entities` is a complete
+   * mirror of this collection. A deletion here is a CRDT tombstone: it pushes to
+   * the log, every other member applies it, and nothing brings the entry back.
+   *
+   * The failure it guards is not hypothetical. An invitee's document receives the
+   * owner's rooms and guests from the log while their Dexie stays empty — the
+   * projection refused, or has not run yet, or the local data was cleared. Their
+   * empty mirror then pruned the document to match, and the owner lost the trip's
+   * contents for everybody.
+   *
+   * Note that the CRDT layer itself is not the hazard: Yjs updates are additive,
+   * so a document that merely *lacks* an entry deletes nothing when it merges.
+   * Only an inferred deletion does damage.
+   */
+  readonly allowDeletions: boolean;
+}
+
 export function replaceDocCollection(
   doc: Y.Doc,
   name: DocCollectionName,
   entities: readonly (DocRecord & { id: string })[],
+  { allowDeletions }: ReplaceDocCollectionOptions,
 ): void {
   const collection = collectionRoot(doc, name);
   const nextIds = new Set(entities.map((entity) => entity.id));
@@ -303,6 +329,11 @@ export function replaceDocCollection(
     for (const entity of entities) {
       upsertDocEntity(doc, name, entity);
     }
+
+    if (!allowDeletions) {
+      return;
+    }
+
     for (const id of [...collection.keys()]) {
       if (!nextIds.has(id)) {
         collection.delete(id);

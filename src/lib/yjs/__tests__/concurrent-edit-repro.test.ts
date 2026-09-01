@@ -99,9 +99,22 @@ function personRow(tripId: TripId, entry: DocGuest): Person {
   };
 }
 
-/** What `YjsTripSync` does when Dexie changes: hand the collection to the doc. */
+/**
+ * What `YjsTripSync` does when Dexie changes: hand the collection to the doc.
+ *
+ * `allowDeletions: true` because every device in this file is one that has
+ * synced — the point of these tests is how two complete, diverged replicas
+ * merge, and a deletion has to be able to travel for that to mean anything. A
+ * device whose Dexie is *not* known to mirror its document is a different
+ * scenario, covered in `trip-integrity.test.ts`.
+ */
 function pushGuests(doc: Y.Doc, guests: readonly DocGuest[]): void {
-  syncDexieToDoc(doc, 'guests', guests.map((entry) => ({ ...entry })));
+  syncDexieToDoc(
+    doc,
+    'guests',
+    guests.map((entry) => ({ ...entry })),
+    { allowDeletions: true },
+  );
 }
 
 /** Two docs sharing a common history, as two devices already on the trip. */
