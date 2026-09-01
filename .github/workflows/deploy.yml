@@ -22,6 +22,10 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Lifted to the job so the source-map step can test it in an `if:` — the
+    # `secrets` context is not available there, but `env` is.
+    env:
+      POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -54,6 +58,29 @@ jobs:
           # undefined and every capture becomes a no-op.
           VITE_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
           VITE_POSTHOG_HOST: ${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
+
+      # Rewrites the built bundles in place to carry a chunk ID, then uploads
+      # the .map files to PostHog and deletes them. It must run between the
+      # build and the Pages upload: the *injected* bundles are what has to ship,
+      # because PostHog matches a stack trace to its map by that chunk ID.
+      - name: Upload source maps to PostHog
+        if: ${{ env.POSTHOG_CLI_API_KEY != '' }}
+        uses: PostHog/upload-source-maps@v2
+        with:
+          directory: dist
+          api-key: ${{ env.POSTHOG_CLI_API_KEY }}
+          project-id: '263292'
+          # This project lives on EU cloud; the input wants the app host, not
+          # the ingestion host that VITE_POSTHOG_HOST points at.
+          host: https://eu.posthog.com
+          release-version: ${{ github.sha }}
+          delete-after-upload: 'true'
+
+      # Safety net: source maps must never reach GitHub Pages, which serves the
+      # artifact publicly. delete-after-upload already removes them, but this
+      # also covers the path where the step above was skipped for a missing key.
+      - name: Strip any remaining source maps
+        run: find dist -name '*.map' -type f -print -delete
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

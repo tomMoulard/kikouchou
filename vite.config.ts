@@ -159,6 +159,10 @@ export default defineConfig({
     format: 'es',
   },
   build: {
+    // Emitted so PostHog Error Tracking can de-minify production stack traces.
+    // The deploy workflow uploads the maps and then deletes them, so they are
+    // never served from GitHub Pages — see .github/workflows/deploy.yml.
+    sourcemap: true,
     rollupOptions: {
       output: {
         manualChunks,
