@@ -18,6 +18,58 @@ import { test, expect, type Page } from '@playwright/test';
 // ============================================================================
 
 /**
+ * Fixture dates, anchored on a month that is always ahead of today.
+ *
+ * These used to be hardcoded to March 2026. That date passed, and the transport
+ * list then folded every fixture transport into its collapsed "Past transports"
+ * accordion — so the rows the assertions looked for were real, rendered, and
+ * hidden. Deriving the month keeps every offset these tests depend on (trip
+ * day 1-10, stays day 2-5, transports day 2 and day 8) while making the suite
+ * proof against the calendar moving on.
+ */
+const FIXTURE_MONTH_START = ((): Date => {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 1));
+})();
+
+/** `YYYY-MM-DD` for the given 1-based day of the fixture month. */
+function fixtureDate(dayOfMonth: number): string {
+  const date = new Date(FIXTURE_MONTH_START);
+  date.setUTCDate(dayOfMonth);
+  return date.toISOString().slice(0, 10);
+}
+
+/** An ISO timestamp for the given day of the fixture month at a UTC time. */
+function fixtureDatetime(dayOfMonth: number, utcTime: string): string {
+  return `${fixtureDate(dayOfMonth)}T${utcTime}`;
+}
+
+/** The fixture month as the transport list groups it, e.g. /March|2027/. */
+const FIXTURE_MONTH_PATTERN = new RegExp(
+  [
+    FIXTURE_MONTH_START.toLocaleString('en', { month: 'long', timeZone: 'UTC' }),
+    FIXTURE_MONTH_START.toLocaleString('fr', { month: 'long', timeZone: 'UTC' }),
+    String(FIXTURE_MONTH_START.getUTCFullYear()),
+  ].join('|'),
+  'i',
+);
+
+/**
+ * Waits for a lazily-loaded route to replace the "Loading..." fallback.
+ *
+ * `waitForLoadState('load')` is not enough on its own: every route in this app
+ * is a lazy chunk, so `load` fires while `main` still holds the suspense
+ * fallback. Any instant read taken there — `.count()`, `.isVisible()` — sees an
+ * empty page and reports a missing field rather than waiting for one, which is
+ * what several assertions in this file were doing.
+ */
+async function waitForRoute(page: Page): Promise<void> {
+  await expect(page.getByRole('status').filter({ hasText: /loading/i })).toHaveCount(0, {
+    timeout: 15_000,
+  });
+}
+
+/**
  * Clears app data using the settings page.
  * This is more reliable than direct IndexedDB access which may fail in some contexts.
  */
@@ -59,8 +111,8 @@ async function createTestTrip(
   const tripData = {
     name: options.name ?? 'Phase 16 Test Trip',
     location: options.location ?? 'Test Location',
-    startDate: options.startDate ?? '2026-03-01',
-    endDate: options.endDate ?? '2026-03-10',
+    startDate: options.startDate ?? fixtureDate(1),
+    endDate: options.endDate ?? fixtureDate(10),
     description: options.description,
   };
 
@@ -244,7 +296,10 @@ async function createTestTransport(
   type: 'arrival' | 'departure',
   datetime: string,
   mode: 'plane' | 'train' | 'car' | 'bus' | 'other' = 'plane',
-  location?: string,
+  // `location` is required on `Transport`, so it gets a default rather than
+  // being left off: a record without one is invalid data, and the transports
+  // page used to crash outright on it.
+  location: string = 'Test Station',
 ): Promise<string> {
   const transportId = await page.evaluate(
     async ({ tripId, personId, type, datetime, mode, location }) => {
@@ -268,9 +323,7 @@ async function createTestTransport(
             needsPickup: type === 'arrival',
           };
 
-          if (location) {
-            transport.location = location;
-          }
+          transport.location = location;
 
           store.add(transport);
 
@@ -334,8 +387,8 @@ const TEST_DATA = {
   trip: {
     name: 'Phase 16 UX Test Trip',
     location: 'Brittany, France',
-    startDate: '2026-03-01',
-    endDate: '2026-03-10',
+    startDate: fixtureDate(1),
+    endDate: fixtureDate(10),
     description: 'Testing Phase 16 UX improvements',
   },
   person: {
@@ -352,13 +405,13 @@ const TEST_DATA = {
   },
   // Multi-day assignment spanning 3 days
   multiDayAssignment: {
-    startDate: '2026-03-02',
-    endDate: '2026-03-05', // 3 nights: Mar 2, 3, 4
+    startDate: fixtureDate(2),
+    endDate: fixtureDate(5), // 3 nights: day 2, 3, 4
   },
   // Transport times for timezone testing
   transport: {
     // Store as UTC - when user enters 14:00 in UTC+1, it's stored as 13:00 UTC
-    datetime: '2026-03-02T13:00:00.000Z',
+    datetime: fixtureDatetime(2, '13:00:00.000Z'),
     expectedDisplayTime: '14:00', // Should display as local time
     location: 'Paris CDG Airport',
   },
@@ -377,25 +430,22 @@ test.describe('Trip Creation with New UI', () => {
     // Navigate directly to trip creation page
     await page.goto('/trips/new');
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Verify we're on the trip form page
     await expect(page).toHaveURL('/trips/new');
 
-    // Verify description field exists - look for textarea or input
-    const descriptionField = page.locator('textarea, input[name="description"]');
-    const hasDescription = await descriptionField.count() > 0;
-
-    // Or check for label
-    const descriptionLabel = page.getByText(/description/i);
-    const hasDescriptionLabel = await descriptionLabel.isVisible().catch(() => false);
-
-    expect(hasDescription || hasDescriptionLabel).toBe(true);
+    // A retrying assertion, not `.count()` / `.isVisible()`. The route is lazy,
+    // so `waitForLoadState('load')` returns while `main` still holds the
+    // "Loading..." fallback, and an instant read there sees no form at all.
+    await expect(page.locator('#trip-description')).toBeVisible();
   });
 
   test('trip form has location input', async ({ page }) => {
     // Navigate directly to trip creation page
     await page.goto('/trips/new');
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Find location input (could be LocationPicker or regular input)
     const locationInput = page.getByLabel(/location|lieu/i);
@@ -406,21 +456,11 @@ test.describe('Trip Creation with New UI', () => {
     // Navigate directly to trip creation page
     await page.goto('/trips/new');
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
-    // Find date inputs or date range picker
-    // The start date button has id="trip-start-date"
-    const startDateButton = page.locator('#trip-start-date');
-    const endDateButton = page.locator('#trip-end-date');
-
-    // Either individual date buttons exist
-    const hasStartDate = await startDateButton.isVisible().catch(() => false);
-    const hasEndDate = await endDateButton.isVisible().catch(() => false);
-
-    // Or look for labeled inputs
-    const startDateLabel = page.getByLabel(/start.*date|date.*d[eé]but/i);
-    const hasStartDateLabel = await startDateLabel.isVisible().catch(() => false);
-
-    expect(hasStartDate || hasEndDate || hasStartDateLabel).toBe(true);
+    // Retrying assertions, for the same reason as the description field above.
+    await expect(page.locator('#trip-start-date')).toBeVisible();
+    await expect(page.locator('#trip-end-date')).toBeVisible();
   });
 
   test('trip card shows guests count after creation', async ({ page }) => {
@@ -432,6 +472,7 @@ test.describe('Trip Creation with New UI', () => {
     // Navigate to trips list
     await page.goto('/trips');
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Find trip card
     const tripCard = page.getByRole('button', { name: new RegExp(TEST_DATA.trip.name) });
@@ -477,6 +518,7 @@ test.describe('Calendar Multi-Day Events', () => {
     // no `role="grid"`, so the assertions below never find the calendar.
     await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Wait for calendar to render
     await page.waitForTimeout(500);
@@ -518,17 +560,18 @@ test.describe('Calendar Multi-Day Events', () => {
     // no `role="grid"`, so the assertions below never find the calendar.
     await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
-    // Wait for calendar to render
-    await page.waitForTimeout(500);
-
-    // Verify room name is visible somewhere in the calendar
-    const roomNameVisible = await page.getByText(TEST_DATA.room.name).isVisible().catch(() => false);
-
-    // Or the person name should be visible (room might be in detail view)
-    const personNameVisible = await page.getByText(TEST_DATA.person.name).isVisible().catch(() => false);
-
-    expect(roomNameVisible || personNameVisible).toBe(true);
+    // A retrying assertion, not a fixed 500 ms wait: the calendar opens on
+    // today's month and only jumps to the trip's start month once the trip has
+    // loaded, from inside a `setTimeout`. The fixture trip is two months out,
+    // so an instant read here looked at the wrong month.
+    await expect(
+      page
+        .getByText(TEST_DATA.room.name)
+        .or(page.getByText(TEST_DATA.person.name))
+        .first(),
+    ).toBeVisible();
   });
 
   test('clicking calendar event opens detail dialog', async ({ page }) => {
@@ -548,6 +591,7 @@ test.describe('Calendar Multi-Day Events', () => {
     // no `role="grid"`, so the assertions below never find the calendar.
     await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
     await page.waitForTimeout(500);
 
     // Find and click the event
@@ -595,12 +639,13 @@ test.describe('Transport Single List', () => {
   test('transport page shows single chronological list without tabs', async ({ page }) => {
     // Create person and transports
     const personId = await createTestPerson(page, tripId, TEST_DATA.person.name, TEST_DATA.person.color);
-    await createTestTransport(page, tripId, personId, 'arrival', '2026-03-02T10:00:00.000Z', 'plane');
-    await createTestTransport(page, tripId, personId, 'departure', '2026-03-08T16:00:00.000Z', 'train');
+    await createTestTransport(page, tripId, personId, 'arrival', fixtureDatetime(2, '10:00:00.000Z'), 'plane');
+    await createTestTransport(page, tripId, personId, 'departure', fixtureDatetime(8, '16:00:00.000Z'), 'train');
 
     // Navigate to transports page
     await page.goto(`/trips/${tripId}/transports`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Verify NO tabs are present
     const tabs = page.getByRole('tablist');
@@ -620,68 +665,57 @@ test.describe('Transport Single List', () => {
     const personId = await createTestPerson(page, tripId, TEST_DATA.person.name, TEST_DATA.person.color);
     const person2Id = await createTestPerson(page, tripId, TEST_DATA.person2.name, TEST_DATA.person2.color);
 
-    await createTestTransport(page, tripId, personId, 'arrival', '2026-03-02T10:00:00.000Z', 'plane');
-    await createTestTransport(page, tripId, person2Id, 'arrival', '2026-03-02T14:00:00.000Z', 'train');
-    await createTestTransport(page, tripId, personId, 'departure', '2026-03-08T16:00:00.000Z', 'car');
+    await createTestTransport(page, tripId, personId, 'arrival', fixtureDatetime(2, '10:00:00.000Z'), 'plane');
+    await createTestTransport(page, tripId, person2Id, 'arrival', fixtureDatetime(2, '14:00:00.000Z'), 'train');
+    await createTestTransport(page, tripId, personId, 'departure', fixtureDatetime(8, '16:00:00.000Z'), 'car');
 
     // Navigate to transports page
     await page.goto(`/trips/${tripId}/transports`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Look for date headers (grouped by date)
     // The page should show dates like "March 2" or "2 mars" as section headers
     const dateHeaders = page.locator('h2, h3, [role="heading"]').filter({
-      hasText: /march|mars|2026/i,
+      hasText: FIXTURE_MONTH_PATTERN,
     });
 
-    const headerCount = await dateHeaders.count();
-    
-    // Should have at least 2 date headers (Mar 2 and Mar 8)
-    expect(headerCount).toBeGreaterThanOrEqual(1);
+    await expect(dateHeaders.first()).toBeVisible();
   });
 
   test('arrivals show green indicator and departures show orange', async ({ page }) => {
     // Create person and transports
     const personId = await createTestPerson(page, tripId, TEST_DATA.person.name, TEST_DATA.person.color);
-    await createTestTransport(page, tripId, personId, 'arrival', '2026-03-02T10:00:00.000Z', 'plane');
-    await createTestTransport(page, tripId, personId, 'departure', '2026-03-08T16:00:00.000Z', 'train');
+    await createTestTransport(page, tripId, personId, 'arrival', fixtureDatetime(2, '10:00:00.000Z'), 'plane');
+    await createTestTransport(page, tripId, personId, 'departure', fixtureDatetime(8, '16:00:00.000Z'), 'train');
 
     // Navigate to transports page
     await page.goto(`/trips/${tripId}/transports`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Look for arrival and departure indicators
     // The TransportListPage uses specific styling for arrivals/departures
     // Check for arrival indicator (down arrow icon or green styling)
-    const arrivalIndicator = page.getByText(/arrival|arriv[ée]/i).first();
-    const departureIndicator = page.getByText(/departure|d[ée]part/i).first();
-
-    const hasArrival = await arrivalIndicator.isVisible().catch(() => false);
-    const hasDeparture = await departureIndicator.isVisible().catch(() => false);
-
-    // Both transport types should be visible (we created both)
-    expect(hasArrival && hasDeparture).toBe(true);
+    await expect(page.getByText(/arrival|arriv[ée]/i).first()).toBeVisible();
+    await expect(page.getByText(/departure|d[ée]part/i).first()).toBeVisible();
   });
 
   test('past transports section exists', async ({ page }) => {
     // Create person with past transport (before trip start, but we'll use a date marker)
     const personId = await createTestPerson(page, tripId, TEST_DATA.person.name, TEST_DATA.person.color);
-    await createTestTransport(page, tripId, personId, 'arrival', '2026-03-02T10:00:00.000Z', 'plane');
+    await createTestTransport(page, tripId, personId, 'arrival', fixtureDatetime(2, '10:00:00.000Z'), 'plane');
 
     // Navigate to transports page
     await page.goto(`/trips/${tripId}/transports`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Look for past transports section or indicator
     // This might be a collapsible section or separate area
-    const pastSection = page.getByText(/past|pass[ée]|history|historique/i);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _hasPastSection = await pastSection.isVisible().catch(() => false);
-
-    // Past section may or may not be visible depending on current date
-    // Just verify the page loads correctly
-    const pageLoaded = await page.getByRole('heading').first().isVisible();
-    expect(pageLoaded).toBe(true);
+    // The past section may or may not be present depending on the current date,
+    // so this only asserts the page itself rendered.
+    await expect(page.getByRole('heading').first()).toBeVisible();
   });
 });
 
@@ -703,8 +737,8 @@ test.describe('Bug Fix: Assignment Dates (BUG-1)', () => {
     const personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
 
     // Create assignment with specific dates
-    const startDate = '2026-03-02';
-    const endDate = '2026-03-05';
+    const startDate = fixtureDate(2);
+    const endDate = fixtureDate(5);
 
     const assignmentId = await createTestAssignment(
       page,
@@ -731,6 +765,7 @@ test.describe('Bug Fix: Assignment Dates (BUG-1)', () => {
     const _personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
     await page.goto(`/trips/${tripId}/rooms`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Open room card
     const roomCard = page.getByText(TEST_DATA.room.name);
@@ -768,12 +803,13 @@ test.describe('Bug Fix: Assignment Dates (BUG-1)', () => {
     const personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
 
     // Assignment from Mar 2 to Mar 5 (3 nights: 2nd, 3rd, 4th)
-    await createTestAssignment(page, tripId, roomId, personId, '2026-03-02', '2026-03-05');
+    await createTestAssignment(page, tripId, roomId, personId, fixtureDate(2), fixtureDate(5));
 
     // Navigate to calendar. Month view: the timeline view (the default) renders
     // no `role="grid"`, so the assertions below never find the calendar.
     await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
     await page.waitForTimeout(500);
 
     // The assignment should appear on days 2, 3, 4 but NOT on day 5
@@ -823,6 +859,7 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     // Navigate to transports page
     await page.goto(`/trips/${tripId}/transports`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // The time should be displayed in local timezone
     // In UTC+1, 13:00 UTC = 14:00 local
@@ -851,6 +888,7 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     // no `role="grid"`, so the assertions below never find the calendar.
     await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
     await page.waitForTimeout(500);
 
     // Look for transport indicator with time
@@ -883,6 +921,7 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     // Navigate to transports
     await page.goto(`/trips/${tripId}/transports`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Click add transport button - look for "New transport" button or FAB
     const addButton = page.getByRole('button', { name: /new transport|nouveau transport/i });
@@ -914,7 +953,7 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
 
     if (hasDatetimeInput) {
       // Enter a specific time
-      const testDatetime = '2026-03-02T14:30';
+      const testDatetime = `${fixtureDate(2)}T14:30`;
       await datetimeInput.fill(testDatetime);
 
       // The form should show the entered time
@@ -946,23 +985,22 @@ test.describe('Room Assignment Drag-Drop', () => {
     // Create room and person with arrival transport but no assignment
     await createTestRoom(page, tripId, TEST_DATA.room.name);
     const personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
-    await createTestTransport(page, tripId, personId, 'arrival', '2026-03-02T10:00:00.000Z', 'plane');
-    await createTestTransport(page, tripId, personId, 'departure', '2026-03-08T16:00:00.000Z', 'train');
+    await createTestTransport(page, tripId, personId, 'arrival', fixtureDatetime(2, '10:00:00.000Z'), 'plane');
+    await createTestTransport(page, tripId, personId, 'departure', fixtureDatetime(8, '16:00:00.000Z'), 'train');
 
     // Navigate to rooms page
     await page.goto(`/trips/${tripId}/rooms`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
-    // Look for unassigned guests section
-    const unassignedSection = page.getByText(/unassigned|sans chambre|no room/i);
-    const hasUnassignedSection = await unassignedSection.isVisible().catch(() => false);
-
-    // The person should appear somewhere as unassigned
-    const personBadge = page.getByText(TEST_DATA.person.name);
-    const hasPersonBadge = await personBadge.isVisible().catch(() => false);
-
-    // Either the section exists or the person is visible
-    expect(hasUnassignedSection || hasPersonBadge).toBe(true);
+    // Either the unassigned section is there or the guest is listed. Retrying,
+    // because the rooms page resolves its guests after the route mounts.
+    await expect(
+      page
+        .getByText(/unassigned|sans chambre|no room/i)
+        .or(page.getByText(TEST_DATA.person.name))
+        .first(),
+    ).toBeVisible();
   });
 
   test('room icons are displayed (16.9)', async ({ page }) => {
@@ -974,6 +1012,7 @@ test.describe('Room Assignment Drag-Drop', () => {
     // Navigate to rooms page
     await page.goto(`/trips/${tripId}/rooms`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Verify rooms are displayed
     await expect(page.getByText('Single Room')).toBeVisible({ timeout: 5000 });

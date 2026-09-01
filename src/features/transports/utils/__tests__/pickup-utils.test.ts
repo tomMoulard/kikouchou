@@ -101,6 +101,28 @@ describe('groupPickupsByProximity', () => {
     expect(result[0]!.station).toBe('gare de vannes');
   });
 
+  /**
+   * `location` is required by the `Transport` type, but a record arriving over
+   * Yjs from a peer is not type-checked. One with no location used to throw
+   * `Cannot read properties of undefined (reading 'trim')`, which the error
+   * boundary turned into "An error occurred / Failed to load" for the entire
+   * transports page rather than for the one bad row.
+   */
+  it('tolerates a pickup whose location is missing', () => {
+    const transport = makeTransport({
+      datetime: '2026-07-15T14:00:00.000Z',
+      needsPickup: true,
+    });
+    delete (transport as { location?: string }).location;
+
+    const result = groupPickupsByProximity([transport]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.pickups).toHaveLength(1);
+    expect(result[0]!.displayStation).toBe('');
+    expect(result[0]!.station).toBe('');
+  });
+
   // --------------------------------------------------------------------------
   // Grouping logic
   // --------------------------------------------------------------------------
