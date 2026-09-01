@@ -210,19 +210,20 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
       );
     }
 
-    // Downloaded, and there is genuinely nobody to pick. An ordinary state for a
-    // trip whose owner has not added anyone yet, and the one this screen used to
-    // treat as a download that had not finished.
+    // Nothing to pick. Deliberately does not claim the *trip* is empty: this
+    // device cannot tell "nobody has been added" from "nobody has reached me
+    // yet", and asserting the first reads as a confident falsehood to anyone
+    // sharing a trip that plainly has people on it.
     return (
       <div className="flex flex-col items-center gap-3 text-center">
         <UserRound className="size-6 text-muted-foreground" aria-hidden="true" />
         <CardTitle className="text-lg">
-          {t('sharing.join.noParticipants', 'Nobody has been added to this trip yet')}
+          {t('sharing.join.noParticipants', 'No participants to choose from')}
         </CardTitle>
         <CardDescription>
           {t(
             'sharing.join.noParticipantsHint',
-            'Open it and add yourself — everyone on the trip sees the change.',
+            "Either nobody has been added to this trip yet, or their details haven't reached this device. You can open the trip and carry on.",
           )}
         </CardDescription>
         <Button onClick={skip}>{t('sharing.join.openTrip', 'Open the trip')}</Button>
