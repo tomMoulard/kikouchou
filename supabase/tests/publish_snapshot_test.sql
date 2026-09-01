@@ -9,7 +9,7 @@
 -- Run with:  bunx supabase test db
 
 begin;
-select plan(13);
+select plan(14);
 
 -- ===========================================================================
 -- Fixtures
@@ -73,6 +73,11 @@ create temporary table log_ids as
 select min(id) as lo, max(id) as hi
 from public.trip_doc_updates
 where trip_id = 'aaaaaaaa-0000-0000-0000-000000000001';
+
+-- Created while privileged, read while acting as a member, so the grant is not
+-- optional: without it every assertion below dies with `permission denied for
+-- table log_ids` rather than testing anything.
+grant select on log_ids to authenticated;
 
 -- ===========================================================================
 -- The privilege that must not exist
@@ -183,6 +188,19 @@ select throws_ok(
   null,
   'somebody who is not on the trip cannot publish, definer rights notwithstanding'
 );
+
+-- Back to a member to read the head. The stranger cannot see the snapshot at
+-- all — `trip_doc_snapshots` restricts SELECT to members, so asserting from that
+-- role returned NULL and tested the RLS policy rather than the head. Which is
+-- itself worth stating, so it is asserted first.
+select is(
+  (select count(*) from public.trip_doc_snapshots
+   where trip_id = 'aaaaaaaa-0000-0000-0000-000000000001'),
+  0::bigint,
+  'a non-member cannot see the trip''s snapshot either'
+);
+
+select tests.act_as('22222222-2222-2222-2222-222222222222');
 
 select is(
   (select through_id from public.trip_doc_snapshots
