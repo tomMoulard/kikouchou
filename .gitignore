@@ -30,3 +30,9 @@ public/icons/
 public/favicon.ico
 .opencode/node_modules
 .omx/
+
+# Local secrets. The variable names live in .env.example so a fresh clone and
+# CI can see what needs setting; only the values stay out of the repo.
+.env
+.env.*
+!.env.example
