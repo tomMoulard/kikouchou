@@ -112,6 +112,9 @@ export const TripsLocationMap = memo(function TripsLocationMap({
                 {trip.location}
               </div>
             )}
+            <div className="text-muted-foreground">
+              {formatDateRange(trip.startDate, trip.endDate, dateLocale)}
+            </div>
           </div>
         ),
         popupContent: (

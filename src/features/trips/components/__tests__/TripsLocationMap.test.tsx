@@ -39,7 +39,12 @@ vi.mock('@/components/shared/MapView', () => ({
           data-testid={`mock-marker-${marker.id}`}
           data-label={marker.label}
           data-position={JSON.stringify(marker.position)}
-        />
+        >
+          {/* Leaflet renders these on hover / click; render them inline so the
+              tests can assert on what they say. */}
+          <div data-testid={`mock-tooltip-${marker.id}`}>{marker.tooltipContent}</div>
+          <div data-testid={`mock-popup-${marker.id}`}>{marker.popupContent}</div>
+        </div>
       ))}
     </div>
   ),
@@ -101,6 +106,44 @@ describe('TripsLocationMap', () => {
       'data-label',
       'Winter Retreat',
     );
+  });
+
+  it('names the trip, its location and its dates in the hover tooltip', () => {
+    renderMap([createTrip()]);
+
+    const tooltip = screen.getByTestId('mock-tooltip-trip-1');
+    expect(tooltip).toHaveTextContent('Summer Vacation');
+    expect(tooltip).toHaveTextContent('Brest, Bretagne');
+    // Same-month range collapses to "15 - 22 Jul 2026".
+    expect(tooltip).toHaveTextContent('15 - 22 Jul 2026');
+  });
+
+  it('shows the dates in the tooltip even for a trip with no location text', () => {
+    renderMap([createTrip({ location: undefined })]);
+
+    const tooltip = screen.getByTestId('mock-tooltip-trip-1');
+    expect(tooltip).toHaveTextContent('15 - 22 Jul 2026');
+  });
+
+  it('spells out both months in the tooltip when the trip spans two', () => {
+    renderMap([
+      createTrip({
+        startDate: '2026-07-28' as ISODateString,
+        endDate: '2026-08-05' as ISODateString,
+      }),
+    ]);
+
+    expect(screen.getByTestId('mock-tooltip-trip-1')).toHaveTextContent(
+      '28 Jul - 5 Aug 2026',
+    );
+  });
+
+  it('links the popup through to that trip\'s analytics', () => {
+    renderMap([createTrip()]);
+
+    const popup = screen.getByTestId('mock-popup-trip-1');
+    expect(popup).toHaveTextContent('analytics.openTrip');
+    expect(popup.querySelector('a')).toHaveAttribute('href', '/trips/trip-1/analytics');
   });
 
   it('places the marker at the trip coordinates', () => {
