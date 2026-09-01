@@ -677,3 +677,60 @@ deliberately does not touch:
 2. The Vault secrets `compaction_service_key` and `compaction_function_url`,
    which nothing reads any more. Deleting somebody's secrets from a migration is
    not a migration's business; a secret nothing reads is inert.
+
+---
+
+## 13. Advisor round after client-side compaction
+
+Same pattern as the earlier four rounds, and worth recording because these two
+findings will recur on every run.
+
+### `authenticated_security_definer_function_executable` — WARN, accepted
+
+Flags `publish_trip_snapshot`, `redeem_invite` and `revoke_invite` as
+`SECURITY DEFINER` functions the `authenticated` role can call, and suggests
+revoking EXECUTE, switching to `SECURITY INVOKER`, or moving them out of the API
+schema.
+
+All three prescriptions would break the app, and the reason is the same in each
+case: definer rights plus a grant to `authenticated` **is** the design. Each
+function exists precisely to perform one privileged write that no policy grants,
+under conditions it checks itself:
+
+| Function | Why definer | Its own check |
+|---|---|---|
+| `redeem_invite` | writes `trip_members`, which has no INSERT policy — joining requires a token, and that is the security property | `auth.uid()` null → `28000`, then token validity |
+| `revoke_invite` | updates `trip_invites`, which has no UPDATE policy — that is what keeps `uses` tamper-proof | `private.is_trip_member` → `42501` |
+| `publish_trip_snapshot` | deletes from `trip_doc_updates`, where clients deliberately hold no DELETE | `auth.uid()` null → `28000`, membership → `42501` |
+
+`SECURITY INVOKER` would put each one back under the policy it exists to bypass.
+Revoking EXECUTE would make joining, un-sharing and compaction impossible. The
+finding is a correct description of the shape and a wrong inference about the
+risk — exactly the `is_trip_member` round again, where following the advice
+produced `permission denied for function is_trip_member` on every `select` from
+`trips`.
+
+The check that *is* worth doing each time this appears: confirm every definer
+function still authorizes itself as its first act. Done, for all three.
+
+### `unused_index` — INFO, keep both
+
+`trip_doc_updates_author_id_idx` and `trip_invites_created_by_idx` are reported
+as never used. Both were added in `20260831200000` because an **earlier advisor
+round** flagged them as unindexed foreign keys, so the tool is now contradicting
+its own previous advice.
+
+Keep them. An index on a foreign key column is not there to serve queries — it is
+there so the *referenced* side's cascade can find the rows. Both columns
+reference `auth.users(id) on delete cascade`, and without the index deleting an
+account is a sequential scan of the whole table. They read as unused because no
+account has been deleted yet, which is the good case, not evidence of waste.
+
+Separately: usage statistics from a project with almost no traffic cannot support
+dropping anything. "Never used" here mostly means "never exercised".
+
+### `auth_leaked_password_protection` — WARN, moot
+
+Google SSO is the only provider, so there are no passwords in the system to
+check against HaveIBeenPwned. Enabling it costs nothing and protects nothing
+until a password provider is added — at which point it should go on.
