@@ -292,6 +292,17 @@ neither `tsc`, ESLint, nor the tests catch it — the test harness mocks i18next
 echo keys back. When you add a `t()` call, add the key to **both**
 `en` and `fr`. Screen-reader-only text is user-facing text.
 
+### A third-party z-index only stays put inside a stacking context
+
+Leaflet numbers its own layers 200 to 1000 and gives `.leaflet-container`
+nothing that makes it a stacking context, so those numbers were resolved against
+the page root — where the app's scale tops out at 50. Every map therefore
+painted over every dialog: opening the share dialog on `/trips` left the trip
+cards' map previews on top of it. The fix is `isolation: isolate` on the
+container (`src/index.css`), not renumbering anything. Any vendor CSS that ships
+its own z-index scale needs the same containment, and `z-50` in the app is not
+a number to raise in answer.
+
 ### Quality gates must actually run
 
 A gate that silently passes is worse than no gate. Two did:

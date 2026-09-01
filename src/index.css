@@ -148,3 +148,23 @@
   background-color: var(--primary-foreground);
   opacity: 0.8;
 }
+
+/*
+ * Keep Leaflet's z-index scale inside the map.
+ *
+ * Leaflet numbers its own layers 200 (tiles) to 1000 (zoom and attribution
+ * controls), and gives the container nothing that makes it a stacking context —
+ * so those numbers were resolved against the page root, where the app's own
+ * scale tops out at the dialog overlay's 50. Every map therefore painted over
+ * every dialog, sheet, popover and the sticky header: opening the share dialog
+ * on `/trips` left the trip cards' map previews sitting on top of it.
+ *
+ * `isolation: isolate` makes the container a stacking context, which contains
+ * 200-1000 without renumbering anything. The map itself then paints as one
+ * positioned box in normal order, under anything the app deliberately raises.
+ * It belongs here rather than on a `className`: it has to hold for every map,
+ * including the ones a future page mounts.
+ */
+.leaflet-container {
+  isolation: isolate;
+}
