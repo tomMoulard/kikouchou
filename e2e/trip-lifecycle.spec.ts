@@ -207,6 +207,12 @@ test.describe('Trip Lifecycle', () => {
     // Clear storage state including IndexedDB for a fresh start
     await context.clearCookies();
 
+    // The trip location field searches OpenStreetMap for places; keep that off
+    // the wire so these tests stay deterministic and don't depend on Nominatim.
+    await page.route('**/nominatim.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+
     // Navigate to the app
     await page.goto('/');
 

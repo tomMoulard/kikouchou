@@ -112,7 +112,11 @@
     "importQrMergeSuccess": "Trip data imported and merged successfully.",
     "importQrSnapshotRequired": "This export is too old to import here (missing trip details). Export again from Settings → Sync on the source device, then scan the new QR.",
     "importQrMergeFailed": "Could not import this trip data. Try again or open a trip and use Settings → Sync → Import.",
-    "shareTripAria": "Share trip — link and QR code"
+    "shareTripAria": "Share trip — link and QR code",
+    "placeSuggestions": "Places on the map",
+    "pinnedAt": "Pinned at {{coordinates}}",
+    "adjustPin": "Adjust",
+    "removePin": "Remove map pin"
   },
   "rooms": {
     "title": "Rooms",

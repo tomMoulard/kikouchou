@@ -6,7 +6,7 @@
  *
  * @module features/trips/components/__tests__/TripForm.test
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -34,6 +34,22 @@ function createTestTrip(overrides?: Partial<Trip>): Trip {
     ...overrides,
   };
 }
+
+// ============================================================================
+// Setup
+// ============================================================================
+
+beforeEach(() => {
+  // Typing in the location field triggers a place lookup; keep it off the wire.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) }),
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 // ============================================================================
 // Basic Rendering Tests
@@ -922,3 +938,113 @@ describe('TripForm Date Selection Branches', () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+// ============================================================================
+// Map Pin Tests
+// ============================================================================
+
+describe('TripForm Map Pin', () => {
+  it('carries the pinned coordinates through to submission', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const onCancel = vi.fn();
+
+    const trip = createTestTrip({ coordinates: { lat: 48.3904, lon: -4.4861 } });
+
+    render(<TripForm trip={trip} onSubmit={onSubmit} onCancel={onCancel} />);
+
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          location: 'Brittany, France',
+          coordinates: { lat: 48.3904, lon: -4.4861 },
+        }),
+      );
+    });
+  });
+
+  it('shows the existing pin next to the location field', () => {
+    const onSubmit = vi.fn();
+    const onCancel = vi.fn();
+
+    const trip = createTestTrip({ coordinates: { lat: 48.3904, lon: -4.4861 } });
+
+    render(<TripForm trip={trip} onSubmit={onSubmit} onCancel={onCancel} />);
+
+    expect(screen.getByText(/trips\.pinnedAt/)).toBeInTheDocument();
+  });
+
+  it('drops the pin when the location text is edited', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const onCancel = vi.fn();
+
+    const trip = createTestTrip({ coordinates: { lat: 48.3904, lon: -4.4861 } });
+
+    render(<TripForm trip={trip} onSubmit={onSubmit} onCancel={onCancel} />);
+
+    // Retyping the place name invalidates coordinates resolved from the old one.
+    await user.type(screen.getByLabelText(/trips\.location/i), ' extra');
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          location: 'Brittany, France extra',
+          coordinates: undefined,
+        }),
+      );
+    });
+  });
+
+  it('keeps the pin when a different field is edited', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const onCancel = vi.fn();
+
+    const trip = createTestTrip({ coordinates: { lat: 48.3904, lon: -4.4861 } });
+
+    render(<TripForm trip={trip} onSubmit={onSubmit} onCancel={onCancel} />);
+
+    await user.type(screen.getByLabelText(/trips\.name/i), '!');
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          coordinates: { lat: 48.3904, lon: -4.4861 },
+        }),
+      );
+    });
+  });
+
+  it('marks the form dirty when the pin is removed but the name kept', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    const onCancel = vi.fn();
+    const onDirtyChange = vi.fn();
+
+    const trip = createTestTrip({ coordinates: { lat: 48.3904, lon: -4.4861 } });
+
+    render(
+      <TripForm
+        trip={trip}
+        onSubmit={onSubmit}
+        onCancel={onCancel}
+        onDirtyChange={onDirtyChange}
+      />,
+    );
+
+    onDirtyChange.mockClear();
+    // The location text is untouched, so only the coordinate comparison can
+    // catch this — otherwise the unsaved-changes guard waves it through.
+    await user.click(screen.getByRole('button', { name: /trips\.removePin/ }));
+
+    await waitFor(() => {
+      expect(onDirtyChange).toHaveBeenCalledWith(true);
+    });
+  });
+});
+

@@ -6,7 +6,7 @@
  * @module features/trips/components/__tests__/LocationAutocomplete.test
  */
 import { useState } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -15,6 +15,7 @@ import {
   ImportBadge,
   type TripImportData,
 } from '@/features/trips/components/LocationAutocomplete';
+import type { Coordinates } from '@/lib/geocoding';
 import type { TripId, ShareId, ISODateString } from '@/types';
 
 // ============================================================================
@@ -54,6 +55,18 @@ const mockRooms = [
   },
 ];
 
+/** Raw Nominatim payload the geocoder is fed in these tests. */
+const mockPlaces = [
+  {
+    place_id: 101,
+    display_name: 'Brest, Finistère, Bretagne, France',
+    lat: '48.3904',
+    lon: '-4.4861',
+    type: 'city',
+    class: 'place',
+  },
+];
+
 vi.mock('@/lib/db', () => ({
   getTripsByLocation: vi.fn(),
   getRoomsByTripId: vi.fn(),
@@ -73,17 +86,29 @@ const mockedGetRoomsByTripId = vi.mocked(getRoomsByTripId);
  */
 function StatefulWrapper({
   initialValue = '',
+  initialCoordinates,
   onImportTrip,
+  onLocationChange,
 }: {
   readonly initialValue?: string;
+  readonly initialCoordinates?: Coordinates;
   readonly onImportTrip?: (data: TripImportData) => void;
+  readonly onLocationChange?: (value: string, coordinates?: Coordinates) => void;
 }) {
   const [value, setValue] = useState(initialValue);
+  const [coordinates, setCoordinates] = useState<Coordinates | undefined>(
+    initialCoordinates,
+  );
 
   return (
     <LocationAutocomplete
       value={value}
-      onChange={setValue}
+      coordinates={coordinates}
+      onChange={(next, nextCoordinates) => {
+        setValue(next);
+        setCoordinates(nextCoordinates);
+        onLocationChange?.(next, nextCoordinates);
+      }}
       onImportTrip={onImportTrip ?? vi.fn()}
       placeholder="Enter location"
     />
@@ -97,9 +122,28 @@ function StatefulWrapper({
 beforeEach(() => {
   mockedGetTripsByLocation.mockResolvedValue([]);
   mockedGetRoomsByTripId.mockResolvedValue([]);
+  // The place search must never reach the real Nominatim from a test.
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) }),
+  );
   // Mock scrollIntoView for cmdk (not available in JSDOM)
   Element.prototype.scrollIntoView = vi.fn();
 });
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+/**
+ * Points the stubbed fetch at the given Nominatim payload.
+ */
+function respondWithPlaces(payload: unknown): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(payload) }),
+  );
+}
 
 // ============================================================================
 // Rendering Tests
@@ -208,7 +252,8 @@ describe('LocationAutocomplete Input Change', () => {
     const input = screen.getByRole('combobox');
     await user.type(input, 'B');
 
-    expect(onChange).toHaveBeenCalledWith('B');
+    // Coordinates travel with every change: free text carries none.
+    expect(onChange).toHaveBeenCalledWith('B', undefined);
   });
 
   it('triggers search after debounce with 2+ characters', async () => {
@@ -273,6 +318,198 @@ describe('LocationAutocomplete Dropdown', () => {
         }),
       );
     });
+  });
+});
+
+// ============================================================================
+// Map Place Tests
+// ============================================================================
+
+describe('LocationAutocomplete Map Places', () => {
+  it('offers places from the geocoder alongside previous trips', async () => {
+    const user = userEvent.setup();
+    respondWithPlaces(mockPlaces);
+    mockedGetTripsByLocation.mockResolvedValue([mockTrips[0]!]);
+
+    render(<StatefulWrapper />);
+
+    await user.type(screen.getByRole('combobox'), 'Bre');
+
+    await waitFor(() => {
+      expect(screen.getByText('Brest, Finistère, Bretagne')).toBeInTheDocument();
+    });
+    // Both sources share the dropdown.
+    expect(screen.getByText('Beach House, Brittany')).toBeInTheDocument();
+  });
+
+  it('shows the map for confirmation instead of committing the place straight away', async () => {
+    const user = userEvent.setup();
+    respondWithPlaces(mockPlaces);
+    const onLocationChange = vi.fn();
+
+    render(<StatefulWrapper onLocationChange={onLocationChange} />);
+
+    await user.type(screen.getByRole('combobox'), 'Bre');
+
+    await waitFor(() => {
+      expect(screen.getByText('Brest, Finistère, Bretagne')).toBeInTheDocument();
+    });
+
+    onLocationChange.mockClear();
+    await user.click(screen.getByText('Brest, Finistère, Bretagne'));
+
+    // The map panel is up and nothing has been committed yet.
+    expect(
+      await screen.findByRole('button', { name: /confirmLocation/i }),
+    ).toBeInTheDocument();
+    expect(onLocationChange).not.toHaveBeenCalled();
+  });
+
+  it('reports the place name and its coordinates once confirmed', async () => {
+    const user = userEvent.setup();
+    respondWithPlaces(mockPlaces);
+    const onLocationChange = vi.fn();
+
+    render(<StatefulWrapper onLocationChange={onLocationChange} />);
+
+    await user.type(screen.getByRole('combobox'), 'Bre');
+    await waitFor(() => {
+      expect(screen.getByText('Brest, Finistère, Bretagne')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Brest, Finistère, Bretagne'));
+
+    onLocationChange.mockClear();
+    await user.click(await screen.findByRole('button', { name: /confirmLocation/i }));
+
+    expect(onLocationChange).toHaveBeenCalledWith('Brest, Finistère, Bretagne', {
+      lat: 48.3904,
+      lon: -4.4861,
+    });
+  });
+
+  it('leaves the field untouched when the map is cancelled', async () => {
+    const user = userEvent.setup();
+    respondWithPlaces(mockPlaces);
+    const onLocationChange = vi.fn();
+
+    render(<StatefulWrapper onLocationChange={onLocationChange} />);
+
+    await user.type(screen.getByRole('combobox'), 'Bre');
+    await waitFor(() => {
+      expect(screen.getByText('Brest, Finistère, Bretagne')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Brest, Finistère, Bretagne'));
+    await screen.findByRole('button', { name: /confirmLocation/i });
+
+    onLocationChange.mockClear();
+    await user.click(screen.getByRole('button', { name: /common\.cancel/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: /confirmLocation/i }),
+      ).not.toBeInTheDocument();
+    });
+    expect(onLocationChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('combobox')).toHaveValue('Bre');
+  });
+
+  it('still shows trip suggestions when the geocoder fails', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockedGetTripsByLocation.mockResolvedValue([mockTrips[0]!]);
+
+    render(<StatefulWrapper />);
+
+    await user.type(screen.getByRole('combobox'), 'Beach');
+
+    // A dead Nominatim must not take the local suggestions down with it.
+    await waitFor(() => {
+      expect(screen.getByText('Beach House, Brittany')).toBeInTheDocument();
+    });
+  });
+});
+
+// ============================================================================
+// Existing Pin Tests
+// ============================================================================
+
+describe('LocationAutocomplete Existing Pin', () => {
+  it('shows the coordinates of an already-pinned trip', () => {
+    render(
+      <StatefulWrapper
+        initialValue="Brest, Bretagne"
+        initialCoordinates={{ lat: 48.3904, lon: -4.4861 }}
+      />,
+    );
+
+    expect(screen.getByText(/trips\.pinnedAt/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /trips\.removePin/ })).toBeInTheDocument();
+  });
+
+  it('shows no pin row when the trip has only a free-text location', () => {
+    render(<StatefulWrapper initialValue="Somewhere nice" />);
+
+    expect(screen.queryByText(/trips\.pinnedAt/)).not.toBeInTheDocument();
+  });
+
+  it('drops the pin but keeps the name when the pin is removed', async () => {
+    const user = userEvent.setup();
+    const onLocationChange = vi.fn();
+
+    render(
+      <StatefulWrapper
+        initialValue="Brest, Bretagne"
+        initialCoordinates={{ lat: 48.3904, lon: -4.4861 }}
+        onLocationChange={onLocationChange}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /trips\.removePin/ }));
+
+    expect(onLocationChange).toHaveBeenCalledWith('Brest, Bretagne', undefined);
+    await waitFor(() => {
+      expect(screen.queryByText(/trips\.pinnedAt/)).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('combobox')).toHaveValue('Brest, Bretagne');
+  });
+
+  it('drops a pin the typed name no longer describes', async () => {
+    const user = userEvent.setup();
+    const onLocationChange = vi.fn();
+
+    render(
+      <StatefulWrapper
+        initialValue="Brest"
+        initialCoordinates={{ lat: 48.3904, lon: -4.4861 }}
+        onLocationChange={onLocationChange}
+      />,
+    );
+
+    await user.type(screen.getByRole('combobox'), 'x');
+
+    expect(onLocationChange).toHaveBeenCalledWith('Brestx', undefined);
+    await waitFor(() => {
+      expect(screen.queryByText(/trips\.pinnedAt/)).not.toBeInTheDocument();
+    });
+  });
+
+  it('re-opens the map on the current pin so it can be nudged', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <StatefulWrapper
+        initialValue="Brest, Bretagne"
+        initialCoordinates={{ lat: 48.3904, lon: -4.4861 }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /trips\.adjustPin/ }));
+
+    expect(
+      await screen.findByRole('button', { name: /confirmLocation/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('48.390400, -4.486100')).toBeInTheDocument();
   });
 });
 
