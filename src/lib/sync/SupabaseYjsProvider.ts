@@ -82,6 +82,18 @@ function isEmptyUpdate(update: Uint8Array): boolean {
 const PULL_DEBOUNCE_MS = 750;
 
 /**
+ * Log rows this device sees before it offers to compact the trip.
+ *
+ * Counted as traffic — rows applied plus rows sent — rather than as the log's
+ * actual length, which would need a `count(*)` round trip the client does not
+ * otherwise make. It over-triggers for a device that joins a long-established
+ * trip and under-triggers for one that mostly watches, and both are fine: the
+ * server's monotonic guard makes a redundant attempt a no-op, and any other
+ * member's device will reach the threshold too.
+ */
+const COMPACT_AFTER_ROWS = 200;
+
+/**
  * A stable, per-trip, non-identifying presence key for an account.
  *
  * Presence keys are visible to everyone on the channel, and this channel is
@@ -220,6 +232,8 @@ export class SupabaseYjsProvider {
   private reconciling = false;
   private hydrationAttempt = 0;
   private hydrationTimer: ReturnType<typeof setTimeout> | null = null;
+  private rowsSinceCompaction = 0;
+  private compacting = false;
   private readonly userId: string | undefined;
   private pullTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -410,6 +424,7 @@ export class SupabaseYjsProvider {
         }
 
         this.applyRows(rows);
+        this.rowsSinceCompaction += rows.length;
         highestApplied = rows[rows.length - 1]!.id;
 
         // The cursor advances per page, so an interrupted multi-page pull
@@ -430,6 +445,11 @@ export class SupabaseYjsProvider {
       }
       this.setState({ lastSyncedAt: Date.now() });
       this.publishStatus();
+
+      // Here specifically, because this is the one point where the document is
+      // known to hold everything up to the cursor — which is exactly what the
+      // snapshot claims.
+      await this.maybeCompact();
     } catch (error: unknown) {
       this.pullHealthy = false;
       this.noteFailure(error);
@@ -501,6 +521,64 @@ export class SupabaseYjsProvider {
     const throughId = (data as { through_id?: unknown }).through_id;
     if (typeof throughId === 'number' && throughId > 0) {
       await advanceCursor(this.tripId, throughId);
+    }
+  }
+
+  /**
+   * Folds the log into a snapshot, when this device has seen enough of it.
+   *
+   * Compaction used to be an Edge Function on a schedule, which reconstructed
+   * each document by replaying every row purely to compute a value a connected
+   * client already holds: `Y.encodeStateAsUpdate` is free here. Everything that
+   * setup needed — a deployment, a service key in Vault, pg_cron, pg_net — existed
+   * only to put a Yjs runtime somewhere it could do that replay.
+   *
+   * `through_id` is this device's own cursor, so the snapshot only ever claims
+   * rows this device has actually applied. The server will not let it exceed the
+   * log, will not let the head move backwards, and keeps a margin of recent rows
+   * unpruned — so a device that publishes a snapshot its document had got wrong
+   * does not take the newest history with it.
+   *
+   * Failure is swallowed. An uncompacted log is a growing table, not a broken
+   * trip, and this must never be the reason sync reports a problem.
+   */
+  private async maybeCompact(): Promise<void> {
+    if (this.destroyed || this.compacting) {
+      return;
+    }
+    if (this.rowsSinceCompaction < COMPACT_AFTER_ROWS) {
+      return;
+    }
+
+    const cursor = await readCursor(this.tripId);
+    if (cursor.lastSeenUpdateId <= 0) {
+      // Nothing applied from the log yet, so there is nothing to claim.
+      return;
+    }
+
+    const state = Y.encodeStateAsUpdate(this.doc);
+    if (isEmptyUpdate(state)) {
+      // Publishing an empty snapshot over a log that has rows in it is the one
+      // move here that could destroy content.
+      return;
+    }
+
+    this.compacting = true;
+    try {
+      const { error } = await this.client.rpc('publish_trip_snapshot', {
+        p_trip_id: this.remoteTripId,
+        p_state: encodeUpdate(state),
+        p_through_id: cursor.lastSeenUpdateId,
+      });
+      if (error) {
+        console.warn('[sync] could not publish a snapshot:', error.message);
+        return;
+      }
+      this.rowsSinceCompaction = 0;
+    } catch (error: unknown) {
+      console.warn('[sync] snapshot publish threw:', error);
+    } finally {
+      this.compacting = false;
     }
   }
 
@@ -724,6 +802,7 @@ export class SupabaseYjsProvider {
     if (error) {
       throw new Error(`log write failed: ${error.message}`);
     }
+    this.rowsSinceCompaction += 1;
   }
 
   // --------------------------------------------------------------------------
