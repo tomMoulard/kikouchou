@@ -15,7 +15,7 @@
  * @module lib/sync/remote-trip
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { TypedSupabaseClient } from '@/lib/supabase/client';
 
 import { db } from '@/lib/db/database';
 import type { Trip, TripId } from '@/types';
@@ -44,7 +44,7 @@ export type EnsureRemoteTripResult =
  * a second server row for the same trip.
  */
 async function findExistingRemoteTrip(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   ownerId: string,
   localId: string,
 ): Promise<string | null> {
@@ -77,7 +77,7 @@ async function rememberRemoteTripId(
  * worse than doing nothing.
  */
 async function remoteTripExists(
-  client: SupabaseClient,
+  client: TypedSupabaseClient,
   remoteTripId: string,
 ): Promise<boolean | null> {
   try {
@@ -124,7 +124,7 @@ async function forgetRemoteTrip(tripId: TripId): Promise<void> {
  * @param tripId - Local trip to upload
  */
 export async function ensureRemoteTrip(
-  client: SupabaseClient | null,
+  client: TypedSupabaseClient | null,
   userId: string | null,
   tripId: TripId,
 ): Promise<EnsureRemoteTripResult> {
@@ -216,7 +216,7 @@ export async function ensureRemoteTrip(
  * swallowed — a stale preview is cosmetic, and this must never block an edit.
  */
 export async function syncRemoteTripMetadata(
-  client: SupabaseClient | null,
+  client: TypedSupabaseClient | null,
   trip: Trip,
 ): Promise<void> {
   if (!client || !trip.remoteTripId) {
@@ -245,7 +245,7 @@ export async function syncRemoteTripMetadata(
  * whatever is local.
  */
 export async function listRemoteTripsMissingLocally(
-  client: SupabaseClient | null,
+  client: TypedSupabaseClient | null,
 ): Promise<{ readonly id: string; readonly name: string }[]> {
   if (!client) {
     return [];
