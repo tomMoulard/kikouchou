@@ -777,8 +777,15 @@ test.describe('Empty State Accessibility', () => {
 
     expect(violations).toEqual([]);
 
-    // The "New trip" button in empty state should be focusable
-    const newTripButton = page.getByRole('button', { name: /new|nouveau/i });
+    // The "New trip" button in empty state should be focusable.
+    //
+    // Scoped to the `EmptyState`, which renders as `role="status"`: the page
+    // header offers the same action under the same name, so an unscoped match
+    // is a strict-mode violation — and this test is about the empty state's
+    // copy of the button specifically.
+    const newTripButton = page
+      .getByRole('status')
+      .getByRole('button', { name: /new|nouveau/i });
     await expect(newTripButton).toBeVisible();
 
     const isFocusable = await newTripButton.evaluate((el) => el.tabIndex >= 0);

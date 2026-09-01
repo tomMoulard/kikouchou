@@ -284,9 +284,9 @@ describe('CalendarPage', () => {
 
   it('renders the view toggle tabs (Month / Timeline)', () => {
     renderCalendarPage();
-    expect(screen.getByRole('tablist', { name: 'calendar.view.ariaLabel' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'calendar.view.month' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'calendar.view.timeline' })).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: 'calendar.view.ariaLabel' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'calendar.view.month' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'calendar.view.timeline' })).toBeInTheDocument();
   });
 
   it('renders the trip name as description', () => {
@@ -317,7 +317,7 @@ describe('CalendarPage', () => {
     });
     const { user } = renderCalendarPage();
     // Switch to month/card view
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     expect(screen.getByText('calendar.noAssignments')).toBeInTheDocument();
   });
 
@@ -338,7 +338,7 @@ describe('CalendarPage', () => {
 
   it('switches to card view when clicking Month tab', async () => {
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     // Card view shows the calendar header and grid
     expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
   });
@@ -366,7 +366,7 @@ describe('CalendarPage', () => {
 
   it('navigates to previous month', async () => {
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     const prevButton = screen.getByRole('button', { name: 'calendar.previousMonth' });
     await user.click(prevButton);
     // The page should still render without error
@@ -375,7 +375,7 @@ describe('CalendarPage', () => {
 
   it('navigates to next month', async () => {
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     const nextButton = screen.getByRole('button', { name: 'calendar.nextMonth' });
     await user.click(nextButton);
     expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
@@ -383,7 +383,7 @@ describe('CalendarPage', () => {
 
   it('navigates to today', async () => {
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     // First navigate away
     const nextButton = screen.getByRole('button', { name: 'calendar.nextMonth' });
     await user.click(nextButton);
@@ -416,7 +416,7 @@ describe('CalendarPage', () => {
     });
 
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
 
     expect(screen.getByTestId('day-headcount-2026-04-05')).toHaveTextContent('3');
   });
@@ -457,7 +457,7 @@ describe('CalendarPage', () => {
     });
 
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
 
     expect(screen.queryByTestId('day-headcount-2026-04-05')).not.toBeInTheDocument();
   });
@@ -468,7 +468,7 @@ describe('CalendarPage', () => {
 
   it('renders multi-day assignment events in card view', async () => {
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     // The assignment label should be rendered (possibly multiple segments)
     const labels = screen.getAllByText('Alice - Blue Room');
     expect(labels.length).toBeGreaterThan(0);
@@ -482,7 +482,7 @@ describe('CalendarPage', () => {
       error: null,
     });
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     // Should show unknown label in aria-label of event pill buttons
     const pills = screen.getAllByTitle('common.unknown - Blue Room');
     expect(pills.length).toBeGreaterThan(0);
@@ -500,7 +500,7 @@ describe('CalendarPage', () => {
       error: null,
     });
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     const labels = screen.getAllByText('Alice - Blue Room');
     expect(labels.length).toBeGreaterThan(0);
   });
@@ -521,7 +521,7 @@ describe('CalendarPage', () => {
       deleteAssignment: vi.fn().mockResolvedValue(undefined),
     });
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     // The far future assignment should not be visible
     expect(screen.queryByText('Alice - Blue Room')).not.toBeInTheDocument();
   });
@@ -542,7 +542,7 @@ describe('CalendarPage', () => {
       deleteAssignment: vi.fn().mockResolvedValue(undefined),
     });
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     expect(screen.queryByText('Alice - Blue Room')).not.toBeInTheDocument();
   });
 
@@ -562,7 +562,7 @@ describe('CalendarPage', () => {
       deleteAssignment: vi.fn().mockResolvedValue(undefined),
     });
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     expect(screen.queryByText('Alice - Blue Room')).not.toBeInTheDocument();
   });
 
@@ -588,7 +588,7 @@ describe('CalendarPage', () => {
       deleteTransport: vi.fn().mockResolvedValue(undefined),
     });
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     // Transport indicators should be rendered
     expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
   });
@@ -605,7 +605,7 @@ describe('CalendarPage', () => {
       error: null,
     });
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     // Should still render without error
     expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
   });
@@ -621,7 +621,7 @@ describe('CalendarPage', () => {
       setCurrentTrip: vi.fn().mockResolvedValue(undefined),
     });
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     // Should render calendar grid but with null trip boundaries
     expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
   });
@@ -637,7 +637,7 @@ describe('CalendarPage', () => {
       setCurrentTrip: vi.fn().mockResolvedValue(undefined),
     });
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
   });
 
@@ -647,7 +647,7 @@ describe('CalendarPage', () => {
 
   it('supports keyboard navigation with arrow keys in card view', async () => {
     const { user } = renderCalendarPage();
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
 
     // Find a gridcell and focus it
     const gridcells = screen.getAllByRole('gridcell');
@@ -748,7 +748,7 @@ describe('CalendarPage', () => {
     expect(screen.queryByRole('button', { name: 'calendar.previousMonth' })).not.toBeInTheDocument();
 
     // Switch to card view
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     expect(screen.getByRole('button', { name: 'calendar.previousMonth' })).toBeInTheDocument();
   });
 
@@ -794,7 +794,7 @@ describe('CalendarPage', () => {
     const { user } = renderCalendarPage();
 
     // Switch to card view for month grid keyboard events
-    await user.click(screen.getByRole('tab', { name: 'calendar.view.month' }));
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
 
     // Press a non-arrow key on a day cell - should not crash
     const dayButtons = screen.getAllByRole('button');

@@ -172,9 +172,9 @@ describe('ActivityListPage', () => {
     renderPage();
 
     expect(
-      screen.getByRole('tab', { name: 'activities.view.timeline' }),
+      screen.getByRole('radio', { name: 'activities.view.timeline' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'activities.view.list' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'activities.view.list' })).toBeInTheDocument();
   });
 
   it('defaults to the timeline view', () => {

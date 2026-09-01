@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { Luggage, Plus, QrCode } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ViewSwitcher } from '@/components/ui/view-switcher';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -308,12 +308,16 @@ const TripListPage = memo(function TripListPage() {
       <div className="flex flex-col">
         <PageHeader title={t('trips.title')} action={headerAction} />
 
-        <Tabs value={currentView} onValueChange={handleViewChange} className="mb-4">
-          <TabsList aria-label={t('trips.view.ariaLabel', 'Trips view')}>
-            <TabsTrigger value="list">{t('trips.view.list', 'List')}</TabsTrigger>
-            <TabsTrigger value="map">{t('trips.view.map', 'Map')}</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <ViewSwitcher
+          className="mb-4"
+          value={currentView}
+          onValueChange={handleViewChange}
+          ariaLabel={t('trips.view.ariaLabel', 'Trips view')}
+          options={[
+            { value: 'list', label: t('trips.view.list', 'List') },
+            { value: 'map', label: t('trips.view.map', 'Map') },
+          ]}
+        />
 
         {currentView === 'map' ? (
           /* Extra bottom padding for stacked FABs on mobile */

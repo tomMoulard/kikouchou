@@ -366,9 +366,9 @@ describe('RoomListPage', () => {
 
   it('renders view toggle tabs (Cards / Timeline)', () => {
     render(<RoomListPage />, { withProviders: false });
-    expect(screen.getByRole('tablist', { name: 'rooms.view.ariaLabel' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'rooms.view.cards' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'rooms.view.timeline' })).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: 'rooms.view.ariaLabel' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'rooms.view.cards' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'rooms.view.timeline' })).toBeInTheDocument();
   });
 
   it('renders FAB add room button', () => {
@@ -609,7 +609,7 @@ describe('RoomListPage', () => {
 
   it('switches view when tab is clicked', async () => {
     const { user } = render(<RoomListPage />, { withProviders: false });
-    const timelineTab = screen.getByRole('tab', { name: 'rooms.view.timeline' });
+    const timelineTab = screen.getByRole('radio', { name: 'rooms.view.timeline' });
     await user.click(timelineTab);
     expect(mockSetSearchParams).toHaveBeenCalled();
   });
