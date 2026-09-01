@@ -5,6 +5,8 @@
  * @module features/assistant/chat-storage
  */
 
+import { nanoid } from 'nanoid';
+
 import type { ChatMessageData } from './components/ChatMessage';
 import type { ChatMessage as LLMChatMessage } from './hooks/useWebLLM';
 
@@ -13,6 +15,7 @@ import type { ChatMessage as LLMChatMessage } from './hooks/useWebLLM';
 // ============================================================================
 
 const STORAGE_KEY = 'kikoushou.assistant.chat.v1';
+const SESSION_STORAGE_KEY = 'kikoushou.assistant.chat.session.v1';
 
 // ============================================================================
 // Validation
@@ -89,8 +92,26 @@ export function saveAssistantChatMessages(
 export function clearAssistantChatStorage(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SESSION_STORAGE_KEY);
   } catch {
     // ignore quota / private mode edge cases
+  }
+}
+
+/**
+ * Returns the id grouping this conversation's turns for AI observability
+ * (PostHog `$ai_session_id`), minting and persisting one on first use so it
+ * survives a page reload and stays stable until the conversation is cleared.
+ */
+export function getOrCreateAssistantSessionId(): string {
+  try {
+    const existing = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (existing) return existing;
+    const created = nanoid();
+    localStorage.setItem(SESSION_STORAGE_KEY, created);
+    return created;
+  } catch {
+    return nanoid();
   }
 }
 
