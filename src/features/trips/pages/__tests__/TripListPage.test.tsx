@@ -385,24 +385,15 @@ describe('TripListPage', () => {
     expect(screen.queryByTestId('share-dialog')).not.toBeInTheDocument();
   });
 
-<<<<<<< HEAD
-  it('keeps the shared trip sync binding alive after the share dialog closes', async () => {
-    const { userEvent } = await import('@testing-library/user-event');
-    const user = userEvent.setup();
-
-    render(<TripListPage />, { withProviders: false });
-
-    await waitFor(() => {
-      expect(screen.getByText('Test Trip')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByLabelText(/trips\.shareTripAria/));
-    await user.click(screen.getByTestId('ready-share-sync'));
-    await user.click(screen.getByTestId('close-share-dialog'));
-
-    expect(screen.queryByTestId('share-dialog')).not.toBeInTheDocument();
-    expect(screen.getByTestId('trip-yjs-sync-binding')).toHaveTextContent('trip-1:room-1:key-1');
-  });
+  // Deleted with the WebRTC transport: "keeps the shared trip sync binding alive
+  // after the share dialog closes".
+  //
+  // That test guarded a mechanism that existed only because WebRTC needed both
+  // peers connected at the same moment — the trip had to be held online while
+  // its share link was on screen, in case the other side turned up. The server
+  // holds the log now, so the other side can arrive whenever it likes and there
+  // is nothing to keep alive. The behaviour was removed, so the test went with
+  // it rather than being adapted to assert something that no longer matters.
 
   // ==========================================================================
   // View Tabs
@@ -504,15 +495,4 @@ describe('TripListPage', () => {
     });
   });
 
-=======
-  // Deleted with the WebRTC transport: "keeps the shared trip sync binding alive
-  // after the share dialog closes".
-  //
-  // That test guarded a mechanism that existed only because WebRTC needed both
-  // peers connected at the same moment — the trip had to be held online while
-  // its share link was on screen, in case the other side turned up. The server
-  // holds the log now, so the other side can arrive whenever it likes and there
-  // is nothing to keep alive. The behaviour was removed, so the test went with
-  // it rather than being adapted to assert something that no longer matters.
->>>>>>> f2dec60 (feat!: retire the WebRTC transport)
 });
