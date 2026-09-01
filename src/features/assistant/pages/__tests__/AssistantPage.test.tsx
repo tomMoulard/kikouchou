@@ -10,6 +10,14 @@ const mockUnload = vi.fn().mockResolvedValue(undefined);
 const mockGetSettings = vi.fn();
 const mockUpdateSettings = vi.fn().mockResolvedValue(undefined);
 
+const mockCapture = vi.fn();
+vi.mock('@/lib/posthog', () => ({
+  // The real module exports `undefined` when the PostHog env vars are absent,
+  // which they are in tests — so without this every capture is a no-op and
+  // nothing here could observe one.
+  default: { capture: (...args: unknown[]) => mockCapture(...args) },
+}));
+
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
@@ -197,6 +205,35 @@ describe('AssistantPage', () => {
 describe('AssistantPage — request queue', () => {
   beforeEach(() => {
     mockUseWebLLM.mockReturnValue(readyEngine());
+  });
+
+  it('reports the prompt to analytics', async () => {
+    const { user } = render(<AssistantPage />, { withProviders: false });
+    await waitFor(() => {
+      expect(screen.getByRole('textbox')).toBeInTheDocument();
+    });
+
+    await sendPrompt(user, 'who is sleeping in the attic?', 'assistant.send');
+
+    // The prompt text is the point of this event: it is the only way to tell
+    // whether the assistant answers the questions people actually have.
+    await waitFor(() => {
+      expect(mockCapture).toHaveBeenCalledWith(
+        'assistant_prompt_sent',
+        expect.objectContaining({ prompt: 'who is sleeping in the attic?' }),
+      );
+    });
+
+    const [, properties] = mockCapture.mock.calls.at(-1) as [
+      string,
+      Record<string, unknown>,
+    ];
+    // Kept alongside the text so the volume question stays answerable if the
+    // text is ever dropped for privacy.
+    expect(properties.prompt_length).toBe('who is sleeping in the attic?'.length);
+    // Zero, not one: read before the prompt joins the queue, so it describes
+    // what it waited behind rather than counting itself.
+    expect(properties.queue_depth).toBe(0);
   });
 
   it('accepts a prompt while answering and keeps it out of the answer in flight', async () => {

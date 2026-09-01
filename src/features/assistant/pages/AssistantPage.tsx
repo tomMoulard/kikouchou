@@ -79,6 +79,7 @@ import {
   getAssistantModelPreset,
   isAssistantModelId,
 } from '../models';
+import posthog from '@/lib/posthog';
 import type { AssistantModelId } from '@/types';
 
 // ============================================================================
@@ -878,6 +879,25 @@ function AssistantPageComponent(): ReactElement {
     (text: string): void => {
       const messageId = nextMessageId();
 
+      // The prompt text itself, which is the point: knowing *what* people ask
+      // the assistant is the only way to tell whether it answers the questions
+      // they actually have.
+      //
+      // Worth being explicit that this is the one capture in the app carrying
+      // free-text user content. A prompt about a trip routinely names its guests
+      // and where they are staying, and those people are not users of this app
+      // and have not agreed to anything. `prompt_length` is kept alongside so
+      // the volume question stays answerable if the text is ever dropped.
+      posthog?.capture('assistant_prompt_sent', {
+        prompt: text,
+        prompt_length: text.length,
+        model_id: selectedModelId,
+        // Read before the push below, so this is the depth the prompt waited
+        // behind rather than including itself.
+        queue_depth: queueRef.current.length,
+        engine_status: status,
+      });
+
       // Show the prompt straight away; `queued` is cleared when its turn starts.
       setMessages((prev) => [
         ...prev,
@@ -889,7 +909,7 @@ function AssistantPageComponent(): ReactElement {
       queueRef.current.push({ messageId, text });
       void drainQueue();
     },
-    [drainQueue],
+    [drainQueue, selectedModelId, status],
   );
 
   // The engine reloads itself after a crash (see useWebLLM); pick the queue up
