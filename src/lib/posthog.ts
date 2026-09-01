@@ -12,9 +12,18 @@
  * by every component test, so a throw here blanks the app and fails test
  * collection rather than just losing events.
  *
- * Captures are anonymous by design. The app has no accounts, and trip guests
- * are domain records rather than identities, so nothing is passed to
- * `identify()` — a shared browser would otherwise misattribute events.
+ * Events are tied to the Supabase account once somebody signs in:
+ * `AuthContext` calls `identify()` with `user.id` so a person's events line up
+ * across their devices, and `reset()` on sign-out so the next person on a shared
+ * browser does not inherit that identity. Before a sign-in, and in a build with
+ * no backend, captures stay anonymous.
+ *
+ * That is a change from how this started. It said captures were anonymous "by
+ * design" because "the app has no accounts", which stopped being true when
+ * Supabase auth landed.
+ *
+ * Trip guests remain domain records rather than identities — nothing about a
+ * guest is ever passed to `identify()`. Only the signed-in account is.
  *
  * @module lib/posthog
  */
@@ -38,6 +47,11 @@ if (posthogKey && posthogHost) {
       capture_console_errors: false,
     },
   });
+  // Attached to every event from here on, so any question can be sliced by
+  // release without each call site having to remember to pass it. Set at init
+  // rather than per capture: it cannot change while the page is loaded.
+  posthog.register({ app_version: import.meta.env.VITE_APP_VERSION ?? 'dev' });
+
   posthogClient = posthog;
 } else if (import.meta.env.DEV && !import.meta.env.VITEST) {
   console.warn(

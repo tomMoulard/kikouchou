@@ -753,6 +753,11 @@ function AssistantPageComponent(): ReactElement {
    */
   const runTurn = useCallback(
     async ({ messageId, text }: QueuedPrompt): Promise<TurnOutcome> => {
+      // Wall clock, for the only performance question that matters here: how
+      // long somebody waits for an answer on their own hardware. The model runs
+      // in the browser, so this varies by device in a way no server metric would
+      // show.
+      const startedAt = Date.now();
       const conversationVersion = conversationVersionRef.current;
       const isSameConversation = (): boolean =>
         conversationVersionRef.current === conversationVersion;
@@ -815,6 +820,12 @@ function AssistantPageComponent(): ReactElement {
           ),
         );
 
+        posthog?.capture('assistant_answer_received', {
+          duration_ms: Date.now() - startedAt,
+          answer_length: response.length,
+          action_count: actionsExecuted,
+        });
+
         return 'answered';
       } catch (err) {
         const fatal = isFatalEngineError(err);
@@ -842,6 +853,14 @@ function AssistantPageComponent(): ReactElement {
             msg.id === assistantId ? { ...msg, content, failed: true } : msg,
           ),
         );
+
+        posthog?.capture('assistant_answer_failed', {
+          duration_ms: Date.now() - startedAt,
+          // A crashed engine and a refused generation need different fixes: the
+          // first is the device running out of GPU, the second is the model or
+          // the prompt.
+          fatal,
+        });
 
         return fatal ? 'engine-lost' : 'failed';
       }

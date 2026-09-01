@@ -23,6 +23,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import posthog from '@/lib/posthog';
 import { useAuth } from '@/features/auth/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import {
@@ -106,6 +107,7 @@ export function useTripShareLink(
     // Decided before the session is consulted, because there is no session to
     // wait for.
     if (!isAvailable) {
+      posthog?.capture('trip_share_blocked', { reason: 'no-backend' });
       setState({ kind: 'unavailable' });
       return;
     }
@@ -118,6 +120,9 @@ export function useTripShareLink(
     }
 
     if (userId === null) {
+      // Where the sharing funnel most plausibly leaks: somebody wanted to share
+      // and was asked to make an account first.
+      posthog?.capture('trip_share_blocked', { reason: 'needs-account' });
       setState({ kind: 'needs-account' });
       return;
     }
@@ -171,6 +176,7 @@ export function useTripShareLink(
         return;
       }
       if (uploaded.status === 'error') {
+        posthog?.capture('trip_share_blocked', { reason: 'upload-failed' });
         setState({
           kind: 'error',
           message: uploaded.message,
@@ -197,6 +203,11 @@ export function useTripShareLink(
         setState({ kind: 'error', message: 'Could not create a share link.' });
         return;
       }
+
+      // `reused` is the interesting half: minting a link every time somebody
+      // opens the dialog would litter the trip with live invites, so this
+      // distinguishes "shared again" from "shared for the first time".
+      posthog?.capture('trip_invite_ready', { reused: existing !== undefined });
 
       setState({
         kind: 'invite',

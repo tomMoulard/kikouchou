@@ -339,7 +339,24 @@ every unit test.
   costs no other insight. Do not add a second exception without deciding to.
 - **Mock it to test a capture.** The real export is `undefined` in tests, so an
   assertion on `capture` passes vacuously without
-  `vi.mock('@/lib/posthog', () => ({ default: { capture: … } }))`.
+  `vi.mock('@/lib/posthog', () => ({ default: { capture: … } }))`. Find the call
+  by event name, not by position: `calls.at(-1)` broke the moment a second event
+  started firing after the one under test.
+- **Identity follows the Supabase session.** `AuthContext` calls
+  `identify(user.id)` on sign-in and `reset()` on sign-out. Both fire on the
+  *transition* only: that handler also runs on every token refresh, and `reset()`
+  mints a fresh anonymous id, so calling it on each cold load would give a
+  signed-out visitor a new identity every time and inflate unique users. The
+  sign-out `reset()` is what stops the next person on a shared browser inheriting
+  the last one's identity.
+- **Super properties carry the context**, so a call site does not have to
+  remember it: `app_version` registered at init, `signed_in` on every auth
+  change. Most of this app works signed out, so that flag is the difference
+  between "nobody uses sharing" and "nobody signs in".
+- **Event names are `noun_verb_past`** — `trip_joined`, `assistant_answer_failed`
+  — and a failure carries a `reason`, because "the invite did not work" and "the
+  invite was revoked" are the same dead end to the user and different problems to
+  fix.
 
 ## Styling
 

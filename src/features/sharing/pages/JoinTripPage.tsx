@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { useTripContext } from '@/contexts/TripContext';
+import posthog from '@/lib/posthog';
 import { db } from '@/lib/db/database';
 import { useAuth } from '@/features/auth/AuthContext';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
@@ -151,12 +152,14 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
       setClaiming(null);
 
       if (result.status === 'taken') {
+        posthog?.capture('trip_identity_claim_failed', { reason: 'taken' });
         // Somebody claimed this person between the list loading and the tap.
         setClaimed((current) => new Set(current).add(personId));
         setError(t('sharing.join.identityTaken', 'Somebody else just took that name.'));
         return;
       }
       if (result.status === 'not-a-member') {
+        posthog?.capture('trip_identity_claim_failed', { reason: 'not-a-member' });
         // The server has no roster row for this account, so nothing was
         // recorded. Navigating anyway would leave the participant looking free
         // to whoever joins next.
@@ -173,6 +176,8 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
         return;
       }
 
+      posthog?.capture('trip_identity_claimed');
+
       // Only on a confirmed claim.
       void navigate(`/trips/${tripId}/calendar`);
     },
@@ -180,6 +185,10 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
   );
 
   const skip = useCallback(() => {
+    // Distinguished from claiming, because somebody entering a trip as nobody in
+    // particular will not see their own room or travel — a quiet drop-off worth
+    // measuring rather than guessing at.
+    posthog?.capture('trip_identity_skipped');
     void navigate(`/trips/${tripId}/calendar`);
   }, [navigate, tripId]);
 

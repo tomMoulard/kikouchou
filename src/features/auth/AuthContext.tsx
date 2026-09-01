@@ -46,6 +46,7 @@ import {
   getCapturedAuthError,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import posthog from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -151,6 +152,15 @@ export function AuthProvider({
   const isMountedRef = useRef(true);
 
   /**
+   * Who PostHog currently thinks this browser is, or null for anonymous.
+   *
+   * Tracked rather than derived because the two calls below must fire on a
+   * *transition*, not on every auth event — `onAuthStateChange` also runs on
+   * every token refresh and on `INITIAL_SESSION`.
+   */
+  const identifiedRef = useRef<string | null>(null);
+
+  /**
    * An error the provider redirected back with — usually a cancelled consent
    * screen.
    *
@@ -203,6 +213,39 @@ export function AuthProvider({
         setSession(nextSession);
         setHasSeenAuthEvent(true);
         setIsSigningIn(false);
+
+        // Tie analytics to the Supabase account, so a person's events line up
+        // across their devices and browsers under the same id.
+        const nextUserId = nextSession?.user.id ?? null;
+
+        // A super property, so every event — not just the ones fired near here —
+        // can be split by whether the person had an account. Most of this app
+        // works signed out, so that split is the difference between "nobody uses
+        // sharing" and "nobody signs in".
+        posthog?.register({ signed_in: nextUserId !== null });
+
+        if (nextUserId !== null) {
+          // Only on a change. This handler also fires on every token refresh,
+          // where re-identifying the same id is pointless churn.
+          if (identifiedRef.current !== nextUserId) {
+            posthog?.identify(nextUserId);
+            identifiedRef.current = nextUserId;
+          }
+          return;
+        }
+
+        // Only on an actual sign-out, never on an initial null session.
+        //
+        // `reset()` mints a *new* anonymous distinct id, so calling it on every
+        // cold load for a signed-out visitor would give them a different
+        // identity each time and inflate the unique-user count. Guarding on
+        // having previously identified somebody keeps it to the transition that
+        // matters — and that transition is what makes a shared browser safe,
+        // since without it the next person inherits the last one's identity.
+        if (identifiedRef.current !== null) {
+          posthog?.reset();
+          identifiedRef.current = null;
+        }
       });
       unsubscribe = () => data.subscription.unsubscribe();
 

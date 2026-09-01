@@ -224,10 +224,13 @@ describe('AssistantPage — request queue', () => {
       );
     });
 
-    const [, properties] = mockCapture.mock.calls.at(-1) as [
-      string,
-      Record<string, unknown>,
-    ];
+    // Found by name, not by position. `calls.at(-1)` broke the moment
+    // `assistant_answer_received` started firing after it.
+    const call = mockCapture.mock.calls.find(
+      ([event]) => event === 'assistant_prompt_sent',
+    ) as [string, Record<string, unknown>] | undefined;
+    expect(call).toBeDefined();
+    const properties = call?.[1] ?? {};
     // Kept alongside the text so the volume question stays answerable if the
     // text is ever dropped for privacy.
     expect(properties.prompt_length).toBe('who is sleeping in the attic?'.length);
