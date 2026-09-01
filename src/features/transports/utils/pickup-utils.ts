@@ -82,7 +82,12 @@ export function groupPickupsByProximity(
   }> = [];
 
   for (const pickup of sorted) {
-    const normalizedStation = pickup.location.trim().toLowerCase();
+    // `location` is required by the `Transport` type, but nothing enforces that
+    // on a record arriving over Yjs from a peer, and one such row used to throw
+    // `Cannot read properties of undefined (reading 'trim')` straight into the
+    // error boundary — taking the whole transports page down rather than the
+    // one malformed pickup. Group those under the empty station instead.
+    const normalizedStation = (pickup.location ?? '').trim().toLowerCase();
     const pickupTime = parseISO(pickup.datetime).getTime();
     const windowMs = timeWindowMinutes * 60 * 1000;
 
@@ -105,7 +110,7 @@ export function groupPickupsByProximity(
     if (!matched) {
       groups.push({
         station: normalizedStation,
-        displayStation: pickup.location,
+        displayStation: pickup.location ?? '',
         pickups: [pickup],
         earliestTime: pickupTime,
         latestTime: pickupTime,
