@@ -69,6 +69,46 @@ async function rememberRemoteTripId(
   await db.trips.update(tripId, { remoteTripId });
 }
 
+/**
+ * Whether the server row this trip points at still exists.
+ *
+ * Null means the question could not be answered, which the caller must not read
+ * as "deleted" — creating a duplicate row on every failed check would be far
+ * worse than doing nothing.
+ */
+async function remoteTripExists(
+  client: SupabaseClient,
+  remoteTripId: string,
+): Promise<boolean | null> {
+  try {
+    const { data, error } = await client
+      .from('trips')
+      .select('id')
+      .eq('id', remoteTripId)
+      .limit(1);
+    if (error) {
+      return null;
+    }
+    return Array.isArray(data) && data.length > 0;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Drops a local trip's link to a server row that is gone, and the sync
+ * bookkeeping that described it.
+ *
+ * The cursor matters as much as the link. `serverStateVector` records what the
+ * server was known to hold, so carrying it across to a freshly created row would
+ * leave the provider computing a diff against a state that row has never had —
+ * pushing a fragment of the document and treating the rest as already sent.
+ */
+async function forgetRemoteTrip(tripId: TripId): Promise<void> {
+  await db.trips.update(tripId, { remoteTripId: undefined });
+  await db.syncCursors.delete(tripId);
+}
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -98,7 +138,32 @@ export async function ensureRemoteTrip(
   }
 
   if (trip.remoteTripId) {
-    return { status: 'ready', remoteTripId: trip.remoteTripId };
+    // Verified rather than trusted. The local `remoteTripId` is a cached pointer
+    // at a row on the server, and it goes stale for ordinary reasons: the row
+    // deleted from the dashboard, a project reset, a restore from a backup taken
+    // before the trip existed.
+    //
+    // Trusting it produced a confusing failure rather than a clean one. Deleting
+    // a trip cascades its `trip_members` row away, so the upload that follows
+    // went ahead against a trip this account was no longer a member of and the
+    // insert policy correctly refused it —
+    // `new row violates row-level security policy for table "trip_doc_updates"`,
+    // reported from the share dialog, which reads as a permissions bug rather
+    // than a missing trip.
+    const stillThere = await remoteTripExists(client, trip.remoteTripId);
+
+    if (stillThere !== false) {
+      // Present, or unknowable. Either way, keep the link.
+      return { status: 'ready', remoteTripId: trip.remoteTripId };
+    }
+
+    // Gone. Forget it and fall through to create a fresh row, which is what
+    // sharing the trip again should mean.
+    console.info(
+      '[sync] the server row for trip %s is gone; creating a new one',
+      tripId,
+    );
+    await forgetRemoteTrip(tripId);
   }
 
   try {
