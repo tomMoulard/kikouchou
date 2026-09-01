@@ -53,11 +53,20 @@ async function createTrip(page: Page, name: string): Promise<void> {
   await expect(page.getByText(name).first()).toBeVisible({ timeout: 15_000 });
 }
 
-/** Adds a guest, which is what the identity step later offers to claim. */
+/**
+ * Adds a guest, which is what the identity step later offers to claim.
+ *
+ * Waits for the persons route before reaching for the add button, and matches it
+ * on "new guest" rather than `/new|add/i`. The loose pattern also matches "New
+ * trip" on the trip list, so whenever this ran before the navigation had settled
+ * it opened the trip-creation form instead and then timed out waiting for a
+ * dialog that was never going to appear.
+ */
 async function addGuest(page: Page, name: string): Promise<void> {
   await page.getByRole('link', { name: /guests/i }).first().click();
+  await page.waitForURL(/\/persons/, { timeout: 15_000 });
   await page
-    .getByRole('button', { name: /new|add/i })
+    .getByRole('button', { name: /new guest/i })
     .first()
     .click();
   await expect(page.getByRole('dialog')).toBeVisible({ timeout: 10_000 });

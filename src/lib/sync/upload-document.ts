@@ -55,19 +55,36 @@ export async function uploadTripDocument(
   tripId: TripId,
   remoteTripId: string,
 ): Promise<UploadResult> {
-  // Only ever the *first* upload, which is the only one that can happen while
-  // the trip is not open.
+  // Skipped only when the server can actually show for it.
   //
-  // A recorded server state vector means this trip has already been uploaded, so
-  // there is nothing here to do and a second pass would be actively worse than
-  // useless: the document below is rebuilt from Dexie with a fresh `Y.Doc`, which
-  // carries a new client id, so re-populating it would write every value again as
-  // new CRDT items. Same converged result for a map keyed by entity id, but a
-  // larger log — and a real risk of resurrecting something another device deleted
-  // if that deletion has not reached this device's Dexie yet.
+  // A recorded server state vector *usually* means this trip has been uploaded,
+  // and re-uploading is worth avoiding: the document below is rebuilt from Dexie
+  // into a fresh `Y.Doc` with a new client id, so re-populating writes every
+  // value again as new CRDT items — a larger log, and a risk of resurrecting
+  // something another device deleted that this device has not heard about yet.
+  //
+  // But a recorded vector is a claim by this device about the server, and it can
+  // be wrong. A provider that started before the trip's contents were populated
+  // into its document reconciles an empty document, finds nothing to send, and
+  // records the vector anyway — a true statement about an empty document that
+  // reads afterwards as "already uploaded". Trusting it then makes the trip
+  // *permanently* broken rather than briefly: the invitee waits on "Getting the
+  // trip…" and re-sharing cannot repair it, because every later attempt
+  // short-circuits on the same stale claim.
+  //
+  // So the server is asked. One cheap query, and it turns an unrecoverable state
+  // into a self-healing one — re-opening the share dialog repairs the trip.
   const existing = await readCursor(tripId);
   if (existing.serverStateVector !== undefined) {
-    return { status: 'already-current' };
+    const serverHolds = await serverHasDocument(client, remoteTripId);
+    if (serverHolds === true) {
+      return { status: 'already-current' };
+    }
+    if (serverHolds === null) {
+      // Could not tell. Skipping risks leaving a broken trip broken; uploading
+      // risks a duplicate row that every peer treats as a no-op. Upload.
+      console.warn('[sync] could not read the server document state; uploading anyway');
+    }
   }
 
   // Its own document rather than the one React holds: this runs for a trip that
@@ -83,7 +100,11 @@ export async function uploadTripDocument(
     await populateDocFromDexie(doc, tripId);
 
     const localVector = Y.encodeStateVector(doc);
-    const missing = Y.encodeStateAsUpdate(doc, existing.serverStateVector);
+    // Deliberately the whole document, not a diff against the recorded vector:
+    // reaching here means either nothing was recorded or the recording was shown
+    // to be wrong, and diffing against a vector the server does not have would
+    // send an empty update and re-record the same false claim.
+    const missing = Y.encodeStateAsUpdate(doc);
 
     // Reached only for a document with genuinely nothing in it, which in practice
     // means a trip row that has since been deleted: `populateDocFromDexie` writes
@@ -119,6 +140,47 @@ export async function uploadTripDocument(
 // ============================================================================
 // Internals
 // ============================================================================
+
+/**
+ * Whether the server holds anything for this trip.
+ *
+ * True if a log row or a snapshot exists, false if neither does, and null when
+ * the question could not be answered — which the caller treats as a reason to
+ * upload rather than to skip.
+ */
+async function serverHasDocument(
+  client: SupabaseClient,
+  remoteTripId: string,
+): Promise<boolean | null> {
+  try {
+    const { data: rows, error: rowsError } = await client
+      .from('trip_doc_updates')
+      .select('id')
+      .eq('trip_id', remoteTripId)
+      .limit(1);
+    if (rowsError) {
+      return null;
+    }
+    if (Array.isArray(rows) && rows.length > 0) {
+      return true;
+    }
+
+    // No rows is not the same as nothing: compaction folds the log into a
+    // snapshot and prunes what it covered, so a fully compacted trip has a
+    // document and an empty log.
+    const { data: snapshot, error: snapshotError } = await client
+      .from('trip_doc_snapshots')
+      .select('through_id')
+      .eq('trip_id', remoteTripId)
+      .maybeSingle();
+    if (snapshotError) {
+      return null;
+    }
+    return snapshot !== null;
+  } catch {
+    return null;
+  }
+}
 
 /** The encoding of an update carrying no changes, measured rather than assumed. */
 const EMPTY_UPDATE = Y.encodeStateAsUpdate(new Y.Doc());
