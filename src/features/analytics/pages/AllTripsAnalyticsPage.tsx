@@ -16,6 +16,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AnalyticsScopeSelector } from '@/features/analytics/components/AnalyticsScopeSelector';
+import { TripsLocationMap } from '@/features/analytics/components/TripsLocationMap';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { getPersonHeadcount } from '@/types';
@@ -191,6 +192,10 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
             <p className="text-2xl font-semibold tabular-nums">{totals.assignments}</p>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="mb-8">
+        <TripsLocationMap trips={trips} />
       </div>
 
       <h2 className="mb-3 text-base font-semibold">{t('analytics.tripBreakdown')}</h2>

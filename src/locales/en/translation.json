@@ -74,7 +74,14 @@
     "tripBreakdown": "By trip",
     "rowSummary": "{{guests}} guests · {{rooms}} rooms · {{transports}} transports · {{assignments}} assignments",
     "openTrip": "Trip analytics",
-    "emptyTrips": "No trips to analyze yet"
+    "emptyTrips": "No trips to analyze yet",
+    "tripsMapTitle": "Trip locations",
+    "tripsMapEmpty": "No trip is pinned on the map yet. Pick a place from the map when you create or edit a trip to see it here.",
+    "tripsMapAriaLabel": "Map showing every trip location",
+    "tripsMapSummary_one": "1 trip on the map",
+    "tripsMapSummary_other": "{{count}} trips on the map",
+    "tripsMapUnpinned_one": "1 trip without a map pin",
+    "tripsMapUnpinned_other": "{{count}} trips without a map pin"
   },
   "trips": {
     "title": "My trips",
