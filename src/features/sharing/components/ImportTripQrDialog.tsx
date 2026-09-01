@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import posthog from '@/lib/posthog';
 import {
   applyMerge,
   computeMerge,
@@ -77,6 +78,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
           conflicts: merge.conflicts.map(c => ({ ...c, resolution: 'accept-guest' as const })),
         };
         await applyMerge(resolved);
+        posthog?.capture('trip_imported', { conflict_count: merge.conflicts.length });
         toast.success(
           t('trips.importQrMergeSuccess', 'Trip data imported and merged successfully.'),
         );

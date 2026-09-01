@@ -26,6 +26,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { TransportForm } from '@/features/transports/components/TransportForm';
+import posthog from '@/lib/posthog';
 import type { Transport, TransportFormData, TransportId, TransportType } from '@/types';
 
 // ============================================================================
@@ -151,10 +152,22 @@ const TransportDialog = memo(function TransportDialog({
         // Edit mode - update existing transport
         await updateTransport(transportId, data);
         successToast(t('transports.updateSuccess', 'Transport updated successfully'));
+        posthog?.capture('transport_saved', {
+          operation: 'updated',
+          transport_type: data.type,
+          transport_mode: data.transportMode ?? 'unspecified',
+          needs_pickup: data.needsPickup,
+        });
       } else {
         // Create mode - create new transport
         await createTransport(data);
         successToast(t('transports.createSuccess', 'Transport created successfully'));
+        posthog?.capture('transport_saved', {
+          operation: 'created',
+          transport_type: data.type,
+          transport_mode: data.transportMode ?? 'unspecified',
+          needs_pickup: data.needsPickup,
+        });
       }
       // Always close dialog on success, regardless of mount state
       onOpenChange(false);

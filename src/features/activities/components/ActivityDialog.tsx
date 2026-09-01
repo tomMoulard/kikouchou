@@ -20,6 +20,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useActivityContext } from '@/contexts/ActivityContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { ActivityForm } from '@/features/activities/components/ActivityForm';
+import posthog from '@/lib/posthog';
 import type { Activity, ActivityFormData, ActivityId, ISODateString } from '@/types';
 
 // ============================================================================
@@ -104,9 +105,21 @@ const ActivityDialog = memo(function ActivityDialog({
       if (activityId) {
         await updateActivity(activityId, data);
         successToast(t('activities.updateSuccess'));
+        posthog?.capture('activity_saved', {
+          operation: 'updated',
+          category: data.category,
+          is_all_day: data.allDay,
+          participant_count: data.participantIds.length,
+        });
       } else {
         await createActivity(data);
         successToast(t('activities.createSuccess'));
+        posthog?.capture('activity_saved', {
+          operation: 'created',
+          category: data.category,
+          is_all_day: data.allDay,
+          participant_count: data.participantIds.length,
+        });
       }
       onOpenChange(false);
     },
