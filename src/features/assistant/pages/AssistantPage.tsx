@@ -18,6 +18,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import {
   Bot,
@@ -61,6 +62,7 @@ import {
 } from '../components/ChatMessage';
 import {
   clearAssistantChatStorage,
+  getOrCreateAssistantSessionId,
   loadAssistantChatMessages,
   messagesToLLMChatHistory,
   saveAssistantChatMessages,
@@ -650,6 +652,14 @@ function AssistantPageComponent(): ReactElement {
   const conversationVersionRef = useRef(0);
   const [isAnswering, setIsAnswering] = useState(false);
 
+  // Groups this conversation's turns for PostHog AI observability
+  // ($ai_session_id). Lazily minted so it survives re-renders, and reset
+  // alongside the transcript in handleClearConversation.
+  const sessionIdRef = useRef<string | null>(null);
+  if (sessionIdRef.current === null) {
+    sessionIdRef.current = getOrCreateAssistantSessionId();
+  }
+
   // Latest-value refs: a turn started minutes ago must still generate against
   // the current trip prompt and action executor, not the ones captured when it
   // was queued.
@@ -659,6 +669,8 @@ function AssistantPageComponent(): ReactElement {
   generateRef.current = generate;
   const executeActionsRef = useRef(executeActions);
   executeActionsRef.current = executeActions;
+  const selectedModelRef = useRef(selectedModel);
+  selectedModelRef.current = selectedModel;
   const tRef = useRef(t);
   tRef.current = t;
 
@@ -761,6 +773,8 @@ function AssistantPageComponent(): ReactElement {
       const conversationVersion = conversationVersionRef.current;
       const isSameConversation = (): boolean =>
         conversationVersionRef.current === conversationVersion;
+      // Shares every LLM call of this turn under one PostHog $ai_trace_id.
+      const traceId = nanoid();
 
       // The prompt is now the one being answered — drop the queued marker.
       setMessages((prev) =>
@@ -780,12 +794,14 @@ function AssistantPageComponent(): ReactElement {
         { id: assistantId, role: 'assistant', content: '' },
       ]);
 
-      try {
-        const fullMessages: LLMChatMessage[] = [
-          { role: 'system', content: systemPromptRef.current },
-          ...chatHistoryRef.current,
-        ];
+      // Built before the try/catch so a rejected generate() can still report
+      // it in the $ai_generation failure capture below.
+      const fullMessages: LLMChatMessage[] = [
+        { role: 'system', content: systemPromptRef.current },
+        ...chatHistoryRef.current,
+      ];
 
+      try {
         const response = await generateRef.current(fullMessages, (chunk) => {
           // Update the assistant message with streaming content
           setMessages((prev) =>
@@ -826,6 +842,24 @@ function AssistantPageComponent(): ReactElement {
           action_count: actionsExecuted,
         });
 
+        // One $ai_generation per turn, sharing the turn's trace id and the
+        // conversation's session id so PostHog groups them into a trace tree.
+        posthog?.capture('$ai_generation', {
+          $ai_trace_id: traceId,
+          $ai_session_id: sessionIdRef.current,
+          $ai_model: selectedModelRef.current.modelId,
+          $ai_provider: 'huggingface',
+          $ai_input: fullMessages,
+          $ai_output_choices: [{ role: 'assistant', content: response }],
+          $ai_latency: (Date.now() - startedAt) / 1000,
+          $ai_stream: true,
+          // Runs fully on-device via Transformers.js — there is no vendor
+          // token cost to estimate.
+          $ai_input_cost_usd: 0,
+          $ai_output_cost_usd: 0,
+          $ai_total_cost_usd: 0,
+        });
+
         return 'answered';
       } catch (err) {
         const fatal = isFatalEngineError(err);
@@ -860,6 +894,18 @@ function AssistantPageComponent(): ReactElement {
           // first is the device running out of GPU, the second is the model or
           // the prompt.
           fatal,
+        });
+
+        posthog?.capture('$ai_generation', {
+          $ai_trace_id: traceId,
+          $ai_session_id: sessionIdRef.current,
+          $ai_model: selectedModelRef.current.modelId,
+          $ai_provider: 'huggingface',
+          $ai_input: fullMessages,
+          $ai_latency: (Date.now() - startedAt) / 1000,
+          $ai_stream: true,
+          $ai_is_error: true,
+          $ai_error: detail,
         });
 
         return fatal ? 'engine-lost' : 'failed';
@@ -958,6 +1004,8 @@ function AssistantPageComponent(): ReactElement {
     setMessages([]);
     chatHistoryRef.current = [];
     clearAssistantChatStorage();
+    // A cleared transcript is a new conversation for AI observability too.
+    sessionIdRef.current = getOrCreateAssistantSessionId();
     toast.success(t('assistant.conversationCleared'));
   }, [interrupt, t]);
 
