@@ -47,3 +47,6 @@ public/favicon.ico
 .env
 .env.*
 !.env.example
+
+# Posthog
+.posthog-wizard-cache/
