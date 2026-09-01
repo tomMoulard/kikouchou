@@ -14,6 +14,7 @@
 
 import { type ReactElement, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Check, Loader2, UserRound } from 'lucide-react';
 
@@ -21,7 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { useTripContext } from '@/contexts/TripContext';
-import { usePersonContext } from '@/contexts/PersonContext';
+import { db } from '@/lib/db/database';
 import { useAuth } from '@/features/auth/AuthContext';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
 import { getSupabaseClient } from '@/lib/supabase/client';
@@ -78,7 +79,28 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { persons } = usePersonContext();
+
+  /**
+   * The participants of the trip this step was told about.
+   *
+   * Read for `tripId` directly rather than from `PersonContext`, which is scoped
+   * to whichever trip is *currently selected*. During the join transition that
+   * is still the trip the invitee had open before following the link, so the
+   * step offered the wrong trip's people — and claiming one of them wrote a
+   * person id from another trip into this trip's roster, which
+   * `unique (trip_id, person_id)` cannot catch because the trip differs.
+   *
+   * The prop was already here and already correct; it was simply not the thing
+   * being read. When the selection happened to be a trip with nobody in it, the
+   * same bug presented as "no participants to choose from" instead.
+   */
+  const personsQuery = useLiveQuery(
+    () => db.persons.where('tripId').equals(tripId).toArray(),
+    [tripId],
+  );
+  // Memoised rather than `?? []` inline: a fresh array on every render defeats
+  // the `available` memo below, which is the only reason that memo exists.
+  const persons = useMemo(() => personsQuery ?? [], [personsQuery]);
 
   const [claimed, setClaimed] = useState<Set<string>>(new Set());
   const [claiming, setClaiming] = useState<PersonId | null>(null);
