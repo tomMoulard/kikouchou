@@ -6,7 +6,7 @@
  * Trips saved with a free-text location and no pin are counted separately so
  * the map never silently under-reports.
  *
- * @module features/analytics/components/TripsLocationMap
+ * @module features/trips/components/TripsLocationMap
  */
 
 import { type ReactElement, memo, useEffect, useMemo, useRef } from 'react';
@@ -20,7 +20,7 @@ import {
   type MapMarkerData,
   type MapViewRef,
 } from '@/components/shared/MapView';
-import { formatDateRange, getDateLocale } from '@/features/trips/components/TripCard';
+import { formatDateRange, getDateLocale } from './TripCard';
 import { hasValidCoordinates, type Coordinates } from '@/lib/geocoding';
 import type { Trip } from '@/types';
 

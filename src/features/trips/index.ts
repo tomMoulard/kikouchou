@@ -41,6 +41,9 @@ export type { LocationAutocompleteProps, ImportBadgeProps, TripImportData } from
 export { TripCard, getDateLocale, formatDateRange } from './components/TripCard';
 export type { TripCardProps } from './components/TripCard';
 
+export { TripsLocationMap } from './components/TripsLocationMap';
+export type { TripsLocationMapProps } from './components/TripsLocationMap';
+
 // ============================================================================
 // Route Configuration
 // ============================================================================
