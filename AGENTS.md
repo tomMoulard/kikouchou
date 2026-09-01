@@ -206,6 +206,31 @@ carries other members' writes, so it is exactly as untrusted as a peer was.
 - Drop an invalid record individually; never let one bad item abort a
   transaction that carries the rest.
 
+### A deletion is never inferred from a mirror that might be incomplete
+
+Dexie is a *mirror* of the document, and pruning the document to match it is only
+valid when that mirror is complete. It often is not: an invitee's document fills
+from the log while their Dexie stays empty because the projection was refused,
+has not run yet, or their local data was cleared.
+
+The prune is a CRDT tombstone. It pushes to the log, every member applies it, and
+nothing brings the entry back — so an invitee's empty mirror could delete the
+owner's rooms and guests for everybody, permanently.
+
+- `replaceDocCollection` takes a **required** `allowDeletions`. No default: the
+  safe answer is not obvious at a call site, and the unsafe one destroys other
+  people's data.
+- Pass `true` only when the caller can assert the set is complete. The observer
+  asks `isDexieTrustedMirror(doc, tripId)`, which is true only once
+  `syncDocToDexie` has actually projected that document into Dexie — tracked on a
+  `WeakMap` keyed by the document, so a fresh document earns the right again
+  rather than inheriting it.
+- `populateDocFromDexie` **seeds and never prunes**. It runs on mount with
+  whatever Dexie holds, which on a freshly joined device is nothing.
+- The CRDT layer is not the hazard. Yjs updates are additive, so a document that
+  merely *lacks* an entry deletes nothing when it merges. Only an inferred
+  deletion does damage.
+
 ### Unmount guards are set on setup, not only in cleanup
 
 ```ts

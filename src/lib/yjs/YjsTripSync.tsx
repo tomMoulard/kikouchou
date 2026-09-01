@@ -17,7 +17,12 @@ import { SupabaseTripSync } from '@/lib/sync/SupabaseTripSync';
 import type { Activity, Person, Room, RoomAssignment, Transport, TripId } from '@/types';
 
 import { YjsProvider, useYjsContext } from './YjsProvider';
-import { populateDocFromDexie, syncDexieToDoc, syncTripMetaToDoc } from './dexie-bridge';
+import {
+  isDexieTrustedMirror,
+  populateDocFromDexie,
+  syncDexieToDoc,
+  syncTripMetaToDoc,
+} from './dexie-bridge';
 
 function stripTripId<T extends { tripId?: unknown }>(
   items: readonly T[],
@@ -132,16 +137,20 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       return;
     }
 
-    syncDexieToDoc(yjs.doc, 'guests', stripTripId(persons as readonly Person[]));
-  }, [persons, yjs?.doc, yjs?.loaded]);
+    syncDexieToDoc(yjs.doc, 'guests', stripTripId(persons as readonly Person[]), {
+      allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
+    });
+  }, [persons, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
     if (!yjs?.loaded || !rooms) {
       return;
     }
 
-    syncDexieToDoc(yjs.doc, 'rooms', stripTripId(rooms as readonly Room[]));
-  }, [rooms, yjs?.doc, yjs?.loaded]);
+    syncDexieToDoc(yjs.doc, 'rooms', stripTripId(rooms as readonly Room[]), {
+      allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
+    });
+  }, [rooms, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
     if (!yjs?.loaded || !roomAssignments) {
@@ -152,8 +161,9 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       yjs.doc,
       'roomAssignments',
       stripTripId(roomAssignments as readonly RoomAssignment[]),
+      { allowDeletions: isDexieTrustedMirror(yjs.doc, tripId) },
     );
-  }, [roomAssignments, yjs?.doc, yjs?.loaded]);
+  }, [roomAssignments, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
     if (!yjs?.loaded || !transports) {
@@ -164,8 +174,9 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       yjs.doc,
       'transport',
       stripTripId(transports as readonly Transport[]),
+      { allowDeletions: isDexieTrustedMirror(yjs.doc, tripId) },
     );
-  }, [transports, yjs?.doc, yjs?.loaded]);
+  }, [transports, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
     if (!yjs?.loaded || !activities) {
@@ -176,8 +187,9 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       yjs.doc,
       'activities',
       stripTripId(activities as readonly Activity[]),
+      { allowDeletions: isDexieTrustedMirror(yjs.doc, tripId) },
     );
-  }, [activities, yjs?.doc, yjs?.loaded]);
+  }, [activities, tripId, yjs?.doc, yjs?.loaded]);
 
   return null;
 });
