@@ -246,5 +246,23 @@ describe('OfflineIndicator', () => {
       const statusRegion = screen.getByRole('status');
       expect(statusRegion.className).toContain('top-14');
     });
+
+    /**
+     * The wrapper is `inset-x-0` and `z-50` but only paints a centred pill, so
+     * it used to intercept clicks along a full-width strip of the page. Offline,
+     * that strip covers the trip list's "New trip" button, which could not be
+     * clicked at all while the banner was up.
+     */
+    it('does not intercept pointer events across its full-bleed wrapper', () => {
+      mockUseOnlineStatus.mockReturnValue({
+        isOnline: false,
+        hasRecentlyChanged: false,
+      });
+
+      render(<OfflineIndicator />);
+
+      const statusRegion = screen.getByRole('status');
+      expect(statusRegion.className).toContain('pointer-events-none');
+    });
   });
 });

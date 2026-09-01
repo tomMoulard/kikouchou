@@ -1,0 +1,112 @@
+/**
+ * @fileoverview Map caching behaviour that only exists in the production build.
+ *
+ * Split out of `maps-integration.spec.ts`. Those tests run against the dev
+ * server, where vite-plugin-pwa registers no service worker at all — so the
+ * offline reload here failed with ERR_INTERNET_DISCONNECTED, and the two cache
+ * assertions passed only because they asserted `typeof value === 'boolean'`,
+ * which is true whether the cache exists or not.
+ *
+ * @module e2e/maps-offline
+ */
+
+import { test, expect, type Page } from '@playwright/test';
+import { clearIndexedDB } from './support/storage';
+import {
+  waitForActivatedServiceWorker,
+  waitForPrecachedAppShell,
+} from './support/service-worker';
+
+/**
+ * Creates a trip through the UI and returns its id.
+ */
+async function createTestTrip(page: Page, name: string): Promise<string> {
+  await page.goto('/trips/new');
+  await page.waitForLoadState('load');
+
+  await page.locator('#trip-name').fill(name);
+
+  await page.locator('#trip-start-date').click();
+  await page.waitForSelector('[data-slot="calendar"]', { state: 'visible' });
+  await page
+    .locator('[data-slot="calendar"]')
+    .first()
+    .locator('button')
+    .filter({ hasText: /^15$/ })
+    .first()
+    .click();
+
+  await page.locator('#trip-end-date').click();
+  await page.waitForSelector('[data-slot="calendar"]', { state: 'visible' });
+  await page
+    .locator('[data-slot="calendar"]')
+    .first()
+    .locator('button')
+    .filter({ hasText: /^22$/ })
+    .first()
+    .click();
+
+  await page.getByRole('button', { name: /save|sauvegarder/i }).click();
+  await page.waitForURL(/\/trips\/[a-zA-Z0-9_-]+\/(calendar)?/, { timeout: 10_000 });
+
+  const tripId = /\/trips\/([a-zA-Z0-9_-]+)/.exec(page.url())?.[1] ?? '';
+  expect(tripId).toBeTruthy();
+  return tripId;
+}
+
+/** Reads the generated service worker script off the preview server. */
+async function fetchServiceWorkerSource(page: Page): Promise<string> {
+  const response = await page.request.get('/sw.js');
+  expect(response.ok()).toBe(true);
+  return await response.text();
+}
+
+test.describe('Offline Map Tiles', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('load');
+    await waitForActivatedServiceWorker(page);
+    await waitForPrecachedAppShell(page);
+  });
+
+  /**
+   * Asserts the rule, not a live fetch.
+   *
+   * Workbox creates a runtime cache lazily, on the first request that matches
+   * its route — so `caches.keys()` only names `osm-tiles` once a real tile has
+   * come back from openstreetmap.org. Asserting that would make CI depend on a
+   * third-party tile server. The rule reaching the built worker is the part
+   * this repo controls, so that is what is checked.
+   */
+  test('the service worker declares the OSM tile cache', async ({ page }) => {
+    expect(await fetchServiceWorkerSource(page)).toContain('osm-tiles');
+  });
+
+  test('the service worker declares the Nominatim geocoding cache', async ({ page }) => {
+    expect(await fetchServiceWorkerSource(page)).toContain('nominatim-geocoding');
+  });
+
+  test('the map page still loads when offline', async ({ page, context }) => {
+    await clearIndexedDB(page);
+
+    const tripId = await createTestTrip(page, 'Offline Test Trip');
+
+    await page.goto(`/trips/${tripId}/transports/map`);
+    await page.waitForLoadState('load');
+    await waitForPrecachedAppShell(page);
+
+    await context.setOffline(true);
+
+    try {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+
+      await expect(page.locator('body')).toBeVisible();
+
+      const pageContent = await page.content();
+      expect(pageContent).not.toContain('ERR_INTERNET_DISCONNECTED');
+      expect(pageContent).not.toContain('net::ERR');
+    } finally {
+      await context.setOffline(false);
+    }
+  });
+});

@@ -19,6 +19,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { clearIndexedDB } from './support/storage';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -73,20 +74,6 @@ const ACCEPTABLE_VIOLATIONS = {
     'color-contrast',
   ] as string[],
 };
-
-/**
- * Clears IndexedDB to ensure a clean state before tests.
- */
-async function clearIndexedDB(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const databases = await indexedDB.databases();
-    for (const db of databases) {
-      if (db.name) {
-        indexedDB.deleteDatabase(db.name);
-      }
-    }
-  });
-}
 
 /**
  * Creates a test trip directly via IndexedDB and returns the trip ID.

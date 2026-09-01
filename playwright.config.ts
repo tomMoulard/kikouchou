@@ -37,6 +37,24 @@ const channel = ((): 'chrome' | 'msedge' | undefined => {
   );
 })();
 
+/**
+ * The specs that only mean anything against the built output, served by `vite
+ * preview` on :4175 — see the `production` project below. Named once so the
+ * projects that must run them and the projects that must skip them cannot
+ * drift apart, which is how `pwa.spec.ts` ended up running against the dev
+ * server and failing all 23 of its tests.
+ */
+const PRODUCTION_BUILD_SPECS_PATTERN =
+  /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts/;
+
+/**
+ * Everything the two dev-server projects must not pick up: the production-build
+ * specs above, plus the sharing journey, which needs the stubbed backend of the
+ * `sync` project.
+ */
+const DEV_SERVER_IGNORE_PATTERN =
+  /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts|trip-sharing-sync\.spec\.ts/;
+
 export default defineConfig({
   testDir: './e2e',
 
@@ -91,43 +109,47 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
       /**
-       * Two specs belong to projects of their own and must not also run here.
+       * Three specs belong to projects of their own and must not also run here.
        *
-       * Offline behaviour cannot be observed against the dev server at all — see
-       * the `offline` project. The sharing journey needs `VITE_SUPABASE_*`
-       * pointing at the stub host, which this project deliberately does not have;
-       * running it here failed every one of its tests against a server with no
-       * backend configured.
+       * Offline and PWA behaviour cannot be observed against the dev server at
+       * all — see the `production` project. The sharing journey needs
+       * `VITE_SUPABASE_*` pointing at the stub host, which this project
+       * deliberately does not have; running it here failed every one of its
+       * tests against a server with no backend configured.
        */
-      testIgnore: /offline-first\.spec\.ts|trip-sharing-sync\.spec\.ts/,
+      testIgnore: DEV_SERVER_IGNORE_PATTERN,
     },
     {
       name: 'Mobile Chrome',
       use: { ...devices['Pixel 5'] },
-      testIgnore: /offline-first\.spec\.ts|trip-sharing-sync\.spec\.ts/,
+      testIgnore: DEV_SERVER_IGNORE_PATTERN,
     },
     {
       /**
-       * The offline contract, against the production build.
+       * The offline and PWA contracts, against the production build.
        *
        * These tests cannot run on the dev server, and running them there was
-       * silently testing nothing. Two reasons, both measured:
+       * silently testing nothing. Three reasons, all measured:
        *
        *   - vite-plugin-pwa registers no service worker in dev, so a reload with
        *     the network off fails with ERR_INTERNET_DISCONNECTED rather than
        *     being served from the precache;
        *   - route chunks are lazy, so navigating to a page whose chunk has not
-       *     loaded yet needs the network — offline that fails too.
+       *     loaded yet needs the network — offline that fails too;
+       *   - the manifest and the workbox precache are build outputs. On the dev
+       *     server `/manifest.webmanifest` falls through to the SPA handler and
+       *     comes back as `text/html`, so every assertion in `pwa.spec.ts` that
+       *     parsed it died on `Unexpected token '<'`.
        *
-       * Both are exactly what the service worker exists to solve, so the only
-       * honest way to assert rule 1 is to serve the built output.
+       * All three are exactly what the service worker exists to solve, so the
+       * only honest way to assert these rules is to serve the built output.
        */
-      name: 'offline',
+      name: 'production',
       use: {
         ...devices['Desktop Chrome'],
         baseURL: 'http://127.0.0.1:4175',
       },
-      testMatch: /offline-first\.spec\.ts/,
+      testMatch: PRODUCTION_BUILD_SPECS_PATTERN,
       /**
        * Serial, unlike every other project here.
        *
@@ -169,7 +191,7 @@ export default defineConfig({
   webServer: [
     {
       /**
-       * Production build for the `offline` project: a real service worker and
+       * Production build for the `production` project: a real service worker and
        * real precached chunks, which is the only configuration where the
        * offline-first claims mean anything.
        *
@@ -186,7 +208,7 @@ export default defineConfig({
       },
     },
     {
-      // The dev server, for every project except `offline` — which needs a real
+      // The dev server, for every project except `production` — which needs a real
       // service worker and so runs against the production build above — and
       // `sync`, which needs a stubbed backend.
       command: 'bun x vite --host 127.0.0.1 --port 4173',

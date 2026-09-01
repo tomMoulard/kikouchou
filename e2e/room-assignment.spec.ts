@@ -15,25 +15,11 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import { clearIndexedDB } from './support/storage';
 
 // ============================================================================
 // Database Helpers
 // ============================================================================
-
-/**
- * Clears IndexedDB to ensure a clean state before each test.
- * This is essential for E2E tests to be independent and reproducible.
- */
-async function clearIndexedDB(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const databases = await indexedDB.databases();
-    for (const db of databases) {
-      if (db.name) {
-        indexedDB.deleteDatabase(db.name);
-      }
-    }
-  });
-}
 
 // ============================================================================
 // Test Configuration

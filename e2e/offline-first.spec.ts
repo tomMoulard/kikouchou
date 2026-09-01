@@ -23,6 +23,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import { waitForPrecachedAppShell } from './support/service-worker';
 
 // ============================================================================
 // Helpers
@@ -76,23 +77,12 @@ async function waitForServiceWorker(page: Page): Promise<void> {
 
   // Controlling is not the same as ready to serve: the precache has to hold the
   // navigation fallback before a reload can succeed offline.
-  await page.waitForFunction(
-    async () => {
-      if (!('caches' in window)) {
-        return false;
-      }
-      for (const name of await caches.keys()) {
-        const cache = await caches.open(name);
-        const keys = await cache.keys();
-        if (keys.some((request) => request.url.includes('index.html'))) {
-          return true;
-        }
-      }
-      return false;
-    },
-    undefined,
-    { timeout: 30_000 },
-  );
+  //
+  // This was a `page.waitForFunction` over an async predicate, which asserted
+  // nothing at all — Playwright does not await a promise the predicate returns,
+  // and a pending Promise is truthy, so it passed on its first poll. See
+  // `waitForPrecachedAppShell`.
+  await waitForPrecachedAppShell(page);
 }
 
 /** Clears app data through the UI, so no test starts on another's leftovers. */
