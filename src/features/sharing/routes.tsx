@@ -18,7 +18,7 @@
  */
 
 import { type ReactElement, Suspense, lazy } from 'react';
-import type { RouteObject } from 'react-router-dom';
+import { Outlet, type RouteObject } from 'react-router-dom';
 
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -116,6 +116,24 @@ function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>)
   );
 }
 
+/**
+ * Layout for the whole `/share/:shareId` branch.
+ *
+ * It renders nothing but an `Outlet`, and that is the point: a parent route
+ * that supplies `element` swallows its children unless that element renders
+ * one. `ShareImportPage` used to be that element and never did, so every step
+ * of the guest onboarding wizard resolved its URL and then rendered the
+ * welcome screen instead — four screens that could not appear at all.
+ *
+ * The welcome screen is now the `index` child rather than the parent, which
+ * also keeps its returning-guest redirect off the step URLs: mounted as the
+ * parent it would send anyone reloading `/share/:shareId/room` straight to the
+ * trip calendar, since the identity step has by then written localStorage.
+ */
+function ShareWizardLayout(): ReactElement {
+  return <Outlet />;
+}
+
 // ============================================================================
 // Route Definitions
 // ============================================================================
@@ -124,7 +142,7 @@ function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>)
  * Route configuration for the Sharing feature.
  *
  * Routes:
- * - `/share/:shareId`           — Welcome screen (story 2.1)
+ * - `/share/:shareId`           — Welcome screen (story 2.1), the index child
  * - `/share/:shareId/identity`  — Step 2: identity selection (story 2.2)
  * - `/share/:shareId/room`      — Step 3: room selection (story 2.3)
  * - `/share/:shareId/transport` — Step 4: transport entry (story 2.4)
@@ -147,8 +165,12 @@ function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>)
 export const sharingRoutes: RouteObject[] = [
   {
     path: 'share/:shareId',
-    element: withSuspense(ShareImportPage),
+    element: <ShareWizardLayout />,
     children: [
+      {
+        index: true,
+        element: withSuspense(ShareImportPage),
+      },
       {
         path: 'identity',
         element: withSuspense(IdentityStepPage),
