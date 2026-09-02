@@ -66,6 +66,7 @@ import {
   loadAssistantChatMessages,
   messagesToLLMChatHistory,
   saveAssistantChatMessages,
+  trimChatHistoryForPrompt,
 } from '../chat-storage';
 import { useTripActions } from '../hooks/useTripActions';
 import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
@@ -796,9 +797,14 @@ function AssistantPageComponent(): ReactElement {
 
       // Built before the try/catch so a rejected generate() can still report
       // it in the $ai_generation failure capture below.
+      //
+      // The transcript keeps growing; the prompt must not. Prefill memory is
+      // linear in prompt length and the models run on the user's own GPU, so an
+      // uncapped history eventually fails to allocate rather than just slowing
+      // down — hence the trim to the most recent exchanges.
       const fullMessages: LLMChatMessage[] = [
         { role: 'system', content: systemPromptRef.current },
-        ...chatHistoryRef.current,
+        ...trimChatHistoryForPrompt(chatHistoryRef.current),
       ];
 
       try {

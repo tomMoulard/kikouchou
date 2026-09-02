@@ -17,6 +17,26 @@ import type { ChatMessage as LLMChatMessage } from './hooks/useWebLLM';
 const STORAGE_KEY = 'kikoushou.assistant.chat.v1';
 const SESSION_STORAGE_KEY = 'kikoushou.assistant.chat.session.v1';
 
+/**
+ * Past turns kept in the prompt, on top of the one being answered — three
+ * complete exchanges.
+ *
+ * Everything sent to the model is re-tokenised on every turn, and prefill
+ * memory grows with the prompt: on a model whose ONNX export does not slice the
+ * logits, each prompt token costs `vocab_size` floats of GPU-to-CPU readback.
+ * An uncapped transcript therefore does not degrade gradually — it walks into a
+ * failed buffer allocation and takes the WebGPU device with it. Three exchanges
+ * is also about as much back-reference as a 1–4B on-device model uses well.
+ */
+export const MAX_PROMPT_HISTORY_MESSAGES = 6;
+
+/**
+ * Characters of past conversation kept in the prompt. A handful of long answers
+ * reaches the memory that matters long before the turn cap does — one answer
+ * can run to `max_new_tokens`.
+ */
+export const MAX_PROMPT_HISTORY_CHARS = 4000;
+
 // ============================================================================
 // Validation
 // ============================================================================
@@ -151,4 +171,53 @@ export function messagesToLLMChatHistory(
   }
 
   return history;
+}
+
+/**
+ * Bounds the conversation handed to the model, keeping the most recent turns.
+ *
+ * The transcript the user sees is untouched — only the prompt is trimmed. The
+ * caps are hit by whole exchanges from the front, never by half of one: Gemma's
+ * chat template rejects a history that does not strictly alternate, so a
+ * trimmed history that opened on an assistant answer would break every
+ * generation after it, not just this one.
+ *
+ * @param history - The full user/assistant history, ending with the prompt
+ *   being answered
+ * @returns The most recent slice that fits both caps, alternation preserved
+ *
+ * @example
+ * ```ts
+ * const fullMessages = [
+ *   { role: 'system', content: systemPrompt },
+ *   ...trimChatHistoryForPrompt(chatHistoryRef.current),
+ * ];
+ * ```
+ */
+export function trimChatHistoryForPrompt(
+  history: readonly LLMChatMessage[],
+): LLMChatMessage[] {
+  if (history.length === 0) return [];
+
+  // The last entry is the prompt being answered: it goes in whatever it costs,
+  // because dropping it would answer the wrong question.
+  const newest = history[history.length - 1]!;
+  const older = history.slice(0, -1);
+
+  let budget = MAX_PROMPT_HISTORY_CHARS - newest.content.length;
+  let kept = 0;
+
+  // Walk backwards a whole exchange at a time.
+  for (let end = older.length; end >= 2; end -= 2) {
+    if (kept + 2 > MAX_PROMPT_HISTORY_MESSAGES) break;
+
+    const cost =
+      older[end - 2]!.content.length + older[end - 1]!.content.length;
+    if (cost > budget) break;
+
+    budget -= cost;
+    kept += 2;
+  }
+
+  return [...older.slice(older.length - kept), newest];
 }

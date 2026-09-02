@@ -8,11 +8,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { ChatMessageData } from '../components/ChatMessage';
 import {
+  MAX_PROMPT_HISTORY_CHARS,
+  MAX_PROMPT_HISTORY_MESSAGES,
   clearAssistantChatStorage,
   loadAssistantChatMessages,
   messagesToLLMChatHistory,
   saveAssistantChatMessages,
+  trimChatHistoryForPrompt,
 } from '../chat-storage';
+import type { ChatMessage as LLMChatMessage } from '../hooks/useWebLLM';
 
 // ============================================================================
 // Test Helpers
@@ -53,6 +57,17 @@ function message(
   extra: Partial<ChatMessageData> = {},
 ): ChatMessageData {
   return { id, role, content, ...extra };
+}
+
+/** `count` complete exchanges followed by the prompt now being answered. */
+function exchanges(count: number, size = 10): LLMChatMessage[] {
+  const history: LLMChatMessage[] = [];
+  for (let index = 0; index < count; index += 1) {
+    history.push({ role: 'user', content: `q${index}`.padEnd(size, '.') });
+    history.push({ role: 'assistant', content: `a${index}`.padEnd(size, '.') });
+  }
+  history.push({ role: 'user', content: 'newest question' });
+  return history;
 }
 
 // ============================================================================
@@ -137,5 +152,57 @@ describe('saveAssistantChatMessages', () => {
       '2',
       '3',
     ]);
+  });
+});
+
+describe('trimChatHistoryForPrompt', () => {
+  it('leaves a short conversation untouched', () => {
+    const history = exchanges(2);
+
+    expect(trimChatHistoryForPrompt(history)).toEqual(history);
+  });
+
+  it('keeps only the most recent exchanges once the turn cap is passed', () => {
+    const trimmed = trimChatHistoryForPrompt(exchanges(10));
+
+    expect(trimmed).toHaveLength(MAX_PROMPT_HISTORY_MESSAGES + 1);
+    expect(trimmed.at(-1)?.content).toBe('newest question');
+    expect(trimmed[0]?.content).toContain('q7');
+  });
+
+  it('drops whole exchanges so the roles keep alternating', () => {
+    // Gemma's chat template rejects two user turns in a row, so a history that
+    // starts on an assistant answer would break every later generation.
+    const trimmed = trimChatHistoryForPrompt(exchanges(10));
+
+    for (const [index, entry] of trimmed.entries()) {
+      expect(entry.role).toBe(index % 2 === 0 ? 'user' : 'assistant');
+    }
+  });
+
+  it('drops older exchanges when a few long answers blow the character budget', () => {
+    // Three exchanges is under the turn cap, but each answer is nearly the
+    // whole budget — a turn count alone would let this through.
+    const long = MAX_PROMPT_HISTORY_CHARS;
+    const trimmed = trimChatHistoryForPrompt(exchanges(3, long));
+
+    const size = trimmed.reduce((total, m) => total + m.content.length, 0);
+    expect(size).toBeLessThanOrEqual(MAX_PROMPT_HISTORY_CHARS);
+    expect(trimmed.at(-1)?.content).toBe('newest question');
+  });
+
+  it('keeps the prompt being answered even when it alone exceeds the budget', () => {
+    const huge = 'x'.repeat(MAX_PROMPT_HISTORY_CHARS * 2);
+    const trimmed = trimChatHistoryForPrompt([
+      { role: 'user', content: 'old' },
+      { role: 'assistant', content: 'older answer' },
+      { role: 'user', content: huge },
+    ]);
+
+    expect(trimmed).toEqual([{ role: 'user', content: huge }]);
+  });
+
+  it('returns an empty history unchanged', () => {
+    expect(trimChatHistoryForPrompt([])).toEqual([]);
   });
 });
