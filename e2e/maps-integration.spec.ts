@@ -11,6 +11,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { clearIndexedDB } from './support/storage';
+import { waitForRoute } from './support/routes';
 
 import { seedTrip } from './support/seed';
 
@@ -148,18 +149,94 @@ async function _createTestTransport(
  * @param tripId - Trip ID
  * @param name - Person name
  */
-async function createTestPerson(page: Page, tripId: string, name: string): Promise<void> {
-  await page.goto(`/trips/${tripId}/persons/new`);
-  await page.waitForLoadState('load');
+async function createTestPerson(page: Page, tripId: string, name: string): Promise<string> {
+  /**
+   * Straight into IndexedDB, the way the other specs seed people.
+   *
+   * This used to `goto('/trips/:id/persons/new')` and fill a form. There is no
+   * such route — `personRoutes` registers only `trips/:tripId/persons`, and
+   * guests are created from a dialog on it — so the navigation landed on the
+   * catch-all 404. Its URL still satisfied the `waitForURL(/\/persons/)` that
+   * followed, so the helper returned happily having created nobody, and the
+   * five tests that depend on it failed later and further away.
+   */
+  return await page.evaluate(
+    async ({ tripId, name }) => {
+      const id = `maps-person-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-  // Fill person form
-  await page.locator('#person-name').fill(name);
+      return new Promise<string>((resolve, reject) => {
+        const request = indexedDB.open('kikoushou');
+        request.onerror = () => reject(new Error('Failed to open database'));
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction('persons', 'readwrite');
+          tx.objectStore('persons').add({
+            id,
+            tripId,
+            name,
+            color: '#3b82f6',
+          });
+          tx.oncomplete = () => {
+            db.close();
+            resolve(id);
+          };
+          tx.onerror = () => {
+            db.close();
+            reject(new Error('Failed to create person'));
+          };
+        };
+      });
+    },
+    { tripId, name },
+  );
+}
 
-  // Submit form
-  await page.getByRole('button', { name: /save|sauvegarder/i }).click();
-
-  // Wait for navigation
-  await page.waitForURL(/\/trips\/[a-zA-Z0-9_-]+\/persons/, { timeout: 10000 });
+/**
+ * Seeds a transport that has coordinates, so the map page renders a map.
+ *
+ * `TransportMapPage` filters to transports whose `coordinates` are numeric and
+ * shows an empty state otherwise — which is what the Map Accessibility tests
+ * below used to land on. They asserted against `[role="application"]` on a page
+ * that was correctly showing "No locations on the map yet", so there was no map
+ * to have ARIA attributes in the first place.
+ */
+async function createTestTransportWithCoordinates(
+  page: Page,
+  tripId: string,
+  personId: string,
+): Promise<void> {
+  await page.evaluate(
+    async ({ tripId, personId }) => {
+      await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open('kikoushou');
+        request.onerror = () => reject(new Error('Failed to open database'));
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction('transports', 'readwrite');
+          tx.objectStore('transports').add({
+            id: `maps-transport-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+            tripId,
+            personId,
+            type: 'arrival',
+            datetime: '2026-07-15T10:00:00.000Z',
+            mode: 'plane',
+            location: 'Paris Charles de Gaulle',
+            coordinates: { lat: 49.0097, lon: 2.5479 },
+            needsPickup: true,
+          });
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => {
+            db.close();
+            reject(new Error('Failed to create transport'));
+          };
+        };
+      });
+    },
+    { tripId, personId },
+  );
 }
 
 /**
@@ -225,6 +302,7 @@ test.describe('Trip Location Map', () => {
 
     await page.goto('/');
     await page.waitForLoadState('load');
+    await waitForRoute(page);
   });
 
   test('trip card shows map preview when location has coordinates', async ({ page }) => {
@@ -237,6 +315,7 @@ test.describe('Trip Location Map', () => {
     // Navigate to trips list
     await page.goto('/trips');
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Find the trip card
     const tripCard = page.getByRole('button', { name: new RegExp(TEST_TRIP_WITH_LOCATION.name) });
@@ -265,6 +344,7 @@ test.describe('Trip Location Map', () => {
     // Navigate to trip calendar (main trip view)
     await page.goto(`/trips/${tripId}/calendar`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // The trip detail page should be accessible
     await expect(page.locator('body')).toBeVisible();
@@ -299,6 +379,7 @@ test.describe('Transport Map View', () => {
 
     await page.goto('/');
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Create a trip
     tripId = await createTestTrip(page, { name: 'Transport Map Trip' });
@@ -310,6 +391,7 @@ test.describe('Transport Map View', () => {
   test('transport list page has map view button', async ({ page }) => {
     await page.goto(`/trips/${tripId}/transports`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Look for the map view button/toggle
     const mapViewButton = page.getByRole('button', { name: /map|carte/i }).or(
@@ -324,6 +406,7 @@ test.describe('Transport Map View', () => {
   }) => {
     await page.goto(`/trips/${tripId}/transports/map`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Should show empty state or message about no locations
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -342,6 +425,7 @@ test.describe('Transport Map View', () => {
   test('transport map page loads without errors', async ({ page }) => {
     await page.goto(`/trips/${tripId}/transports/map`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Page should load without console errors
     const consoleErrors: string[] = [];
@@ -368,6 +452,7 @@ test.describe('Transport Map View', () => {
   test('navigating from list view to map view works', async ({ page }) => {
     await page.goto(`/trips/${tripId}/transports`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Click on map view button
     const mapViewButton = page.getByRole('button', { name: /map|carte/i }).or(
@@ -401,6 +486,7 @@ test.describe('Directions Button', () => {
     await clearIndexedDB(page);
     await page.goto('/');
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     const tripId = await createTestTrip(page, { name: 'Directions Test Trip' });
     await createTestPerson(page, tripId, 'Traveler');
@@ -408,6 +494,7 @@ test.describe('Directions Button', () => {
     // Navigate to transport map page (where directions button exists)
     await page.goto(`/trips/${tripId}/transports/map`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Look for directions button (might be in popup or always visible)
     const directionsButton = page.getByRole('button', {
@@ -453,18 +540,18 @@ test.describe('Map Accessibility', () => {
     );
 
     const tripId = await createTestTrip(page, { name: 'Accessibility Test Trip' });
+    const personId = await createTestPerson(page, tripId, 'Map A11y Person');
+    await createTestTransportWithCoordinates(page, tripId, personId);
 
     await page.goto(`/trips/${tripId}/transports/map`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
-    // Check for proper ARIA roles and labels
-    const hasAriaLabel = await page.evaluate(() => {
-      const mapContainer = document.querySelector('[role="application"]');
-      return mapContainer?.hasAttribute('aria-label');
-    });
-
-    // Map should have accessibility attributes
-    expect(typeof hasAriaLabel).toBe('boolean');
+    // Assert the map is there and named, rather than `typeof x === 'boolean'`,
+    // which held whether or not a map had rendered.
+    const mapContainer = page.locator('[role="application"]').first();
+    await expect(mapContainer).toBeVisible();
+    await expect(mapContainer).toHaveAttribute('aria-label', /.+/);
   });
 
   test('map markers are keyboard navigable', async ({ page }) => {
@@ -474,9 +561,12 @@ test.describe('Map Accessibility', () => {
     );
 
     const tripId = await createTestTrip(page, { name: 'Keyboard Nav Trip' });
+    const personId = await createTestPerson(page, tripId, 'Map Keyboard Person');
+    await createTestTransportWithCoordinates(page, tripId, personId);
 
     await page.goto(`/trips/${tripId}/transports/map`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // The map should be focusable
     const mapContainer = page.locator('[role="application"]').first();
@@ -515,6 +605,7 @@ test.describe('Map Error Handling', () => {
     // Navigate to map page
     await page.goto(`/trips/${tripId}/transports/map`);
     await page.waitForLoadState('load');
+    await waitForRoute(page);
 
     // Page should not crash
     await expect(page.locator('body')).toBeVisible();
@@ -537,39 +628,6 @@ test.describe('Map Error Handling', () => {
     expect(criticalErrors.length).toBe(0);
   });
 
-  test('shows appropriate message when map fails to load', async ({ page, context }) => {
-    await clearIndexedDB(page);
-    await page.route('**/tile.openstreetmap.org/**', (route) =>
-      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
-    );
-
-    // Create a trip first while online
-    const tripId = await createTestTrip(page, { name: 'Fail Test Trip' });
-
-    // Go offline before navigating to map
-    await context.setOffline(true);
-
-    // Navigate to map page
-    await page.goto(`/trips/${tripId}/transports/map`);
-
-    // Wait for page to attempt to load
-    await page.waitForTimeout(2000);
-
-    // Page should handle offline state gracefully
-    const pageContent = await page.content();
-
-    // Should not show raw network error
-    const hasRawError =
-      pageContent.includes('ERR_INTERNET_DISCONNECTED') ||
-      pageContent.includes('net::ERR');
-
-    // With proper SW caching, we should not see raw errors
-    // The app should either work from cache or show a friendly offline message
-    expect(hasRawError).toBe(false);
-
-    // Restore online
-    await context.setOffline(false);
-  });
 });
 
 // ============================================================================

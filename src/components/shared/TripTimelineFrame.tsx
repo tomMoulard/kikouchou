@@ -200,8 +200,17 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
 
   return (
     <div role="region" aria-label={ariaLabel} className="w-full min-w-0 border rounded-lg overflow-hidden">
+      {/*
+        `tabIndex={0}` makes the scroll container reachable by keyboard.
+        Without it a keyboard-only user could not scroll the timeline at all
+        when its content overflows — axe's `scrollable-region-focusable`, which
+        fires on the narrow viewport where the timeline actually does overflow.
+        The `role="region"` and its label live on the parent, so this element
+        stays a plain scroll surface.
+      */}
       <div
         ref={scrollRef}
+        tabIndex={0}
         className={cn('w-full min-w-0 max-h-[70vh]', 'overflow-x-auto overflow-y-auto')}
       >
         <div style={{ width: labelColumnWidth + canvasWidth }}>

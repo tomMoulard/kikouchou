@@ -12,6 +12,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { clearIndexedDB } from './support/storage';
+import { stubExternalMapServices } from './support/external-services';
 import {
   waitForActivatedServiceWorker,
   waitForPrecachedAppShell,
@@ -101,6 +102,36 @@ test.describe('Offline Map Tiles', () => {
       await page.reload({ waitUntil: 'domcontentloaded' });
 
       await expect(page.locator('body')).toBeVisible();
+
+      const pageContent = await page.content();
+      expect(pageContent).not.toContain('ERR_INTERNET_DISCONNECTED');
+      expect(pageContent).not.toContain('net::ERR');
+    } finally {
+      await context.setOffline(false);
+    }
+  });
+
+  /**
+   * Moved here from `maps-integration.spec.ts`, which runs against the dev
+   * server. Its own comment said "with proper SW caching" — and there is no
+   * service worker there, so `page.goto` while offline failed outright with
+   * ERR_INTERNET_DISCONNECTED, which is the very string it asserts against.
+   */
+  test('the map page shows no raw network error when offline', async ({ page, context }) => {
+    await stubExternalMapServices(page);
+    await clearIndexedDB(page);
+
+    const tripId = await createTestTrip(page, 'Fail Test Trip');
+
+    await page.goto(`/trips/${tripId}/transports/map`);
+    await page.waitForLoadState('load');
+    await waitForPrecachedAppShell(page);
+
+    await context.setOffline(true);
+
+    try {
+      await page.goto(`/trips/${tripId}/transports/map`);
+      await page.waitForLoadState('domcontentloaded');
 
       const pageContent = await page.content();
       expect(pageContent).not.toContain('ERR_INTERNET_DISCONNECTED');

@@ -12,6 +12,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import { waitForRoute } from './support/routes';
 
 // ============================================================================
 // Database Helpers
@@ -53,21 +54,6 @@ const FIXTURE_MONTH_PATTERN = new RegExp(
   ].join('|'),
   'i',
 );
-
-/**
- * Waits for a lazily-loaded route to replace the "Loading..." fallback.
- *
- * `waitForLoadState('load')` is not enough on its own: every route in this app
- * is a lazy chunk, so `load` fires while `main` still holds the suspense
- * fallback. Any instant read taken there — `.count()`, `.isVisible()` — sees an
- * empty page and reports a missing field rather than waiting for one, which is
- * what several assertions in this file were doing.
- */
-async function waitForRoute(page: Page): Promise<void> {
-  await expect(page.getByRole('status').filter({ hasText: /loading/i })).toHaveCount(0, {
-    timeout: 15_000,
-  });
-}
 
 /**
  * Clears app data using the settings page.

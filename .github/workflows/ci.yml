@@ -227,7 +227,13 @@ jobs:
   e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # 30 was not enough and the job was killed at that mark on every single run
+    # since this workflow was written, which reads as a failure and hid whatever
+    # the suite was actually saying. A green run of all 214 tests takes ~13 min
+    # on a developer laptop at CI's `workers: 1`, and a GitHub runner is
+    # slower — so this leaves real headroom rather than sitting just above the
+    # measured time.
+    timeout-minutes: 45
     needs: [build]
     steps:
       - name: Checkout
@@ -241,11 +247,14 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-dist
-          path: dist/
+      # No build artifact is downloaded here on purpose. The `production`
+      # Playwright project serves the built output through `vite preview`, and
+      # its webServer command runs `bun run build` itself with GITHUB_ACTIONS
+      # cleared — because the `build` job's artifact is compiled with
+      # base='/kikoushou/' for Pages, which would 404 every navigation the
+      # tests make against '/'. Downloading it only ever cost time.
+      #
+      # `needs: [build]` stays, so a broken build still fails before this runs.
 
       - name: Install Playwright browsers
         run: bunx playwright install --with-deps chromium
