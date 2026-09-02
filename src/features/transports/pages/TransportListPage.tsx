@@ -77,6 +77,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
 import type { Person, PersonId, Transport, TransportId, TransportMode, TransportType } from '@/types';
@@ -180,32 +181,6 @@ function getTransportModeIcon(mode: TransportMode | undefined): typeof Train {
     case 'other':
     default:
       return CircleDot;
-  }
-}
-
-/**
- * Safely formats a datetime string for display.
- * Returns formatted date and time or empty strings on error.
- *
- * @param datetime - ISO datetime string
- * @param locale - date-fns locale object
- * @returns Object with formatted date and time strings
- */
-function formatTransportDatetime(
-  datetime: string,
-  locale: typeof fr | typeof enUS,
-): { date: string; time: string } {
-  try {
-    const parsedDate = parseISO(datetime);
-    if (isNaN(parsedDate.getTime())) {
-      return { date: '', time: '' };
-    }
-    return {
-      date: format(parsedDate, 'EEE d MMM', { locale }),
-      time: format(parsedDate, 'HH:mm', { locale }),
-    };
-  } catch {
-    return { date: '', time: '' };
   }
 }
 
@@ -322,7 +297,7 @@ const TransportCard = memo(function TransportCard({
 
   // Format datetime for display
    { date, time } = useMemo(
-    () => formatTransportDatetime(transport.datetime, dateLocale),
+    () => formatTransportDatetimeParts(transport.datetime, dateLocale, 'dayAndTime'),
     [transport.datetime, dateLocale],
   ),
 

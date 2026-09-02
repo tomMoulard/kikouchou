@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@/test/utils';
+import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
+import { formatTime } from '@/features/calendar/utils/calendar-utils';
 import { getTransportIcon, formatDatetime } from '../transport-display-helpers';
 
 describe('getTransportIcon', () => {
@@ -50,5 +52,25 @@ describe('formatDatetime', () => {
     const result = formatDatetime('2026-07-15T14:30:00Z');
     expect(result).toBeTruthy();
     expect(result).not.toBe('—');
+  });
+
+  it('uses a 24-hour clock, like every other transport surface', () => {
+    // No offset, so this reads as 14:30 wherever the test runs.
+    const result = formatDatetime('2026-07-15T14:30:00', 'en');
+    expect(result).toContain('14:30');
+    expect(result).not.toMatch(/[AP]M/i);
+  });
+
+  it('shows the same clock time as the list, map and calendar', () => {
+    const stored = '2026-07-15T12:30:00.000Z';
+    const canonical = formatTransportDatetimeParts(stored, undefined, 'dayAndTime').time;
+
+    expect(formatDatetime(stored, 'en')).toContain(canonical);
+    expect(formatTime(stored)).toBe(canonical);
+  });
+
+  it('renders the date in the active language', () => {
+    expect(formatDatetime('2026-07-15T14:30:00', 'fr')).toContain('juillet');
+    expect(formatDatetime('2026-07-15T14:30:00', 'en')).toContain('July');
   });
 });

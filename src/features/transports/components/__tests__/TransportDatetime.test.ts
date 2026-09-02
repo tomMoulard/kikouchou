@@ -1,23 +1,31 @@
 /**
  * @fileoverview Tests for transport datetime handling
  * Verifies the datetime flow from form input through storage to display.
- * 
+ *
  * BUG-2 Regression Tests: Transport time should display the same time
  * that was entered, regardless of the user's timezone.
- * 
+ *
  * Datetime Flow:
  * 1. User enters time in form (local time via datetime-local input)
  * 2. Form converts to ISO string for storage (UTC)
  * 3. Display extracts and shows time (should convert back to local)
- * 
+ *
  * The key insight is that:
  * - Storage is in UTC (ISO format: 2024-01-10T13:00:00.000Z)
  * - Display must convert back to local time
  * - Round-trip: local → UTC → local should be consistent
+ *
+ * The display half of that flow is asserted against the shipped renderer,
+ * `formatTransportDatetimeParts`, not against a copy of it: a regression guard
+ * that only ever exercises its own private reimplementation cannot catch the
+ * regression it guards against. The two form-side helpers below are still
+ * replicated from `TransportForm.tsx`, which does not export them.
  */
 
 import { describe, it, expect } from 'vitest';
 import { format, parseISO } from 'date-fns';
+
+import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 
 // ============================================================================
 // Helper Functions (replicate from actual code for testing)
@@ -60,20 +68,14 @@ function formatDatetimeLocal(isoDatetime: string): string {
 }
 
 /**
- * Formats a datetime string to show just the time (HH:mm) in local timezone.
- * This is the FIXED function from CalendarPage.tsx.
- * 
+ * The time as the app actually renders it: the shipped single renderer, in its
+ * `timeOnly` variant. Every screen that shows a bare clock goes through this.
+ *
  * @param datetime - ISO datetime string (UTC)
  * @returns Time string in HH:mm format (local timezone)
  */
 function formatTime(datetime: string): string {
-  try {
-    const date = parseISO(datetime);
-    if (isNaN(date.getTime())) return '';
-    return format(date, 'HH:mm');
-  } catch {
-    return '';
-  }
+  return formatTransportDatetimeParts(datetime, undefined, 'timeOnly').time;
 }
 
 /**
@@ -173,7 +175,7 @@ describe('Transport Datetime Handling', () => {
 // ============================================================================
 
 describe('BUG-2: Transport Time Display', () => {
-  describe('formatTime (FIXED version)', () => {
+  describe('formatTime (the shipped renderer)', () => {
     it('displays time in local timezone', () => {
       // Given a stored ISO datetime
       const isoDatetime = '2024-01-10T14:30:00.000Z';
