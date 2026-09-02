@@ -66,6 +66,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ViewSwitcher } from '@/components/ui/view-switcher';
 import { cn } from '@/lib/utils';
 import { ASSISTANT_MODEL_PRESETS } from '@/features/assistant/models';
+import { deriveGuestStayDateBounds } from '@/features/persons/utils/guest-presence';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
 import { RoomDialog } from '@/features/rooms/components/RoomDialog';
 import { RoomAssignmentSection } from '@/features/rooms/components/RoomAssignmentSection';
@@ -161,31 +162,13 @@ function calculateUnassignedDates(
   departures: readonly Transport[],
   assignments: readonly RoomAssignment[],
 ): { startDate: string; endDate: string; unassignedDates: string[] } | null {
-  // Prefer explicit stay dates when available (covers "I'm here" without transports)
-  let arrivalDate: string | null = person.stayStartDate ?? null;
-  let departureDate: string | null = person.stayEndDate ?? null;
-
-  // Otherwise derive from transports (earliest arrival / latest departure)
-  const personArrivals = arrivals.filter((t) => t.personId === person.id);
-  const personDepartures = departures.filter((t) => t.personId === person.id);
-
-  if (!arrivalDate) {
-    for (const arrival of personArrivals) {
-      const date = arrival.datetime.substring(0, 10);
-      if (!arrivalDate || date < arrivalDate) {
-        arrivalDate = date;
-      }
-    }
-  }
-
-  if (!departureDate) {
-    for (const departure of personDepartures) {
-      const date = departure.datetime.substring(0, 10);
-      if (!departureDate || date > departureDate) {
-        departureDate = date;
-      }
-    }
-  }
+  // Explicit stay dates first, transports as the fallback — the app's one
+  // derivation of a guest's stay window, shared with the calendar and sidebar.
+  const { arrival: arrivalDate, departure: departureDate } = deriveGuestStayDateBounds(
+    person,
+    arrivals,
+    departures,
+  );
 
   // Still no range => we don't know when they need a room
   if (!arrivalDate || !departureDate) {
