@@ -25,7 +25,6 @@ import {
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { format, parseISO } from 'date-fns';
 import { enUS, fr } from 'date-fns/locale';
 import {
   ArrowDownToLine,
@@ -56,6 +55,7 @@ import {
 } from '@/components/shared/MapView';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
+import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
 import type { Person, PersonId, Transport, TransportMode } from '@/types';
 
@@ -84,28 +84,6 @@ function getDateLocale(language: string): typeof fr | typeof enUS {
   return language === 'fr' ? fr : enUS;
 }
 
-
-
-/**
- * Safely formats a datetime string for display.
- */
-function formatTransportDatetime(
-  datetime: string,
-  locale: typeof fr | typeof enUS
-): { date: string; time: string } {
-  try {
-    const parsedDate = parseISO(datetime);
-    if (isNaN(parsedDate.getTime())) {
-      return { date: '', time: '' };
-    }
-    return {
-      date: format(parsedDate, 'EEE d MMM', { locale }),
-      time: format(parsedDate, 'HH:mm', { locale }),
-    };
-  } catch {
-    return { date: '', time: '' };
-  }
-}
 
 /**
  * Type guard to filter transports with coordinates.
@@ -182,7 +160,7 @@ const TransportPopupContent = memo(function TransportPopupContent({
   dateLocale,
 }: TransportPopupContentProps): ReactElement {
   const { t } = useTranslation();
-  const { date, time } = formatTransportDatetime(transport.datetime, dateLocale);
+  const { date, time } = formatTransportDatetimeParts(transport.datetime, dateLocale, 'dayAndTime');
 
   return (
     <div className="min-w-[200px] space-y-2 p-1">
@@ -342,7 +320,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
     const result: MapMarkerData[] = [];
     for (const transport of transportsWithCoordinates) {
       const person = personsMap.get(transport.personId);
-      const { date, time } = formatTransportDatetime(transport.datetime, dateLocale);
+      const { date, time } = formatTransportDatetimeParts(transport.datetime, dateLocale, 'dayAndTime');
 
       const startCoords = transport.startCoordinates;
       if (hasStartCoordinates(transport) && startCoords) {
