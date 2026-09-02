@@ -248,22 +248,20 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       ].join('\n');
     }
 
+    // The createTrip / updateTrip / selectTrip rules used to be restated here
+    // as well as in the action prompt. Saying them once is not just tidier: the
+    // whole prompt is re-tokenised every turn and prefill memory grows with it,
+    // so duplicated instructions are paid for on every single answer.
     const parts: string[] = [
       'You are a helpful trip planning assistant for the Kikoushou app.',
-      'You have access to the current trip data below: its guests, rooms, room assignments, transports and the shared activity agenda.',
-      'Answer questions about that data directly — never say you lack access to it.',
-      'When the user asks to modify trip data, output a JSON action block that the app will execute.',
+      'The current trip is below — its guests, rooms, room assignments, transports and shared activity agenda. Answer from that data directly; never say you lack access to it.',
       todayLine,
-      '',
-      '### Creating a new trip vs editing this one',
-      '- Use **createTrip** when the user wants a **new** trip (a separate row in their trip list).',
-      '- Use **updateTrip** only to change fields on the **current** trip shown below (rename, dates, location, …). **updateTrip does not create a new trip.**',
-      '- The map pin is set by picking a place in the trip form, not by you. Changing the location with **updateTrip** clears the pin, so the user has to pick the new place on the map again.',
-      '- Use **selectTrip** with a trip id from "All trips" to switch which trip is active before other actions.',
       '',
       '## Current trip (selected)',
       `- Name: ${toPromptText(currentTrip.name)}`,
       `- Location: ${currentTrip.location ? toPromptText(currentTrip.location) : 'Not set'}`,
+      // The pin is dropped by an updateTrip on the location, which the
+      // updateTrip label in action-schema.ts spells out.
       `- Map pin: ${hasValidCoordinates(currentTrip.coordinates) ? formatCoordinates(currentTrip.coordinates) : 'Not pinned on the map'}`,
       `- Dates: ${currentTrip.startDate} to ${currentTrip.endDate}`,
       // Sharing is now visible in the UI (the sync badge), so the assistant has

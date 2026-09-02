@@ -248,4 +248,25 @@ describe('useTripSystemPrompt', () => {
     expect(prompt).toContain('counts as 2 people');
     expect(prompt).toContain('notes: Vegetarian');
   });
+
+  /**
+   * The floor — the prompt for a trip holding almost nothing — is paid on every
+   * turn before any trip data, and prefill memory on the browser models is
+   * linear in prompt length: `gemma-3-1b`'s ONNX export has no
+   * `num_logits_to_keep` input, so it materialises `prompt_tokens × 262144`
+   * logits and hands them back to the CPU in one buffer. At ~3.6 chars per
+   * token this budget keeps the floor near 1000 tokens, roughly half a
+   * gibibyte of readback, instead of the ~1.9 GiB that failed with
+   * "Failed to allocate memory for buffer mapping".
+   */
+  it('keeps the trip-independent floor within its prompt budget', async () => {
+    const MAX_FLOOR_CHARS = 5000;
+
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    expect(result.current.prompt.systemPrompt.length).toBeLessThanOrEqual(
+      MAX_FLOOR_CHARS,
+    );
+  });
 });

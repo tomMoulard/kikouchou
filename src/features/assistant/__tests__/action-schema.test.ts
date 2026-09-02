@@ -159,3 +159,66 @@ describe('action-schema', () => {
     });
   });
 });
+
+// ============================================================================
+// Prompt Budget
+// ============================================================================
+
+/**
+ * The action prompt is paid on **every** turn, before a single byte of trip
+ * data, and it is the largest fixed cost in the system prompt.
+ *
+ * On a model whose ONNX export does not slice the logits — `gemma-3-1b` has no
+ * `num_logits_to_keep` input — prefill computes logits for *every* prompt
+ * position, so each prompt token costs `vocab_size` floats of GPU-to-CPU
+ * readback. At Gemma's 262144-token vocabulary that is half a mebibyte per
+ * prompt token in fp16, and a 2401-token prompt is what took the WebGPU device
+ * down with "Failed to allocate memory for buffer mapping".
+ *
+ * Characters rather than tokens, so the guard runs without downloading a
+ * tokenizer; the Gemma tokenizer averages ~3.6 chars per token on this text,
+ * which puts this budget at roughly 1000 tokens — down from the ~1650 that
+ * spelling out every optional field of all sixteen actions used to cost.
+ *
+ * Adding an action is expected to eat into it. Rewriting the section to fit
+ * again is the right response to hitting the ceiling; raising it is not.
+ */
+const MAX_ACTION_PROMPT_CHARS = 3700;
+
+describe('action-schema prompt budget', () => {
+  it('documents every action within the prompt character budget', () => {
+    const prompt = generateActionPrompt().join('\n');
+
+    expect(prompt.length).toBeLessThanOrEqual(MAX_ACTION_PROMPT_CHARS);
+  });
+
+  it('still names every action in ACTION_SCHEMAS', () => {
+    const prompt = generateActionPrompt().join('\n');
+
+    for (const schema of ACTION_SCHEMAS) {
+      expect(prompt).toContain(schema.action);
+    }
+  });
+
+  it('still names every field of every action', () => {
+    const prompt = generateActionPrompt().join('\n');
+
+    for (const schema of ACTION_SCHEMAS) {
+      for (const field of Object.keys(schema.fields)) {
+        expect(prompt).toContain(field);
+      }
+    }
+  });
+
+  it('still lists every enum value the validator accepts', () => {
+    const prompt = generateActionPrompt().join('\n');
+
+    for (const schema of ACTION_SCHEMAS) {
+      for (const field of Object.values(schema.fields)) {
+        for (const value of field.enum ?? []) {
+          expect(prompt).toContain(value);
+        }
+      }
+    }
+  });
+});
