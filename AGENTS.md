@@ -314,6 +314,37 @@ different `base` than every `page.goto('/…')` assumed, 404-ing all 108 of them
 If you touch `vite.config.ts`'s `base`, `playwright.config.ts`'s `webServer`, or
 a `validate`/CI script, prove the gate still fails on a deliberate error.
 
+The E2E job was the third: `timeout-minutes: 30` killed it on every run since
+the workflow was written, so the suite had never finished in CI and the
+`production` and `sync` projects had never run there at all. A job that always
+dies at its limit reads as a failure and hides whatever the tests were saying.
+
+#### `page.waitForFunction` does not await an async predicate
+
+A pending Promise is truthy, so `waitForFunction(async () => …)` returns on its
+first poll having asserted nothing — measured at 17 ms for a predicate that
+resolves `false` forever. Three waits here were written that way: two guarding
+service-worker activation, one the offline precache. Use
+`expect.poll(() => page.evaluate(…))`, which runs in Node and does await it.
+
+#### An instant read races every lazy route
+
+Every route is a lazy chunk, so `waitForLoadState('load')` fires while `main`
+still holds the "Loading..." fallback. `.count()`, `.isVisible()`,
+`page.content()` and `page.evaluate` taken there see an empty page and report
+the feature missing rather than waiting for it. Prefer a retrying
+`expect(locator)`; `e2e/support/routes.ts`'s `waitForRoute` covers the rest.
+
+#### Assertions that cannot fail, and fixtures that rot
+
+`expect(typeof value).toBe('boolean')` and
+`expect(hasContent).toBe(true)` over an `||` of loose substring checks both held
+whether or not the feature was on the page — one of them "passed" against a page
+correctly showing "No locations on the map yet". And dates pinned to a literal
+month go stale: once March 2026 passed, the transport list folded every fixture
+transport into its collapsed "Past transports" accordion and the assertions
+hunted for rows that were rendered but hidden. Derive fixture dates from today.
+
 ---
 
 ## Supabase — RLS is the only thing protecting the data
