@@ -205,6 +205,19 @@ export default defineConfig({
       timeout: 180 * 1000,
       env: {
         GITHUB_ACTIONS: '',
+
+        /**
+         * Same blanking as the dev server below, and it matters more here
+         * because this command runs `bun run build`: whatever `.env.local`
+         * holds is *inlined into the bundle* that the offline and PWA specs
+         * then exercise. A developer's real Supabase project and real PostHog
+         * key would ship into that build, and the specs in this project assert
+         * local-only behaviour anyway.
+         */
+        VITE_SUPABASE_URL: '',
+        VITE_SUPABASE_PUBLISHABLE_KEY: '',
+        VITE_POSTHOG_KEY: '',
+        VITE_POSTHOG_HOST: '',
       },
     },
     {
@@ -226,14 +239,22 @@ export default defineConfig({
          * Blanked deliberately, and this is a safety measure rather than tidiness.
          *
          * Vite loads `.env.local`, which on a developer's machine holds the real
-         * project URL and key — so without these two lines every test in these
+         * project URL and key — so without these lines every test in these
          * projects ran against production, and any that reached a share would
          * have written to it. A process env var beats `.env.local` (verified
          * against Vite's own `loadEnv`), so setting them empty is what makes
          * these projects local-only.
+         *
+         * PostHog was the half that was missed, and it cost the project 19
+         * phantom people: every fresh browser context on a server that had a
+         * key created a Person, against three real Supabase accounts. The
+         * localhost guard in `lib/posthog` now refuses to init here too, so
+         * this is belt and braces — keep both.
          */
         VITE_SUPABASE_URL: '',
         VITE_SUPABASE_PUBLISHABLE_KEY: '',
+        VITE_POSTHOG_KEY: '',
+        VITE_POSTHOG_HOST: '',
       },
     },
 
@@ -252,6 +273,11 @@ export default defineConfig({
         GITHUB_ACTIONS: '',
         VITE_SUPABASE_URL: 'http://stub.invalid',
         VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_e2e_stub',
+        // A backend is configured here, analytics still is not: this project
+        // signs a stub user in, and an `identify()` against the real project
+        // would put a fake account in it. See the dev server above.
+        VITE_POSTHOG_KEY: '',
+        VITE_POSTHOG_HOST: '',
       },
     },
   ],

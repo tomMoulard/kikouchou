@@ -1,0 +1,32 @@
+# What must never enter the build context.
+#
+# The Dockerfile does `COPY . .`, so anything left out of this file is copied
+# into the build stage — and `vite build` *inlines* every VITE_* variable it can
+# see into the JavaScript nginx then serves. Without this file a developer's
+# `.env.local` was baked into the image: the real Supabase project, and a real
+# PostHog key on a container answering at http://localhost:3000. That is where
+# 16 of the 19 phantom PostHog people came from. Configuration for a container
+# build is passed explicitly with --build-arg instead; see the Dockerfile.
+
+# Secrets and machine-local configuration. `.env.example` holds names, not
+# values, and is the one that documents what a build needs.
+.env
+.env.*
+!.env.example
+
+# Rebuilt inside the image, or irrelevant to it.
+node_modules
+dist
+coverage
+playwright-report
+test-results
+e2e
+.git
+.gitignore
+.github
+.worktrees
+
+# Editor and OS noise.
+.DS_Store
+.idea
+.vscode
