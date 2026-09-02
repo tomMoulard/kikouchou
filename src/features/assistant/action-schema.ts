@@ -64,8 +64,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Trip ----------------------------------------------------------------
   {
     action: 'createTrip',
-    label:
-      'Create a NEW trip and switch the app to it. Use when the user wants a new trip — never use updateTrip for that',
+    label: 'Create a separate new trip and switch to it',
     fields: {
       name: {
         type: 'string',
@@ -101,8 +100,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'selectTrip',
-    label:
-      'Switch the app to an existing trip using its id from the "All trips" list in the system prompt',
+    label: 'Switch to an existing trip, by its id from All trips',
     fields: {
       tripId: {
         type: 'string',
@@ -114,7 +112,8 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'updateTrip',
-    label: 'Update the currently selected trip name, location, dates, or description (does not create a new trip)',
+    label:
+      'Edit the selected trip — never creates a new one. Changing location clears the map pin',
     fields: {
       name: {
         type: 'string',
@@ -416,8 +415,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'updateActivity',
-    label:
-      'Update an existing activity using its id from the activities list (does not create a new one)',
+    label: 'Edit an existing agenda entry — never creates a new one',
     fields: {
       activityId: {
         type: 'string',
@@ -562,14 +560,46 @@ export interface LLMAction {
 // ============================================================================
 
 /**
- * Build an example JSON object for an action schema, using the example values.
+ * Build the example JSON object shown for one action.
+ *
+ * Only the **required** fields go in. Spelling out all sixteen actions with
+ * every optional field set was the single biggest block of the system prompt,
+ * and the prompt is re-tokenised on every turn: prefill memory on the browser
+ * models is linear in prompt length, so a fixed cost paid per turn is worth
+ * squeezing. The optional fields are still named on the line below, so nothing
+ * the validator accepts goes undocumented.
+ *
+ * An action whose fields are all optional (`updateTrip`) has nothing required
+ * to show, so its first field stands in as the example.
  */
 function buildExample(def: ActionDef): string {
+  const entries = Object.entries(def.fields);
+  const required = entries.filter(([, field]) => field.required);
+  const shown = required.length > 0 ? required : entries.slice(0, 1);
+
   const data: Record<string, unknown> = {};
-  for (const [key, field] of Object.entries(def.fields)) {
+  for (const [key, field] of shown) {
     data[key] = field.example;
   }
   return JSON.stringify({ action: def.action, data });
+}
+
+/**
+ * Short type marker for an optional field, so dropping it from the example
+ * does not also drop the fact that it is a number, a flag or a list.
+ * Strings are the default and stay unmarked.
+ */
+function typeHint(type: FieldType): string {
+  switch (type) {
+    case 'number':
+      return ' (num)';
+    case 'boolean':
+      return ' (bool)';
+    case 'string[]':
+      return ' (list)';
+    default:
+      return '';
+  }
 }
 
 /**
@@ -582,69 +612,50 @@ export function generateActionPrompt(): string[] {
   const lines: string[] = [
     '',
     '## Modification Actions',
-    'When the user asks you to modify trip data, respond with a fenced JSON code block using the ```action tag.',
-    'The app parses these blocks and executes the mutations automatically.',
-    'IMPORTANT: Use EXACTLY the ```action tag (not ```json or ```).',
-    'IMPORTANT: Do NOT include question marks in JSON keys. All keys are plain strings.',
-    'IMPORTANT: Output ONLY valid JSON inside the action block — no comments, no trailing commas.',
+    'To modify trip data, emit a fenced block tagged EXACTLY ```action (not ```json) holding only valid JSON — no comments, no trailing commas, plain string keys.',
+    'One block per change. To answer a question, use the data above and emit no block at all.',
     '',
-    'Available actions and their exact JSON schemas:',
-  ];
-
-  ACTION_SCHEMAS.forEach((def, index) => {
-    lines.push('');
-    lines.push(`${index + 1}. ${def.action} — ${def.label}:`);
-    lines.push(`   ${buildExample(def)}`);
-
-    // Note which fields are optional
-    const optionalFields = Object.entries(def.fields)
-      .filter(([, f]) => !f.required)
-      .map(([key]) => key);
-
-    if (optionalFields.length > 0) {
-      if (optionalFields.length === Object.keys(def.fields).length) {
-        lines.push('   All fields inside data are optional — include only the ones to change.');
-      } else {
-        lines.push(`   ${optionalFields.join(', ')} ${optionalFields.length === 1 ? 'is' : 'are'} optional.`);
-      }
-    }
-
-    // Note enum constraints
-    for (const [key, field] of Object.entries(def.fields)) {
-      if (field.enum) {
-        lines.push(
-          `   ${key} must be one of: ${field.enum.map((v) => `"${v}"`).join(', ')}.`,
-        );
-      }
-    }
-  });
-
-  // Concrete example
-  lines.push(
-    '',
-    'Example of a correct response when the user asks to add a room:',
-    'Sure! I\'ll create a room called "The Cozy Den" with 4 beds.',
-    '',
+    // Small models copy the shape they are shown, so the rule "prose first,
+    // then the block" is demonstrated rather than only stated.
+    'I will add a room with 4 beds.',
     '```action',
-    '{"action":"addRoom","data":{"name":"The Cozy Den","capacity":4,"description":"A cozy room for four"}}',
+    '{"action":"addRoom","data":{"name":"The Cozy Den","capacity":4}}',
     '```',
     '',
-    'Rules:',
-    '- Always explain what you are doing BEFORE the action block.',
-    '- You can output multiple ```action blocks if the user requests multiple changes.',
-    '- Be concise and helpful.',
-    '- If the user asks a question about the trip, answer based on the data above without any action block.',
+    'Actions — the example shows the required fields:',
+  ];
+
+  for (const def of ACTION_SCHEMAS) {
+    lines.push(`${def.action} — ${def.label}`);
+    lines.push(`  ${buildExample(def)}`);
+
+    const optional = Object.entries(def.fields).filter(
+      ([, field]) => !field.required,
+    );
+    if (optional.length > 0) {
+      const names = optional
+        .map(([key, field]) => `${key}${typeHint(field.type)}`)
+        .join(', ');
+      // When nothing is required the example had to borrow an optional field,
+      // so say so rather than letting it read as a mandatory one.
+      const prefix =
+        optional.length === Object.keys(def.fields).length
+          ? 'all optional'
+          : 'optional';
+      lines.push(`  ${prefix}: ${names}`);
+    }
+
+    for (const [key, field] of Object.entries(def.fields)) {
+      if (field.enum) {
+        lines.push(`  ${key}: ${field.enum.join(' | ')}`);
+      }
+    }
+  }
+
+  lines.push(
     '',
-    'Trip creation vs editing:',
-    '- If the user asks to **create a new trip**, you MUST use **createTrip**, not updateTrip.',
-    '- **updateTrip** only edits the trip that is currently selected; it never creates a separate trip.',
-    '- After **createTrip**, further actions in the same reply (guests, rooms, …) apply to that new trip.',
-    '- Use **selectTrip** with a trip id from **All trips** when the user wants to work on a different existing trip.',
-    '',
-    'Agenda (activities):',
-    '- **addActivity** creates a new agenda entry; **updateActivity** edits an existing one and requires its `activityId` from the **Activities** list.',
-    '- Use **joinActivity** / **leaveActivity** to change who is signed up — never rewrite the sign-up list through updateActivity.',
-    '- Resolve "today", "tonight", "tomorrow" and "this weekend" against the current date given above, then answer from the **Activities** list without an action block.',
+    'After createTrip, later actions in the same reply apply to the new trip.',
+    'Change who is signed up with joinActivity / leaveActivity, never through updateActivity.',
   );
 
   return lines;
