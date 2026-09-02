@@ -775,6 +775,12 @@ test.describe('PWA Installation Readiness', () => {
     await page.goto('/');
     await page.waitForLoadState('load');
 
+    // The worker registers asynchronously, so `load` is not far enough: reading
+    // `getRegistrations()` straight after it measured an empty list at 245 ms
+    // and failed on `swRegistered`. Same wait as every other
+    // service-worker assertion in this file.
+    await waitForActivatedServiceWorker(page);
+
     // Check all installability requirements
     const installabilityChecks = await page.evaluate(async () => {
       const checks = {
