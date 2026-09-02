@@ -148,6 +148,22 @@ Relative dates ("today", "tonight", "this weekend") resolve against the current
 date, which the prompt states from `useToday()` — extend that line rather than
 letting the model guess.
 
+**Say it once, and say it short.** The prompt is not free text: the model runs on
+the user's own GPU, and prefill memory grows with prompt length. `gemma-3-1b`'s
+ONNX export has no `num_logits_to_keep` input, so it computes logits for *every*
+prompt position and reads back `prompt_tokens × 262144` values in one buffer —
+half a mebibyte per prompt token. A 2401-token prompt asked WebGPU for 2.34 GiB
+and got "Failed to allocate memory for buffer mapping", which kills the session,
+not just the answer. Two guards keep that honest, and both are meant to be
+rewritten to fit rather than raised:
+
+- `action-schema.test.ts` caps the generated action prompt (~1000 tokens).
+- `useTripSystemPrompt.test.tsx` caps the trip-independent floor.
+
+So: never state a rule in `useTripSystemPrompt.ts` that `action-schema.ts`
+already states, keep `label` to a phrase, and let the example show the required
+fields only — the `optional:` line documents the rest.
+
 Done check: *could the assistant both answer a question about this feature and
 change it, from the prompt alone?* If not, the feature is not finished.
 
