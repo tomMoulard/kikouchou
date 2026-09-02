@@ -115,3 +115,116 @@ export async function seedTrip(
 
   return seeded;
 }
+
+/**
+ * Writes one guest into the `persons` store.
+ *
+ * Seed a trip's rows **before** anything makes that trip current.
+ * `YjsTripSync` mounts a document per trip and projects it back over Dexie
+ * through `syncDocToDexie`, so a row written raw once that document is already
+ * loaded races the mirror: the document does not contain the row, and the next
+ * projection can drop it. That is what made the map's ARIA test flaky in CI —
+ * it created its trip through the form, which selects it, and only then wrote
+ * the rows. It passed locally every time and failed on the slower runner.
+ *
+ * @param page - Playwright page object
+ * @param tripId - The trip the guest belongs to
+ * @param name - Guest name
+ * @param color - Badge colour
+ * @returns The new guest's id
+ */
+export async function seedPerson(
+  page: Page,
+  tripId: string,
+  name: string,
+  color = '#3b82f6',
+): Promise<string> {
+  return await page.evaluate(
+    async ({ tripId, name, color }) => {
+      const id = `seed-person-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+      return new Promise<string>((resolve, reject) => {
+        const request = indexedDB.open('kikoushou');
+        request.onerror = () => reject(new Error('Failed to open database'));
+        request.onsuccess = () => {
+          const db = request.result;
+          const tx = db.transaction('persons', 'readwrite');
+          tx.objectStore('persons').add({ id, tripId, name, color });
+
+          tx.oncomplete = () => {
+            db.close();
+            resolve(id);
+          };
+          tx.onerror = () => {
+            db.close();
+            reject(new Error('Failed to create person'));
+          };
+        };
+      });
+    },
+    { tripId, name, color },
+  );
+}
+
+/**
+ * The fields a seeded transport is given.
+ */
+export interface SeedTransportOptions {
+  readonly tripId: string;
+  readonly personId: string;
+  readonly type: 'arrival' | 'departure';
+  /** ISO 8601 with a timezone. */
+  readonly datetime: string;
+  readonly mode?: 'plane' | 'train' | 'car' | 'bus' | 'other';
+  /** Required on `Transport`; the transports page crashes without one. */
+  readonly location?: string;
+  /** Pin it on the map; `TransportMapPage` shows an empty state without this. */
+  readonly coordinates?: { readonly lat: number; readonly lon: number };
+}
+
+/**
+ * Writes one transport into the `transports` store.
+ *
+ * Same ordering rule as {@link seedPerson}: seed before the trip is current.
+ *
+ * @param page - Playwright page object
+ * @param options - The transport to write
+ * @returns The new transport's id
+ */
+export async function seedTransport(
+  page: Page,
+  options: SeedTransportOptions,
+): Promise<string> {
+  return await page.evaluate(async (options: SeedTransportOptions) => {
+    const id = `seed-transport-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+    return new Promise<string>((resolve, reject) => {
+      const request = indexedDB.open('kikoushou');
+      request.onerror = () => reject(new Error('Failed to open database'));
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('transports', 'readwrite');
+        tx.objectStore('transports').add({
+          id,
+          tripId: options.tripId,
+          personId: options.personId,
+          type: options.type,
+          datetime: options.datetime,
+          mode: options.mode ?? 'plane',
+          location: options.location ?? 'Test Station',
+          ...(options.coordinates === undefined ? {} : { coordinates: options.coordinates }),
+          needsPickup: options.type === 'arrival',
+        });
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve(id);
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(new Error('Failed to create transport'));
+        };
+      };
+    });
+  }, options);
+}
