@@ -193,6 +193,24 @@ export default defineConfig({
             },
           },
           {
+            // Cache the CARTO dark basemap on the same terms as the OSM one
+            // above. `MapView` swaps to it whenever the dark theme is active,
+            // so without this entry every map a dark-mode user visits would be
+            // blank offline while the same map worked in light mode.
+            urlPattern: /^https:\/\/[abcd]\.basemaps\.cartocdn\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'carto-dark-tiles',
+              expiration: {
+                maxEntries: 500,
+                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
+          {
             // Cache Nominatim geocoding responses for location search
             urlPattern: /^https:\/\/nominatim\.openstreetmap\.org\/.*/i,
             handler: 'NetworkFirst',

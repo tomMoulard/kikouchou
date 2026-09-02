@@ -760,6 +760,13 @@
       "fr": "Français",
       "en": "English"
     },
+    "theme": "Theme",
+    "themeDescription": "Choose how the app looks",
+    "themes": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
     "about": "About",
     "aboutDescription": "Application information",
     "version": "Version",
