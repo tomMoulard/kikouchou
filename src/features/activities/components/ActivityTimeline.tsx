@@ -43,6 +43,12 @@ export interface ActivityTimelineProps {
   readonly today: Date;
   /** Callback when an activity bar is clicked */
   readonly onActivityClick: (activity: Activity) => void;
+  /**
+   * Callback offered when every activity falls outside the trip dates, so the
+   * timeline has nothing to draw but the list view still can. Without it that
+   * state is a dead end.
+   */
+  readonly onShowAsList?: () => void;
 }
 
 // ============================================================================
@@ -75,6 +81,7 @@ const ActivityTimeline = memo(function ActivityTimeline({
   dateLocale,
   today,
   onActivityClick,
+  onShowAsList,
 }: ActivityTimelineProps): ReactElement {
   const { t } = useTranslation();
 
@@ -86,19 +93,42 @@ const ActivityTimeline = memo(function ActivityTimeline({
   const todayKey = toLocalISODateString(today) as ISODateString;
 
   if (model.rows.length === 0) {
+    // Activities exist, they just have no column on this trip's day axis.
+    // Saying "no activity planned yet" here would be a plain lie. `hiddenCount`
+    // alone is not enough: it also counts unparseable days, so only claim
+    // "outside the trip dates" when it accounts for every activity there is.
+    const isEverythingOutsideTrip =
+      activities.length > 0 && model.hiddenCount === activities.length;
+
     return (
       <div className="flex min-h-[200px] items-center justify-center rounded-lg border">
         <EmptyState
           icon={CalendarDays}
-          title={t('activities.empty')}
+          title={
+            isEverythingOutsideTrip
+              ? t('activities.timeline.noneInRange', {
+                  defaultValue: 'Nothing on the trip dates',
+                })
+              : t('activities.empty')
+          }
           description={
-            model.hiddenCount > 0
+            isEverythingOutsideTrip
               ? t('activities.timeline.allOutsideTrip', {
                   defaultValue:
                     'All {{count}} activities fall outside the trip dates.',
                   count: model.hiddenCount,
                 })
               : t('activities.emptyDescription')
+          }
+          action={
+            isEverythingOutsideTrip && onShowAsList
+              ? {
+                  label: t('activities.timeline.showAsList', {
+                    defaultValue: 'Show as list',
+                  }),
+                  onClick: onShowAsList,
+                }
+              : undefined
           }
         />
       </div>

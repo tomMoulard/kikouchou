@@ -6,7 +6,7 @@
  * @module features/activities/utils/activity-utils
  */
 
-import { format, isValid, parseISO } from 'date-fns';
+import { endOfDay, format, isValid, parseISO } from 'date-fns';
 import type { Locale } from 'date-fns/locale';
 
 import { toLocalISODateString } from '@/lib/db/utils';
@@ -27,10 +27,10 @@ const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
  * Normalises any parseable datetime into the single representation activities
  * are stored in: a UTC ISO instant.
  *
- * Every write path must go through this. Activity instants are compared as
- * plain strings (`ActivityContext.upcomingActivities`) and ordered by the
- * `[tripId+startDatetime]` index, so a naive `2026-04-20T09:00:00` stored
- * next to a `…Z` value silently breaks both.
+ * Every write path must go through this. Activity instants are ordered as
+ * plain strings by the `[tripId+startDatetime]` index, so a naive
+ * `2026-04-20T09:00:00` stored next to a `…Z` value silently breaks the
+ * agenda's ordering.
  *
  * @param value - A datetime string, with or without an offset
  * @returns The UTC ISO instant, or undefined when the value is unparseable
@@ -131,6 +131,16 @@ export function getActivityEndDayKey(
 /**
  * Whether an activity is already over relative to a reference instant.
  *
+ * This is the **single** definition of "past" for activities: `ActivityContext`
+ * partitions the agenda with it and every consumer reads that partition rather
+ * than recomputing one. The comparison is a real instant comparison — an
+ * activity that ended at 09:00 is over at 09:01, not at midnight — so callers
+ * must pass a live `Date`, not the start of the day.
+ *
+ * An activity with **no end time** is open-ended, not instantaneous: the form
+ * offers "leave empty for an activity with no set end", so a 19:00 apéro runs
+ * until the end of its local day rather than being over at 19:01.
+ *
  * @param activity - The activity
  * @param now - Reference instant (defaults to the current time)
  * @returns True when the activity ended before `now`
@@ -140,7 +150,8 @@ export function isActivityPast(activity: Activity, now: Date = new Date()): bool
   if (!isValid(end)) {
     return false;
   }
-  return end.getTime() < now.getTime();
+  const effectiveEnd = activity.endDatetime ? end : endOfDay(end);
+  return effectiveEnd.getTime() < now.getTime();
 }
 
 /**

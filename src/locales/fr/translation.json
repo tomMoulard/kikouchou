@@ -356,6 +356,8 @@
     "participantsDescription": "Sélectionnez les personnes qui participent. Chacun peut aussi s'inscrire lui-même.",
     "participantCount_one": "{{count}} participant",
     "participantCount_other": "{{count}} participants",
+    "participantCountCapped_one": "{{count}}/{{max}} participant",
+    "participantCountCapped_other": "{{count}}/{{max}} participants",
     "noParticipants": "Personne ne s'est encore inscrit",
     "maxParticipants": "Nombre de places",
     "maxParticipantsPlaceholder": "Illimité",
@@ -368,7 +370,8 @@
     "notesPlaceholder": "Prix, réservation, quoi prévoir...",
     "empty": "Aucune activité prévue pour l'instant",
     "emptyDescription": "Ajoutez les sorties, visites et repas partagés pour que chacun sache quoi faire et puisse s'inscrire",
-    "pastActivities": "Activités passées",
+    "pastActivitiesWithCount_one": "Activité passée ({{count}})",
+    "pastActivitiesWithCount_other": "Activités passées ({{count}})",
     "createSuccess": "Activité créée avec succès",
     "updateSuccess": "Activité mise à jour avec succès",
     "deleteSuccess": "Activité supprimée avec succès",
@@ -387,7 +390,9 @@
       "hiddenCount_one": "{{count}} activité en dehors des dates du voyage n'est pas affichée.",
       "hiddenCount_other": "{{count}} activités en dehors des dates du voyage ne sont pas affichées.",
       "allOutsideTrip_one": "La seule activité enregistrée est en dehors des dates du voyage.",
-      "allOutsideTrip_other": "Les {{count}} activités enregistrées sont en dehors des dates du voyage."
+      "allOutsideTrip_other": "Les {{count}} activités enregistrées sont en dehors des dates du voyage.",
+      "noneInRange": "Rien sur les dates du voyage",
+      "showAsList": "Afficher en liste"
     },
     "errors": {
       "endBeforeStart": "La fin doit être après le début",

@@ -6,7 +6,9 @@
  * Route: /trips/:tripId/activities
  *
  * Features:
- * - List view grouped by day, with a collapsible "past activities" section
+ * - List view grouped by day, with a collapsible "past activities" section.
+ *   The upcoming/past split is read from `ActivityContext`, never recomputed
+ *   here — the page and the context used to answer "is this over?" differently.
  * - Timeline view: one band per category across the trip days
  * - Create / edit / delete via the activity dialog
  * - One-tap join & leave for the guest using this browser
@@ -52,7 +54,6 @@ import { ActivityTimeline } from '../components/ActivityTimeline';
 import {
   type ActivityDateGroup,
   groupActivitiesByDate,
-  isActivityPast,
 } from '../utils/activity-utils';
 
 // ============================================================================
@@ -163,6 +164,8 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
   const {
     activities,
+    upcomingActivities,
+    pastActivities,
     isLoading: isActivitiesLoading,
     error: activitiesError,
     deleteActivity,
@@ -227,21 +230,6 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
       ? todayKey
       : currentTrip.startDate;
   }, [currentTrip, today]);
-
-  const { upcomingActivities, pastActivities } = useMemo(() => {
-    const upcoming: Activity[] = [];
-    const past: Activity[] = [];
-
-    for (const activity of activities) {
-      if (isActivityPast(activity, today)) {
-        past.push(activity);
-      } else {
-        upcoming.push(activity);
-      }
-    }
-
-    return { upcomingActivities: upcoming, pastActivities: past };
-  }, [activities, today]);
 
   const upcomingDateGroups = useMemo(
     () => groupActivitiesByDate(upcomingActivities, dateLocale),
@@ -345,6 +333,14 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
     setIsPastExpanded((prev) => !prev);
   }, []);
 
+  /**
+   * Escape hatch from the timeline when every activity sits outside the trip
+   * dates: the list view has no day axis and can still show them all.
+   */
+  const handleShowAsList = useCallback(() => {
+    handleViewChange('list');
+  }, [handleViewChange]);
+
   const headerAction = useMemo(
     () => (
       <div className="hidden sm:flex items-center gap-2">
@@ -447,16 +443,12 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
         ]}
       />
 
-      {currentView === 'timeline' ? (
-        <ActivityTimeline
-          trip={currentTrip}
-          activities={activities}
-          dateLocale={dateLocale}
-          today={today}
-          onActivityClick={handleActivityClick}
-        />
-      ) : !hasActivities ? (
-        <div className="flex min-h-[200px] items-center justify-center">
+      {/*
+        One empty state for both views: the agenda being empty is the same
+        situation whichever tab is open, so it must make the same offer.
+      */}
+      {!hasActivities ? (
+        <div className="flex min-h-[200px] items-center justify-center rounded-lg border">
           <EmptyState
             icon={CalendarDays}
             title={t('activities.empty')}
@@ -467,6 +459,15 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
             }}
           />
         </div>
+      ) : currentView === 'timeline' ? (
+        <ActivityTimeline
+          trip={currentTrip}
+          activities={activities}
+          dateLocale={dateLocale}
+          today={today}
+          onActivityClick={handleActivityClick}
+          onShowAsList={handleShowAsList}
+        />
       ) : (
         <div
           role="list"
@@ -508,7 +509,9 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
                 )}
                 <History className="size-4 shrink-0" aria-hidden="true" />
                 <span>
-                  {t('activities.pastActivities')} ({pastActivities.length})
+                  {t('activities.pastActivitiesWithCount', {
+                    count: pastActivities.length,
+                  })}
                 </span>
               </button>
 
