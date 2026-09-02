@@ -62,7 +62,26 @@ function App(): ReactElement {
         `toast.getToasts()` returned 1 while the document held no
         `[data-sonner-toaster]` at all.
       */}
-      <Toaster position="bottom-center" richColors closeButton />
+      {/*
+        `mobileOffset` lifts toasts clear of the other two things anchored to
+        the bottom of a phone screen.
+
+        A toast is interactive — it has a close button — so wherever it lands it
+        takes taps for the several seconds it is up. At `bottom-center` with no
+        offset it covered the navigation bar (`h-16`, fixed below `md`), eating
+        every tap on Calendar, Rooms, Guests and Transport; at 80px it covered
+        the `bottom-20 size-14` FAB instead. Both were measured as an E2E click
+        spending its whole timeout intercepted by a toast.
+
+        144px clears the FAB's top edge (80 + 56), and so the bar underneath it
+        too. Only reachable since toasts began rendering at all.
+      */}
+      <Toaster
+        position="bottom-center"
+        mobileOffset={{ bottom: '144px' }}
+        richColors
+        closeButton
+      />
       <InstallPrompt />
       <OfflineIndicator />
     </>

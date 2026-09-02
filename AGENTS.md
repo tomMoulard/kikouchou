@@ -305,6 +305,22 @@ container (`src/index.css`), not renumbering anything. Any vendor CSS that ships
 its own z-index scale needs the same containment, and `z-50` in the app is not
 a number to raise in answer.
 
+### A fixed overlay eats every tap underneath it
+
+Three separate bugs, all the same shape. `OfflineIndicator` is `inset-x-0` and
+paints only a centred pill, so it swallowed clicks along a full-width strip and
+"New trip" could not be clicked at all while offline — fixed with
+`pointer-events-none`, which is right for anything purely informational. Toasts
+are not: a toast has a close button, so it has to be *positioned* clear
+instead. At `bottom-center` with no offset it covered the mobile navigation bar
+and ate every tap on Calendar, Rooms, Guests and Transport; offset to 80px it
+covered the FAB.
+
+A phone screen has three things anchored to its bottom edge — the nav bar
+(`h-16`), the FAB (`bottom-20 size-14`, so 80px to 136px) and toasts. Anything
+new down there has to clear all of them, and the check is a hit test at the
+element's own centre rather than a look at the screenshot.
+
 ### Quality gates must actually run
 
 A gate that silently passes is worse than no gate. Two did:
