@@ -25,11 +25,12 @@ bun run test src/features/trips/components/__tests__/TripForm.test.tsx  # Single
 bun run test -t "TripForm"    # Pattern match (vitest has no --grep)
 
 # E2E tests (Playwright)
-bun run test:e2e              # Headless (sets PW_CHANNEL=chrome, see below)
+bun run test:e2e              # Headless, on Playwright's pinned Chromium (as CI)
+bun run test:e2e:chrome       # Same, on the machine's installed Chrome (see below)
 bun run test:e2e:headed       # With browser
 bun run test:e2e:install      # Fetch Playwright's own Chromium
 npx playwright test --project=sync                   # Sharing/join/two-device flows
-npx playwright test --project=offline                # Offline contract (production build)
+npx playwright test --project=production             # Offline + PWA (production build)
 npx playwright test e2e/trip-lifecycle.spec.ts       # Single file
 npx playwright test -g "user can create a new trip"  # Single test
 
@@ -46,10 +47,11 @@ tsc -b                        # The ONLY form that checks anything (see below)
 ```
 
 > **`PW_CHANNEL=chrome` drives the machine's installed Chrome** instead of
-> Playwright's own build, which is what the `test:e2e*` scripts set. Unset is the
-> default in `playwright.config.ts` and what CI uses, so the browser version
-> moves with the dependency and a Chrome auto-update cannot change a result.
-> Set it when `playwright install` has not run locally.
+> Playwright's own build. Unset is the default, and what `bun run test:e2e` and
+> CI now use, so the browser version moves with the dependency and a Chrome
+> auto-update cannot change a result. Reach for `test:e2e:chrome` when
+> `playwright install` has not run locally — the scripts used to force it, which
+> meant CI downloaded a Chromium it then ignored.
 
 > **`tsc --noEmit` type-checks ZERO files in this repo.** The root
 > `tsconfig.json` is a solution file (`"files": []` + `references`), and project

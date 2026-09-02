@@ -174,6 +174,25 @@ async function observeLongTasks(page: Page, timeout: number): Promise<LongTaskEn
 }
 
 /**
+ * Collects garbage, so a heap reading means retention rather than luck.
+ *
+ * `performance.memory.usedJSHeapSize` reports whatever V8 happens to be holding
+ * at that instant, including everything not yet collected. Comparing two raw
+ * readings therefore measures when the collector last ran, not what the app
+ * kept: three identical runs of the test below produced 14.83%, 72.88% and
+ * 132.21% growth against a 50% threshold. Forcing a collection either side
+ * makes the comparison mean something.
+ */
+async function collectGarbage(page: Page): Promise<void> {
+  const client = await createCDPSession(page);
+  try {
+    await client.send('HeapProfiler.collectGarbage');
+  } finally {
+    await client.detach();
+  }
+}
+
+/**
  * Gets memory usage from the page.
  *
  * @param page - Playwright page object
@@ -711,6 +730,7 @@ test.describe('Performance Tests', () => {
     await page.waitForLoadState('load');
     await waitForLoading(page);
 
+    await collectGarbage(page);
     const initialMemory = await getMemoryUsage(page);
     console.log('=== Memory Usage Test ===');
     console.log(
@@ -739,6 +759,7 @@ test.describe('Performance Tests', () => {
     }
 
     // Get final memory
+    await collectGarbage(page);
     const finalMemory = await getMemoryUsage(page);
     console.log(
       `Final memory: ${finalMemory ? (finalMemory.usedJSHeapSize / 1024 / 1024).toFixed(2) : 'N/A'}MB`,

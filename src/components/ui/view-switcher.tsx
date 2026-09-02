@@ -85,7 +85,16 @@ export function ViewSwitcher<TValue extends string>({
       aria-label={ariaLabel}
       data-slot="view-switcher"
       data-variant="default"
-      className={cn(tabsListVariants({ variant: 'default' }), 'group/tabs-list', className)}
+      className={cn(
+        tabsListVariants({ variant: 'default' }),
+        // `tabsListVariants` only sets the height through
+        // `group-data-[orientation=horizontal]/tabs:h-9`, which needs the
+        // `Tabs` root as an ancestor. There isn't one here, so set it directly
+        // or the control renders shorter than the tab list it replaces.
+        'h-9',
+        'group/tabs-list',
+        className,
+      )}
       onKeyDown={handleKeyDown}
     >
       {options.map((option) => {

@@ -16,11 +16,12 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
-    "test:e2e": "PW_CHANNEL=chrome playwright test",
+    "test:e2e": "playwright test",
+    "test:e2e:chrome": "PW_CHANNEL=chrome playwright test",
     "test:e2e:install": "playwright install chromium",
     "db:types": "supabase gen types typescript --linked > /tmp/kikoushou-db-types.ts && sed -n '1,/^ \\*\\//p' src/lib/supabase/database.types.ts > /tmp/kikoushou-db-header.ts && printf '\\n' >> /tmp/kikoushou-db-header.ts && cat /tmp/kikoushou-db-header.ts /tmp/kikoushou-db-types.ts > src/lib/supabase/database.types.ts && rm /tmp/kikoushou-db-types.ts /tmp/kikoushou-db-header.ts",
-    "test:e2e:ui": "PW_CHANNEL=chrome playwright test --ui",
-    "test:e2e:headed": "PW_CHANNEL=chrome playwright test --headed"
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",
