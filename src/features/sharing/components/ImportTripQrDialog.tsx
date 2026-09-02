@@ -57,10 +57,25 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
   const navigate = useNavigate();
   const handledRef = useRef(false);
   const framesRef = useRef<Map<number, string>>(new Map());
+  /**
+   * The re-entrancy guard, and a ref rather than `isImporting` on purpose.
+   *
+   * `useZxing` re-decodes continuously, so a code held in frame fires `onScan`
+   * many times a second — repeatedly within one tick. State cannot gate that:
+   * `handleScan` reads whatever `isImporting` was when the handler was created,
+   * and React has not re-rendered yet, so every scan in that tick sees `false`
+   * and the trip is imported once per scan. A ref is written synchronously and
+   * read by the very next call.
+   *
+   * `isImporting` stays, but only for what it is good at — rendering the
+   * spinner and pausing the scanner.
+   */
+  const importingRef = useRef(false);
   const [isImporting, setIsImporting] = useState(false);
 
   const tryImportEncodedPayload = useCallback(
     async (encoded: string) => {
+      importingRef.current = true;
       setIsImporting(true);
       try {
         let raw: AppChangeset;
@@ -106,6 +121,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
           ),
         );
       } finally {
+        importingRef.current = false;
         setIsImporting(false);
         framesRef.current.clear();
       }
@@ -115,7 +131,9 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
 
   const handleScan = useCallback(
     (data: string) => {
-      if (handledRef.current || isImporting) {
+      // Both refs, so the guard holds for scans arriving in the same tick —
+      // see `importingRef`.
+      if (handledRef.current || importingRef.current) {
         return;
       }
       const trimmed = data.trim();
@@ -160,7 +178,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
 
       void tryImportEncodedPayload(trimmed);
     },
-    [isImporting, navigate, onOpenChange, tryImportEncodedPayload],
+    [navigate, onOpenChange, tryImportEncodedPayload],
   );
 
   const handleOpenChange = useCallback(

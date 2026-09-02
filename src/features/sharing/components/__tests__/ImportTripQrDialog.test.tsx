@@ -253,11 +253,44 @@ describe('ImportTripQrDialog', () => {
     mockDecodeChangeset.mockClear();
     mockPrepareChangeset.mockClear();
 
-    // Second scan should be ignored because isImporting is true
+    // Second scan should be ignored because the import is still in flight
     capturedOnScan!('payload-2');
 
     // decode should NOT have been called again
     expect(mockDecodeChangeset).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The case a real scanner produces, and the one the test above cannot see.
+   *
+   * `useZxing` re-decodes continuously, so holding one code in frame fires
+   * `onScan` many times a second — repeatedly within a single tick. The guard
+   * therefore has to hold before React has re-rendered, which is why it is a
+   * ref and not `isImporting` state: reading state here only ever saw the value
+   * captured when the handler was created, so both scans passed it and the trip
+   * was imported twice.
+   *
+   * The test above waits for `prepareChangeset` before scanning again, so it
+   * gives React a chance to commit and only failed when CI was loaded enough to
+   * lose that race. This one never gives it the chance.
+   */
+  it('ignores a second scan delivered in the same tick as the first', async () => {
+    const rawChangeset = { tripId: 'trip-1', version: 1, shareId: 'share1' };
+    mockDecodeChangeset.mockReturnValue(rawChangeset);
+    mockPrepareChangeset.mockReturnValue(new Promise(() => {})); // Never resolves
+
+    render(<ImportTripQrDialog open={true} onOpenChange={onOpenChange} />, { withProviders: false });
+
+    // Back to back, with no await between them: React cannot have re-rendered.
+    capturedOnScan!('payload-1');
+    capturedOnScan!('payload-2');
+
+    await waitFor(() => {
+      expect(mockPrepareChangeset).toHaveBeenCalled();
+    });
+
+    expect(mockDecodeChangeset).toHaveBeenCalledTimes(1);
+    expect(mockPrepareChangeset).toHaveBeenCalledTimes(1);
   });
 
   it('handles multi-frame completion and import', async () => {
