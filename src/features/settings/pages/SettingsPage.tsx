@@ -1,6 +1,6 @@
 /**
  * @fileoverview Settings page for app configuration.
- * Allows users to change language, view app info, and clear data.
+ * Allows users to change language and theme, view app info, and clear data.
  *
  * @module features/settings/pages/SettingsPage
  */
@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { AccountSection } from '@/features/auth/components/AccountSection';
+import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
 import { TripForm } from '@/features/trips/components/TripForm';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db';
@@ -394,6 +395,7 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement | nu
  * Features:
  * - Account: sign in with Google, sign out
  * - Language selector (French/English)
+ * - Theme selector (light/dark/system)
  * - App version display
  * - Clear data option with confirmation
  * - About section
@@ -428,6 +430,9 @@ function SettingsPageComponent(): ReactElement {
 
         {/* Language Section */}
         <LanguageSelector />
+
+        {/* Theme Section - grouped with Language: both are presentation preferences */}
+        <ThemeSelector />
 
         {/* About Section */}
         <AboutSection />

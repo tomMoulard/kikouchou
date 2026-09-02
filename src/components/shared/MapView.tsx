@@ -235,6 +235,14 @@ function KeyboardNavigation({
 
 /**
  * Component to detect theme and switch tile layers.
+ *
+ * @remarks
+ * Reads the `.dark` class off `<html>` rather than `useTheme()` so the map
+ * keeps working in the tests and stories that render it with no
+ * `ThemeProvider` above it. The class is written by the `ThemeProvider` in
+ * `App.tsx` (and, before the first React commit, by `applyStoredTheme`); the
+ * `MutationObserver` is what makes flipping the theme repaint a map that is
+ * already on screen.
  */
 function ThemeAwareTileLayer({ showAttribution }: { showAttribution: boolean }) {
   const [isDark, setIsDark] = useState(false);
