@@ -13,7 +13,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { clearIndexedDB } from './support/storage';
 import { waitForRoute } from './support/routes';
 
-import { seedTrip } from './support/seed';
+import { seedPerson, seedTransport, seedTrip } from './support/seed';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -143,103 +143,6 @@ async function _createTestTransport(
 }
 
 /**
- * Creates a test person for a trip.
- *
- * @param page - Playwright page object
- * @param tripId - Trip ID
- * @param name - Person name
- */
-async function createTestPerson(page: Page, tripId: string, name: string): Promise<string> {
-  /**
-   * Straight into IndexedDB, the way the other specs seed people.
-   *
-   * This used to `goto('/trips/:id/persons/new')` and fill a form. There is no
-   * such route — `personRoutes` registers only `trips/:tripId/persons`, and
-   * guests are created from a dialog on it — so the navigation landed on the
-   * catch-all 404. Its URL still satisfied the `waitForURL(/\/persons/)` that
-   * followed, so the helper returned happily having created nobody, and the
-   * five tests that depend on it failed later and further away.
-   */
-  return await page.evaluate(
-    async ({ tripId, name }) => {
-      const id = `maps-person-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-
-      return new Promise<string>((resolve, reject) => {
-        const request = indexedDB.open('kikoushou');
-        request.onerror = () => reject(new Error('Failed to open database'));
-        request.onsuccess = () => {
-          const db = request.result;
-          const tx = db.transaction('persons', 'readwrite');
-          tx.objectStore('persons').add({
-            id,
-            tripId,
-            name,
-            color: '#3b82f6',
-          });
-          tx.oncomplete = () => {
-            db.close();
-            resolve(id);
-          };
-          tx.onerror = () => {
-            db.close();
-            reject(new Error('Failed to create person'));
-          };
-        };
-      });
-    },
-    { tripId, name },
-  );
-}
-
-/**
- * Seeds a transport that has coordinates, so the map page renders a map.
- *
- * `TransportMapPage` filters to transports whose `coordinates` are numeric and
- * shows an empty state otherwise — which is what the Map Accessibility tests
- * below used to land on. They asserted against `[role="application"]` on a page
- * that was correctly showing "No locations on the map yet", so there was no map
- * to have ARIA attributes in the first place.
- */
-async function createTestTransportWithCoordinates(
-  page: Page,
-  tripId: string,
-  personId: string,
-): Promise<void> {
-  await page.evaluate(
-    async ({ tripId, personId }) => {
-      await new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open('kikoushou');
-        request.onerror = () => reject(new Error('Failed to open database'));
-        request.onsuccess = () => {
-          const db = request.result;
-          const tx = db.transaction('transports', 'readwrite');
-          tx.objectStore('transports').add({
-            id: `maps-transport-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-            tripId,
-            personId,
-            type: 'arrival',
-            datetime: '2026-07-15T10:00:00.000Z',
-            mode: 'plane',
-            location: 'Paris Charles de Gaulle',
-            coordinates: { lat: 49.0097, lon: 2.5479 },
-            needsPickup: true,
-          });
-          tx.oncomplete = () => {
-            db.close();
-            resolve();
-          };
-          tx.onerror = () => {
-            db.close();
-            reject(new Error('Failed to create transport'));
-          };
-        };
-      });
-    },
-    { tripId, personId },
-  );
-}
-
-/**
  * Checks if a specific cache exists and has entries.
  *
  * @param page - Playwright page object
@@ -287,6 +190,12 @@ async function _hasOsmTilesCached(page: Page): Promise<boolean> {
 // ============================================================================
 // Test Suite: Trip Location Map
 // ============================================================================
+
+/** A fixed window the seeded fixtures sit inside. */
+const SEEDED_TRIP_DATES = { startDate: '2026-07-13', endDate: '2026-07-25' } as const;
+
+/** Charles de Gaulle, so a seeded transport has somewhere to be on the map. */
+const SEEDED_TRANSPORT_COORDINATES = { lat: 49.0097, lon: 2.5479 } as const;
 
 test.describe('Trip Location Map', () => {
   test.beforeEach(async ({ page }) => {
@@ -382,10 +291,13 @@ test.describe('Transport Map View', () => {
     await waitForRoute(page);
 
     // Create a trip
-    tripId = await createTestTrip(page, { name: 'Transport Map Trip' });
-
-    // Create a person
-    await createTestPerson(page, tripId, 'Test Person');
+    // Seeded, not driven through the form. Both because the form is not the
+    // subject here, and because the rows have to land before the trip becomes
+    // current — see `seedPerson`.
+    tripId = (
+      await seedTrip(page, { name: 'Transport Map Trip', ...SEEDED_TRIP_DATES })
+    ).tripId;
+    await seedPerson(page, tripId, 'Test Person');
   });
 
   test('transport list page has map view button', async ({ page }, testInfo) => {
@@ -502,8 +414,11 @@ test.describe('Directions Button', () => {
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    const tripId = await createTestTrip(page, { name: 'Directions Test Trip' });
-    await createTestPerson(page, tripId, 'Traveler');
+    const { tripId } = await seedTrip(page, {
+      name: 'Directions Test Trip',
+      ...SEEDED_TRIP_DATES,
+    });
+    await seedPerson(page, tripId, 'Traveler');
 
     // Navigate to transport map page (where directions button exists)
     await page.goto(`/trips/${tripId}/transports/map`);
@@ -553,9 +468,19 @@ test.describe('Map Accessibility', () => {
       route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
     );
 
-    const tripId = await createTestTrip(page, { name: 'Accessibility Test Trip' });
-    const personId = await createTestPerson(page, tripId, 'Map A11y Person');
-    await createTestTransportWithCoordinates(page, tripId, personId);
+    const { tripId } = await seedTrip(page, {
+      name: 'Accessibility Test Trip',
+      ...SEEDED_TRIP_DATES,
+    });
+    const personId = await seedPerson(page, tripId, 'Map A11y Person');
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'arrival',
+      datetime: '2026-07-15T10:00:00.000Z',
+      location: 'Paris Charles de Gaulle',
+      coordinates: SEEDED_TRANSPORT_COORDINATES,
+    });
 
     await page.goto(`/trips/${tripId}/transports/map`);
     await page.waitForLoadState('load');
@@ -574,9 +499,19 @@ test.describe('Map Accessibility', () => {
       route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
     );
 
-    const tripId = await createTestTrip(page, { name: 'Keyboard Nav Trip' });
-    const personId = await createTestPerson(page, tripId, 'Map Keyboard Person');
-    await createTestTransportWithCoordinates(page, tripId, personId);
+    const { tripId } = await seedTrip(page, {
+      name: 'Keyboard Nav Trip',
+      ...SEEDED_TRIP_DATES,
+    });
+    const personId = await seedPerson(page, tripId, 'Map Keyboard Person');
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'arrival',
+      datetime: '2026-07-15T10:00:00.000Z',
+      location: 'Paris Charles de Gaulle',
+      coordinates: SEEDED_TRANSPORT_COORDINATES,
+    });
 
     await page.goto(`/trips/${tripId}/transports/map`);
     await page.waitForLoadState('load');
@@ -614,7 +549,10 @@ test.describe('Map Error Handling', () => {
     );
 
     // Create a trip
-    const tripId = await createTestTrip(page, { name: 'Error Test Trip' });
+    const { tripId } = await seedTrip(page, {
+      name: 'Error Test Trip',
+      ...SEEDED_TRIP_DATES,
+    });
 
     // Navigate to map page
     await page.goto(`/trips/${tripId}/transports/map`);
