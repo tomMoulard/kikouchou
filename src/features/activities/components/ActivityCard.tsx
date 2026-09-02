@@ -124,18 +124,34 @@ const ActivityCard = memo(function ActivityCard({
     onToggleParticipation?.(activity.id, !isJoined);
   }, [activity.id, isJoined, onToggleParticipation]);
 
+  /**
+   * How many people are coming, said the same way on screen and to a screen
+   * reader. The capped form used to be a bare `3/5` template string, which no
+   * translator could reach and which read as a fraction out of context.
+   */
+  const participantLabel = useMemo(
+    () =>
+      cap === undefined
+        ? t('activities.participantCount', '{{count}} participants', {
+            count: participantCount,
+          })
+        : t('activities.participantCountCapped', '{{count}}/{{max}} participants', {
+            count: participantCount,
+            max: cap,
+          }),
+    [cap, participantCount, t],
+  );
+
   const ariaLabel = useMemo(() => {
     const parts = [
       activity.title,
       t(`activities.categories.${activity.category}`),
       activity.allDay ? t('activities.allDay') : timeRange,
       activity.location,
-      t('activities.participantCount', '{{count}} participants', {
-        count: participantCount,
-      }),
+      participantLabel,
     ];
     return parts.filter(Boolean).join(', ');
-  }, [activity, participantCount, t, timeRange]);
+  }, [activity, participantLabel, t, timeRange]);
 
   return (
     <Card
@@ -223,13 +239,7 @@ const ActivityCard = memo(function ActivityCard({
         {/* Who */}
         <div className="flex flex-wrap items-center gap-1.5">
           <Users className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="text-sm text-muted-foreground">
-            {cap === undefined
-              ? t('activities.participantCount', '{{count}} participants', {
-                  count: participantCount,
-                })
-              : `${participantCount}/${cap}`}
-          </span>
+          <span className="text-sm text-muted-foreground">{participantLabel}</span>
           {isFull && (
             <Badge variant="outline" className="border-amber-500 text-amber-600">
               {t('activities.full')}
