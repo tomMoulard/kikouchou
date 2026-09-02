@@ -166,4 +166,51 @@ describe('InstallPrompt', () => {
     expect(screen.getByRole('region')).toBeInTheDocument();
     getItemSpy.mockRestore();
   });
+
+  /**
+   * The bottom edge.
+   *
+   * jsdom loads no stylesheet, so these assert the *classes* — which is as far
+   * as a unit test can go. The geometry itself is hit-tested in
+   * `e2e/mobile-bottom-edge.spec.ts`, at the FAB's own centre. What these catch
+   * is the two ways the fix silently comes undone in a later edit.
+   */
+  describe('bottom-edge clearance', () => {
+    it('uses the shared bottom-stack padding rather than its own arithmetic', async () => {
+      mockCanInstall.mockReturnValue(true);
+      render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+
+      const region = screen.getByRole('region');
+
+      // `pb-20` cleared the `h-16` nav bar and left the card body sitting on
+      // the `bottom-20 size-14` FAB — 80px to 136px is exactly where a 4rem
+      // bottom padding puts it. `pb-bottom-stack` is the shared rule.
+      expect(region).toHaveClass('pb-bottom-stack');
+      expect(region.className).not.toMatch(/\bpb-20\b/);
+    });
+
+    it('does not set bottom padding twice', async () => {
+      mockCanInstall.mockReturnValue(true);
+      render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+
+      // `p-4` and `pb-bottom-stack` both write `padding-bottom`, and which one
+      // wins is stylesheet order — not something `cn()`'s tailwind-merge can
+      // resolve for a custom utility it does not know about. The gutter is
+      // spelled `px-4 pt-4` so there is only ever one declaration.
+      expect(screen.getByRole('region').className).not.toMatch(/\bp-4\b/);
+    });
+
+    it('keeps its buttons clickable — it is not an informational overlay', async () => {
+      mockCanInstall.mockReturnValue(true);
+      render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+
+      // `OfflineIndicator` gets `pointer-events-none` because it only informs.
+      // This one has three buttons, so the only fix available to it is being
+      // positioned clear of everything else on the bottom edge.
+      expect(screen.getByRole('region').className).not.toMatch(/pointer-events-none/);
+    });
+  });
 });

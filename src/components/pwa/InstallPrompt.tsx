@@ -247,9 +247,17 @@ export const InstallPrompt = memo(function InstallPrompt({
   return (
     <div
       className={cn(
-        'fixed bottom-0 inset-x-0 z-50 p-4',
-        // Account for mobile navigation bar
-        'pb-20 md:pb-4',
+        // `px-4 pt-4` rather than `p-4`: the bottom padding is not a gutter, it
+        // is the clearance below, and a `p-4` shorthand and a `pb-*` utility
+        // setting the same property leaves the winner to stylesheet order.
+        'fixed bottom-0 inset-x-0 z-50 px-4 pt-4',
+        // This card has an Install button, a "Not now" button and a close
+        // button, so it cannot be waved through with `pointer-events-none` the
+        // way `OfflineIndicator` is — it has to be positioned clear. `pb-20`
+        // cleared the nav bar and left the card body sitting exactly on the
+        // `bottom-20 size-14` FAB, which is the third time that bug has shipped.
+        // `pb-bottom-stack` is the shared rule; see `src/index.css`.
+        'pb-bottom-stack',
         // Animation classes
         'transition-transform duration-300 ease-out',
         isVisible ? 'translate-y-0' : 'translate-y-full',
