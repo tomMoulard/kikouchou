@@ -42,9 +42,10 @@ export type { PersonDialogProps } from './components/PersonDialog';
 export {
   buildGuestIdsByTripDateMap,
   deriveGuestStayDateBounds,
-  isGuestPresentOnDate,
-  listGuestsPresentOnDate,
+  isGuestOnSiteOnDate,
+  listGuestsOnSiteOnDate,
 } from './utils/guest-presence';
+export type { GuestPresenceQuery } from './utils/guest-presence';
 
 // ============================================================================
 // Route Configuration

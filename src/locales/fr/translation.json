@@ -40,7 +40,7 @@
     "tripSections": "Navigation du voyage",
     "settingsNavigation": "Navigation des paramètres",
     "guestsOfTheDay": "Invités ce soir",
-    "guestsOfTheDayHint": "Présents cette nuit selon les dates de séjour et les trajets.",
+    "guestsOfTheDayHint": "Présents cette nuit selon les dates de séjour, les trajets ou une chambre.",
     "guestsOfTheDayEmpty": "Aucun invité cette nuit",
     "guestsOfTheDayOutsideTrip": "Aujourd’hui est en dehors des dates du voyage",
     "guestsOfTheDayLoading": "Chargement des invités…",
