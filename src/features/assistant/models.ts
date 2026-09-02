@@ -63,7 +63,21 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
   {
     id: 'gemma-3-1b',
     modelId: 'onnx-community/gemma-3-1b-it-ONNX',
-    dtype: 'q4',
+    // q4f16 rather than q4, and not for the download size.
+    //
+    // This export has no `num_logits_to_keep` graph input — unlike the two
+    // Gemma 4 decoders below — so Transformers.js cannot ask it for the last
+    // token's logits only (see `decoder_forward` in modeling_utils.js). Prefill
+    // therefore materialises logits for *every* prompt position and hands the
+    // whole `prompt_tokens × 262144` tensor back to the CPU in one buffer.
+    // Under q4 those are fp32: 1 MiB per prompt token, so a 2401-token prompt
+    // asked WebGPU for a 2.34 GiB mappable buffer and got "Failed to allocate
+    // memory for buffer mapping", killing the session. q4f16 halves it.
+    //
+    // Halving is not a licence to grow the prompt again: this preset is still
+    // the one that runs out of GPU first, which is why the system prompt has a
+    // character budget (action-schema.test.ts) and the history has a cap.
+    dtype: 'q4f16',
     device: 'webgpu',
     nameKey: 'assistant.models.gemma-3-1b.name',
     descriptionKey: 'assistant.models.gemma-3-1b.description',
