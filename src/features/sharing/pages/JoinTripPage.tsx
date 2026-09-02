@@ -51,7 +51,7 @@ const EMPTY_TRIP_GRACE_MS = 15_000;
 /** One centred card, so every phase of the flow looks like the same screen. */
 function JoinShell({ children }: { readonly children: ReactElement }): ReactElement {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex min-h-svh items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardContent className="pt-6">{children}</CardContent>
       </Card>

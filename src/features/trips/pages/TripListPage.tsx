@@ -305,7 +305,16 @@ const TripListPage = memo(function TripListPage() {
 
   return (
     <>
-      <div className="flex flex-col">
+      {/*
+        `pb-second-fab` on the wrapper, not on the grid.
+
+        `<main>`'s `pb-bottom-stack` already clears one FAB; this page stacks a
+        second (QR import) on top of it, and this is the 4rem difference. It
+        goes on the wrapper because `RemoteTripsSection` renders *after* the
+        grid — so the grid's old `pb-52` protected the trip cards and left the
+        remote-trips list, the actual last thing on the page, under both FABs.
+      */}
+      <div className="flex flex-col pb-second-fab">
         <PageHeader title={t('trips.title')} action={headerAction} />
 
         <ViewSwitcher
@@ -320,8 +329,7 @@ const TripListPage = memo(function TripListPage() {
         />
 
         {currentView === 'map' ? (
-          /* Extra bottom padding for stacked FABs on mobile */
-          <div className="pb-52 sm:pb-4">
+          <div>
             <TripsLocationMap trips={trips} height={MAP_VIEW_HEIGHT} asCard={false} />
           </div>
         ) : (
@@ -330,8 +338,7 @@ const TripListPage = memo(function TripListPage() {
             className={cn(
               'grid gap-4',
               'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-              // Extra bottom padding for stacked FABs on mobile
-              'pb-52 sm:pb-4',
+              // Bottom clearance lives on the wrapper above and on `<main>`.
             )}
             role="list"
             aria-label={t('trips.title')}
@@ -359,7 +366,7 @@ const TripListPage = memo(function TripListPage() {
           size="lg"
           variant="secondary"
           className={cn(
-            'fixed bottom-36 right-4 z-10',
+            'fixed bottom-fab-safe right-4 z-10',
             'size-14 rounded-full shadow-lg',
             'sm:hidden',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -372,7 +379,7 @@ const TripListPage = memo(function TripListPage() {
           onClick={handleCreateClick}
           size="lg"
           className={cn(
-            'fixed bottom-20 right-4 z-10',
+            'fixed bottom-nav-safe right-4 z-10',
             'size-14 rounded-full shadow-lg',
             'sm:hidden',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',

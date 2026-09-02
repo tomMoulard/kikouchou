@@ -91,7 +91,7 @@ function ErrorPage(): ReactElement {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-svh bg-background flex items-center justify-center p-4">
       <Card className="max-w-md w-full">
         <CardContent className="pt-6">
           <div className="flex flex-col items-center text-center">

@@ -640,7 +640,8 @@ const TransportList = memo(function TransportList({
     <div
       role="list"
       aria-label={listLabel}
-      className="space-y-6 pb-20 sm:pb-4"
+      // Bottom clearance is `<main>`'s job (`pb-bottom-stack`), not this list's.
+      className="space-y-6"
     >
       {/* Upcoming transports */}
       {upcomingDateGroups.map((group) => (
@@ -1040,7 +1041,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         onClick={handleAddTransport}
         size="lg"
         className={cn(
-          'fixed bottom-20 right-4 z-10',
+          'fixed bottom-nav-safe right-4 z-10',
           'size-14 rounded-full shadow-lg',
           'sm:hidden',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
