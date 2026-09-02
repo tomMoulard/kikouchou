@@ -13,10 +13,12 @@
  * collection rather than just losing events.
  *
  * Events are tied to the Supabase account once somebody signs in:
- * `AuthContext` calls `identify()` with `user.id` so a person's events line up
- * across their devices, and `reset()` on sign-out so the next person on a shared
- * browser does not inherit that identity. Before a sign-in, and in a build with
- * no backend, captures stay anonymous.
+ * `AuthContext` calls `identify()` with `user.id` and the account's email and
+ * display name, so a person's events line up across their devices *and* the
+ * PostHog person can be matched to the `auth.users` row it belongs to. `reset()`
+ * fires on sign-out so the next person on a shared browser does not inherit that
+ * identity. Before a sign-in, and in a build with no backend, captures stay
+ * anonymous.
  *
  * That is a change from how this started. It said captures were anonymous "by
  * design" because "the app has no accounts", which stopped being true when
@@ -25,20 +27,146 @@
  * Trip guests remain domain records rather than identities — nothing about a
  * guest is ever passed to `identify()`. Only the signed-in account is.
  *
+ * **Two guards below exist because development polluted the project.** PostHog
+ * held 20 persons against three real Supabase accounts; 19 of them were
+ * anonymous ids minted on `localhost:3000`, `localhost:5173` and the e2e
+ * servers, and not one came from production. See the constants for the
+ * mechanism behind each guard.
+ *
  * @module lib/posthog
  */
 
 import posthog from 'posthog-js';
 
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Exact hostnames that mean "this is somebody's machine, not the deployed app".
+ */
+const DEVELOPMENT_HOSTNAMES: readonly string[] = ['localhost', '::1', '[::1]', '0.0.0.0'];
+
+/**
+ * Hostname shapes that mean the same thing.
+ *
+ * Loopback is only half of it. `vite --host` binds to the LAN so a phone can
+ * load the app, and that phone sees `192.168.1.20`, not `localhost` — which is
+ * exactly the session where somebody is most likely to be poking at the app by
+ * hand. `.localhost` resolves to loopback by RFC 6761 and `.local` is mDNS, so
+ * both are a machine on a desk rather than a deployment.
+ *
+ * Nothing here can match the deployment host, which is the property that
+ * matters: a false positive costs a day of analytics, a false negative costs
+ * the project another nineteen people.
+ */
+const DEVELOPMENT_HOSTNAME_PATTERNS: readonly RegExp[] = [
+  /\.localhost$/,
+  /\.local$/,
+  /^127\./, // loopback, all of 127.0.0.0/8
+  /^10\./, // RFC 1918 private
+  /^192\.168\./, // RFC 1918 private
+  /^172\.(1[6-9]|2\d|3[01])\./, // RFC 1918 private
+  /^169\.254\./, // link-local, e.g. an ad-hoc connection
+];
+
+/**
+ * Whether this document is being served from a developer's own machine.
+ *
+ * Reads `window` defensively: this module is evaluated at import time and must
+ * never throw, and it is imported by unit tests whose environment is not
+ * guaranteed to have a DOM.
+ */
+function isDevelopmentHost(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  const { hostname } = window.location;
+  return (
+    DEVELOPMENT_HOSTNAMES.includes(hostname) ||
+    DEVELOPMENT_HOSTNAME_PATTERNS.some((pattern) => pattern.test(hostname))
+  );
+}
+
+// ============================================================================
+// Initialization
+// ============================================================================
+
 const posthogKey = import.meta.env.VITE_POSTHOG_KEY;
 const posthogHost = import.meta.env.VITE_POSTHOG_HOST;
 
+/**
+ * The deliberate opt-in for capturing from a dev server.
+ *
+ * Off by default. Set `VITE_POSTHOG_ALLOW_LOCALHOST=true` in `.env.local` for
+ * the session where you actually need to watch events arrive, and unset it
+ * again — every load with it on is a real person row in the real project.
+ */
+const allowLocalhost = import.meta.env.VITE_POSTHOG_ALLOW_LOCALHOST === 'true';
+
+/**
+ * The super properties this module owns.
+ *
+ * Named rather than inlined at the `register()` call because `reset()` wipes
+ * persisted properties and they have to be put back — see
+ * {@link resetAnalyticsIdentity}. One definition, so the two cannot drift.
+ */
+const BASE_SUPER_PROPERTIES = {
+  app_version: import.meta.env.VITE_APP_VERSION ?? 'dev',
+} as const;
+
 let posthogClient: typeof posthog | undefined;
 
-if (posthogKey && posthogHost) {
+if (!posthogKey || !posthogHost) {
+  if (import.meta.env.DEV && !import.meta.env.VITEST) {
+    console.warn(
+      `PostHog is disabled: ${posthogKey ? 'VITE_POSTHOG_HOST' : 'VITE_POSTHOG_KEY'} is not set. ` +
+        'Analytics and error tracking will be silently skipped. Set both in .env to enable them.',
+    );
+  }
+} else if (isDevelopmentHost() && !allowLocalhost) {
+  // Defence in depth, and the reason the project filled up with phantom people.
+  //
+  // A key reaches a dev server far too easily: Vite loads `.env.local` for the
+  // dev server, for `vite preview`, for Vitest and for Playwright's own
+  // servers, and a `COPY . .` in the Dockerfile used to bake it into the image
+  // nginx serves on :3000. Blanking the key in each of those places is
+  // necessary but not sufficient — every new entry point has to remember. This
+  // check does not have to remember: a build served from loopback never
+  // initializes at all, so no capture, no person, no `$pageview`.
+  console.info(
+    '[posthog] Disabled on %s. Analytics from a dev server would create real ' +
+      'people in the real project. Set VITE_POSTHOG_ALLOW_LOCALHOST=true to override.',
+    window.location.hostname,
+  );
+} else {
   posthog.init(posthogKey, {
     api_host: posthogHost,
     defaults: '2026-05-30',
+
+    /**
+     * Anonymous visitors must not become Person rows.
+     *
+     * This is posthog-js's own default, restated because the app depends on it:
+     * most of Kikoushou works signed out, so a persisted person per visitor
+     * would swamp the handful of real accounts. Only `identify()` — from
+     * `AuthContext`, with a Supabase user id — creates one.
+     */
+    person_profiles: 'identified_only',
+
+    /**
+     * Disabled, and this is the single line that caused the 19 phantom people.
+     *
+     * `defaults: '2026-05-30'` turns this on as `/^(localhost|127\.0\.0\.1)$/`.
+     * On a match posthog-js calls `setInternalOrTestUser()`, which goes through
+     * `setPersonProperties()` — and that is one of the calls that force
+     * `$process_person_profile = true`, overriding `identified_only` above. So
+     * every dev-server load and every fresh Playwright browser context minted a
+     * persisted anonymous Person. `null` is the documented way to switch it off
+     * while keeping the rest of the dated defaults.
+     */
+    internal_or_test_user_hostname: null,
+
     capture_exceptions: {
       capture_unhandled_errors: true,
       capture_unhandled_rejections: true,
@@ -50,14 +178,35 @@ if (posthogKey && posthogHost) {
   // Attached to every event from here on, so any question can be sliced by
   // release without each call site having to remember to pass it. Set at init
   // rather than per capture: it cannot change while the page is loaded.
-  posthog.register({ app_version: import.meta.env.VITE_APP_VERSION ?? 'dev' });
+  posthog.register(BASE_SUPER_PROPERTIES);
 
   posthogClient = posthog;
-} else if (import.meta.env.DEV && !import.meta.env.VITEST) {
-  console.warn(
-    `PostHog is disabled: ${posthogKey ? 'VITE_POSTHOG_HOST' : 'VITE_POSTHOG_KEY'} is not set. ` +
-      'Analytics and error tracking will be silently skipped. Set both in .env to enable them.',
-  );
+}
+
+// ============================================================================
+// Identity
+// ============================================================================
+
+/**
+ * Drops the current identity, then puts back what init had registered.
+ *
+ * `reset()` alone is not enough. It calls `persistence.clear()` internally,
+ * which wipes *every* persisted property — super properties included — so a
+ * bare `reset()` leaves the rest of that tab's session reporting no
+ * `app_version` at all. Every event after a sign-out would fall out of any
+ * breakdown by release, which is the one super property the whole project is
+ * sliced by.
+ *
+ * Whoever registered a super property owns restoring it: this restores what
+ * this module set, and `AuthContext` restores `signed_in` after calling here.
+ * Safe with no client — analytics is simply off.
+ */
+export function resetAnalyticsIdentity(): void {
+  if (!posthogClient) {
+    return;
+  }
+  posthogClient.reset();
+  posthogClient.register(BASE_SUPER_PROPERTIES);
 }
 
 export default posthogClient;

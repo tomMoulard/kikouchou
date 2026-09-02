@@ -26,7 +26,7 @@ export default defineConfig({
     setupFiles: ['./src/test/setup.ts'],
 
     /**
-     * Blank the Supabase configuration for the whole suite.
+     * Blank the Supabase and PostHog configuration for the whole suite.
      *
      * Vite loads `.env.local` in tests too, so without this the developer's real
      * project URL and key reach `import.meta.env`. `isSupabaseConfigured()` then
@@ -36,6 +36,15 @@ export default defineConfig({
      * That was the source of an intermittent failure in the assistant prompt
      * tests.
      *
+     * PostHog is blanked for the same reason and a worse symptom: `lib/posthog`
+     * is imported at module scope by anything that mounts the app, so a key in
+     * `.env.local` had every test run call `posthog.init()` against the real
+     * project. jsdom reports `window.location.hostname` as `localhost`, which
+     * posthog-js's dated defaults treat as an internal user — and that path
+     * forces a person profile, so each run minted anonymous people in a project
+     * that has three real accounts. `lib/posthog` now refuses to init on
+     * localhost as well; both belong here.
+     *
      * Local-only is also the right default to test: it is the mode a first
      * launch runs in. The few tests that need a configured backend stub the env
      * themselves with `vi.stubEnv`.
@@ -43,6 +52,8 @@ export default defineConfig({
     env: {
       VITE_SUPABASE_URL: '',
       VITE_SUPABASE_PUBLISHABLE_KEY: '',
+      VITE_POSTHOG_KEY: '',
+      VITE_POSTHOG_HOST: '',
     },
 
     // Test file patterns

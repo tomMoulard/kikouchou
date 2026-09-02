@@ -23,6 +23,23 @@ interface ImportMetaEnv {
    */
   readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;
 
+  /**
+   * PostHog project token (`phc_…`). Absent means analytics is off entirely —
+   * `lib/posthog` default-exports `undefined` and every capture is a no-op.
+   */
+  readonly VITE_POSTHOG_KEY?: string;
+
+  /** PostHog ingestion host, e.g. `https://eu.i.posthog.com`. */
+  readonly VITE_POSTHOG_HOST?: string;
+
+  /**
+   * Opt in to PostHog on a dev server. `'true'` and nothing else.
+   *
+   * Off by default because a key on `localhost` created 19 anonymous people in
+   * a project with three real accounts. See `lib/posthog` for the mechanism.
+   */
+  readonly VITE_POSTHOG_ALLOW_LOCALHOST?: string;
+
   /** Version string shown in Settings; set by CI from the ref and SHA. */
   readonly VITE_APP_VERSION?: string;
 }
