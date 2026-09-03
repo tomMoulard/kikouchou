@@ -5,7 +5,10 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@/test/utils';
-import type { Activity, Person, Trip } from '@/types';
+import { toLocalISODateString } from '@/lib/db/utils';
+import type { Activity, ISODateString, ISODateTimeString, Person, Trip } from '@/types';
+
+import { isActivityPast } from '../../utils/activity-utils';
 
 // ============================================================================
 // Fixtures
@@ -16,12 +19,34 @@ const mockSetCurrentTrip = vi.fn().mockResolvedValue(undefined);
 const mockDeleteActivity = vi.fn().mockResolvedValue(undefined);
 const mockSetParticipation = vi.fn().mockResolvedValue(undefined);
 
+/**
+ * Every date below is derived from the real "today" rather than pinned to a
+ * calendar date: a stale fixture once left rows rendered but hidden, and the
+ * suite stayed green (see AGENTS.md).
+ */
+const NOW = new Date();
+
+/** Local calendar day, `offsetDays` away from today. */
+function dayKey(offsetDays: number): ISODateString {
+  const date = new Date(NOW);
+  date.setDate(date.getDate() + offsetDays);
+  return toLocalISODateString(date) as ISODateString;
+}
+
+/** A local wall-clock instant, `offsetDays` away from today. */
+function instant(offsetDays: number, hour: number): ISODateTimeString {
+  const date = new Date(NOW);
+  date.setDate(date.getDate() + offsetDays);
+  date.setHours(hour, 0, 0, 0);
+  return date.toISOString() as ISODateTimeString;
+}
+
 const mockTrip: Trip = {
   id: 'trip-1' as Trip['id'],
   shareId: 'share-1' as Trip['shareId'],
   name: 'Test Trip',
-  startDate: '2026-07-01' as Trip['startDate'],
-  endDate: '2026-07-10' as Trip['endDate'],
+  startDate: dayKey(-2) as Trip['startDate'],
+  endDate: dayKey(7) as Trip['endDate'],
   createdAt: Date.now(),
   updatedAt: Date.now(),
 };
@@ -33,29 +58,26 @@ const mockPerson: Person = {
   color: '#3b82f6' as Person['color'],
 };
 
-/**
- * Inside the trip window and after the mocked "today" (2026-07-02), so it lands
- * on the timeline and counts as upcoming.
- */
+/** Inside the trip window and still ahead, so it counts as upcoming. */
 const upcomingActivity: Activity = {
   id: 'activity-1' as Activity['id'],
   tripId: 'trip-1' as Activity['tripId'],
   title: 'Plant fair',
   category: 'horticulture',
-  startDatetime: '2026-07-03T09:00:00.000Z',
-  endDatetime: '2026-07-03T12:00:00.000Z',
+  startDatetime: instant(1, 9),
+  endDatetime: instant(1, 12),
   allDay: false,
   location: 'Saint-Jean',
   participantIds: [],
 };
 
-/** Inside the trip window but before the mocked "today". */
+/** Inside the trip window but already over. */
 const pastActivity: Activity = {
   id: 'activity-2' as Activity['id'],
   tripId: 'trip-1' as Activity['tripId'],
   title: 'Old picnic',
   category: 'meal',
-  startDatetime: '2026-07-01T12:00:00.000Z',
+  startDatetime: instant(-1, 12),
   allDay: false,
   participantIds: [],
 };
@@ -93,7 +115,9 @@ vi.mock('@/hooks', () => ({
 }));
 
 vi.mock('@/hooks/useToday', () => ({
-  useToday: () => ({ today: new Date('2026-07-02T12:00:00.000Z') }),
+  useToday: () => ({
+    today: new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()),
+  }),
 }));
 
 vi.mock('@/features/activities/components/ActivityDialog', () => ({
@@ -130,9 +154,14 @@ function setMocks(activities: readonly Activity[] = [upcomingActivity]) {
     getPersonById: vi.fn((id: string) => (id === mockPerson.id ? mockPerson : undefined)),
   } as unknown as ReturnType<typeof usePersonContext>);
 
+  // The page reads the split rather than deriving it, so the mock has to do
+  // exactly what ActivityProvider does — same helper, same live instant.
+  const now = new Date();
+
   vi.mocked(useActivityContext).mockReturnValue({
     activities,
-    upcomingActivities: activities,
+    upcomingActivities: activities.filter((activity) => !isActivityPast(activity, now)),
+    pastActivities: activities.filter((activity) => isActivityPast(activity, now)),
     isLoading: false,
     error: null,
     createActivity: vi.fn(),
@@ -206,11 +235,33 @@ describe('ActivityListPage', () => {
     expect(screen.getByText('Old picnic')).toBeInTheDocument();
   });
 
-  it('shows the empty state when the agenda is empty', () => {
-    setMocks([]);
+  it('translates the past-activities count instead of appending a raw "(n)"', () => {
+    setMocks([upcomingActivity, pastActivity]);
     renderPage('/trips/trip-1/activities?view=list');
 
-    expect(screen.getByText('activities.empty')).toBeInTheDocument();
+    const toggle = screen.getByRole('button', { name: /activities.pastActivities/ });
+
+    expect(toggle).toHaveAccessibleName('activities.pastActivitiesWithCount');
+    expect(toggle.textContent).not.toMatch(/\(\d+\)/);
+  });
+
+  it('offers the same "new activity" action from the empty state in both views', () => {
+    setMocks([]);
+
+    const { unmount } = renderPage('/trips/trip-1/activities?view=list');
+    const listEmptyState = screen.getByRole('status');
+    expect(within(listEmptyState).getByText('activities.empty')).toBeInTheDocument();
+    expect(
+      within(listEmptyState).getByRole('button', { name: 'activities.new' }),
+    ).toBeInTheDocument();
+    unmount();
+
+    renderPage('/trips/trip-1/activities?view=timeline');
+    const timelineEmptyState = screen.getByRole('status');
+    expect(within(timelineEmptyState).getByText('activities.empty')).toBeInTheDocument();
+    expect(
+      within(timelineEmptyState).getByRole('button', { name: 'activities.new' }),
+    ).toBeInTheDocument();
   });
 
   it('opens the create dialog from the header action', async () => {
@@ -284,6 +335,7 @@ describe('ActivityListPage', () => {
     vi.mocked(useActivityContext).mockReturnValue({
       activities: [],
       upcomingActivities: [],
+      pastActivities: [],
       isLoading: false,
       error: new Error('Agenda load failed'),
       createActivity: vi.fn(),

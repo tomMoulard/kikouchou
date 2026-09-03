@@ -372,6 +372,8 @@
     "participantsDescription": "Pick who is coming. Guests can also sign themselves up.",
     "participantCount_one": "{{count}} participant",
     "participantCount_other": "{{count}} participants",
+    "participantCountCapped_one": "{{count}}/{{max}} participant",
+    "participantCountCapped_other": "{{count}}/{{max}} participants",
     "noParticipants": "Nobody has signed up yet",
     "maxParticipants": "Seats",
     "maxParticipantsPlaceholder": "Unlimited",
@@ -384,7 +386,8 @@
     "notesPlaceholder": "Price, booking, what to bring...",
     "empty": "No activity planned yet",
     "emptyDescription": "Add outings, visits and shared meals so everyone knows what's on and can sign up",
-    "pastActivities": "Past activities",
+    "pastActivitiesWithCount_one": "Past activity ({{count}})",
+    "pastActivitiesWithCount_other": "Past activities ({{count}})",
     "createSuccess": "Activity created successfully",
     "updateSuccess": "Activity updated successfully",
     "deleteSuccess": "Activity deleted successfully",
@@ -403,7 +406,9 @@
       "hiddenCount_one": "{{count}} activity falls outside the trip dates and is not shown.",
       "hiddenCount_other": "{{count}} activities fall outside the trip dates and are not shown.",
       "allOutsideTrip_one": "The only activity recorded falls outside the trip dates.",
-      "allOutsideTrip_other": "All {{count}} activities fall outside the trip dates."
+      "allOutsideTrip_other": "All {{count}} activities fall outside the trip dates.",
+      "noneInRange": "Nothing on the trip dates",
+      "showAsList": "Show as list"
     },
     "errors": {
       "endBeforeStart": "The end must be after the start",

@@ -91,10 +91,14 @@ describe('activity-utils', () => {
       expect(isActivityPast(activity, new Date(2024, 6, 16, 11, 0))).toBe(false);
     });
 
-    it('uses the start when the activity has no end', () => {
+    it('keeps an open-ended activity current until the end of its day', () => {
       const activity = makeActivity({ endDatetime: undefined });
 
-      expect(isActivityPast(activity, new Date(2024, 6, 16, 10, 0))).toBe(true);
+      // An activity with no end time is open-ended, not instantaneous: a 09:00
+      // apéro must not fold itself into "past activities" at 09:01.
+      expect(isActivityPast(activity, new Date(2024, 6, 16, 10, 0))).toBe(false);
+      expect(isActivityPast(activity, new Date(2024, 6, 16, 23, 59))).toBe(false);
+      expect(isActivityPast(activity, new Date(2024, 6, 17, 0, 1))).toBe(true);
     });
 
     it('is never past when the datetime is unparseable', () => {

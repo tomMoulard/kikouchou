@@ -18,6 +18,8 @@ import {
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
+import { isActivityPast } from '@/features/activities/utils/activity-utils';
+
 import { useTripContext } from '@/contexts/TripContext';
 import { areArraysEqual, wrapAndSetError } from '@/contexts/utils';
 import { db } from '@/lib/db/database';
@@ -52,8 +54,19 @@ export interface ActivityContextValue {
   /**
    * Activities that have not ended yet, sorted by start datetime.
    * An activity counts as upcoming until its end (or its start when open-ended).
+   *
+   * This and `pastActivities` partition `activities`: every activity appears in
+   * exactly one of them. Consumers must never re-derive the split themselves —
+   * the agenda page and this context used to disagree for the rest of the day
+   * about an activity that ended this morning.
    */
   readonly upcomingActivities: readonly Activity[];
+
+  /**
+   * Activities that are already over, sorted by start datetime.
+   * The exact complement of `upcomingActivities`.
+   */
+  readonly pastActivities: readonly Activity[];
 
   /**
    * True while activity data is being loaded from IndexedDB.
@@ -196,13 +209,6 @@ function buildActivitiesByParticipantMap(
   return byParticipant;
 }
 
-/**
- * The instant an activity is over — its end when set, its start otherwise.
- */
-function getActivityEndInstant(activity: Activity): string {
-  return activity.endDatetime ?? activity.startDatetime;
-}
-
 // ============================================================================
 // Context Creation
 // ============================================================================
@@ -286,15 +292,15 @@ export function ActivityProvider({
 
     [activities, setActivities] = useState<Activity[]>([]),
 
-    // Refreshed every minute so `upcomingActivities` stays accurate
-    [currentTimestamp, setCurrentTimestamp] = useState<string>(() =>
-      new Date().toISOString(),
-    );
+    // Refreshed every minute so the past/upcoming split stays accurate while
+    // the page is left open. Kept as epoch millis so it is a stable primitive
+    // for memo dependencies and compares as a real instant, not as text.
+    [nowMs, setNowMs] = useState<number>(() => Date.now());
 
   useEffect(() => {
     const REFRESH_INTERVAL_MS = 60_000; // 1 minute
     const intervalId = setInterval(() => {
-      setCurrentTimestamp(new Date().toISOString());
+      setNowMs(Date.now());
     }, REFRESH_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
@@ -318,13 +324,31 @@ export function ActivityProvider({
     }
   }, [rawActivities]);
 
-  const upcomingActivities = useMemo(
-    () =>
-      activities.filter(
-        (activity) => getActivityEndInstant(activity) >= currentTimestamp,
-      ),
-    [activities, currentTimestamp],
-  ),
+  // One character per activity: "1" once it is over. Recomputed on every tick,
+  // but it collapses to the same string until an activity actually crosses its
+  // end, which keeps the split arrays — and the whole context value — stable
+  // between ticks instead of re-rendering every consumer once a minute.
+  const pastSignature = useMemo(() => {
+    const now = new Date(nowMs);
+    return activities
+      .map((activity) => (isActivityPast(activity, now) ? '1' : '0'))
+      .join('');
+  }, [activities, nowMs]),
+
+    { upcomingActivities, pastActivities } = useMemo(() => {
+      const upcoming: Activity[] = [],
+        past: Activity[] = [];
+
+      activities.forEach((activity, index) => {
+        if (pastSignature[index] === '1') {
+          past.push(activity);
+        } else {
+          upcoming.push(activity);
+        }
+      });
+
+      return { upcomingActivities: upcoming, pastActivities: past };
+    }, [activities, pastSignature]),
 
     createActivity = useCallback(
       async (data: ActivityFormData): Promise<Activity> => {
@@ -412,6 +436,7 @@ export function ActivityProvider({
       () => ({
         activities,
         upcomingActivities,
+        pastActivities,
         isLoading,
         error,
         createActivity,
@@ -423,6 +448,7 @@ export function ActivityProvider({
       [
         activities,
         upcomingActivities,
+        pastActivities,
         isLoading,
         error,
         createActivity,
