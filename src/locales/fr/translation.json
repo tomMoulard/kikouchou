@@ -816,6 +816,13 @@
       "fr": "Français",
       "en": "English"
     },
+    "theme": "Thème",
+    "themeDescription": "Choisissez l'apparence de l'application",
+    "themes": {
+      "light": "Clair",
+      "dark": "Sombre",
+      "system": "Système"
+    },
     "about": "À propos",
     "aboutDescription": "Informations sur l'application",
     "version": "Version",

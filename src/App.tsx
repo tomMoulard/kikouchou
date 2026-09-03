@@ -6,12 +6,40 @@
  */
 
 import { type ReactElement } from 'react';
+import { ThemeProvider } from 'next-themes';
 import { RouterProvider } from 'react-router-dom';
 
 import { AppProviders } from '@/contexts/AppProviders';
 import { Toaster } from '@/components/ui/sonner';
 import { InstallPrompt, OfflineIndicator } from '@/components/pwa';
+import { applyStoredTheme, THEME_STORAGE_KEY } from '@/lib/theme';
 import { router } from '@/router';
+
+// ============================================================================
+// Pre-paint theme
+// ============================================================================
+
+/*
+  Runs at module evaluation, which is the earliest point this app can reach
+  without touching `index.html`.
+
+  `ThemeProvider` below applies the same class, but only once React commits —
+  and `main.tsx` deliberately delays that commit behind `await i18nReady` and a
+  database open that is raced against a 3s timeout. A dark-mode user would
+  stare at a white page for all of it. Calling this here cuts the window down
+  to the entry chunk's own download and parse.
+
+  It does NOT eliminate the window: `index.html` loads `main.tsx` as a deferred
+  module, so the browser may paint the light `:root` background before any of
+  our code runs. Closing that last gap needs a small blocking `<script>` in
+  `<head>` — which is exactly what next-themes emits during SSR and cannot here.
+  That file belongs to another unit; see the PR body.
+
+  The provider and this call cannot disagree: both read `THEME_STORAGE_KEY`,
+  and `applyStoredTheme` normalises the stored value so next-themes only ever
+  sees one it understands.
+*/
+applyStoredTheme();
 
 // ============================================================================
 // Component
@@ -21,6 +49,7 @@ import { router } from '@/router';
  * Main application component.
  *
  * Provides:
+ * - ThemeProvider: light / dark / system theme, written as a class on `<html>`
  * - AppProviders: Trip, Room, Person, Assignment, Transport contexts
  * - RouterProvider: React Router with configured routes
  * - Toaster: Toast notifications via Sonner
@@ -43,7 +72,25 @@ import { router } from '@/router';
  */
 function App(): ReactElement {
   return (
-    <>
+    /*
+      `attribute="class"` is not optional: `index.css` declares the dark
+      variant as `@custom-variant dark (&:is(.dark *))`, so every `dark:`
+      utility and the whole `.dark` token block need that class on an ancestor.
+      A media-query theme would leave them all inert, which is what the app
+      shipped with until this provider was mounted.
+
+      Outside `AppProviders` for the same reason the three elements below are:
+      it must not be remounted when `YjsTripSync` swaps the element at its
+      position on the no-trip -> trip transition. It has to be outside and
+      above, though, rather than a sibling — `Toaster` reads `useTheme`.
+    */
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      storageKey={THEME_STORAGE_KEY}
+      enableSystem
+      disableTransitionOnChange
+    >
       <AppProviders>
         <RouterProvider router={router} />
       </AppProviders>
@@ -84,7 +131,7 @@ function App(): ReactElement {
       />
       <InstallPrompt />
       <OfflineIndicator />
-    </>
+    </ThemeProvider>
   );
 }
 
