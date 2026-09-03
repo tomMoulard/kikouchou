@@ -39,7 +39,7 @@ The repo already contains **two** independent sharing mechanisms.
 
 - **Dexie is the read model.** `useLiveQuery` throughout the app, `DB_VERSION = 6`. Untouched by this plan.
 - **Yjs is already the merge engine.** `yjsUpdates` persists binary updates; the doc rebuilds after reload with no server. This is exactly the primitive that makes offline-first sync possible — the migration keeps it and swaps only the *transport and persistence*.
-- **Identity selection already exists.** `/share/:shareId/identity` (`IdentityStepPage`) plus `guest-identity.ts` (`localStorage` `kikoushou_guest_<shareId>` → `{personId, tripId}`). The new flow reuses this UI and makes the claim server-authoritative.
+- **Identity selection already exists.** `/share/:shareId/identity` (`IdentityStepPage`) plus `guest-identity.ts` (`localStorage` `kikouchou_guest_<shareId>` → `{personId, tripId}`). The new flow reuses this UI and makes the claim server-authoritative.
 - **The untrusted-input invariants in `AGENTS.md`** (never use a remote id as a write key, never adopt a remote unique-index value, never read `window.location` in `lib/`, bound every remote field). These were learned from real bugs and apply verbatim to a server peer.
 
 ### The blocking defect: the CRDT model corrupts data on concurrent edits
@@ -149,7 +149,7 @@ Offline behaviour is inherent rather than bolted on: local edits go to `yjsUpdat
 
 Cloudflare Durable Objects is technically the most elegant Yjs home (one DO per trip = the authoritative doc with WebSocket hibernation), but it needs a separate auth vendor and more custom code. Worth revisiting only if latency becomes a real complaint.
 
-Self-hosting on the existing `kikoushou.cyprin.eu` VPS is the cheapest in cash, since the box already runs traefik and the relay. It is not recommended: you would write your own OAuth and operate a stateful service with backups, to save nothing.
+Self-hosting on the existing `kikouchou.cyprin.eu` VPS is the cheapest in cash, since the box already runs traefik and the relay. It is not recommended: you would write your own OAuth and operate a stateful service with backups, to save nothing.
 
 ### Free-tier headroom
 
@@ -347,7 +347,7 @@ Ordering matters: Phase 1 is a prerequisite, not a nice-to-have. Landing the bac
 - Confirm Supabase; confirm plaintext vs E2E (§3); create the project.
 - **Google only, decided.** Email signup is off in `config.toml` (`[auth.email] enable_signup = false`) so there is exactly one authentication path rather than a second one nobody tested. Magic link is deferred, not rejected: turning it on means flipping that flag and configuring `[auth.email.smtp]`.
 - **Magic link will need custom SMTP when it lands.** `config.toml` confirms the built-in sender's cap at `[auth.rate_limit] email_sent = 2` per hour, and it is explicitly test-only, so magic link is unusable without Resend (or similar) plus a domain verified for the sender address.
-- **Auth needs no callback route.** Set `redirectTo` to the app root (`https://tommoulard.github.io/kikoushou/`) and let `detectSessionInUrl` pick the PKCE `?code=` off the root URL. `index.html` is served normally there, so the GitHub Pages deep-link problem never applies to sign-in. Drop the `/auth/callback` route from Phase 2.
+- **Auth needs no callback route.** Set `redirectTo` to the app root (`https://tommoulard.github.io/kikouchou/`) and let `detectSessionInUrl` pick the PKCE `?code=` off the root URL. `index.html` is served normally there, so the GitHub Pages deep-link problem never applies to sign-in. Drop the `/auth/callback` route from Phase 2.
 - **`public/404.html` is still required**, because `/join/:token` share links are deep links by nature — the entire point of the feature. GitHub Pages serves `404.html` for unknown paths (with a 404 status the browser still renders), preserving path and query, so the SPA router resolves correctly. Ship it as a copy of `index.html`.
 
 ### Phase 1 — Fix the CRDT model · **DONE**
@@ -474,7 +474,7 @@ lived in how two pieces fit together, not inside either piece.
 
 | Finding | Why the tests missed it |
 |---|---|
-| **The schema 8 migration destroyed every trip's CRDT history.** `Collection.modify` hands its mutator a clone and stores the result, and that round trip loses the `Uint8Array` prototype — the bytes come back as `{0:1, 1:2, …}`. Rows all present, `Y.applyUpdate` unable to read one of them. | The migration had no test at all. It was also untestable by construction: `KikoushouDatabase` hardcoded `super('kikoushou')`, so a v7 fixture under any other name was invisible to the class performing the upgrade. |
+| **The schema 8 migration destroyed every trip's CRDT history.** `Collection.modify` hands its mutator a clone and stores the result, and that round trip loses the `Uint8Array` prototype — the bytes come back as `{0:1, 1:2, …}`. Rows all present, `Y.applyUpdate` unable to read one of them. | The migration had no test at all. It was also untestable by construction: `KikoushouDatabase` hardcoded `super('kikouchou')`, so a v7 fixture under any other name was invisible to the class performing the upgrade. |
 | **The provider recorded server state the server did not hold.** A flush sent the queue, found it empty, and recorded the *document's* state vector. An edit made while that flush was in flight, whose queue row never landed, sat inside that vector — so reconciliation computed an empty diff from then on and the edit never left the device. | The existing lost-queue-row test has the push *fail*, so no vector is recorded and the backstop works. Nothing covered a lost row alongside a *successful* push. |
 | **An unreadable snapshot was assumed harmless** on the grounds that "the log alone reconstructs the document". True only while the log is intact — and compaction upserts the snapshot then deletes exactly the rows it folded. Past that point the provider reported `synced` over a permanent hole. | The one test that existed kept the log intact, so it asserted the recoverable half of the branch and looked like coverage of both. |
 | **An identity claim reported success when it wrote nothing.** `claimParticipant` treated a missing error as a claim, but an UPDATE matching no row succeeds with zero rows and no error — the normal outcome when the roster row is not visible to the account. The page then navigated in, `person_id` stayed null, and an unclaimed participant still looks free, so the next joiner could claim the same name. | Every test asserted the error branch. The double terminated at `eq()`, so it could not express a zero-row update even in principle. |

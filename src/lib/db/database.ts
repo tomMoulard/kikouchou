@@ -212,7 +212,7 @@ export class KikoushouDatabase extends Dexie {
    *   opened the same database, so a fixture written at v7 under another name was
    *   invisible to the class that performs the upgrade.
    */
-  constructor(name = 'kikoushou') {
+  constructor(name = 'kikouchou') {
     super(name);
 
     /**

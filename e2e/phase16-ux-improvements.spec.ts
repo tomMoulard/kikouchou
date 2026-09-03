@@ -210,7 +210,7 @@ async function createTestTrip(
       const now = Date.now();
 
       return new Promise<string>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -265,7 +265,7 @@ async function createTestPerson(
       const id = `p16-person-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       return new Promise<string>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -305,7 +305,7 @@ async function createTestRoom(
       const id = `p16-room-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       return new Promise<string>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -347,7 +347,7 @@ async function createTestAssignment(
       const id = `p16-assign-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       return new Promise<string>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -393,7 +393,7 @@ async function createTestTransport(
       const id = `p16-transport-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       return new Promise<string>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -440,7 +440,7 @@ async function getAssignmentFromDB(
 ): Promise<{ startDate: string; endDate: string } | null> {
   return page.evaluate(async (id) => {
     return new Promise((resolve, reject) => {
-      const dbRequest = indexedDB.open('kikoushou');
+      const dbRequest = indexedDB.open('kikouchou');
       dbRequest.onerror = () => reject(new Error('Failed to open database'));
       dbRequest.onsuccess = () => {
         const db = dbRequest.result;

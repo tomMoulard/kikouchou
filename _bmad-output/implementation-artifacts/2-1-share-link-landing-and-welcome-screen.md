@@ -32,7 +32,7 @@ so that I know I'm in the right place and feel invited to participate.
 
 - [x] Task 1: Refactor/enhance `ShareImportPage` to become the welcome screen (AC: 1, 2, 4)
   - [x] 1.1 Update the "View this trip" card to match the warm welcome screen design: trip name prominent, date range, location (if set), and a "Get Started" / "Continue to trip" CTA button with vacation-appropriate styling
-  - [x] 1.2 Add returning-guest detection: on load, check `localStorage` key `kikoushou_guest_{shareId}` (or equivalent); if found with valid `personId`, navigate directly to `/trips/:tripId/calendar` (via `setCurrentTrip(trip.id)` then navigate)
+  - [x] 1.2 Add returning-guest detection: on load, check `localStorage` key `kikouchou_guest_{shareId}` (or equivalent); if found with valid `personId`, navigate directly to `/trips/:tripId/calendar` (via `setCurrentTrip(trip.id)` then navigate)
   - [x] 1.3 Ensure friendly not-found error uses the i18n key `sharing.notFoundWizard` (new key) — message "This trip link doesn't seem to work" — no stack traces or technical jargon
   - [x] 1.4 Add all new i18n keys to `src/locales/en/translation.json` and `src/locales/fr/translation.json`
 
@@ -65,7 +65,7 @@ This is the **first story of Epic 2 (Guest Onboarding)**. The primary goal is tr
 - Routes go in `src/features/sharing/routes.tsx`
 - Barrel export in `src/features/sharing/index.ts`
 
-**Returning guest detection strategy:** Use `localStorage` to store guest identity across visits. The key should be `kikoushou_guest_${shareId}` storing `{ personId: string, tripId: string }`. On the welcome screen, check this key before rendering the "Get Started" CTA; if valid, auto-redirect. This key will be written in Story 2.2 (identity step) — this story only reads it.
+**Returning guest detection strategy:** Use `localStorage` to store guest identity across visits. The key should be `kikouchou_guest_${shareId}` storing `{ personId: string, tripId: string }`. On the welcome screen, check this key before rendering the "Get Started" CTA; if valid, auto-redirect. This key will be written in Story 2.2 (identity step) — this story only reads it.
 
 ### Technical Requirements
 
@@ -144,7 +144,7 @@ Note: existing `sharing.viewTrip`, `sharing.notFound`, `sharing.notFoundDescript
 ### Returning Guest Detection — Implementation Detail
 
 ```typescript
-const GUEST_STORAGE_KEY = (shareId: string) => `kikoushou_guest_${shareId}`;
+const GUEST_STORAGE_KEY = (shareId: string) => `kikouchou_guest_${shareId}`;
 
 interface StoredGuestIdentity {
   personId: string;
@@ -198,7 +198,7 @@ Check this in `useEffect` after trip is loaded. If `storedIdentity?.tripId === t
 ### Project Context
 
 - No `project-context.md` found; treat PRD + Architecture + Epics as canonical sources.
-- Project: kikoushou — vacation house coordination PWA. No backend. IndexedDB (Dexie.js). Offline-first.
+- Project: kikouchou — vacation house coordination PWA. No backend. IndexedDB (Dexie.js). Offline-first.
 - Epic 2 goal: first-time guests arriving via shared link get a guided 5-step wizard and can self-service in under 2 minutes.
 - Story 2.1 is the entry point (Step 1: Welcome). Stories 2.2–2.5 are the subsequent wizard steps. Story 2.6 is the returning guest dashboard.
 
@@ -230,11 +230,11 @@ anthropic/claude-sonnet-4-6
 - Story context created from epics + architecture + UX design + PRD + git history analysis.
 - This is the first story in Epic 2. Epic 2 status updated to `in-progress` in sprint-status.yaml.
 - The existing `ShareImportPage` is the foundation — enhance and extend, don't replace.
-- Returning-guest localStorage key (`kikoushou_guest_${shareId}`) established here; Story 2.2 will write it.
+- Returning-guest localStorage key (`kikouchou_guest_${shareId}`) established here; Story 2.2 will write it.
 - Wizard sub-routes scaffold should be minimal stubs — full implementations come in stories 2.2–2.5.
 - Implementation complete: warm amber-themed welcome screen replacing the previous generic card.
 - `ShareImportPage` fully rewritten: warm Palmtree icon, amber gradient background, prominent trip name via `t('sharing.welcome', { tripName })`, date range, conditional location, `h-12` "Get Started" CTA.
-- Returning-guest detection: `getStoredGuestIdentity(shareId)` reads `kikoushou_guest_${shareId}` from localStorage; matching `tripId` triggers `setCurrentTrip` + navigate to `/trips/:tripId/calendar`. `setIsLoading(false)` is called before the async redirect to prevent stuck loading state.
+- Returning-guest detection: `getStoredGuestIdentity(shareId)` reads `kikouchou_guest_${shareId}` from localStorage; matching `tripId` triggers `setCurrentTrip` + navigate to `/trips/:tripId/calendar`. `setIsLoading(false)` is called before the async redirect to prevent stuck loading state.
 - Not-found state replaced with warm amber card using `sharing.notFoundWizard` / `sharing.notFoundWizardDescription` keys.
 - 7 new i18n keys added to both `en/translation.json` and `fr/translation.json` under the `sharing` object.
 - `OnboardingPlaceholderPage` created as minimal stub for wizard sub-routes (identity, room, transport, summary).

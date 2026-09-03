@@ -34,7 +34,7 @@ import type { Trip, PersonId } from '@/types';
 const getGuestStorageKeyForTrip = (tripId: string): string | null => {
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if (key?.startsWith('kikoushou_guest_')) {
+    if (key?.startsWith('kikouchou_guest_')) {
       try {
         const data = JSON.parse(localStorage.getItem(key) ?? '');
         if (data && data.tripId === tripId) {
@@ -100,7 +100,7 @@ const TripSyncExportPanel = memo(function TripSyncExportPanel({
         if (guestKey) {
           const guestData = JSON.parse(localStorage.getItem(guestKey) ?? '{}');
           const personId = guestData.personId as PersonId | undefined;
-          const shareId = guestKey.replace('kikoushou_guest_', '');
+          const shareId = guestKey.replace('kikouchou_guest_', '');
 
           if (!personId) {
             setError(t('sharing.sync.noGuestIdentity', 'No guest identity found.'));

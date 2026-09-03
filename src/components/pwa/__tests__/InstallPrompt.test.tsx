@@ -25,7 +25,7 @@ describe('InstallPrompt', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     // Spy on localStorage to prevent state leaking between tests.
-    // The component reads 'kikoushou-install-dismissed' on init and writes on dismiss.
+    // The component reads 'kikouchou-install-dismissed' on init and writes on dismiss.
     vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
     mockCanInstall.mockReturnValue(false);
@@ -142,7 +142,7 @@ describe('InstallPrompt', () => {
   it('shows prompt when dismissed timestamp is NaN (invalid localStorage)', async () => {
     // Spy on localStorage.getItem to return a non-numeric value
     const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
-      if (key === 'kikoushou-install-dismissed') return 'invalid-value';
+      if (key === 'kikouchou-install-dismissed') return 'invalid-value';
       return null;
     });
     mockCanInstall.mockReturnValue(true);
@@ -157,7 +157,7 @@ describe('InstallPrompt', () => {
     // Spy on localStorage.getItem to return an expired timestamp
     const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
     const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
-      if (key === 'kikoushou-install-dismissed') return eightDaysAgo.toString();
+      if (key === 'kikouchou-install-dismissed') return eightDaysAgo.toString();
       return null;
     });
     mockCanInstall.mockReturnValue(true);

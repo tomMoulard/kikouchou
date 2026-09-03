@@ -264,7 +264,7 @@ export default defineConfig({
        * offline-first claims mean anything.
        *
        * GITHUB_ACTIONS is cleared for the same reason as the dev server below —
-       * vite.config.ts would otherwise set base to '/kikoushou/' and every
+       * vite.config.ts would otherwise set base to '/' and every
        * navigation would 404.
        */
       command: `bun run build && bun x vite preview --host 127.0.0.1 --port ${PREVIEW_PORT} --strictPort`,
@@ -312,7 +312,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
       env: {
-        // vite.config.ts sets base='/kikoushou/' when GITHUB_ACTIONS is set,
+        // vite.config.ts sets base='/' when GITHUB_ACTIONS is set,
         // but baseURL and every page.goto('/...') here assume '/'. The plugin
         // spawns this command with the full ambient env, so CI's own
         // GITHUB_ACTIONS=true would 404 every non-root navigation. Clear it.

@@ -2,7 +2,7 @@
 # https://supabase.com/docs/guides/local-development/cli/config
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
-project_id = "kikoushou"
+project_id = "kikouchou"
 
 [api]
 enabled = true
@@ -162,8 +162,7 @@ site_url = "http://localhost:5173"
 additional_redirect_urls = [
   "http://localhost:5173",
   "http://localhost:5173/**",
-  "https://tommoulard.github.io/kikoushou/**",
-  "https://kikoushou.app/**",
+  "https://app.kikouchou.app/**",
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600

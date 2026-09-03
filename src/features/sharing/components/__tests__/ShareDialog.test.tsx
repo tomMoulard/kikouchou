@@ -76,7 +76,7 @@ describe('ShareDialog', () => {
     mockedUseTripShareLink.mockReturnValue({
       state: {
         kind: 'invite',
-        url: 'https://kikoushou.app/join/aBcDeFgHiJkL3456',
+        url: 'https://kikouchou.app/join/aBcDeFgHiJkL3456',
         token: 'aBcDeFgHiJkL3456',
       },
       refresh: vi.fn(),
@@ -86,7 +86,7 @@ describe('ShareDialog', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('share-url')).toHaveTextContent(
-        'https://kikoushou.app/join/aBcDeFgHiJkL3456',
+        'https://kikouchou.app/join/aBcDeFgHiJkL3456',
       );
     });
   });

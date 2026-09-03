@@ -47,7 +47,7 @@ export type TypedSupabaseClient = SupabaseClient<Database>;
  * projects (say prod and a local stack) cannot overwrite each other's session
  * in the same browser profile.
  */
-const STORAGE_KEY = 'kikoushou-auth';
+const STORAGE_KEY = 'kikouchou-auth';
 
 // ============================================================================
 // Configuration

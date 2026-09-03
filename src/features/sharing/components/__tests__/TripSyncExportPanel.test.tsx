@@ -126,7 +126,7 @@ describe('TripSyncExportPanel', () => {
   });
 
   it('uses guest changeset when guest key exists in localStorage', async () => {
-    localStorage.setItem('kikoushou_guest_share-abc', JSON.stringify({
+    localStorage.setItem('kikouchou_guest_share-abc', JSON.stringify({
       tripId: 'trip-1',
       personId: 'person-1',
     }));
@@ -147,7 +147,7 @@ describe('TripSyncExportPanel', () => {
   });
 
   it('shows error when guest has no personId', async () => {
-    localStorage.setItem('kikoushou_guest_share-abc', JSON.stringify({
+    localStorage.setItem('kikouchou_guest_share-abc', JSON.stringify({
       tripId: 'trip-1',
       // no personId
     }));
@@ -160,7 +160,7 @@ describe('TripSyncExportPanel', () => {
   });
 
   it('shows error when guest has no baseline', async () => {
-    localStorage.setItem('kikoushou_guest_share-abc', JSON.stringify({
+    localStorage.setItem('kikouchou_guest_share-abc', JSON.stringify({
       tripId: 'trip-1',
       personId: 'person-1',
     }));
@@ -205,7 +205,7 @@ describe('TripSyncExportPanel', () => {
   });
 
   it('does not update state when unmounted during guest export', async () => {
-    localStorage.setItem('kikoushou_guest_share-abc', JSON.stringify({
+    localStorage.setItem('kikouchou_guest_share-abc', JSON.stringify({
       tripId: 'trip-1',
       personId: 'person-1',
     }));
@@ -235,9 +235,9 @@ describe('TripSyncExportPanel', () => {
 
   it('skips malformed localStorage entries when searching for guest key', async () => {
     // Store malformed JSON that should be caught silently
-    localStorage.setItem('kikoushou_guest_bad', '{invalid json');
+    localStorage.setItem('kikouchou_guest_bad', '{invalid json');
     // Also store a valid guest entry for a different trip
-    localStorage.setItem('kikoushou_guest_other', JSON.stringify({
+    localStorage.setItem('kikouchou_guest_other', JSON.stringify({
       tripId: 'other-trip',
       personId: 'person-99',
     }));

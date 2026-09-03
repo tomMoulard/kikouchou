@@ -55,26 +55,26 @@ function clientWithRpc(result: unknown) {
 
 describe('buildInviteUrl', () => {
   it('builds a link at the app root', () => {
-    expect(buildInviteUrl('https://kikoushou.app', '/', 'tok1234567890abc')).toBe(
-      'https://kikoushou.app/join/tok1234567890abc',
+    expect(buildInviteUrl('https://kikouchou.app', '/', 'tok1234567890abc')).toBe(
+      'https://kikouchou.app/join/tok1234567890abc',
     );
   });
 
   it('respects a base path, as GitHub Pages needs', () => {
     expect(
-      buildInviteUrl('https://tommoulard.github.io', '/kikoushou/', 'tok1234567890abc'),
-    ).toBe('https://tommoulard.github.io/kikoushou/join/tok1234567890abc');
+      buildInviteUrl('https://tommoulard.github.io', '/kikouchou/', 'tok1234567890abc'),
+    ).toBe('https://tommoulard.github.io/kikouchou/join/tok1234567890abc');
   });
 
   it('tolerates a base path with no trailing slash', () => {
     expect(
-      buildInviteUrl('https://tommoulard.github.io', '/kikoushou', 'tok1234567890abc'),
-    ).toBe('https://tommoulard.github.io/kikoushou/join/tok1234567890abc');
+      buildInviteUrl('https://tommoulard.github.io', '/kikouchou', 'tok1234567890abc'),
+    ).toBe('https://tommoulard.github.io/kikouchou/join/tok1234567890abc');
   });
 
   it('round-trips through the parser', () => {
     const token = 'aBcDeFgHiJkL3456';
-    const url = buildInviteUrl('https://kikoushou.app', '/kikoushou/', token);
+    const url = buildInviteUrl('https://kikouchou.app', '/kikouchou/', token);
 
     expect(extractInviteToken(url)).toBe(token);
   });
@@ -82,10 +82,10 @@ describe('buildInviteUrl', () => {
 
 describe('extractInviteToken', () => {
   it.each([
-    ['a full URL', 'https://kikoushou.app/join/aBcDeFgHiJkL3456', 'aBcDeFgHiJkL3456'],
-    ['a URL under a base path', 'https://x.github.io/kikoushou/join/aBcDeFgHiJkL3456', 'aBcDeFgHiJkL3456'],
+    ['a full URL', 'https://kikouchou.app/join/aBcDeFgHiJkL3456', 'aBcDeFgHiJkL3456'],
+    ['a URL under a base path', 'https://x.github.io/kikouchou/join/aBcDeFgHiJkL3456', 'aBcDeFgHiJkL3456'],
     ['a bare path', '/join/aBcDeFgHiJkL3456', 'aBcDeFgHiJkL3456'],
-    ['a trailing slash', 'https://kikoushou.app/join/aBcDeFgHiJkL3456/', 'aBcDeFgHiJkL3456'],
+    ['a trailing slash', 'https://kikouchou.app/join/aBcDeFgHiJkL3456/', 'aBcDeFgHiJkL3456'],
     ['the token alone', 'aBcDeFgHiJkL3456', 'aBcDeFgHiJkL3456'],
     ['surrounding whitespace', '  /join/aBcDeFgHiJkL3456  ', 'aBcDeFgHiJkL3456'],
     ['a token using both URL-safe extras', 'https://k.app/join/aB-dEfGhIjKl_456', 'aB-dEfGhIjKl_456'],
@@ -96,8 +96,8 @@ describe('extractInviteToken', () => {
   it.each([
     ['an empty string', ''],
     ['whitespace only', '   '],
-    ['a share link from the old scheme', 'https://kikoushou.app/share/abc1234567'],
-    ['the old P2P trip link', 'https://kikoushou.app/trip/room12345678#key'],
+    ['a share link from the old scheme', 'https://kikouchou.app/share/abc1234567'],
+    ['the old P2P trip link', 'https://kikouchou.app/trip/room12345678#key'],
     ['some other URL', 'https://example.com/'],
     ['a token that is too short', '/join/abc'],
     ['a path with no token', '/join/'],
@@ -107,7 +107,7 @@ describe('extractInviteToken', () => {
 
   it('does not mistake a random 16-character string in a path for a token', () => {
     // Only a bare token, or one under /join/, counts.
-    expect(extractInviteToken('https://kikoushou.app/trips/aBcDeFgHiJkL3456')).toBeNull();
+    expect(extractInviteToken('https://kikouchou.app/trips/aBcDeFgHiJkL3456')).toBeNull();
   });
 });
 

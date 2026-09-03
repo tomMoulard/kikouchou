@@ -127,7 +127,7 @@ function setStoredIdentity(
   shareId: string,
   identity: { personId: string; tripId: string },
 ): void {
-  localStorageMock[`kikoushou_guest_${shareId}`] = JSON.stringify(identity);
+  localStorageMock[`kikouchou_guest_${shareId}`] = JSON.stringify(identity);
 }
 
 /**
@@ -209,7 +209,7 @@ describe('TransportEntryStepPage — 4.2: missing identity redirects to identity
   });
 
   it('redirects when stored identity JSON is invalid', async () => {
-    localStorageMock['kikoushou_guest_abc123'] = 'not-valid-json{{{';
+    localStorageMock['kikouchou_guest_abc123'] = 'not-valid-json{{{';
     mockGetTripByShareId.mockResolvedValue(makeTrip());
     mockGetTransportsByPersonId.mockResolvedValue([]);
 
@@ -239,7 +239,7 @@ describe('TransportEntryStepPage — 4.2b: stale tripId redirects to identity st
     });
 
     // localStorage should be cleared
-    expect(localStorageMock['kikoushou_guest_abc123']).toBeUndefined();
+    expect(localStorageMock['kikouchou_guest_abc123']).toBeUndefined();
   });
 });
 

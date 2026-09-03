@@ -71,8 +71,8 @@ export type RedeemInviteResult =
  * what once let the a11y skip link `#main-content` overwrite a trip's encryption
  * key. Callers in components pass them in.
  *
- * @param origin - e.g. `https://kikoushou.app`
- * @param basePath - Vite's `BASE_URL`, e.g. `/` or `/kikoushou/`
+ * @param origin - e.g. `https://kikouchou.app`
+ * @param basePath - Vite's `BASE_URL`, e.g. `/`
  * @param token - The invite token
  */
 export function buildInviteUrl(
