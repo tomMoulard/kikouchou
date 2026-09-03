@@ -35,6 +35,20 @@ export { UpcomingPickups } from './components/UpcomingPickups';
 export type { UpcomingPickupsProps } from './components/UpcomingPickups';
 
 // ============================================================================
+// Utilities
+// ============================================================================
+
+// Timing and selection only. `groupPickupsByProximity` stays internal to the
+// pickup alert panel: it groups an already-selected list and would silently
+// render assigned or past rides as "needs a driver" if handed a raw one.
+export {
+  isTransportUpcoming,
+  selectPickupsNeedingDriver,
+  sortTransportsByInstant,
+  toTransportInstant,
+} from './utils/pickup-utils';
+
+// ============================================================================
 // Routes
 // ============================================================================
 

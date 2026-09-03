@@ -81,6 +81,11 @@ import { formatFullDate } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
+import {
+  isTransportUpcoming,
+  selectPickupsNeedingDriver,
+  sortTransportsByInstant,
+} from '@/features/transports/utils/pickup-utils';
 import type { Person, PersonId, Transport, TransportId, TransportMode, TransportType } from '@/types';
 
 // ============================================================================
@@ -192,22 +197,6 @@ function getDateKey(datetime: string): string {
 }
 
 /**
- * Checks if a transport is in the past.
- *
- * @param datetime - ISO datetime string
- * @returns True if the transport datetime is before now
- */
-function isTransportPast(datetime: string): boolean {
-  try {
-    const parsedDate = parseISO(datetime);
-    if (isNaN(parsedDate.getTime())) {return false;}
-    return parsedDate < new Date();
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Groups transports by date, sorted chronologically.
  *
  * @param transports - Array of transports to group
@@ -233,18 +222,16 @@ function groupTransportsByDate(
     }
   }
   
-  // Sort transports within each group by time
-  for (const transports of groupsMap.values()) {
-    transports.sort((a, b) => a.datetime.localeCompare(b.datetime));
-  }
-  
-  // Convert to array and sort by date key (chronological)
+  // Convert to array and sort by date key (chronological). Date keys are all
+  // `yyyy-MM-dd`, so comparing them as strings is sound; the transports inside a
+  // day are ordered by instant, because their datetimes may carry different UTC
+  // offsets and would then sort by wall clock rather than by when they happen.
   const groups: DateGroup[] = Array.from(groupsMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([dateKey, transports]) => ({
       dateKey,
       displayDate: formatFullDate(dateKey, locale),
-      transports,
+      transports: sortTransportsByInstant(transports),
     }));
   
   return groups;
@@ -684,6 +671,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     arrivals,
     departures,
     upcomingPickups,
+    nowMs,
     isLoading: isTransportsLoading,
     error: transportsError,
     deleteTransport,
@@ -718,21 +706,24 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // Combine arrivals and departures into a single list
    allTransports = useMemo(() => [...arrivals, ...departures], [arrivals, departures]),
 
-  // Separate upcoming and past transports
+  // Separate upcoming and past transports against the context's single
+  // reference instant, so this split and the pickup alerts agree — and so the
+  // list ages on the same minute tick instead of only when something else
+  // happens to re-render it.
    { upcomingTransports, pastTransports } = useMemo(() => {
     const upcoming: Transport[] = [];
     const past: Transport[] = [];
-    
+
     for (const transport of allTransports) {
-      if (isTransportPast(transport.datetime)) {
-        past.push(transport);
-      } else {
+      if (isTransportUpcoming(transport.datetime, nowMs)) {
         upcoming.push(transport);
+      } else {
+        past.push(transport);
       }
     }
-    
+
     return { upcomingTransports: upcoming, pastTransports: past };
-  }, [allTransports]),
+  }, [allTransports, nowMs]),
 
   // Group upcoming transports by date (chronological)
    upcomingDateGroups = useMemo(
@@ -746,11 +737,18 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     [pastTransports, dateLocale],
   ),
 
-   pastCount = pastTransports.length,
+  // Count what the accordion actually renders: `groupTransportsByDate` drops
+  // rows whose datetime cannot be parsed, so counting `pastTransports` promised
+  // more entries than the section could show.
+   pastCount = useMemo(
+    () => pastDateGroups.reduce((total, group) => total + group.transports.length, 0),
+    [pastDateGroups],
+  ),
 
-  // Amber pickup alerts only when at least one upcoming pickup still needs a driver
+  // Amber pickup alerts only when at least one upcoming pickup still needs a
+  // driver — same selection the panel counts and the analytics badge reports.
    hasUnassignedUpcomingPickup = useMemo(
-    () => upcomingPickups.some((t) => t.needsPickup && !t.driverId),
+    () => selectPickupsNeedingDriver(upcomingPickups).length > 0,
     [upcomingPickups],
   );
 
