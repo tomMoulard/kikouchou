@@ -7,9 +7,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { addDays, subDays } from 'date-fns';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 import { Layout } from '../Layout';
@@ -124,6 +124,11 @@ function renderLayout(children: ReactNode = <div>Page Content</div>) {
       <Layout>{children}</Layout>
     </MemoryRouter>,
   );
+}
+
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location-probe">{location.pathname}</span>;
 }
 
 /**
@@ -600,6 +605,192 @@ describe('Layout', () => {
       const tripInfo = screen.getByTestId('trip-info-section');
       expect(screen.queryByRole('list', { name: 'nav.guestsOfTheDay' })).not.toBeInTheDocument();
       expect(within(tripInfo).getByText('nav.guestsOfTheDayEmpty')).toBeInTheDocument();
+    });
+  });
+
+  // ============================================================================
+  // Disabled Nav Affordances
+  // ============================================================================
+
+  describe('Disabled nav affordances', () => {
+    beforeEach(() => {
+      mockUseTripContext.mockReturnValue({
+        currentTrip: null,
+        trips: [],
+        isLoading: false,
+        error: null,
+        setCurrentTrip: vi.fn(),
+        checkConnection: vi.fn(),
+      });
+    });
+
+    it('keeps trip-gated links in the tab order instead of hiding them', () => {
+      renderLayout();
+
+      const calendarLink = within(getMobileNav() as HTMLElement)
+        .getByText('nav.calendar')
+        .closest('a');
+
+      expect(calendarLink).toHaveAttribute('aria-disabled', 'true');
+      // `tabIndex={-1}` was the bug: a link nobody can reach is a link nobody
+      // knows exists, so the nav silently changed shape without a trip.
+      expect(calendarLink).not.toHaveAttribute('tabindex');
+      expect(calendarLink?.className).not.toContain('pointer-events-none');
+    });
+
+    it('describes why a trip-gated link cannot be used', () => {
+      renderLayout();
+
+      const calendarLink = within(getMobileNav() as HTMLElement)
+        .getByText('nav.calendar')
+        .closest('a');
+
+      const hintId = calendarLink?.getAttribute('aria-describedby');
+      expect(hintId).toBeTruthy();
+      expect(document.getElementById(hintId as string)).toHaveTextContent(
+        'nav.requiresTrip',
+      );
+    });
+
+    it('does not navigate when a disabled link is activated', async () => {
+      const user = userEvent.setup();
+      renderLayout(<LocationProbe />);
+
+      const calendarLink = within(getMobileNav() as HTMLElement)
+        .getByText('nav.calendar')
+        .closest('a') as HTMLAnchorElement;
+
+      // Focusable is the point of the fix; activating it must still do nothing.
+      act(() => calendarLink.focus());
+      expect(document.activeElement).toBe(calendarLink);
+      // Exact, not `toHaveTextContent('/')`: that is a substring match, and it
+      // also passes for the '/trips' this test exists to rule out.
+      expect(screen.getByTestId('location-probe').textContent).toBe('/');
+
+      await user.click(calendarLink);
+
+      // Without the guard this link resolves to '/trips'.
+      expect(screen.getByTestId('location-probe').textContent).toBe('/');
+    });
+
+    it('leaves "More" sheet items reachable while announcing them as disabled', async () => {
+      const user = userEvent.setup();
+      renderLayout();
+
+      await user.click(
+        within(getMobileNav() as HTMLElement).getByRole('button', { name: 'nav.more' }),
+      );
+
+      const personsItem = await screen.findByRole('button', { name: /nav\.persons/ });
+      expect(personsItem).toHaveAttribute('aria-disabled', 'true');
+      // A natively `disabled` button leaves the tab order entirely.
+      expect(personsItem).not.toBeDisabled();
+
+      const hintId = personsItem.getAttribute('aria-describedby');
+      expect(hintId).toBeTruthy();
+      expect(document.getElementById(hintId as string)).toHaveTextContent(
+        'nav.requiresTrip',
+      );
+    });
+
+    it('does not park the "More" sheet\'s opening focus on a disabled item', async () => {
+      const user = userEvent.setup();
+      renderLayout();
+
+      await user.click(
+        within(getMobileNav() as HTMLElement).getByRole('button', { name: 'nav.more' }),
+      );
+      await screen.findByRole('button', { name: /nav\.persons/ });
+
+      // Radix's focus scope skips natively `disabled` nodes but not
+      // `aria-disabled` ones, so swapping the attribute moved the sheet's
+      // opening focus onto the first item — which, with no trip, is disabled.
+      const focused = document.activeElement as HTMLElement | null;
+      expect(focused).not.toBeNull();
+      // Inside the sheet, or the focus trap has nothing to trap. `document.body`
+      // would satisfy a bare "not disabled" check, so assert both halves.
+      const sheet = screen.getByRole('dialog');
+      expect(sheet.contains(focused)).toBe(true);
+      expect(focused?.getAttribute('aria-disabled')).not.toBe('true');
+    });
+
+    it('drops the trip-gated hint entirely once a trip is selected', () => {
+      mockUseTripContext.mockReturnValue({
+        currentTrip: mockTrip,
+        trips: [mockTrip],
+        isLoading: false,
+        error: null,
+        setCurrentTrip: vi.fn(),
+        checkConnection: vi.fn(),
+      });
+
+      renderLayout();
+
+      // An sr-only span is still in the accessibility tree. Rendered
+      // unconditionally it would be read out on every screen of the app,
+      // explaining a restriction that no longer applies to anything.
+      expect(screen.queryByText('nav.requiresTrip')).not.toBeInTheDocument();
+    });
+  });
+
+  // ============================================================================
+  // Collapsed Sidebar Tooltip
+  // ============================================================================
+
+  describe('Collapsed sidebar tooltip', () => {
+    beforeEach(() => {
+      mockUseTripContext.mockReturnValue({
+        currentTrip: mockTrip,
+        trips: [mockTrip],
+        isLoading: false,
+        error: null,
+        setCurrentTrip: vi.fn(),
+        checkConnection: vi.fn(),
+      });
+    });
+
+    /** Collapses the sidebar and returns the icon-only Calendar link. */
+    async function collapseAndGetCalendarLink(
+      user: ReturnType<typeof userEvent.setup>,
+    ): Promise<HTMLAnchorElement> {
+      await user.click(screen.getByRole('button', { name: 'nav.collapse' }));
+
+      const link = within(getSidebar() as HTMLElement).getByRole('link', {
+        name: 'nav.calendar',
+      });
+      return link as HTMLAnchorElement;
+    }
+
+    it('links the tooltip to the link it describes', async () => {
+      const user = userEvent.setup();
+      renderLayout();
+
+      const link = await collapseAndGetCalendarLink(user);
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+      // `focus()` is what opens the tooltip, so the state update it triggers
+      // has to be inside `act`.
+      act(() => link.focus());
+
+      const tooltip = await screen.findByRole('tooltip');
+      expect(tooltip).toHaveTextContent('nav.calendar');
+      // Without this the tooltip is an orphan in a body portal that no screen
+      // reader ever visits.
+      expect(link.getAttribute('aria-describedby')).toBe(tooltip.id);
+    });
+
+    it('dismisses the tooltip on Escape', async () => {
+      const user = userEvent.setup();
+      renderLayout();
+
+      const link = await collapseAndGetCalendarLink(user);
+      act(() => link.focus());
+      await screen.findByRole('tooltip');
+
+      await user.keyboard('{Escape}');
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+      expect(link).not.toHaveAttribute('aria-describedby');
     });
   });
 });

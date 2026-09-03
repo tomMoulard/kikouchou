@@ -4,6 +4,23 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * NON-STOCK addition — keep it if `shadcn add dropdown-menu` is ever re-run.
+ *
+ * Stock menu rows are `py-1.5 text-sm`, which renders at about 30px tall with
+ * no mobile override. This menu is the edit/delete affordance on nearly every
+ * card in the app, so on a phone the primary destructive action was a 30px
+ * target sitting a few pixels from its neighbour. `min-h` rather than more
+ * padding so the icon/label row stays centred and desktop stays exactly stock.
+ *
+ * `max-md:` and not `min-h-11 md:min-h-0` for the same reason as the button's
+ * `icon` size, which documents it at length: the variant prefix makes this a
+ * hard floor that an unprefixed caller class cannot cancel, while the `md:`
+ * form would leak past the breakpoint when a caller cancelled the base. A row
+ * that genuinely must be shorter on a phone has to say `max-md:min-h-*`.
+ */
+const TOUCH_TARGET_MIN_HEIGHT = "max-md:min-h-11"
+
 function DropdownMenu({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
@@ -73,6 +90,7 @@ function DropdownMenuItem({
       data-variant={variant}
       className={cn(
         "focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:!text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        TOUCH_TARGET_MIN_HEIGHT,
         className
       )}
       {...props}
@@ -91,6 +109,7 @@ function DropdownMenuCheckboxItem({
       data-slot="dropdown-menu-checkbox-item"
       className={cn(
         "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        TOUCH_TARGET_MIN_HEIGHT,
         className
       )}
       checked={checked}
@@ -127,6 +146,7 @@ function DropdownMenuRadioItem({
       data-slot="dropdown-menu-radio-item"
       className={cn(
         "focus:bg-accent focus:text-accent-foreground relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        TOUCH_TARGET_MIN_HEIGHT,
         className
       )}
       {...props}
@@ -210,6 +230,7 @@ function DropdownMenuSubTrigger({
       data-inset={inset}
       className={cn(
         "focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[inset]:pl-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        TOUCH_TARGET_MIN_HEIGHT,
         className
       )}
       {...props}

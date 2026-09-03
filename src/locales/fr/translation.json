@@ -33,6 +33,7 @@
     "transports": "Transports",
     "settings": "Paramètres",
     "share": "Partager",
+    "requiresTrip": "Choisissez d’abord un voyage pour ouvrir cette section",
     "skipToMain": "Aller au contenu principal",
     "main": "Navigation principale",
     "mobileMain": "Navigation mobile",

@@ -198,7 +198,7 @@ const ActivityCard = memo(function ActivityCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-10 shrink-0 md:size-8"
+                className="shrink-0 md:size-8"
                 disabled={isActionsDisabled}
                 aria-label={t('common.actions', 'Actions')}
               >

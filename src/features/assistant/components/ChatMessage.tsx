@@ -163,7 +163,7 @@ const ChatMessage = memo(function ChatMessage({
               </summary>
               <ul
                 className={cn(
-                  'mt-2 space-y-1.5 border-l-2 pl-3 text-[11px] font-normal leading-snug',
+                  'mt-2 space-y-1.5 border-l-2 pl-3 text-xs font-normal leading-snug',
                   isUser
                     ? 'border-primary-foreground/35 text-primary-foreground/85'
                     : 'border-muted-foreground/25 text-muted-foreground',

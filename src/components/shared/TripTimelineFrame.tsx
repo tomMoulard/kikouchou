@@ -237,7 +237,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
                       {...(isToday ? { 'aria-current': 'date' as const } : {})}
                     >
                       <div className="flex flex-col items-center leading-none">
-                        <div className="text-[10px] text-muted-foreground/80 truncate">
+                        <div className="text-muted-foreground/80 truncate">
                           {monthLabel}
                         </div>
                         <div

@@ -84,7 +84,7 @@ const TransportIndicator = memo(function TransportIndicator({
   // Render content (shared between button and div)
   const content = (
     <>
-      <span className="text-[10px] font-semibold" aria-hidden="true">
+      <span className="font-semibold" aria-hidden="true">
         {isArrival ? '↓' : '↑'}
       </span>
       <TransportIcon mode={transportMode} className="size-3 shrink-0" />
@@ -96,7 +96,7 @@ const TransportIndicator = memo(function TransportIndicator({
       />
       <span className="truncate">{transport.personName}</span>
       {location && (
-        <span className="truncate text-[10px] opacity-75">- {location}</span>
+        <span className="truncate opacity-75">- {location}</span>
       )}
     </>
   );

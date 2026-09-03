@@ -347,7 +347,7 @@ const TransportCard = memo(function TransportCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-10 md:size-8 shrink-0"
+                className="md:size-8 shrink-0"
                 disabled={isActionsDisabled}
                 aria-label={t('common.actions', 'Actions')}
               >

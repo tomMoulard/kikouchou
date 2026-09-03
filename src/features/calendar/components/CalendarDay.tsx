@@ -189,7 +189,7 @@ const CalendarDay = memo(function CalendarDay({
         {peopleOnSite > 0 && (
           <span
             className={cn(
-              'absolute right-0 flex items-center gap-0.5 text-[10px] font-medium',
+              'absolute right-0 flex items-center gap-0.5 text-xs font-medium',
               isCurrentMonth ? 'text-muted-foreground' : 'text-muted-foreground/50',
             )}
             title={t('calendar.peopleOnSite', '{{count}} people on site', {
