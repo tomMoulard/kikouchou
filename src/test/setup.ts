@@ -95,13 +95,17 @@ beforeEach(async () => {
  * This prevents memory leaks and test pollution.
  *
  * `restoreAllMocks` matters as much as `cleanup`. This hook used to call only
- * `clearAllMocks`, which wipes a spy's call history but leaves the spy
- * installed — with its implementation stripped to a bare `vi.fn()` returning
- * `undefined`. A `vi.spyOn(console, 'error')` or `vi.spyOn(navigator, …)` in one
- * test therefore survived into every later test in the file as a silent stub of
- * the real thing, and the next test saw a global that no longer did what its
- * name says. That is a shared-state channel between tests with no syntax to
- * point at, and it makes the order tests run in part of their meaning.
+ * `clearAllMocks`, which clears a spy's call history — `mock.calls`, `results`,
+ * `instances` — and nothing else. The spy stays installed, and in Vitest 4 it
+ * keeps the fake implementation too: `mockClear` does not touch it, only
+ * `mockReset` and `mockRestore` do. So `vi.spyOn(console, 'error')
+ * .mockImplementation(() => {})` in one test went on swallowing errors for
+ * every later test in the file, and a `mockReturnValue` went on returning it.
+ * The next test saw a global that quietly did not do what its name says.
+ *
+ * That is a shared-state channel between tests with no syntax to point at, and
+ * it makes the order tests run in part of their meaning.
+ * `src/test/mock-restoration.test.ts` pins the fixed behaviour.
  *
  * `restoreAllMocks` only undoes `vi.spyOn` installs, so `clearAllMocks` still
  * runs afterwards to reset call history on the plain `vi.fn()`s in the module

@@ -133,16 +133,26 @@ export default defineConfig({
      * `import 178.85s` against `tests 99.01s`, summed across workers, for a
      * 53.8s wall clock. That import cost is Vite transforming the same heavy
      * module graph (React, Radix, date-fns, Yjs) in every worker at once, and
-     * it is charged against `testTimeout`, not `hookTimeout`. Uncapped, a
-     * developer machine runs one worker per core plus whatever else it is
-     * doing, and the heaviest files — TripForm, SupabaseYjsProvider, TripCard —
-     * drift toward the 10s budget and start reading as flaky. They are not
-     * flaky; they are the files closest to the limit when the box is busy.
+     * it is charged against `testTimeout`, not `hookTimeout`.
+     *
+     * Be careful what you claim for this setting. Measured A/B on an 8-core
+     * machine, alternating, full suite:
+     *
+     *   idle box:    7 workers 58s all green · 4 workers 55s all green
+     *   load avg 87: 7 workers 750s, 6 files failed
+     *   load avg 46: 4 workers 881s, 7 files failed
+     *
+     * So the cap is free — it costs nothing on an idle machine, and 4 was if
+     * anything marginally faster — but it does NOT rescue a box that is already
+     * oversubscribed by other processes. Under a load average of 46+ the suite
+     * fails at any worker count, on `waitFor`'s 1s default and on this file's
+     * 10s `testTimeout`. That is a machine-capacity problem, not a test defect,
+     * and no setting here fixes it. What the cap does buy is a bound on the
+     * suite's *own* footprint, so a run does not create that contention itself.
      *
      * Four is deliberately an absolute, not a percentage: a GitHub runner has
      * 4 vCPUs, so CI keeps the parallelism it already had, and only oversized
-     * dev machines are held back. Cheap insurance against a failure mode whose
-     * symptom is a timeout somewhere unrelated to the change under test.
+     * dev machines are held back.
      *
      * This is `maxWorkers`, not `poolOptions.threads.maxThreads`: Vitest 4
      * removed the per-pool block and promoted the setting to the top level.
