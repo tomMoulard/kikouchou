@@ -1,52 +1,43 @@
 /**
- * @fileoverview Analytics overview for the trip in the URL (current trip context).
+ * @fileoverview Analytics overview for the trip named in the URL.
+ *
+ * Reads Dexie directly through {@link loadTripStats} rather than through
+ * `PersonContext` / `RoomContext` / `AssignmentContext` / `TransportContext`.
+ * Those are scoped to `TripContext.currentTrip`, which lags the URL during a
+ * trip switch, so the page could report the previous trip's rows under this
+ * trip's name — and disagree with `/analytics`, which reads Dexie. One reader,
+ * keyed on the id in the URL, is the only way the two pages cannot diverge.
  *
  * @module features/analytics/pages/TripAnalyticsPage
  */
 
-import { type ReactElement, memo, useEffect, useMemo } from 'react';
+import { type ReactElement, memo, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-
-import { getPersonHeadcount } from '@/types';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { BarChart2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AnalyticsScopeSelector } from '@/features/analytics/components/AnalyticsScopeSelector';
-import { useAssignmentContext } from '@/contexts/AssignmentContext';
-import { usePersonContext } from '@/contexts/PersonContext';
-import { useRoomContext } from '@/contexts/RoomContext';
-import { useTransportContext } from '@/contexts/TransportContext';
+import { StatCard } from '@/features/analytics/components/StatCard';
+import { useAnalyticsClock } from '@/features/analytics/hooks/useAnalyticsClock';
+import {
+  isTripStatsEmpty,
+  loadTripStats,
+  readAnalytics,
+} from '@/features/analytics/lib/trip-stats';
 import { useTripContext } from '@/contexts/TripContext';
-import { cn } from '@/lib/utils';
+import type { TripId } from '@/types';
 
 // ============================================================================
-// Subcomponents
+// Constants
 // ============================================================================
 
-const StatCard = memo(function StatCard({
-  label,
-  value,
-  className,
-}: {
-  readonly label: string;
-  readonly value: number | string;
-  readonly className?: string;
-}): ReactElement {
-  return (
-    <Card className={cn(className)}>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold tabular-nums">{value}</p>
-      </CardContent>
-    </Card>
-  );
-});
+/** Separator between the parts of a stat card's hint line. */
+const HINT_SEPARATOR = ' · ';
 
 // ============================================================================
 // Page
@@ -57,16 +48,18 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   const navigate = useNavigate();
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
 
-  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
-  const { persons, isLoading: isPersonsLoading } = usePersonContext();
-  const { rooms, isLoading: isRoomsLoading } = useRoomContext();
-  const { assignments, isLoading: isAssignmentsLoading } = useAssignmentContext();
   const {
-    arrivals,
-    departures,
-    upcomingPickups,
-    isLoading: isTransportsLoading,
-  } = useTransportContext();
+    trips,
+    currentTrip,
+    isLoading: isTripLoading,
+    error: tripError,
+    setCurrentTrip,
+    checkConnection,
+  } = useTripContext();
+  // Live: "pickups needing a driver" only counts *upcoming* pickups, so the
+  // number goes stale on a page left open. `TransportContext` ticks its own
+  // clock every minute for the same reason.
+  const { now, retryToken, retry } = useAnalyticsClock({ live: true });
 
   useEffect(() => {
     if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
@@ -76,23 +69,24 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
     }
   }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
 
-  const tripMismatch = useMemo(() => {
-    if (!tripIdFromUrl || !currentTrip) {
-      return false;
-    }
-    return tripIdFromUrl !== currentTrip.id;
-  }, [tripIdFromUrl, currentTrip]);
-
-  // A guest entry can stand for several real people, so the headline number
-  // must sum headcount rather than count rows.
-  const guestHeadcount = useMemo(
-    () => persons.reduce((total, person) => total + getPersonHeadcount(person), 0),
-    [persons],
+  // Existence is decided from the trips list, not from `currentTrip`: during a
+  // switch `currentTrip` is still the previous trip, and treating that as "trip
+  // not found" made the page flash an error on every navigation into it.
+  const trip = useMemo(
+    () => trips.find((candidate) => candidate.id === tripIdFromUrl),
+    [trips, tripIdFromUrl],
   );
 
-  const pickupsNeedingDriver = useMemo(
-    () => upcomingPickups.filter((tr) => tr.needsPickup && !tr.driverId).length,
-    [upcomingPickups],
+  const result = useLiveQuery(
+    async () => {
+      if (tripIdFromUrl === undefined) {
+        return null;
+      }
+      return readAnalytics('load trip analytics', () =>
+        loadTripStats(tripIdFromUrl as TripId, now),
+      );
+    },
+    [tripIdFromUrl, now, retryToken],
   );
 
   const tripAnalyticsHref = useMemo(
@@ -100,28 +94,52 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
     [tripIdFromUrl],
   );
 
+  const backLink = tripIdFromUrl ? `/trips/${tripIdFromUrl}/calendar` : '/trips';
+
+  // `useLiveQuery` keeps its previous result while a changed dependency
+  // re-subscribes, so straight after a trip switch `result` still describes the
+  // trip we just left. `TripStats` carries the id it was read for precisely so
+  // that stale paint can be caught and shown as loading — rendering it would
+  // reintroduce the very divergence this page was rewritten to remove.
+  const isStatsStale =
+    result?.data !== undefined &&
+    result.data !== null &&
+    result.data.tripId !== tripIdFromUrl;
+
   const isLoading =
     isTripLoading ||
-    isPersonsLoading ||
-    isRoomsLoading ||
-    isAssignmentsLoading ||
-    isTransportsLoading;
+    isStatsStale ||
+    (tripIdFromUrl !== undefined && result === undefined);
 
-  const handleBack = (): void => {
+  const handleBack = useCallback((): void => {
+    void navigate(backLink);
+  }, [navigate, backLink]);
+
+  // Retry has to clear the trip context's error too: it is sticky, and bumping
+  // only the analytics query would re-render the same alert forever.
+  const handleRetry = useCallback((): void => {
+    void checkConnection().catch(() => {
+      // Whatever went wrong is already in the context's own error state.
+    });
+    retry();
+  }, [checkConnection, retry]);
+
+  const handleAddGuests = useCallback((): void => {
     if (tripIdFromUrl) {
-      navigate(`/trips/${tripIdFromUrl}/calendar`);
+      void navigate(`/trips/${tripIdFromUrl}/persons`);
       return;
     }
-    navigate('/trips');
-  };
+    void navigate('/trips');
+  }, [navigate, tripIdFromUrl]);
+
+  // ==========================================================================
+  // Render: Loading
+  // ==========================================================================
 
   if (isLoading) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader
-          title={t('analytics.tripTitle')}
-          backLink={tripIdFromUrl ? `/trips/${tripIdFromUrl}/calendar` : '/trips'}
-        />
+        <PageHeader title={t('analytics.tripTitle')} backLink={backLink} />
         <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
           <LoadingState variant="inline" size="lg" />
@@ -130,7 +148,37 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
     );
   }
 
-  if (!tripIdFromUrl || !currentTrip || tripMismatch) {
+  // ==========================================================================
+  // Render: Error
+  // ==========================================================================
+
+  const statsError = result?.error ?? null;
+  const stats = result?.data ?? null;
+
+  // The read failing is a real database problem, so it outranks everything.
+  if (statsError) {
+    return (
+      <div className="container max-w-4xl py-6 md:py-8">
+        <PageHeader title={t('analytics.tripTitle')} backLink={backLink} />
+        <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
+        <ErrorDisplay
+          error={statsError}
+          onRetry={handleRetry}
+          onBack={handleBack}
+        />
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // Render: Trip Not Found
+  // ==========================================================================
+
+  // Checked BEFORE the trip context's error: an id that is not on this device
+  // makes `setCurrentTrip` reject with `Trip with ID "…" not found`, which the
+  // context stores as an error. Showing that as "failed to load", with a Retry
+  // button that can never succeed, is the wrong answer to a mistyped URL.
+  if (!tripIdFromUrl || trip === undefined || stats === null) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
         <PageHeader title={t('analytics.tripTitle')} backLink="/trips" />
@@ -138,11 +186,8 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
           <EmptyState
             icon={BarChart2}
-            title={t('errors.tripNotFound', 'Trip not found')}
-            description={t(
-              'errors.tripNotFoundDescription',
-              'The trip you are looking for does not exist or you do not have access to it.',
-            )}
+            title={t('errors.tripNotFound')}
+            description={t('errors.tripNotFoundDescription')}
             action={{
               label: t('common.back'),
               onClick: handleBack,
@@ -153,24 +198,97 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
     );
   }
 
+  // ==========================================================================
+  // Render: Trip Context Error
+  // ==========================================================================
+
+  if (tripError) {
+    return (
+      <div className="container max-w-4xl py-6 md:py-8">
+        <PageHeader title={t('analytics.tripTitle')} backLink={backLink} />
+        <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
+        <ErrorDisplay
+          error={tripError}
+          onRetry={handleRetry}
+          onBack={handleBack}
+        />
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // Render: Empty Trip
+  // ==========================================================================
+
+  if (isTripStatsEmpty(stats)) {
+    return (
+      <div className="container max-w-4xl py-6 md:py-8">
+        <PageHeader title={t('analytics.tripTitle')} backLink={backLink} />
+        <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
+        <div className="flex min-h-[200px] flex-1 items-center justify-center">
+          <EmptyState
+            icon={BarChart2}
+            title={t('analytics.emptyTrip')}
+            description={t('analytics.emptyTripDescription')}
+            action={{
+              label: t('persons.new'),
+              onClick: handleAddGuests,
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================================================
+  // Render: Stats
+  // ==========================================================================
+
   return (
     <div className="container max-w-4xl py-6 md:py-8">
-      <PageHeader
-        title={t('analytics.tripTitle')}
-        backLink={`/trips/${tripIdFromUrl}/calendar`}
-      />
+      <PageHeader title={t('analytics.tripTitle')} backLink={backLink} />
 
       <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
 
       <p className="mb-6 text-sm text-muted-foreground">{t('analytics.tripDescription')}</p>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label={t('analytics.guests')} value={guestHeadcount} />
-        <StatCard label={t('analytics.rooms')} value={rooms.length} />
-        <StatCard label={t('analytics.assignments')} value={assignments.length} />
-        <StatCard label={t('analytics.arrivals')} value={arrivals.length} />
-        <StatCard label={t('analytics.departures')} value={departures.length} />
-        <StatCard label={t('analytics.pickupsNeedingDriver')} value={pickupsNeedingDriver} />
+        {/* "People" and not "Guests": the Guests page lists rows, and one row
+            can stand for a couple or a family. Naming both "Guests" made the
+            two pages contradict each other. */}
+        <StatCard
+          label={t('analytics.people')}
+          value={stats.headcount}
+          hint={t('analytics.peopleHint', { count: stats.guestCount })}
+          testId="stat-people"
+        />
+        <StatCard
+          label={t('analytics.rooms')}
+          value={stats.roomCount}
+          testId="stat-rooms"
+        />
+        <StatCard
+          label={t('analytics.assignments')}
+          value={stats.assignmentCount}
+          testId="stat-assignments"
+        />
+        {/* Same label and same total as the all-trips page, with the arrivals
+            and departures split spelled out underneath rather than shown as
+            two unrelated cards. */}
+        <StatCard
+          label={t('analytics.transports')}
+          value={stats.transportCount}
+          hint={[
+            t('analytics.countArrivals', { count: stats.arrivalCount }),
+            t('analytics.countDepartures', { count: stats.departureCount }),
+          ].join(HINT_SEPARATOR)}
+          testId="stat-transports"
+        />
+        <StatCard
+          label={t('analytics.pickupsNeedingDriver')}
+          value={stats.pickupsNeedingDriver}
+          testId="stat-pickups"
+        />
       </div>
     </div>
   );

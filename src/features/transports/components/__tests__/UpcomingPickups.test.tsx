@@ -407,8 +407,15 @@ describe('UpcomingPickups', () => {
     expect(container.querySelector('.custom-test')).toBeInTheDocument();
   });
 
-  it('renders nothing when grouping filters out past pickups', async () => {
-    // Set time to after the pickup — groupPickupsByProximity filters out date < now
+  /**
+   * The panel no longer re-decides what counts as upcoming: `TransportContext`
+   * owns that against one reference instant it refreshes each minute. So a
+   * pickup that has just fallen due stays on screen, flagged as overdue, until
+   * that tick drops it — instead of vanishing from this panel alone at the very
+   * moment somebody needs to drive, while the analytics badge still counted it.
+   */
+  it('keeps a pickup the context still lists, flagged as overdue', async () => {
+    // Set time to after the pickup, as if the minute tick had not landed yet
     vi.setSystemTime(new Date('2026-07-16T10:00:00.000Z'));
 
     const { useTransportContext } = await import('@/contexts/TransportContext');
@@ -447,9 +454,10 @@ describe('UpcomingPickups', () => {
       deleteTransport: vi.fn(),
     } as never);
 
-    const { container } = render(<UpcomingPickups />);
-    // Past pickups are filtered out by groupPickupsByProximity (date >= now)
-    expect(container.firstChild).toBeNull();
+    render(<UpcomingPickups />);
+
+    expect(screen.getByText('Station Late')).toBeInTheDocument();
+    expect(screen.getAllByText('pickups.overdue').length).toBeGreaterThan(0);
   });
 
   it('handles driver assignment with resolving animation', async () => {
