@@ -365,11 +365,16 @@ describe('Translation Quality', () => {
   });
 
   it('error messages are user-friendly (not technical)', () => {
-    // Check that error messages don't contain technical jargon
+    // Check that error messages don't contain technical jargon.
+    // `errors.dev` is deliberately skipped: it holds the developer-facing
+    // labels of the ErrorBoundary's dev-only details panel ("Stack trace:"),
+    // which are never shown to a user.
     const technicalTerms = ['null', 'undefined', 'exception', 'stack', 'NaN'];
 
     for (const key of Object.keys(enTranslations.errors)) {
-      const value = (enTranslations.errors as Record<string, string>)[key];
+      // The only exemption: never rendered outside `import.meta.env.DEV`.
+      if (key === 'dev') continue;
+      const value = (enTranslations.errors as Record<string, unknown>)[key];
       if (typeof value === 'string') {
         for (const term of technicalTerms) {
           expect(value.toLowerCase()).not.toContain(term.toLowerCase());

@@ -22,7 +22,8 @@
     "actions": "Actions",
     "menu": "Menu",
     "openMenu": "Open menu",
-    "optional": "optional"
+    "optional": "optional",
+    "comingSoon": "Coming soon"
   },
   "nav": {
     "calendar": "Calendar",
@@ -263,7 +264,8 @@
     "deleteSuccess": "Guest removed successfully",
     "empty": "No guests yet",
     "emptyDescription": "Add the friends joining this trip — they'll pick rooms and add their travel details",
-    "cardNoTransportDetail": "No travel details yet"
+    "cardNoTransportDetail": "No travel details yet",
+    "badgeInteractive": "Select {{name}}"
   },
   "assignments": {
     "title": "Room assignments",
@@ -290,7 +292,8 @@
     "autofilledFromTransport": "Dates pre-filled from transport schedule",
     "openInRooms": "Open rooms to edit",
     "quickAssign": "Assign to room",
-    "quickAssignDescription": "Confirm the dates for this room assignment."
+    "quickAssignDescription": "Confirm the dates for this room assignment.",
+    "dropHere": "Drop here"
   },
   "transports": {
     "title": "Transport",
@@ -523,6 +526,7 @@
     "notFoundWizard": "This trip link doesn't seem to work",
     "notFoundWizardDescription": "The link may be incorrect or the trip may no longer exist.",
     "returning": "Welcome back! Taking you to the trip...",
+    "onboardingComingSoon": "This step will be available soon.",
     "identityTitle": "Who are you?",
     "identitySubtitle": "Select yourself from the list below",
     "identityNotOnList": "I'm not on the list",
@@ -607,7 +611,16 @@
       "noGuestIdentity": "No guest identity found. You need to import this trip first via a share link.",
       "noBaseline": "No import baseline found. Re-import the trip via the share link.",
       "payloadTooLargeForQr": "This export is too large for a scannable QR code. Copy the text below and paste it on the other device to import.",
+      "copyAsText": "Copy as text",
+      "copied": "Copied!",
+      "copiedToClipboard": "Copied to clipboard",
+      "copyFailed": "Failed to copy",
       "importInstructions": "Point your camera at the other participant's QR code to import their changes.",
+      "scannerLoading": "Starting camera...",
+      "switchToCamera": "Use camera instead",
+      "switchToPaste": "Paste data manually",
+      "pasteHint": "Paste the exported data here...",
+      "importPasted": "Import",
       "wrongTrip": "This QR code is for a different trip",
       "decodeError": "Failed to decode QR code data",
       "processing": "Processing changes...",
@@ -846,7 +859,8 @@
   },
   "validation": {
     "invalidDate": "Invalid date",
-    "capacityMin": "Minimum {{min}} bed"
+    "capacityMin": "Minimum {{min}} bed",
+    "endDateBeforeStart": "End date must be on or after start date"
   },
   "errors": {
     "generic": "An error occurred",
@@ -860,7 +874,13 @@
     "loadingFailed": "Failed to load",
     "saveFailed": "Failed to save",
     "deleteFailed": "Failed to delete",
-    "activityNotFound": "Activity not found. Please try again."
+    "activityNotFound": "Activity not found. Please try again.",
+    "dev": {
+      "details": "Error details (development only)",
+      "error": "Error:",
+      "stack": "Stack trace:",
+      "componentStack": "Component stack:"
+    }
   },
   "pwa": {
     "install": "Install app",

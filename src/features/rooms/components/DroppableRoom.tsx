@@ -6,6 +6,7 @@
  */
 
 import { type ReactElement, type ReactNode, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDroppable } from '@dnd-kit/core';
 
 import { cn } from '@/lib/utils';
@@ -57,6 +58,8 @@ export interface DroppableRoomProps {
 const DroppableRoom = memo(function DroppableRoom(props: DroppableRoomProps): ReactElement {
   const { roomId, children, className, disabled = false } = props;
 
+  const { t } = useTranslation();
+
   // Create unique ID for this droppable
   const droppableId = `room-${roomId}`;
 
@@ -100,7 +103,7 @@ const DroppableRoom = memo(function DroppableRoom(props: DroppableRoomProps): Re
           aria-hidden="true"
         >
           <div className="bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-medium shadow-lg">
-            Drop here
+            {t('assignments.dropHere', 'Drop here')}
           </div>
         </div>
       )}

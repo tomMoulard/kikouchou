@@ -19,7 +19,7 @@ import {
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { BedDouble, Check } from 'lucide-react';
+import { BedDouble, Check, SearchX } from 'lucide-react';
 
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Button } from '@/components/ui/button';
@@ -396,8 +396,8 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
       <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
         <Card className="w-full max-w-md border-amber-200 text-center shadow-lg">
           <CardHeader className="pb-2 pt-8">
-            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-amber-100 text-3xl">
-              🔍
+            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-amber-100">
+              <SearchX className="size-8 text-amber-700" aria-hidden="true" />
             </div>
             <CardTitle className="text-xl text-amber-900">
               {t('sharing.notFoundWizard', "This trip link doesn't seem to work")}
