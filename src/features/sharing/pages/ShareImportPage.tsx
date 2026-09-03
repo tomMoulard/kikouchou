@@ -30,9 +30,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { onboardingSurface, statusVariants } from '@/components/ui/status.variants';
 
 import { getTripByShareId, setCurrentTrip } from '@/lib/db';
 import { getDateLocale } from '@/lib/i18n/date-locale';
+import { cn } from '@/lib/utils';
 import { formatDateRange } from '@/lib/utils/date-format';
 import type { ShareId, Trip } from '@/types';
 
@@ -325,18 +327,18 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
   // Not found state — friendly message, no technical jargon
   if (notFound || !trip) {
     return (
-      <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-        <Card className="w-full max-w-md border-amber-200 text-center shadow-lg">
+      <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+        <Card className="w-full max-w-md border-warning-border text-center shadow-lg">
           <CardHeader className="pb-2 pt-8">
-            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-amber-100">
-              <SearchX className="size-8 text-amber-700" aria-hidden="true" />
+            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-warning/20">
+              <SearchX className="size-8 text-warning-on-surface" aria-hidden="true" />
             </div>
-            <CardTitle className="text-xl text-amber-900">
+            <CardTitle className="text-xl text-warning-on-surface">
               {t('sharing.notFoundWizard', 'This trip link doesn\'t seem to work')}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-8">
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-muted-foreground">
               {t(
                 'sharing.notFoundWizardDescription',
                 'The link may be incorrect or the trip may no longer exist.',
@@ -350,32 +352,32 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
 
   // Success state — warm welcome screen
   return (
-    <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-      <Card className="w-full max-w-md border-amber-200 shadow-lg">
+    <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+      <Card className="w-full max-w-md border-warning-border shadow-lg">
         <CardHeader className="pb-4 pt-8 text-center">
           {/* Warm vacation icon */}
-          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-amber-100">
-            <Palmtree className="size-10 text-amber-600" aria-hidden="true" />
+          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-warning/20">
+            <Palmtree className="size-10 text-warning-on-surface" aria-hidden="true" />
           </div>
 
           {/* Trip name — visually prominent */}
-          <CardTitle className="text-2xl font-bold text-amber-900">
+          <CardTitle className="text-2xl font-bold text-warning-on-surface">
             {t('sharing.welcome', { tripName: trip.name })}
           </CardTitle>
 
-          <p className="mt-1 text-sm text-amber-700">
+          <p className="mt-1 text-sm text-muted-foreground">
             {t('sharing.welcomeSubtitle', "You've been invited to join this trip")}
           </p>
         </CardHeader>
 
         <CardContent className="space-y-6 pb-8">
           {/* Trip details — scannable at a glance */}
-          <div className="space-y-3 rounded-xl bg-amber-50 p-4 ring-1 ring-amber-200">
+          <div className={cn('space-y-3 rounded-xl p-4', statusVariants({ tone: 'warning', emphasis: 'surface' }))}>
             {/* Location (conditional) */}
             {trip.location && (
-              <div className="flex items-center gap-3 text-sm text-amber-800">
+              <div className="flex items-center gap-3 text-sm text-foreground">
                 <MapPin
-                  className="size-4 shrink-0 text-amber-500"
+                  className="size-4 shrink-0 text-warning-on-surface"
                   aria-hidden="true"
                 />
                 <span>{trip.location}</span>
@@ -383,9 +385,9 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
             )}
 
             {/* Date range */}
-            <div className="flex items-center gap-3 text-sm text-amber-800">
+            <div className="flex items-center gap-3 text-sm text-foreground">
               <Calendar
-                className="size-4 shrink-0 text-amber-500"
+                className="size-4 shrink-0 text-warning-on-surface"
                 aria-hidden="true"
               />
               <span>{formattedDateRange}</span>
@@ -394,7 +396,7 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
 
           {/* Get Started — primary CTA, min 44px touch target */}
           <Button
-            className="h-12 w-full bg-amber-500 text-base font-semibold text-white hover:bg-amber-600 focus-visible:ring-2 focus-visible:ring-amber-500"
+            className={cn('h-12 w-full text-base font-semibold', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
             onClick={handleGetStarted}
             disabled={isNavigating}
           >

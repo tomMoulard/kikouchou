@@ -55,10 +55,12 @@ import {
 } from '@/components/shared/MapView';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
+import { statusVariants } from '@/components/ui/status.variants';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import type { Person, PersonId, Transport, TransportMode } from '@/types';
+import { cn } from '@/lib/utils';
 
 // ============================================================================
 // Type Definitions
@@ -160,9 +162,15 @@ const TransportPopupContent = memo(function TransportPopupContent({
       {/* Header with type and person */}
       <div className="flex items-center gap-2">
         {transport.type === 'arrival' ? (
-          <ArrowDownToLine className="size-4 shrink-0 text-green-600" aria-hidden="true" />
+          <ArrowDownToLine
+            className={cn('size-4 shrink-0', statusVariants({ tone: 'arrival', emphasis: 'text' }))}
+            aria-hidden="true"
+          />
         ) : (
-          <ArrowUpFromLine className="size-4 shrink-0 text-orange-600" aria-hidden="true" />
+          <ArrowUpFromLine
+            className={cn('size-4 shrink-0', statusVariants({ tone: 'departure', emphasis: 'text' }))}
+            aria-hidden="true"
+          />
         )}
         <span className="font-medium">
           {transport.type === 'arrival' ? t('transports.arrival') : t('transports.departure')}
@@ -226,7 +234,7 @@ const TransportPopupContent = memo(function TransportPopupContent({
 
       {/* Needs pickup indicator */}
       {transport.needsPickup && !transport.driverId && (
-        <div className="text-xs text-amber-600 font-medium">
+        <div className={cn('text-xs font-medium', statusVariants({ tone: 'warning', emphasis: 'text' }))}>
           {t('transports.needsPickup')}
         </div>
       )}
@@ -550,11 +558,17 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
       {/* Map legend */}
       <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
         <div className="flex items-center gap-1.5">
-          <div className="size-3 rounded-full bg-green-500" aria-hidden="true" />
+          <div
+            className={cn('size-3 rounded-full', statusVariants({ tone: 'arrival', emphasis: 'solid' }))}
+            aria-hidden="true"
+          />
           <span>{t('transports.arrivals')}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <div className="size-3 rounded-full bg-orange-500" aria-hidden="true" />
+          <div
+            className={cn('size-3 rounded-full', statusVariants({ tone: 'departure', emphasis: 'solid' }))}
+            aria-hidden="true"
+          />
           <span>{t('transports.departures')}</span>
         </div>
         {/*

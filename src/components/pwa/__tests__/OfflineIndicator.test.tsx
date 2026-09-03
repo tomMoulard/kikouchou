@@ -217,7 +217,7 @@ describe('OfflineIndicator', () => {
       expect(html).not.toContain('destructive');
     });
 
-    it('uses warm amber styling for offline state', () => {
+    it('uses the warning tone for offline state', () => {
       mockUseOnlineStatus.mockReturnValue({
         isOnline: false,
         hasRecentlyChanged: false,
@@ -232,7 +232,9 @@ describe('OfflineIndicator', () => {
       const statusRegion = screen.getByRole('status');
       const innerBanner = statusRegion.querySelector('div > div');
 
-      expect(innerBanner?.className).toContain('amber');
+      // The brief's amber, named rather than spelled: offline is a warning, not
+      // an error. Asserting the token survives a re-theme; `amber-50` did not.
+      expect(innerBanner?.className).toContain('bg-warning-surface');
     });
 
     it('positions below the header at top-14', () => {

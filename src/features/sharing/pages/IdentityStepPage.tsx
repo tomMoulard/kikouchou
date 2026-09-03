@@ -30,12 +30,14 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { onboardingSurface, statusVariants } from '@/components/ui/status.variants';
 
 import {
   createPersonWithAutoColor,
   getPersonsByTripId,
   getTripByShareId,
 } from '@/lib/db';
+import { cn } from '@/lib/utils';
 import type { Person, PersonId, ShareId, Trip, TripId } from '@/types';
 
 // ============================================================================
@@ -299,18 +301,18 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
   // Not found / error state — friendly message, no technical jargon
   if (notFound || !trip) {
     return (
-      <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-        <Card className="w-full max-w-md border-amber-200 text-center shadow-lg">
+      <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+        <Card className="w-full max-w-md border-warning-border text-center shadow-lg">
           <CardHeader className="pb-2 pt-8">
-            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-amber-100">
-              <SearchX className="size-8 text-amber-700" aria-hidden="true" />
+            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-warning/20">
+              <SearchX className="size-8 text-warning-on-surface" aria-hidden="true" />
             </div>
-            <CardTitle className="text-xl text-amber-900">
+            <CardTitle className="text-xl text-warning-on-surface">
               {t('sharing.notFoundWizard', "This trip link doesn't seem to work")}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-8">
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-muted-foreground">
               {t(
                 'sharing.notFoundWizardDescription',
                 'The link may be incorrect or the trip may no longer exist.',
@@ -325,19 +327,22 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
   const isEmpty = persons.length === 0;
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-      <Card className="w-full max-w-md border-amber-200 shadow-lg">
+    <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+      <Card className="w-full max-w-md border-warning-border shadow-lg">
         <CardHeader className="pb-4 pt-8 text-center">
           {/* Warm vacation icon */}
-          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-amber-100">
-            <Palmtree className="size-10 text-amber-600" aria-hidden="true" />
+          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-warning/20">
+            <Palmtree
+              className={cn('size-10', statusVariants({ tone: 'warning', emphasis: 'text' }))}
+              aria-hidden="true"
+            />
           </div>
 
-          <CardTitle className="text-2xl font-bold text-amber-900">
+          <CardTitle className="text-2xl font-bold text-warning-on-surface">
             {t('sharing.identityTitle', 'Who are you?')}
           </CardTitle>
 
-          <p className="mt-1 text-sm text-amber-700">
+          <p className="mt-1 text-sm text-muted-foreground">
             {t('sharing.identitySubtitle', 'Select yourself from the list below')}
           </p>
         </CardHeader>
@@ -345,7 +350,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
         <CardContent className="space-y-4 pb-8">
           {/* Empty list state — show add form prominently */}
           {isEmpty ? (
-            <p className="rounded-xl bg-amber-50 p-4 text-center text-sm text-amber-700 ring-1 ring-amber-200">
+            <p className={cn('rounded-xl p-4 text-center text-sm', statusVariants({ tone: 'warning' }))}>
               {t('sharing.identityEmptyList', 'No guests yet. Add yourself to get started!')}
             </p>
           ) : (
@@ -362,12 +367,12 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
                     aria-label={isSelected
                       ? `${person.name} — ${t('sharing.identitySelected', 'Selected')}`
                       : person.name}
-                    className={[
+                    className={cn(
                       'flex w-full min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border-2 p-4 text-left transition-colors',
                       isSelected
-                        ? 'border-amber-500 bg-amber-50 ring-2 ring-amber-500'
-                        : 'border-amber-200 bg-white hover:border-amber-300',
-                    ].join(' ')}
+                        ? 'border-warning bg-warning-surface ring-2 ring-warning'
+                        : 'border-warning-border bg-card hover:border-warning',
+                    )}
                   >
                     {/* Color swatch */}
                     <span
@@ -376,12 +381,15 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
                       aria-hidden="true"
                     />
                     {/* Person name */}
-                    <span className="flex-1 font-medium text-amber-900">
+                    <span className="flex-1 font-medium text-foreground">
                       {person.name}
                     </span>
                     {/* Checkmark for selected state */}
                     {isSelected && (
-                      <Check className="size-5 text-amber-600" aria-hidden="true" />
+                      <Check
+                        className={cn('size-5', statusVariants({ tone: 'warning', emphasis: 'text' }))}
+                        aria-hidden="true"
+                      />
                     )}
                   </button>
                 );
@@ -394,7 +402,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
             <Button
               type="button"
               variant="ghost"
-              className="h-11 w-full text-amber-700 hover:bg-amber-50 hover:text-amber-900"
+              className="h-11 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface dark:hover:bg-warning-surface dark:hover:text-warning-on-surface"
               onClick={handleToggleAddForm}
             >
               {t('sharing.identityNotOnList', "I'm not on the list")}
@@ -403,7 +411,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
 
           {/* Inline "Add myself" form — shown when empty list or when toggled */}
           {(isEmpty || showAddForm) && (
-            <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className={cn('space-y-3 rounded-xl p-4', statusVariants({ tone: 'warning', emphasis: 'surface' }))}>
               <div className="space-y-1">
                 <label
                   htmlFor="new-person-name"
@@ -428,7 +436,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
                   placeholder={t('sharing.identityAddName', 'Your name')}
                   aria-invalid={nameError !== undefined ? 'true' : 'false'}
                   aria-describedby={nameError !== undefined ? 'name-error' : undefined}
-                  className="border-amber-300 bg-white focus-visible:ring-amber-500"
+                  className="border-warning-border bg-card dark:border-warning-border dark:bg-card"
                   autoComplete="given-name"
                   maxLength={100}
                 />
@@ -442,7 +450,10 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
                 type="button"
                 onClick={() => { void handleAddMyself(); }}
                 disabled={isAdding}
-                className="h-11 w-full bg-amber-500 text-white hover:bg-amber-600 focus-visible:ring-2 focus-visible:ring-amber-500"
+                className={cn(
+                  'h-11 w-full',
+                  statusVariants({ tone: 'warning', emphasis: 'solid' }),
+                )}
               >
                 {isAdding
                   ? t('sharing.identityAdding', 'Adding...')
@@ -456,7 +467,10 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
             type="button"
             onClick={handleNext}
             disabled={!selectedPersonId || isNavigating}
-            className="h-12 w-full bg-amber-500 text-base font-semibold text-white hover:bg-amber-600 focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-40"
+            className={cn(
+              'h-12 w-full text-base font-semibold disabled:opacity-40',
+              statusVariants({ tone: 'warning', emphasis: 'solid' }),
+            )}
           >
             {isNavigating
               ? t('common.loading', 'Loading...')

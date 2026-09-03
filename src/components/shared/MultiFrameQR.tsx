@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Check, ClipboardCopy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { statusVariants } from '@/components/ui/status.variants';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -86,6 +87,8 @@ export const MultiFrameQR = memo(function MultiFrameQR({
           )}
         </p>
       ) : (
+        // Literal white, not `bg-card`: a QR code needs a light quiet zone to
+        // scan, in either theme.
         <div className="rounded-xl bg-white p-4 shadow-md">
           <QRCodeCanvas
             value={singleFrameData}
@@ -104,7 +107,7 @@ export const MultiFrameQR = memo(function MultiFrameQR({
       >
         {copied ? (
           <>
-            <Check className="mr-2 h-4 w-4 text-green-500" />
+            <Check className={cn('mr-2 h-4 w-4', statusVariants({ tone: 'success', emphasis: 'text' }))} />
             {t('sharing.sync.copied', 'Copied!')}
           </>
         ) : (

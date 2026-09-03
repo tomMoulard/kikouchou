@@ -44,6 +44,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { statusVariants } from '@/components/ui/status.variants';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
@@ -145,56 +146,71 @@ function formatRelativeTime(
 }
 
 /**
+ * Urgency treatments, warning-toned except when the pickup is already overdue.
+ *
+ * The rungs have to be legible *as* rungs — "due today" and "due next week"
+ * carry different actions — so they step through fill AND border rather than
+ * through alpha alone. `--warning-surface` sits about a percent of lightness
+ * off the page behind it, so 80%/60%/40% of it is not a ladder anybody can
+ * see; a filled card with a strong border, a filled card with a hairline, and
+ * an unfilled outline are three steps you can tell apart at a glance.
+ *
+ * Every value here is cva output, so the theme still owns the hue and its
+ * dark-mode counterpart.
+ */
+const URGENCY = {
+  overdue: {
+    card: cn(statusVariants({ tone: 'danger', emphasis: 'surface' }), 'border-destructive'),
+    badge: cn(statusVariants({ tone: 'danger', emphasis: 'soft' }), 'border-destructive'),
+    isOverdue: true,
+  },
+  today: {
+    card: cn(statusVariants({ tone: 'warning', emphasis: 'surface' }), 'border-warning'),
+    badge: cn(statusVariants({ tone: 'warning', emphasis: 'soft' }), 'border-warning'),
+    isOverdue: false,
+  },
+  tomorrow: {
+    card: statusVariants({ tone: 'warning', emphasis: 'surface' }),
+    badge: statusVariants({ tone: 'warning', emphasis: 'soft' }),
+    isOverdue: false,
+  },
+  later: {
+    card: statusVariants({ tone: 'warning', emphasis: 'outline' }),
+    badge: statusVariants({ tone: 'warning', emphasis: 'outline' }),
+    isOverdue: false,
+  },
+} as const;
+
+/**
  * Returns urgency-based classes for a pickup based on its datetime.
  */
-function getUrgencyClasses(datetime: string): {
-  card: string;
-  badge: string;
-  isOverdue: boolean;
-} {
+function getUrgencyClasses(
+  datetime: string,
+): (typeof URGENCY)[keyof typeof URGENCY] {
   try {
     const date = parseISO(datetime);
     if (isNaN(date.getTime())) {
-      return { card: 'border-amber-300 bg-amber-50/50 dark:bg-amber-950/20', badge: 'border-amber-500 text-amber-700 bg-amber-100 dark:bg-amber-950/40', isOverdue: false };
+      // A date we cannot read is a thing to look at, not a thing to soften.
+      return URGENCY.today;
     }
 
     const now = new Date();
 
     if (date < now) {
-      // Overdue
-      return {
-        card: 'border-red-300 bg-red-50/50 dark:bg-red-950/20',
-        badge: 'border-red-500 text-red-700 bg-red-100 dark:bg-red-950/40',
-        isOverdue: true,
-      };
+      return URGENCY.overdue;
     }
 
     if (isToday(date)) {
-      // Today - more urgent amber
-      return {
-        card: 'border-amber-400 bg-amber-50/70 dark:bg-amber-950/30',
-        badge: 'border-amber-500 text-amber-700 bg-amber-100 dark:bg-amber-950/40',
-        isOverdue: false,
-      };
+      return URGENCY.today;
     }
 
     if (isTomorrow(date)) {
-      // Tomorrow - lighter amber
-      return {
-        card: 'border-amber-300 bg-amber-50/40 dark:bg-amber-950/15',
-        badge: 'border-amber-400 text-amber-600 bg-amber-50 dark:bg-amber-950/30',
-        isOverdue: false,
-      };
+      return URGENCY.tomorrow;
     }
 
-    // Later - warm neutral
-    return {
-      card: 'border-amber-200 bg-amber-50/20 dark:bg-amber-950/10',
-      badge: 'border-amber-300 text-amber-500 bg-amber-50/50 dark:bg-amber-950/20',
-      isOverdue: false,
-    };
+    return URGENCY.later;
   } catch {
-    return { card: 'border-amber-300 bg-amber-50/50 dark:bg-amber-950/20', badge: 'border-amber-500 text-amber-700 bg-amber-100 dark:bg-amber-950/40', isOverdue: false };
+    return URGENCY.today;
   }
 }
 
@@ -336,9 +352,9 @@ const PickupAlertCard = memo(function PickupAlertCard({
   return (
     <div
       className={cn(
+        urgency.card,
         'rounded-lg border-2 p-4',
         'motion-safe:transition-all motion-safe:duration-300',
-        urgency.card,
       )}
       role="article"
       aria-label={`${t('pickups.needsDriver')}: ${person?.name ?? t('common.unknown')}, ${transport.location}, ${relativeTime}`}
@@ -368,7 +384,7 @@ const PickupAlertCard = memo(function PickupAlertCard({
           <TypeIcon
             className={cn(
               'size-4 shrink-0',
-              transport.type === 'arrival' ? 'text-green-600' : 'text-orange-600',
+              statusVariants({ tone: transport.type, emphasis: 'text' }),
             )}
             aria-hidden="true"
           />
@@ -534,11 +550,14 @@ const UpcomingPickups = memo(function UpcomingPickups({
     <div className={className}>
       {/* Section header with count badge */}
       <div className="flex items-center gap-2 mb-4">
-        <Car className="size-5 text-amber-600" aria-hidden="true" />
+        <Car
+          className={cn('size-5', statusVariants({ tone: 'warning', emphasis: 'text' }))}
+          aria-hidden="true"
+        />
         <h2 className="text-base font-semibold">{t('pickups.needsDriver')}</h2>
         <Badge
           variant="outline"
-          className="border-amber-500 text-amber-700 bg-amber-50 dark:bg-amber-950/30"
+          className={statusVariants({ tone: 'warning', emphasis: 'soft' })}
         >
           {t('pickups.unassignedCount', { count: unassignedCount })}
         </Badge>
@@ -554,11 +573,17 @@ const UpcomingPickups = memo(function UpcomingPickups({
             return (
               <div
                 key={`${group.station}-${group.startTime}`}
-                className="rounded-xl border-2 border-amber-300 bg-amber-50/30 dark:bg-amber-950/10 p-4"
+                className={cn(
+                  statusVariants({ tone: 'warning', emphasis: 'surface' }),
+                  'rounded-xl border-2 bg-warning-surface/40 p-4',
+                )}
               >
                 {/* Group header */}
-                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-amber-200 dark:border-amber-800">
-                  <MapPin className="size-4 text-amber-600" aria-hidden="true" />
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-warning-border">
+                  <MapPin
+                    className={cn('size-4', statusVariants({ tone: 'warning', emphasis: 'text' }))}
+                    aria-hidden="true"
+                  />
                   <span className="font-medium text-sm">
                     {t('pickups.stationWindow', {
                       station: group.displayStation,
@@ -568,7 +593,7 @@ const UpcomingPickups = memo(function UpcomingPickups({
                   </span>
                   <Badge
                     variant="outline"
-                    className="shrink-0 border-amber-400 text-amber-600 bg-amber-100 dark:bg-amber-950/40 text-xs"
+                    className={cn('shrink-0 text-xs', statusVariants({ tone: 'warning', emphasis: 'soft' }))}
                   >
                     <Users className="size-3 mr-1" aria-hidden="true" />
                     {t('pickups.combinedTrip')}
@@ -576,7 +601,7 @@ const UpcomingPickups = memo(function UpcomingPickups({
                 </div>
 
                 {/* Combined trip hint */}
-                <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">
+                <p className="text-xs text-muted-foreground mb-3">
                   {t('pickups.combinedTripHint')}
                 </p>
 
@@ -594,7 +619,12 @@ const UpcomingPickups = memo(function UpcomingPickups({
                         )}
                       >
                         {isResolving ? (
-                          <div className="rounded-lg border-2 border-green-300 bg-green-50/50 dark:bg-green-950/20 p-4 text-center text-sm text-green-700 dark:text-green-300">
+                          <div
+                            className={cn(
+                              statusVariants({ tone: 'success' }),
+                              'rounded-lg border-2 p-4 text-center text-sm',
+                            )}
+                          >
                             {resolvingDriverName}
                           </div>
                         ) : (
@@ -626,7 +656,12 @@ const UpcomingPickups = memo(function UpcomingPickups({
               )}
             >
               {isResolving ? (
-                <div className="rounded-lg border-2 border-green-300 bg-green-50/50 dark:bg-green-950/20 p-4 text-center text-sm text-green-700 dark:text-green-300">
+                <div
+                  className={cn(
+                    statusVariants({ tone: 'success' }),
+                    'rounded-lg border-2 p-4 text-center text-sm',
+                  )}
+                >
                   {resolvingDriverName}
                 </div>
               ) : (
