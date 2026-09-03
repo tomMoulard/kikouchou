@@ -318,7 +318,8 @@
     "noLocations": "No locations on the map yet",
     "noLocationsDescription": "Add a location to transport entries and they'll show up here",
     "backToList": "Back to list",
-    "locationsCount": "{{count}} location(s)",
+    "mappedCount_one": "{{count}} transport on the map",
+    "mappedCount_other": "{{count}} transports on the map",
     "mapAriaLabel": "Map showing transport locations"
   },
   "activities": {
@@ -870,9 +871,9 @@
     "ariaLabel": "Interactive map",
     "loading": "Loading map...",
     "markerLabel": "{{type}} marker at {{label}}",
-    "markerCount": "{{count}} location(s) on map",
+    "markerCount": "{{count}} locations on map",
     "markerCount_zero": "No locations on map",
-    "markerCount_one": "1 location on map",
+    "markerCount_one": "{{count}} location on map",
     "markerCount_other": "{{count}} locations on map",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",

@@ -49,7 +49,11 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { cn } from '@/lib/utils';
-import { DEFAULT_TIME_WINDOW_MINUTES, groupPickupsByProximity } from '@/features/transports/utils/pickup-utils';
+import {
+  DEFAULT_TIME_WINDOW_MINUTES,
+  groupPickupsByProximity,
+  selectPickupsNeedingDriver,
+} from '@/features/transports/utils/pickup-utils';
 import type { Person, PersonId, Transport, TransportId } from '@/types';
 
 // ============================================================================
@@ -458,28 +462,34 @@ const UpcomingPickups = memo(function UpcomingPickups({
     return map;
   }, [persons]);
 
-  // Group pickups by station proximity (handles filtering internally: unassigned, upcoming, valid datetime)
-  const pickupGroups = useMemo(
-    () => groupPickupsByProximity(upcomingPickups, DEFAULT_TIME_WINDOW_MINUTES),
+  // The one answer to "which pickups still need a driver" — shared with the
+  // transport list's alert gate and the analytics badge, so the number in the
+  // header, the visibility of this panel and the cards below always agree.
+  const pickupsNeedingDriver = useMemo(
+    () => selectPickupsNeedingDriver(upcomingPickups),
     [upcomingPickups],
   );
 
-  // Derive unassigned count from groups (single source of truth for displayed pickups)
-  const unassignedCount = useMemo(
-    () => pickupGroups.reduce((sum, group) => sum + group.pickups.length, 0),
-    [pickupGroups],
+  // Group those pickups by station proximity for combined-trip planning.
+  // Grouping partitions the selection, so the cards rendered here are exactly
+  // the pickups counted in the header badge.
+  const pickupGroups = useMemo(
+    () => groupPickupsByProximity(pickupsNeedingDriver, DEFAULT_TIME_WINDOW_MINUTES),
+    [pickupsNeedingDriver],
   );
+
+  const unassignedCount = pickupsNeedingDriver.length;
 
   // Handle volunteer button click - open driver selector
   const handleVolunteer = useCallback(
     (transportId: TransportId) => {
-      const transport = upcomingPickups.find((p) => p.id === transportId);
+      const transport = pickupsNeedingDriver.find((p) => p.id === transportId);
       if (transport) {
         setSelectedTransport(transport);
         setDriverDialogOpen(true);
       }
     },
-    [upcomingPickups],
+    [pickupsNeedingDriver],
   );
 
   // Handle driver confirmed

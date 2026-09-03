@@ -225,7 +225,7 @@ describe('TransportMapPage', () => {
     render(<TransportMapPage />, { withProviders: false });
     expect(screen.getByText('transports.arrivals')).toBeInTheDocument();
     expect(screen.getByText('transports.departures')).toBeInTheDocument();
-    expect(screen.getByText('transports.locationsCount')).toBeInTheDocument();
+    expect(screen.getByText('transports.mappedCount')).toBeInTheDocument();
   });
 
   it('renders list view button and navigates on click', async () => {

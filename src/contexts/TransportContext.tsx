@@ -18,6 +18,10 @@ import {
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
+import {
+  isTransportUpcoming,
+  sortTransportsByInstant,
+} from '@/features/transports/utils/pickup-utils';
 import { useTripContext } from '@/contexts/TripContext';
 import { areArraysEqual, wrapAndSetError } from '@/contexts/utils';
 import { db } from '@/lib/db/database';
@@ -61,10 +65,27 @@ export interface TransportContextValue {
   readonly departures: readonly Transport[];
 
   /**
-   * Array of upcoming transports that need pickup, sorted by datetime.
-   * Filtered from transports where needsPickup === true AND datetime >= now.
+   * Array of upcoming transports that need pickup, sorted chronologically.
+   * Filtered from transports where needsPickup === true AND the transport's
+   * instant is at or after {@link nowMs}.
+   *
+   * This is the base set for "how many pickups still need a driver" — narrow it
+   * with `selectPickupsNeedingDriver` from
+   * `@/features/transports/utils/pickup-utils` rather than re-filtering by hand,
+   * so every view reports the same number.
    */
   readonly upcomingPickups: readonly Transport[];
+
+  /**
+   * The single reference instant (epoch milliseconds) every transport view uses
+   * to decide past versus upcoming.
+   *
+   * Refreshed once a minute so the UI ages without a reload: a pickup that has
+   * just happened drops out of {@link upcomingPickups} on its own, and the list
+   * page moves it into its past section at the same tick. Deriving a separate
+   * `new Date()` per view is what let those two views disagree.
+   */
+  readonly nowMs: number;
 
   /**
    * True while transport data is being loaded from IndexedDB.
@@ -287,19 +308,38 @@ export function TransportProvider({
   // State to hold stable transports (replacing ref for render-safe access)
    [transports, setTransports] = useState<Transport[]>([]),
 
-  // CR-3: State for current timestamp, refreshed every minute to keep upcomingPickups fresh
-   [currentTimestamp, setCurrentTimestamp] = useState<string>(
-    () => new Date().toISOString(),
-  );
+  // CR-3: The one reference instant for past-vs-upcoming, refreshed every minute
+  // so the pickup alerts and the transport list age without a reload. Held as
+  // epoch milliseconds rather than an ISO string: comparing ISO strings only
+  // works while every stored datetime shares one exact formatting, and nothing
+  // guarantees that for rows arriving over Yjs.
+   [nowMs, setNowMs] = useState<number>(() => Date.now());
 
-  // CR-3: Refresh current timestamp every minute to keep upcomingPickups accurate
+  // CR-3: Refresh the reference instant every minute to keep upcomingPickups
+  // accurate, and again whenever the app comes back to the foreground: a
+  // backgrounded PWA has its timers throttled or frozen, so without this a user
+  // returning after lunch would see pickups that are hours past still listed as
+  // upcoming until the next tick landed.
   useEffect(() => {
     const REFRESH_INTERVAL_MS = 60_000; // 1 minute
     const intervalId = setInterval(() => {
-      setCurrentTimestamp(new Date().toISOString());
+      setNowMs(Date.now());
     }, REFRESH_INTERVAL_MS);
 
-    return () => clearInterval(intervalId);
+    const handleResume = (): void => {
+      if (document.visibilityState === 'visible') {
+        setNowMs(Date.now());
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleResume);
+    window.addEventListener('focus', handleResume);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleResume);
+      window.removeEventListener('focus', handleResume);
+    };
   }, []);
 
   // Clear refs, state, and error when trip changes to prevent stale cross-trip data
@@ -340,22 +380,20 @@ export function TransportProvider({
         departuresArr.push(transport);
       }
 
-      // Check for upcoming pickups (uses refreshed currentTimestamp from CR-3)
-      if (transport.needsPickup && transport.datetime >= currentTimestamp) {
+      // Check for upcoming pickups against the single reference instant (CR-3)
+      if (transport.needsPickup && isTransportUpcoming(transport.datetime, nowMs)) {
         upcomingPickupsArr.push(transport);
       }
     }
 
-    // upcomingPickups are already sorted by datetime due to index [tripId+datetime]
-    // but filter may have introduced non-contiguous items, so sort to ensure order
-    upcomingPickupsArr.sort((a, b) => a.datetime.localeCompare(b.datetime));
-
+    // The [tripId+datetime] index orders rows by string, which mis-orders values
+    // written with different UTC offsets — sort by instant instead.
     return {
       arrivals: arrivalsArr,
       departures: departuresArr,
-      upcomingPickups: upcomingPickupsArr,
+      upcomingPickups: sortTransportsByInstant(upcomingPickupsArr),
     };
-  }, [transports, currentTimestamp]),
+  }, [transports, nowMs]),
 
   /**
    * Creates a new transport in the current trip.
@@ -444,6 +482,7 @@ export function TransportProvider({
       arrivals,
       departures,
       upcomingPickups,
+      nowMs,
       isLoading,
       error,
       createTransport,
@@ -456,6 +495,7 @@ export function TransportProvider({
       arrivals,
       departures,
       upcomingPickups,
+      nowMs,
       isLoading,
       error,
       createTransport,

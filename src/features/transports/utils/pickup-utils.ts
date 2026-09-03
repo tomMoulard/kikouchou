@@ -1,10 +1,16 @@
 /**
- * @fileoverview Utility functions for pickup grouping and proximity detection.
+ * @fileoverview Timing and selection helpers for transports and pickups, plus
+ * the proximity grouping used by the pickup alert panel.
+ *
+ * Every view that asks "is this transport still ahead of us?" or "how many
+ * pickups still need a driver?" answers it here, so the analytics badge, the
+ * alert panel and its visibility gate can never disagree.
  *
  * @module features/transports/utils/pickup-utils
  */
 
 import { parseISO } from 'date-fns';
+
 import type { Transport } from '@/types';
 
 // ============================================================================
@@ -37,19 +43,134 @@ export interface PickupGroup {
 }
 
 // ============================================================================
-// Functions
+// Timing
 // ============================================================================
 
 /**
- * Groups unassigned pickups by station proximity within a time window.
+ * Resolves a transport datetime to an absolute instant.
+ *
+ * `Transport.datetime` is an ISO 8601 string, but the schema accepts `Z`, a
+ * numeric offset and no offset at all, and records also arrive over Yjs from
+ * peers without ever passing through the form. Comparing those strings
+ * lexicographically only happens to work while every value shares one exact
+ * formatting: `2026-07-15T14:00:00+02:00` sorts *after* `2026-07-15T13:00:00Z`
+ * even though it happens an hour *before* it. Everything here compares
+ * instants instead.
+ *
+ * @param datetime - ISO datetime string
+ * @returns Epoch milliseconds, or null when the value cannot be parsed
+ */
+export function toTransportInstant(datetime: string | undefined): number | null {
+  if (!datetime) {
+    return null;
+  }
+
+  try {
+    const parsed = parseISO(datetime).getTime();
+    return isNaN(parsed) ? null : parsed;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Decides whether a transport is still ahead of the reference instant.
+ *
+ * A datetime that cannot be parsed is never reported as upcoming: we cannot
+ * prove it is in the future, and a row we cannot place in time must not
+ * inflate a "still to come" count.
+ *
+ * @param datetime - ISO datetime string
+ * @param nowMs - Reference instant in epoch milliseconds (`TransportContext.nowMs`)
+ * @returns True when the transport happens at or after the reference instant
+ */
+export function isTransportUpcoming(
+  datetime: string | undefined,
+  nowMs: number,
+): boolean {
+  const instant = toTransportInstant(datetime);
+  return instant !== null && instant >= nowMs;
+}
+
+/**
+ * Orders transports chronologically by instant.
+ *
+ * Sorting by the raw string mis-orders mixed-offset values for the same reason
+ * comparing them does — see {@link toTransportInstant}. A row whose datetime
+ * cannot be parsed sorts last: it belongs at the end of a chronological list,
+ * not floated to the top of one.
+ *
+ * @param transports - Transports to order (not mutated)
+ * @returns A new array sorted earliest first
+ */
+export function sortTransportsByInstant(
+  transports: readonly Transport[],
+): Transport[] {
+  return [...transports].sort((a, b) => {
+    const left = toTransportInstant(a.datetime);
+    const right = toTransportInstant(b.datetime);
+
+    if (left === null) {
+      return right === null ? 0 : 1;
+    }
+    if (right === null) {
+      return -1;
+    }
+    return left - right;
+  });
+}
+
+// ============================================================================
+// Selection
+// ============================================================================
+
+/**
+ * Selects the pickups that still need somebody to drive.
+ *
+ * This is the single answer to "how many rides still need a driver". It is
+ * deliberately time-free: the base set is `TransportContext.upcomingPickups`,
+ * which is already filtered against the context's single, minute-refreshed
+ * reference instant. Re-deriving "now" here is what used to let the analytics
+ * badge, the alert panel's visibility gate and the count inside the panel
+ * disagree with one another.
+ *
+ * Rows whose datetime cannot be parsed are excluded, so every returned pickup
+ * can be placed on a timeline by {@link groupPickupsByProximity} — the count
+ * above the cards and the cards themselves therefore always match.
+ *
+ * @param upcomingPickups - The trip's upcoming pickups, from `TransportContext`
+ * @returns Unassigned pickups, earliest first
+ */
+export function selectPickupsNeedingDriver(
+  upcomingPickups: readonly Transport[],
+): readonly Transport[] {
+  return sortTransportsByInstant(
+    upcomingPickups.filter(
+      (transport) =>
+        transport.needsPickup &&
+        !transport.driverId &&
+        toTransportInstant(transport.datetime) !== null,
+    ),
+  );
+}
+
+// ============================================================================
+// Grouping
+// ============================================================================
+
+/**
+ * Groups pickups by station proximity within a time window.
+ *
+ * Filtering is *not* this function's job — pass it the output of
+ * {@link selectPickupsNeedingDriver} so that the number rendered above the
+ * cards and the cards themselves come from the same selection.
  *
  * Algorithm:
- * 1. Filter to unassigned pickups (needsPickup && !driverId && datetime >= now)
- * 2. Sort by datetime
- * 3. Group by matching station (case-insensitive trim) AND within timeWindow
- * 4. Return sorted groups by earliest datetime
+ * 1. Sort by instant
+ * 2. Group by matching station (case-insensitive trim) AND within timeWindow
+ * 3. Return groups sorted by earliest instant
  *
- * @param pickups - Array of upcoming transports
+ * @param pickups - Pickups to group, already selected by the caller
  * @param timeWindowMinutes - Max minutes between pickups to group (default: 60)
  * @returns Array of pickup groups sorted by earliest datetime
  */
@@ -57,21 +178,8 @@ export function groupPickupsByProximity(
   pickups: readonly Transport[],
   timeWindowMinutes: number = DEFAULT_TIME_WINDOW_MINUTES,
 ): PickupGroup[] {
-  const now = new Date();
-
-  // Filter to unassigned upcoming pickups
-  const unassigned = pickups.filter((t) => {
-    if (!t.needsPickup || t.driverId) return false;
-    try {
-      const date = parseISO(t.datetime);
-      return !isNaN(date.getTime()) && date >= now;
-    } catch {
-      return false;
-    }
-  });
-
-  // Sort by datetime
-  const sorted = [...unassigned].sort((a, b) => a.datetime.localeCompare(b.datetime));
+  const sorted = sortTransportsByInstant(pickups);
+  const windowMs = timeWindowMinutes * 60 * 1000;
 
   const groups: Array<{
     station: string;
@@ -82,14 +190,20 @@ export function groupPickupsByProximity(
   }> = [];
 
   for (const pickup of sorted) {
+    const pickupTime = toTransportInstant(pickup.datetime);
+    // Defensive: a row we cannot place in time has no position in a proximity
+    // window. `selectPickupsNeedingDriver` already drops those, so this only
+    // guards a caller that hands over an unselected list.
+    if (pickupTime === null) {
+      continue;
+    }
+
     // `location` is required by the `Transport` type, but nothing enforces that
     // on a record arriving over Yjs from a peer, and one such row used to throw
     // `Cannot read properties of undefined (reading 'trim')` straight into the
     // error boundary — taking the whole transports page down rather than the
     // one malformed pickup. Group those under the empty station instead.
     const normalizedStation = (pickup.location ?? '').trim().toLowerCase();
-    const pickupTime = parseISO(pickup.datetime).getTime();
-    const windowMs = timeWindowMinutes * 60 * 1000;
 
     // Find an existing group that matches (within timeWindow of any pickup in the group)
     let matched = false;
