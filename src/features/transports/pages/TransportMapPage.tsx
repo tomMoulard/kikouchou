@@ -586,9 +586,14 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
           <div className="size-3 rounded-full bg-orange-500" aria-hidden="true" />
           <span>{t('transports.departures')}</span>
         </div>
+        {/*
+          Counts transports, not map pins: this sits beside the arrival and
+          departure swatches, and a transport with a start location contributes
+          two pins, so `markers.length` overstated what the legend describes.
+        */}
         <div className="ml-auto text-xs">
-          {t('transports.locationsCount', '{{count}} location(s)', {
-            count: markers.length,
+          {t('transports.mappedCount', {
+            count: transportsWithCoordinates.length,
           })}
         </div>
       </div>

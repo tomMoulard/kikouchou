@@ -318,7 +318,8 @@
     "noLocations": "Aucun lieu sur la carte pour l'instant",
     "noLocationsDescription": "Ajoutez un lieu aux transports et ils apparaîtront ici",
     "backToList": "Retour à la liste",
-    "locationsCount": "{{count}} lieu(x)",
+    "mappedCount_one": "{{count}} transport sur la carte",
+    "mappedCount_other": "{{count}} transports sur la carte",
     "mapAriaLabel": "Carte montrant les lieux de transport"
   },
   "activities": {
@@ -870,9 +871,9 @@
     "ariaLabel": "Carte interactive",
     "loading": "Chargement de la carte...",
     "markerLabel": "Marqueur {{type}} à {{label}}",
-    "markerCount": "{{count}} emplacement(s) sur la carte",
+    "markerCount": "{{count}} emplacements sur la carte",
     "markerCount_zero": "Aucun emplacement sur la carte",
-    "markerCount_one": "1 emplacement sur la carte",
+    "markerCount_one": "{{count}} emplacement sur la carte",
     "markerCount_other": "{{count}} emplacements sur la carte",
     "zoomIn": "Zoom avant",
     "zoomOut": "Zoom arrière",

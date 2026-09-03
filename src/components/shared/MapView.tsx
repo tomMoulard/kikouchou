@@ -473,9 +473,7 @@ export const MapView = memo(
 
         {/* Screen reader marker count announcement */}
         <div className="sr-only" aria-live="polite">
-          {t('map.markerCount', '{{count}} location(s) on map', {
-            count: markers.length,
-          })}
+          {t('map.markerCount', { count: markers.length })}
         </div>
       </div>
     );

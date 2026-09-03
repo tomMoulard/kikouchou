@@ -1,16 +1,24 @@
 /**
- * @fileoverview Tests for pickup grouping utility functions.
+ * @fileoverview Tests for the transport timing, selection and grouping helpers.
  *
- * Tests the groupPickupsByProximity function which groups unassigned pickups
- * at the same station within a configurable time window.
+ * Covers `toTransportInstant` / `isTransportUpcoming` (the one comparison every
+ * transport view uses), `selectPickupsNeedingDriver` (the one answer to "how
+ * many rides still need a driver") and `groupPickupsByProximity`, which groups
+ * an already-selected list.
  *
  * @module features/transports/utils/__tests__/pickup-utils.test
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { groupPickupsByProximity } from '../pickup-utils';
-import type { Transport } from '@/types';
-import type { PersonId, TransportId, TripId } from '@/types';
+
+import {
+  groupPickupsByProximity,
+  isTransportUpcoming,
+  selectPickupsNeedingDriver,
+  sortTransportsByInstant,
+  toTransportInstant,
+} from '../pickup-utils';
+import type { PersonId, Transport, TransportId, TripId } from '@/types';
 
 // ============================================================================
 // Test Helpers
@@ -33,12 +41,152 @@ function makeTransport(overrides: Partial<Transport> = {}): Transport {
 }
 
 // ============================================================================
-// Tests
+// Timing
+// ============================================================================
+
+describe('toTransportInstant', () => {
+  it('resolves a UTC datetime to its epoch instant', () => {
+    expect(toTransportInstant('2026-07-15T14:00:00.000Z')).toBe(
+      Date.UTC(2026, 6, 15, 14, 0, 0),
+    );
+  });
+
+  it('honours an explicit UTC offset', () => {
+    expect(toTransportInstant('2026-07-15T14:00:00+02:00')).toBe(
+      Date.UTC(2026, 6, 15, 12, 0, 0),
+    );
+  });
+
+  it('returns null for a datetime it cannot parse', () => {
+    expect(toTransportInstant('not-a-date')).toBeNull();
+    expect(toTransportInstant('')).toBeNull();
+    expect(toTransportInstant(undefined)).toBeNull();
+  });
+});
+
+describe('isTransportUpcoming', () => {
+  it('compares instants, not strings', () => {
+    // Same wall-clock digits, different offsets: `+02:00` happens FIRST, but
+    // sorts LAST as a string. The old lexicographic compare called this one
+    // upcoming when it was already an hour in the past.
+    const nowMs = Date.UTC(2026, 6, 15, 12, 30, 0);
+
+    expect(isTransportUpcoming('2026-07-15T14:00:00+02:00', nowMs)).toBe(false);
+    expect(isTransportUpcoming('2026-07-15T14:00:00.000Z', nowMs)).toBe(true);
+  });
+
+  it('treats a transport at exactly the reference instant as upcoming', () => {
+    const nowMs = Date.UTC(2026, 6, 15, 14, 0, 0);
+    expect(isTransportUpcoming('2026-07-15T14:00:00.000Z', nowMs)).toBe(true);
+  });
+
+  it('never reports an unparseable datetime as upcoming', () => {
+    expect(isTransportUpcoming('not-a-date', 0)).toBe(false);
+    expect(isTransportUpcoming(undefined, 0)).toBe(false);
+  });
+});
+
+describe('sortTransportsByInstant', () => {
+  it('orders mixed-offset datetimes chronologically', () => {
+    const later = makeTransport({
+      id: 't-later' as TransportId,
+      datetime: '2026-07-15T13:00:00.000Z',
+    });
+    const earlier = makeTransport({
+      id: 't-earlier' as TransportId,
+      datetime: '2026-07-15T14:00:00+02:00', // 12:00Z
+    });
+
+    // String order would put `t-later` first; instant order must not.
+    expect(sortTransportsByInstant([later, earlier]).map((t) => t.id)).toEqual([
+      't-earlier',
+      't-later',
+    ]);
+  });
+
+  it('puts a datetime it cannot parse at the end, not the start', () => {
+    const ordered = sortTransportsByInstant([
+      makeTransport({ id: 't-broken' as TransportId, datetime: 'not-a-date' }),
+      makeTransport({ id: 't-later' as TransportId, datetime: '2026-07-15T15:00:00.000Z' }),
+      makeTransport({ id: 't-earlier' as TransportId, datetime: '2026-07-15T14:00:00.000Z' }),
+    ]);
+
+    expect(ordered.map((t) => t.id)).toEqual(['t-earlier', 't-later', 't-broken']);
+  });
+
+  it('does not mutate its input', () => {
+    const input = [
+      makeTransport({ id: 't-2' as TransportId, datetime: '2026-07-15T15:00:00.000Z' }),
+      makeTransport({ id: 't-1' as TransportId, datetime: '2026-07-15T14:00:00.000Z' }),
+    ];
+    sortTransportsByInstant(input);
+    expect(input.map((t) => t.id)).toEqual(['t-2', 't-1']);
+  });
+});
+
+// ============================================================================
+// Selection
+// ============================================================================
+
+describe('selectPickupsNeedingDriver', () => {
+  it('returns nothing for an empty base set', () => {
+    expect(selectPickupsNeedingDriver([])).toEqual([]);
+  });
+
+  it('excludes transports that do not need a pickup', () => {
+    expect(
+      selectPickupsNeedingDriver([makeTransport({ needsPickup: false })]),
+    ).toEqual([]);
+  });
+
+  it('excludes pickups that already have a driver', () => {
+    expect(
+      selectPickupsNeedingDriver([
+        makeTransport({ needsPickup: true, driverId: 'driver-1' as PersonId }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it('excludes pickups whose datetime cannot be parsed', () => {
+    expect(
+      selectPickupsNeedingDriver([makeTransport({ datetime: 'not-a-date' })]),
+    ).toEqual([]);
+  });
+
+  it('does NOT re-filter by time: the base set already decided that', () => {
+    // A pickup a few minutes in the past that the context still lists as
+    // upcoming (its reference instant only moves once a minute) must stay
+    // visible until the next tick rather than vanish from one view only.
+    const justPast = makeTransport({
+      id: 't-just-past' as TransportId,
+      datetime: new Date(Date.now() - 5 * 60_000).toISOString(),
+    });
+
+    expect(selectPickupsNeedingDriver([justPast]).map((t) => t.id)).toEqual([
+      't-just-past',
+    ]);
+  });
+
+  it('orders the selection chronologically by instant', () => {
+    const pickups = [
+      makeTransport({ id: 't-late' as TransportId, datetime: '2026-07-15T18:00:00.000Z' }),
+      makeTransport({ id: 't-early' as TransportId, datetime: '2026-07-15T14:00:00.000Z' }),
+    ];
+
+    expect(selectPickupsNeedingDriver(pickups).map((t) => t.id)).toEqual([
+      't-early',
+      't-late',
+    ]);
+  });
+});
+
+// ============================================================================
+// Grouping
 // ============================================================================
 
 describe('groupPickupsByProximity', () => {
   beforeEach(() => {
-    // Fix "now" to a known time for predictable tests
+    // Fix "now" to a known time so the fixtures below read unambiguously.
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-15T10:00:00.000Z'));
   });
@@ -48,39 +196,40 @@ describe('groupPickupsByProximity', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Empty / No-match cases
+  // Empty cases
   // --------------------------------------------------------------------------
 
   it('returns empty array when no pickups provided', () => {
     expect(groupPickupsByProximity([])).toEqual([]);
   });
 
-  it('returns empty array when no pickups need a ride', () => {
-    const pickups = [
-      makeTransport({ needsPickup: false }),
-      makeTransport({ needsPickup: true, driverId: 'driver-1' as PersonId }),
-    ];
+  it('skips a pickup whose datetime cannot be placed on a timeline', () => {
+    const pickups = [makeTransport({ datetime: 'not-a-date' })];
     expect(groupPickupsByProximity(pickups)).toEqual([]);
   });
 
-  it('excludes past pickups', () => {
-    const pickups = [
-      makeTransport({
-        datetime: '2026-07-15T09:00:00.000Z', // 1 hour in the past
-        needsPickup: true,
-      }),
-    ];
-    expect(groupPickupsByProximity(pickups)).toEqual([]);
-  });
+  // --------------------------------------------------------------------------
+  // Total over its input
+  // --------------------------------------------------------------------------
 
-  it('excludes pickups with invalid datetime', () => {
-    const pickups = [
-      makeTransport({
-        datetime: 'not-a-date',
-        needsPickup: true,
-      }),
-    ];
-    expect(groupPickupsByProximity(pickups)).toEqual([]);
+  /**
+   * The alert panel counts the selection and renders the groups. If grouping
+   * ever dropped a selected pickup, the header badge would promise a card that
+   * is not on screen.
+   */
+  it('places every selected pickup in exactly one group', () => {
+    const pickups = selectPickupsNeedingDriver([
+      makeTransport({ id: 't-1' as TransportId, datetime: '2026-07-15T14:00:00.000Z', location: 'Gare de Vannes' }),
+      makeTransport({ id: 't-2' as TransportId, datetime: '2026-07-15T14:30:00.000Z', location: 'Gare de Vannes' }),
+      makeTransport({ id: 't-3' as TransportId, datetime: '2026-07-15T18:00:00.000Z', location: 'Aeroport de Nantes' }),
+      makeTransport({ id: 't-4' as TransportId, datetime: '2026-07-14T09:00:00.000Z', location: 'Gare de Vannes' }),
+    ]);
+
+    const groups = groupPickupsByProximity(pickups, 60);
+    const grouped = groups.flatMap((g) => g.pickups.map((p) => p.id));
+
+    expect(grouped).toHaveLength(pickups.length);
+    expect(new Set(grouped).size).toBe(pickups.length);
   });
 
   // --------------------------------------------------------------------------
@@ -91,7 +240,6 @@ describe('groupPickupsByProximity', () => {
     const transport = makeTransport({
       datetime: '2026-07-15T14:00:00.000Z',
       location: 'Gare de Vannes',
-      needsPickup: true,
     });
     const result = groupPickupsByProximity([transport]);
 
@@ -109,10 +257,7 @@ describe('groupPickupsByProximity', () => {
    * transports page rather than for the one bad row.
    */
   it('tolerates a pickup whose location is missing', () => {
-    const transport = makeTransport({
-      datetime: '2026-07-15T14:00:00.000Z',
-      needsPickup: true,
-    });
+    const transport = makeTransport({ datetime: '2026-07-15T14:00:00.000Z' });
     delete (transport as { location?: string }).location;
 
     const result = groupPickupsByProximity([transport]);
@@ -146,6 +291,25 @@ describe('groupPickupsByProximity', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]!.pickups).toHaveLength(2);
+  });
+
+  it('groups pickups written with different UTC offsets', () => {
+    const pickups = [
+      makeTransport({
+        id: 't-utc' as TransportId,
+        datetime: '2026-07-15T12:15:00.000Z',
+        location: 'Gare de Vannes',
+      }),
+      makeTransport({
+        id: 't-offset' as TransportId,
+        datetime: '2026-07-15T14:00:00+02:00', // 12:00Z — 15 minutes earlier
+        location: 'Gare de Vannes',
+      }),
+    ];
+    const result = groupPickupsByProximity(pickups, 60);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.pickups.map((p) => p.id)).toEqual(['t-offset', 't-utc']);
   });
 
   it('does NOT group pickups at different stations', () => {
@@ -327,51 +491,6 @@ describe('groupPickupsByProximity', () => {
 
     // 10 minute window - should NOT group
     expect(groupPickupsByProximity(pickups, 10)).toHaveLength(2);
-  });
-
-  // --------------------------------------------------------------------------
-  // Filtering behavior
-  // --------------------------------------------------------------------------
-
-  it('excludes assigned pickups (with driverId)', () => {
-    const pickups = [
-      makeTransport({
-        id: 't-unassigned' as TransportId,
-        datetime: '2026-07-15T14:00:00.000Z',
-        location: 'Gare de Vannes',
-        needsPickup: true,
-        driverId: undefined,
-      }),
-      makeTransport({
-        id: 't-assigned' as TransportId,
-        datetime: '2026-07-15T14:10:00.000Z',
-        location: 'Gare de Vannes',
-        needsPickup: true,
-        driverId: 'driver-1' as PersonId,
-      }),
-    ];
-    const result = groupPickupsByProximity(pickups, 60);
-
-    expect(result).toHaveLength(1);
-    expect(result[0]!.pickups).toHaveLength(1);
-    expect(result[0]!.pickups[0]!.id).toBe('t-unassigned');
-  });
-
-  it('excludes non-pickup transports', () => {
-    const pickups = [
-      makeTransport({
-        datetime: '2026-07-15T14:00:00.000Z',
-        needsPickup: true,
-      }),
-      makeTransport({
-        datetime: '2026-07-15T14:10:00.000Z',
-        needsPickup: false,
-      }),
-    ];
-    const result = groupPickupsByProximity(pickups, 60);
-
-    expect(result).toHaveLength(1);
-    expect(result[0]!.pickups).toHaveLength(1);
   });
 
   // --------------------------------------------------------------------------
