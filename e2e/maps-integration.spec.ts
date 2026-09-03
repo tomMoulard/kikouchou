@@ -14,6 +14,7 @@ import { clearIndexedDB } from './support/storage';
 import { waitForRoute } from './support/routes';
 
 import { seedPerson, seedTransport, seedTrip } from './support/seed';
+import { fixtureDate, fixtureDatetime } from './support/fixture-dates';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -21,11 +22,14 @@ import { seedPerson, seedTransport, seedTrip } from './support/seed';
 
 /**
  * Test data for creating trips with locations.
+ *
+ * Dates derived from today rather than pinned to July 2024, which was 26 months
+ * behind by the time anyone looked — see `support/fixture-dates`.
  */
 const TEST_TRIP_WITH_LOCATION = {
-  name: 'Paris Trip 2024',
-  startDate: '2024-07-15',
-  endDate: '2024-07-22',
+  name: 'Paris Trip',
+  startDate: fixtureDate(15),
+  endDate: fixtureDate(22),
 } as const;
 
 /**
@@ -128,7 +132,7 @@ async function _createTestTransport(
   // Set datetime - just use today's date
   const datetimeInput = page.locator('#transport-datetime');
   if (await datetimeInput.isVisible()) {
-    await datetimeInput.fill('2024-07-16T10:00');
+    await datetimeInput.fill(fixtureDatetime(16, '10:00'));
   }
 
   // Set location
@@ -192,7 +196,7 @@ async function _hasOsmTilesCached(page: Page): Promise<boolean> {
 // ============================================================================
 
 /** A fixed window the seeded fixtures sit inside. */
-const SEEDED_TRIP_DATES = { startDate: '2026-07-13', endDate: '2026-07-25' } as const;
+const SEEDED_TRIP_DATES = { startDate: fixtureDate(13), endDate: fixtureDate(25) } as const;
 
 /** Charles de Gaulle, so a seeded transport has somewhere to be on the map. */
 const SEEDED_TRANSPORT_COORDINATES = { lat: 49.0097, lon: 2.5479 } as const;
@@ -477,7 +481,7 @@ test.describe('Map Accessibility', () => {
       tripId,
       personId,
       type: 'arrival',
-      datetime: '2026-07-15T10:00:00.000Z',
+      datetime: fixtureDatetime(15, '10:00:00.000Z'),
       location: 'Paris Charles de Gaulle',
       coordinates: SEEDED_TRANSPORT_COORDINATES,
     });
@@ -508,7 +512,7 @@ test.describe('Map Accessibility', () => {
       tripId,
       personId,
       type: 'arrival',
-      datetime: '2026-07-15T10:00:00.000Z',
+      datetime: fixtureDatetime(15, '10:00:00.000Z'),
       location: 'Paris Charles de Gaulle',
       coordinates: SEEDED_TRANSPORT_COORDINATES,
     });
@@ -593,15 +597,15 @@ const MAPPED_TRIPS = [
   {
     name: 'Stacking Trip Paris',
     location: 'Paris, France',
-    startDate: '2026-06-01',
-    endDate: '2026-06-10',
+    startDate: fixtureDate(1),
+    endDate: fixtureDate(10),
     coordinates: { lat: 48.8566, lon: 2.3522 },
   },
   {
     name: 'Stacking Trip Lisbon',
     location: 'Lisbon, Portugal',
-    startDate: '2026-07-01',
-    endDate: '2026-07-08',
+    startDate: fixtureDate(1, 3),
+    endDate: fixtureDate(8, 3),
     coordinates: { lat: 38.7223, lon: -9.1393 },
   },
 ] as const;

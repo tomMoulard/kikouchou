@@ -16,6 +16,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { clearIndexedDB } from './support/storage';
+import { fixtureDate } from './support/fixture-dates';
 
 // ============================================================================
 // Database Helpers
@@ -26,15 +27,23 @@ import { clearIndexedDB } from './support/storage';
 // ============================================================================
 
 /**
- * Test data constants for consistent test execution
+ * Test data constants for consistent test execution.
+ *
+ * Every date is a day of the fixture month, which is derived from today — see
+ * `support/fixture-dates`. These were pinned to March 2026, the exact month the
+ * project has already been burned by: once it passed, the transport list folded
+ * every fixture into its collapsed "Past transports" accordion and the
+ * assertions hunted for rows that were rendered and hidden. The offsets are what
+ * these tests are about — a stay inside the trip, a second that does not overlap
+ * it, a third that does — so the offsets are what is preserved here.
  */
 const TEST_DATA = {
   trip: {
     name: 'E2E Test Trip',
     location: 'Test Location',
-    // Using dates in the future to avoid date-related issues
-    startDate: '2026-03-01',
-    endDate: '2026-03-10',
+    // Ten days, always ahead of today.
+    startDate: fixtureDate(1),
+    endDate: fixtureDate(10),
   },
   room: {
     name: 'Master Bedroom',
@@ -54,23 +63,23 @@ const TEST_DATA = {
   },
   assignment: {
     // Dates within trip range
-    startDate: '2026-03-02',
-    endDate: '2026-03-05',
+    startDate: fixtureDate(2),
+    endDate: fixtureDate(5),
   },
   assignment2: {
     // Non-overlapping dates for second assignment
-    startDate: '2026-03-06',
-    endDate: '2026-03-08',
+    startDate: fixtureDate(6),
+    endDate: fixtureDate(8),
   },
   overlappingAssignment: {
     // Overlapping with first assignment
-    startDate: '2026-03-04',
-    endDate: '2026-03-07',
+    startDate: fixtureDate(4),
+    endDate: fixtureDate(7),
   },
   editedAssignment: {
     // New dates for edited assignment
-    startDate: '2026-03-03',
-    endDate: '2026-03-06',
+    startDate: fixtureDate(3),
+    endDate: fixtureDate(6),
   },
 } as const;
 
