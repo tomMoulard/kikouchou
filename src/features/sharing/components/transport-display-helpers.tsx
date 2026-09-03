@@ -5,8 +5,8 @@
  */
 
 import type { ReactElement } from 'react';
-import { Bus, Car, MapPin, Plane, Train } from 'lucide-react';
 
+import { getTransportModeIcon } from '@/lib/utils/transport-icons';
 import type { TransportMode } from '@/types';
 
 /**
@@ -17,21 +17,15 @@ export function getTransportIcon(
   mode: TransportMode | undefined,
   t: (key: string, fallback: string) => string,
 ): ReactElement {
-  const iconProps = { className: 'size-4', 'aria-hidden': true as const };
+  const Icon = getTransportModeIcon(mode);
   const label = mode ? t(`transports.modes.${mode}`, mode) : t('transports.modes.other', 'other');
 
-  switch (mode) {
-    case 'train':
-      return <><Train {...iconProps} /><span className="sr-only">{label}</span></>;
-    case 'plane':
-      return <><Plane {...iconProps} /><span className="sr-only">{label}</span></>;
-    case 'car':
-      return <><Car {...iconProps} /><span className="sr-only">{label}</span></>;
-    case 'bus':
-      return <><Bus {...iconProps} /><span className="sr-only">{label}</span></>;
-    default:
-      return <><MapPin {...iconProps} /><span className="sr-only">{label}</span></>;
-  }
+  return (
+    <>
+      <Icon className="size-4" aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </>
+  );
 }
 
 /**

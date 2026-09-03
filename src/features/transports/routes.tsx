@@ -5,11 +5,10 @@
  * @module features/transports/routes
  */
 
-import { type ReactElement, Suspense, lazy } from 'react';
+import { lazy } from 'react';
 import type { RouteObject } from 'react-router-dom';
 
-import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { withSuspense } from '@/components/shared/with-suspense';
 
 // ============================================================================
 // Lazy-loaded Components
@@ -34,27 +33,6 @@ const TransportMapPage = lazy(() =>
     default: module.TransportMapPage,
   })),
 );
-
-// ============================================================================
-// Route Wrapper Components
-// ============================================================================
-
-/**
- * Wraps a lazy-loaded component in Suspense with a loading fallback and error boundary.
- * Handles both loading states and chunk loading failures gracefully.
- *
- * @param Component - The lazy-loaded component to wrap
- * @returns A React element with error boundary and Suspense boundary
- */
-function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>): ReactElement {
-  return (
-    <ErrorBoundary>
-      <Suspense fallback={<LoadingState variant="fullPage" />}>
-        <Component />
-      </Suspense>
-    </ErrorBoundary>
-  );
-}
 
 // ============================================================================
 // Route Definitions

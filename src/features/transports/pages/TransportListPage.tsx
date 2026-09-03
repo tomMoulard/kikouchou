@@ -36,11 +36,8 @@ import { enUS, fr } from 'date-fns/locale';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
-  Bus,
-  Car,
   ChevronDown,
   ChevronRight,
-  CircleDot,
   Clock,
   Edit,
   History,
@@ -49,7 +46,6 @@ import {
   MoreVertical,
   Plane,
   Plus,
-  Train,
   Trash2,
   User,
 } from 'lucide-react';
@@ -77,9 +73,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { getTransportModeIcon } from '@/lib/utils/transport-icons';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
-import type { Person, PersonId, Transport, TransportId, TransportMode, TransportType } from '@/types';
+import type { Person, PersonId, Transport, TransportId, TransportType } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -159,28 +156,6 @@ interface TransportListProps {
  */
 function getDateLocale(language: string): typeof fr | typeof enUS {
   return language === 'fr' ? fr : enUS;
-}
-
-/**
- * Gets the icon component for a transport mode.
- *
- * @param mode - The transport mode
- * @returns The Lucide icon component
- */
-function getTransportModeIcon(mode: TransportMode | undefined): typeof Train {
-  switch (mode) {
-    case 'train':
-      return Train;
-    case 'plane':
-      return Plane;
-    case 'car':
-      return Car;
-    case 'bus':
-      return Bus;
-    case 'other':
-    default:
-      return CircleDot;
-  }
 }
 
 /**

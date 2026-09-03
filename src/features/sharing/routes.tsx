@@ -17,11 +17,10 @@
  * ```
  */
 
-import { type ReactElement, Suspense, lazy } from 'react';
+import { type ReactElement, lazy } from 'react';
 import { Outlet, type RouteObject } from 'react-router-dom';
 
-import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { withSuspense } from '@/components/shared/with-suspense';
 
 // ============================================================================
 // Lazy-loaded Components
@@ -39,7 +38,6 @@ const ShareImportPage = lazy(() =>
 
 /**
  * Lazy-loaded IdentityStepPage component (story 2.2).
- * Replaces the OnboardingPlaceholderPage for the identity route.
  */
 const IdentityStepPage = lazy(() =>
   import('./pages/IdentityStepPage').then((module) => ({
@@ -49,7 +47,6 @@ const IdentityStepPage = lazy(() =>
 
 /**
  * Lazy-loaded RoomSelectionStepPage component (story 2.3).
- * Replaces the OnboardingPlaceholderPage for the room route.
  */
 const RoomSelectionStepPage = lazy(() =>
   import('./pages/RoomSelectionStepPage').then((module) => ({
@@ -59,7 +56,6 @@ const RoomSelectionStepPage = lazy(() =>
 
 /**
  * Lazy-loaded TransportEntryStepPage component (story 2.4).
- * Replaces the OnboardingPlaceholderPage for the transport route.
  */
 const TransportEntryStepPage = lazy(() =>
   import('./pages/TransportEntryStepPage').then((module) => ({
@@ -69,7 +65,6 @@ const TransportEntryStepPage = lazy(() =>
 
 /**
  * Lazy-loaded SummaryStepPage component (story 2.5).
- * Replaces the OnboardingPlaceholderPage for the summary route.
  */
 const SummaryStepPage = lazy(() =>
   import('./pages/SummaryStepPage').then((module) => ({
@@ -98,23 +93,6 @@ const TripSyncPage = lazy(() =>
 // ============================================================================
 // Route Wrapper Components
 // ============================================================================
-
-/**
- * Wraps a lazy-loaded component in Suspense with a loading fallback and error boundary.
- * Handles both loading states and chunk loading failures gracefully.
- *
- * @param Component - The lazy-loaded component to wrap
- * @returns A React element with error boundary and Suspense boundary
- */
-function withSuspense(Component: React.LazyExoticComponent<React.ComponentType>): ReactElement {
-  return (
-    <ErrorBoundary>
-      <Suspense fallback={<LoadingState variant="fullPage" />}>
-        <Component />
-      </Suspense>
-    </ErrorBoundary>
-  );
-}
 
 /**
  * Layout for the whole `/share/:shareId` branch.
@@ -208,14 +186,6 @@ export const joinRoutes: RouteObject[] = [
     element: withSuspense(JoinTripPage),
   },
 ];
-
-/**
- * Standalone route for use in nested route configurations.
- */
-export const ShareImportRoute = {
-  path: 'share/:shareId',
-  element: withSuspense(ShareImportPage),
-} satisfies RouteObject;
 
 /**
  * Routes for the P2P sync feature (QR code export/import).
