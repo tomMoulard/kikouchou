@@ -31,10 +31,10 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { eachDayOfInterval, format, isAfter, isValid } from 'date-fns';
-import { enUS, fr } from 'date-fns/locale';
 import type { Matcher, DateRange as RdpDateRange } from 'react-day-picker';
 import { CalendarIcon, X } from 'lucide-react';
 
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -102,13 +102,6 @@ function isValidDate(date: Date | undefined): date is Date {
 }
 
 /**
- * Get the date-fns locale based on the current i18n language.
- */
-function getDateFnsLocale(language: string): typeof fr | typeof enUS {
-  return language === 'fr' ? fr : enUS;
-}
-
-/**
  * DateRangePicker component for selecting a range of dates.
  *
  * Features:
@@ -137,7 +130,7 @@ const DateRangePicker = memo(({
 
   // Get the appropriate date-fns locale
   const locale = useMemo(
-    () => getDateFnsLocale(i18n.language),
+    () => getDateLocale(i18n.language),
     [i18n.language]
   ),
 

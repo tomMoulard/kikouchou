@@ -12,8 +12,6 @@
  *   TripEditPage,
  *   TripForm,
  *   TripCard,
- *   getDateLocale,
- *   formatDateRange,
  * } from '@/features/trips';
  * ```
  */
@@ -38,7 +36,7 @@ export type { TripFormProps } from './components/TripForm';
 export { LocationAutocomplete, ImportBadge } from './components/LocationAutocomplete';
 export type { LocationAutocompleteProps, ImportBadgeProps, TripImportData } from './components/LocationAutocomplete';
 
-export { TripCard, getDateLocale, formatDateRange } from './components/TripCard';
+export { TripCard } from './components/TripCard';
 export type { TripCardProps } from './components/TripCard';
 
 export { TripsLocationMap } from './components/TripsLocationMap';

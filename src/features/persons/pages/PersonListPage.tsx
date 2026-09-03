@@ -29,8 +29,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { format, parseISO } from 'date-fns';
-import { enUS, fr } from 'date-fns/locale';
+import { type Locale, format, parseISO } from 'date-fns';
 import { ArrowDownRight, ArrowUpRight, Plus, Trash2, Users } from 'lucide-react';
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -51,6 +50,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
 import { getPersonHeadcount } from '@/types';
@@ -97,22 +97,12 @@ interface PersonCardProps {
   /** Whether interaction is disabled */
   readonly isDisabled?: boolean;
   /** Date locale for formatting */
-  readonly dateLocale: typeof fr | typeof enUS;
+  readonly dateLocale: Locale;
 }
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Gets the date-fns locale based on the current i18n language.
- *
- * @param language - The current i18n language code
- * @returns The date-fns locale object
- */
-function getDateLocale(language: string): typeof fr | typeof enUS {
-  return language === 'fr' ? fr : enUS;
-}
 
 /**
  * Safely formats a datetime string for display.
@@ -124,7 +114,7 @@ function getDateLocale(language: string): typeof fr | typeof enUS {
  */
 function formatTransportDatetime(
   datetime: string,
-  locale: typeof fr | typeof enUS,
+  locale: Locale,
 ): { date: string; time: string } {
   try {
     const date = parseISO(datetime);
@@ -143,7 +133,7 @@ function formatTransportDatetime(
  */
 function formatPersonStayRangeLabel(
   person: Person,
-  locale: typeof fr | typeof enUS,
+  locale: Locale,
 ): string | undefined {
   if (!person.stayStartDate || !person.stayEndDate) {
     return undefined;

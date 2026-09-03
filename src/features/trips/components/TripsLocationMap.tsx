@@ -20,8 +20,9 @@ import {
   type MapMarkerData,
   type MapViewRef,
 } from '@/components/shared/MapView';
-import { formatDateRange, getDateLocale } from './TripCard';
 import { hasValidCoordinates, type Coordinates } from '@/lib/geocoding';
+import { getDateLocale } from '@/lib/i18n/date-locale';
+import { formatDateRange } from '@/lib/utils/date-format';
 import type { Trip } from '@/types';
 
 // ============================================================================

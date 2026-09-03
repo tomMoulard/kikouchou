@@ -17,8 +17,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormSubmission } from '@/hooks';
-import { type Locale, format, isBefore, isValid, parseISO, startOfDay } from 'date-fns';
-import { enUS, fr } from 'date-fns/locale';
+import { format, isBefore, isValid, parseISO, startOfDay } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -33,6 +32,7 @@ import {
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { toISODateStringFromString } from '@/lib/db/utils';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import type { Coordinates } from '@/lib/geocoding';
 import {
   LocationAutocomplete,
@@ -94,13 +94,6 @@ const ISO_DATE_FORMAT = 'yyyy-MM-dd';
 // ============================================================================
 // Utility Functions
 // ============================================================================
-
-/**
- * Gets the date-fns locale based on i18n language.
- */
-function getDateLocale(lang: string): Locale {
-  return lang === 'fr' ? fr : enUS;
-}
 
 /**
  * Parses an ISO date string to a Date object.

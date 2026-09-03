@@ -15,8 +15,6 @@ import {
   useMemo,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { type Locale, format, parseISO } from 'date-fns';
-import { enUS, fr } from 'date-fns/locale';
 import { Calendar, MapPin, MoreHorizontal, Pencil, Share2, Trash2, Users } from 'lucide-react';
 
 // Lazy load the map component for performance
@@ -40,7 +38,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
+import { formatDateRange } from '@/lib/utils/date-format';
 import type { Person, Trip } from '@/types';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 
@@ -48,73 +48,6 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 // Utility Functions
 // ============================================================================
 const MAX_VISIBLE_PERSONS = 4;
-
-
-/**
- * Gets the date-fns locale object for the given language code.
- *
- * @param lang - Language code (e.g., 'fr', 'en')
- * @returns date-fns Locale object
- *
- * @example
- * ```typescript
- * const locale = getDateLocale('fr'); // Returns French locale
- * const locale = getDateLocale('de'); // Returns English locale (fallback)
- * ```
- */
-export function getDateLocale(lang: string): Locale {
-  return lang === 'fr' ? fr : enUS;
-}
-
-/**
- * Formats a date range for display.
- * Handles same month and different month cases for cleaner output.
- *
- * @param startDate - Start date in ISO format (YYYY-MM-DD)
- * @param endDate - End date in ISO format (YYYY-MM-DD)
- * @param locale - date-fns locale object
- * @returns Formatted date range string
- *
- * @example
- * ```typescript
- * // Same month
- * formatDateRange('2024-07-15', '2024-07-22', fr) // "15 - 22 juil. 2024"
- *
- * // Different months
- * formatDateRange('2024-07-28', '2024-08-05', fr) // "28 juil. - 5 août 2024"
- * ```
- */
-export function formatDateRange(
-  startDate: string,
-  endDate: string,
-  locale: Locale,
-): string {
-  try {
-    const start = parseISO(startDate),
-     end = parseISO(endDate);
-
-    // Validate parsed dates (parseISO returns Invalid Date, doesn't throw)
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      return `${startDate} - ${endDate}`;
-    }
-
-    // Check if dates are in the same month and year
-    const sameMonth =
-      start.getMonth() === end.getMonth() &&
-      start.getFullYear() === end.getFullYear();
-
-    if (sameMonth) {
-      // Same month: "15 - 22 juil. 2024"
-      return `${format(start, 'd', { locale })} - ${format(end, 'd MMM yyyy', { locale })}`;
-    }
-
-    // Different months: "28 juil. - 5 août 2024"
-    return `${format(start, 'd MMM', { locale })} - ${format(end, 'd MMM yyyy', { locale })}`;
-  } catch {
-    // Fallback to raw ISO strings if parsing fails
-    return `${startDate} - ${endDate}`;
-  }
-}
 
 // ============================================================================
 // Type Definitions

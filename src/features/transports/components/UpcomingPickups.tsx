@@ -14,8 +14,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { format, formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns';
-import { enUS, fr } from 'date-fns/locale';
+import { type Locale, format, formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { useOfflineAwareToast } from '@/hooks';
 import {
@@ -48,6 +47,7 @@ import {
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { DEFAULT_TIME_WINDOW_MINUTES, groupPickupsByProximity } from '@/features/transports/utils/pickup-utils';
 import type { Person, PersonId, Transport, TransportId } from '@/types';
@@ -73,7 +73,7 @@ interface PickupAlertCardProps {
   /** The person associated with this transport (if found) */
   readonly person: Person | undefined;
   /** Date locale for formatting */
-  readonly dateLocale: typeof fr | typeof enUS;
+  readonly dateLocale: Locale;
   /** Callback to volunteer to drive */
   readonly onVolunteer: (transportId: TransportId) => void;
 }
@@ -101,20 +101,13 @@ interface DriverSelectDialogProps {
 // ============================================================================
 
 /**
- * Gets the date-fns locale based on the current i18n language.
- */
-function getDateLocale(language: string): typeof fr | typeof enUS {
-  return language === 'fr' ? fr : enUS;
-}
-
-/**
  * Formats a datetime string into a relative time display.
  * Shows "in X hours/minutes" for today, "tomorrow at HH:mm" for tomorrow,
  * and "Day at HH:mm" for other days.
  */
 function formatRelativeTime(
   datetime: string,
-  locale: typeof fr | typeof enUS,
+  locale: Locale,
   t: ReturnType<typeof useTranslation>['t'],
 ): string {
   try {
