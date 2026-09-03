@@ -1,6 +1,15 @@
 /**
- * @fileoverview Derive which guests are “present” on a calendar day from stay dates and transports.
- * Aligns with the check-in / check-out model used for rooms (`isDateInStayRange`).
+ * @fileoverview The single answer to “is this guest here on this night?”.
+ *
+ * A guest is on site when their stay window covers the night — from explicit
+ * stay dates, or failing that from their arrival/departure transports — **or**
+ * when a room assignment covers it. The room clause matters: a host can give
+ * someone a bed without ever filling in stay dates or travel details, and that
+ * guest is unmistakably there. Leaving them out made the sidebar's “guests
+ * tonight” list disagree with the calendar's headcount for the same night.
+ *
+ * Aligns with the check-in / check-out model used for rooms
+ * (`isDateInStayRange`): check-in inclusive, check-out exclusive.
  *
  * @module features/persons/utils/guest-presence
  */
@@ -8,7 +17,37 @@
 import { eachDayOfInterval, format, parseISO } from 'date-fns';
 
 import { isDateInStayRange } from '@/features/rooms/utils/capacity-utils';
-import type { ISODateString, Person, PersonId, Transport } from '@/types';
+import type {
+  ISODateString,
+  Person,
+  PersonId,
+  RoomAssignment,
+  Transport,
+} from '@/types';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Everything needed to decide whether one guest sleeps on one calendar night.
+ *
+ * `assignments` is required rather than optional on purpose: an optional list
+ * silently defaults to “no rooms”, which is exactly the narrower definition
+ * this module exists to remove.
+ */
+export interface GuestPresenceQuery {
+  /** The guest being asked about. */
+  readonly person: Person;
+  /** Arrival transports for the whole trip (filtered internally). */
+  readonly arrivals: readonly Transport[];
+  /** Departure transports for the whole trip (filtered internally). */
+  readonly departures: readonly Transport[];
+  /** Room assignments for the whole trip (filtered internally). */
+  readonly assignments: readonly RoomAssignment[];
+  /** The night in question. */
+  readonly dateKey: ISODateString;
+}
 
 // ============================================================================
 // Stay bounds
@@ -50,10 +89,17 @@ export function deriveGuestStayDateBounds(
   return { arrival: arrivalDate, departure: departureDate };
 }
 
+// ============================================================================
+// Presence
+// ============================================================================
+
 /**
- * True if the person is staying overnight on `dateKey` (check-in ≤ dateKey &lt; check-out).
+ * True if the guest's stay window covers `dateKey` (check-in ≤ dateKey &lt; check-out).
+ *
+ * Internal: the stay window is only half the story — a guest with a bed and no
+ * stay dates is still on site. Callers want {@link isGuestOnSiteOnDate}.
  */
-export function isGuestPresentOnDate(
+function isWithinStayWindow(
   person: Person,
   arrivals: readonly Transport[],
   departures: readonly Transport[],
@@ -67,28 +113,67 @@ export function isGuestPresentOnDate(
 }
 
 /**
- * Guests present on the given calendar day, sorted by existing `persons` order (typically by name).
+ * True if the guest sleeps on `dateKey`, from either their stay window
+ * (explicit dates or transports) or a room assignment covering that night.
+ *
+ * This is the app's one definition of presence. The sidebar's “guests tonight”
+ * list and the calendar's per-day headcounts both read it, so they always name
+ * the same people.
+ *
+ * @example
+ * ```typescript
+ * // No stay dates, no transports — but a bed for the night: on site.
+ * isGuestOnSiteOnDate({
+ *   person,
+ *   arrivals: [],
+ *   departures: [],
+ *   assignments: [{ personId: person.id, startDate: '2026-04-10', endDate: '2026-04-12' }],
+ *   dateKey: '2026-04-10',
+ * }); // true
+ * ```
  */
-export function listGuestsPresentOnDate(
-  persons: readonly Person[],
-  arrivals: readonly Transport[],
-  departures: readonly Transport[],
-  dateKey: ISODateString,
-): readonly Person[] {
-  return persons.filter((p) => isGuestPresentOnDate(p, arrivals, departures, dateKey));
+export function isGuestOnSiteOnDate(args: GuestPresenceQuery): boolean {
+  const { person, arrivals, departures, assignments, dateKey } = args;
+
+  if (isWithinStayWindow(person, arrivals, departures, dateKey)) {
+    return true;
+  }
+
+  return assignments.some(
+    (a) => a.personId === person.id && isDateInStayRange(a.startDate, a.endDate, dateKey),
+  );
 }
 
 /**
- * Maps each trip calendar day (inclusive start…inclusive end) to guest IDs present that night.
+ * Guests on site on the given calendar day, sorted by existing `persons` order (typically by name).
+ */
+export function listGuestsOnSiteOnDate(args: {
+  readonly persons: readonly Person[];
+  readonly arrivals: readonly Transport[];
+  readonly departures: readonly Transport[];
+  readonly assignments: readonly RoomAssignment[];
+  readonly dateKey: ISODateString;
+}): readonly Person[] {
+  const { persons, arrivals, departures, assignments, dateKey } = args;
+  return persons.filter((person) =>
+    isGuestOnSiteOnDate({ person, arrivals, departures, assignments, dateKey }),
+  );
+}
+
+/**
+ * Maps each trip calendar day (inclusive start…inclusive end) to guest IDs on site that night.
  * Use for cache keys, batching, or prefetch: `map.get(isoDate)` → ids to load for that day.
  */
-export function buildGuestIdsByTripDateMap(
-  persons: readonly Person[],
-  arrivals: readonly Transport[],
-  departures: readonly Transport[],
-  tripStartDate: ISODateString,
-  tripEndDate: ISODateString,
-): ReadonlyMap<ISODateString, readonly PersonId[]> {
+export function buildGuestIdsByTripDateMap(args: {
+  readonly persons: readonly Person[];
+  readonly arrivals: readonly Transport[];
+  readonly departures: readonly Transport[];
+  readonly assignments: readonly RoomAssignment[];
+  readonly tripStartDate: ISODateString;
+  readonly tripEndDate: ISODateString;
+}): ReadonlyMap<ISODateString, readonly PersonId[]> {
+  const { persons, arrivals, departures, assignments, tripStartDate, tripEndDate } = args;
+
   const map = new Map<ISODateString, PersonId[]>();
   const start = parseISO(tripStartDate);
   const end = parseISO(tripEndDate);
@@ -99,7 +184,9 @@ export function buildGuestIdsByTripDateMap(
   for (const d of eachDayOfInterval({ start, end })) {
     const key = format(d, 'yyyy-MM-dd') as ISODateString;
     const ids = persons
-      .filter((p) => isGuestPresentOnDate(p, arrivals, departures, key))
+      .filter((person) =>
+        isGuestOnSiteOnDate({ person, arrivals, departures, assignments, dateKey: key }),
+      )
       .map((p) => p.id);
     map.set(key, ids);
   }
