@@ -6,10 +6,15 @@
 
 import { subDays } from 'date-fns';
 
-import { parseISODateString, toISODateString } from '@/lib/db/utils';
+import { toLocalISODateString } from '@/lib/db/utils';
 import { dedupeContainedTimelineSpans } from '@/lib/utils/dedupe-timeline-spans';
 import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
-import { buildTripDayColumns } from '@/lib/utils/trip-days';
+import {
+  buildTripDayColumns,
+  localDayKeyOfInstant,
+  parseLocalDayKey,
+  toDayKeys,
+} from '@/lib/utils/trip-days';
 import type {
   ISODateString,
   Person,
@@ -121,8 +126,8 @@ function isAssignmentVisible(
 }
 
 function isTransportVisible(transport: Transport, tripStart: ISODateString, tripEnd: ISODateString): boolean {
-  const dateKey = transport.datetime.substring(0, 10) as ISODateString;
-  return dateKey >= tripStart && dateKey <= tripEnd;
+  const dateKey = localDayKeyOfInstant(transport.datetime);
+  return dateKey !== null && dateKey >= tripStart && dateKey <= tripEnd;
 }
 
 /**
@@ -182,7 +187,7 @@ export function buildCalendarTimelineModel(args: {
   const { trip, persons, rooms, assignments, arrivals, departures, unknownLabel } = args;
 
   const tripDays = buildTripDayColumns(trip);
-  const dayKeys = tripDays.map((d) => toISODateString(d));
+  const dayKeys = toDayKeys(tripDays);
 
   const tripStartKey = trip.startDate;
   const tripEndKey = trip.endDate;
@@ -218,7 +223,8 @@ export function buildCalendarTimelineModel(args: {
     if (!stayStartKey) {
       for (const arrival of arrivals) {
         if (arrival.personId !== person.id) continue;
-        const key = arrival.datetime.substring(0, 10) as ISODateString;
+        const key = localDayKeyOfInstant(arrival.datetime);
+        if (!key) continue;
         if (!stayStartKey || key < stayStartKey) {
           stayStartKey = key;
         }
@@ -227,7 +233,8 @@ export function buildCalendarTimelineModel(args: {
     if (!stayEndKey) {
       for (const departure of departures) {
         if (departure.personId !== person.id) continue;
-        const key = departure.datetime.substring(0, 10) as ISODateString;
+        const key = localDayKeyOfInstant(departure.datetime);
+        if (!key) continue;
         if (!stayEndKey || key > stayEndKey) {
           stayEndKey = key;
         }
@@ -238,15 +245,15 @@ export function buildCalendarTimelineModel(args: {
       if (!stayStartKey || !stayEndKey) return undefined;
       if (stayStartKey >= stayEndKey) return undefined;
 
-      const start = parseISODateString(stayStartKey);
-      const end = parseISODateString(stayEndKey);
+      const start = parseLocalDayKey(stayStartKey);
+      const end = parseLocalDayKey(stayEndKey);
       if (!start || !end) return undefined;
 
       const lastNight = subDays(end, 1);
       if (lastNight < start) return undefined;
 
       const clippedStartKey = stayStartKey < tripStartKey ? tripStartKey : stayStartKey;
-      const lastNightKey = toISODateString(lastNight);
+      const lastNightKey = toLocalISODateString(lastNight);
       const clippedEndKey = lastNightKey > tripEndKey ? tripEndKey : lastNightKey;
 
       const startIndex = dayIndexByKey.get(clippedStartKey);
@@ -272,8 +279,8 @@ export function buildCalendarTimelineModel(args: {
         continue;
       }
 
-      const assignmentStart = parseISODateString(assignment.startDate);
-      const assignmentEnd = parseISODateString(assignment.endDate);
+      const assignmentStart = parseLocalDayKey(assignment.startDate);
+      const assignmentEnd = parseLocalDayKey(assignment.endDate);
       if (!assignmentStart || !assignmentEnd) {
         continue;
       }
@@ -283,8 +290,8 @@ export function buildCalendarTimelineModel(args: {
         continue;
       }
 
-      const startKey = toISODateString(assignmentStart);
-      const endKey = toISODateString(lastNight);
+      const startKey = toLocalISODateString(assignmentStart);
+      const endKey = toLocalISODateString(lastNight);
 
       const startIndex = dayIndexByKey.get(startKey);
       const endIndex = dayIndexByKey.get(endKey);
@@ -400,8 +407,8 @@ export function buildCalendarTimelineModel(args: {
         continue;
       }
 
-      const dateKey = transport.datetime.substring(0, 10) as ISODateString;
-      const index = dayIndexByKey.get(dateKey);
+      const dateKey = localDayKeyOfInstant(transport.datetime);
+      const index = dateKey === null ? undefined : dayIndexByKey.get(dateKey);
       if (index === undefined) {
         continue;
       }

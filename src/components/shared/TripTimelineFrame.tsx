@@ -18,7 +18,7 @@ import type { Locale } from 'date-fns';
 import { format } from 'date-fns';
 
 import { cn } from '@/lib/utils';
-import { toISODateString } from '@/lib/db/utils';
+import { toLocalISODateString } from '@/lib/db/utils';
 import { TIMELINE_LANE_HEIGHT_PX } from '@/lib/utils/timeline-bar-geometry';
 import {
   computeDayGridTemplateColumns,
@@ -48,7 +48,9 @@ export interface TripTimelineFrameProps {
   readonly ariaLabel: string;
   readonly labelColumnWidth: number;
   readonly leftHeader: ReactNode;
+  /** One local-midnight Date per column, from `buildDayColumns`. */
   readonly days: readonly Date[];
+  /** Local day keys matching `days` one-for-one, from `toDayKeys`. */
   readonly dayKeys: readonly ISODateString[];
   readonly dateLocale: Locale;
   /** When set, that day column is highlighted in the header (local “today”). */
@@ -60,22 +62,6 @@ export interface TripTimelineFrameProps {
    */
   readonly renderDayMeta?: (dayKey: ISODateString, index: number) => ReactNode;
   readonly children: (viewport: TripTimelineViewportContext) => ReactNode;
-}
-
-/**
- * Re-reads a `YYYY-MM-DD` day key as a local-midnight Date, so date-fns
- * `format()` prints exactly that calendar day in every timezone.
- *
- * @param dayKey - A day key from `buildTripDayColumns`
- * @returns A Date whose local calendar day equals `dayKey`
- */
-function localDateFromDayKey(dayKey: string): Date {
-  const [year, month, day] = dayKey.split('-').map(Number) as [
-    number,
-    number,
-    number,
-  ];
-  return new Date(year, month - 1, day);
 }
 
 // ============================================================================
@@ -232,14 +218,13 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
                 }
               >
                 {days.map((day, index) => {
-                  const key = toISODateString(day);
-                  // `days` are built by stepping in UTC, so date-fns `format()`
-                  // — which reads LOCAL components — prints the previous day at
-                  // any negative offset, while the "today" highlight (matched on
-                  // `key`) lands on the correct column. Label from the key.
-                  const labelDate = localDateFromDayKey(key);
-                  const monthLabel = format(labelDate, 'MMM', { locale: dateLocale });
-                  const dayLabel = format(labelDate, 'dd', { locale: dateLocale });
+                  // `days` are local midnights and `dayKeys` their local keys
+                  // (see `lib/utils/trip-days`), so the label date-fns prints
+                  // and the key the "today" highlight matches on are the same
+                  // calendar day in every timezone.
+                  const key = dayKeys[index] ?? toLocalISODateString(day);
+                  const monthLabel = format(day, 'MMM', { locale: dateLocale });
+                  const dayLabel = format(day, 'dd', { locale: dateLocale });
                   const isToday = todayColumnIndex === index;
                   return (
                     <div
@@ -248,7 +233,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
                         'min-w-0 border-r border-muted px-1 py-2 text-xs text-muted-foreground',
                         isToday && 'bg-primary/12 text-foreground',
                       )}
-                      title={format(labelDate, 'PPPP', { locale: dateLocale })}
+                      title={format(day, 'PPPP', { locale: dateLocale })}
                       {...(isToday ? { 'aria-current': 'date' as const } : {})}
                     >
                       <div className="flex flex-col items-center leading-none">
