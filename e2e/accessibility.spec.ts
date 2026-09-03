@@ -333,13 +333,22 @@ async function expectDarkThemeApplied(page: Page): Promise<void> {
 
       ctx.fillRect(0, 0, 1, 1);
 
-      const [r = 0, g = 0, b = 0] = ctx.getImageData(0, 0, 1, 1).data,
-        linear = (channel: number): number => {
-          const ratio = channel / 255;
-          return ratio <= 0.04045
-            ? ratio / 12.92
-            : Math.pow((ratio + 0.055) / 1.055, 2.4);
-        };
+      const [r = 0, g = 0, b = 0, alpha = 0] = ctx.getImageData(0, 0, 1, 1).data;
+
+      // A fully transparent colour composites to [0,0,0,0], whose luminance is
+      // 0 — which would sail through a "background is dark" check on a page
+      // that has no background at all. That is the same vacuous pass this
+      // helper exists to prevent, so refuse to score it.
+      if (alpha !== 255) {
+        return null;
+      }
+
+      const linear = (channel: number): number => {
+        const ratio = channel / 255;
+        return ratio <= 0.04045
+          ? ratio / 12.92
+          : Math.pow((ratio + 0.055) / 1.055, 2.4);
+      };
 
       return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
     };
@@ -351,9 +360,42 @@ async function expectDarkThemeApplied(page: Page): Promise<void> {
     };
   });
 
+  // `not.toBeNull()` is load-bearing: `luminance` returns null for a colour
+  // the browser could not parse and for a transparent one, and a null scored
+  // as 0 would read as "very dark".
   expect(colors.background, 'body background should be dark').not.toBeNull();
+  expect(colors.foreground, 'body text should be light').not.toBeNull();
   expect(colors.background ?? 1).toBeLessThan(0.2);
   expect(colors.foreground ?? 0).toBeGreaterThan(0.5);
+}
+
+/**
+ * Runs axe's `color-contrast` rule against the current page.
+ *
+ * `ACCEPTABLE_VIOLATIONS.rules` disables `color-contrast` globally, for a
+ * documented light-mode reason: the calendar's `text-muted-foreground/80` day
+ * labels measure 4.24:1 at 10px against white, just under the 4.5:1 floor.
+ * That exclusion is not this unit's to lift — but inheriting it here would
+ * leave the dark-mode tests unable to fail on the one defect class that is
+ * *specific* to a theme, which is most of the point of testing a theme.
+ *
+ * Measured before enabling: with the dark tokens applied, `/trips`,
+ * `/settings`, the calendar, rooms, guests and transports report zero
+ * contrast violations. The dark palette is comfortably the better of the two
+ * here, so this is a gate the app passes today and a real guard against the
+ * next raw-colour utility that lands without a `dark:` counterpart.
+ *
+ * @param page - Playwright page object
+ * @returns Contrast violations only
+ */
+async function analyzeContrast(
+  page: Page,
+): Promise<import('axe-core').Result[]> {
+  const results = await new AxeBuilder({ page })
+    .withRules(['color-contrast'])
+    .analyze();
+
+  return results.violations;
 }
 
 /**
@@ -812,6 +854,14 @@ test.describe('Dark Mode Accessibility', () => {
     }
 
     expect(violations).toEqual([]);
+
+    const contrast = await analyzeContrast(page);
+
+    if (contrast.length > 0) {
+      console.log('Trip list (dark mode) contrast:\n', formatViolations(contrast));
+    }
+
+    expect(contrast).toEqual([]);
   });
 
   test('settings page in dark mode has no a11y violations', async ({ page }) => {
@@ -829,6 +879,14 @@ test.describe('Dark Mode Accessibility', () => {
     }
 
     expect(violations).toEqual([]);
+
+    const contrast = await analyzeContrast(page);
+
+    if (contrast.length > 0) {
+      console.log('Settings (dark mode) contrast:\n', formatViolations(contrast));
+    }
+
+    expect(contrast).toEqual([]);
   });
 
   test('calendar page in dark mode has no a11y violations', async ({ page }) => {
@@ -849,6 +907,14 @@ test.describe('Dark Mode Accessibility', () => {
     }
 
     expect(violations).toEqual([]);
+
+    const contrast = await analyzeContrast(page);
+
+    if (contrast.length > 0) {
+      console.log('Calendar (dark mode) contrast:\n', formatViolations(contrast));
+    }
+
+    expect(contrast).toEqual([]);
   });
 });
 

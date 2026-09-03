@@ -245,7 +245,15 @@ function KeyboardNavigation({
  * already on screen.
  */
 function ThemeAwareTileLayer({ showAttribution }: { showAttribution: boolean }) {
-  const [isDark, setIsDark] = useState(false);
+  // Read synchronously rather than starting `false` and correcting in the
+  // effect below. The effect runs after the first commit, so a map opened
+  // while dark mode is already on would request a light OSM tile, paint it,
+  // and only then swap to the dark one — a visible flash, and a wasted tile
+  // fetch that the service worker caches. Harmless while nothing ever wrote
+  // `.dark`; user-visible now that something does.
+  const [isDark, setIsDark] = useState(() =>
+    document.documentElement.classList.contains('dark'),
+  );
 
   useEffect(() => {
     let isMounted = true;

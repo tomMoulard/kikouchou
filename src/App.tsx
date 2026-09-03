@@ -20,14 +20,24 @@ import { router } from '@/router';
 // ============================================================================
 
 /*
-  Runs at module evaluation — i.e. while `main.tsx` is still importing, long
-  before it awaits i18n and the database and finally renders.
+  Runs at module evaluation, which is the earliest point this app can reach
+  without touching `index.html`.
 
-  `ThemeProvider` below applies the same class, but only once React commits,
-  and this app deliberately delays that commit. Painting a white page first and
-  a dark one a second later is worse than either theme, so the class goes on
-  `<html>` here and the provider agrees with it: both read
-  `THEME_STORAGE_KEY`.
+  `ThemeProvider` below applies the same class, but only once React commits —
+  and `main.tsx` deliberately delays that commit behind `await i18nReady` and a
+  database open that is raced against a 3s timeout. A dark-mode user would
+  stare at a white page for all of it. Calling this here cuts the window down
+  to the entry chunk's own download and parse.
+
+  It does NOT eliminate the window: `index.html` loads `main.tsx` as a deferred
+  module, so the browser may paint the light `:root` background before any of
+  our code runs. Closing that last gap needs a small blocking `<script>` in
+  `<head>` — which is exactly what next-themes emits during SSR and cannot here.
+  That file belongs to another unit; see the PR body.
+
+  The provider and this call cannot disagree: both read `THEME_STORAGE_KEY`,
+  and `applyStoredTheme` normalises the stored value so next-themes only ever
+  sees one it understands.
 */
 applyStoredTheme();
 
