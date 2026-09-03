@@ -32,19 +32,42 @@ export const buttonVariants = cva(
           hoc with `size-11 md:size-8` at about ten call sites and missed
           everywhere else, so the rule now lives here instead.
 
-          `max-md:` rather than `size-11 md:size-9` on purpose. A call site that
-          overrides the size with a plain utility (`components/ui/calendar.tsx`
-          passes `size-auto` so a day button fills its grid cell) cancels an
-          unprefixed `size-11` but would *not* cancel a `md:`-prefixed one,
-          which would then re-apply at desktop and break the layout. Anchoring
-          the floor to the mobile range instead means an override behaves the
-          way its author expected on desktop, and the touch minimum still
-          applies below `md` where it matters.
+          Read `max-md:size-11` as a HARD FLOOR, not a default. Because it
+          carries a variant prefix, tailwind-merge keeps it alongside any
+          unprefixed size a call site passes, and Tailwind emits variants after
+          plain utilities — so below `md` it wins over `size-8`, `size-10` and
+          even `size-auto`. That is deliberate: a floor a call site can cancel
+          by accident is not a floor. To go smaller than 44px on a phone a call
+          site has to say so in the same breakpoint range (`max-md:size-8`),
+          which is loud enough to be noticed in review.
+
+          `size-11 md:size-9` was the other candidate and is worse: an
+          unprefixed override such as `components/ui/calendar.tsx`'s `size-auto`
+          cancels the `size-11` but not the `md:size-9`, which then re-applies
+          at desktop and breaks a layout the author thought they controlled.
+
+          Two known consequences, both intended. The date picker's day buttons
+          (`ui/calendar.tsx`, `size-auto w-full`) become 44px squares below
+          `md`, which grows a six-week month to about 332px wide — right for a
+          touch target, tight below a 340px viewport. And `PersonListPage`'s
+          delete button reaches 44px on a phone despite its own `size-8`.
         */
         icon: "size-9 max-md:size-11",
         // The deliberate opt-out: an inline chip inside dense text, never a
         // primary affordance. Below the touch minimum by design.
         "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
+        /*
+          Same floor, so below `md` these collapse into `icon` — a three-step
+          desktop scale becomes one step on a phone, which is the point: 32px is
+          32px whatever the desktop design wanted. Neither has a call site yet.
+
+          The text sizes above are deliberately untouched. `default` (36),
+          `sm` (32), `lg` (40) and `xs` (24) are all under 44px tall too, but a
+          text button's hit area is its full width, and giving every form button
+          in the app a taller mobile height is a visual change to nearly every
+          page — a separate decision from fixing the icon buttons and menu rows
+          that had no hit area to spare in either direction.
+        */
         "icon-sm": "size-8 max-md:size-11",
         "icon-lg": "size-10 max-md:size-11",
       },

@@ -187,10 +187,10 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         >
           {isTransport ? (
             <span className="flex items-center justify-center gap-1 w-full">
-              <span className="text-xs font-semibold leading-none" aria-hidden="true">
+              <span className="font-semibold leading-none" aria-hidden="true">
                 {item.transport.type === 'arrival' ? '↓' : '↑'}
               </span>
-              <span className="text-xs font-medium tabular-nums leading-none">{transportLabel}</span>
+              <span className="font-medium tabular-nums leading-none">{transportLabel}</span>
             </span>
           ) : (
             <>
@@ -233,7 +233,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
                     <span className="block max-w-full truncate">{item.label}</span>
                   </span>
                   {assignmentRange ? (
-                    <span className="min-w-0 flex-1 truncate text-left text-xs font-medium leading-tight opacity-90">
+                    <span className="min-w-0 flex-1 truncate text-left font-medium leading-tight opacity-90">
                       {assignmentRange}
                     </span>
                   ) : null}

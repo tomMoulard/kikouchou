@@ -79,42 +79,92 @@ interface Box {
 }
 
 /**
- * Measures a locator's rendered box once it has stopped moving.
+ * Waits for every running CSS animation and transition on the page to finish.
  *
- * Two hazards, both hit while writing this. `boundingBox()` returns `null` for
- * anything not rendered, and `null?.height` would quietly compare `undefined`
- * and assert nothing — the assertion-that-cannot-fail this suite has been
- * bitten by before. And Radix opens a menu with a `zoom-in-95` animation, so a
- * read taken the moment the row becomes visible measures a mid-flight, scaled
- * box: on a Pixel 5 that produced 43.83px for a row that settles at 44.
+ * Radix opens a menu with `data-[state=open]:zoom-in-95`, so a box read the
+ * moment a row becomes visible measures a mid-flight, *scaled* box — 44 x 0.95
+ * is 41.8. That cuts both ways, and the second way is worse: a desktop
+ * regression guard asserting `toBeLessThan(44)` would pass on a 44px row caught
+ * mid-zoom and report green while the bug was present.
  *
- * So: poll until two consecutive reads agree, then measure for real.
+ * `getAnimations()` covers CSS animations and transitions alike, and settles
+ * rejected ones too, since a cancelled animation rejects `finished`.
  */
-async function boxOf(locator: Locator): Promise<Box> {
-  await expect(locator).toBeVisible();
+async function waitForAnimations(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    await Promise.all(
+      document
+        .getAnimations()
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
+}
 
-  // Hundredths of a pixel, as an integer, so two reads compare exactly.
-  const readHeight = async (): Promise<number> => {
+/**
+ * Measures a locator's rendered box once it has genuinely stopped moving.
+ *
+ * Three hazards, all hit while writing this.
+ *
+ * `boundingBox()` returns `null` for anything not rendered, and `null?.height`
+ * would quietly compare `undefined` and assert nothing — the
+ * assertion-that-cannot-fail this suite has been bitten by before.
+ *
+ * The open animation above, which `waitForAnimations` handles.
+ *
+ * And the stability poll itself: Playwright's `expect.poll` runs its callback
+ * immediately and only sleeps *after* a failed attempt, so "two consecutive
+ * reads" taken back to back land inside a single frame and prove nothing. Each
+ * comparison here is separated by two real animation frames.
+ *
+ * Width and height are both settled, because callers assert both.
+ */
+async function boxOf(page: Page, locator: Locator): Promise<Box> {
+  await expect(locator).toBeVisible();
+  await waitForAnimations(page);
+
+  /** Hundredths of a pixel as integers, so two reads compare exactly. */
+  const read = async (): Promise<{ w: number; h: number } | null> => {
     const box = await locator.boundingBox();
-    return box === null ? -1 : Math.round(box.height * 100);
+    return box === null
+      ? null
+      : { w: Math.round(box.width * 100), h: Math.round(box.height * 100) };
   };
 
-  let previous = await readHeight();
+  const nextFrame = async (): Promise<void> => {
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => { resolve(); }));
+        }),
+    );
+  };
+
+  let settled: { w: number; h: number } | null = null;
   await expect
     .poll(
       async () => {
-        const current = await readHeight();
-        const settled = current > 0 && current === previous;
-        previous = current;
-        return settled;
+        const first = await read();
+        await nextFrame();
+        const second = await read();
+        if (
+          first === null ||
+          second === null ||
+          first.w !== second.w ||
+          first.h !== second.h
+        ) {
+          settled = null;
+          return false;
+        }
+        settled = second;
+        return true;
       },
       { message: 'element never stopped resizing', timeout: 10_000 },
     )
     .toBe(true);
 
-  const box = await locator.boundingBox();
+  const box: { w: number; h: number } | null = settled;
   expect(box, 'element has no layout box').not.toBeNull();
-  return { width: box!.width, height: box!.height };
+  return { width: box!.w / 100, height: box!.h / 100 };
 }
 
 /**
@@ -167,7 +217,7 @@ test.describe('Touch targets on mobile', () => {
   test('the card overflow menu button is at least 44px square', async ({ page }) => {
     await gotoTransportList(page);
 
-    const box = await boxOf(cardMenuTrigger(page));
+    const box = await boxOf(page, cardMenuTrigger(page));
 
     expect(box.width, `trigger is ${box.width}px wide`).toBeGreaterThanOrEqual(
       MEASURED_FLOOR_PX,
@@ -189,7 +239,7 @@ test.describe('Touch targets on mobile', () => {
     expect(count).toBeGreaterThan(0);
 
     for (let index = 0; index < count; index += 1) {
-      const box = await boxOf(items.nth(index));
+      const box = await boxOf(page, items.nth(index));
       expect(
         box.height,
         `menu row ${index} is ${box.height}px tall`,
@@ -216,7 +266,7 @@ test.describe('Touch targets on mobile', () => {
     expect(count).toBeGreaterThan(0);
 
     for (let index = 0; index < count; index += 1) {
-      const box = await boxOf(arrows.nth(index));
+      const box = await boxOf(page, arrows.nth(index));
       expect(box.width, `arrow ${index} is ${box.width}px wide`).toBeGreaterThanOrEqual(
         MEASURED_FLOOR_PX,
       );
@@ -234,7 +284,7 @@ test.describe('Desktop density is unchanged', () => {
     await gotoTransportList(page);
 
     const trigger = cardMenuTrigger(page);
-    const triggerBox = await boxOf(trigger);
+    const triggerBox = await boxOf(page, trigger);
     expect(
       triggerBox.height,
       'the mobile floor leaked past `md` and inflated desktop',
@@ -242,7 +292,7 @@ test.describe('Desktop density is unchanged', () => {
 
     await trigger.click();
 
-    const itemBox = await boxOf(page.getByRole('menuitem').first());
+    const itemBox = await boxOf(page, page.getByRole('menuitem').first());
     expect(
       itemBox.height,
       'the mobile floor leaked past `md` and inflated the menu',
