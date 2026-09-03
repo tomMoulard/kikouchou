@@ -20,11 +20,13 @@
  * The clock is always 24-hour (`HH:mm`), matching every other time in the app.
  *
  * The instant is rendered in the viewer's timezone, which is only meaningful
- * for a datetime that carries an offset. `TransportForm` stores one
- * (`new Date(localDatetime).toISOString()`); the share wizard's transport step
- * currently persists the raw offset-less `datetime-local` value, which any
- * reader — this renderer included — has no choice but to read as its own wall
- * clock. Normalising that belongs at the write site, not here.
+ * for a datetime that carries an offset. Every writer now stores one: the
+ * transport repository normalises through `lib/db/transport-datetime` and
+ * rejects what it cannot parse, so a row written by the share wizard and one
+ * written by `TransportForm` reach this renderer in the same shape. Rows
+ * persisted before that rule can still be offset-less, and this renderer has
+ * no choice but to read those as its own wall clock — see the migration note
+ * in `transport-repository`.
  *
  * @module lib/utils/datetime-format
  */

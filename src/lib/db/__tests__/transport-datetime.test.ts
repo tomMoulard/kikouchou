@@ -9,8 +9,8 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  requireTransportInstant,
-  toTransportInstant,
+  requireCanonicalDatetime,
+  toCanonicalDatetime,
 } from '@/lib/db/transport-datetime';
 
 const pad = (value: number): string => String(value).padStart(2, '0');
@@ -23,20 +23,20 @@ function asLocalInputValue(instant: Date): string {
   ].join('T');
 }
 
-describe('toTransportInstant', () => {
+describe('toCanonicalDatetime', () => {
   it('reads an offset-less value as local time and returns its UTC instant', () => {
     const instant = new Date('2026-09-03T12:30:00.000Z');
 
-    expect(toTransportInstant(asLocalInputValue(instant))).toBe(
+    expect(toCanonicalDatetime(asLocalInputValue(instant))).toBe(
       instant.toISOString(),
     );
   });
 
   it('re-expresses an offset-carrying value in UTC', () => {
-    expect(toTransportInstant('2026-09-03T14:30:00+02:00')).toBe(
+    expect(toCanonicalDatetime('2026-09-03T14:30:00+02:00')).toBe(
       '2026-09-03T12:30:00.000Z',
     );
-    expect(toTransportInstant('2026-09-03T01:30:00-11:00')).toBe(
+    expect(toCanonicalDatetime('2026-09-03T01:30:00-11:00')).toBe(
       '2026-09-03T12:30:00.000Z',
     );
   });
@@ -44,27 +44,33 @@ describe('toTransportInstant', () => {
   it('is idempotent on an already canonical value', () => {
     const canonical = '2026-09-03T12:30:00.000Z';
 
-    expect(toTransportInstant(canonical)).toBe(canonical);
-    expect(toTransportInstant(toTransportInstant(canonical) ?? '')).toBe(canonical);
+    expect(toCanonicalDatetime(canonical)).toBe(canonical);
+    expect(toCanonicalDatetime(toCanonicalDatetime(canonical) ?? '')).toBe(canonical);
+  });
+
+  it('reads a date-only value as local midnight, agreeing with pickup-utils', () => {
+    const localMidnight = new Date(2026, 8, 3);
+
+    expect(toCanonicalDatetime('2026-09-03')).toBe(localMidnight.toISOString());
   });
 
   it('returns undefined for an unparseable or empty value', () => {
-    expect(toTransportInstant('')).toBeUndefined();
-    expect(toTransportInstant('   ')).toBeUndefined();
-    expect(toTransportInstant('not-a-date')).toBeUndefined();
-    expect(toTransportInstant('2026-13-45T99:99')).toBeUndefined();
+    expect(toCanonicalDatetime('')).toBeUndefined();
+    expect(toCanonicalDatetime('   ')).toBeUndefined();
+    expect(toCanonicalDatetime('not-a-date')).toBeUndefined();
+    expect(toCanonicalDatetime('2026-13-45T99:99')).toBeUndefined();
   });
 });
 
-describe('requireTransportInstant', () => {
+describe('requireCanonicalDatetime', () => {
   it('returns the instant for a parseable value', () => {
-    expect(requireTransportInstant('2026-09-03T14:30:00+02:00')).toBe(
+    expect(requireCanonicalDatetime('2026-09-03T14:30:00+02:00')).toBe(
       '2026-09-03T12:30:00.000Z',
     );
   });
 
   it('throws with the offending value for an unparseable one', () => {
-    expect(() => requireTransportInstant('tomorrow-ish')).toThrow(
+    expect(() => requireCanonicalDatetime('tomorrow-ish')).toThrow(
       'Invalid transport datetime: "tomorrow-ish"',
     );
   });

@@ -8,11 +8,14 @@
  *
  * A transport's `datetime` is stored as a UTC ISO instant (`…Z`) and nothing
  * else. Every write path here normalises through
- * {@link requireTransportInstant} so a caller holding a raw `datetime-local`
- * value (`2026-09-03T14:30`) cannot persist it, and every read path coerces
- * through {@link toTransportInstant} so rows written before that rule — or
- * written straight to Dexie by the Yjs bridge and the share merge applicator —
- * are still comparable as instants.
+ * {@link requireCanonicalDatetime} so a caller holding a raw `datetime-local`
+ * value (`2026-09-03T14:30`) cannot persist it, and every read path *here*
+ * coerces through {@link toCanonicalDatetime} so rows written before that rule
+ * — or written straight to Dexie by the Yjs bridge and the share merge
+ * applicator — are still comparable as instants. Coercion reaches only this
+ * repository's readers: `TransportContext`, `trip-stats` and the Yjs bridge
+ * query `db.transports` themselves. Every row written from now on is canonical
+ * wherever it is read, so that gap is a legacy-row gap, not a new one.
  *
  * **No migration rewrites the stored rows.** An offset-less value has lost the
  * information needed to place it on the timeline: the only way to interpret it
@@ -32,8 +35,8 @@
 import { db } from '@/lib/db/database';
 import { sanitizeTransportData } from '@/lib/db/sanitize';
 import {
-  requireTransportInstant,
-  toTransportInstant,
+  requireCanonicalDatetime,
+  toCanonicalDatetime,
 } from '@/lib/db/transport-datetime';
 import { createTransportId } from '@/lib/db/utils';
 import type {
@@ -63,7 +66,7 @@ import type {
  * @returns The same object when already canonical, a coerced copy otherwise
  */
 function toCanonicalRow(transport: Transport): Transport {
-  const instant = toTransportInstant(transport.datetime);
+  const instant = toCanonicalDatetime(transport.datetime);
 
   return instant === undefined || instant === transport.datetime
     ? transport
@@ -71,19 +74,40 @@ function toCanonicalRow(transport: Transport): Transport {
 }
 
 /**
- * Coerces a result set and sorts it by instant.
+ * Orders canonical rows by instant, unparseable rows last.
  *
  * The sort is not redundant with the `[tripId+datetime]` index: that index
  * orders by the stored characters, so a set mixing representations comes back
- * in the wrong order and has to be re-sorted once canonical.
+ * in the wrong order and has to be re-sorted once canonical. A row nobody can
+ * place in time sorts to the end rather than floating to the top, matching
+ * `sortTransportsByInstant` in the transports feature.
+ *
+ * @param transports - Canonical rows (mutated in place, as `Array#sort` does)
+ * @returns The same array, ascending by instant
+ */
+function sortByInstant(transports: Transport[]): Transport[] {
+  return transports.sort((a, b) => {
+    const left = toCanonicalDatetime(a.datetime),
+      right = toCanonicalDatetime(b.datetime);
+
+    if (left === undefined) {
+      return right === undefined ? 0 : 1;
+    }
+    if (right === undefined) {
+      return -1;
+    }
+    return left < right ? -1 : left > right ? 1 : 0;
+  });
+}
+
+/**
+ * Coerces a result set and sorts it by instant.
  *
  * @param transports - Rows as stored
  * @returns Canonical rows, ascending by instant
  */
 function toCanonicalRows(transports: Transport[]): Transport[] {
-  return transports
-    .map(toCanonicalRow)
-    .sort((a, b) => a.datetime.localeCompare(b.datetime));
+  return sortByInstant(transports.map(toCanonicalRow));
 }
 
 /**
@@ -114,7 +138,7 @@ export async function createTransport(
   const sanitizedData = sanitizeTransportData(data),
     // Normalise before the try: an unparseable datetime is a caller bug and
     // deserves its own message rather than the generic create failure below.
-    datetime = requireTransportInstant(sanitizedData.datetime);
+    datetime = requireCanonicalDatetime(sanitizedData.datetime);
 
   try {
     const transport: Transport = {
@@ -267,7 +291,7 @@ export async function updateTransport(
   // Sanitize input data (trim whitespace, enforce max lengths)
   const sanitizedData: Partial<TransportFormData> = { ...data };
   if (sanitizedData.datetime !== undefined) {
-    sanitizedData.datetime = requireTransportInstant(sanitizedData.datetime);
+    sanitizedData.datetime = requireCanonicalDatetime(sanitizedData.datetime);
   }
   if (sanitizedData.location !== undefined) {
     sanitizedData.location = sanitizeTransportData({
@@ -363,7 +387,9 @@ export async function getUpcomingPickups(
 ): Promise<Transport[]> {
   // The cutoff is normalised too: a caller may pass a local-shaped value, and
   // comparing that against canonical rows would be the same category of bug.
-  const now = requireTransportInstant(fromDatetime ?? new Date().toISOString()),
+  // `||`, not `??`: an empty string is a cleared filter, not a cutoff of "the
+  // epoch", and normalising it would throw.
+  const now = requireCanonicalDatetime(fromDatetime || new Date().toISOString()),
 
    transports = await db.transports
     .where('tripId')
@@ -374,7 +400,9 @@ export async function getUpcomingPickups(
   // Coerce before comparing: a legacy row's stored characters do not order
   // against an ISO instant, so filtering on the raw value drops or keeps the
   // wrong rows.
-  return toCanonicalRows(transports).filter((t) => t.datetime >= now);
+  return sortByInstant(
+    transports.map(toCanonicalRow).filter((t) => t.datetime >= now),
+  );
 }
 
 /**
@@ -403,7 +431,9 @@ export async function getTransportsForDate(
 
   // Match on the canonical instant, not the stored characters: the day of a
   // row is its UTC day for every row or for none, never per representation.
-  return toCanonicalRows(transports).filter((t) => t.datetime.startsWith(date));
+  return sortByInstant(
+    transports.map(toCanonicalRow).filter((t) => t.datetime.startsWith(date)),
+  );
 }
 
 /**
@@ -480,7 +510,7 @@ export async function updateTransportWithOwnershipCheck(
       id,
       data.datetime === undefined
         ? data
-        : { ...data, datetime: requireTransportInstant(data.datetime) },
+        : { ...data, datetime: requireCanonicalDatetime(data.datetime) },
     );
   });
 }
