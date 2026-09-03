@@ -16,6 +16,7 @@ import type { ReactNode } from 'react';
 
 import { TripProvider, useTripContext } from '@/contexts/TripContext';
 import { RoomProvider, useRoomContext } from '@/contexts/RoomContext';
+import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createRoom } from '@/lib/db/repositories/room-repository';
 import type { RoomId, TripId, Room } from '@/types';
@@ -430,6 +431,111 @@ describe('RoomContext', () => {
           await result.current.room.reorderRooms(['unknown_id' as RoomId]);
         })
       ).rejects.toThrow();
+    });
+  });
+
+  /**
+   * The comparator gates whether a live-query result reaches consumers at all,
+   * so a field it forgets is a field the UI never sees change. Rooms carry no
+   * `updatedAt`, so nothing else can mask the omission: each mutable field needs
+   * its own case. `icon` was in fact missing, and changing a room's icon left
+   * `rooms` holding the old one until some other field happened to change too.
+   */
+  describe('comparator covers every mutable field', () => {
+    const mutations: readonly {
+      readonly field: string;
+      readonly patch: Partial<Room>;
+      readonly read: (room: Room | undefined) => unknown;
+      readonly expected: unknown;
+    }[] = [
+      {
+        field: 'name',
+        patch: { name: 'Attic' },
+        read: (room) => room?.name,
+        expected: 'Attic',
+      },
+      {
+        field: 'capacity',
+        patch: { capacity: 5 },
+        read: (room) => room?.capacity,
+        expected: 5,
+      },
+      {
+        field: 'description',
+        patch: { description: 'King bed, ensuite' },
+        read: (room) => room?.description,
+        expected: 'King bed, ensuite',
+      },
+      {
+        field: 'icon',
+        patch: { icon: 'tent' as Room['icon'] },
+        read: (room) => room?.icon,
+        expected: 'tent',
+      },
+    ];
+
+    for (const { field, patch, read, expected } of mutations) {
+      it(`propagates a change to ${field}`, async () => {
+        const tripId = await createTestTripData();
+        const room = await createTestRoom(tripId, 'Original');
+
+        const { result } = renderHook(() => useCombinedContexts(), {
+          wrapper: AllContextsWrapper,
+        });
+
+        await waitFor(() => {
+          expect(result.current.trip.isLoading).toBe(false);
+        });
+
+        await act(async () => {
+          await result.current.trip.setCurrentTrip(tripId);
+        });
+
+        await waitFor(() => {
+          expect(result.current.room.rooms).toHaveLength(1);
+        });
+
+        await db.rooms.update(room.id, patch);
+        await waitForLiveQuery();
+
+        await waitFor(() => {
+          const updated = result.current.room.rooms.find((r) => r.id === room.id);
+          expect(read(updated)).toEqual(expected);
+        });
+      });
+    }
+
+    it('propagates an icon change made through the context', async () => {
+      const tripId = await createTestTripData();
+      const room = await createTestRoom(tripId, 'Original');
+
+      const { result } = renderHook(() => useCombinedContexts(), {
+        wrapper: AllContextsWrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.trip.isLoading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.trip.setCurrentTrip(tripId);
+      });
+
+      await waitFor(() => {
+        expect(result.current.room.rooms).toHaveLength(1);
+      });
+
+      await act(async () => {
+        await result.current.room.updateRoom(room.id, {
+          icon: 'tent' as Room['icon'],
+        });
+      });
+      await waitForLiveQuery();
+
+      await waitFor(() => {
+        const updated = result.current.room.rooms.find((r) => r.id === room.id);
+        expect(updated?.icon).toBe('tent');
+      });
     });
   });
 

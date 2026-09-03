@@ -19,6 +19,7 @@ import type { ReactNode } from 'react';
 import { TripProvider, useTripContext } from '@/contexts/TripContext';
 import { TransportProvider, useTransportContext } from '@/contexts/TransportContext';
 import { PersonProvider } from '@/contexts/PersonContext';
+import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import { createTransport } from '@/lib/db/repositories/transport-repository';
@@ -434,6 +435,203 @@ describe('TransportContext', () => {
 
       const transports = result.current.getTransportsByPerson('unknown' as PersonId);
       expect(transports).toEqual([]);
+    });
+  });
+
+  /**
+   * Transports carry no `updatedAt`, so the comparator is the only thing
+   * between a change and the UI. Three fields were missing — `coordinates`,
+   * `startLocation` and `startCoordinates` — which is to say the three the map
+   * draws from: moving a pin or naming a starting point left the old marker and
+   * the old route on screen until some other field happened to change too.
+   *
+   * The nested pairs get a case per axis. Moving both at once passes for a deep
+   * compare that reads only one of them.
+   */
+  describe('comparator covers every mutable field', () => {
+    const mutations: readonly {
+      readonly field: string;
+      /** Applied before the hook mounts, when the case needs a starting value. */
+      readonly seed?: Partial<Transport>;
+      readonly patch: Partial<Transport>;
+      readonly read: (transport: Transport | undefined) => unknown;
+      readonly expected: unknown;
+    }[] = [
+      {
+        field: 'type',
+        patch: { type: 'departure' },
+        read: (t) => t?.type,
+        expected: 'departure',
+      },
+      {
+        field: 'datetime',
+        patch: { datetime: '2024-07-20T08:15:00.000Z' as Transport['datetime'] },
+        read: (t) => t?.datetime,
+        expected: '2024-07-20T08:15:00.000Z',
+      },
+      {
+        field: 'location',
+        patch: { location: 'Gare Montparnasse' },
+        read: (t) => t?.location,
+        expected: 'Gare Montparnasse',
+      },
+      {
+        field: 'needsPickup',
+        patch: { needsPickup: true },
+        read: (t) => t?.needsPickup,
+        expected: true,
+      },
+      {
+        field: 'transportMode',
+        patch: { transportMode: 'train' },
+        read: (t) => t?.transportMode,
+        expected: 'train',
+      },
+      {
+        field: 'transportNumber',
+        patch: { transportNumber: 'TGV 8541' },
+        read: (t) => t?.transportNumber,
+        expected: 'TGV 8541',
+      },
+      {
+        field: 'notes',
+        patch: { notes: 'Platform 12' },
+        read: (t) => t?.notes,
+        expected: 'Platform 12',
+      },
+      {
+        field: 'coordinates, from absent to present',
+        patch: { coordinates: { lat: 48.8566, lon: 2.3522 } },
+        read: (t) => t?.coordinates,
+        expected: { lat: 48.8566, lon: 2.3522 },
+      },
+      {
+        field: 'coordinates.lat alone',
+        seed: { coordinates: { lat: 48.8566, lon: 2.3522 } },
+        patch: { coordinates: { lat: 43.2965, lon: 2.3522 } },
+        read: (t) => t?.coordinates?.lat,
+        expected: 43.2965,
+      },
+      {
+        field: 'coordinates.lon alone',
+        seed: { coordinates: { lat: 48.8566, lon: 2.3522 } },
+        patch: { coordinates: { lat: 48.8566, lon: 5.3698 } },
+        read: (t) => t?.coordinates?.lon,
+        expected: 5.3698,
+      },
+      {
+        field: 'startLocation',
+        patch: { startLocation: 'Home' },
+        read: (t) => t?.startLocation,
+        expected: 'Home',
+      },
+      {
+        field: 'startCoordinates, from absent to present',
+        patch: { startCoordinates: { lat: 45.764, lon: 4.8357 } },
+        read: (t) => t?.startCoordinates,
+        expected: { lat: 45.764, lon: 4.8357 },
+      },
+      {
+        field: 'startCoordinates.lat alone',
+        seed: { startCoordinates: { lat: 45.764, lon: 4.8357 } },
+        patch: { startCoordinates: { lat: 44.8378, lon: 4.8357 } },
+        read: (t) => t?.startCoordinates?.lat,
+        expected: 44.8378,
+      },
+      {
+        field: 'startCoordinates.lon alone',
+        seed: { startCoordinates: { lat: 45.764, lon: 4.8357 } },
+        patch: { startCoordinates: { lat: 45.764, lon: -0.5792 } },
+        read: (t) => t?.startCoordinates?.lon,
+        expected: -0.5792,
+      },
+    ];
+
+    for (const { field, seed, patch, read, expected } of mutations) {
+      it(`propagates a change to ${field}`, async () => {
+        const tripId = await createTestTripData();
+        const personId = await createTestPerson(tripId);
+        const created = await createTransport(tripId, {
+          type: 'arrival',
+          personId,
+          datetime: '2024-07-15T10:00:00.000Z' as Transport['datetime'],
+          location: 'Airport',
+          needsPickup: false,
+        });
+        if (seed) {
+          await db.transports.update(created.id, seed);
+        }
+
+        const { result } = renderHook(() => useCombinedContexts(), {
+          wrapper: AllContextsWrapper,
+        });
+
+        await waitFor(() => {
+          expect(result.current.trip.isLoading).toBe(false);
+        });
+
+        await act(async () => {
+          await result.current.trip.setCurrentTrip(tripId);
+        });
+
+        await waitFor(() => {
+          expect(result.current.transport.transports).toHaveLength(1);
+        });
+
+        await db.transports.update(created.id, patch);
+        await waitForLiveQuery();
+
+        await waitFor(() => {
+          const updated = result.current.transport.transports.find(
+            (t) => t.id === created.id,
+          );
+          expect(read(updated)).toEqual(expected);
+        });
+      });
+    }
+
+    it('propagates a coordinates change made through the context', async () => {
+      const tripId = await createTestTripData();
+      const personId = await createTestPerson(tripId);
+      const created = await createTransport(tripId, {
+        type: 'arrival',
+        personId,
+        datetime: '2024-07-15T10:00:00.000Z' as Transport['datetime'],
+        location: 'Airport',
+        needsPickup: false,
+      });
+
+      const { result } = renderHook(() => useCombinedContexts(), {
+        wrapper: AllContextsWrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.trip.isLoading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.trip.setCurrentTrip(tripId);
+      });
+
+      await waitFor(() => {
+        expect(result.current.transport.transports).toHaveLength(1);
+      });
+
+      await act(async () => {
+        await result.current.transport.updateTransport(created.id, {
+          coordinates: { lat: 48.8566, lon: 2.3522 },
+          startLocation: 'Home',
+        });
+      });
+      await waitForLiveQuery();
+
+      await waitFor(() => {
+        const updated = result.current.transport.transports.find(
+          (t) => t.id === created.id,
+        );
+        expect(updated?.coordinates).toEqual({ lat: 48.8566, lon: 2.3522 });
+        expect(updated?.startLocation).toBe('Home');
+      });
     });
   });
 
