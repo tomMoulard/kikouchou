@@ -53,7 +53,7 @@ describe('TransportIcon', () => {
     expect(classes).toContain('shrink-0');
   });
 
-  it('falls back to User icon for unknown mode', () => {
+  it('falls back to the shared "other" icon for an unknown mode', () => {
     const { container } = render(
       <TransportIcon mode={'unknown' as TransportMode} />,
       { withProviders: false },

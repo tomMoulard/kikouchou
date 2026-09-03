@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import i18n from '@/lib/i18n';
+import { formatBytes } from '@/lib/utils/format-bytes';
 import type { AssistantModelPreset } from '../models';
 import type {
   HubProgressEvent,
@@ -114,20 +115,6 @@ export interface UseWebLLMReturn {
  * Cache name used by @huggingface/transformers to store downloaded model files.
  */
 const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
-
-/**
- * Formats a byte count for short progress lines.
- */
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return '';
-  if (bytes < 1024) return `${Math.round(bytes)} B`;
-  const kb = bytes / 1024;
-  if (kb < 1024) return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
-  const mb = kb / 1024;
-  if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
-  const gb = mb / 1024;
-  return `${gb.toFixed(2)} GB`;
-}
 
 interface FileEntry {
   fileName: string;

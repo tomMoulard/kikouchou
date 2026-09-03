@@ -19,14 +19,14 @@ describe('getTransportIcon', () => {
     expect(screen.getByText(label)).toBeInTheDocument();
   });
 
-  it('returns MapPin icon for undefined mode', () => {
+  it('returns the "other" icon for undefined mode', () => {
     const icon = getTransportIcon(undefined, t);
     const { container } = render(icon);
     expect(container.querySelector('svg')).toBeTruthy();
     expect(screen.getByText('other')).toBeInTheDocument();
   });
 
-  it('returns MapPin icon for "other" mode', () => {
+  it('returns the "other" icon for "other" mode', () => {
     const icon = getTransportIcon('other', t);
     const { container } = render(icon);
     expect(container.querySelector('svg')).toBeTruthy();

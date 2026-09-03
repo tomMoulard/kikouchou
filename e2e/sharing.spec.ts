@@ -15,8 +15,9 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { clearIndexedDB } from './support/storage';
+import { waitForRoute } from './support/routes';
 
-import { seedTrip, type SeededTrip } from './support/seed';
+import { seedPerson, seedTrip, type SeededTrip } from './support/seed';
 
 // ============================================================================
 // Database Helpers
@@ -27,15 +28,31 @@ import { seedTrip, type SeededTrip } from './support/seed';
 // ============================================================================
 
 /**
- * Test data constants for consistent test execution
+ * Returns an ISO `yyyy-MM-dd` date `days` from today.
+ * Fixtures are derived from today so the trip never drifts into the past —
+ * a hard-coded 2026 date was already behind us by the time this ran.
+ */
+function isoDaysFromToday(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  // Read back the *local* fields. `toISOString()` would convert to UTC, which
+  // shifts the date by a day either side of midnight and can turn a 10-day
+  // span into 9 across a DST boundary.
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * Test data constants for consistent test execution.
  */
 const TEST_DATA = {
   trip: {
     name: 'Sharing Test Trip',
     location: 'Test Beach House',
-    // Using dates in the future to avoid date-related issues
-    startDate: '2026-06-01',
-    endDate: '2026-06-10',
+    // Always in the future, relative to whenever the suite runs
+    startDate: isoDaysFromToday(30),
+    endDate: isoDaysFromToday(40),
   },
 } as const;
 
@@ -144,6 +161,66 @@ test.describe('Sharing Flow', () => {
     // Into the onboarding wizard's identity step. The test used to expect
     // `/calendar`, which the CTA has not gone to since the wizard was added.
     await expect(page).toHaveURL(/\/share\/[^/]+\/identity/, { timeout: 10000 });
+
+    // ...and the step has to actually be on screen. Asserting the URL alone is
+    // what let the wizard ship broken: `/identity` matched for months while the
+    // parent route rendered the welcome screen over it, because
+    // `ShareImportPage` supplied `element` and never rendered an `<Outlet />`.
+    await expect(
+      page.getByText(/who are you|qui êtes-vous/i),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.getByRole('button', { name: /get started|commencer/i }),
+    ).toHaveCount(0);
+  });
+
+  // --------------------------------------------------------------------------
+  // The four onboarding steps, end to end
+  // --------------------------------------------------------------------------
+
+  /**
+   * Walks a guest through identity → room → transport → summary.
+   *
+   * Every step is asserted on its own heading rather than on the URL: until the
+   * parent route rendered an `<Outlet />`, all four URLs resolved and all four
+   * screens rendered `ShareImportPage` instead.
+   */
+  test('walks a guest through all four onboarding steps', async ({ page }) => {
+    const { tripId, shareId } = await createTestTrip(page);
+    await seedPerson(page, tripId, 'Wizard Guest');
+
+    // Step 1 — welcome
+    await page.goto(`/share/${shareId}`);
+    await waitForRoute(page);
+    await page.getByRole('button', { name: /get started|commencer/i }).click();
+
+    // Step 2 — identity: pick the seeded guest, then Next
+    await expect(
+      page.getByText(/who are you|qui êtes-vous/i),
+    ).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Wizard Guest' }).click();
+    await page.getByRole('button', { name: /^(next|suivant)$/i }).click();
+
+    // Step 3 — rooms: none were seeded, so the empty state and Skip must show
+    await expect(
+      page.getByText(/pick your room|choisissez votre chambre/i),
+    ).toBeVisible({ timeout: 10000 });
+    await page
+      .getByRole('button', { name: /skip for now|passer pour l'instant/i })
+      .click();
+
+    // Step 4 — transport: skip again
+    await expect(
+      page.getByText(/your travel details|vos détails de voyage/i),
+    ).toBeVisible({ timeout: 10000 });
+    await page
+      .getByRole('button', { name: /skip for now|passer pour l'instant/i })
+      .click();
+
+    // Step 5 — summary
+    await expect(
+      page.getByText(/you.?re all set|vous êtes prêt/i),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   // --------------------------------------------------------------------------

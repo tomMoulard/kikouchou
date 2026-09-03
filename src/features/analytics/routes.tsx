@@ -4,11 +4,10 @@
  * @module features/analytics/routes
  */
 
-import { type ReactElement, Suspense, lazy } from 'react';
+import { lazy } from 'react';
 import type { RouteObject } from 'react-router-dom';
 
-import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { withSuspense } from '@/components/shared/with-suspense';
 
 // ============================================================================
 // Lazy-Loaded Page Components
@@ -25,22 +24,6 @@ const AllTripsAnalyticsPage = lazy(() =>
     default: module.AllTripsAnalyticsPage,
   })),
 );
-
-// ============================================================================
-// Suspense Wrapper
-// ============================================================================
-
-function withSuspense(
-  Component: React.LazyExoticComponent<React.ComponentType>,
-): ReactElement {
-  return (
-    <ErrorBoundary>
-      <Suspense fallback={<LoadingState variant="fullPage" />}>
-        <Component />
-      </Suspense>
-    </ErrorBoundary>
-  );
-}
 
 // ============================================================================
 // Route Configuration

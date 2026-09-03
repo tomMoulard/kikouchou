@@ -35,7 +35,6 @@ export {
 // ============================================================================
 
 export { ShareImportPage } from './pages/ShareImportPage';
-export { OnboardingPlaceholderPage } from './pages/OnboardingPlaceholderPage';
 export { IdentityStepPage } from './pages/IdentityStepPage';
 export { RoomSelectionStepPage } from './pages/RoomSelectionStepPage';
 export { TransportEntryStepPage } from './pages/TransportEntryStepPage';
@@ -46,4 +45,4 @@ export { TripSyncPage } from './pages/TripSyncPage';
 // Routes
 // ============================================================================
 
-export { sharingRoutes, sharingSyncRoutes, ShareImportRoute } from './routes';
+export { sharingRoutes, sharingSyncRoutes } from './routes';

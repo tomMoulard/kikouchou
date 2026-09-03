@@ -7,8 +7,10 @@
 
 import { type KeyboardEvent, type MouseEvent, memo, useCallback, useMemo } from 'react';
 
-import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+
+import { cn } from '@/lib/utils';
+import { getContrastTextHex, parseHexColor } from '@/lib/utils/color-contrast';
 import type { Person } from '@/types';
 
 // ============================================================================
@@ -16,23 +18,11 @@ import type { Person } from '@/types';
 // ============================================================================
 
 /** Fallback color when an invalid hex color is provided */
-const FALLBACK_COLOR = '#6B7280', // Neutral gray
-
-/** WCAG luminance threshold for determining text color */
- LUMINANCE_THRESHOLD = 0.179;
+const FALLBACK_COLOR = '#6B7280'; // Neutral gray
 
 // ============================================================================
 // Type Definitions
 // ============================================================================
-
-/**
- * RGB color values normalized to 0-1 range.
- */
-interface RGB {
-  readonly r: number;
-  readonly g: number;
-  readonly b: number;
-}
 
 /**
  * Base props shared by all PersonBadge variants.
@@ -72,72 +62,6 @@ interface PersonBadgeWithNameColorProps extends PersonBadgeBaseProps {
  * Accepts either a Person object OR individual name + color props.
  */
 type PersonBadgeProps = PersonBadgeWithPersonProps | PersonBadgeWithNameColorProps;
-
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Parses a hex color string to RGB values normalized to 0-1 range.
- *
- * @param hex - Hex color string (with or without #, 3 or 6 characters)
- * @returns RGB object or null if invalid
- *
- * @example
- * parseHexColor('#ff5500') // { r: 1, g: 0.333, b: 0 }
- * parseHexColor('f50')     // { r: 1, g: 0.333, b: 0 }
- */
-function parseHexColor(hex: string): RGB | null {
-  // Normalize: remove # prefix and convert to lowercase
-  let normalized = hex.replace(/^#/, '').toLowerCase();
-
-  // Strip alpha channel if present (8 chars -> 6 chars)
-  if (normalized.length === 8) {
-    normalized = normalized.slice(0, 6);
-  }
-
-  // Expand 3-char format to 6-char
-  if (normalized.length === 3) {
-    normalized = normalized
-      .split('')
-      .map((c) => c + c)
-      .join('');
-  }
-
-  // Validate: must be exactly 6 hex characters
-  if (!/^[0-9a-f]{6}$/.test(normalized)) {
-    return null;
-  }
-
-  // Parse hex values and normalize to 0-1 range
-  const r = parseInt(normalized.slice(0, 2), 16) / 255,
-   g = parseInt(normalized.slice(2, 4), 16) / 255,
-   b = parseInt(normalized.slice(4, 6), 16) / 255;
-
-  return { r, g, b };
-}
-
-/**
- * Calculates the relative luminance of a color per WCAG 2.1.
- * Uses sRGB gamma correction and the luminance formula.
- *
- * @param rgb - RGB color values normalized to 0-1
- * @returns Relative luminance value between 0 (black) and 1 (white)
- *
- * @see https://www.w3.org/TR/WCAG21/#dfn-relative-luminance
- */
-function calculateLuminance(rgb: RGB): number {
-  // Apply sRGB gamma correction
-  const gammaCorrected = (value: number): number =>
-    value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055)**2.4,
-
-   r = gammaCorrected(rgb.r),
-   g = gammaCorrected(rgb.g),
-   b = gammaCorrected(rgb.b);
-
-  // WCAG luminance formula
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
 
 // ============================================================================
 // Component
@@ -180,21 +104,10 @@ const PersonBadge = memo((
   // Calculate contrast text color based on background
   // Validate color and calculate text color in a single computation (DRY)
    { validatedColor, textColor } = useMemo(() => {
-    const rgb = parseHexColor(color);
-    if (!rgb) {
-      // Invalid color - use fallback with appropriate text color
-      const fallbackRgb = parseHexColor(FALLBACK_COLOR),
-       fallbackLuminance = fallbackRgb ? calculateLuminance(fallbackRgb) : 0.5;
-      return {
-        validatedColor: FALLBACK_COLOR,
-        textColor: fallbackLuminance > LUMINANCE_THRESHOLD ? '#000000' : '#FFFFFF',
-      };
-    }
-    const luminance = calculateLuminance(rgb);
-    return {
-      validatedColor: color,
-      textColor: luminance > LUMINANCE_THRESHOLD ? '#000000' : '#FFFFFF',
-    };
+    // An unparseable colour falls back to the neutral grey rather than painting
+    // an invalid value into the style attribute.
+    const background = parseHexColor(color) === null ? FALLBACK_COLOR : color;
+    return { validatedColor: background, textColor: getContrastTextHex(background) };
   }, [color]),
 
   // Determine if the badge is interactive
