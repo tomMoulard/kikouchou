@@ -29,18 +29,26 @@ import { waitForPrecachedAppShell } from './support/service-worker';
 // Helpers
 // ============================================================================
 
+/**
+ * The trip these tests create through the form.
+ *
+ * It carried a `startDate`/`endDate` pair pinned to July 2026 that nothing read
+ * — `fillDates` below picks days out of the calendar directly. Two dead fixture
+ * dates are still two dates that rot, and the next reader would reasonably
+ * assume the trip has them, so they are gone rather than derived.
+ */
 const TRIP = {
   name: 'Offline Brittany',
-  startDate: '2026-07-15',
-  endDate: '2026-07-22',
 } as const;
 
 /**
  * Picks a date in the trip form's calendar.
  *
- * Types into the field rather than clicking through months: this spec is about
- * offline behaviour, and a fragile date-picker walk would fail for reasons that
- * have nothing to do with the network.
+ * Clicks the 15th and the 22nd of whatever month the picker opens on rather
+ * than walking to a named one: this spec is about offline behaviour, and a
+ * fragile date-picker walk would fail for reasons that have nothing to do with
+ * the network. The picker opens on the current month with nothing selected, so
+ * there is no fixture date here to go stale — the days are always this month's.
  */
 async function fillDates(page: Page): Promise<void> {
   await page.locator('#trip-start-date').click();

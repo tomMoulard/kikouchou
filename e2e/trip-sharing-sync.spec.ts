@@ -23,6 +23,7 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 
 import { SupabaseStub, type StubUser } from './support/supabase-stub';
+import { fixtureDate } from './support/fixture-dates';
 
 // ============================================================================
 // Fixtures
@@ -33,11 +34,29 @@ const GUEST: StubUser = { id: 'guest-1', email: 'guest@example.test' };
 
 const TRIP = { name: 'Shared Brittany' } as const;
 
+/**
+ * The window the trips seeded straight into the stub sit in.
+ *
+ * Derived from today — see `support/fixture-dates`. These were pinned to July
+ * 2026, which is behind us; a joined trip that has already happened is rendered
+ * as a past trip, which is not the state any of these tests mean to assert.
+ * Trips created through the form get their dates from `fillDates` instead.
+ */
+const SEEDED_TRIP_DATES = {
+  startDate: fixtureDate(15),
+  endDate: fixtureDate(22),
+} as const;
+
 // ============================================================================
 // Helpers
 // ============================================================================
 
-/** Picks the 15th and 22nd in the trip form, as the offline spec does. */
+/**
+ * Picks the 15th and 22nd in the trip form, as the offline spec does.
+ *
+ * Days of the month the picker opens on — always the current one — so there is
+ * no fixture date here to go stale.
+ */
 async function fillDates(page: Page): Promise<void> {
   await page.locator('#trip-start-date').click();
   await page.getByRole('gridcell').filter({ hasText: /^15$/ }).first().click();
@@ -462,8 +481,8 @@ test.describe('joining a trip', () => {
       local_id: 'local-99',
       owner_id: OWNER.id,
       name: TRIP.name,
-      start_date: '2026-07-15',
-      end_date: '2026-07-22',
+      start_date: SEEDED_TRIP_DATES.startDate,
+      end_date: SEEDED_TRIP_DATES.endDate,
     });
     stub.addMember('00000000-0000-4000-8000-000000000099', OWNER.id);
     stub.addInvite('00000000-0000-4000-8000-000000000099', OWNER.id, 'revokedtoken1', {
@@ -489,8 +508,8 @@ test.describe('joining a trip', () => {
       local_id: 'local-98',
       owner_id: OWNER.id,
       name: TRIP.name,
-      start_date: '2026-07-15',
-      end_date: '2026-07-22',
+      start_date: SEEDED_TRIP_DATES.startDate,
+      end_date: SEEDED_TRIP_DATES.endDate,
     });
     stub.addMember('00000000-0000-4000-8000-000000000098', OWNER.id);
     stub.addInvite('00000000-0000-4000-8000-000000000098', OWNER.id, 'needsaccount1');
@@ -512,8 +531,8 @@ test.describe('joining a trip', () => {
       local_id: 'local-97',
       owner_id: OWNER.id,
       name: TRIP.name,
-      start_date: '2026-07-15',
-      end_date: '2026-07-22',
+      start_date: SEEDED_TRIP_DATES.startDate,
+      end_date: SEEDED_TRIP_DATES.endDate,
     });
     stub.addMember('00000000-0000-4000-8000-000000000097', OWNER.id);
     stub.addInvite('00000000-0000-4000-8000-000000000097', OWNER.id, 'twicetoken12', {

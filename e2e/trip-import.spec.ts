@@ -7,16 +7,32 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import { fixtureDate } from './support/fixture-dates';
 
 // ============================================================================
 // Test Configuration & Helpers
 // ============================================================================
 
+/**
+ * The trip that gets imported from. Its dates are derived from today.
+ *
+ * They were pinned to July 2024, which `navigateToMonth` below could not reach:
+ * it walks the picker from the current month with a 24-click ceiling, and July
+ * 2024 sat 26 months behind. The walk gave up in silence and `selectDate` then
+ * clicked the 15th of whatever month it had stopped on. See
+ * `support/fixture-dates`.
+ */
 const ORIGINAL_TRIP = {
   name: 'Summer at Vacation Home',
   location: 'Vacation Home',
-  startDate: '2024-07-15',
-  endDate: '2024-07-22',
+  startDate: fixtureDate(15),
+  endDate: fixtureDate(22),
+} as const;
+
+/** The return visit, a month after the original, at the same location. */
+const RETURN_TRIP_DATES = {
+  startDate: fixtureDate(15, 3),
+  endDate: fixtureDate(22, 3),
 } as const;
 
 const ROOMS = ['Living Room', 'Master Bedroom', 'Guest Room'] as const;
@@ -36,11 +52,13 @@ async function selectDate(page: Page, dateString: string): Promise<void> {
   await popover.waitFor({ state: 'visible' });
   const calendar = popover.locator('[data-slot="calendar"]');
   await navigateToMonth(page, targetDate, calendar);
-  const day = targetDate.getDate();
+  // Addressed by the date the cell *is*, not by the digits it prints.
+  // react-day-picker stamps every gridcell `data-day="yyyy-MM-dd"` and flags the
+  // ones borrowed from the neighbouring months `data-outside`, so this cannot
+  // click the 22nd of the wrong month the way a `/^22$/` text match could.
   const dayButton = calendar
-    .locator('button')
-    .filter({ hasText: new RegExp(`^${day}$`) })
-    .first();
+    .locator(`td[data-day="${dateString}"]:not([data-outside])`)
+    .locator('button');
   await dayButton.click();
   await popover.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {
     // Popover may already be hidden
@@ -49,6 +67,8 @@ async function selectDate(page: Page, dateString: string): Promise<void> {
 
 /**
  * Navigates the calendar to a specific month/year.
+ *
+ * @throws Error if the target month is not reached within `maxAttempts` clicks
  */
 async function navigateToMonth(
   page: Page,
@@ -56,8 +76,10 @@ async function navigateToMonth(
   calendar: ReturnType<Page['locator']>,
 ): Promise<void> {
   const maxAttempts = 24;
+  // Remembered so the failure below can name the month the walk reached.
+  let captionText: string | null = null;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const captionText = await calendar.locator('.rdp-month_caption').textContent();
+    captionText = await calendar.locator('.rdp-month_caption').textContent();
     if (captionText) {
       const targetMonth = targetDate.toLocaleString('default', { month: 'long' });
       const targetYear = targetDate.getFullYear().toString();
@@ -93,6 +115,17 @@ async function navigateToMonth(
     await calendar.locator('button.rdp-button_next').click();
     await page.waitForTimeout(50);
   }
+
+  // Exhausting the walk used to fall out of this loop and return as if it had
+  // arrived, leaving the caller to click a day of the wrong month. Say which
+  // month it wanted and which one it is looking at.
+  const wanted = `${targetDate.toLocaleString('en', { month: 'long' })} ${targetDate.getFullYear()}`;
+  throw new Error(
+    `navigateToMonth: gave up after ${maxAttempts} clicks — wanted ${wanted}, ` +
+      `calendar is showing ${captionText?.trim() ?? '(no caption)'}. ` +
+      'The picker opens on the current month, so a fixture more than two years ' +
+      'away cannot be reached: derive it from today with support/fixture-dates.',
+  );
 }
 
 /**
@@ -239,9 +272,9 @@ test.describe('Trip Import Feature', () => {
     await page.getByLabel(/trip name/i).fill('Return to Vacation Home');
 
     await page.locator('#trip-start-date').click();
-    await selectDate(page, '2025-07-15');
+    await selectDate(page, RETURN_TRIP_DATES.startDate);
     await page.locator('#trip-end-date').click();
-    await selectDate(page, '2025-07-22');
+    await selectDate(page, RETURN_TRIP_DATES.endDate);
 
     await page.getByRole('button', { name: /save/i }).click();
 
