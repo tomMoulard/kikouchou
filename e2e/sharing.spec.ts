@@ -147,8 +147,15 @@ test.describe('Sharing Flow', () => {
     // Verify location is displayed (if provided)
     await expect(page.getByText(TEST_DATA.trip.location)).toBeVisible();
 
-    // Verify date range is displayed
-    // The page formats dates using date-fns with localized format
+    // The date range, which the comment here has always claimed to check and
+    // never did. `formatDateRange` renders the end of the span as `d MMM yyyy`
+    // whatever its shape, so that is what is looked for.
+    const end = new Date(`${TEST_DATA.trip.endDate}T12:00:00`);
+    const endLabel = `${end.getDate()} ${end.toLocaleString('en-US', {
+      month: 'short',
+    })} ${end.getFullYear()}`;
+    await expect(page.getByText(endLabel, { exact: false })).toBeVisible();
+
     // Check for the trip invite message (use first() to avoid strict mode violation)
     const inviteMessage = page.getByText(/you've been invited|vous avez été invité/i).first();
     await expect(inviteMessage).toBeVisible();
@@ -243,14 +250,17 @@ test.describe('Sharing Flow', () => {
     const description = page.getByText(/may be incorrect|no longer exist|incorrect|n'existe plus/i);
     await expect(description).toBeVisible();
 
-    // Verify there's a way to go back to trips list
-    const backButton = page.getByRole('button', { name: /trips|voyages|back|retour/i });
-    const hasBackButton = await backButton.isVisible({ timeout: 2000 }).catch(() => false);
-    
-    if (hasBackButton) {
-      await backButton.click();
-      await expect(page).toHaveURL('/trips', { timeout: 5000 });
-    }
+    // And it is a dead end, which is asserted rather than wished for.
+    //
+    // The comment here used to say "Verify there's a way to go back to trips
+    // list" and then wrapped the check in `if (hasBackButton)`, so the test
+    // passed whether or not one existed — and none does: `ShareImportPage`'s
+    // not-found branch renders a bare card with no action, and the route is
+    // registered outside `LayoutWrapper`, so there is no nav either. Pinned as
+    // it actually is, so that giving this screen a way out is a deliberate
+    // change to this assertion instead of a silent no-op.
+    await expect(page.getByRole('button')).toHaveCount(0);
+    await expect(page.getByRole('link')).toHaveCount(0);
   });
 
   // --------------------------------------------------------------------------
@@ -262,10 +272,25 @@ test.describe('Sharing Flow', () => {
     await page.goto('/share/');
     await page.waitForLoadState('load');
 
-    // Should show error state or redirect
-    // The router might redirect to 404 or show an error
-    const notFoundIndicator = page.getByText(/not.*found|introuvable|error|erreur|404/i);
-    await expect(notFoundIndicator).toBeVisible({ timeout: 10000 });
+    // `/share/` matches no route — a dynamic segment needs at least one
+    // character — so the app's catch-all `ErrorPage` answers.
+    //
+    // The previous assertion was `getByText(/not.*found|introuvable|error|
+    // erreur|404/i)`, which the word "error" anywhere on any screen satisfies.
+    // What matters is which screen this is: not the share welcome, and not a
+    // blank page.
+    await expect(
+      page.getByText(/something went wrong|page not found/i),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: /get started/i })).toHaveCount(0);
+
+    // ...and unlike the not-found share screen above, this one is not a dead
+    // end. The way home has to actually go home.
+    await page.getByRole('button', { name: /my trips/i }).click();
+    await expect(page).toHaveURL(/\/trips$/, { timeout: 10000 });
+    await expect(
+      page.getByRole('heading', { name: /my trips/i }),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   // --------------------------------------------------------------------------

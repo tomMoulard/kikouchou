@@ -85,6 +85,18 @@ async function waitForServiceWorker(page: Page): Promise<void> {
   await waitForPrecachedAppShell(page);
 }
 
+/**
+ * The trip-scoped sections in the sidebar, by the label they actually carry.
+ * `persons` lives behind a link named "Guests"; matching on the path name found
+ * nothing and skipped it.
+ */
+const TRIP_SECTIONS = [
+  { label: /^rooms$/i, path: 'rooms' },
+  { label: /^guests$/i, path: 'persons' },
+  { label: /^transport$/i, path: 'transports' },
+  { label: /^activities$/i, path: 'activities' },
+] as const;
+
 /** Clears app data through the UI, so no test starts on another's leftovers. */
 async function resetApp(page: Page): Promise<void> {
   await page.goto('/settings');
@@ -218,12 +230,24 @@ test.describe('offline-first contract', () => {
     await context.setOffline(true);
 
     // Every trip-scoped view reads from IndexedDB, so all of them work.
-    for (const section of ['rooms', 'persons', 'transports', 'activities']) {
-      const link = page.getByRole('link', { name: new RegExp(section, 'i') }).first();
-      if (await link.isVisible().catch(() => false)) {
-        await link.click();
-        await expect(page.locator('main')).toBeVisible({ timeout: 15_000 });
-      }
+    //
+    // Unconditional, and matched on the label the sidebar actually renders.
+    // The previous loop looked for a link named `/persons/i` — the sidebar
+    // calls it "Guests" — inside `if (await link.isVisible().catch(...))`, so
+    // that section was silently never visited. And its only assertion was that
+    // `main` was visible, which is true of every route in the app including one
+    // that rendered nothing at all.
+    for (const section of TRIP_SECTIONS) {
+      const link = page.getByRole('link', { name: section.label }).first();
+      await expect(link).toBeVisible({ timeout: 15_000 });
+      await link.click();
+
+      await expect(page).toHaveURL(new RegExp(`/${section.path}$`), { timeout: 15_000 });
+      // The route's own chunk came out of the precache and rendered: an `<h1>`
+      // inside `main`, not merely a `main` element.
+      await expect(
+        page.locator('main').getByRole('heading', { level: 1 }),
+      ).toBeVisible({ timeout: 15_000 });
     }
 
     await context.setOffline(false);
@@ -233,23 +257,30 @@ test.describe('offline-first contract', () => {
   // Rule 7 — the service worker must not cache the backend
   // ==========================================================================
 
-  test('rule 7: no Supabase response is served from a cache', async ({ page }) => {
-    await page.goto('/trips');
-    await page.waitForLoadState('load');
+  /**
+   * The URL the probe below issues and looks for. It has to match the worker's
+   * own rule, `^https://[a-z0-9-]+\.supabase\.(co|in)/.*` in `vite.config.ts`,
+   * or the request would miss the route under test and prove nothing.
+   */
+  const SUPABASE_PROBE_URL = 'https://e2e-probe.supabase.co/rest/v1/trips?select=id';
 
-    const cachedSupabase = await page.evaluate(async () => {
+  /**
+   * Every cached URL on a Supabase origin, across every cache in the browser.
+   *
+   * Matches the *origin*, not the substring. An earlier version checked
+   * `url.includes('supabase')` and flagged the precached `vendor-supabase-*.js`
+   * bundle — which is an app asset that should absolutely be cached, not an API
+   * response that must not be.
+   */
+  async function cachedSupabaseUrls(page: Page): Promise<string[]> {
+    return page.evaluate(async () => {
       if (!('caches' in window)) {
         return [];
       }
-      const names = await caches.keys();
       const hits: string[] = [];
-      for (const name of names) {
+      for (const name of await caches.keys()) {
         const cache = await caches.open(name);
         for (const request of await cache.keys()) {
-          // Match the *origin*, not the substring. An earlier version checked
-          // `url.includes('supabase')` and flagged the precached
-          // `vendor-supabase-*.js` bundle — which is an app asset that should
-          // absolutely be cached, not an API response that must not be.
           const { hostname } = new URL(request.url);
           if (/\.supabase\.(co|in)$/.test(hostname)) {
             hits.push(request.url);
@@ -258,9 +289,53 @@ test.describe('offline-first contract', () => {
       }
       return hits;
     });
+  }
+
+  test('rule 7: no Supabase response is served from a cache', async ({ page, context }) => {
+    // Fulfilled at the context, not the page: a request the service worker
+    // makes on the page's behalf is the worker's request, and `page.route`
+    // never sees it. Answering it with a cacheable 200 is the whole point — a
+    // DNS failure would leave nothing for a wrong rule to cache, and the test
+    // would pass against a service worker that caches the backend.
+    await context.route('https://*.supabase.co/**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*' },
+        body: '[]',
+      }),
+    );
+
+    await page.goto('/trips');
+    await page.waitForLoadState('load');
+    // Without a worker in front of the page there is no caching rule in play at
+    // all, and "nothing was cached" would be true for the wrong reason.
+    await waitForServiceWorker(page);
+
+    // Positive control 1: the scan can see a violation. Plant one, find it,
+    // remove it. Without this the assertion below is indistinguishable from a
+    // scan that looks in the wrong place.
+    const planted = await page.evaluate(async (url) => {
+      const cache = await caches.open('e2e-rule-7-control');
+      await cache.put(url, new Response('[]', { status: 200 }));
+      return url;
+    }, SUPABASE_PROBE_URL);
+    expect(await cachedSupabaseUrls(page)).toContain(planted);
+    await page.evaluate(() => caches.delete('e2e-rule-7-control'));
+    expect(await cachedSupabaseUrls(page)).toEqual([]);
+
+    // Positive control 2: a Supabase request really was issued, through the
+    // worker, and really succeeded — so the worker's router matched it and had
+    // its chance to cache the response. The original test never signed in, so
+    // no request was ever made and the empty collection said nothing.
+    const status = await page.evaluate(
+      async (url) => (await fetch(url)).status,
+      SUPABASE_PROBE_URL,
+    );
+    expect(status).toBe(200);
 
     // A cached session or row read is a correctness bug, not a slow page: the
     // offline story is IndexedDB plus the outbox, never cached HTTP.
-    expect(cachedSupabase).toEqual([]);
+    expect(await cachedSupabaseUrls(page)).toEqual([]);
   });
 });

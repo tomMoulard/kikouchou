@@ -15,6 +15,10 @@ import { expect, test, type Page } from '@playwright/test';
 const ORIGINAL_TRIP = {
   name: 'Summer at Vacation Home',
   location: 'Vacation Home',
+  // Carried by the import alongside the location — see `TripForm`'s
+  // `applyImportSource`. Without it the "pre-fills location and description"
+  // test below had no description to copy and only ever checked the location.
+  description: 'Bring your own towels and sunscreen.',
   startDate: '2024-07-15',
   endDate: '2024-07-22',
 } as const;
@@ -100,11 +104,20 @@ async function navigateToMonth(
  */
 async function createTrip(
   page: Page,
-  tripData: { name: string; location?: string; startDate: string; endDate: string },
+  tripData: {
+    name: string;
+    location?: string;
+    description?: string;
+    startDate: string;
+    endDate: string;
+  },
 ): Promise<void> {
   await page.getByLabel(/trip name/i).fill(tripData.name);
   if (tripData.location) {
     await page.locator('#trip-location').fill(tripData.location);
+  }
+  if (tripData.description) {
+    await page.locator('#trip-description').fill(tripData.description);
   }
   await page.locator('#trip-start-date').click();
   await selectDate(page, tripData.startDate);
@@ -206,8 +219,16 @@ test.describe('Trip Import Feature', () => {
     // Step 4: Verify the location field is pre-filled
     await expect(locationInput).toHaveValue(ORIGINAL_TRIP.location);
 
-    // Verify import badge is shown
-    await expect(page.getByText(/importing from/i)).toBeVisible();
+    // ...and the description, which this test has always been named for and
+    // never checked. `applyImportSource` copies both.
+    await expect(page.locator('#trip-description')).toHaveValue(
+      ORIGINAL_TRIP.description,
+    );
+
+    // Verify import badge is shown, naming the trip it is importing from.
+    await expect(
+      page.getByText(new RegExp(`importing from.*${ORIGINAL_TRIP.name}`, 'i')),
+    ).toBeVisible();
   });
 
   test('importing a trip clones rooms to the new trip', async ({ page }) => {
@@ -250,9 +271,14 @@ test.describe('Trip Import Feature', () => {
     await page.getByRole('link', { name: /rooms/i }).click();
     await page.waitForURL(/\/rooms/);
 
-    // Step 7: Verify all rooms were cloned
+    // Step 7: Verify all rooms were cloned — every one of them, and nothing
+    // else. Scoped to the rooms list and counted: an unscoped `getByText` per
+    // name says nothing about how many rooms the clone actually produced, so a
+    // clone that duplicated each room would have passed.
+    const rooms = page.getByRole('list', { name: /rooms/i }).getByRole('listitem');
+    await expect(rooms).toHaveCount(ROOMS.length);
     for (const roomName of ROOMS) {
-      await expect(page.getByText(roomName).first()).toBeVisible();
+      await expect(rooms.filter({ hasText: roomName })).toHaveCount(1);
     }
   });
 
