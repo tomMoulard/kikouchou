@@ -167,6 +167,19 @@ function calculateUnassignedDates(
   let departureDate: string | null = person.stayEndDate ?? null;
 
   // Otherwise derive from transports (earliest arrival / latest departure)
+  //
+  // TODO(unit-4 / PR #11): the two `.substring(0, 10)` calls below read the
+  // **UTC** day out of a transport datetime, because `TransportForm` stores it
+  // with `toISOString()`. Unit 4 has made local day keys canonical across the
+  // timeline builders, so this is now the odd one out: a Paris guest whose
+  // flight lands at 00:30 local is dated to the previous day here, and their
+  // room then looks unassigned for a night they are actually present.
+  //
+  // Replace both with `localDayKeyOfInstant` from `@/lib/utils/trip-days.ts`
+  // (lines 176 and 185 below). That helper is not in this branch's base — unit
+  // 4's PR had not merged when this was written — and hand-rolling a
+  // fourteenth private date converter is exactly what this batch is removing,
+  // so the fix waits for the helper rather than being approximated here.
   const personArrivals = arrivals.filter((t) => t.personId === person.id);
   const personDepartures = departures.filter((t) => t.personId === person.id);
 
