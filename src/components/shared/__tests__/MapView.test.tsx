@@ -419,9 +419,15 @@ describe('MapView Map Click', () => {
     render(<MapView center={[0, 0]} onMapClick={onMapClick} />);
 
     // Simulate map click via stored handler
-    const handler = (window as unknown as Record<string, (e: { latlng: { lat: number; lng: number } }) => void>).__testMapClickHandler;
+    const handler = (
+      window as unknown as {
+        __testMapClickHandler?: (e: { latlng: { lat: number; lng: number } }) => void;
+      }
+    ).__testMapClickHandler;
+    // Without this the test passes when the map registers no handler at all:
+    // the call below is skipped and `onMapClick` is never expected to fire.
     expect(handler, 'the map never registered a click handler').toBeTypeOf('function');
-    handler({ latlng: { lat: 45.0, lng: 10.0 } });
+    handler?.({ latlng: { lat: 45.0, lng: 10.0 } });
 
     expect(onMapClick).toHaveBeenCalledWith([45.0, 10.0]);
   });
