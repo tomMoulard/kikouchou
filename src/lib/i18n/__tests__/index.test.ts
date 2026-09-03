@@ -11,11 +11,12 @@ import { format, formatDistanceToNow } from 'date-fns';
 // `await import(...)` inside a test body is not a style preference: a dynamic
 // import in the body makes Vite transform the barrel *during* the test, and
 // that transform is charged against `testTimeout`, not `hookTimeout`. Five
-// tests were paying it (measured 794ms and 597ms on an idle machine), which put
-// this file among the handful sitting closest to the 10s budget — and so among
-// the handful that start failing first when the machine is busy. The module
+// tests below were paying it. Hoisting took this file from 1472ms to 298ms on
+// an idle machine, which is the difference between sitting near the 10s budget
+// and nowhere near it — and files near that budget are the ones that start
+// failing first when the machine is busy, then get called flaky. The module
 // under test, `lib/i18n/date-locale.ts`, imports it statically for the same
-// reason.
+// reason, and `calendar-utils.test.ts` was never reported flaky.
 import { enUS, fr } from 'date-fns/locale';
 
 // Import translation files directly for key comparison
