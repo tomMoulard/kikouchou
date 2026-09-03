@@ -247,17 +247,21 @@ export const InstallPrompt = memo(function InstallPrompt({
   return (
     <div
       className={cn(
-        // `px-4 pt-4` rather than `p-4`: the bottom padding is not a gutter, it
-        // is the clearance below, and a `p-4` shorthand and a `pb-*` utility
-        // setting the same property leaves the winner to stylesheet order.
-        'fixed bottom-0 inset-x-0 z-50 px-4 pt-4',
-        // This card has an Install button, a "Not now" button and a close
-        // button, so it cannot be waved through with `pointer-events-none` the
-        // way `OfflineIndicator` is — it has to be positioned clear. `pb-20`
-        // cleared the nav bar and left the card body sitting exactly on the
-        // `bottom-20 size-14` FAB, which is the third time that bug has shipped.
-        // `pb-bottom-stack` is the shared rule; see `src/index.css`.
-        'pb-bottom-stack',
+        // This card has an Install button, a "Not now" and a close button, so
+        // it cannot be waved through with `pointer-events-none` the way
+        // `OfflineIndicator` is — it has to be *positioned* clear, and this is
+        // the third time that bug has shipped. `bottom-0 pb-20` put the card
+        // body exactly on the `bottom-20 size-14` FAB; `bottom-0` with the
+        // shared `pb-bottom-stack` moved the card up but left the wrapper's
+        // padding, which paints nothing and still takes the tap, lying across
+        // the FAB. `bottom-above-stack` anchors the box's bottom edge where the
+        // stack ends, so the wrapper is only as tall as the card.
+        'fixed bottom-above-stack inset-x-0 z-50 px-4',
+        // Belt and braces for the width the card does not use: the wrapper is
+        // `inset-x-0` and the card is `max-w-md mx-auto`, so on a tablet the
+        // wrapper spans dead space either side of it. Nothing is drawn there,
+        // which makes it exactly the `OfflineIndicator` case.
+        'pointer-events-none',
         // Animation classes
         'transition-transform duration-300 ease-out',
         isVisible ? 'translate-y-0' : 'translate-y-full',
@@ -266,7 +270,8 @@ export const InstallPrompt = memo(function InstallPrompt({
       role="region"
       aria-label={t('pwa.installPromptRegion', 'App installation prompt')}
     >
-      <Card className="mx-auto max-w-md shadow-lg border-primary/20">
+      {/* `pointer-events-auto` puts them back for the part that is drawn. */}
+      <Card className="pointer-events-auto mx-auto max-w-md shadow-lg border-primary/20">
         <CardContent className="p-4">
           <div className="flex items-start gap-4">
             {/* App Icon */}

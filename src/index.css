@@ -187,27 +187,59 @@
 }
 
 /**
+ * `--bottom-stack`: how much room the stack needs at this width, in one place.
+ *
+ * Below `sm` all three layers are up, so it clears the FAB's top edge (8.5rem)
+ * with a 1rem gutter. From `sm` the FAB is `sm:hidden` and only the nav bar is
+ * left; from `md` the nav bar is `md:hidden` too and a page gutter is enough.
+ *
+ * It is a variable rather than three copies of the arithmetic because two
+ * different properties need the same number: `padding-bottom`, for a scroll
+ * container whose last row must stay tappable, and `bottom`, for a fixed
+ * overlay that has to start above the stack instead of reaching down into it.
+ */
+:root {
+  --bottom-stack: calc(9.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (width >= theme(--breakpoint-sm)) {
+  :root {
+    --bottom-stack: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (width >= theme(--breakpoint-md)) {
+  :root {
+    --bottom-stack: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/**
  * The shared rule: bottom padding for anything whose last row must stay
  * tappable, at every width.
  *
- * Below `sm` all three layers are up, so content stops 1rem above the FAB's top
- * edge (8.5rem). From `sm` the FAB is hidden and only the nav bar is left; from
- * `md` the nav bar goes too and a plain page gutter is enough. Encoding the
- * three tiers in one utility rather than in `pb-… sm:pb-… md:pb-…` at each call
- * site is deliberate — four list pages each carried their own version of this
- * sum, and the one page that got it wrong was invisible until someone tried to
- * tap the last card.
+ * One utility rather than `pb-… sm:pb-… md:pb-…` at each call site, deliberately
+ * — four list pages each carried their own version of this sum, and the two
+ * that got it wrong were invisible until someone tried to tap the last card.
  */
 @utility pb-bottom-stack {
-  padding-bottom: calc(9.5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: var(--bottom-stack);
+}
 
-  @media (width >= theme(--breakpoint-sm)) {
-    padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
-  }
-
-  @media (width >= theme(--breakpoint-md)) {
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-  }
+/**
+ * The same number as a *position*: the overlay's bottom edge starts where the
+ * stack ends.
+ *
+ * `pb-bottom-stack` would look like it does the same job and does not. Padding
+ * is part of an element's box and hit-tests like the rest of it, so a fixed
+ * overlay at `bottom-0` with 9.5rem of bottom padding still swallows every tap
+ * across the FAB's band — the padding paints nothing and takes the tap anyway.
+ * Measured: `document.elementFromPoint` at the FAB's centre returned the
+ * install prompt's wrapper. Anchoring `bottom` instead gives the element a box
+ * that ends where its content ends.
+ */
+@utility bottom-above-stack {
+  bottom: var(--bottom-stack);
 }
 
 /**
