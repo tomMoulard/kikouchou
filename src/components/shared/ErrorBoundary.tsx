@@ -291,12 +291,14 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
         {IS_DEVELOPMENT && (errorMessage || errorStack || componentStack) && (
           <details className="mt-8 w-full text-left">
             <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
-              {this.safeTranslate('errors.details', 'Error details (development only)')}
+              {this.safeTranslate('errors.dev.details', 'Error details (development only)')}
             </summary>
             <div className="mt-2 rounded-md bg-muted p-4 text-xs font-mono overflow-auto max-h-64">
               {errorMessage && (
                 <div className="mb-2">
-                  <strong className="text-destructive">Error:</strong>
+                  <strong className="text-destructive">
+                    {this.safeTranslate('errors.dev.error', 'Error:')}
+                  </strong>
                   <pre className="mt-1 whitespace-pre-wrap break-words">
                     {errorMessage}
                   </pre>
@@ -304,7 +306,9 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
               )}
               {errorStack && (
                 <div className="mb-2">
-                  <strong className="text-muted-foreground">Stack trace:</strong>
+                  <strong className="text-muted-foreground">
+                    {this.safeTranslate('errors.dev.stack', 'Stack trace:')}
+                  </strong>
                   <pre className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
                     {errorStack}
                   </pre>
@@ -312,7 +316,12 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
               )}
               {componentStack && (
                 <div>
-                  <strong className="text-muted-foreground">Component stack:</strong>
+                  <strong className="text-muted-foreground">
+                    {this.safeTranslate(
+                      'errors.dev.componentStack',
+                      'Component stack:',
+                    )}
+                  </strong>
                   <pre className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">
                     {componentStack}
                   </pre>
