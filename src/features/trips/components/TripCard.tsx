@@ -49,6 +49,9 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 // ============================================================================
 const MAX_VISIBLE_PERSONS = 4;
 
+/** How much of a trip's notes goes into the card's accessible name. */
+const ARIA_DESCRIPTION_LENGTH = 120;
+
 
 /**
  * Gets the date-fns locale object for the given language code.
@@ -147,7 +150,7 @@ interface TripCardProps {
  * A reusable trip card component with dropdown menu actions.
  *
  * Features:
- * - Displays trip name, location, and date range
+ * - Displays trip name, location, date range, notes and attendees
  * - Dropdown menu with Edit and Delete actions
  * - Full keyboard accessibility
  * - Event propagation control (menu clicks don't trigger card click)
@@ -187,6 +190,11 @@ const TripCard = memo(function TripCard({
     () => Math.max(0, persons.length - MAX_VISIBLE_PERSONS),
     [persons],
   ),
+   overflowLabel = t('trips.moreGuests', { count: overflowCount }),
+
+  // Trimmed here rather than at the source: a description of nothing but
+  // whitespace is a description the card must not make room for.
+   description = trip.description?.trim() ?? '',
 
   // Format the date range
    dateRange = useMemo(
@@ -195,15 +203,29 @@ const TripCard = memo(function TripCard({
   ),
 
 
-  // Build aria-label for screen readers
+  // Build aria-label for screen readers.
+  //
+  // The whole card is one `role="button"`, so its accessible name is all a
+  // screen reader gets — the text inside it is not announced separately. The
+  // guest count therefore has to be said here or not at all.
    ariaLabel = useMemo(() => {
     const parts = [trip.name];
     if (trip.location) {
       parts.push(trip.location);
     }
     parts.push(dateRange);
+    parts.push(
+      persons.length === 0
+        ? t('trips.noGuests')
+        : t('trips.guestCount', { count: persons.length }),
+    );
+    if (description) {
+      // Clipped: the label is spoken in one breath, and a thousand-character
+      // note would bury the trip it belongs to.
+      parts.push(description.slice(0, ARIA_DESCRIPTION_LENGTH));
+    }
     return parts.join(', ');
-  }, [trip.name, trip.location, dateRange]),
+  }, [trip.name, trip.location, dateRange, persons.length, description, t]),
 
   // ============================================================================
   // Event Handlers
@@ -297,7 +319,7 @@ const TripCard = memo(function TripCard({
             variant="ghost"
             size="icon"
             className="size-11 md:size-8"
-            aria-label={t('trips.shareTripAria', 'Share trip — link and QR code')}
+            aria-label={t('trips.shareTripAria')}
             disabled={isDisabled}
             onClick={handleShareClick}
           >
@@ -311,7 +333,7 @@ const TripCard = memo(function TripCard({
               variant="ghost"
               size="icon"
               className="size-11 md:size-8"
-              aria-label={t('common.openMenu', 'Open menu')}
+              aria-label={t('common.openMenu')}
               disabled={isDisabled}
             >
               <MoreHorizontal className="size-4" aria-hidden="true" />
@@ -356,12 +378,24 @@ const TripCard = memo(function TripCard({
           <span>{dateRange}</span>
         </div>
 
+        {/* Notes. The trip form has always captured these and nothing has ever
+            shown them back — a field that went nowhere. Clamped rather than
+            truncated so a long note stays readable in the tooltip. */}
+        {description && (
+          <p
+            className="line-clamp-2 text-sm text-muted-foreground italic whitespace-pre-wrap break-words"
+            title={description}
+          >
+            {description}
+          </p>
+        )}
+
         {/* Attendees */}
         <div className="flex items-center gap-1.5">
           <Users className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           {persons.length === 0 ? (
             <span className="text-sm text-muted-foreground italic">
-              {t('trips.noGuests', 'No guests yet')}
+              {t('trips.noGuests')}
             </span>
           ) : (
             <div className="flex flex-wrap gap-1">
@@ -369,8 +403,16 @@ const TripCard = memo(function TripCard({
                 <PersonBadge key={person.id} person={person} size="sm" />
               ))}
               {overflowCount > 0 && (
-                <span className="text-xs text-muted-foreground px-1.5 py-0.5 bg-muted rounded-full">
-                  +{overflowCount}
+                <span
+                  className="text-xs text-muted-foreground px-1.5 py-0.5 bg-muted rounded-full"
+                  title={overflowLabel}
+                >
+                  {/* "+3" is fine to look at and useless to hear. The card's
+                      own aria-label carries the full guest count, since a
+                      `role="button"` announces its name and not its contents;
+                      this text is for the browse modes that do walk inside. */}
+                  <span aria-hidden="true">+{overflowCount}</span>
+                  <span className="sr-only">{overflowLabel}</span>
                 </span>
               )}
             </div>
@@ -385,6 +427,10 @@ const TripCard = memo(function TripCard({
           >
             <Suspense
               fallback={
+                // The one content-shaped loading state in the app; everything
+                // else spins. It is deliberately kept: the placeholder is
+                // exactly the height the map will be, so the card does not jump
+                // when the chunk lands.
                 <div className="h-20 w-full rounded-md bg-muted animate-pulse" />
               }
             >

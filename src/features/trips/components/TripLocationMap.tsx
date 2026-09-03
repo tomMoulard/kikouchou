@@ -131,7 +131,7 @@ export const TripLocationMap = memo(function TripLocationMap({
           className
         )}
         style={{ height: `${previewHeight}px` }}
-        aria-label={t('map.expandMap', 'View location on map: {{location}}', {
+        aria-label={t('map.expandMap', {
           location,
         })}
         aria-haspopup="dialog"
@@ -146,7 +146,7 @@ export const TripLocationMap = memo(function TripLocationMap({
           showZoomControl={false}
           showAttribution={false}
           height={previewHeight}
-          aria-label={t('map.tripPreview', 'Trip location preview')}
+          aria-label={t('map.tripPreview')}
         />
 
         {/* Expand Icon Overlay */}
@@ -186,7 +186,7 @@ export const TripLocationMap = memo(function TripLocationMap({
               showZoomControl={true}
               showAttribution={true}
               height="100%"
-              aria-label={t('map.tripLocation', 'Trip location: {{location}}', {
+              aria-label={t('map.tripLocation', {
                 location,
               })}
             />
