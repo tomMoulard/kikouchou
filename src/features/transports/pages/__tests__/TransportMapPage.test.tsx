@@ -106,13 +106,21 @@ vi.mock('@/hooks', () => ({
   }),
 }));
 
-// Mock MapView to avoid Leaflet in jsdom - render popupContent if provided
+// Mock MapView to avoid Leaflet in jsdom. It exposes both halves of a marker:
+// the `popupContent` node and the `label` string, which is the marker's
+// accessible name on the real map and was previously unobservable from a test.
 vi.mock('@/components/shared/MapView', () => ({
-  MapView: ({ markers }: { markers: Array<{ popupContent?: React.ReactNode }> }) => (
+  MapView: ({
+    markers,
+  }: {
+    markers: Array<{ popupContent?: React.ReactNode; label?: string }>;
+  }) => (
     <div data-testid="map-view" data-markers={markers?.length ?? 0}>
       Map View
       {markers?.map((m, i) => (
-        <div key={i} data-testid={`marker-popup-${i}`}>{m.popupContent}</div>
+        <div key={i} data-testid={`marker-popup-${i}`} data-label={m.label}>
+          {m.popupContent}
+        </div>
       ))}
     </div>
   ),
@@ -302,7 +310,17 @@ describe('TransportMapPage', () => {
     } as unknown as ReturnType<typeof useTransportContext>);
 
     render(<TransportMapPage />, { withProviders: false });
-    expect(screen.getByTestId('map-view')).toBeInTheDocument();
+
+    // The branch this test is named for: a pickup with nobody driving it says
+    // so in the popup. `getByTestId('map-view')` said nothing about it.
+    const popup = screen.getByTestId('marker-popup-0');
+    expect(popup).toHaveTextContent('transports.needsPickup');
+    expect(popup).toHaveTextContent('Paris CDG');
+    expect(popup).toHaveTextContent('TGV 6789');
+    expect(popup).toHaveTextContent('transports.modes.train');
+    // Datetime carries no offset, so it reads as this wall clock everywhere
+    expect(popup).toHaveTextContent('Thu 15 Jul');
+    expect(popup).toHaveTextContent('14:30');
   });
 
   it('renders map with multiple markers', () => {
@@ -353,7 +371,14 @@ describe('TransportMapPage', () => {
     } as unknown as ReturnType<typeof useTransportContext>);
 
     render(<TransportMapPage />, { withProviders: false });
-    expect(screen.getByTestId('map-view')).toBeInTheDocument();
+
+    // The fallback this test is named for: with no matching person the marker
+    // still has to be findable on the map, named "unknown" rather than blank,
+    // and the popup drops the person badge instead of rendering an empty one.
+    const marker = screen.getByTestId('marker-popup-0');
+    expect(marker).toHaveAttribute('data-label', 'common.unknown - Airport');
+    expect(screen.queryByTestId('person-badge')).not.toBeInTheDocument();
+    expect(marker).toHaveTextContent('Airport');
   });
 
   it('renders popup content with arrival type transport', () => {
@@ -459,7 +484,8 @@ describe('TransportMapPage', () => {
 
     render(<TransportMapPage />, { withProviders: false });
     const popup = screen.getByTestId('marker-popup-0');
-    expect(popup.textContent).toContain('Parking Lot A');
+    expect(popup).toHaveTextContent('Parking Lot A');
+    expect(popup).toHaveTextContent('transports.modes.car');
   });
 
   it('renders popup with other transport mode', () => {
@@ -486,7 +512,8 @@ describe('TransportMapPage', () => {
 
     render(<TransportMapPage />, { withProviders: false });
     const popup = screen.getByTestId('marker-popup-0');
-    expect(popup.textContent).toContain('Ferry Terminal');
+    expect(popup).toHaveTextContent('Ferry Terminal');
+    expect(popup).toHaveTextContent('transports.modes.other');
   });
 
   it('renders popup with invalid datetime gracefully', () => {
@@ -511,8 +538,14 @@ describe('TransportMapPage', () => {
     } as unknown as ReturnType<typeof useTransportContext>);
 
     render(<TransportMapPage />, { withProviders: false });
+
+    // A row we cannot place in time still belongs on the map — but the popup
+    // must show *no* date and *no* time rather than "Invalid Date"
     const popup = screen.getByTestId('marker-popup-0');
-    expect(popup.textContent).toContain('Station X');
+    expect(popup).toHaveTextContent('Station X');
+    expect(popup.textContent).not.toMatch(/invalid/i);
+    expect(popup.textContent).not.toMatch(/nan/i);
+    expect(popup.textContent).not.toMatch(/\d{2}:\d{2}/);
   });
 
   it('renders popup with transport that has driver assigned', () => {
@@ -538,8 +571,14 @@ describe('TransportMapPage', () => {
     } as unknown as ReturnType<typeof useTransportContext>);
 
     render(<TransportMapPage />, { withProviders: false });
-    // Should not show needs pickup since driverId is set
+
     const popup = screen.getByTestId('marker-popup-0');
+    // A driver is assigned, so the pickup warning is gone…
     expect(popup.textContent).not.toContain('transports.needsPickup');
+    // …while the rest of the popup still renders. Without this half, deleting
+    // the popup entirely would also satisfy the assertion above.
+    expect(popup).toHaveTextContent('Airport');
+    expect(popup).toHaveTextContent('14:30');
+    expect(screen.getByTestId('person-badge')).toHaveTextContent('Alice');
   });
 });

@@ -406,15 +406,8 @@ describe('DirectionsButton Accessibility', () => {
   });
 });
 
-// ============================================================================
-// Memoization Tests
-// ============================================================================
-
-describe('DirectionsButton Memoization', () => {
-  it('is memoized with React.memo', () => {
-    // memo() returns a component with a $$typeof property
-    // We can verify the component is wrapped by checking it exists and renders
-    expect(DirectionsButton).toBeDefined();
-    expect(typeof DirectionsButton).toBe('object'); // memo() returns an object, not a function
-  });
-});
+// A "DirectionsButton Memoization" block used to live here, asserting
+// `typeof DirectionsButton === 'object'`. That is a property of the `memo()`
+// wrapper, not of this component: it holds for every memoised component in the
+// codebase and would keep holding if the button rendered nothing at all. There
+// is no behaviour behind it to test, so it is gone rather than rewritten.
