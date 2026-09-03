@@ -10,6 +10,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -252,6 +253,12 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
   const navigate = useNavigate();
   const location = useLocation();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  // One shared description for every trip-gated link in this nav. The sheet
+  // needs its own copy: Radix marks the rest of the document `aria-hidden`
+  // while it is open, and a description that lives in an aria-hidden subtree is
+  // not reliably announced.
+  const disabledHintId = useId();
+  const sheetDisabledHintId = useId();
 
   const handleMoreItemClick = useCallback((path: string) => {
     setIsMoreOpen(false);
@@ -280,10 +287,18 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
 
             return (
               <li key={item.pathSuffix} className="flex-1">
+                {/*
+                  Disabled, not removed: no `tabIndex={-1}` and no
+                  `pointer-events-none`. A control taken out of the tab order is
+                  a control a keyboard or screen-reader user never learns
+                  exists, and the nav silently changes shape as trips come and
+                  go. It stays focusable, announces itself as disabled through
+                  `aria-disabled`, says why through `aria-describedby`, and is
+                  stopped from navigating in the handler instead.
+                */}
                 <NavLink
                   to={path}
                   onClick={(e) => { if (isDisabled) e.preventDefault(); }}
-                  tabIndex={isDisabled ? -1 : undefined}
                   className={({ isActive }) =>
                     cn(
                       'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors',
@@ -291,10 +306,12 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
                       isActive
                         ? 'text-primary font-medium'
                         : 'text-muted-foreground',
-                      isDisabled && 'opacity-50 pointer-events-none',
+                      // No hover affordance on something that cannot be used.
+                      isDisabled && 'cursor-not-allowed opacity-50 hover:text-muted-foreground',
                     )
                   }
                   aria-disabled={isDisabled || undefined}
+                  aria-describedby={isDisabled ? disabledHintId : undefined}
                 >
                   {({ isActive }) => (
                     <>
@@ -328,6 +345,14 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
             </button>
           </li>
         </ul>
+        {/*
+          Outside the <ul>, which may only contain <li>. Referenced by every
+          trip-gated link above so the reason a link is unusable is announced
+          rather than left to a dimmed colour nobody can hear.
+        */}
+        <span id={disabledHintId} className="sr-only">
+          {t('nav.requiresTrip')}
+        </span>
       </nav>
 
       {/* "More" bottom sheet */}
@@ -349,10 +374,18 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
 
                 return (
                   <li key={`${item.requiresTrip ? 'trip' : 'global'}-${item.pathSuffix || 'trips'}`}>
+                    {/*
+                      `aria-disabled` rather than the `disabled` attribute, for
+                      the same reason the bars above dropped `tabIndex={-1}`: a
+                      natively disabled button leaves the tab order, so someone
+                      driving this sheet from the keyboard never hears that
+                      Rooms and Guests exist and are waiting on a trip.
+                    */}
                     <button
                       type="button"
-                      onClick={() => handleMoreItemClick(path)}
-                      disabled={isDisabled}
+                      onClick={() => { if (!isDisabled) handleMoreItemClick(path); }}
+                      aria-disabled={isDisabled || undefined}
+                      aria-describedby={isDisabled ? sheetDisabledHintId : undefined}
                       className={cn(
                         'flex items-center gap-3 w-full rounded-lg px-3 py-3 text-sm min-h-[44px] transition-colors',
                         'hover:bg-accent hover:text-accent-foreground',
@@ -360,7 +393,8 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
                         isActive
                           ? 'bg-accent text-accent-foreground font-medium'
                           : 'text-foreground',
-                        isDisabled && 'opacity-50 cursor-not-allowed',
+                        isDisabled &&
+                          'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-foreground',
                       )}
                     >
                       <item.icon className={cn('h-5 w-5 shrink-0', isActive && 'text-primary')} aria-hidden="true" />
@@ -370,6 +404,9 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
                 );
               })}
             </ul>
+            <span id={sheetDisabledHintId} className="sr-only">
+              {t('nav.requiresTrip')}
+            </span>
           </nav>
         </SheetContent>
       </Sheet>
@@ -461,7 +498,7 @@ const TripInfoSection = memo(function TripInfoSection({
       </div>
 
       <div className="mt-3 pt-2 border-t border-border/60">
-        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
           {t('nav.guestsOfTheDay')}
         </p>
         <p className="sr-only">{t('nav.guestsOfTheDayHint')}</p>
@@ -523,6 +560,8 @@ const NavLinkItem = memo(function NavLinkItem({
   const hideTooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [collapsedTooltipOpen, setCollapsedTooltipOpen] = useState(false);
   const [collapsedTooltipPos, setCollapsedTooltipPos] = useState({ top: 0, left: 0 });
+  const tooltipId = useId();
+  const disabledHintId = useId();
 
   const clearHideTooltipTimer = useCallback(() => {
     if (hideTooltipTimerRef.current !== null) {
@@ -562,15 +601,53 @@ const NavLinkItem = memo(function NavLinkItem({
     };
   }, [clearHideTooltipTimer]);
 
+  /*
+    Escape dismisses the tooltip, per the ARIA tooltip pattern. On `document`
+    rather than the link so it works for the pointer case too, where the tooltip
+    is open but focus is somewhere else entirely. Deliberately not stopping
+    propagation: the tooltip is not modal, and swallowing Escape here would stop
+    it reaching anything that legitimately wants it.
+  */
+  useEffect(() => {
+    if (!collapsedTooltipOpen) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        closeCollapsedTooltipNow();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [collapsedTooltipOpen, closeCollapsedTooltipNow]);
+
+  const isTooltipVisible = isCollapsed && collapsedTooltipOpen;
+  /*
+    Both descriptions are optional and either can be absent, so build the list
+    rather than nesting ternaries. An empty string would be a dangling
+    `aria-describedby` pointing at nothing, hence the `undefined`.
+  */
+  const describedBy =
+    [isTooltipVisible ? tooltipId : null, isDisabled ? disabledHintId : null]
+      .filter((id): id is string => id !== null)
+      .join(' ') || undefined;
+
   return (
     <li className={cn(isCollapsed && 'flex justify-center')}>
+      {/*
+        Disabled, not removed from the page: no `tabIndex={-1}`, no
+        `pointer-events-none`. See the mobile bar for the reasoning — a disabled
+        control has to stay focusable to be discoverable, and `aria-disabled`
+        plus a described reason is what tells the user why it will not move.
+      */}
       <NavLink
         ref={linkRef}
         to={path}
         onClick={(e) => {
           if (isDisabled) e.preventDefault();
         }}
-        tabIndex={isDisabled ? -1 : undefined}
         aria-label={isCollapsed ? label : undefined}
         className={({ isActive }) =>
           cn(
@@ -583,10 +660,12 @@ const NavLinkItem = memo(function NavLinkItem({
               ? 'bg-primary/14 text-primary font-medium shadow-sm ring-1 ring-primary/20'
               : 'text-muted-foreground hover:bg-accent/80 hover:text-accent-foreground',
             isActive && 'hover:bg-primary/20 hover:text-primary',
-            isDisabled && 'pointer-events-none opacity-50',
+            isDisabled &&
+              'cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted-foreground',
           )
         }
         aria-disabled={isDisabled || undefined}
+        aria-describedby={describedBy}
         onMouseEnter={isCollapsed ? openCollapsedTooltip : undefined}
         onMouseLeave={isCollapsed ? scheduleCloseCollapsedTooltip : undefined}
         onFocus={isCollapsed ? openCollapsedTooltip : undefined}
@@ -595,9 +674,30 @@ const NavLinkItem = memo(function NavLinkItem({
         <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
         {!isCollapsed ? <span className="truncate">{label}</span> : null}
       </NavLink>
-      {isCollapsed && collapsedTooltipOpen
+      {isDisabled ? (
+        <span id={disabledHintId} className="sr-only">
+          {t('nav.requiresTrip')}
+        </span>
+      ) : null}
+      {isTooltipVisible
         ? createPortal(
+            /*
+              `id` + the link's `aria-describedby` is what makes this reachable:
+              a bare `role="tooltip"` in a body portal is an orphan no screen
+              reader ever visits, because nothing points at it.
+
+              The `z-[100]` predates this component and is left alone. It does
+              sit above the `z-50` dialog/sheet/toast layer, which the app has no
+              documented scale for — the skip link uses the same number. Raising
+              or renumbering is the wrong fix; a stacking context (`isolation:
+              isolate`) is. Out of scope here, and harmless in practice: the
+              sidebar is inert behind a modal, so this cannot open over one.
+
+              Inline `style` for the position only — it is measured from the
+              link's rect every time, so there is no utility class for it.
+            */
             <div
+              id={tooltipId}
               role="tooltip"
               className={cn(
                 'pointer-events-auto fixed z-[100] -translate-y-1/2',
