@@ -515,7 +515,6 @@ describe('TripContext', () => {
       });
 
       const countSpy = vi.spyOn(db.trips, 'count');
-      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       countSpy.mockRejectedValue('not an error object');
 
       const caught = await callAndCatch(() => result.current.checkConnection());
