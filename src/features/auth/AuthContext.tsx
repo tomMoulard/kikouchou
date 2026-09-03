@@ -24,6 +24,14 @@
  *   `isAvailable` does not wait for it: it reads the environment synchronously,
  *   so the UI can decide whether to offer sign-in on the very first render.
  *
+ * What this provider does **not** know is *which* ways in the project accepts.
+ * That is asked of the backend when a sign-in surface opens — see
+ * `lib/supabase/auth-settings` — so enabling a provider in the Supabase
+ * dashboard needs no change here. The methods below are therefore shaped by
+ * mechanism (a redirect, an emailed link, a wallet signature, a passkey)
+ * rather than by provider, and `signInWithProvider` takes whatever id the
+ * project reported.
+ *
  * @module features/auth/AuthContext
  */
 /* eslint-disable react-refresh/only-export-components -- The provider, its `useAuth` hook and the context type are one concept; splitting them across three files to please Fast Refresh costs more than the refresh it buys. */
@@ -39,7 +47,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
+import type { Provider, Session, SupabaseClient, User } from '@supabase/supabase-js';
 
 import {
   consumeAuthCode,
@@ -48,13 +56,43 @@ import {
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import posthog, { resetAnalyticsIdentity } from '@/lib/posthog';
 
+import type { Web3Chain } from './web3';
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
 
-/** How a sign-in attempt ended, so the caller can show the right message. */
+/**
+ * How a sign-in attempt ended, so the caller can show the right message.
+ *
+ * The three success shapes are genuinely different endings and the UI has to
+ * tell them apart: `redirecting` means this document is being torn down and
+ * anything after it is unreachable; `email-sent` means nothing has happened yet
+ * and the user must go and open a mail client; `signed-in` means there is a
+ * session *now*, on this page, with no round trip at all.
+ */
 export type SignInOutcome =
+  /** The browser is leaving for the provider. Nothing after this runs. */
   | { readonly status: 'redirecting' }
+  /** A magic link is on its way; the session will arrive on a later load. */
+  | { readonly status: 'email-sent' }
+  /** Signed in without leaving the page — a wallet signature. */
+  | { readonly status: 'signed-in' }
+  /** No backend in this build, so there was nothing to try. */
+  | { readonly status: 'unavailable' }
+  | { readonly status: 'error'; readonly message: string };
+
+/**
+ * How enrolling a passkey ended.
+ *
+ * Separate from {@link SignInOutcome} because it is not a sign-in: the user is
+ * already signed in, and what changed is that this device can now be the way
+ * back in. Reusing `signed-in` for it would have every caller re-checking which
+ * of the two things just happened.
+ */
+export type PasskeyEnrolmentOutcome =
+  | { readonly status: 'enrolled' }
+  /** No backend, or no session to attach the passkey to. */
   | { readonly status: 'unavailable' }
   | { readonly status: 'error'; readonly message: string };
 
@@ -82,10 +120,54 @@ export interface AuthContextValue {
   readonly isSigningIn: boolean;
 
   /**
-   * Starts Google sign-in. Navigates away on success, so nothing after the
-   * `redirecting` outcome runs in this document.
+   * Starts an OAuth redirect for one provider id, as reported by the project's
+   * own `/auth/v1/settings` — `'google'`, `'spotify'`, anything enabled later.
+   * Navigates away on success, so nothing after the `redirecting` outcome runs
+   * in this document.
    */
-  readonly signInWithGoogle: () => Promise<SignInOutcome>;
+  readonly signInWithProvider: (providerId: string) => Promise<SignInOutcome>;
+
+  /**
+   * Emails a sign-in link. Resolves `email-sent` once the request is accepted —
+   * which says the mail was *queued*, not that it arrived.
+   */
+  readonly signInWithEmailLink: (email: string) => Promise<SignInOutcome>;
+
+  /**
+   * Signs in with an injected wallet, via Sign in with Solana / Ethereum.
+   *
+   * Completes in this document: the wallet prompts, the signature is verified,
+   * and the outcome is `signed-in` with a session already in hand.
+   *
+   * @param chain - Must be one the wallet is actually there for; see
+   *   `features/auth/web3`.
+   * @param statement - The sentence shown inside the wallet's signing prompt.
+   *   User-facing, so it is translated by the caller, and it must contain no
+   *   newline — most wallets reject one.
+   */
+  readonly signInWithWallet: (
+    chain: Web3Chain,
+    statement: string,
+  ) => Promise<SignInOutcome>;
+
+  /**
+   * Signs in with a passkey already enrolled for this origin.
+   *
+   * Completes in this document, like a wallet: the browser prompts for the
+   * screen lock or security key and a session follows. Offer it only where
+   * `features/auth/passkeys` says the browser can, and where the project
+   * reports `passkeys` enabled.
+   */
+  readonly signInWithPasskey: () => Promise<SignInOutcome>;
+
+  /**
+   * Enrols a passkey for the signed-in user, on this device and origin.
+   *
+   * Sign-in with a passkey is unreachable until somebody has done this once —
+   * there is no other way for one to exist — which is why the account panel
+   * offers it rather than leaving it to a provider's own screens.
+   */
+  readonly registerPasskey: () => Promise<PasskeyEnrolmentOutcome>;
 
   /** Signs out locally. Safe to call offline: the local session is cleared. */
   readonly signOut: () => Promise<void>;
@@ -358,45 +440,145 @@ export function AuthProvider({
     };
   }, [isAvailable]);
 
-  const signInWithGoogle = useCallback(async (): Promise<SignInOutcome> => {
+  /**
+   * The part every way in shares: refuse when there is no backend, resolve the
+   * client, run the attempt, and make sure `isSigningIn` comes back down.
+   *
+   * One runner rather than three copies, because the copies are where the
+   * differences creep in — the original single method already carried three
+   * separate `setIsSigningIn(false)` calls, and each new provider would have
+   * added three more places to forget one.
+   */
+  const runSignIn = useCallback(
+    async (
+      attempt: (activeClient: SupabaseClient) => Promise<SignInOutcome>,
+    ): Promise<SignInOutcome> => {
+      if (!isAvailable) {
+        return { status: 'unavailable' };
+      }
+
+      setIsSigningIn(true);
+      setExchangeError(null);
+
+      const settle = (outcome: SignInOutcome): SignInOutcome => {
+        // `redirecting` is the exception: the browser is on its way to the
+        // provider, so the flag stays set and the buttons stay disabled for the
+        // remainder of this document's life.
+        if (outcome.status !== 'redirecting' && isMountedRef.current) {
+          setIsSigningIn(false);
+        }
+        return outcome;
+      };
+
+      try {
+        // Usually already resolved by the mount effect; awaited here so a click
+        // that lands before the chunk finishes loading still works.
+        const activeClient = client ?? (await getSupabaseClient());
+        if (!activeClient) {
+          return settle({ status: 'unavailable' });
+        }
+
+        return settle(await attempt(activeClient));
+      } catch (error: unknown) {
+        // Offline or blocked: these calls reject rather than returning an
+        // error. A wallet prompt the user dismisses also lands here.
+        return settle({ status: 'error', message: toMessage(error) });
+      }
+    },
+    [client, isAvailable],
+  );
+
+  const signInWithProvider = useCallback(
+    (providerId: string): Promise<SignInOutcome> =>
+      runSignIn(async (activeClient) => {
+        const { error } = await activeClient.auth.signInWithOAuth({
+          // The id came from this project's own `/auth/v1/settings`, whose
+          // `external` map is keyed by exactly these ids — so the cast asserts
+          // something the endpoint guarantees. Narrowing it against a literal
+          // list here would reintroduce the hard-coded provider list that
+          // discovery exists to delete, and the failure mode it would prevent
+          // is already benign: an id GoTrue does not know comes straight back
+          // as a "provider is not enabled" error.
+          provider: providerId as Provider,
+          options: { redirectTo: resolveRedirectTo() },
+        });
+
+        return error
+          ? { status: 'error', message: error.message }
+          : { status: 'redirecting' };
+      }),
+    [runSignIn],
+  );
+
+  const signInWithEmailLink = useCallback(
+    (email: string): Promise<SignInOutcome> =>
+      runSignIn(async (activeClient) => {
+        const { error } = await activeClient.auth.signInWithOtp({
+          email,
+          // Same destination as the OAuth redirect, for the same reason: the
+          // link has to land somewhere GitHub Pages serves on a cold load.
+          options: { emailRedirectTo: resolveRedirectTo() },
+        });
+
+        return error
+          ? { status: 'error', message: error.message }
+          : { status: 'email-sent' };
+      }),
+    [runSignIn],
+  );
+
+  const signInWithWallet = useCallback(
+    (chain: Web3Chain, statement: string): Promise<SignInOutcome> =>
+      runSignIn(async (activeClient) => {
+        // Built per chain rather than spread from the parameter: the credentials
+        // type is a union discriminated on `chain`, and a widened
+        // `'solana' | 'ethereum'` matches neither arm.
+        const { error } = await activeClient.auth.signInWithWeb3(
+          chain === 'solana' ? { chain: 'solana', statement } : { chain: 'ethereum', statement },
+        );
+
+        return error
+          ? { status: 'error', message: error.message }
+          : { status: 'signed-in' };
+      }),
+    [runSignIn],
+  );
+
+  const signInWithPasskey = useCallback(
+    (): Promise<SignInOutcome> =>
+      runSignIn(async (activeClient) => {
+        // Throws rather than returning an error when `experimental.passkey` is
+        // off in `lib/supabase/client` — `runSignIn` catches that too.
+        const { error } = await activeClient.auth.signInWithPasskey();
+
+        return error
+          ? { status: 'error', message: error.message }
+          : { status: 'signed-in' };
+      }),
+    [runSignIn],
+  );
+
+  /**
+   * Deliberately not routed through {@link runSignIn}: nobody is signing in, so
+   * flipping `isSigningIn` would disable a sign-in surface that is not even on
+   * screen. The caller owns the in-flight state for its own button.
+   */
+  const registerPasskey = useCallback(async (): Promise<PasskeyEnrolmentOutcome> => {
     if (!isAvailable) {
       return { status: 'unavailable' };
     }
 
-    setIsSigningIn(true);
-    setExchangeError(null);
     try {
-      // Usually already resolved by the mount effect; awaited here so a click
-      // that lands before the chunk finishes loading still works.
       const activeClient = client ?? (await getSupabaseClient());
       if (!activeClient) {
-        if (isMountedRef.current) {
-          setIsSigningIn(false);
-        }
         return { status: 'unavailable' };
       }
 
-      const { error } = await activeClient.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: resolveRedirectTo() },
-      });
-
-      if (error) {
-        if (isMountedRef.current) {
-          setIsSigningIn(false);
-        }
-        return { status: 'error', message: error.message };
-      }
-
-      // The browser is navigating to Google. Leave `isSigningIn` set so the
-      // button stays disabled for the remainder of this document's life.
-      return { status: 'redirecting' };
+      const { error } = await activeClient.auth.registerPasskey();
+      return error ? { status: 'error', message: error.message } : { status: 'enrolled' };
     } catch (error: unknown) {
-      // Offline, or the request was blocked: signInWithOAuth rejects rather
-      // than returning an error.
-      if (isMountedRef.current) {
-        setIsSigningIn(false);
-      }
+      // A dismissed system prompt, an origin WebAuthn will not serve, or the
+      // experimental flag being off.
       return { status: 'error', message: toMessage(error) };
     }
   }, [client, isAvailable]);
@@ -427,7 +609,11 @@ export function AuthProvider({
       isResolved,
       isAvailable,
       isSigningIn,
-      signInWithGoogle,
+      signInWithProvider,
+      signInWithEmailLink,
+      signInWithWallet,
+      signInWithPasskey,
+      registerPasskey,
       signOut,
       // The exchange's own failure is more specific than the redirect's, so it
       // wins when both are present.
@@ -439,8 +625,12 @@ export function AuthProvider({
       isAvailable,
       isResolved,
       isSigningIn,
+      registerPasskey,
       session,
-      signInWithGoogle,
+      signInWithEmailLink,
+      signInWithPasskey,
+      signInWithProvider,
+      signInWithWallet,
       signOut,
     ],
   );
