@@ -384,17 +384,29 @@ test.describe('joining a trip', () => {
 
     await guestPage.getByRole('button', { name: /alice/i }).click();
 
-    // Claimed on the server, not merely in the UI.
+    // Claimed on the server, not merely in the UI — and in two steps, because
+    // one is not enough to say *whose* claim it was.
+    //
+    // First: a claim landed on somebody's roster row.
     await expect
-      .poll(
-        () =>
-          stub.members.find((m) => m.user_id === GUEST.id)?.person_id ?? null,
-        { timeout: 20_000 },
-      )
-      .not.toBeNull();
+      .poll(() => stub.members.filter((m) => m.person_id !== null).length, {
+        timeout: 20_000,
+      })
+      .toBeGreaterThan(0);
+
+    // Then: it landed on this account's row and on no other. `members claim
+    // their own identity` is `using (user_id = auth.uid())`, so the subject of
+    // the write is the bearer token, never the `?user_id=eq.` the client sent —
+    // which the stub used to take at its word, obligingly writing a claim onto
+    // another account's row when asked to. Asserting only that the guest's own
+    // row is set cannot see that: it fails either way once the client names the
+    // wrong account. This is the assertion that tells the two apart.
+    expect(
+      stub.members.filter((m) => m.user_id !== GUEST.id && m.person_id !== null),
+    ).toHaveLength(0);
+    expect(stub.members.find((m) => m.user_id === GUEST.id)?.person_id).toBeTruthy();
 
     await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
-
   });
 
   test('lets an invitee into a trip that has no participants', async ({ browser }) => {
@@ -683,13 +695,15 @@ test.describe('two devices on one trip', () => {
     // And nothing landed, because nothing could.
     expect(stub.counts.updateInserts).toBe(landed);
 
-    // The retry is bounded. A client spinning on failure passes every assertion
-    // above while hammering the server flat; the backoff schedule is what stops
-    // it, and nothing else in this file exercises it. Six seconds sits past the
-    // 1 s and 2 s steps, so a handful is expected and a storm is hundreds.
-    const burst = stub.counts.updateAttempts;
-    await ownerPage.waitForTimeout(6_000);
-    expect(stub.counts.updateAttempts - burst).toBeLessThanOrEqual(10);
+    // Measured, not asserted, and recorded because the number is a surprise: in
+    // the six seconds after the edit the client makes *no* further push attempt
+    // at all — not a bounded one. Neither `BACKOFF_MS` set to 1 ms nor
+    // `noteFailure` calling `syncNow()` directly changes it, so the queued edit
+    // waits for an external trigger (the `online` event below, or tab focus)
+    // rather than for the retry schedule. A bound on retry storms is therefore
+    // unexercisable from here today: any number it asserted would pass at zero.
+    // Worth a look on its own — a device that never regains `online` holds the
+    // edit indefinitely — but it is not this test's claim to make.
 
     // And send them when it comes back, with no user action.
     stub.offline = false;
