@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { StrictMode } from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { isSameDay } from 'date-fns';
 
@@ -145,6 +146,58 @@ describe('useToday', () => {
 
       await act(async () => {
         window.dispatchEvent(new Event('focus'));
+      });
+
+      expect(result.current.today.getDate()).toBe(4);
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Unmount guard
+  // --------------------------------------------------------------------------
+
+  /**
+   * `isMountedRef` guards the `setToday` that the interval and the visibility
+   * listener both go through, and it has to be set to true on effect *setup*,
+   * not only reset to false in cleanup.
+   *
+   * StrictMode runs setup -> cleanup -> setup on the same component instance, so
+   * a ref only ever written in cleanup latches false on the first pass and stays
+   * false for the life of the component. Every guarded setState then silently
+   * no-ops: the day never rolls over, and nothing throws to say so. The plain
+   * (non-StrictMode) tests above cannot see this, because they never run the
+   * cleanup before the update they are checking.
+   */
+  describe('unmount guard under StrictMode', () => {
+    it('still rolls the day over after the double-invoked effect', () => {
+      vi.setSystemTime(new Date('2026-02-03T23:59:00'));
+
+      const { result } = renderHook(() => useToday(), { wrapper: StrictMode });
+
+      expect(result.current.today.getDate()).toBe(3);
+
+      vi.setSystemTime(new Date('2026-02-04T00:01:00'));
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+
+      expect(result.current.today.getDate()).toBe(4);
+    });
+
+    it('still reacts to the tab becoming visible after the double-invoked effect', () => {
+      vi.setSystemTime(new Date('2026-02-03T23:59:00'));
+
+      const { result } = renderHook(() => useToday(), { wrapper: StrictMode });
+
+      vi.setSystemTime(new Date('2026-02-04T09:00:00'));
+      act(() => {
+        // An earlier test leaves visibilityState on 'hidden'; say so explicitly
+        // rather than inheriting whatever ran last.
+        Object.defineProperty(document, 'visibilityState', {
+          value: 'visible',
+          writable: true,
+        });
+        document.dispatchEvent(new Event('visibilitychange'));
       });
 
       expect(result.current.today.getDate()).toBe(4);
