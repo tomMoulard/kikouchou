@@ -127,6 +127,14 @@ jobs:
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
+    # Coverage instrumentation makes this job roughly 4x slower than the bare
+    # run it replaced (203s vs 54s measured locally), so it is worth bounding.
+    # GitHub's default is 360 minutes: a suite that hangs would burn six hours
+    # of runner time before anyone saw a red mark. 30 leaves ~3x headroom over
+    # the measured time and still fails fast. Raise it if the suite legitimately
+    # grows into it — do not let it sit just above the real duration, which is
+    # how the E2E job ended up killed on every run for months.
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
