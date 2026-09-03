@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import {
@@ -333,22 +333,29 @@ describe('EventDetailDialog', () => {
       // Click delete button in the event dialog
       await user.click(screen.getByText('common.delete'));
 
-      // Find and click the confirm button in the nested confirm dialog
-      await waitFor(() => {
-        expect(screen.getByText('confirm.deleteTransport')).toBeInTheDocument();
-      });
+      const confirm = await screen.findByRole('alertdialog');
+      expect(within(confirm).getByText('confirm.deleteTransport')).toBeInTheDocument();
 
-      // The confirm dialog should have a confirm button
-      const confirmButtons = screen.getAllByRole('button');
-      const confirmBtn = confirmButtons.find(
-        (btn) => btn.textContent === 'common.delete'
-      );
-      expect(confirmBtn).toBeDefined();
+      // Both the footer button and the confirm button read `common.delete`, so
+      // the confirm one has to be scoped to the alert dialog. This test used to
+      // stop at `expect(confirmBtn).toBeDefined()` and never click it, leaving
+      // the whole `onDelete` wiring — the thing it is named for — unverified.
+      await user.click(within(confirm).getByRole('button', { name: 'common.delete' }));
+
+      await waitFor(() => {
+        expect(onDelete).toHaveBeenCalledOnce();
+      });
+      // The event dialog closes only after the delete resolves.
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+      await waitFor(() => {
+        expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      });
     });
 
-    it('keeps dialog open on delete error', async () => {
+    it('keeps the event dialog open when the delete fails', async () => {
       const onDelete = vi.fn().mockRejectedValue(new Error('Delete failed'));
       const onOpenChange = vi.fn();
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
       render(
         <EventDetailDialog
@@ -362,9 +369,20 @@ describe('EventDetailDialog', () => {
       const user = userEvent.setup();
       await user.click(screen.getByText('common.delete'));
 
+      const confirm = await screen.findByRole('alertdialog');
+      await user.click(within(confirm).getByRole('button', { name: 'common.delete' }));
+
       await waitFor(() => {
-        expect(screen.getByText('confirm.deleteTransport')).toBeInTheDocument();
+        expect(onDelete).toHaveBeenCalledOnce();
       });
+
+      // The row is still there, so the dialog the user would retry from must
+      // still be there too.
+      expect(onOpenChange).not.toHaveBeenCalled();
+      expect(screen.getByText('Arrival')).toBeInTheDocument();
+      expect(consoleError).toHaveBeenCalled();
+
+      consoleError.mockRestore();
     });
   });
 });
