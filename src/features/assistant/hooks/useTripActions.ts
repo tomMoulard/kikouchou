@@ -17,6 +17,7 @@ import {
   toAllDayActivityInstant,
 } from '@/features/activities/utils/activity-utils';
 
+import { useOfflineAwareToast } from '@/hooks';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import {
@@ -253,6 +254,10 @@ function toActivityFormData(activity: Activity): ActivityFormData {
 export function useTripActions(): UseTripActionsReturn {
   const { t } = useTranslation();
   const { currentTrip } = useTripContext();
+  // Every write the assistant performs lands in IndexedDB exactly like a write
+  // made by hand, so it confirms the same way: offline it says "Saved on this
+  // device" rather than claiming a success the network never saw.
+  const { successToast } = useOfflineAwareToast();
 
   const executeActions = useCallback(
     async (response: string): Promise<ActionExecutionResult> => {
@@ -302,7 +307,7 @@ export function useTripActions(): UseTripActionsReturn {
               });
               activeTripId = trip.id;
               await setCurrentTrip(trip.id);
-              toast.success(t('trips.created'));
+              successToast(t('trips.created'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.createTrip', { name: trip.name }),
@@ -319,6 +324,10 @@ export function useTripActions(): UseTripActionsReturn {
               }
               activeTripId = trip.id;
               await setCurrentTrip(trip.id);
+              // Deliberately a raw toast: switching trips changes which trip
+              // the rest of the batch touches, so the name has to stay on
+              // screen. "Saved on this device" would drop the one fact that
+              // matters, and the selection never leaves this device anyway.
               toast.success(
                 t('assistant.tripSwitched', { name: trip.name }),
               );
@@ -368,7 +377,7 @@ export function useTripActions(): UseTripActionsReturn {
                 ...(d.endDate !== undefined && { endDate: d.endDate as ISODateString }),
                 ...(d.description !== undefined && { description: d.description as string }),
               });
-              toast.success(t('trips.updated'));
+              successToast(t('trips.updated'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.updateTrip', {
@@ -405,7 +414,7 @@ export function useTripActions(): UseTripActionsReturn {
                 ...(d.notes !== undefined && { notes: d.notes as string }),
               });
               guestIdCache.delete(tid);
-              toast.success(t('persons.createSuccess'));
+              successToast(t('persons.createSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.addGuest', {
@@ -426,7 +435,7 @@ export function useTripActions(): UseTripActionsReturn {
               const guest = await getPersonById(pid);
               await deletePersonWithOwnershipCheck(pid, tid);
               guestIdCache.delete(tid);
-              toast.success(t('persons.deleteSuccess'));
+              successToast(t('persons.deleteSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.removeGuest', {
@@ -449,7 +458,7 @@ export function useTripActions(): UseTripActionsReturn {
                 capacity: d.capacity as number,
                 description: d.description as string | undefined,
               });
-              toast.success(t('rooms.createSuccess'));
+              successToast(t('rooms.createSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.addRoom', {
@@ -470,7 +479,7 @@ export function useTripActions(): UseTripActionsReturn {
               const rid = action.data.roomId as RoomId;
               const room = await getRoomById(rid);
               await deleteRoomWithOwnershipCheck(rid, tid);
-              toast.success(t('rooms.deleteSuccess'));
+              successToast(t('rooms.deleteSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.removeRoom', {
@@ -509,7 +518,7 @@ export function useTripActions(): UseTripActionsReturn {
                 startDate: d.startDate as ISODateString,
                 endDate: d.endDate as ISODateString,
               });
-              toast.success(t('assignments.createSuccess'));
+              successToast(t('assignments.createSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.assignRoom', {
@@ -539,7 +548,7 @@ export function useTripActions(): UseTripActionsReturn {
                 ? await getRoomById(assignment.roomId)
                 : undefined;
               await deleteAssignmentWithOwnershipCheck(aid, tid);
-              toast.success(t('assignments.deleteSuccess'));
+              successToast(t('assignments.deleteSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.removeAssignment', {
@@ -576,7 +585,7 @@ export function useTripActions(): UseTripActionsReturn {
                 transportNumber: d.transportNumber as string | undefined,
                 needsPickup: (d.needsPickup as boolean | undefined) ?? false,
               });
-              toast.success(t('transports.createSuccess'));
+              successToast(t('transports.createSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.addTransport', {
@@ -599,7 +608,7 @@ export function useTripActions(): UseTripActionsReturn {
               const transportId = action.data.transportId as TransportId;
               const tr = await getTransportById(transportId);
               await deleteTransportWithOwnershipCheck(transportId, tid);
-              toast.success(t('transports.deleteSuccess'));
+              successToast(t('transports.deleteSuccess'));
               executedCount++;
               const label = tr
                 ? `${tr.type} · ${tr.location}`
@@ -672,7 +681,7 @@ export function useTripActions(): UseTripActionsReturn {
               }
 
               await createActivity(tid, formData);
-              toast.success(t('activities.createSuccess'));
+              successToast(t('activities.createSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.addActivity', {
@@ -772,7 +781,7 @@ export function useTripActions(): UseTripActionsReturn {
               }
 
               await updateActivityWithOwnershipCheck(aid, tid, patch);
-              toast.success(t('activities.updateSuccess'));
+              successToast(t('activities.updateSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.updateActivity', {
@@ -797,7 +806,7 @@ export function useTripActions(): UseTripActionsReturn {
                 break;
               }
               await deleteActivityWithOwnershipCheck(aid, tid);
-              toast.success(t('activities.deleteSuccess'));
+              successToast(t('activities.deleteSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.removeActivity', {
@@ -845,7 +854,7 @@ export function useTripActions(): UseTripActionsReturn {
                 break;
               }
 
-              toast.success(t('activities.participationUpdated'));
+              successToast(t('activities.participationUpdated'));
               executedCount++;
               summaries.push(
                 t(
@@ -877,7 +886,7 @@ export function useTripActions(): UseTripActionsReturn {
 
       return { count: executedCount, summaries };
     },
-    [currentTrip, t],
+    [currentTrip, successToast, t],
   );
 
   return { executeActions };

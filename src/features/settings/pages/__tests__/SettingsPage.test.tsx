@@ -127,17 +127,145 @@ describe('SettingsPage', () => {
     expect(screen.getByTestId('trip-form')).toBeInTheDocument();
   });
 
-  it('does not render current trip section when no trip is selected', () => {
-    vi.mocked(useTripContext).mockReturnValue({
-      currentTrip: null,
-      setCurrentTrip: vi.fn().mockResolvedValue(undefined),
-      trips: [],
-      isLoading: false,
-      error: null,
-      checkConnection: vi.fn().mockResolvedValue(undefined),
-    } as ReturnType<typeof useTripContext>);
-    render(<SettingsPage />, { withProviders: false });
-    expect(screen.queryByText('settings.currentTrip')).not.toBeInTheDocument();
+  describe('CurrentTripSection states', () => {
+    it('shows a loading state, not a hole, while the trip query resolves', () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: null,
+        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
+        trips: [],
+        isLoading: true,
+        error: null,
+        checkConnection: vi.fn().mockResolvedValue(undefined),
+      } as ReturnType<typeof useTripContext>);
+      render(<SettingsPage />, { withProviders: false });
+
+      const status = screen.getByRole('status');
+      expect(status).toHaveAttribute('aria-busy', 'true');
+      expect(status).toHaveAttribute('aria-live', 'polite');
+      expect(status).toHaveTextContent('settings.currentTripLoading');
+      expect(screen.queryByTestId('trip-form')).not.toBeInTheDocument();
+    });
+
+    it('shows an error with a retry that rechecks the connection', async () => {
+      const checkConnection = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: null,
+        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
+        trips: [],
+        isLoading: false,
+        error: new Error('IndexedDB is unavailable'),
+        checkConnection,
+      } as ReturnType<typeof useTripContext>);
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<SettingsPage />, { withProviders: false });
+
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveAttribute('aria-live', 'assertive');
+      expect(alert).toHaveTextContent('settings.currentTripError');
+      expect(alert).toHaveTextContent('IndexedDB is unavailable');
+
+      await user.click(screen.getByRole('button', { name: /common\.retry/i }));
+      expect(checkConnection).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the editable form when a stale context error arrives with a trip', () => {
+      // TripContext's error is shared: a setCurrentTrip that failed on another
+      // page leaves it set. That must not unmount a form the user can still use.
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: mockTrip,
+        setCurrentTrip: mockSetCurrentTrip,
+        trips: [mockTrip],
+        isLoading: false,
+        error: new Error('Trip with ID "other" not found'),
+        checkConnection: vi.fn().mockResolvedValue(undefined),
+      } as ReturnType<typeof useTripContext>);
+      render(<SettingsPage />, { withProviders: false });
+
+      expect(screen.getByTestId('trip-form')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('swallows a retry that fails again instead of rejecting', async () => {
+      const checkConnection = vi.fn().mockRejectedValue(new Error('still broken'));
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: null,
+        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
+        trips: [],
+        isLoading: false,
+        error: new Error('IndexedDB is unavailable'),
+        checkConnection,
+      } as ReturnType<typeof useTripContext>);
+      const onUnhandled = vi.fn();
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        render(<SettingsPage />, { withProviders: false });
+        await user.click(screen.getByRole('button', { name: /common\.retry/i }));
+        await waitFor(() => {
+          expect(checkConnection).toHaveBeenCalledTimes(1);
+        });
+        // Give the microtask queue a turn for a rejection to surface.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(onUnhandled).not.toHaveBeenCalled();
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    });
+
+    it('shows an empty state pointing at the trip list when trips exist', async () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: null,
+        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
+        trips: [mockTrip],
+        isLoading: false,
+        error: null,
+        checkConnection: vi.fn().mockResolvedValue(undefined),
+      } as ReturnType<typeof useTripContext>);
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<SettingsPage />, { withProviders: false });
+
+      expect(screen.getByText('settings.noCurrentTrip')).toBeInTheDocument();
+      expect(screen.getByText('settings.noCurrentTripDescription')).toBeInTheDocument();
+      expect(screen.queryByTestId('trip-form')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'settings.chooseTrip' }));
+      expect(mockNavigate).toHaveBeenCalledWith('/trips');
+    });
+
+    it('offers to create the first trip when the device has none', async () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: null,
+        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
+        trips: [],
+        isLoading: false,
+        error: null,
+        checkConnection: vi.fn().mockResolvedValue(undefined),
+      } as ReturnType<typeof useTripContext>);
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<SettingsPage />, { withProviders: false });
+
+      expect(screen.getByText('settings.noTripsYetDescription')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'settings.createFirstTrip' }));
+      expect(mockNavigate).toHaveBeenCalledWith('/trips/new');
+    });
+
+    it('hides the destructive delete button when there is no trip to delete', () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: null,
+        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
+        trips: [mockTrip],
+        isLoading: false,
+        error: null,
+        checkConnection: vi.fn().mockResolvedValue(undefined),
+      } as ReturnType<typeof useTripContext>);
+      render(<SettingsPage />, { withProviders: false });
+      expect(screen.queryByText('common.delete')).not.toBeInTheDocument();
+    });
   });
 
   it('renders version information', () => {
@@ -167,6 +295,31 @@ describe('SettingsPage', () => {
         name: 'Updated',
         startDate: '2026-07-01',
         endDate: '2026-07-10',
+      });
+    });
+
+    it('confirms a trip update through the offline-aware toast', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<SettingsPage />, { withProviders: false });
+
+      await user.click(screen.getByTestId('trip-form-submit'));
+
+      await waitFor(() => {
+        expect(mockSuccessToast).toHaveBeenCalledWith('trips.updated');
+      });
+    });
+
+    it('confirms a trip deletion through the offline-aware toast', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<SettingsPage />, { withProviders: false });
+
+      await user.click(screen.getAllByText('common.delete')[0]!);
+      await user.click(await screen.findByTestId('confirm-action'));
+
+      await waitFor(() => {
+        expect(mockSuccessToast).toHaveBeenCalledWith('trips.deleted');
       });
     });
 

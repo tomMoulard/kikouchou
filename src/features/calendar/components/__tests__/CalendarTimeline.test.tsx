@@ -119,6 +119,13 @@ describe('CalendarTimeline', () => {
   it('shows empty state when no assignments, arrivals, or departures', () => {
     render(<CalendarTimeline {...defaultProps} />);
     expect(screen.getByText('calendar.noAssignments')).toBeInTheDocument();
+    // The same EmptyState the month view uses, so switching views does not
+    // change how "nothing here yet" is presented. This file's `t` mock returns
+    // the fallback when one is given, hence the English string here.
+    expect(screen.getByText('Nothing scheduled yet')).toBeInTheDocument();
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveTextContent('Nothing scheduled yet');
   });
 
   it('does not show empty state when assignments exist', () => {
