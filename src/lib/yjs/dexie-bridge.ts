@@ -15,6 +15,7 @@
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
+import i18n from '@/lib/i18n';
 import {
   DOC_SCHEMA_VERSION,
   type DocCollectionName,
@@ -73,7 +74,22 @@ function buildTripRecord(
 
   const trip: Trip = {
     id: tripId,
-    name: (meta.get('name') as string) ?? existingTrip?.name ?? 'Shared Trip',
+    // Last resort: a document that has not said what the trip is called yet.
+    // This lands in Dexie and is rendered as the trip's *name*, so it goes
+    // through i18n like any other string a user reads — a hardcoded 'Shared
+    // Trip' put an English label on a French user's trip list.
+    //
+    // It is a stored name, not a render-time placeholder, because every screen
+    // that shows a trip reads `trip.name` straight out of Dexie and an empty one
+    // would render as nothing at all. That means `populateDocFromDexie` can push
+    // it back into the document, so two devices in two languages could each
+    // write their own placeholder; the map converges and either can rename the
+    // trip. The real fix is for the bridge not to name trips at all, which needs
+    // every renderer to handle a nameless one first.
+    name:
+      (meta.get('name') as string) ??
+      existingTrip?.name ??
+      i18n.t('trips.untitled'),
     startDate:
       (meta.get('startDate') as Trip['startDate']) ??
       existingTrip?.startDate ??

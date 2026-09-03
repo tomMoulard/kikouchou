@@ -5,8 +5,9 @@
  * @module features/trips/pages/TripListPage
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useTranslation } from 'react-i18next';
 import { Luggage, Plus, QrCode } from 'lucide-react';
 
@@ -34,6 +35,12 @@ import { TripsLocationMap } from '../components/TripsLocationMap';
 
 /** Height of the map view on the trip list, in pixels. */
 const MAP_VIEW_HEIGHT = 520;
+
+/**
+ * Initial value for the attendee query, hoisted so it is the same object on
+ * every render — a fresh `new Map()` there would be a new identity each time.
+ */
+const EMPTY_PERSONS_BY_TRIP: ReadonlyMap<TripId, Person[]> = new Map();
 
 // ============================================================================
 // TripListPage Component
@@ -91,67 +98,56 @@ const TripListPage = memo(function TripListPage() {
     [sharedTripId, trips],
   );
 
-  // Persons per trip (map of tripId -> persons)
-  const [personsByTrip, setPersonsByTrip] = useState<Map<TripId, Person[]>>(
-    new Map(),
-  );
-
-  // Fetch persons for all trips when trips change
-  // Uses batch query for O(1) instead of O(n) queries (PERF-1 fix)
-  // Uses isMounted flag to prevent state updates after unmount (IMP-2 fix)
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadPersons() {
-      if (trips.length === 0) {
-        if (isMounted) {
-          setPersonsByTrip(new Map());
-        }
-        return;
+  /**
+   * Attendee badges for every card, in one query.
+   *
+   * The only place in the app that reads `db.persons` outside `PersonContext`,
+   * and deliberately so: that context is scoped to the *current* trip, and this
+   * page has no current trip — it needs the guests of all of them at once. Going
+   * through the context would mean either mounting one provider per card or
+   * querying per trip, which is the N+1 this batch replaced.
+   *
+   * `useLiveQuery` rather than an effect so the badges follow the database the
+   * way every context-backed list does: adding a guest updates the card behind
+   * it instead of waiting for the next mount.
+   */
+  const personsByTrip = useLiveQuery(
+    async (): Promise<Map<TripId, Person[]>> => {
+      const byTrip = new Map<TripId, Person[]>();
+      const tripIds = trips.map((trip) => trip.id);
+      for (const tripId of tripIds) {
+        byTrip.set(tripId, []);
+      }
+      if (tripIds.length === 0) {
+        return byTrip;
       }
 
       try {
-        // Use batch query instead of N+1 individual queries (PERF-1 fix)
-        const allTripIds = trips.map((t) => t.id);
-        const allPersons = await db.persons
-          .where('tripId')
-          .anyOf(allTripIds)
-          .toArray();
-
-        // Group persons by tripId
-        const newMap = new Map<TripId, Person[]>();
-        // Initialize all trips with empty arrays
-        for (const tripId of allTripIds) {
-          newMap.set(tripId, []);
-        }
-        // Populate with fetched persons
-        for (const person of allPersons) {
-          const existing = newMap.get(person.tripId);
-          if (existing) {
-            existing.push(person);
-          }
+        const persons = await db.persons.where('tripId').anyOf(tripIds).toArray();
+        for (const person of persons) {
+          // A person whose trip is not on screen is not an error: the query is
+          // keyed on ids that were current when it started.
+          byTrip.get(person.tripId)?.push(person);
         }
 
-        // Only update state if component is still mounted
-        if (isMounted) {
-          setPersonsByTrip(newMap);
+        // By name, because `PersonContext` reads the `[tripId+name]` index and
+        // the guests page is therefore in name order. A card that shows the
+        // first four of a differently ordered list shows a different four.
+        for (const group of byTrip.values()) {
+          group.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
         }
       } catch (err) {
-        // Log error for debugging (CR-3 fix)
+        // Caught rather than left to propagate: `useLiveQuery` rethrows during
+        // render, so a blocked or evicted IndexedDB would take the whole trip
+        // list to the error boundary over some badges. Cards without their
+        // guests still show every trip, which is the page's actual job.
         console.error('Failed to load persons for trips:', err);
-        // Set empty map on error
-        if (isMounted) {
-          setPersonsByTrip(new Map());
-        }
       }
-    }
-
-    loadPersons();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [trips]);
+      return byTrip;
+    },
+    [trips],
+    EMPTY_PERSONS_BY_TRIP,
+  );
 
   const handleTripSelect = useCallback(
     async (trip: Trip) => {
@@ -209,11 +205,11 @@ const TripListPage = memo(function TripListPage() {
           type="button"
           variant="outline"
           onClick={openImportQr}
-          aria-label={t('trips.importFromQrAria', 'Import a shared trip using a QR code')}
+          aria-label={t('trips.importFromQrAria')}
           className="shrink-0"
         >
           <QrCode className="size-4 sm:mr-2" aria-hidden="true" />
-          <span className="hidden sm:inline">{t('trips.importFromQr', 'Import from QR code')}</span>
+          <span className="hidden sm:inline">{t('trips.importFromQr')}</span>
         </Button>
         <Button onClick={handleCreateClick} className="hidden sm:flex">
           <Plus className="size-4 mr-2" aria-hidden="true" />
@@ -312,10 +308,10 @@ const TripListPage = memo(function TripListPage() {
           className="mb-4"
           value={currentView}
           onValueChange={handleViewChange}
-          ariaLabel={t('trips.view.ariaLabel', 'Trips view')}
+          ariaLabel={t('trips.view.ariaLabel')}
           options={[
-            { value: 'list', label: t('trips.view.list', 'List') },
-            { value: 'map', label: t('trips.view.map', 'Map') },
+            { value: 'list', label: t('trips.view.list') },
+            { value: 'map', label: t('trips.view.map') },
           ]}
         />
 
@@ -364,7 +360,7 @@ const TripListPage = memo(function TripListPage() {
             'sm:hidden',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           )}
-          aria-label={t('trips.importFromQrAria', 'Import a shared trip using a QR code')}
+          aria-label={t('trips.importFromQrAria')}
         >
           <QrCode className="size-6" aria-hidden="true" />
         </Button>
