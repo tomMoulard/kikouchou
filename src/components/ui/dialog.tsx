@@ -6,6 +6,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
+  dialogBodyClassName,
   dialogCloseButtonClassName,
   dialogContentClassName,
   dialogFooterClassName,
@@ -68,7 +69,17 @@ function DialogContent({
         className={cn(dialogContentClassName, className)}
         {...props}
       >
-        {children}
+        <div
+          data-slot="dialog-body"
+          className={cn(
+            dialogBodyClassName,
+            // Reserve the corner the close button occupies, so a long title
+            // does not run underneath it. Only when there is one.
+            showCloseButton && '[&>[data-slot=dialog-header]]:pr-8',
+          )}
+        >
+          {children}
+        </div>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"

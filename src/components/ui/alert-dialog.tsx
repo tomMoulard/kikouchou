@@ -20,6 +20,7 @@ import { AlertDialog as AlertDialogPrimitive } from 'radix-ui';
 
 import { cn } from '@/lib/utils';
 import {
+  dialogBodyClassName,
   dialogContentClassName,
   dialogFooterClassName,
   dialogHeaderClassName,
@@ -69,6 +70,7 @@ function AlertDialogOverlay({
  */
 function AlertDialogContent({
   className,
+  children,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
   return (
@@ -78,7 +80,14 @@ function AlertDialogContent({
         data-slot="alert-dialog-content"
         className={cn(dialogContentClassName, className)}
         {...props}
-      />
+      >
+        {/* Same split as DialogContent: the box holds the height cap, the body
+            inside it does the scrolling. A long confirmation on a short screen
+            scrolls rather than losing its buttons off the bottom edge. */}
+        <div data-slot="alert-dialog-body" className={dialogBodyClassName}>
+          {children}
+        </div>
+      </AlertDialogPrimitive.Content>
     </AlertDialogPortal>
   );
 }

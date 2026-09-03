@@ -116,12 +116,44 @@ describe('DialogContent height', () => {
     renderDialog();
 
     const content = screen.getByRole('dialog');
+    const body = content.querySelector('[data-slot="dialog-body"]');
 
-    // Without these the box is centred on the viewport with no cap, so a tall
-    // dialog on a short screen clips off the top AND the bottom at once, with
-    // no way to reach either. 14 of 20 call sites used to forget them.
+    // Without the cap the box is centred on the viewport unconstrained, so a
+    // tall dialog on a short screen clips off the top AND the bottom at once,
+    // with no way to reach either. 14 of 20 call sites used to forget it.
     expect(content).toHaveClass('max-h-[calc(100dvh-2rem)]');
-    expect(content).toHaveClass('overflow-y-auto');
+    expect(body).toHaveClass('overflow-y-auto');
+  });
+
+  it('scrolls the body, not the box, so the close button stays pinned', () => {
+    renderDialog();
+
+    const close = screen.getByRole('button', { name: 'common.dialogClose' });
+
+    // The close button is positioned against the box. If the box were the
+    // scroll container, scrolling down to reach the footer would carry the
+    // close button off the top of it.
+    expect(close.closest('[data-slot="dialog-body"]')).toBeNull();
+    expect(screen.getByRole('dialog')).not.toHaveClass('overflow-y-auto');
+  });
+
+  it('carries the call site\'s gap through the body wrapper', () => {
+    render(
+      <Dialog open>
+        <DialogContent className="gap-0">
+          <DialogTitle>Tight</DialogTitle>
+          <DialogDescription>Body</DialogDescription>
+        </DialogContent>
+      </Dialog>,
+    );
+
+    const body = screen
+      .getByRole('dialog')
+      .querySelector('[data-slot="dialog-body"]');
+
+    // `[gap:inherit]` is what keeps a call site's own gap meaningful now that
+    // its children sit one level down.
+    expect(body).toHaveClass('[gap:inherit]');
   });
 
   it('still lets a call site override the cap', () => {
