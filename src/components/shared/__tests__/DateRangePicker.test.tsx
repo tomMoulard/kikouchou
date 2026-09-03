@@ -11,10 +11,47 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { DateRangePicker, type DateRange } from '../DateRangePicker';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * The day button for a calendar date in the open popover.
+ *
+ * react-day-picker v9 tags every gridcell with an ISO `data-day`, which is the
+ * one part of its markup that does not move with locale or styling. Throwing
+ * on a miss is deliberate: a test that cannot find the day it means to click
+ * has to fail, not fall back to asserting something weaker.
+ *
+ * @param isoDay - Calendar day as `YYYY-MM-DD`
+ * @returns The `<button>` inside that day's gridcell
+ */
+function dayButton(isoDay: string): HTMLElement {
+  const cells = screen.getAllByRole('gridcell'),
+   cell = cells.find((c) => c.getAttribute('data-day') === isoDay);
+
+  if (!cell) {
+    const rendered = cells.map((c) => c.getAttribute('data-day')).join(', ');
+    throw new Error(`No calendar cell for ${isoDay}. Rendered days: ${rendered}`);
+  }
+
+  return within(cell).getByRole('button');
+}
+
+/** Opens the picker's popover and waits for the calendar to appear. */
+async function openCalendar(
+  user: ReturnType<typeof userEvent.setup>
+): Promise<void> {
+  await user.click(screen.getAllByRole('button')[0]!);
+  await waitFor(() => {
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+}
 
 // ============================================================================
 // Basic Rendering Tests
@@ -54,11 +91,11 @@ describe('DateRangePicker', () => {
 
       render(<DateRangePicker value={value} onChange={vi.fn()} />);
       
-      // Check that both dates are displayed (format depends on locale)
+      // Exact, not three `toContain` probes: "Jul", "15" and "20" all appear
+      // in a plain "Jul 15, 2024" too, so the substring form kept passing with
+      // the end date dropped from the label entirely.
       const button = screen.getByRole('button');
-      expect(button.textContent).toContain('Jul');
-      expect(button.textContent).toContain('15');
-      expect(button.textContent).toContain('20');
+      expect(button).toHaveTextContent('Jul 15, 2024 → Jul 20, 2024');
     });
 
     it('renders same-day selection as single date', () => {
@@ -69,8 +106,10 @@ describe('DateRangePicker', () => {
 
       render(<DateRangePicker value={value} onChange={vi.fn()} />);
       
+      // The date still has to be shown: the arrow check on its own also holds
+      // for a button that renders no label at all.
       const button = screen.getByRole('button');
-      // Should show only one date, not a range with arrow
+      expect(button).toHaveTextContent('Jul 15, 2024');
       expect(button.textContent).not.toContain('→');
     });
 
@@ -106,34 +145,80 @@ describe('DateRangePicker', () => {
       });
     });
 
-    it('calls onChange when date is selected', async () => {
+    it('reports the clicked day back through onChange', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
-      render(<DateRangePicker value={undefined} onChange={onChange} />);
-      
-      // Open the calendar
-      await user.click(screen.getByRole('button'));
-      await waitFor(() => {
-        expect(screen.getByRole('dialog')).toBeInTheDocument();
-      });
-      
-      // Find a clickable date button - react-day-picker v9 uses buttons inside gridcells
-      const buttons = screen.getAllByRole('button');
-      // Find a date button (not navigation buttons, which have aria-label)
-      const dateButton = buttons.find(
-        (btn) =>
-          btn.closest('[role="gridcell"]') &&
-          !btn.hasAttribute('disabled') &&
-          btn.getAttribute('aria-disabled') !== 'true'
+
+      // Pin the visible month via minDate so the day being clicked is a known
+      // calendar date rather than "whichever cell happened to be enabled".
+      render(
+        <DateRangePicker
+          value={undefined}
+          onChange={onChange}
+          minDate={new Date(2024, 6, 1)}
+          maxDate={new Date(2024, 6, 31)}
+        />
       );
-      
-      if (dateButton) {
-        await user.click(dateButton);
-        expect(onChange).toHaveBeenCalled();
-      } else {
-        // Fallback: at least verify calendar is rendered
-        expect(screen.getByRole('grid')).toBeInTheDocument();
-      }
+
+      await openCalendar(user);
+      await user.click(dayButton('2024-07-15'));
+
+      // react-day-picker v9 sets BOTH ends to the clicked day on the first
+      // click of a range; the component forwards that verbatim.
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledWith({
+        from: new Date(2024, 6, 15),
+        to: new Date(2024, 6, 15),
+      });
+    });
+
+    it('closes the popover once a two-day range is complete', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+
+      render(
+        <DateRangePicker
+          value={{ from: new Date(2024, 6, 15), to: new Date(2024, 6, 15) }}
+          onChange={onChange}
+          minDate={new Date(2024, 6, 1)}
+          maxDate={new Date(2024, 6, 31)}
+        />
+      );
+
+      await openCalendar(user);
+      await user.click(dayButton('2024-07-18'));
+
+      expect(onChange).toHaveBeenCalledWith({
+        from: new Date(2024, 6, 15),
+        to: new Date(2024, 6, 18),
+      });
+
+      // Auto-close only fires when from !== to, so a first click must NOT
+      // close and this second one must.
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      });
+    });
+
+    it('keeps the popover open after the first click of a range', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DateRangePicker
+          value={undefined}
+          onChange={vi.fn()}
+          minDate={new Date(2024, 6, 1)}
+          maxDate={new Date(2024, 6, 31)}
+        />
+      );
+
+      await openCalendar(user);
+      await user.click(dayButton('2024-07-15'));
+
+      // Closing here would make the end date unreachable: rdp reports the
+      // first click as a complete from===to range, and closing on that was
+      // exactly the bug the `getTime()` comparison guards against.
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
   });
 
@@ -142,47 +227,60 @@ describe('DateRangePicker', () => {
   // ============================================================================
 
   describe('Date Constraints', () => {
-    it('passes minDate to calendar', async () => {
+    it('disables every day before minDate', async () => {
       const user = userEvent.setup();
-      const minDate = new Date(2024, 6, 15); // July 15, 2024
-      
-      render(
-        <DateRangePicker value={undefined} onChange={vi.fn()} minDate={minDate} />
-      );
-      
-      await user.click(screen.getByRole('button'));
-      await waitFor(() => {
-        expect(screen.getByRole('dialog')).toBeInTheDocument();
-      });
-      
-      // Calendar should be rendered with minDate constraint
-      // We verify the calendar opens - the actual date disabling is handled by react-day-picker
-      const grid = screen.getByRole('grid');
-      expect(grid).toBeInTheDocument();
-    });
 
-    it('passes maxDate to calendar', async () => {
-      const user = userEvent.setup();
-      const minDate = new Date(2024, 6, 1); // July 1, 2024
-      const maxDate = new Date(2024, 6, 20); // July 20, 2024
-      
       render(
         <DateRangePicker
           value={undefined}
           onChange={vi.fn()}
-          minDate={minDate}
-          maxDate={maxDate}
+          minDate={new Date(2024, 6, 15)}
         />
       );
-      
-      await user.click(screen.getByRole('button'));
-      await waitFor(() => {
-        expect(screen.getByRole('dialog')).toBeInTheDocument();
-      });
-      
-      // Calendar should be rendered with maxDate constraint
-      const grid = screen.getByRole('grid');
-      expect(grid).toBeInTheDocument();
+
+      await openCalendar(user);
+
+      // "The calendar opened" is true whether or not minDate reached
+      // react-day-picker at all; the boundary is what the prop is for.
+      expect(dayButton('2024-07-14')).toBeDisabled();
+      expect(dayButton('2024-07-15')).toBeEnabled();
+    });
+
+    it('disables every day after maxDate', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DateRangePicker
+          value={undefined}
+          onChange={vi.fn()}
+          minDate={new Date(2024, 6, 1)}
+          maxDate={new Date(2024, 6, 20)}
+        />
+      );
+
+      await openCalendar(user);
+
+      expect(dayButton('2024-07-20')).toBeEnabled();
+      expect(dayButton('2024-07-21')).toBeDisabled();
+    });
+
+    it('disables a day that a disabled range cannot be clicked through', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+
+      render(
+        <DateRangePicker
+          value={undefined}
+          onChange={onChange}
+          minDate={new Date(2024, 6, 15)}
+          maxDate={new Date(2024, 6, 20)}
+        />
+      );
+
+      await openCalendar(user);
+      await user.click(dayButton('2024-07-10'));
+
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('sets default month to minDate when no value', async () => {
@@ -329,6 +427,38 @@ describe('DateRangePicker', () => {
       
       // Should show the "Already assigned" text (mock returns key)
       expect(screen.getByText('dateRangePicker.alreadyBooked')).toBeInTheDocument();
+    });
+
+    it('marks the nights of a booked range, not the checkout morning', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <DateRangePicker
+          value={undefined}
+          onChange={vi.fn()}
+          // Jul 10 check-in, Jul 15 check-out: five nights slept, and the bed
+          // is free again on the 15th.
+          bookedRanges={[{ from: new Date(2024, 6, 10), to: new Date(2024, 6, 15) }]}
+          minDate={new Date(2024, 6, 1)}
+          maxDate={new Date(2024, 6, 31)}
+        />
+      );
+
+      await openCalendar(user);
+
+      const booked = Array.from(document.querySelectorAll('.rdp-day-booked'));
+      expect(booked.map((el) => el.textContent)).toEqual([
+        '10',
+        '11',
+        '12',
+        '13',
+        '14',
+      ]);
+      // Drop the `slice(0, -1)` and the 15th joins the list, showing the room
+      // as taken on a night nobody is in it.
+      expect(dayButton('2024-07-15')).not.toHaveClass('rdp-day-booked');
+      // Still selectable — a checkout day is a valid check-in day.
+      expect(dayButton('2024-07-15')).toBeEnabled();
     });
 
     it('does not show booked indicator when no bookedRanges', async () => {

@@ -50,8 +50,18 @@ describe('ErrorDisplay', () => {
     it('renders without error message when error is null', () => {
       render(<ErrorDisplay error={null} />, { withProviders: false });
 
-      // Only the title should be present
-      expect(screen.getByText('errors.loadingFailed')).toBeInTheDocument();
+      // The old assertion was byte-identical to "renders default title", so
+      // the half this test is named for went unchecked: the message paragraph
+      // must be absent entirely, not merely empty.
+      const paragraphs = screen.getByRole('alert').querySelectorAll('p');
+      expect(paragraphs).toHaveLength(1);
+      expect(paragraphs[0]).toHaveTextContent('errors.loadingFailed');
+    });
+
+    it('renders no action row when neither callback is given', () => {
+      render(<ErrorDisplay error={new Error('boom')} />, { withProviders: false });
+
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
     });
   });
 
@@ -130,11 +140,24 @@ describe('ErrorDisplay', () => {
         { withProviders: false }
       );
 
-      // Error message uses smaller text in compact
-      expect(screen.getByText('Compact error')).toBeInTheDocument();
-      // Action buttons are present
-      expect(screen.getByRole('button', { name: /common.retry/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /common.back/i })).toBeInTheDocument();
+      // The comment claimed smaller text; nothing checked it, so `isCompact`
+      // could stop reaching the message and the buttons and this still passed.
+      expect(screen.getByText('Compact error')).toHaveClass('text-xs');
+      expect(screen.getByRole('button', { name: /common.retry/i })).toHaveClass('h-8');
+      expect(screen.getByRole('button', { name: /common.back/i })).toHaveClass('h-8');
+    });
+
+    it('renders the message and buttons at default size outside compact', () => {
+      const error = new Error('Roomy error');
+      render(
+        <ErrorDisplay error={error} onRetry={vi.fn()} onBack={vi.fn()} />,
+        { withProviders: false }
+      );
+
+      // The contrast with the compact case is the point: without it, "compact
+      // uses text-xs" is unfalsifiable if every size did.
+      expect(screen.getByText('Roomy error')).toHaveClass('text-sm');
+      expect(screen.getByRole('button', { name: /common.retry/i })).toHaveClass('h-9');
     });
   });
 
