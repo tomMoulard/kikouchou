@@ -240,8 +240,14 @@ async function createTrip(
  * Read through the calendar rather than the trigger button: the button prints
  * the date with date-fns `PPP` in the active locale, which would make this
  * assertion a statement about i18n. react-day-picker marks the chosen gridcell
- * `data-selected="true"` and stamps it with `data-day="yyyy-MM-dd"`, and the
- * picker opens on the month of its own selection, so no navigation is needed.
+ * `data-selected="true"` and stamps every cell with `data-day="yyyy-MM-dd"`.
+ *
+ * The walk to the month is not optional. `getInitialMonth` is
+ * `month || defaultMonth || today` and `TripForm` passes neither, so the picker
+ * opens on the *current* month however far away its own selection is — the
+ * selected cell is simply not in the DOM until you navigate to it. Asserting
+ * that this particular cell is the selected one is the stronger statement
+ * anyway: `mode="single"` has exactly one, so if this is it, that is the date.
  *
  * @param page - Playwright page object
  * @param triggerId - `#trip-start-date` or `#trip-end-date`
@@ -258,16 +264,76 @@ async function expectSelectedDate(
   await popover.waitFor({ state: 'visible' });
   const calendar = popover.locator('[data-slot="calendar"]');
 
-  await expect(calendar.locator('td[data-selected="true"]')).toHaveAttribute(
-    'data-day',
-    isoDate,
-  );
+  await navigateToMonth(page, new Date(isoDate + 'T12:00:00'), calendar);
+
+  await expect(
+    calendar.locator(`td[data-day="${isoDate}"]:not([data-outside])`),
+  ).toHaveAttribute('data-selected', 'true');
 
   // Leave the form as it was found — the next picker has to open over nothing.
   await page.keyboard.press('Escape');
   await popover.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {
     // Already closed, which is the same outcome.
   });
+}
+
+/**
+ * The trip id out of a `/trips/:id/calendar` URL, or a failure that says why.
+ *
+ * @param page - Playwright page object, expected to be on a trip calendar
+ * @returns The trip id
+ * @throws Error if the page is not on a trip calendar URL
+ */
+function tripIdFromCalendarUrl(page: Page): string {
+  const tripId = page.url().match(/\/trips\/([^/]+)\/calendar/)?.[1];
+  if (!tripId) {
+    throw new Error(`Expected a trip calendar URL, got ${page.url()}`);
+  }
+  return tripId;
+}
+
+/**
+ * Reads one trip's stored dates straight out of IndexedDB.
+ *
+ * The other half of the missing assertion, and the cheap half: it needs no
+ * navigation, so it can be dropped into a test that is already near its 60 s
+ * budget. It also asserts the value the app *stored* rather than a rendering of
+ * it — `expectSelectedDate` covers the rendering, on a page a test is visiting
+ * anyway.
+ *
+ * @param page - Playwright page object, on a page where the app has booted
+ * @param tripId - The trip to read
+ * @returns Its `startDate` and `endDate`, both `YYYY-MM-DD`
+ */
+async function readTripDates(
+  page: Page,
+  tripId: string,
+): Promise<{ startDate: string; endDate: string }> {
+  return await page.evaluate(
+    async (id) =>
+      new Promise<{ startDate: string; endDate: string }>((resolve, reject) => {
+        const request = indexedDB.open('kikoushou');
+        request.onerror = () => reject(new Error('Failed to open database'));
+        request.onsuccess = () => {
+          const db = request.result;
+          const read = db.transaction('trips', 'readonly').objectStore('trips').get(id);
+          read.onsuccess = () => {
+            db.close();
+            const trip = read.result as { startDate: string; endDate: string } | undefined;
+            if (!trip) {
+              reject(new Error(`No trip ${id} in IndexedDB`));
+              return;
+            }
+            resolve({ startDate: trip.startDate, endDate: trip.endDate });
+          };
+          read.onerror = () => {
+            db.close();
+            reject(new Error(`Failed to read trip ${id}`));
+          };
+        };
+      }),
+    tripId,
+  );
 }
 
 // ============================================================================
@@ -346,8 +412,7 @@ test.describe('Trip Lifecycle', () => {
     // Verify success toast appears
     await expect(page.getByText(/trip created successfully/i)).toBeVisible();
 
-    const tripId = page.url().match(/\/trips\/([^/]+)\/calendar/)?.[1];
-    expect(tripId).toBeTruthy();
+    const tripId = tripIdFromCalendarUrl(page);
 
     // Navigate back to trips list to verify the trip appears
     await page.goto('/trips');
@@ -368,11 +433,13 @@ test.describe('Trip Lifecycle', () => {
     //
     // A URL and a name were the whole of this test's evidence, and neither says
     // anything about the two fields the form spends most of its effort on. The
-    // date picker was selecting days of the wrong month for months without a
-    // single test noticing.
-    await page.goto(`/trips/${tripId}/edit`);
-    await expectSelectedDate(page, '#trip-start-date', TEST_TRIP.startDate);
-    await expectSelectedDate(page, '#trip-end-date', TEST_TRIP.endDate);
+    // date picker was selecting days of the wrong month for months on end —
+    // measured at two months wrong today, three next month — without a single
+    // test noticing.
+    expect(await readTripDates(page, tripId)).toEqual({
+      startDate: TEST_TRIP.startDate,
+      endDate: TEST_TRIP.endDate,
+    });
   });
 
   // ============================================================================
@@ -388,9 +455,7 @@ test.describe('Trip Lifecycle', () => {
     await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
 
     // Extract the trip ID from the URL for later verification
-    const calendarUrl = page.url();
-    const tripId = calendarUrl.match(/\/trips\/([^/]+)\/calendar/)?.[1];
-    expect(tripId).toBeTruthy();
+    const tripId = tripIdFromCalendarUrl(page);
 
     // Navigate to the edit page
     await page.goto(`/trips/${tripId}/edit`);
@@ -451,9 +516,10 @@ test.describe('Trip Lifecycle', () => {
 
     // The name was the only edited field this test looked at. Both dates moved
     // too — the start back a day, the end forward three — so read them back.
-    await page.goto(`/trips/${tripId}/edit`);
-    await expectSelectedDate(page, '#trip-start-date', UPDATED_TRIP.startDate);
-    await expectSelectedDate(page, '#trip-end-date', UPDATED_TRIP.endDate);
+    expect(await readTripDates(page, tripId)).toEqual({
+      startDate: UPDATED_TRIP.startDate,
+      endDate: UPDATED_TRIP.endDate,
+    });
   });
 
   // ============================================================================
