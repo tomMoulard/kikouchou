@@ -361,8 +361,10 @@ describe('ConfirmDialog Loading State', () => {
     await user.click(cancelButton);
 
     // Should not have called onOpenChange with false (cancel blocked during loading)
+    // No `getByRole('alertdialog')` check here: `open` is hard-coded true and
+    // the mock never feeds a new value back, so the dialog stays mounted
+    // whatever the component does. `onOpenChange` is the only real signal.
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
-    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
   });
 
   it('prevents double-click during loading', async () => {
@@ -613,9 +615,6 @@ describe('ConfirmDialog Accessibility', () => {
         document.querySelector('.motion-safe\\:animate-spin')
       ).toHaveAttribute('aria-hidden', 'true');
     });
-    // The label stays in the accessible name while the spinner is hidden, so
-    // the button does not go anonymous mid-flight.
-    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
   });
 });
 

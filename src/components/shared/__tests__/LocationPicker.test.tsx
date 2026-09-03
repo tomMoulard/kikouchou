@@ -244,7 +244,39 @@ describe('LocationPicker', () => {
         );
       });
 
-      // A failed search must not leave a stale dropdown open over the input.
+    });
+
+    it('closes an open dropdown when the next search fails', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LocationPicker value="" onChange={mockOnChange} />);
+
+      const input = screen.getByRole('combobox');
+
+      // First search succeeds, so there is a dropdown on screen to go stale.
+      // Without this the `setIsOpen(false)` in the catch branch is unreachable:
+      // `isOpen` is false from initial state, and asserting it stays false
+      // proves nothing.
+      await user.type(input, 'Paris');
+      await act(() => { vi.advanceTimersByTime(350); });
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      // Second search fails.
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
+      await user.type(input, 'x');
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'locationPicker.searchError'
+        );
+      });
+
+      // The old results must not stay on screen under the error.
       expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     });
 
@@ -555,13 +587,18 @@ describe('LocationPicker', () => {
     });
 
     it('never issues a search when unmounted before the debounce elapses', async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const { unmount } = render(
         <LocationPicker value="" onChange={mockOnChange} />
       );
 
-      const input = screen.getByRole('combobox');
-      await user.type(input, 'Paris');
+      // One synchronous `change`, not five keystrokes. `shouldAdvanceTime` ties
+      // the fake clock to real time, so `user.type` spends real milliseconds
+      // between keys — enough, on a loaded machine, for the 300ms debounce to
+      // fire before `unmount()` and redden this for a reason that has nothing
+      // to do with the cleanup it tests.
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: { value: 'Paris' },
+      });
 
       // Unmount before debounce completes
       unmount();
@@ -583,12 +620,14 @@ describe('LocationPicker', () => {
         return new Promise(() => {});
       });
 
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const { unmount } = render(
         <LocationPicker value="" onChange={mockOnChange} />
       );
 
-      await user.type(screen.getByRole('combobox'), 'Paris');
+      // Synchronous, for the same reason as the test above.
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: { value: 'Paris' },
+      });
       await act(() => { vi.advanceTimersByTime(350); });
 
       await waitFor(() => {
