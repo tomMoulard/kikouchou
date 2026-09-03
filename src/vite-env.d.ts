@@ -24,6 +24,16 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;
 
   /**
+   * Wallet chains to offer, comma-separated: `solana`, `ethereum`, or both.
+   *
+   * The one auth setting that cannot be discovered from the project.
+   * `GET /auth/v1/settings` lists every OAuth provider plus email and phone but
+   * says nothing about web3, so this is how the app is told. Unset means no
+   * wallet button. See `features/auth/web3`.
+   */
+  readonly VITE_SUPABASE_WEB3_CHAINS?: string;
+
+  /**
    * PostHog project token (`phc_…`). Absent means analytics is off entirely —
    * `lib/posthog` default-exports `undefined` and every capture is a no-op.
    */

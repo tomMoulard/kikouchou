@@ -67,6 +67,10 @@ interface FakeClient {
   readonly auth: {
     onAuthStateChange: ReturnType<typeof vi.fn>;
     signInWithOAuth: ReturnType<typeof vi.fn>;
+    signInWithOtp: ReturnType<typeof vi.fn>;
+    signInWithWeb3: ReturnType<typeof vi.fn>;
+    signInWithPasskey: ReturnType<typeof vi.fn>;
+    registerPasskey: ReturnType<typeof vi.fn>;
     signOut: ReturnType<typeof vi.fn>;
     getSession: ReturnType<typeof vi.fn>;
     exchangeCodeForSession: ReturnType<typeof vi.fn>;
@@ -80,7 +84,7 @@ interface FakeClient {
  * A Supabase client stand-in.
  *
  * Hand-rolled rather than generated: this is the only place in the repo that
- * needs one, and the surface used is three methods wide.
+ * needs one, and the surface used is a handful of methods wide.
  */
 function makeFakeClient(): FakeClient {
   let handler: AuthChangeHandler = () => undefined;
@@ -93,6 +97,10 @@ function makeFakeClient(): FakeClient {
         return { data: { subscription: { unsubscribe } } };
       }),
       signInWithOAuth: vi.fn(async () => ({ data: {}, error: null })),
+      signInWithOtp: vi.fn(async () => ({ data: {}, error: null })),
+      signInWithWeb3: vi.fn(async () => ({ data: {}, error: null })),
+      signInWithPasskey: vi.fn(async () => ({ data: {}, error: null })),
+      registerPasskey: vi.fn(async () => ({ data: {}, error: null })),
       signOut: vi.fn(async () => ({ error: null })),
       getSession: vi.fn(async () => ({ data: { session: null }, error: null })),
       exchangeCodeForSession: vi.fn(async () => ({
@@ -642,14 +650,28 @@ describe('AuthProvider — returning from the provider', () => {
 // Sign in
 // ============================================================================
 
-describe('signInWithGoogle', () => {
+describe('signInWithProvider', () => {
   it('reports unavailable rather than throwing with no backend', async () => {
     withoutBackend();
 
     const { result } = renderHook(() => useAuth(), { wrapper });
-    await expect(result.current.signInWithGoogle()).resolves.toEqual({
+    await expect(result.current.signInWithProvider('google')).resolves.toEqual({
       status: 'unavailable',
     });
+  });
+
+  it('passes through whatever provider id it is given', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+    // Not in any list in this repo: the ids come from the project's own
+    // /auth/v1/settings, so enabling one in the dashboard must reach the API
+    // call without an edit here.
+    await result.current.signInWithProvider('spotify');
+
+    expect(client.auth.signInWithOAuth.mock.calls[0]?.[0].provider).toBe('spotify');
   });
 
   it('sends the user back to the app root, not a callback route', async () => {
@@ -658,7 +680,7 @@ describe('signInWithGoogle', () => {
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitForSubscription(client);
-    await result.current.signInWithGoogle();
+    await result.current.signInWithProvider('google');
 
     const options = client.auth.signInWithOAuth.mock.calls[0]?.[0];
     expect(options.provider).toBe('google');
@@ -674,7 +696,7 @@ describe('signInWithGoogle', () => {
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     // Deliberately no waitForSubscription: the click races the dynamic import.
-    await result.current.signInWithGoogle();
+    await result.current.signInWithProvider('google');
 
     expect(client.auth.signInWithOAuth).toHaveBeenCalledTimes(1);
   });
@@ -690,7 +712,7 @@ describe('signInWithGoogle', () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitForSubscription(client);
 
-    await expect(result.current.signInWithGoogle()).resolves.toEqual({
+    await expect(result.current.signInWithProvider('google')).resolves.toEqual({
       status: 'error',
       message: 'provider disabled',
     });
@@ -705,7 +727,7 @@ describe('signInWithGoogle', () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitForSubscription(client);
 
-    await expect(result.current.signInWithGoogle()).resolves.toEqual({
+    await expect(result.current.signInWithProvider('google')).resolves.toEqual({
       status: 'error',
       message: 'Failed to fetch',
     });
@@ -718,10 +740,245 @@ describe('signInWithGoogle', () => {
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitForSubscription(client);
-    await result.current.signInWithGoogle();
+    await result.current.signInWithProvider('google');
 
     await waitFor(() => {
       expect(result.current.isSigningIn).toBe(false);
+    });
+  });
+
+  it('keeps the in-flight flag set while the browser is leaving', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+    await result.current.signInWithProvider('google');
+
+    // The document is being torn down; re-enabling the button would only invite
+    // a second click that races the navigation. Read through `waitFor` because
+    // the flag is set outside `act`, so the commit trails the resolved promise.
+    await waitFor(() => {
+      expect(result.current.isSigningIn).toBe(true);
+    });
+  });
+});
+
+// ============================================================================
+// Sign in — email
+// ============================================================================
+
+describe('signInWithEmailLink', () => {
+  it('reports the mail as queued, not as a session', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    await expect(
+      result.current.signInWithEmailLink('someone@example.com'),
+    ).resolves.toEqual({ status: 'email-sent' });
+
+    const options = client.auth.signInWithOtp.mock.calls[0]?.[0];
+    expect(options.email).toBe('someone@example.com');
+    // Same destination as the OAuth redirect, for the same reason.
+    expect(String(options.options.emailRedirectTo)).toMatch(/\/$/);
+  });
+
+  it('re-enables the form once the mail is away', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+    await result.current.signInWithEmailLink('someone@example.com');
+
+    // Nothing is navigating, so leaving the flag set would strand the form.
+    await waitFor(() => {
+      expect(result.current.isSigningIn).toBe(false);
+    });
+  });
+
+  it('surfaces the sender rate limit as a message', async () => {
+    const client = makeFakeClient();
+    // The built-in sender is capped at two an hour, so this is the error people
+    // will actually hit while trying the flow.
+    client.auth.signInWithOtp.mockResolvedValue({
+      data: {},
+      error: { message: 'email rate limit exceeded' },
+    });
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    await expect(
+      result.current.signInWithEmailLink('someone@example.com'),
+    ).resolves.toEqual({ status: 'error', message: 'email rate limit exceeded' });
+  });
+});
+
+// ============================================================================
+// Sign in — wallet
+// ============================================================================
+
+describe('signInWithWallet', () => {
+  it('reports a session in hand, with no redirect', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    await expect(
+      result.current.signInWithWallet('solana', 'Sign in to Kikoushou.'),
+    ).resolves.toEqual({ status: 'signed-in' });
+
+    expect(client.auth.signInWithWeb3).toHaveBeenCalledWith({
+      chain: 'solana',
+      statement: 'Sign in to Kikoushou.',
+    });
+  });
+
+  it('passes the chain through unchanged', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+    await result.current.signInWithWallet('ethereum', 'Sign in to Kikoushou.');
+
+    expect(client.auth.signInWithWeb3.mock.calls[0]?.[0].chain).toBe('ethereum');
+  });
+
+  it('treats a dismissed wallet prompt as an ordinary error', async () => {
+    const client = makeFakeClient();
+    // Wallets throw on rejection rather than returning an error.
+    client.auth.signInWithWeb3.mockRejectedValue(new Error('User rejected the request'));
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    await expect(
+      result.current.signInWithWallet('solana', 'Sign in to Kikoushou.'),
+    ).resolves.toEqual({ status: 'error', message: 'User rejected the request' });
+
+    // Nothing navigated, so the buttons have to come back.
+    await waitFor(() => {
+      expect(result.current.isSigningIn).toBe(false);
+    });
+  });
+});
+
+// ============================================================================
+// Sign in — passkey
+// ============================================================================
+
+describe('signInWithPasskey', () => {
+  it('reports a session in hand, with no redirect', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    await expect(result.current.signInWithPasskey()).resolves.toEqual({
+      status: 'signed-in',
+    });
+    expect(client.auth.signInWithPasskey).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a cancelled prompt as an ordinary error', async () => {
+    const client = makeFakeClient();
+    client.auth.signInWithPasskey.mockResolvedValue({
+      data: null,
+      error: { message: 'The operation either timed out or was not allowed' },
+    });
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    await expect(result.current.signInWithPasskey()).resolves.toEqual({
+      status: 'error',
+      message: 'The operation either timed out or was not allowed',
+    });
+  });
+
+  it('survives the experimental flag being off, which throws', async () => {
+    const client = makeFakeClient();
+    // `@supabase/auth-js` throws rather than returning an error when
+    // `experimental.passkey` is not set — see lib/supabase/client.
+    client.auth.signInWithPasskey.mockRejectedValue(
+      new Error('passkey support is not enabled'),
+    );
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    await expect(result.current.signInWithPasskey()).resolves.toEqual({
+      status: 'error',
+      message: 'passkey support is not enabled',
+    });
+  });
+});
+
+// ============================================================================
+// Passkey enrolment
+// ============================================================================
+
+describe('registerPasskey', () => {
+  it('reports the passkey as enrolled', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    await expect(result.current.registerPasskey()).resolves.toEqual({
+      status: 'enrolled',
+    });
+  });
+
+  it('leaves the sign-in flag alone, since nobody is signing in', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+    await result.current.registerPasskey();
+
+    // Enrolment happens on the Settings page. Flipping `isSigningIn` would
+    // disable a sign-in surface that is not even mounted.
+    expect(result.current.isSigningIn).toBe(false);
+  });
+
+  it('reports unavailable with no backend rather than throwing', async () => {
+    withoutBackend();
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await expect(result.current.registerPasskey()).resolves.toEqual({
+      status: 'unavailable',
+    });
+  });
+
+  it('surfaces a refused ceremony', async () => {
+    const client = makeFakeClient();
+    client.auth.registerPasskey.mockRejectedValue(
+      new Error('The operation either timed out or was not allowed'),
+    );
+    withBackend(client);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    await expect(result.current.registerPasskey()).resolves.toEqual({
+      status: 'error',
+      message: 'The operation either timed out or was not allowed',
     });
   });
 });

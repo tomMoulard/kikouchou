@@ -53,12 +53,21 @@ const STORAGE_KEY = 'kikouchou-auth';
 // Configuration
 // ============================================================================
 
-interface SupabaseConfig {
+export interface SupabaseConfig {
   readonly url: string;
   readonly publishableKey: string;
 }
 
-function readConfig(): SupabaseConfig | null {
+/**
+ * The backend coordinates, or `null` when this build has none.
+ *
+ * Exported so that anything needing to call the project directly — see
+ * `lib/supabase/auth-settings`, which talks to the Auth REST API without the
+ * client library — reads the environment through this one function. Two copies
+ * of the "is a blank string configured?" question is exactly how one caller
+ * ends up disagreeing with `isSupabaseConfigured`.
+ */
+export function readSupabaseConfig(): SupabaseConfig | null {
   const url = import.meta.env.VITE_SUPABASE_URL;
   const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
@@ -105,7 +114,7 @@ export function getSupabaseClient(): Promise<TypedSupabaseClient | null> {
     return pending;
   }
 
-  const config = readConfig();
+  const config = readSupabaseConfig();
   if (!config) {
     return Promise.resolve(null);
   }
@@ -139,6 +148,14 @@ async function createConfiguredClient(
       // captured synchronously at import instead, and exchanged explicitly by
       // AuthProvider. See lib/supabase/auth-callback.
       detectSessionInUrl: false,
+      // Passkey sign-in is behind this flag in `@supabase/auth-js`, and every
+      // passkey method *throws* without it — including the one behind a button
+      // that would look enabled. The project has passkeys on
+      // (`passkeys_enabled: true` at `/auth/v1/settings`), so the flag is what
+      // makes that reachable. Experimental means the API may change under us on
+      // a minor bump; the two call sites are `signInWithPasskey` and
+      // `registerPasskey` in `features/auth/AuthContext`.
+      experimental: { passkey: true },
     },
   });
 
@@ -154,7 +171,7 @@ async function createConfiguredClient(
  * whether a trip can be edited — both work regardless.
  */
 export function isSupabaseConfigured(): boolean {
-  return readConfig() !== null;
+  return readSupabaseConfig() !== null;
 }
 
 /**
