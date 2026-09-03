@@ -740,7 +740,7 @@ test.describe('App Updates', () => {
    * What it was reaching for is asserted for real above: `clientsClaim()` is in
    * the built worker, and `navigator.serviceWorker.controller` proves it ran.
    */
-  test('a new worker takes control of the open page', async ({ page }) => {
+  test('a new build reloads the session it finds already running', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
     await waitForActivatedServiceWorker(page);
@@ -752,44 +752,80 @@ test.describe('App Updates', () => {
       .toBe(true);
 
     /**
-     * Drop the current worker and install a fresh one, then watch the page
-     * change hands.
+     * A marker that only survives as long as this document does.
      *
-     * This is the real sequence a deploy produces, minus the new bytes: the
-     * page is already controlled, a different worker activates, and
-     * `clientsClaim()` makes it seize the existing client — which fires
-     * `controllerchange`. The listener is attached *before* the re-register so
-     * the event cannot be missed, and the promise races a timeout so a worker
-     * that never claims fails here instead of hanging the test.
+     * The whole point of `autoUpdate` is that the running page does not stay on
+     * the build it booted with, so the observable is a reload — and a reload is
+     * exactly what a value hung off `window` cannot survive.
      */
-    const claimed = await page.evaluate(async () => {
-      const changed = new Promise<boolean>((resolve) => {
-        navigator.serviceWorker.addEventListener(
-          'controllerchange',
-          () => resolve(true),
-          { once: true },
-        );
-        setTimeout(() => resolve(false), 20_000);
-      });
-
-      for (const registration of await navigator.serviceWorker.getRegistrations()) {
-        await registration.unregister();
-      }
-      await navigator.serviceWorker.register('/sw.js');
-
-      return await changed;
+    await page.evaluate(() => {
+      (window as unknown as Record<string, string>).__unit7Session = 'pre-update';
     });
 
-    expect(claimed, 'the replacement worker should claim this page').toBe(true);
+    /**
+     * Register a worker at a URL the current registration does not have.
+     *
+     * A plain re-register of `/sw.js` does nothing observable, which is how the
+     * first draft of this test failed: `unregister()` on a registration that
+     * still controls a client only sets its uninstalling flag, and the
+     * subsequent `register()` finds the same scope with a byte-identical script
+     * URL and resolves with the resurrected registration. No worker installs,
+     * no `controllerchange` fires. A distinct script URL in the same scope is
+     * what makes the browser fetch, install and activate a genuinely new
+     * worker — the same path a deploy takes.
+     *
+     * Not awaited, and wrapped: `lib/pwa/register` reloads the page the moment
+     * the new worker activates, so this call site can be torn down mid-flight.
+     * That reload is the assertion, not an accident.
+     */
+    await page
+      .evaluate(() => {
+        void navigator.serviceWorker.register('/sw.js?unit7-new-build=1');
+      })
+      .catch(() => {
+        // The document went away before the call returned. That is the
+        // behaviour under test; the poll below is what decides the verdict.
+      });
 
-    // And the page is controlled again afterwards, by a worker that is this
-    // app's — not merely "some controllerchange happened".
+    /**
+     * The session reloaded onto the new worker.
+     *
+     * This is the half of `registerType: 'autoUpdate'` that
+     * `src/lib/pwa/register.ts` exists to supply, and the half its fileoverview
+     * records as a production bug when it was missing: "`skipWaiting` and
+     * `clientsClaim` mean the *next* navigation gets the new build; nothing
+     * reloads a session that never navigates". Delete the `registerSW` call
+     * there — or set `injectRegister` back to its default, which injects a bare
+     * `navigator.serviceWorker.register` and nothing else — and the marker
+     * below is still sitting on `window` when this times out.
+     *
+     * `'navigating'` keeps a destroyed execution context from being read as a
+     * pass: only a document that ran fresh JavaScript reports `'gone'`.
+     */
+    await expect
+      .poll(
+        async () => {
+          try {
+            return await page.evaluate(
+              () =>
+                (window as unknown as Record<string, string | undefined>)
+                  .__unit7Session ?? 'gone',
+            );
+          } catch {
+            return 'navigating';
+          }
+        },
+        { timeout: SW_READY_TIMEOUT },
+      )
+      .toBe('gone');
+
+    // And what it reloaded onto is this app's worker, in control.
     await expect
       .poll(
         () => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL ?? null),
         { timeout: SW_READY_TIMEOUT },
       )
-      .toMatch(/sw\.js$/);
+      .toContain('sw.js');
   });
 });
 
