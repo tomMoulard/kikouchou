@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package kikoushou.sharing;
+package kikouchou.sharing;
 
 // Top-level changeset message — this is what goes into the QR code.
 // Captures a guest's additions and modifications relative to a baseline snapshot.

@@ -6,7 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // Base URL for deployment - set to repo name for GitHub Pages
-const base = process.env.GITHUB_ACTIONS ? '/kikoushou/' : '/'
+const base = '/'
 
 /**
  * Manual chunk splitting strategy to keep bundles under 500KB
@@ -80,7 +80,7 @@ function manualChunks(id: string): string | undefined {
 
 /**
  * GitHub Pages has no SPA rewrite: a cold load of a deep link like
- * `/kikoushou/join/<token>` asks for a file that does not exist. Pages serves
+ * `/join/<token>` asks for a file that does not exist. Pages serves
  * `404.html` for those, and although the status is 404 the browser still renders
  * it — so a copy of the built `index.html` boots the app, and the router reads
  * the real `location.pathname` and resolves the route.
@@ -100,7 +100,7 @@ function githubPagesSpaFallback(): Plugin {
   let outDir = 'dist'
 
   return {
-    name: 'kikoushou:github-pages-spa-fallback',
+    name: 'kikouchou:github-pages-spa-fallback',
     apply: 'build',
     configResolved(config) {
       outDir = config.build.outDir

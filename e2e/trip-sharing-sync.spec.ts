@@ -485,7 +485,7 @@ test.describe('joining a trip', () => {
     // Somebody else takes Alice while this page is open. Offering her anyway
     // means the claim fails at the last moment with nothing useful to say.
     const alicePersonId = await guestPage.evaluate(async () => {
-      const request = indexedDB.open('kikoushou');
+      const request = indexedDB.open('kikouchou');
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
@@ -605,7 +605,7 @@ test.describe('joining a trip', () => {
     expect(stub.invites[0]?.uses).toBe(1);
 
     const localTrips = await page.evaluate(async () => {
-      const request = indexedDB.open('kikoushou');
+      const request = indexedDB.open('kikouchou');
       const database = await new Promise<IDBDatabase>((resolve, reject) => {
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);

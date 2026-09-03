@@ -66,7 +66,7 @@ afterEach(() => {
 
 describe('auth-callback capture', () => {
   it('captures the authorization code from a callback URL', async () => {
-    atUrl('https://kikoushou.app/?code=auth-code-123');
+    atUrl('https://kikouchou.app/?code=auth-code-123');
 
     const module = await importFresh();
 
@@ -74,7 +74,7 @@ describe('auth-callback capture', () => {
   });
 
   it('captures a provider error in place of a code', async () => {
-    atUrl('https://kikoushou.app/?error=access_denied&error_description=User%20cancelled');
+    atUrl('https://kikouchou.app/?error=access_denied&error_description=User%20cancelled');
 
     const module = await importFresh();
 
@@ -84,7 +84,7 @@ describe('auth-callback capture', () => {
   });
 
   it('falls back to the bare error code when there is no description', async () => {
-    atUrl('https://kikoushou.app/?error=server_error');
+    atUrl('https://kikouchou.app/?error=server_error');
 
     const module = await importFresh();
 
@@ -92,7 +92,7 @@ describe('auth-callback capture', () => {
   });
 
   it('reports nothing for an ordinary page load', async () => {
-    atUrl('https://kikoushou.app/trips');
+    atUrl('https://kikouchou.app/trips');
 
     const module = await importFresh();
 
@@ -103,7 +103,7 @@ describe('auth-callback capture', () => {
   });
 
   it('strips the code from the URL so a reload cannot reuse it', async () => {
-    atUrl('https://kikoushou.app/?code=auth-code-123');
+    atUrl('https://kikouchou.app/?code=auth-code-123');
 
     await importFresh();
 
@@ -115,7 +115,7 @@ describe('auth-callback capture', () => {
   });
 
   it('keeps unrelated query parameters', async () => {
-    atUrl('https://kikoushou.app/trips?code=auth-code-123&view=timeline');
+    atUrl('https://kikouchou.app/trips?code=auth-code-123&view=timeline');
 
     await importFresh();
 
@@ -128,16 +128,16 @@ describe('auth-callback capture', () => {
   });
 
   it('preserves the path and hash', async () => {
-    atUrl('https://kikoushou.app/kikoushou/?code=abc#main-content');
+    atUrl('https://kikouchou.app/kikouchou/?code=abc#main-content');
 
     await importFresh();
 
     const nextUrl = String(replaceState.mock.calls[0]?.[2]);
-    expect(nextUrl).toBe('/kikoushou/#main-content');
+    expect(nextUrl).toBe('/kikouchou/#main-content');
   });
 
   it('strips the OAuth state parameter too', async () => {
-    atUrl('https://kikoushou.app/?code=abc&state=xyz');
+    atUrl('https://kikouchou.app/?code=abc&state=xyz');
 
     await importFresh();
 
@@ -146,7 +146,7 @@ describe('auth-callback capture', () => {
   });
 
   it('still reports the code when replaceState is refused', async () => {
-    atUrl('https://kikoushou.app/?code=auth-code-123');
+    atUrl('https://kikouchou.app/?code=auth-code-123');
     replaceState.mockImplementation(() => {
       throw new Error('blocked in this webview');
     });
@@ -158,7 +158,7 @@ describe('auth-callback capture', () => {
   });
 
   it('hands the code out exactly once', async () => {
-    atUrl('https://kikoushou.app/?code=auth-code-123');
+    atUrl('https://kikouchou.app/?code=auth-code-123');
 
     const module = await importFresh();
 

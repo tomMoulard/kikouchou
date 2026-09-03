@@ -179,7 +179,7 @@ A dedicated import review page:
 
 - [ ] **3.1 Track import baseline** (modify guest onboarding wizard)
   - When a guest completes the onboarding wizard (SummaryStepPage "Enter trip"), persist a `baseSnapshotAt` timestamp to localStorage alongside the existing guest identity
-  - Key: `kikoushou_guest_{shareId}` → add `baseSnapshotAt` field
+  - Key: `kikouchou_guest_{shareId}` → add `baseSnapshotAt` field
   - Rationale: The changeset computation needs to know what state existed when the guest started
 
 - [ ] **3.2 Create Guest Export page** (`src/features/sharing/pages/GuestExportPage.tsx`)
@@ -192,7 +192,7 @@ A dedicated import review page:
 
 - [ ] **3.3 Add export entry point in trip UI**
   - Add an "Export my changes" button/menu item in the trip navigation or settings
-  - Only visible when the user is identified as a guest (has `kikoushou_guest_*` in localStorage)
+  - Only visible when the user is identified as a guest (has `kikouchou_guest_*` in localStorage)
   - Navigate to GuestExportPage
   - Rationale: Discoverability — guests need to know how to share their changes back
 

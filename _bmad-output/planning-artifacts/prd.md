@@ -12,7 +12,7 @@ stepsCompleted:
   - step-10-nonfunctional
   - step-11-polish
 inputDocuments:
-  - _bmad-output/planning-artifacts/product-brief-kikoushou-2026-02-06.md
+  - _bmad-output/planning-artifacts/product-brief-kikouchou-2026-02-06.md
   - _bmad-output/brainstorming/brainstorming-session-2026-02-06.md
   - README.md
   - TODO.md
@@ -86,7 +86,7 @@ author: tom
 
 ### Measurable Outcomes
 
-- A real group of friends successfully organizes a vacation trip end-to-end using kikoushou
+- A real group of friends successfully organizes a vacation trip end-to-end using kikouchou
 - The organizer shares the link once and doesn't need to answer logistics questions
 - Guests check the shared link before arriving and know their room and transport details
 - The app works reliably on mobile at a rural vacation house with intermittent connectivity
@@ -97,7 +97,7 @@ author: tom
 
 **Opening Scene:** Marie just booked a vacation house in Brittany for two weeks with a rotating group of 8 friends. Her phone buzzes with WhatsApp messages: "Which room should I take?", "When does Pierre arrive?", "Can someone pick me up?". She's stressed and the trip is three weeks away.
 
-**Rising Action:** Marie opens kikoushou and creates a new trip - "Summer 2026, Brittany". She adds the house's 4 rooms with their bed counts and descriptions, then adds the 8 friends to the trip. She doesn't assign anyone to rooms - that's for each person to do themselves.
+**Rising Action:** Marie opens kikouchou and creates a new trip - "Summer 2026, Brittany". She adds the house's 4 rooms with their bed counts and descriptions, then adds the 8 friends to the trip. She doesn't assign anyone to rooms - that's for each person to do themselves.
 
 **Climax:** Marie taps "Share", copies the link, and drops it in the WhatsApp group: "Here's the trip - pick your room, add your travel details, and flag if you need a pickup." She puts her phone down.
 
@@ -123,7 +123,7 @@ author: tom
 
 ### Journey 3: Sophie the Driver - Volunteering for Pickup
 
-**Opening Scene:** Sophie is already at the vacation house. She checks kikoushou to see who's arriving tomorrow. Lucas needs a pickup from Gare de Vannes at 14:32 but no driver is assigned.
+**Opening Scene:** Sophie is already at the vacation house. She checks kikouchou to see who's arriving tomorrow. Lucas needs a pickup from Gare de Vannes at 14:32 but no driver is assigned.
 
 **Rising Action:** Sophie assigns herself as the driver. She notices Camille arrives at 15:10 at the same station - she can do both pickups in one trip.
 
@@ -143,7 +143,7 @@ author: tom
 
 **Climax:** Marie checks the calendar and sees all updates reflected. Pierre's new pickup time is visible. Camille's room swap is done. Nobody asked Marie.
 
-**Resolution:** The trip runs itself. Changes happen, but kikoushou absorbs them because everyone can edit their own details.
+**Resolution:** The trip runs itself. Changes happen, but kikouchou absorbs them because everyone can edit their own details.
 
 **Capabilities revealed:** Transport/room editing by any user, mutual room swaps, shared link always shows current state, conflict detection, self-organizing without coordinator bottleneck.
 

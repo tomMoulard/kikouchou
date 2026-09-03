@@ -207,7 +207,7 @@ describe('ShareImportPage — 3.3: returning guest is redirected to calendar', (
 
     // Simulate returning guest with matching tripId
     window.localStorage.setItem(
-      'kikoushou_guest_abc123',
+      'kikouchou_guest_abc123',
       JSON.stringify({ personId: 'person-1', tripId: 'trip-abc' }),
     );
 
@@ -224,7 +224,7 @@ describe('ShareImportPage — 3.3: returning guest is redirected to calendar', (
     const trip = makeTrip({ id: 'trip-abc' as TripId });
     mockGetTripByShareId.mockResolvedValue(trip);
 
-    localStorageMock['kikoushou_guest_abc123'] = JSON.stringify({
+    localStorageMock['kikouchou_guest_abc123'] = JSON.stringify({
       personId: 'person-1',
       tripId: 'trip-DIFFERENT',
     });
@@ -334,7 +334,7 @@ describe('ShareImportPage — 3.5: error handling', () => {
 
     // Set up localStorage for returning guest
     window.localStorage.setItem(
-      'kikoushou_guest_abc123',
+      'kikouchou_guest_abc123',
       JSON.stringify({ personId: 'person-1', tripId: 'trip-abc' }),
     );
 
@@ -360,7 +360,7 @@ describe('ShareImportPage — 3.5: error handling', () => {
     mockGetTripByShareId.mockResolvedValue(makeTrip());
 
     // Set invalid JSON in localStorage
-    window.localStorage.setItem('kikoushou_guest_abc123', 'not valid json {{{');
+    window.localStorage.setItem('kikouchou_guest_abc123', 'not valid json {{{');
 
     renderShareImportPage('abc123');
 
@@ -373,7 +373,7 @@ describe('ShareImportPage — 3.5: error handling', () => {
     mockGetTripByShareId.mockResolvedValue(makeTrip());
 
     // Set localStorage with missing fields (no tripId)
-    window.localStorage.setItem('kikoushou_guest_abc123', JSON.stringify({ personId: 'p1' }));
+    window.localStorage.setItem('kikouchou_guest_abc123', JSON.stringify({ personId: 'p1' }));
 
     renderShareImportPage('abc123');
 

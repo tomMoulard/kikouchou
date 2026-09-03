@@ -62,7 +62,7 @@ async function seedGuestWithHeadcount(
       const id = `seed-person-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
       return new Promise<string>((resolve, reject) => {
-        const request = indexedDB.open('kikoushou');
+        const request = indexedDB.open('kikouchou');
         request.onerror = () => reject(new Error('Failed to open database'));
         request.onsuccess = () => {
           const db = request.result;

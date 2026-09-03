@@ -24,7 +24,7 @@
 import Dexie from 'dexie';
 import { afterEach, describe, expect, it } from 'vitest';
 
-const DB_NAME = 'kikoushou-binary-row-probe';
+const DB_NAME = 'kikouchou-binary-row-probe';
 
 interface Row {
   id?: number;

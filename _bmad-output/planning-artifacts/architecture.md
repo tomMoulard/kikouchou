@@ -4,14 +4,14 @@ lastStep: 8
 status: 'complete'
 completedAt: '2026-02-10'
 inputDocuments:
-  - _bmad-output/planning-artifacts/product-brief-kikoushou-2026-02-06.md
+  - _bmad-output/planning-artifacts/product-brief-kikouchou-2026-02-06.md
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/ux-design-specification.md
   - .github/workflows/ci.yml
   - .github/workflows/deploy.yml
   - package.json
 workflowType: 'architecture'
-project_name: 'kikoushou'
+project_name: 'kikouchou'
 user_name: 'tom'
 date: '2026-02-06'
 ---
@@ -279,12 +279,12 @@ The `/share/:shareId` route operates **outside `AppProviders`**. This is a hard 
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| **Hosting** | GitHub Pages (via `actions/deploy-pages@v4`) | Free, static-only, HTTPS enforced. Base URL: `/kikoushou/`. |
+| **Hosting** | GitHub Pages (via `actions/deploy-pages@v4`) | Free, static-only, HTTPS enforced. Base URL: `/kikouchou/`. |
 | **Package manager** | Bun (`bun install --frozen-lockfile`) | Used in all CI jobs and local development. |
 | **CI pipeline** | GitHub Actions with 6 jobs | lint → typecheck → test → generate-icons → build → e2e (parallel where possible). |
 | **Concurrency** | `cancel-in-progress: true` per branch | Saves CI minutes on rapid pushes. |
 | **Versioning** | `VITE_APP_VERSION` set from git SHA/ref in CI | Displayed in SettingsPage. Defaults to `"devel"` locally. |
-| **Base URL** | Dynamic: `/kikoushou/` in CI, `/` locally | `process.env.GITHUB_ACTIONS` conditional in `vite.config.ts`. |
+| **Base URL** | Dynamic: `/kikouchou/` in CI, `/` locally | `process.env.GITHUB_ACTIONS` conditional in `vite.config.ts`. |
 | **Test coverage** | **80% line coverage** (aligned with PRD NFR25) | vitest.config.ts threshold MUST be updated from 70% to 80%. |
 | **Accessibility testing** | `@axe-core/playwright` in E2E tests (SHOULD, not MUST) | Runs on critical user flows: share link landing, room assignment, transport entry. Does not gate CI. |
 | **Performance testing** | Calendar rendering benchmark MUST exist | Synthetic test: render CalendarPage with 15 persons, 20+ assignments. Thresholds: initial render < 500ms, re-render < 100ms. Regression guard. |
@@ -583,7 +583,7 @@ function validateForm(): boolean {
 ### Complete Project Directory Structure
 
 ```
-kikoushou/
+kikouchou/
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml                          # CI: lint, typecheck, test, build, e2e
@@ -896,7 +896,7 @@ Dexie useLiveQuery (reactive, auto-subscribes to table changes)
 - `bun run dev` → Vite dev server with HMR, base URL `/`
 - `bun run test` → Vitest in watch mode
 - `bun run lint` → ESLint check
-- `bun run build` → Production build (base URL `/kikoushou/` if `GITHUB_ACTIONS`)
+- `bun run build` → Production build (base URL `/kikouchou/` if `GITHUB_ACTIONS`)
 
 **CI Pipeline (`.github/workflows/ci.yml`):**
 ```

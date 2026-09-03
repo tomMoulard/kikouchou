@@ -159,7 +159,7 @@ describe('sharingRoutes', () => {
     mockGetTripByShareId.mockResolvedValue(makeTrip());
     mockGetPersonsByTripId.mockResolvedValue([]);
     localStorage.setItem(
-      `kikoushou_guest_${SHARE_ID}`,
+      `kikouchou_guest_${SHARE_ID}`,
       JSON.stringify({ personId: 'person-1', tripId: 'trip-abc' }),
     );
 

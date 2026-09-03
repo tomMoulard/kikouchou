@@ -69,7 +69,7 @@ interface StoredGuestIdentity {
  * @returns The localStorage key string
  */
 const getGuestStorageKey = (shareId: string): string =>
-  `kikoushou_guest_${shareId}`;
+  `kikouchou_guest_${shareId}`;
 
 // ============================================================================
 // Helper Functions

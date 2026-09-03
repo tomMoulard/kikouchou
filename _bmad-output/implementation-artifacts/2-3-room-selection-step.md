@@ -51,7 +51,7 @@ so that I have a room reserved without needing to ask anyone.
   - [x] 1.6 Add all new i18n keys to `src/locales/en/translation.json` and `src/locales/fr/translation.json` under `sharing` object
 
 - [x] Task 2: Implement claim and navigation logic (AC: 4, 5, 6)
-  - [x] 2.1 Read stored guest identity from localStorage key `kikoushou_guest_${shareId}` → `{ personId, tripId }` on mount; if not found, redirect back to `/share/:shareId/identity` (guard: can't skip identity step)
+  - [x] 2.1 Read stored guest identity from localStorage key `kikouchou_guest_${shareId}` → `{ personId, tripId }` on mount; if not found, redirect back to `/share/:shareId/identity` (guard: can't skip identity step)
   - [x] 2.2 On "Claim this room": call `checkAssignmentConflict(tripId, personId, trip.startDate, trip.endDate)` first; if conflict → show inline error, do not call `createAssignment`
   - [x] 2.3 If no conflict: call `createAssignment(tripId, { roomId: room.id, personId, startDate: trip.startDate, endDate: trip.endDate })` — use trip start/end dates as the full stay duration
   - [x] 2.4 On success: update local occupancy state (re-add to assignments array), show success state on the claimed card (disable "Claim" button, show "Claimed ✓"), enable "Next" button
@@ -110,9 +110,9 @@ This is **Story 2.3 of Epic 2 (Guest Onboarding)**. It replaces the `OnboardingP
 
 **Getting tripId from the URL:** The `/share/:shareId/room` route does NOT have a `tripId` param — only `shareId`. Call `getTripByShareId(shareId as ShareId)` on mount (exactly as `ShareImportPage` and `IdentityStepPage` do). Store `trip` in state for all subsequent calls.
 
-**Getting the guest personId:** Read from localStorage under key `kikoushou_guest_${shareId}`:
+**Getting the guest personId:** Read from localStorage under key `kikouchou_guest_${shareId}`:
 ```typescript
-const GUEST_STORAGE_KEY = (shareId: string) => `kikoushou_guest_${shareId}`;
+const GUEST_STORAGE_KEY = (shareId: string) => `kikouchou_guest_${shareId}`;
 
 interface StoredGuestIdentity {
   personId: string;
@@ -303,7 +303,7 @@ const isMountedRef = useRef(true);
 
 // On mount: read guest identity from localStorage
 useEffect(() => {
-  const stored = localStorage.getItem(`kikoushou_guest_${shareId}`);
+  const stored = localStorage.getItem(`kikouchou_guest_${shareId}`);
   if (!stored) {
     // No identity stored — must go through identity step first
     navigate(`/share/${shareId}/identity`, { replace: true });
@@ -468,7 +468,7 @@ function isRoomFull(room: Room, allAssignments: RoomAssignment[]): boolean {
 
 **From Story 2.2 (IdentityStepPage — most relevant):**
 - `IdentityStepPage.tsx` is the canonical pattern for this story — same async-load flow, same `isMountedRef` + cancelled flag, same `isSubmittingRef` for submitting.
-- localStorage key `kikoushou_guest_${shareId}` → `{ personId: string, tripId: string }` is **written** by 2.2 and **read** by 2.3. This is the bridge between steps.
+- localStorage key `kikouchou_guest_${shareId}` → `{ personId: string, tripId: string }` is **written** by 2.2 and **read** by 2.3. This is the bridge between steps.
 - Amber theme confirmed: `from-amber-50 to-orange-50` gradient background, `border-amber-200` card border, `text-amber-900` text.
 - `withSuspense()` helper is already defined in `routes.tsx` — use it for `RoomSelectionStepPage`.
 - `OnboardingPlaceholderPage` stays for routes `transport`, `summary` until stories 2.4–2.5.
@@ -500,7 +500,7 @@ function isRoomFull(room: Room, allAssignments: RoomAssignment[]): boolean {
 
 ### Project Context
 
-- Project: kikoushou — vacation house coordination PWA. No backend. IndexedDB (Dexie.js). Offline-first.
+- Project: kikouchou — vacation house coordination PWA. No backend. IndexedDB (Dexie.js). Offline-first.
 - This story is step 3 of the wizard flow, outside AppProviders. Pattern established by Stories 2.1 and 2.2.
 - Epic 2 goal: first-time guests can self-service setup in under 2 minutes with no more than 5 taps for the happy path (UX-1).
 - After this story: story 2.4 (transport entry) will also read the stored guest identity to pre-populate the personId for the transport record.
@@ -537,7 +537,7 @@ _No debug issues encountered. Clean implementation following IdentityStepPage pa
 
 - ✅ Implemented `RoomSelectionStepPage` following the canonical async-load pattern from `IdentityStepPage` and `ShareImportPage` (isMountedRef + cancelled flag + isSubmittingRef).
 - ✅ AR-10 compliant: no context hooks — all data via `getTripByShareId`, `getRoomsByTripId`, `getAssignmentsByTripId`, `checkAssignmentConflict`, `createAssignment` from `@/lib/db`.
-- ✅ Identity guard: reads `kikoushou_guest_${shareId}` from localStorage on mount; redirects to identity step if missing or malformed.
+- ✅ Identity guard: reads `kikouchou_guest_${shareId}` from localStorage on mount; redirects to identity step if missing or malformed.
 - ✅ Parallel data load: `getRoomsByTripId` and `getAssignmentsByTripId` called with `Promise.all`.
 - ✅ Occupancy computed client-side (no date filtering, whole-trip model) with visual progress bar.
 - ✅ Full rooms dimmed + "Full" badge; available rooms show "Claim this room" (amber button, ≥44px touch target).

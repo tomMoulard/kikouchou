@@ -78,13 +78,13 @@ type SummaryStepParams = {
  * Returns the localStorage key used to persist guest identity.
  */
 const getGuestStorageKey = (shareId: string): string =>
-  `kikoushou_guest_${shareId}`;
+  `kikouchou_guest_${shareId}`;
 
 /**
  * Returns the localStorage key for wizard completion flag.
  */
 const getWizardCompleteKey = (shareId: string): string =>
-  `kikoushou_wizard_complete_${shareId}`;
+  `kikouchou_wizard_complete_${shareId}`;
 
 // ============================================================================
 // Component

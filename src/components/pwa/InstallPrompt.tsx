@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils';
 /**
  * LocalStorage key for storing dismissal timestamp.
  */
-const STORAGE_KEY = 'kikoushou-install-dismissed',
+const STORAGE_KEY = 'kikouchou-install-dismissed',
 
 /**
  * Duration in milliseconds to hide the prompt after dismissal (7 days).

@@ -343,7 +343,7 @@ function readSpotsOpenFromLabels(): number {
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.setItem(
-    'kikoushou_guest_share-1',
+    'kikouchou_guest_share-1',
     JSON.stringify({ personId: 'person-2', tripId: 'trip-1' }),
   );
   vi.mocked(getTripByShareId).mockResolvedValue(TRIP);

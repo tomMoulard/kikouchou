@@ -14,8 +14,8 @@ import type { ChatMessage as LLMChatMessage } from './hooks/useWebLLM';
 // Constants
 // ============================================================================
 
-const STORAGE_KEY = 'kikoushou.assistant.chat.v1';
-const SESSION_STORAGE_KEY = 'kikoushou.assistant.chat.session.v1';
+const STORAGE_KEY = 'kikouchou.assistant.chat.v1';
+const SESSION_STORAGE_KEY = 'kikouchou.assistant.chat.session.v1';
 
 /**
  * Past turns kept in the prompt, on top of the one being answered — three

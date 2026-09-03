@@ -1,8 +1,8 @@
 # generated: 2026-02-10
-# project: kikoushou
+# project: kikouchou
 # project_key: NOKEY
 # tracking_system: file-system
-# story_location: /Users/tom.moulard/workspace/kikoushou/_bmad-output/implementation-artifacts
+# story_location: /Users/tom.moulard/workspace/kikouchou/_bmad-output/implementation-artifacts
 
 # STATUS DEFINITIONS:
 # ==================
@@ -35,10 +35,10 @@
 
 generated: 2026-03-16
 last_updated: 2026-03-22 # updated for 2-5 story creation → ready-for-dev
-project: kikoushou
+project: kikouchou
 project_key: NOKEY
 tracking_system: file-system
-story_location: /Users/tom.moulard/workspace/kikoushou/_bmad-output/implementation-artifacts
+story_location: /Users/tom.moulard/workspace/kikouchou/_bmad-output/implementation-artifacts
 
 development_status:
   # Epic 1: UX Polish & Friction Reduction

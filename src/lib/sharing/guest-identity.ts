@@ -30,7 +30,7 @@ export interface StoredGuestIdentity {
 // ============================================================================
 
 /** Prefix of the localStorage key holding a guest identity. */
-export const GUEST_IDENTITY_STORAGE_PREFIX = 'kikoushou_guest_';
+export const GUEST_IDENTITY_STORAGE_PREFIX = 'kikouchou_guest_';
 
 // ============================================================================
 // Public API

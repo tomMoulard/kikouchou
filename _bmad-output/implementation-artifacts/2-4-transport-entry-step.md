@@ -45,7 +45,7 @@ so that the group knows when I'm coming and whether I need a pickup.
 - [x] Task 1: Create `TransportEntryStepPage` component (AC: 1, 5, 6, 7)
   - [x] 1.1 Create `src/features/sharing/pages/TransportEntryStepPage.tsx` — the transport wizard step page
   - [x] 1.2 On mount: call `getTripByShareId(shareId as ShareId)` to get the trip; show `<LoadingState />` while loading, handle not-found with redirect or error display
-  - [x] 1.3 Read stored guest identity from localStorage key `kikoushou_guest_${shareId}` → `{ personId, tripId }`; if not found, redirect to `/share/${shareId}/identity` (same guard pattern as RoomSelectionStepPage)
+  - [x] 1.3 Read stored guest identity from localStorage key `kikouchou_guest_${shareId}` → `{ personId, tripId }`; if not found, redirect to `/share/${shareId}/identity` (same guard pattern as RoomSelectionStepPage)
   - [x] 1.4 Load existing transports for the guest: call `getTransportsByPersonId(personId as PersonId)` to display already-entered transports as summary cards
   - [x] 1.5 Render form with: type toggle (arrival/departure), datetime input (`<input type="datetime-local">`), location text input, transport mode select (train/plane/car/bus/other — optional), transport number text input (optional), "Need pickup?" switch toggle
   - [x] 1.6 Show already-entered transports as compact summary cards above the form (type icon, datetime, location, needsPickup badge)
@@ -109,9 +109,9 @@ This is **Story 2.4 of Epic 2 (Guest Onboarding)**. It replaces the `OnboardingP
 
 **Getting tripId from the URL:** The `/share/:shareId/transport` route does NOT have a `tripId` param — only `shareId`. Call `getTripByShareId(shareId as ShareId)` on mount (exactly as previous wizard steps do). Store `trip` in state for all subsequent calls.
 
-**Getting the guest personId:** Read from localStorage under key `kikoushou_guest_${shareId}`:
+**Getting the guest personId:** Read from localStorage under key `kikouchou_guest_${shareId}`:
 ```typescript
-const GUEST_STORAGE_KEY = (shareId: string) => `kikoushou_guest_${shareId}`;
+const GUEST_STORAGE_KEY = (shareId: string) => `kikouchou_guest_${shareId}`;
 
 interface StoredGuestIdentity {
   personId: string;
@@ -264,7 +264,7 @@ const { shareId } = useParams<{ shareId: string }>();
 const navigate = useNavigate();
 
 useEffect(() => {
-  const stored = localStorage.getItem(`kikoushou_guest_${shareId}`);
+  const stored = localStorage.getItem(`kikouchou_guest_${shareId}`);
   if (!stored) {
     navigate(`/share/${shareId}/identity`, { replace: true });
     return;
@@ -563,7 +563,7 @@ Reference them as `t('transports.modes.train')` etc. in the select options. Do N
 
 **From Story 2.3 (RoomSelectionStepPage — most relevant predecessor):**
 - Same async-load pattern: `isMountedRef` + `cancelled` flag + `isSubmittingRef`.
-- Same localStorage key `kikoushou_guest_${shareId}` → `{ personId, tripId }` is **read** on mount.
+- Same localStorage key `kikouchou_guest_${shareId}` → `{ personId, tripId }` is **read** on mount.
 - Same identity guard: redirect to identity step if localStorage is missing.
 - Same amber theme, same Card wrapper, same button styling.
 - `withSuspense()` helper already defined in `routes.tsx` — reuse it.
@@ -611,7 +611,7 @@ For the wizard, build a **simplified inline form** that:
 
 ### Project Context
 
-- Project: kikoushou — vacation house coordination PWA. No backend. IndexedDB (Dexie.js). Offline-first.
+- Project: kikouchou — vacation house coordination PWA. No backend. IndexedDB (Dexie.js). Offline-first.
 - This story is step 4 of the wizard flow, outside AppProviders. Pattern established by Stories 2.1, 2.2, and 2.3.
 - Epic 2 goal: first-time guests can self-service setup in under 2 minutes with no more than 5 taps for the happy path (UX-1).
 - After this story: story 2.5 (Summary and Trip Entry) will display the guest's identity, room assignment, and transport details as a summary before entering the trip.

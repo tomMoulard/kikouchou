@@ -8,13 +8,13 @@ date: 2026-02-06
 author: tom
 ---
 
-# Product Brief: kikoushou
+# Product Brief: kikouchou
 
 ## Executive Summary
 
-**Kikoushou** is a focused PWA that solves vacation house coordination for groups of friends with rotating attendance. While generic trip planners handle multi-destination itineraries and expense apps track money, kikoushou answers the simple but critical questions: *Who sleeps where? Who arrives when? Who needs a pickup?*
+**Kikoushou** is a focused PWA that solves vacation house coordination for groups of friends with rotating attendance. While generic trip planners handle multi-destination itineraries and expense apps track money, kikouchou answers the simple but critical questions: *Who sleeps where? Who arrives when? Who needs a pickup?*
 
-Built for the trip organizer drowning in mental load and the guests who just want clarity, kikoushou provides a visual, shareable, offline-first solution that works even at rural vacation houses with spotty wifi. One link or QR code gives everyone the information they need.
+Built for the trip organizer drowning in mental load and the guests who just want clarity, kikouchou provides a visual, shareable, offline-first solution that works even at rural vacation houses with spotty wifi. One link or QR code gives everyone the information they need.
 
 ---
 
@@ -126,7 +126,7 @@ Kikoushou provides:
 
 | Stage | Action | Experience |
 |-------|--------|------------|
-| **Discovery** | Hears about kikoushou from another organizer or friend | "Finally, something for this specific problem" |
+| **Discovery** | Hears about kikouchou from another organizer or friend | "Finally, something for this specific problem" |
 | **Onboarding** | Creates a trip, adds rooms, adds guests | Quick setup, intuitive flow |
 | **Core Usage** | Assigns rooms, adds transport details | Visual calendar shows everything at a glance |
 | **Sharing** | Sends link/QR code to the group | One action replaces dozens of messages |

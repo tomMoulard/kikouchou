@@ -398,7 +398,7 @@ describe('IdentityStepPage — 3.5: "Next" writes localStorage and navigates', (
     await user.click(nextButton);
 
     await waitFor(() => {
-      const stored = window.localStorage.getItem('kikoushou_guest_abc123');
+      const stored = window.localStorage.getItem('kikouchou_guest_abc123');
       expect(stored).not.toBeNull();
       const parsed = JSON.parse(stored!);
       expect(parsed).toEqual({ personId: 'p1', tripId: 'trip-abc' });

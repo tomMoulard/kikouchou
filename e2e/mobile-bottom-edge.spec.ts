@@ -197,7 +197,7 @@ async function seedRows(
       rows: readonly Record<string, unknown>[];
     }) =>
       new Promise<void>((resolve, reject) => {
-        const request = indexedDB.open('kikoushou');
+        const request = indexedDB.open('kikouchou');
         request.onerror = () =>
           reject(new Error(`Failed to open the database for ${store}`));
         request.onsuccess = () => {
