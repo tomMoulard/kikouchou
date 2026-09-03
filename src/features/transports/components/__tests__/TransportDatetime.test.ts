@@ -13,7 +13,9 @@
  * Every function under test here is the **shipped** one. This file used to
  * declare private copies of all three and assert those, so reintroducing the
  * UTC-slicing bug in the app left the whole file green — a regression guard
- * that exercises its own reimplementation guards nothing.
+ * that exercises its own reimplementation guards nothing. The two form-side
+ * conversions now live in `features/transports/utils/datetime-input`, which
+ * exists so they cannot be duplicated by accident again.
  *
  * Fixtures are built with `new Date(y, m, d, h, min)` rather than written as
  * literal UTC strings: a local constructor pins the *wall clock*, which reads
@@ -27,7 +29,7 @@ import { describe, it, expect } from 'vitest';
 import {
   formatDatetimeLocal,
   toISODatetime,
-} from '@/features/transports/components/TransportForm';
+} from '@/features/transports/utils/datetime-input';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 
 // ============================================================================

@@ -16,7 +16,6 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { format, parseISO } from 'date-fns';
 import { useFormSubmission } from '@/hooks';
 
 import { Button } from '@/components/ui/button';
@@ -33,6 +32,10 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { LocationPicker, type Coordinates } from '@/components/shared/LocationPicker';
+import {
+  formatDatetimeLocal,
+  toISODatetime,
+} from '@/features/transports/utils/datetime-input';
 import type {
   Person,
   PersonId,
@@ -150,53 +153,6 @@ function getInitialFormState(
     needsPickup: transport?.needsPickup ?? false,
     notes: transport?.notes ?? '',
   };
-}
-
-/**
- * Converts an ISO datetime string to the `datetime-local` input format.
- *
- * Rendered in the viewer's timezone: the value handed back to the input has to
- * be the wall clock they will read off it, not the stored UTC one.
- *
- * Exported for its regression tests. `TransportDatetime.test.ts` used to keep a
- * private copy of this function and assert *that*, so the BUG-2 timezone
- * round-trip the file exists to guard could be reintroduced here without a
- * single test going red. Nothing outside this module and its tests calls it.
- *
- * @param isoDatetime - ISO datetime string
- * @returns datetime-local format (YYYY-MM-DDTHH:mm), or `''` when unparseable
- */
-export function formatDatetimeLocal(isoDatetime: string): string {
-  try {
-    const date = parseISO(isoDatetime);
-    if (isNaN(date.getTime())) {return '';}
-    return format(date, "yyyy-MM-dd'T'HH:mm");
-  } catch {
-    return '';
-  }
-}
-
-/**
- * Converts the `datetime-local` input format to the stored ISO datetime string.
- *
- * The input yields a wall clock with no offset, so it is read as the viewer's
- * local time and normalised to the UTC instant every other surface stores.
- *
- * Exported for its regression tests — see {@link formatDatetimeLocal} for why.
- *
- * @param localDatetime - datetime-local format (YYYY-MM-DDTHH:mm)
- * @returns ISO datetime string (UTC), or `''` when unparseable
- */
-export function toISODatetime(localDatetime: string): string {
-  if (!localDatetime) {return '';}
-  try {
-    // Datetime-local gives us local time, convert to ISO
-    const date = new Date(localDatetime);
-    if (isNaN(date.getTime())) {return '';}
-    return date.toISOString();
-  } catch {
-    return '';
-  }
 }
 
 /**
