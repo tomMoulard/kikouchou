@@ -264,7 +264,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                       </div>
                       {row.room.capacity > 1 &&
                         (bedsFree > 0 || row.laneCount > row.room.capacity) && (
-                          <span className="text-[11px] text-muted-foreground leading-tight truncate">
+                          <span className="text-xs text-muted-foreground leading-tight truncate">
                             {bedsFree > 0
                               ? t('rooms.spotsOpen', { count: bedsFree })
                               : t('rooms.capacityWarning')}

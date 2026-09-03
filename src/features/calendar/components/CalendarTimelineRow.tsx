@@ -187,15 +187,24 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         >
           {isTransport ? (
             <span className="flex items-center justify-center gap-1 w-full">
-              <span className="text-[11px] font-semibold leading-none" aria-hidden="true">
+              <span className="text-xs font-semibold leading-none" aria-hidden="true">
                 {item.transport.type === 'arrival' ? '↓' : '↑'}
               </span>
-              <span className="text-[11px] font-medium tabular-nums leading-none">{transportLabel}</span>
+              <span className="text-xs font-medium tabular-nums leading-none">{transportLabel}</span>
             </span>
           ) : (
             <>
               <span className="relative z-[1] flex min-w-0 flex-1 items-center gap-1">
                 {arrivals.length > 0 ? (
+                  /*
+                    Left at 10px, unlike the rest of this sweep. These markers
+                    stack vertically inside a pill that is `laneHeight - 6` =
+                    22px tall: one row of 12px text fits, two do not, and the
+                    pill is `overflow-hidden`, so a second arrival on the same
+                    day would be sliced through the middle. The time is also on
+                    the button's `aria-label` and `title`, so nothing here is
+                    only available at 10px.
+                  */
                   <span className="flex shrink-0 flex-col justify-center gap-0.5">
                     {arrivals.map((m) => (
                       <span
@@ -224,12 +233,13 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
                     <span className="block max-w-full truncate">{item.label}</span>
                   </span>
                   {assignmentRange ? (
-                    <span className="min-w-0 flex-1 truncate text-left text-[11px] font-medium leading-tight opacity-90">
+                    <span className="min-w-0 flex-1 truncate text-left text-xs font-medium leading-tight opacity-90">
                       {assignmentRange}
                     </span>
                   ) : null}
                 </span>
                 {departures.length > 0 ? (
+                  /* Same 22px stacking constraint as the arrivals above. */
                   <span className="flex shrink-0 flex-col items-end justify-center gap-0.5">
                     {departures.map((m) => (
                       <span
@@ -294,7 +304,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         </span>
         {personHeadcount > 1 && (
           <span
-            className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] font-medium text-muted-foreground tabular-nums"
+            className="shrink-0 rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground tabular-nums"
             title={t('calendar.timeline.guestHeadcount', 'Counts as {{count}} people', {
               count: personHeadcount,
             })}

@@ -123,11 +123,11 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
             aria-label={description}
           >
             {timeRange && (
-              <span className="shrink-0 text-[10px] font-semibold tabular-nums leading-none opacity-95">
+              <span className="shrink-0 text-xs font-semibold tabular-nums leading-none opacity-95">
                 {timeRange}
               </span>
             )}
-            <span className="min-w-0 flex-1 truncate text-left text-[11px] font-medium leading-tight">
+            <span className="min-w-0 flex-1 truncate text-left text-xs font-medium leading-tight">
               {activity.title}
             </span>
             {participantCount > 0 && (
@@ -178,7 +178,7 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
         <span className="truncate text-sm font-medium" title={categoryLabel}>
           {categoryLabel}
         </span>
-        <span className="shrink-0 rounded-full bg-muted px-1.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-muted px-1.5 text-xs font-medium tabular-nums text-muted-foreground">
           {model.items.length}
         </span>
       </div>
