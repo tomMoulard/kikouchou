@@ -18,9 +18,14 @@
  * @module features/analytics/lib/trip-stats
  */
 
+import {
+  isTransportUpcoming,
+  selectPickupsNeedingDriver,
+  toTransportInstant,
+} from '@/features/transports/utils/pickup-utils';
 import { db } from '@/lib/db/database';
 import { getPersonHeadcount } from '@/types';
-import type { ISODateTimeString, TripId } from '@/types';
+import type { ISODateTimeString, Transport, TripId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -132,24 +137,30 @@ export async function loadTripStats(
     headcount += getPersonHeadcount(person);
   }
 
+  // One reference instant for the whole read, so two transports cannot be
+  // measured against two different "now"s.
+  const nowMs = toTransportInstant(now) ?? Date.now();
+
   let arrivalCount = 0;
   let departureCount = 0;
-  let pickupsNeedingDriver = 0;
+  const upcomingPickups: Transport[] = [];
   for (const transport of transports) {
     if (transport.type === 'arrival') {
       arrivalCount += 1;
     } else {
       departureCount += 1;
     }
-    // Deliberately the same predicate as `TransportContext.upcomingPickups`,
-    // filtered on a missing driver — the expression this page has always used.
-    // "Pickups needing a driver" is computed in more than one place in this
-    // app; when a shared helper for it lands, this should call that rather than
-    // keep a copy.
-    if (transport.needsPickup && transport.datetime >= now && !transport.driverId) {
-      pickupsNeedingDriver += 1;
+    // Rebuilds `TransportContext.upcomingPickups` exactly: same predicate, same
+    // instant-based comparison. Comparing the ISO strings, as this used to,
+    // mis-reads any row written with a UTC offset instead of a `Z`.
+    if (transport.needsPickup && isTransportUpcoming(transport.datetime, nowMs)) {
+      upcomingPickups.push(transport);
     }
   }
+
+  // The shared selection the pickup alert panel and the transport list's alert
+  // gate use, so the badge here cannot report a number the panel contradicts.
+  const pickupsNeedingDriver = selectPickupsNeedingDriver(upcomingPickups).length;
 
   return {
     tripId,

@@ -5,8 +5,12 @@
  * Three places used to answer that question over three different base sets and
  * two different notions of "now" — the analytics badge, the alert panel's
  * visibility gate on the transport list, and the count rendered inside the
- * panel. Here the same base set is fed to all three and they must agree, both
- * for a pickup a few minutes ahead and for one a few minutes behind.
+ * panel. Here the same rows are fed to all three and they must agree, both for
+ * a pickup a few minutes ahead and for one a few minutes behind.
+ *
+ * The analytics side is exercised through the real `loadTripStats`, not a
+ * re-typed copy of its predicate, so this fails if that page ever grows its own
+ * answer again.
  *
  * @module features/transports/utils/__tests__/pickup-count-consistency.test
  */
@@ -14,7 +18,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { render, screen, within } from '@/test/utils';
-import type { PersonId, Transport, TransportId, TripId } from '@/types';
+import { loadTripStats } from '@/features/analytics/lib/trip-stats';
+import { db } from '@/lib/db/database';
+import type {
+  ISODateTimeString,
+  PersonId,
+  Transport,
+  TransportId,
+  TripId,
+} from '@/types';
 
 import {
   groupPickupsByProximity,
@@ -228,6 +240,55 @@ describe('pickup count consistency across views', () => {
 
     const { container } = render(<UpcomingPickups />, { withProviders: false });
     expect(container.firstChild).toBeNull();
+  });
+
+  it('reports the same number through the real analytics read', async () => {
+    const nowMs = Date.now();
+    const now = new Date(nowMs).toISOString() as ISODateTimeString;
+
+    const transports = [
+      makePickup({
+        id: 't-ahead-1',
+        datetime: new Date(nowMs + 5 * MINUTE_MS).toISOString(),
+      }),
+      makePickup({
+        id: 't-ahead-2',
+        datetime: new Date(nowMs + 40 * MINUTE_MS).toISOString(),
+        location: 'Aeroport de Nantes',
+      }),
+      makePickup({
+        id: 't-behind',
+        datetime: new Date(nowMs - 5 * MINUTE_MS).toISOString(),
+      }),
+      makePickup({
+        id: 't-has-driver',
+        datetime: new Date(nowMs + 20 * MINUTE_MS).toISOString(),
+        driverId: 'driver-1' as PersonId,
+      }),
+      makePickup({
+        id: 't-no-pickup-needed',
+        datetime: new Date(nowMs + 25 * MINUTE_MS).toISOString(),
+        needsPickup: false,
+      }),
+    ];
+
+    await db.transports.bulkPut(transports);
+
+    // 1. The analytics badge, through the read the page actually calls.
+    const stats = await loadTripStats('trip-1' as TripId, now);
+
+    // 2/3. The panel's count and its visibility gate on the transport list.
+    const upcomingPickups = deriveUpcomingPickups(transports, nowMs);
+    const selected = selectPickupsNeedingDriver(upcomingPickups);
+    const groupedCount = groupPickupsByProximity(selected).reduce(
+      (sum, group) => sum + group.pickups.length,
+      0,
+    );
+
+    expect(stats.pickupsNeedingDriver).toBe(2);
+    expect(selected).toHaveLength(stats.pickupsNeedingDriver);
+    expect(groupedCount).toBe(stats.pickupsNeedingDriver);
+    expect(selected.length > 0).toBe(true);
   });
 
   it('agrees on a pickup stored with a UTC offset instead of Z', () => {
