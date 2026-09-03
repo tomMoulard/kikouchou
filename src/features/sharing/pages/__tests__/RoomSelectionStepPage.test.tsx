@@ -34,6 +34,7 @@ vi.mock('@/lib/db', () => ({
   getTripByShareId: vi.fn(),
   getRoomsByTripId: vi.fn(),
   getAssignmentsByTripId: vi.fn(),
+  getPersonsByTripId: vi.fn(),
   checkAssignmentConflict: vi.fn(),
   createAssignment: vi.fn(),
 }));
@@ -60,7 +61,9 @@ Object.defineProperty(window, 'localStorage', {
 // ============================================================================
 
 import type {
+  HexColor,
   ISODateString,
+  Person,
   PersonId,
   Room,
   RoomAssignment,
@@ -75,6 +78,7 @@ import {
   getTripByShareId,
   getRoomsByTripId,
   getAssignmentsByTripId,
+  getPersonsByTripId,
   checkAssignmentConflict,
   createAssignment,
 } from '@/lib/db';
@@ -82,6 +86,7 @@ import {
 const mockGetTripByShareId = vi.mocked(getTripByShareId);
 const mockGetRoomsByTripId = vi.mocked(getRoomsByTripId);
 const mockGetAssignmentsByTripId = vi.mocked(getAssignmentsByTripId);
+const mockGetPersonsByTripId = vi.mocked(getPersonsByTripId);
 const mockCheckAssignmentConflict = vi.mocked(checkAssignmentConflict);
 const mockCreateAssignment = vi.mocked(createAssignment);
 
@@ -137,6 +142,21 @@ function makeAssignment(overrides?: Partial<RoomAssignment>): RoomAssignment {
 }
 
 /**
+ * Creates a minimal fixture Person for testing.
+ *
+ * `headcount` defaults to 1; pass 2 for a guest row that stands for a couple.
+ */
+function makePerson(overrides?: Partial<Person>): Person {
+  return {
+    id: 'person1' as PersonId,
+    tripId: 'trip1' as TripId,
+    name: 'Alice',
+    color: '#3b82f6' as HexColor,
+    ...overrides,
+  };
+}
+
+/**
  * Sets the stored guest identity in the fake localStorage.
  */
 function setStoredIdentity(
@@ -175,6 +195,9 @@ function renderRoomSelectionPage(shareId = 'abc123') {
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
+  // The page resolves each assignment's headcount from the guest list, so every
+  // test needs this to resolve even when the guest list is irrelevant to it.
+  mockGetPersonsByTripId.mockResolvedValue([]);
 });
 
 // ============================================================================
@@ -260,6 +283,53 @@ describe('RoomSelectionStepPage — 4.2: full room shows "Full" and no claim but
 
     // "Claim this room" button should not be rendered for a full room
     expect(screen.queryByRole('button', { name: 'sharing.roomClaimNamed' })).not.toBeInTheDocument();
+  });
+});
+
+describe('RoomSelectionStepPage — 4.2b: occupancy counts people over the trip nights', () => {
+  it('treats a couple as two occupants, filling a two-bed room', async () => {
+    setStoredIdentity('abc123', { personId: 'person2', tripId: 'trip1' });
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+    mockGetRoomsByTripId.mockResolvedValue([
+      makeRoom({ id: 'r1' as RoomId, name: 'Couple Room', capacity: 2 }),
+    ]);
+    mockGetAssignmentsByTripId.mockResolvedValue([
+      makeAssignment({ roomId: 'r1' as RoomId, personId: 'person1' as PersonId }),
+    ]);
+    // One guest row, two real people: the room has no bed left.
+    mockGetPersonsByTripId.mockResolvedValue([makePerson({ headcount: 2 })]);
+
+    renderRoomSelectionPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('sharing.roomFull')).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole('button', { name: 'sharing.roomClaimNamed' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('ignores an assignment whose nights fall outside the trip', async () => {
+    setStoredIdentity('abc123', { personId: 'person2', tripId: 'trip1' });
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+    mockGetRoomsByTripId.mockResolvedValue([
+      makeRoom({ id: 'r1' as RoomId, name: 'Free Room', capacity: 1 }),
+    ]);
+    // A stale row for the week before the trip: it takes no bed during the stay.
+    mockGetAssignmentsByTripId.mockResolvedValue([
+      makeAssignment({
+        roomId: 'r1' as RoomId,
+        startDate: '2026-07-01' as ISODateString,
+        endDate: '2026-07-05' as ISODateString,
+      }),
+    ]);
+    mockGetPersonsByTripId.mockResolvedValue([makePerson()]);
+
+    renderRoomSelectionPage();
+
+    const claimButton = await screen.findByRole('button', { name: 'sharing.roomClaimNamed' });
+    expect(claimButton).toBeInTheDocument();
+    expect(screen.queryByText('sharing.roomFull')).not.toBeInTheDocument();
   });
 });
 

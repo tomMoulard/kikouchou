@@ -78,12 +78,13 @@ import {
   calculatePeakOccupancy,
   createHeadcountResolver,
   isDateInStayRange,
+  listStayNights,
+  type HeadcountResolver,
 } from '@/features/rooms/utils/capacity-utils';
 import { getPersonHeadcount } from '@/types';
 import type {
   ISODateString,
   Person,
-  PersonId,
   Room,
   RoomAssignment,
   RoomId,
@@ -331,7 +332,7 @@ function splitIntoDateSegments(dates: readonly string[]): readonly DateSegment[]
 
 function buildRoomDateOccupancy(
   assignments: readonly RoomAssignment[],
-  headcountOf: (personId: PersonId) => number,
+  headcountOf: HeadcountResolver,
 ): Map<Room['id'], Map<string, number>> {
   const occupancyByRoom = new Map<Room['id'], Map<string, number>>();
 
@@ -341,20 +342,11 @@ function buildRoomDateOccupancy(
       roomOccupancy = new Map<string, number>();
       occupancyByRoom.set(assignment.roomId, roomOccupancy);
     }
-    // Match check-in / check-out model (see capacity-utils): endDate is exclusive.
-    const start = parseISO(assignment.startDate);
-    const end = parseISO(assignment.endDate);
-    const lastNight = new Date(end);
-    lastNight.setDate(lastNight.getDate() - 1);
-    if (start > lastNight) {
-      continue;
-    }
-    const nights = eachDayOfInterval({ start, end: lastNight });
-    for (const night of nights) {
-      const key = formatToISODate(night);
+    // Nights model lives in capacity-utils; do not re-derive "endDate - 1" here.
+    for (const night of listStayNights(assignment.startDate, assignment.endDate)) {
       roomOccupancy.set(
-        key,
-        (roomOccupancy.get(key) ?? 0) + headcountOf(assignment.personId),
+        night,
+        (roomOccupancy.get(night) ?? 0) + headcountOf(assignment.personId),
       );
     }
   }
@@ -362,10 +354,18 @@ function buildRoomDateOccupancy(
   return occupancyByRoom;
 }
 
+/**
+ * Picks the room that best fits a guest's unassigned stretch of nights.
+ *
+ * `incomingHeadcount` is the number of people the guest stands for, not the
+ * number of rows about to be written: planning a family of four as one bed is
+ * how the optimizer used to overfill a double room.
+ */
 function chooseRoomForSegment(
   rooms: readonly Room[],
   occupancyByRoom: Map<Room['id'], Map<string, number>>,
   segment: DateSegment,
+  incomingHeadcount: number,
 ): Room | undefined {
   const candidates: Array<{
     room: Room;
@@ -374,18 +374,18 @@ function chooseRoomForSegment(
   }> = [];
 
   for (const room of rooms) {
-    if (room.capacity < 1) {
+    if (room.capacity < incomingHeadcount) {
       continue;
     }
     const roomOccupancy = occupancyByRoom.get(room.id) ?? new Map<string, number>();
     const occupancies = segment.dates.map((date) => roomOccupancy.get(date) ?? 0);
-    if (occupancies.some((value) => value >= room.capacity)) {
+    if (occupancies.some((value) => value + incomingHeadcount > room.capacity)) {
       continue;
     }
 
     const isCompletelyEmpty = occupancies.every((value) => value === 0);
     const slackScore = occupancies.reduce(
-      (sum, value) => sum + (room.capacity - (value + 1)),
+      (sum, value) => sum + (room.capacity - (value + incomingHeadcount)),
       0,
     );
     candidates.push({
@@ -412,7 +412,7 @@ function planAutoAssignments(
   guests: readonly UnassignedGuest[],
   rooms: readonly Room[],
   assignments: readonly RoomAssignment[],
-  headcountOf: (personId: PersonId) => number,
+  headcountOf: HeadcountResolver,
 ): {
   readonly plans: readonly RoomAssignmentPlan[];
   readonly unplacedSegments: number;
@@ -426,9 +426,11 @@ function planAutoAssignments(
   );
 
   for (const guest of guestsByConstraint) {
+    // Count people, not rows: one guest entry can stand for a couple or a family.
+    const incomingHeadcount = headcountOf(guest.person.id);
     const segments = splitIntoDateSegments(guest.unassignedDates);
     for (const segment of segments) {
-      const room = chooseRoomForSegment(rooms, occupancyByRoom, segment);
+      const room = chooseRoomForSegment(rooms, occupancyByRoom, segment, incomingHeadcount);
       if (!room) {
         unplacedSegments += 1;
         continue;
@@ -441,7 +443,7 @@ function planAutoAssignments(
       }
 
       for (const date of segment.dates) {
-        roomOccupancy.set(date, (roomOccupancy.get(date) ?? 0) + 1);
+        roomOccupancy.set(date, (roomOccupancy.get(date) ?? 0) + incomingHeadcount);
       }
 
       plans.push({
@@ -600,13 +602,24 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     [currentTrip?.endDate],
   ),
 
-  // Effective date range for capacity calculation (defaults to full trip range)
+  // Effective date range for capacity calculation (defaults to full trip range).
+  //
+  // Two guards keep the cards from disagreeing with the timeline:
+  //  - the picker only applies in the cards view, which is the only view that
+  //    renders it; the timeline measures the whole trip, so a filter left behind
+  //    from an earlier visit must not silently change the numbers there.
+  //  - a half-made selection is ignored. react-day-picker v9 reports
+  //    `{from: D, to: D}` on the *first* click (see DateRangePicker), and a
+  //    zero-night window makes every room read as empty and claimable.
    effectiveDateRange = useMemo(() => {
-    if (selectedDateRange?.from && selectedDateRange?.to) {
-      return {
-        startDate: formatToISODate(selectedDateRange.from),
-        endDate: formatToISODate(selectedDateRange.to),
-      };
+    const from = selectedDateRange?.from;
+    const to = selectedDateRange?.to;
+    if (currentView === 'card' && from && to) {
+      const startDate = formatToISODate(from);
+      const endDate = formatToISODate(to);
+      if (startDate < endDate) {
+        return { startDate, endDate };
+      }
     }
     // Default to full trip date range
     if (currentTrip?.startDate && currentTrip?.endDate) {
@@ -616,7 +629,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       };
     }
     return null;
-  }, [selectedDateRange, currentTrip?.startDate, currentTrip?.endDate]),
+  }, [currentView, selectedDateRange, currentTrip?.startDate, currentTrip?.endDate]),
 
   // Combined loading state
    isLoading = isTripLoading || isRoomsLoading || isTransportsLoading,
@@ -1252,7 +1265,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
               <CardTitle className="text-base flex items-center gap-2">
                 <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
                 <span className="text-amber-800 dark:text-amber-200">
-                  {t('rooms.unassignedGuests', 'Guests without rooms')} ({unassignedGuests.length})
+                  {t('rooms.unassignedGuestsCount', { count: unassignedGuests.length })}
                 </span>
               </CardTitle>
               {hasCachedAssistantModel ? (

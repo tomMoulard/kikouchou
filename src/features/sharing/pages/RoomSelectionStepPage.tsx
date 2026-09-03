@@ -13,6 +13,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -30,13 +31,20 @@ import {
 } from '@/components/ui/card';
 
 import {
+  calculatePeakOccupancyByRoom,
+  createHeadcountResolver,
+  summarizeRoomOccupancy,
+} from '@/features/rooms/utils/capacity-utils';
+import {
   checkAssignmentConflict,
   createAssignment,
   getAssignmentsByTripId,
+  getPersonsByTripId,
   getRoomsByTripId,
   getTripByShareId,
 } from '@/lib/db';
 import type {
+  Person,
   PersonId,
   Room,
   RoomAssignment,
@@ -70,32 +78,6 @@ type RoomSelectionStepParams = {
  */
 const getGuestStorageKey = (shareId: string): string =>
   `kikoushou_guest_${shareId}`;
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Computes the number of current occupants for a room.
- *
- * @param room - The room to check
- * @param allAssignments - All assignments for the trip
- * @returns Number of existing assignments for this room
- */
-function getRoomOccupancy(room: Room, allAssignments: RoomAssignment[]): number {
-  return allAssignments.filter((a) => a.roomId === room.id).length;
-}
-
-/**
- * Checks whether a room has reached its maximum capacity.
- *
- * @param room - The room to check
- * @param allAssignments - All assignments for the trip
- * @returns True if the room is at or above capacity
- */
-function isRoomFull(room: Room, allAssignments: RoomAssignment[]): boolean {
-  return getRoomOccupancy(room, allAssignments) >= room.capacity;
-}
 
 // ============================================================================
 // Component
@@ -136,6 +118,8 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
   const [trip, setTrip] = useState<Trip | undefined>(undefined);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [assignments, setAssignments] = useState<RoomAssignment[]>([]);
+  /** Guests of the trip, needed only to resolve each assignment's headcount. */
+  const [persons, setPersons] = useState<Person[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   /** True when data fetching failed for a reason other than trip not existing (recoverable). */
@@ -252,10 +236,12 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
 
         let roomsData: Room[];
         let assignmentsData: RoomAssignment[];
+        let personsData: Person[];
         try {
-          [roomsData, assignmentsData] = await Promise.all([
+          [roomsData, assignmentsData, personsData] = await Promise.all([
             getRoomsByTripId(tripData.id as TripId),
             getAssignmentsByTripId(tripData.id as TripId),
+            getPersonsByTripId(tripData.id as TripId),
           ]);
         } catch (fetchError) {
           console.error('Failed to load rooms or assignments:', fetchError);
@@ -267,6 +253,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
         setTrip(tripData);
         setRooms(roomsData);
         setAssignments(assignmentsData);
+        setPersons(personsData);
       } catch (error) {
         console.error('Failed to load room selection data:', error);
         if (!cancelled && isMountedRef.current) setNotFound(true);
@@ -278,6 +265,31 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
     void loadData();
     return () => { cancelled = true; };
   }, [shareId, navigate]);
+
+  // ============================================================================
+  // Derived Values
+  // ============================================================================
+
+  /**
+   * Peak occupancy per room, over the trip's nights.
+   *
+   * The same shared helper the organiser's room cards and occupancy timeline
+   * use. This page used to count assignment *rows* with no date window at all,
+   * so a couple assigned for two nights of a ten-night trip read as "1 of 2
+   * spots taken" here and "2 of 2" on the organiser's card.
+   */
+  const peakOccupancyByRoom = useMemo(() => {
+    if (!trip) {
+      return new Map<RoomId, number>();
+    }
+    const headcountOf = createHeadcountResolver(persons);
+    return calculatePeakOccupancyByRoom(
+      assignments,
+      trip.startDate,
+      trip.endDate,
+      headcountOf,
+    );
+  }, [assignments, persons, trip]);
 
   // ============================================================================
   // Event Handlers
@@ -449,8 +461,12 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
             /* Room card list */
             <div className="space-y-3">
               {rooms.map((room) => {
-                const occupied = getRoomOccupancy(room, assignments);
-                const full = isRoomFull(room, assignments);
+                const occupancy = summarizeRoomOccupancy(
+                  room.capacity,
+                  peakOccupancyByRoom.get(room.id) ?? 0,
+                );
+                const occupied = occupancy.peakOccupancy;
+                const full = occupancy.isFull;
                 const isClaimed = claimedRoomId === room.id;
                 const isClaiming = isClaimingRoomId === room.id;
                 const occupancyPct = room.capacity > 0

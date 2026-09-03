@@ -67,6 +67,8 @@ const mockUpdateAssignment = vi.fn().mockResolvedValue(undefined);
 const mockDeleteAssignment = vi.fn().mockResolvedValue(undefined);
 const mockCheckConflict = vi.fn().mockResolvedValue(false);
 const mockGetAssignmentsByRoom = vi.fn().mockReturnValue([]);
+/** Trip-wide assignments; `undefined` means "just this room's". */
+let mockTripAssignments: RoomAssignment[] | undefined;
 const mockGetPersonById = vi.fn((id: string) =>
   mockPersons.find((p) => p.id === id),
 );
@@ -99,6 +101,12 @@ vi.mock('@/contexts/RoomContext', () => ({
 
 vi.mock('@/contexts/AssignmentContext', () => ({
   useAssignmentContext: vi.fn(() => ({
+    // The section scans every assignment in the trip to spot a guest booked in
+    // two rooms on the same night. Tests that care set `mockTripAssignments`;
+    // for the rest, the trip holds exactly this room's assignments.
+    get assignments() {
+      return mockTripAssignments ?? mockGetAssignmentsByRoom();
+    },
     getAssignmentsByRoom: mockGetAssignmentsByRoom,
     createAssignment: mockCreateAssignment,
     updateAssignment: mockUpdateAssignment,
@@ -146,10 +154,14 @@ describe('RoomAssignmentSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetAssignmentsByRoom.mockReturnValue([]);
+    mockTripAssignments = undefined;
     mockCheckConflict.mockResolvedValue(false);
     mockGetTransportsByPerson.mockReturnValue([]);
     // Reset the assignment context mock to default
     vi.mocked(useAssignmentContext).mockReturnValue({
+      get assignments() {
+        return mockTripAssignments ?? mockGetAssignmentsByRoom();
+      },
       getAssignmentsByRoom: mockGetAssignmentsByRoom,
       createAssignment: mockCreateAssignment,
       updateAssignment: mockUpdateAssignment,
@@ -174,6 +186,41 @@ describe('RoomAssignmentSection', () => {
       <RoomAssignmentSection roomId={'room-1' as RoomId} />,
     );
     expect(screen.getByText('Alice')).toBeInTheDocument();
+  });
+
+  it('flags a guest booked into two rooms on the same night', () => {
+    // The list used to pass `hasConflict={false}` unconditionally, so a double
+    // booking already stored could never surface outside the edit dialog.
+    const clashingAssignment: RoomAssignment = {
+      ...mockAssignment,
+      id: 'a2' as RoomAssignment['id'],
+      roomId: 'room-2' as RoomId,
+      startDate: '2026-07-05' as RoomAssignment['startDate'],
+      endDate: '2026-07-09' as RoomAssignment['endDate'],
+    };
+    mockGetAssignmentsByRoom.mockReturnValue([mockAssignment]);
+    mockTripAssignments = [mockAssignment, clashingAssignment];
+
+    render(<RoomAssignmentSection roomId={'room-1' as RoomId} />);
+
+    expect(screen.getAllByText('assignments.conflict').length).toBeGreaterThan(0);
+  });
+
+  it('does not flag a guest moving rooms on their check-out day', () => {
+    const nextRoomAssignment: RoomAssignment = {
+      ...mockAssignment,
+      id: 'a2' as RoomAssignment['id'],
+      roomId: 'room-2' as RoomId,
+      // Checks out of room-1 on the 8th and into room-2 the same day.
+      startDate: '2026-07-08' as RoomAssignment['startDate'],
+      endDate: '2026-07-10' as RoomAssignment['endDate'],
+    };
+    mockGetAssignmentsByRoom.mockReturnValue([mockAssignment]);
+    mockTripAssignments = [mockAssignment, nextRoomAssignment];
+
+    render(<RoomAssignmentSection roomId={'room-1' as RoomId} />);
+
+    expect(screen.queryByText('assignments.conflict')).not.toBeInTheDocument();
   });
 
   it('renders header with assignment count badge', () => {
@@ -487,6 +534,7 @@ describe('RoomAssignmentSection', () => {
 
   it('renders loading state when assignments are loading', () => {
     vi.mocked(useAssignmentContext).mockReturnValue({
+      assignments: [],
       getAssignmentsByRoom: vi.fn().mockReturnValue([]),
       createAssignment: mockCreateAssignment,
       updateAssignment: mockUpdateAssignment,

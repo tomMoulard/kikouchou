@@ -18,6 +18,11 @@ import { DraggableGuest } from '@/features/rooms/components/DraggableGuest';
 import { DraggableRoomAssignment } from '@/features/rooms/components/DraggableRoomAssignment';
 import { DroppableAssignment } from '@/features/rooms/components/DroppableAssignment';
 import { buildRoomTimelineModel } from '@/features/rooms/utils/room-timeline-utils';
+import {
+  calculatePeakOccupancyByRoom,
+  createHeadcountResolver,
+  summarizeRoomOccupancy,
+} from '@/features/rooms/utils/capacity-utils';
 import { GripVertical } from 'lucide-react';
 
 // ============================================================================
@@ -119,6 +124,18 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
         departures,
       }),
     [trip, range, rooms, assignments, arrivals, departures, personsById, t],
+  );
+
+  // Lanes describe the *layout* (how many bars stack in a row); they say nothing
+  // about how many people are in the room, because one bar can be a couple and
+  // two bars for the same guest are merged into one. Occupancy therefore comes
+  // from the shared capacity helper, exactly as the room cards get it.
+  const headcountOf = useMemo(() => createHeadcountResolver(persons), [persons]);
+
+  const peakOccupancyByRoom = useMemo(
+    () =>
+      calculatePeakOccupancyByRoom(assignments, range.startDate, range.endDate, headcountOf),
+    [assignments, range.startDate, range.endDate, headcountOf],
   );
 
   const dayCount = model.days.length;
@@ -223,10 +240,21 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
               {model.rows.map((row) => {
                 const visualLaneCount = Math.max(row.laneCount, row.room.capacity);
                 const rowHeight = Math.max(1, visualLaneCount) * TIMELINE_LANE_HEIGHT_PX;
-                const bedsFree = row.room.capacity - row.laneCount;
+                const occupancy = summarizeRoomOccupancy(
+                  row.room.capacity,
+                  peakOccupancyByRoom.get(row.room.id) ?? 0,
+                );
+                const spotsOpen = occupancy.availableSpots;
+                // Never promise a free bed the occupancy maths says is taken: a
+                // couple fills two beds from a single lane.
+                const freeBedTracks = Math.max(
+                  0,
+                  Math.min(row.room.capacity - row.laneCount, spotsOpen),
+                );
+                const hasOccupancyNote = spotsOpen > 0 || occupancy.isOverCapacity;
                 const rowAriaLabel =
-                  row.room.capacity > 1 && bedsFree > 0
-                    ? `${row.room.name}. ${t('rooms.spotsOpen', { count: bedsFree })}`
+                  spotsOpen > 0
+                    ? `${row.room.name}. ${t('rooms.spotsOpen', { count: spotsOpen })}`
                     : row.room.name;
                 const RoomGlyph = getRoomIconComponent(row.room.icon);
 
@@ -240,7 +268,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                     <div
                       className={cn(
                         'sticky left-0 z-10 bg-background border-r border-muted px-3 flex',
-                        row.room.capacity > 1
+                        hasOccupancyNote
                           ? 'flex-col items-stretch justify-center gap-0.5 py-1'
                           : 'items-center',
                       )}
@@ -249,11 +277,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                         minWidth: ROOM_COL_PX_COMPACT,
                         height: rowHeight,
                       }}
-                      title={
-                        row.room.capacity > 1
-                          ? `${row.room.name} — ${t('rooms.beds_plural', { count: row.room.capacity })}`
-                          : row.room.name
-                      }
+                      title={`${row.room.name} — ${t('rooms.beds', { count: row.room.capacity })}`}
                     >
                       <div className="flex min-w-0 items-center gap-1.5">
                         <RoomGlyph
@@ -262,14 +286,13 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                         />
                         <span className="truncate text-sm font-medium">{row.room.name}</span>
                       </div>
-                      {row.room.capacity > 1 &&
-                        (bedsFree > 0 || row.laneCount > row.room.capacity) && (
-                          <span className="text-[11px] text-muted-foreground leading-tight truncate">
-                            {bedsFree > 0
-                              ? t('rooms.spotsOpen', { count: bedsFree })
-                              : t('rooms.capacityWarning')}
-                          </span>
-                        )}
+                      {hasOccupancyNote && (
+                        <span className="text-[11px] text-muted-foreground leading-tight truncate">
+                          {spotsOpen > 0
+                            ? t('rooms.spotsOpen', { count: spotsOpen })
+                            : t('rooms.capacityWarning')}
+                        </span>
+                      )}
                     </div>
 
                     <DroppableRoom roomId={row.room.id} className="relative bg-background" disabled={false}>
@@ -306,9 +329,9 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                             />
                           ))}
 
-                        {row.laneCount < row.room.capacity &&
+                        {freeBedTracks > 0 &&
                           Array.from(
-                            { length: row.room.capacity - row.laneCount },
+                            { length: freeBedTracks },
                             (_, i) => row.laneCount + i,
                           ).map((laneIndex) => (
                             <div
