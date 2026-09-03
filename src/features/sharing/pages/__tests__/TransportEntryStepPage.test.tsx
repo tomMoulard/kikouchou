@@ -279,13 +279,72 @@ describe('TransportEntryStepPage — 4.3: submitting valid data calls createTran
       expect(mockCreateTransport).toHaveBeenCalledWith('trip1', {
         personId: 'person1',
         type: 'arrival',
-        datetime: '2026-07-15T14:30',
+        // The input holds a local wall clock; the wizard stores the instant.
+        datetime: new Date('2026-07-15T14:30').toISOString(),
         location: 'Gare de Vannes',
         transportMode: undefined,
         transportNumber: undefined,
         needsPickup: false,
       });
     });
+  });
+
+  it('normalises the datetime-local value to a UTC instant, not the raw input', async () => {
+    setStoredIdentity('abc123', { personId: 'person1', tripId: 'trip1' });
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+    mockGetTransportsByPersonId.mockResolvedValue([]);
+    mockCreateTransport.mockResolvedValue(makeTransport({ id: 'new-transport' as TransportId }));
+
+    const { user } = renderTransportEntryPage();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('sharing.transportDatetime')).toBeInTheDocument();
+    });
+
+    const datetimeInput = screen.getByLabelText('sharing.transportDatetime');
+    await user.clear(datetimeInput);
+    await user.type(datetimeInput, '2026-07-15T14:30');
+    await user.type(screen.getByLabelText(/sharing\.transportLocation/), 'Gare de Vannes');
+    await user.click(screen.getByRole('button', { name: /sharing\.transportAdd/i }));
+
+    await waitFor(() => {
+      expect(mockCreateTransport).toHaveBeenCalled();
+    });
+
+    const [, formData] = mockCreateTransport.mock.calls[0] ?? [];
+    // Instant, not wall clock: no writer may hand storage an offset-less value,
+    // or the day bucket and the [tripId+datetime] index disagree with every
+    // other writer's rows. The expected value is derived, never hard-coded, so
+    // this holds in UTC+14 and UTC-11 alike.
+    expect(formData?.datetime).toBe(new Date('2026-07-15T14:30').toISOString());
+    expect(formData?.datetime).toMatch(/Z$/u);
+  });
+
+  it('agrees with the transport form on the day bucket for the same instant', async () => {
+    setStoredIdentity('abc123', { personId: 'person1', tripId: 'trip1' });
+    mockGetTripByShareId.mockResolvedValue(makeTrip());
+    mockGetTransportsByPersonId.mockResolvedValue([]);
+    mockCreateTransport.mockResolvedValue(makeTransport({ id: 'new-transport' as TransportId }));
+
+    const { user } = renderTransportEntryPage();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('sharing.transportDatetime')).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText('sharing.transportDatetime'), '2026-07-15T14:30');
+    await user.type(screen.getByLabelText(/sharing\.transportLocation/), 'Gare de Vannes');
+    await user.click(screen.getByRole('button', { name: /sharing\.transportAdd/i }));
+
+    await waitFor(() => {
+      expect(mockCreateTransport).toHaveBeenCalled();
+    });
+
+    // What TransportForm writes for the same moment: new Date(local).toISOString().
+    const formPathValue = new Date('2026-07-15T14:30').toISOString(),
+      [, formData] = mockCreateTransport.mock.calls[0] ?? [];
+
+    expect(formData?.datetime.substring(0, 10)).toBe(formPathValue.substring(0, 10));
   });
 });
 
