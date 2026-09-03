@@ -4,11 +4,37 @@
  * Provides CRUD operations for Transport entities (arrivals/departures).
  * All operations use the Dexie.js database and branded types for type safety.
  *
+ * ## Datetime representation
+ *
+ * A transport's `datetime` is stored as a UTC ISO instant (`…Z`) and nothing
+ * else. Every write path here normalises through
+ * {@link requireTransportInstant} so a caller holding a raw `datetime-local`
+ * value (`2026-09-03T14:30`) cannot persist it, and every read path coerces
+ * through {@link toTransportInstant} so rows written before that rule — or
+ * written straight to Dexie by the Yjs bridge and the share merge applicator —
+ * are still comparable as instants.
+ *
+ * **No migration rewrites the stored rows.** An offset-less value has lost the
+ * information needed to place it on the timeline: the only way to interpret it
+ * is to guess a zone. Read-time coercion guesses the *reading* device's zone,
+ * which for a locally entered row is the zone it was typed in, and it stays a
+ * guess — reversible, and re-evaluated on whichever device reads. A Dexie
+ * upgrade would instead bake one device's guess into the shared document, sync
+ * it to every peer as fact, and be irreversible. For rows that arrived over
+ * sync from a peer in another zone the guess is simply wrong, and no migration
+ * can make it right. So the ambiguity is contained rather than laundered:
+ * ordering and day bucketing become self-consistent on each device, and the
+ * cross-device skew of legacy rows is accepted and documented.
+ *
  * @module lib/db/repositories/transport-repository
  */
 
 import { db } from '@/lib/db/database';
 import { sanitizeTransportData } from '@/lib/db/sanitize';
+import {
+  requireTransportInstant,
+  toTransportInstant,
+} from '@/lib/db/transport-datetime';
 import { createTransportId } from '@/lib/db/utils';
 import type {
   PersonId,
@@ -17,6 +43,48 @@ import type {
   TransportId,
   TripId,
 } from '@/types';
+
+// ============================================================================
+// Datetime Normalisation
+// ============================================================================
+
+/**
+ * Re-expresses a row read back from Dexie as a UTC instant.
+ *
+ * Rows predating write-time normalisation, and rows written straight to Dexie
+ * by the Yjs bridge or the share merge applicator, can still carry a bare
+ * `2026-09-03T14:30` or an offset form. Every consumer of this repository
+ * orders and buckets by the raw string, so they are coerced here — the reader
+ * sees one representation whatever the writer used.
+ *
+ * Coercion is deliberately read-only. See the module note on migration.
+ *
+ * @param transport - A row as stored
+ * @returns The same object when already canonical, a coerced copy otherwise
+ */
+function toCanonicalRow(transport: Transport): Transport {
+  const instant = toTransportInstant(transport.datetime);
+
+  return instant === undefined || instant === transport.datetime
+    ? transport
+    : { ...transport, datetime: instant };
+}
+
+/**
+ * Coerces a result set and sorts it by instant.
+ *
+ * The sort is not redundant with the `[tripId+datetime]` index: that index
+ * orders by the stored characters, so a set mixing representations comes back
+ * in the wrong order and has to be re-sorted once canonical.
+ *
+ * @param transports - Rows as stored
+ * @returns Canonical rows, ascending by instant
+ */
+function toCanonicalRows(transports: Transport[]): Transport[] {
+  return transports
+    .map(toCanonicalRow)
+    .sort((a, b) => a.datetime.localeCompare(b.datetime));
+}
 
 /**
  * Creates a new transport in the database.
@@ -43,13 +111,17 @@ export async function createTransport(
   data: TransportFormData,
 ): Promise<Transport> {
   // Sanitize input data (trim whitespace, enforce max lengths)
-  const sanitizedData = sanitizeTransportData(data);
+  const sanitizedData = sanitizeTransportData(data),
+    // Normalise before the try: an unparseable datetime is a caller bug and
+    // deserves its own message rather than the generic create failure below.
+    datetime = requireTransportInstant(sanitizedData.datetime);
 
   try {
     const transport: Transport = {
       id: createTransportId(),
       tripId,
       ...sanitizedData,
+      datetime,
     };
 
     await db.transports.add(transport);
@@ -65,7 +137,10 @@ export async function createTransport(
 /**
  * Retrieves all transports for a trip, ordered by datetime.
  *
- * Uses the compound index [tripId+datetime] for efficient querying.
+ * Uses the compound index [tripId+datetime] for efficient querying. The index
+ * orders by the stored characters, so results are re-sorted after coercion —
+ * a trip mixing representations is otherwise returned in literal-string order,
+ * which is not instant order.
  *
  * @param tripId - The trip ID to filter by
  * @returns Array of transports sorted by datetime ascending
@@ -76,10 +151,12 @@ export async function createTransport(
  * ```
  */
 export async function getTransportsByTripId(tripId: TripId): Promise<Transport[]> {
-  return db.transports
+  const transports = await db.transports
     .where('[tripId+datetime]')
     .between([tripId, ''], [tripId, '\uffff'])
     .toArray();
+
+  return toCanonicalRows(transports);
 }
 
 /**
@@ -101,8 +178,7 @@ export async function getTransportsByPersonId(
     .equals(personId)
     .toArray();
 
-  // Sort by datetime
-  return transports.sort((a, b) => a.datetime.localeCompare(b.datetime));
+  return toCanonicalRows(transports);
 }
 
 /**
@@ -123,7 +199,7 @@ export async function getArrivals(tripId: TripId): Promise<Transport[]> {
     .filter((t) => t.type === 'arrival')
     .toArray();
 
-  return transports.sort((a, b) => a.datetime.localeCompare(b.datetime));
+  return toCanonicalRows(transports);
 }
 
 /**
@@ -144,7 +220,7 @@ export async function getDepartures(tripId: TripId): Promise<Transport[]> {
     .filter((t) => t.type === 'departure')
     .toArray();
 
-  return transports.sort((a, b) => a.datetime.localeCompare(b.datetime));
+  return toCanonicalRows(transports);
 }
 
 /**
@@ -161,7 +237,9 @@ export async function getDepartures(tripId: TripId): Promise<Transport[]> {
 export async function getTransportById(
   id: TransportId,
 ): Promise<Transport | undefined> {
-  return db.transports.get(id);
+  const transport = await db.transports.get(id);
+
+  return transport === undefined ? undefined : toCanonicalRow(transport);
 }
 
 /**
@@ -188,6 +266,9 @@ export async function updateTransport(
 ): Promise<void> {
   // Sanitize input data (trim whitespace, enforce max lengths)
   const sanitizedData: Partial<TransportFormData> = { ...data };
+  if (sanitizedData.datetime !== undefined) {
+    sanitizedData.datetime = requireTransportInstant(sanitizedData.datetime);
+  }
   if (sanitizedData.location !== undefined) {
     sanitizedData.location = sanitizeTransportData({
       location: sanitizedData.location,
@@ -280,22 +361,30 @@ export async function getUpcomingPickups(
   tripId: TripId,
   fromDatetime?: string,
 ): Promise<Transport[]> {
-  const now = fromDatetime ?? new Date().toISOString(),
+  // The cutoff is normalised too: a caller may pass a local-shaped value, and
+  // comparing that against canonical rows would be the same category of bug.
+  const now = requireTransportInstant(fromDatetime ?? new Date().toISOString()),
 
    transports = await db.transports
     .where('tripId')
     .equals(tripId)
-    .filter((t) => t.needsPickup && t.datetime >= now)
+    .filter((t) => t.needsPickup)
     .toArray();
 
-  return transports.sort((a, b) => a.datetime.localeCompare(b.datetime));
+  // Coerce before comparing: a legacy row's stored characters do not order
+  // against an ISO instant, so filtering on the raw value drops or keeps the
+  // wrong rows.
+  return toCanonicalRows(transports).filter((t) => t.datetime >= now);
 }
 
 /**
- * Gets transports for a trip on a specific date.
+ * Gets transports for a trip on a specific UTC date.
+ *
+ * The day is taken from the canonical instant, so the bucket a row falls in
+ * does not depend on which writer produced it.
  *
  * @param tripId - The trip ID to search within
- * @param date - The date to filter by (YYYY-MM-DD)
+ * @param date - The UTC date to filter by (YYYY-MM-DD)
  * @returns Array of transports on the given date, sorted by datetime
  *
  * @example
@@ -307,14 +396,14 @@ export async function getTransportsForDate(
   tripId: TripId,
   date: string,
 ): Promise<Transport[]> {
-  // Match datetimes that start with the date (YYYY-MM-DD)
   const transports = await db.transports
     .where('tripId')
     .equals(tripId)
-    .filter((t) => t.datetime.startsWith(date))
     .toArray();
 
-  return transports.sort((a, b) => a.datetime.localeCompare(b.datetime));
+  // Match on the canonical instant, not the stored characters: the day of a
+  // row is its UTC day for every row or for none, never per representation.
+  return toCanonicalRows(transports).filter((t) => t.datetime.startsWith(date));
 }
 
 /**
@@ -351,7 +440,7 @@ export async function getTransportsByDriverId(
     .equals(driverId)
     .toArray();
 
-  return transports.sort((a, b) => a.datetime.localeCompare(b.datetime));
+  return toCanonicalRows(transports);
 }
 
 // ============================================================================
@@ -387,7 +476,12 @@ export async function updateTransportWithOwnershipCheck(
       throw new Error('Cannot update transport: transport does not belong to current trip');
     }
 
-    await db.transports.update(id, data);
+    await db.transports.update(
+      id,
+      data.datetime === undefined
+        ? data
+        : { ...data, datetime: requireTransportInstant(data.datetime) },
+    );
   });
 }
 
