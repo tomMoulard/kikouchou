@@ -153,6 +153,18 @@ interface TransportProviderProps {
 // ============================================================================
 
 /**
+ * Deep equality for an optional lat/lon pair.
+ *
+ * A nested object is a new reference on every live-query read, so it has to be
+ * compared field by field; `a.coordinates === b.coordinates` would report every
+ * transport as changed and defeat the whole memoisation.
+ */
+const areCoordinatesEqual = (
+  a: Transport['coordinates'],
+  b: Transport['coordinates'],
+): boolean => a === b || (a?.lat === b?.lat && a?.lon === b?.lon);
+
+/**
  * Comparison function for Transport objects.
  * Compares all mutable properties to ensure refs are updated when any transport property is modified.
  */
@@ -167,7 +179,14 @@ const compareTransports = (a: Transport, b: Transport): boolean =>
   a.location === b.location &&
   a.transportMode === b.transportMode &&
   a.transportNumber === b.transportNumber &&
-  a.notes === b.notes;
+  a.notes === b.notes &&
+  // The three map fields, listed because the comparator must cover every
+  // mutable field. Without them, moving a pin or naming a starting point left
+  // `transports` holding the old place: the map kept drawing the old marker and
+  // the old route until some unrelated field happened to change too.
+  a.startLocation === b.startLocation &&
+  areCoordinatesEqual(a.coordinates, b.coordinates) &&
+  areCoordinatesEqual(a.startCoordinates, b.startCoordinates);
 
 /**
  * Compares two transport arrays for equality based on IDs and all mutable properties.

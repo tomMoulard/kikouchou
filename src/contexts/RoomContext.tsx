@@ -115,7 +115,11 @@ const compareRooms = (a: Room, b: Room): boolean =>
   a.order === b.order &&
   a.name === b.name &&
   a.capacity === b.capacity &&
-  a.description === b.description;
+  a.description === b.description &&
+  // The room's icon. Listed because the comparator must cover every mutable
+  // field — without it, changing a room's icon left `rooms` holding the old
+  // one until some unrelated field changed too.
+  a.icon === b.icon;
 
 /**
  * Compares two room arrays for equality based on IDs and all mutable properties.
