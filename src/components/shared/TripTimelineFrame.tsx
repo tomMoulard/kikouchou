@@ -252,7 +252,17 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
                       {...(isToday ? { 'aria-current': 'date' as const } : {})}
                     >
                       <div className="flex flex-col items-center leading-none">
-                        <div className="text-[10px] text-muted-foreground/80 truncate">
+                        {/*
+                          Full-strength `muted-foreground`, not `/80`.
+
+                          At 10px this is normal-size text, so WCAG AA wants
+                          4.5:1. The 80% tint measured 4.24:1 on the white
+                          header and 3.59:1 over today's `bg-primary/12`
+                          column; at full strength it is 6.9:1 and 5.4:1.
+                          Dropping the opacity is what let `color-contrast`
+                          be turned back on in `e2e/accessibility.spec.ts`.
+                        */}
+                        <div className="text-[10px] text-muted-foreground truncate">
                           {monthLabel}
                         </div>
                         <div
