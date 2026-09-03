@@ -793,9 +793,9 @@ describe('EventDetailDialog - Transport Events', () => {
         expect(screen.getByText('confirm.deleteTransport')).toBeInTheDocument();
       });
 
-      // Find all dialogs and get the confirmation dialog
-      const dialogs = screen.getAllByRole('dialog');
-      const confirmDialog = dialogs[dialogs.length - 1]!; // Confirmation dialog is the second one (non-null assertion)
+      // The confirmation is an alert dialog, so it names itself: no more
+      // "take the last of the dialogs and hope it is the right one".
+      const confirmDialog = screen.getByRole('alertdialog');
 
       // Click confirm button in the confirmation dialog
       const confirmButton = within(confirmDialog).getByRole('button', { name: /common\.delete/i });
@@ -830,9 +830,8 @@ describe('EventDetailDialog - Transport Events', () => {
         expect(screen.getByText('confirm.deleteTransport')).toBeInTheDocument();
       });
 
-      // Get confirmation dialog
-      const dialogs = screen.getAllByRole('dialog');
-      const confirmDialog = dialogs[dialogs.length - 1]!;
+      // Get confirmation dialog — an alert dialog, distinct from the event one.
+      const confirmDialog = screen.getByRole('alertdialog');
 
       // Confirm delete
       const confirmButton = within(confirmDialog).getByRole('button', { name: /common\.delete/i });
@@ -868,9 +867,8 @@ describe('EventDetailDialog - Transport Events', () => {
         expect(screen.getByText('confirm.deleteTransport')).toBeInTheDocument();
       });
 
-      // Get confirmation dialog
-      const dialogs = screen.getAllByRole('dialog');
-      const confirmDialog = dialogs[dialogs.length - 1]!;
+      // Get confirmation dialog — an alert dialog, distinct from the event one.
+      const confirmDialog = screen.getByRole('alertdialog');
 
       // Confirm delete
       const confirmButton = within(confirmDialog).getByRole('button', { name: /common\.delete/i });
@@ -909,9 +907,8 @@ describe('EventDetailDialog - Transport Events', () => {
         expect(screen.getByText('confirm.deleteTransport')).toBeInTheDocument();
       });
 
-      // Get confirmation dialog
-      const dialogs = screen.getAllByRole('dialog');
-      const confirmDialog = dialogs[dialogs.length - 1]!;
+      // Get confirmation dialog — an alert dialog, distinct from the event one.
+      const confirmDialog = screen.getByRole('alertdialog');
 
       // Click cancel
       const cancelButton = within(confirmDialog).getByRole('button', { name: /common\.cancel/i });

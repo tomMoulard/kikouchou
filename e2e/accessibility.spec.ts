@@ -486,11 +486,11 @@ test.describe('Dialog Focus Management', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // Focus should be inside the dialog
-    const activeElement = await page.evaluate(() => {
-      const active = document.activeElement;
-      return active?.closest('[role="dialog"]') !== null;
-    });
+    // Focus should be inside the dialog (see the Boolean() note below — the old
+    // `!== null` form here could not fail either).
+    const activeElement = await page.evaluate(() =>
+      Boolean(document.activeElement?.closest('[role="dialog"]')),
+    );
     expect(activeElement).toBe(true);
 
     // Tab through all focusable elements - focus should stay within dialog
@@ -502,11 +502,15 @@ test.describe('Dialog Focus Management', () => {
     for (let i = 0; i < focusableCount + 2; i++) {
       await page.keyboard.press('Tab');
 
-      // Verify focus is still inside dialog
-      const stillInDialog = await page.evaluate(() => {
-        const active = document.activeElement;
-        return active?.closest('[role="dialog"]') !== null;
-      });
+      // Verify focus is still inside dialog.
+      //
+      // `closest()` returns null when it matches nothing, so the old
+      // `active?.closest(...) !== null` was ALSO true when `active` itself was
+      // null — the optional chain short-circuits to undefined, and undefined is
+      // not null. The assertion could not fail. Boolean() is the honest read.
+      const stillInDialog = await page.evaluate(() =>
+        Boolean(document.activeElement?.closest('[role="dialog"]')),
+      );
       expect(stillInDialog).toBe(true);
     }
 
@@ -526,23 +530,86 @@ test.describe('Dialog Focus Management', () => {
     const clearDataButton = page.getByRole('button', { name: /clear.*data/i });
     await clearDataButton.click();
 
-    // Wait for confirm dialog (alertdialog or dialog)
-    const dialog = page.getByRole('alertdialog').or(page.getByRole('dialog'));
+    // A confirmation is an alert dialog, and only an alert dialog. The old
+    // `getByRole('alertdialog').or(getByRole('dialog'))` passed whichever role
+    // shipped, which is how this stayed a plain dialog for so long.
+    const dialog = page.getByRole('alertdialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // Focus should be inside the dialog
-    const activeElement = await page.evaluate(() => {
-      const active = document.activeElement;
-      const inDialog = active?.closest('[role="dialog"]') !== null;
-      const inAlertDialog = active?.closest('[role="alertdialog"]') !== null;
-      return inDialog || inAlertDialog;
-    });
+    // Focus should be inside the dialog — on the cancel button, which is where
+    // Radix puts it so that the destructive choice is never the default one.
+    const activeElement = await page.evaluate(() =>
+      Boolean(document.activeElement?.closest('[role="alertdialog"]')),
+    );
     expect(activeElement).toBe(true);
 
     // Cancel the dialog
     const cancelButton = dialog.getByRole('button', { name: /cancel|annuler/i });
     await cancelButton.click();
     await expect(dialog).toBeHidden({ timeout: 5000 });
+  });
+});
+
+// ============================================================================
+// Test Suite: Dialogs on a short viewport
+// ============================================================================
+
+test.describe('Dialog Viewport Fit', () => {
+  // --------------------------------------------------------------------------
+  // A dialog is centred with `top-1/2 -translate-y-1/2`, so one taller than the
+  // viewport used to run off the top AND the bottom at once, with nothing to
+  // scroll: the title and the Save button were both unreachable at the same
+  // time. The cap now lives in `DialogContent` itself.
+  // --------------------------------------------------------------------------
+  test('a tall dialog scrolls itself instead of clipping off both edges', async ({
+    page,
+  }) => {
+    // A short phone in landscape-ish height — the shape that broke.
+    const viewport = { width: 390, height: 480 };
+    await page.setViewportSize(viewport);
+
+    const tripId = await setupTripWithData(page);
+    await page.goto(`/trips/${tripId}/rooms`);
+    await page.waitForLoadState('load');
+    await waitForLoading(page);
+
+    await openAddDialog(page);
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    // The case has to be real: a dialog that already fits proves nothing.
+    const overflows = await dialog.evaluate(
+      (el) => el.scrollHeight > el.clientHeight + 1,
+    );
+    expect(overflows).toBe(true);
+
+    // 1. The box itself is inside the viewport — neither edge is cut off.
+    const box = await dialog.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box?.y ?? -1).toBeGreaterThanOrEqual(0);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(
+      viewport.height + 1,
+    );
+
+    // 2. The header is in view at rest.
+    await expect(dialog.getByRole('heading')).toBeInViewport();
+
+    // 3. And the footer is reachable by scrolling the dialog's own container —
+    //    which is the part that did not exist before.
+    const saveButton = dialog.getByRole('button', {
+      name: /save|sauvegarder/i,
+    });
+    await saveButton.scrollIntoViewIfNeeded();
+    await expect(saveButton).toBeInViewport();
+
+    // The close button is reachable too, and big enough to hit: 44px on mobile.
+    const closeButton = dialog.getByRole('button', {
+      name: /close dialog|fermer la bo/i,
+    });
+    const closeBox = await closeButton.boundingBox();
+    expect(closeBox?.width ?? 0).toBeGreaterThanOrEqual(44);
+    expect(closeBox?.height ?? 0).toBeGreaterThanOrEqual(44);
   });
 });
 

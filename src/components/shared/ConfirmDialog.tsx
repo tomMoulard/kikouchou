@@ -1,7 +1,7 @@
 /**
  * @fileoverview Reusable confirmation dialog for destructive or important actions.
- * Wraps shadcn/ui Dialog primitives with standardized confirmation patterns
- * including loading state management for async operations.
+ * Wraps the shadcn/ui AlertDialog primitives with standardized confirmation
+ * patterns including loading state management for async operations.
  *
  * @module components/shared/ConfirmDialog
  */
@@ -13,13 +13,14 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // ============================================================================
 // Type Definitions
@@ -70,7 +71,10 @@ interface ConfirmDialogProps {
  * - Supports both default and destructive (delete) variants
  * - Handles async confirmation with loading state
  * - Prevents double-submission during loading
- * - Accessible via Radix Dialog primitives (focus trap, escape to close)
+ * - Announced as `role="alertdialog"`, so a screen reader treats "Delete this
+ *   trip?" as the interruption it is rather than as another ordinary dialog
+ * - Cannot be answered by a stray click on the backdrop (Radix AlertDialog)
+ * - Accessible via Radix AlertDialog primitives (focus trap, escape to close)
  * - Internationalized default button labels
  *
  * @param props - Component props
@@ -188,24 +192,39 @@ const ConfirmDialog = memo(function ConfirmDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className={cn('sm:max-w-[425px]', className)}>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+      <AlertDialogContent
+        className={cn('sm:max-w-[425px]', className)}
+        // Escape is the one dismissal Radix still allows; blocked mid-flight so
+        // the dialog cannot vanish while the work it started is still running.
+        onEscapeKeyDown={(event) => {
+          if (isLoading) {
+            event.preventDefault();
+          }
+        }}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          {/* Cancel button */}
-          <Button
-            type="button"
-            variant="outline"
-            className="h-11 md:h-9"
-            onClick={() => handleOpenChange(false)}
-            disabled={isLoading}
-          >
-            {resolvedCancelLabel}
-          </Button>
+        <AlertDialogFooter className="gap-2 sm:gap-0">
+          {/* Cancel button. AlertDialogCancel is what Radix focuses when the
+              dialog opens, so it has to wrap the real button rather than sit
+              beside it — an alert dialog without one opens with focus nowhere.
+              It closes the dialog itself, through `handleOpenChange`; a second
+              `onClick` here would call the consumer's `onOpenChange` twice, and
+              at least one consumer (UnsavedChangesDialog) is not idempotent. */}
+          <AlertDialogCancel asChild>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 md:h-9"
+              disabled={isLoading}
+            >
+              {resolvedCancelLabel}
+            </Button>
+          </AlertDialogCancel>
 
           {/* Confirm button */}
           <Button
@@ -227,9 +246,9 @@ const ConfirmDialog = memo(function ConfirmDialog({
               resolvedConfirmLabel
             )}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 });
 
