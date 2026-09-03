@@ -167,6 +167,63 @@ export async function seedPerson(
 }
 
 /**
+ * The fields a seeded room is given.
+ */
+export interface SeedRoomOptions {
+  readonly tripId: string;
+  readonly name: string;
+  /** Beds in the room. Must be at least 1 for the capacity badge to make sense. */
+  readonly capacity?: number;
+  readonly description?: string;
+  /** Sort position within the trip; part of the `[tripId+order]` index. */
+  readonly order?: number;
+}
+
+/**
+ * Writes one room into the `rooms` store.
+ *
+ * Same ordering rule as {@link seedPerson}: seed before the trip is current.
+ *
+ * @param page - Playwright page object
+ * @param options - The room to write
+ * @returns The new room's id
+ */
+export async function seedRoom(
+  page: Page,
+  options: SeedRoomOptions,
+): Promise<string> {
+  return await page.evaluate(async (options: SeedRoomOptions) => {
+    const id = `seed-room-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+    return new Promise<string>((resolve, reject) => {
+      const request = indexedDB.open('kikoushou');
+      request.onerror = () => reject(new Error('Failed to open database'));
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('rooms', 'readwrite');
+        tx.objectStore('rooms').add({
+          id,
+          tripId: options.tripId,
+          name: options.name,
+          capacity: options.capacity ?? 2,
+          ...(options.description === undefined ? {} : { description: options.description }),
+          order: options.order ?? 0,
+        });
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve(id);
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(new Error('Failed to create room'));
+        };
+      };
+    });
+  }, options);
+}
+
+/**
  * The fields a seeded transport is given.
  */
 export interface SeedTransportOptions {
