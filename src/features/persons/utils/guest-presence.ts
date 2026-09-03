@@ -14,9 +14,12 @@
  * @module features/persons/utils/guest-presence
  */
 
-import { eachDayOfInterval, format, parseISO } from 'date-fns';
-
 import { isDateInStayRange } from '@/features/rooms/utils/capacity-utils';
+import {
+  buildDayColumns,
+  localDayKeyOfInstant,
+  toDayKeys,
+} from '@/lib/utils/trip-days';
 import type {
   ISODateString,
   Person,
@@ -56,6 +59,18 @@ export interface GuestPresenceQuery {
 /**
  * Resolves arrival and departure calendar dates for a person.
  * Prefers explicit `stayStartDate` / `stayEndDate`; otherwise earliest arrival / latest departure transport day.
+ *
+ * Stay dates are already local day keys — `PersonForm` writes them from a date
+ * picker. Transports are not: they are stored as UTC instants
+ * (`new Date(datetimeLocalInput).toISOString()`), so their day has to be *read*
+ * with `localDayKeyOfInstant` rather than sliced off the front of the string.
+ * A 00:30 arrival in Paris is stored at 22:30Z the evening before, and slicing
+ * started that guest's stay a day early — the timeline drew them a column left
+ * of where they land and the room maths charged them an extra night.
+ *
+ * Transports whose datetime will not parse are skipped: a bound derived from an
+ * unreadable instant is worse than no bound at all, because it silently wins the
+ * min/max comparison.
  */
 export function deriveGuestStayDateBounds(
   person: Person,
@@ -70,8 +85,8 @@ export function deriveGuestStayDateBounds(
 
   if (!arrivalDate) {
     for (const arrival of personArrivals) {
-      const date = arrival.datetime.slice(0, 10) as ISODateString;
-      if (!arrivalDate || date < arrivalDate) {
+      const date = localDayKeyOfInstant(arrival.datetime);
+      if (date && (!arrivalDate || date < arrivalDate)) {
         arrivalDate = date;
       }
     }
@@ -79,8 +94,8 @@ export function deriveGuestStayDateBounds(
 
   if (!departureDate) {
     for (const departure of personDepartures) {
-      const date = departure.datetime.slice(0, 10) as ISODateString;
-      if (!departureDate || date > departureDate) {
+      const date = localDayKeyOfInstant(departure.datetime);
+      if (date && (!departureDate || date > departureDate)) {
         departureDate = date;
       }
     }
@@ -175,14 +190,11 @@ export function buildGuestIdsByTripDateMap(args: {
   const { persons, arrivals, departures, assignments, tripStartDate, tripEndDate } = args;
 
   const map = new Map<ISODateString, PersonId[]>();
-  const start = parseISO(tripStartDate);
-  const end = parseISO(tripEndDate);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
-    return map;
-  }
 
-  for (const d of eachDayOfInterval({ start, end })) {
-    const key = format(d, 'yyyy-MM-dd') as ISODateString;
+  // `buildDayColumns` owns the day axis: it rejects unparseable or inverted
+  // bounds and hands back keys in the same local convention the callers ask
+  // with, so this module never names a date converter of its own.
+  for (const key of toDayKeys(buildDayColumns(tripStartDate, tripEndDate))) {
     const ids = persons
       .filter((person) =>
         isGuestOnSiteOnDate({ person, arrivals, departures, assignments, dateKey: key }),

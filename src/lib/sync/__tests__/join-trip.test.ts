@@ -17,6 +17,7 @@ import {
   materialiseJoinedTrip,
 } from '@/lib/sync/join-trip';
 import type { ShareId, TripId, UnixTimestamp } from '@/types';
+import { toLocalISODateString } from '@/lib/db/utils';
 import { isoDate } from '@/test/utils';
 
 // ============================================================================
@@ -156,6 +157,32 @@ describe('materialiseJoinedTrip', () => {
 
     // An unparseable date would poison every date-range query for this trip.
     expect(trip?.startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // …and "today" is the viewer's day, since `Trip.startDate` is a local day key.
+    expect(trip?.startDate).toBe(toLocalISODateString(new Date()));
+    expect(trip?.endDate).toBe(toLocalISODateString(new Date()));
+  });
+
+  // Regression: the fallback read `new Date().toISOString().slice(0, 10)`, the
+  // UTC day. Pinned to half past midnight and half past eleven local, that is
+  // the wrong day for every viewer ahead of UTC and behind it respectively —
+  // the placeholder trip opened on a day the user was not looking at.
+  it.each([
+    ['just after local midnight', 0, 30],
+    ['just before local midnight', 23, 30],
+  ])('derives today locally when the clock reads %s', async (_label, hour, minute) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.setSystemTime(new Date(2026, 6, 15, hour, minute));
+
+      const client = clientWithTrip({ name: 'Brittany', start_date: '', end_date: '' });
+      const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
+      const trip = await db.trips.get((result as { tripId: TripId }).tripId);
+
+      expect(trip?.startDate).toBe('2026-07-15');
+      expect(trip?.endDate).toBe('2026-07-15');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('substitutes a name when the server sends none', async () => {

@@ -18,7 +18,7 @@ import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import { nanoid } from 'nanoid';
 
 import { db } from '@/lib/db/database';
-import { toISODateStringFromString } from '@/lib/db/utils';
+import { toISODateStringFromString, toLocalISODateString } from '@/lib/db/utils';
 import type { ShareId, Trip, TripId, UnixTimestamp } from '@/types';
 
 // ============================================================================
@@ -72,7 +72,11 @@ async function fetchRemoteTripPreview(
  * today rather than poisoning every date query with an unparseable value.
  */
 function sanitisePreview(preview: RemoteTripPreview | null): RemoteTripPreview {
-  const today = new Date().toISOString().slice(0, 10);
+  // The viewer's own calendar day, not UTC: these become `Trip.startDate` /
+  // `Trip.endDate`, which the whole app reads as local day keys. Deriving the
+  // fallback in UTC handed a Paris user yesterday's date for most of the
+  // evening, and the placeholder trip opened on the wrong day.
+  const today = toLocalISODateString(new Date());
   if (!preview) {
     return { name: 'Shared trip', startDate: today, endDate: today };
   }
