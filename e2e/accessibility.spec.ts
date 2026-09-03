@@ -20,7 +20,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { clearIndexedDB } from './support/storage';
-import { waitForRoute } from './support/routes';
 import { seedPerson, seedRoom, seedTrip } from './support/seed';
 
 // ============================================================================
@@ -198,13 +197,23 @@ async function setColorScheme(
  * This used to swallow its own timeout with `.catch(() => {})`, which meant a
  * page that never finished loading was scanned anyway — and a suspense
  * fallback has no violations, so every one of these tests passed by finding
- * nothing. {@link waitForRoute} is a real `expect` with a stated timeout, so
- * the test now fails instead of quietly asserting nothing.
+ * nothing at all. It is a real `expect` now, so the test fails instead.
+ *
+ * Same assertion as `waitForRoute` in `e2e/support/routes.ts`, with a longer
+ * stated timeout.
+ * Measured: the calendar and rooms chunks are the two heaviest routes, and
+ * against a cold dev server serving several of these tests in parallel they
+ * were still on the fallback at 15s. That is a property of the dev server, not
+ * of the page, so the wait is widened here rather than in the shared helper —
+ * and widened, not deleted, because a wait that cannot fail is what this
+ * function was sent to stop being.
  *
  * @param page - Playwright page object
  */
 async function waitForLoading(page: Page): Promise<void> {
-  await waitForRoute(page);
+  await expect(page.getByRole('status').filter({ hasText: /loading/i })).toHaveCount(0, {
+    timeout: 30_000,
+  });
 }
 
 /**
