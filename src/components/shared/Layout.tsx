@@ -10,6 +10,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -252,6 +253,34 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
   const navigate = useNavigate();
   const location = useLocation();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  // One shared description for every trip-gated link in this nav. The sheet
+  // needs its own copy: Radix marks the rest of the document `aria-hidden`
+  // while it is open, and a description that lives in an aria-hidden subtree is
+  // not reliably announced.
+  const disabledHintId = useId();
+  const sheetDisabledHintId = useId();
+  // Every trip-gated item shares one reason, so one flag decides whether the
+  // hint is worth putting in the accessibility tree at all.
+  const hasDisabledItems = tripId === null;
+
+  const sheetNavRef = useRef<HTMLElement>(null);
+  /*
+    Radix's focus scope skips natively `disabled` nodes but not `aria-disabled`
+    ones, and this sheet has no close button to catch focus first. Swapping the
+    attribute therefore moved the sheet's opening focus onto "Guests" — the
+    first item in the list and, with no trip, disabled. Steer it to the first
+    item that actually works; if none does, leave Radix to its default so the
+    focus trap still has somewhere to put it.
+  */
+  const handleSheetOpenAutoFocus = useCallback((event: Event) => {
+    const firstEnabled = sheetNavRef.current?.querySelector<HTMLElement>(
+      'button:not([aria-disabled="true"])',
+    );
+    if (firstEnabled) {
+      event.preventDefault();
+      firstEnabled.focus();
+    }
+  }, []);
 
   const handleMoreItemClick = useCallback((path: string) => {
     setIsMoreOpen(false);
@@ -286,26 +315,46 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
 
             return (
               <li key={item.pathSuffix} className="flex-1">
+                {/*
+                  Disabled, not removed: no `tabIndex={-1}` and no
+                  `pointer-events-none`. A control taken out of the tab order is
+                  a control a keyboard or screen-reader user never learns
+                  exists, and the nav silently changes shape as trips come and
+                  go. It stays focusable, announces itself as disabled through
+                  `aria-disabled`, says why through `aria-describedby`, and is
+                  stopped from navigating in the handler instead.
+                */}
                 <NavLink
                   to={path}
                   onClick={(e) => { if (isDisabled) e.preventDefault(); }}
-                  tabIndex={isDisabled ? -1 : undefined}
                   className={({ isActive }) =>
                     cn(
                       'flex flex-col items-center justify-center gap-1 py-2 text-xs transition-colors',
                       'hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      isActive
+                      isActive && !isDisabled
                         ? 'text-primary font-medium'
                         : 'text-muted-foreground',
-                      isDisabled && 'opacity-50 pointer-events-none',
+                      // No hover affordance on something that cannot be used.
+                      isDisabled && 'cursor-not-allowed opacity-50 hover:text-muted-foreground',
                     )
                   }
                   aria-disabled={isDisabled || undefined}
+                  /*
+                    `buildNavPath` falls back to '/trips' for every trip-gated
+                    item while no trip is chosen, and `NavLink` has no `end`, so
+                    on the trips page react-router marked all three of them
+                    current at once. Tabbing the bar then announced three
+                    consecutive "current page" links on the one screen where
+                    none of them works. 'false' is a real `aria-current` value
+                    and the only way to override NavLink's own default.
+                  */
+                  aria-current={isDisabled ? 'false' : 'page'}
+                  aria-describedby={isDisabled ? disabledHintId : undefined}
                 >
                   {({ isActive }) => (
                     <>
                       <item.icon
-                        className={cn('h-5 w-5', isActive && 'text-primary')}
+                        className={cn('h-5 w-5', isActive && !isDisabled && 'text-primary')}
                         aria-hidden="true"
                       />
                       <span>{t(item.labelKey)}</span>
@@ -334,6 +383,21 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
             </button>
           </li>
         </ul>
+        {/*
+          Outside the <ul>, which may only contain <li>. Referenced by every
+          trip-gated link above so the reason a link is unusable is announced
+          rather than left to a dimmed colour nobody can hear.
+
+          Conditional, because an sr-only span is still in the accessibility
+          tree: rendered unconditionally, a screen-reader user swiping the
+          bottom bar hears "choose a trip first" on every screen of the app,
+          including the ones where nothing is gated at all.
+        */}
+        {hasDisabledItems ? (
+          <span id={disabledHintId} className="sr-only">
+            {t('nav.requiresTrip', 'Choose a trip first to open this section')}
+          </span>
+        ) : null}
       </nav>
 
       {/* "More" bottom sheet */}
@@ -343,15 +407,24 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
           the bar is still visible behind the scrim — so its last row keeps clear
           of both the bar and the home indicator. `pb-nav-safe` is that sum;
           `pb-20` used to claim it and was a flat 80px with no inset in it.
+
+          `onOpenAutoFocus` is load-bearing: swapping the native `disabled`
+          attribute for `aria-disabled` stopped Radix's FocusScope skipping
+          those rows, so without this the sheet lands focus on a disabled item.
         */}
-        <SheetContent side="bottom" showCloseButton={false} className="pb-nav-safe">
+        <SheetContent
+          side="bottom"
+          showCloseButton={false}
+          className="pb-nav-safe"
+          onOpenAutoFocus={handleSheetOpenAutoFocus}
+        >
           <SheetHeader>
             <SheetTitle>{t('nav.more', 'More')}</SheetTitle>
             <SheetDescription className="sr-only">
               {t('nav.main', 'Main navigation')}
             </SheetDescription>
           </SheetHeader>
-          <nav aria-label={t('nav.moreNavigation', 'More navigation')}>
+          <nav ref={sheetNavRef} aria-label={t('nav.moreNavigation', 'More navigation')}>
             <ul className="space-y-1">
               {MOBILE_MORE_NAV_ITEMS.map((item) => {
                 const path = buildNavPath(item, tripId);
@@ -360,27 +433,41 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
 
                 return (
                   <li key={`${item.requiresTrip ? 'trip' : 'global'}-${item.pathSuffix || 'trips'}`}>
+                    {/*
+                      `aria-disabled` rather than the `disabled` attribute, for
+                      the same reason the bars above dropped `tabIndex={-1}`: a
+                      natively disabled button leaves the tab order, so someone
+                      driving this sheet from the keyboard never hears that
+                      Rooms and Guests exist and are waiting on a trip.
+                    */}
                     <button
                       type="button"
-                      onClick={() => handleMoreItemClick(path)}
-                      disabled={isDisabled}
+                      onClick={() => { if (!isDisabled) handleMoreItemClick(path); }}
+                      aria-disabled={isDisabled || undefined}
+                      aria-describedby={isDisabled ? sheetDisabledHintId : undefined}
                       className={cn(
                         'flex items-center gap-3 w-full rounded-lg px-3 py-3 text-sm min-h-[44px] transition-colors',
                         'hover:bg-accent hover:text-accent-foreground',
                         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        isActive
+                        isActive && !isDisabled
                           ? 'bg-accent text-accent-foreground font-medium'
                           : 'text-foreground',
-                        isDisabled && 'opacity-50 cursor-not-allowed',
+                        isDisabled &&
+                          'opacity-50 cursor-not-allowed hover:bg-transparent hover:text-foreground',
                       )}
                     >
-                      <item.icon className={cn('h-5 w-5 shrink-0', isActive && 'text-primary')} aria-hidden="true" />
+                      <item.icon className={cn('h-5 w-5 shrink-0', isActive && !isDisabled && 'text-primary')} aria-hidden="true" />
                       <span>{t(item.labelKey)}</span>
                     </button>
                   </li>
                 );
               })}
             </ul>
+            {hasDisabledItems ? (
+              <span id={sheetDisabledHintId} className="sr-only">
+                {t('nav.requiresTrip', 'Choose a trip first to open this section')}
+              </span>
+            ) : null}
           </nav>
         </SheetContent>
       </Sheet>
@@ -457,7 +544,7 @@ const TripInfoSection = memo(function TripInfoSection({
       </div>
 
       <div className="mt-3 pt-2 border-t border-border/60">
-        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
           {t('nav.guestsOfTheDay')}
         </p>
         <p className="sr-only">{t('nav.guestsOfTheDayHint')}</p>
@@ -519,6 +606,8 @@ const NavLinkItem = memo(function NavLinkItem({
   const hideTooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [collapsedTooltipOpen, setCollapsedTooltipOpen] = useState(false);
   const [collapsedTooltipPos, setCollapsedTooltipPos] = useState({ top: 0, left: 0 });
+  const tooltipId = useId();
+  const disabledHintId = useId();
 
   const clearHideTooltipTimer = useCallback(() => {
     if (hideTooltipTimerRef.current !== null) {
@@ -558,15 +647,66 @@ const NavLinkItem = memo(function NavLinkItem({
     };
   }, [clearHideTooltipTimer]);
 
+  const isTooltipVisible = isCollapsed && collapsedTooltipOpen;
+
+  /*
+    Expanding the sidebar hides the tooltip, so the "open" flag has to go with
+    it. `onMouseLeave` and `onBlur` are only wired up while collapsed, so
+    nothing else clears it — and a stale `true` would make the tooltip pop up
+    unprompted the next time the sidebar collapsed.
+  */
+  useEffect(() => {
+    if (!isCollapsed) {
+      closeCollapsedTooltipNow();
+    }
+  }, [isCollapsed, closeCollapsedTooltipNow]);
+
+  /*
+    Escape dismisses the tooltip, per the ARIA tooltip pattern. On `document`
+    rather than the link so it works for the pointer case too, where the tooltip
+    is open but focus is somewhere else entirely. Deliberately not stopping
+    propagation: the tooltip is not modal, and swallowing Escape here would stop
+    it reaching anything that legitimately wants it.
+  */
+  useEffect(() => {
+    if (!isTooltipVisible) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        closeCollapsedTooltipNow();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isTooltipVisible, closeCollapsedTooltipNow]);
+
+  /*
+    Both descriptions are optional and either can be absent, so build the list
+    rather than nesting ternaries. An empty string would be a dangling
+    `aria-describedby` pointing at nothing, hence the `undefined`.
+  */
+  const describedBy =
+    [isTooltipVisible ? tooltipId : null, isDisabled ? disabledHintId : null]
+      .filter((id): id is string => id !== null)
+      .join(' ') || undefined;
+
   return (
     <li className={cn(isCollapsed && 'flex justify-center')}>
+      {/*
+        Disabled, not removed from the page: no `tabIndex={-1}`, no
+        `pointer-events-none`. See the mobile bar for the reasoning — a disabled
+        control has to stay focusable to be discoverable, and `aria-disabled`
+        plus a described reason is what tells the user why it will not move.
+      */}
       <NavLink
         ref={linkRef}
         to={path}
         onClick={(e) => {
           if (isDisabled) e.preventDefault();
         }}
-        tabIndex={isDisabled ? -1 : undefined}
         aria-label={isCollapsed ? label : undefined}
         className={({ isActive }) =>
           cn(
@@ -575,14 +715,19 @@ const NavLinkItem = memo(function NavLinkItem({
             isCollapsed
               ? 'size-9 shrink-0 justify-center'
               : 'min-h-9 gap-3 px-3 py-2',
-            isActive
+            isActive && !isDisabled
               ? 'bg-primary/14 text-primary font-medium shadow-sm ring-1 ring-primary/20'
               : 'text-muted-foreground hover:bg-accent/80 hover:text-accent-foreground',
-            isActive && 'hover:bg-primary/20 hover:text-primary',
-            isDisabled && 'pointer-events-none opacity-50',
+            isActive && !isDisabled && 'hover:bg-primary/20 hover:text-primary',
+            isDisabled &&
+              'cursor-not-allowed opacity-50 hover:bg-transparent hover:text-muted-foreground',
           )
         }
         aria-disabled={isDisabled || undefined}
+        // See the mobile bar: every trip-gated path collapses to '/trips'
+        // without a trip, so react-router would mark them all current at once.
+        aria-current={isDisabled ? 'false' : 'page'}
+        aria-describedby={describedBy}
         onMouseEnter={isCollapsed ? openCollapsedTooltip : undefined}
         onMouseLeave={isCollapsed ? scheduleCloseCollapsedTooltip : undefined}
         onFocus={isCollapsed ? openCollapsedTooltip : undefined}
@@ -591,9 +736,30 @@ const NavLinkItem = memo(function NavLinkItem({
         <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
         {!isCollapsed ? <span className="truncate">{label}</span> : null}
       </NavLink>
-      {isCollapsed && collapsedTooltipOpen
+      {isDisabled ? (
+        <span id={disabledHintId} className="sr-only">
+          {t('nav.requiresTrip', 'Choose a trip first to open this section')}
+        </span>
+      ) : null}
+      {isTooltipVisible
         ? createPortal(
+            /*
+              `id` + the link's `aria-describedby` is what makes this reachable:
+              a bare `role="tooltip"` in a body portal is an orphan no screen
+              reader ever visits, because nothing points at it.
+
+              The `z-[100]` predates this component and is left alone. It does
+              sit above the `z-50` dialog/sheet/toast layer, which the app has no
+              documented scale for — the skip link uses the same number. Raising
+              or renumbering is the wrong fix; a stacking context (`isolation:
+              isolate`) is. Out of scope here, and harmless in practice: the
+              sidebar is inert behind a modal, so this cannot open over one.
+
+              Inline `style` for the position only — it is measured from the
+              link's rect every time, so there is no utility class for it.
+            */
             <div
+              id={tooltipId}
               role="tooltip"
               className={cn(
                 'pointer-events-auto fixed z-[100] -translate-y-1/2',
@@ -667,24 +833,32 @@ const DesktopSidebar = memo(function DesktopSidebar({
         <TripInfoSection trip={trip} isCollapsed={isCollapsed} />
       )}
 
-      {/* Trip navigation items - only shown when trip is selected */}
-      {trip && (
-        <nav className="flex-1 overflow-y-auto py-2" aria-label={t('nav.tripSections', 'Trip navigation')}>
-          <ul className="space-y-1 px-2">
-            {TRIP_NAV_ITEMS.map((item) => (
-              <NavLinkItem
-                key={item.pathSuffix}
-                item={item}
-                tripId={tripId}
-                isCollapsed={isCollapsed}
-              />
-            ))}
-          </ul>
-        </nav>
-      )}
+      {/*
+        Trip navigation, rendered whether or not a trip is selected.
 
-      {/* Spacer when no trip */}
-      {!trip && <div className="flex-1" />}
+        It used to be behind `{trip && …}`, which meant that on the app's
+        landing state — no trip chosen — Calendar, Rooms, Guests, Transport,
+        Activities and Analytics were absent from the DOM entirely. A sighted
+        user sees the sidebar change shape and infers those sections appear once
+        a trip exists; a screen-reader user just never learns they exist. The
+        mobile bar had always shown them disabled, so the two navigations also
+        disagreed about what the app contains.
+
+        Now they render disabled, exactly as on mobile: focusable, announced as
+        unavailable, and described with the reason.
+      */}
+      <nav className="flex-1 overflow-y-auto py-2" aria-label={t('nav.tripSections', 'Trip navigation')}>
+        <ul className="space-y-1 px-2">
+          {TRIP_NAV_ITEMS.map((item) => (
+            <NavLinkItem
+              key={item.pathSuffix}
+              item={item}
+              tripId={tripId}
+              isCollapsed={isCollapsed}
+            />
+          ))}
+        </ul>
+      </nav>
 
       {/* Yjs / P2P online count — desktop sidebar only when others are online (mobile: header above) */}
       <SyncStatusBadge collapsed={isCollapsed} layout="sidebar" />
