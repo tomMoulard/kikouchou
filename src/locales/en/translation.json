@@ -31,6 +31,7 @@
     "transports": "Transport",
     "settings": "Settings",
     "share": "Share",
+    "requiresTrip": "Choose a trip first to open this section",
     "skipToMain": "Skip to main content",
     "main": "Main navigation",
     "mobileMain": "Mobile navigation",
