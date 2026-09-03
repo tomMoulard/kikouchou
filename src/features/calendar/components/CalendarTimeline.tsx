@@ -90,7 +90,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
 
       return (
         <div
-          className="mt-1 flex items-center gap-0.5 text-[10px] text-muted-foreground"
+          className="mt-1 flex items-center gap-0.5 text-xs text-muted-foreground"
           title={label}
           data-testid={`timeline-headcount-${dayKey}`}
         >
