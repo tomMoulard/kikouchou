@@ -176,13 +176,24 @@ describe('getTransportsByTripId — instant ordering across representations', ()
     expect(stored?.datetime).toBe(rawValue);
   });
 
-  it('leaves an unparseable legacy datetime alone rather than inventing an instant', async () => {
-    const { tripId, personId } = await seedTrip();
-    await putLegacyRow(tripId, personId, 'legacy-broken', 'not-a-date');
+  it('leaves an unparseable legacy datetime alone and sorts it last', async () => {
+    const { tripId, personId } = await seedTrip(),
+      real = await createTransport(
+        tripId,
+        transportData(personId, '2026-09-03T11:00:00.000Z'),
+      ),
+      brokenId = await putLegacyRow(
+        tripId,
+        personId,
+        'legacy-broken',
+        '0000-corrupt',
+      ),
+      ordered = await getTransportsByTripId(tripId);
 
-    const [read] = await getTransportsByTripId(tripId);
-
-    expect(read?.datetime).toBe('not-a-date');
+    // A row nobody can place in time belongs at the end of a chronological
+    // list, not sorted to the top of one by its leading zeroes.
+    expect(ordered.map((t) => t.id)).toEqual([real.id, brokenId]);
+    expect(ordered[1]?.datetime).toBe('0000-corrupt');
   });
 });
 
@@ -303,6 +314,12 @@ describe('update paths — normalisation', () => {
 // ============================================================================
 
 describe('getUpcomingPickups — compares instants, not characters', () => {
+  it('treats a cleared cutoff as now rather than throwing', async () => {
+    const { tripId } = await seedTrip();
+
+    await expect(getUpcomingPickups(tripId, '')).resolves.toEqual([]);
+  });
+
   it('excludes a legacy row whose characters look future but whose instant is past', async () => {
     const { tripId, personId } = await seedTrip(),
       cutoff = '2026-09-03T12:00:00.000Z';

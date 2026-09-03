@@ -45,7 +45,7 @@ import {
   getTransportsByPersonId,
   getTripByShareId,
 } from '@/lib/db';
-import { toTransportInstant } from '@/lib/db/transport-datetime';
+import { toCanonicalDatetime } from '@/lib/db/transport-datetime';
 import { cn } from '@/lib/utils';
 import type {
   PersonId,
@@ -102,11 +102,6 @@ const TRANSPORT_MODES: readonly TransportMode[] = [
   'bus',
   'other',
 ] as const;
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
 
 
 // ============================================================================
@@ -306,7 +301,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
     // with no offset ("2026-09-03T14:30"); normalising here is what stops that
     // string reaching storage, where it would sort and bucket as characters
     // rather than as an instant.
-    const instant = toTransportInstant(datetime),
+    const instant = toCanonicalDatetime(datetime),
       newErrors: FormErrors = {};
     if (instant === undefined) {
       newErrors.datetime = t('sharing.transportDatetimeRequired', 'Date and time is required');

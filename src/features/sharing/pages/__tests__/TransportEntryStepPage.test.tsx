@@ -319,33 +319,6 @@ describe('TransportEntryStepPage — 4.3: submitting valid data calls createTran
     expect(formData?.datetime).toBe(new Date('2026-07-15T14:30').toISOString());
     expect(formData?.datetime).toMatch(/Z$/u);
   });
-
-  it('agrees with the transport form on the day bucket for the same instant', async () => {
-    setStoredIdentity('abc123', { personId: 'person1', tripId: 'trip1' });
-    mockGetTripByShareId.mockResolvedValue(makeTrip());
-    mockGetTransportsByPersonId.mockResolvedValue([]);
-    mockCreateTransport.mockResolvedValue(makeTransport({ id: 'new-transport' as TransportId }));
-
-    const { user } = renderTransportEntryPage();
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('sharing.transportDatetime')).toBeInTheDocument();
-    });
-
-    await user.type(screen.getByLabelText('sharing.transportDatetime'), '2026-07-15T14:30');
-    await user.type(screen.getByLabelText(/sharing\.transportLocation/), 'Gare de Vannes');
-    await user.click(screen.getByRole('button', { name: /sharing\.transportAdd/i }));
-
-    await waitFor(() => {
-      expect(mockCreateTransport).toHaveBeenCalled();
-    });
-
-    // What TransportForm writes for the same moment: new Date(local).toISOString().
-    const formPathValue = new Date('2026-07-15T14:30').toISOString(),
-      [, formData] = mockCreateTransport.mock.calls[0] ?? [];
-
-    expect(formData?.datetime.substring(0, 10)).toBe(formPathValue.substring(0, 10));
-  });
 });
 
 // ============================================================================
