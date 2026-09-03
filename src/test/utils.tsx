@@ -19,6 +19,7 @@
 
 import type { ReactElement, ReactNode } from 'react';
 import type { RenderOptions, RenderResult } from '@testing-library/react';
+import type { i18n as I18nInstance, Resource } from 'i18next';
 
 import { render as rtlRender } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -142,10 +143,45 @@ export function render(
   ui: ReactElement,
   options: CustomRenderOptions = {}
 ): CustomRenderResult {
+  return renderInternal(ui, options);
+}
+
+/**
+ * Options {@link render} accepts, plus the outermost wrapper that
+ * {@link renderWithRealI18n} needs and no caller outside this module may set.
+ *
+ * @internal
+ */
+interface InternalRenderOptions extends CustomRenderOptions {
+  /**
+   * Wraps the *whole* tree — router and app providers included, not just the
+   * element under test. An i18next provider has to sit out there: the
+   * providers in {@link AppProviders} translate too, and a provider nested
+   * inside them would leave their strings resolving against a different
+   * instance.
+   */
+  readonly outerWrapper?: (children: ReactNode) => ReactElement;
+}
+
+/**
+ * The single render path. {@link render} and {@link renderWithRealI18n} differ
+ * only in whether they pass an `outerWrapper`, so the routing, provider and
+ * user-event setup below stays in one place.
+ *
+ * @param ui - React element to render
+ * @param options - Render options, including the internal outer wrapper
+ * @returns Render result with user event instance
+ * @internal
+ */
+function renderInternal(
+  ui: ReactElement,
+  options: InternalRenderOptions
+): CustomRenderResult {
   const {
     initialRoute = '/',
     initialEntries,
     withProviders = true,
+    outerWrapper,
     ...renderOptions
   } = options;
 
@@ -157,10 +193,13 @@ export function render(
 
   // Create wrapper function
   function Wrapper({ children }: { children: ReactNode }): ReactElement {
-    if (withProviders) {
-      return <AllProviders initialEntries={entries}>{children}</AllProviders>;
-    }
-    return <RouterOnly initialEntries={entries}>{children}</RouterOnly>;
+    const tree = withProviders ? (
+      <AllProviders initialEntries={entries}>{children}</AllProviders>
+    ) : (
+      <RouterOnly initialEntries={entries}>{children}</RouterOnly>
+    );
+
+    return outerWrapper ? outerWrapper(tree) : tree;
   }
 
   // Render with wrapper
@@ -169,6 +208,289 @@ export function render(
   return {
     ...result,
     user,
+  };
+}
+
+// ============================================================================
+// Real i18n Rendering
+// ============================================================================
+
+/**
+ * A language the app ships a bundle for.
+ *
+ * Mirrors `SUPPORTED_LANGUAGES` in `@/lib/i18n`, which cannot be imported here:
+ * `src/test/setup.ts` mocks that module for the whole suite.
+ */
+export type TestLanguage = 'en' | 'fr';
+
+/** Every language {@link renderWithRealI18n} loads, in both directions. */
+const TEST_LANGUAGES: readonly TestLanguage[] = ['en', 'fr'];
+
+/**
+ * The language a test renders in unless it says otherwise.
+ *
+ * Matches the language the suite-wide mock reports, so switching a file over to
+ * {@link renderWithRealI18n} changes the *strings* under assertion and nothing
+ * else.
+ */
+const DEFAULT_TEST_LANGUAGE: TestLanguage = 'en';
+
+/**
+ * The app's fallback language: what a user actually sees for a key the active
+ * bundle is missing. Mirrors `DEFAULT_LANGUAGE` in `@/lib/i18n` — which is
+ * French, so an English-only key gap is a French string on an English screen,
+ * not a raw key.
+ */
+const FALLBACK_TEST_LANGUAGE: TestLanguage = 'fr';
+
+/** Told to the caller whenever a mocked i18n module reaches the helper. */
+const UNMOCK_HINT =
+  "Add `vi.unmock('i18next')` and `vi.unmock('react-i18next')` at the top of the " +
+  'test file. `src/test/setup.ts` mocks both for the whole suite, and a mocked ' +
+  '`t` returns the key instead of the translation, which is exactly what this ' +
+  'helper exists to stop.';
+
+/**
+ * Reads a named export without letting Vitest's mocked-module proxy throw.
+ *
+ * A `vi.mock` factory produces a namespace that raises on any export it did not
+ * define, so a plain destructure here would surface as
+ * `No "createInstance" export is defined on the mock` — true, but it names
+ * neither the helper nor the fix.
+ *
+ * @param module - Imported module namespace
+ * @param name - Export to read
+ * @returns The export, or undefined when the module is a mock without it
+ */
+function readExport(module: object, name: string): unknown {
+  try {
+    return (module as Record<string, unknown>)[name];
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Imports the real `i18next`, failing loudly when the suite mock is still in
+ * place.
+ *
+ * @returns The unmocked i18next module
+ * @throws Error if the test file has not called `vi.unmock('i18next')`
+ */
+async function importRealI18next(): Promise<typeof import('i18next')> {
+  const module = await import('i18next');
+
+  if (typeof readExport(module, 'createInstance') !== 'function') {
+    throw new Error(`i18next is still mocked in this test file. ${UNMOCK_HINT}`);
+  }
+
+  return module;
+}
+
+/**
+ * Imports the real `react-i18next`, failing loudly when the suite mock is still
+ * in place.
+ *
+ * @returns The unmocked react-i18next module
+ * @throws Error if the test file has not called `vi.unmock('react-i18next')`
+ */
+async function importRealReactI18next(): Promise<typeof import('react-i18next')> {
+  const module = await import('react-i18next');
+
+  if (typeof readExport(module, 'I18nextProvider') !== 'function') {
+    throw new Error(`react-i18next is still mocked in this test file. ${UNMOCK_HINT}`);
+  }
+
+  return module;
+}
+
+/** Parsed once per test file — the two bundles are ~95 KB of JSON together. */
+let bundlesPromise: Promise<Resource> | undefined;
+
+/**
+ * Loads the shipped locale files as an i18next resource tree.
+ *
+ * Deliberately a dynamic import: a static one would add the JSON parse to all
+ * 186 test files, nearly none of which render real translations.
+ *
+ * @returns Resources for every {@link TEST_LANGUAGES} entry
+ */
+async function loadBundles(): Promise<Resource> {
+  bundlesPromise ??= (async () => {
+    const [en, fr] = await Promise.all([
+      import('@/locales/en/translation.json'),
+      import('@/locales/fr/translation.json'),
+    ]);
+
+    return {
+      en: { translation: en.default },
+      fr: { translation: fr.default },
+    } satisfies Resource;
+  })();
+
+  return bundlesPromise;
+}
+
+/** One instance per language per test file; building one parses both bundles. */
+const instancesByLanguage = new Map<TestLanguage, Promise<I18nInstance>>();
+
+/**
+ * Builds a real i18next instance over the shipped locale files.
+ *
+ * @param language - Language to render in
+ * @returns An initialised i18next instance
+ */
+async function initRealI18n(language: TestLanguage): Promise<I18nInstance> {
+  const [{ createInstance }, { initReactI18next }, resources] = await Promise.all([
+    importRealI18next(),
+    importRealReactI18next(),
+    loadBundles(),
+  ]);
+
+  const instance = createInstance();
+
+  // Mirrors src/lib/i18n's init, minus the browser language detector: a test
+  // states the language it is asserting rather than inheriting jsdom's.
+  await instance.use(initReactI18next).init({
+    lng: language,
+    fallbackLng: FALLBACK_TEST_LANGUAGE,
+    supportedLngs: [...TEST_LANGUAGES],
+    defaultNS: 'translation',
+    ns: ['translation'],
+    resources,
+    interpolation: { escapeValue: false },
+    react: { useSuspense: false },
+  });
+
+  return instance;
+}
+
+/**
+ * Returns a real i18next instance for the given language, built from the two
+ * bundles the app ships.
+ *
+ * Use it when the assertion is about a string rather than a component: plural
+ * selection, interpolation, or the French wording of a key. To assert what a
+ * component renders, prefer {@link renderWithRealI18n}.
+ *
+ * The test file must unmock both i18n modules first — see {@link UNMOCK_HINT}.
+ *
+ * @param language - Language to resolve keys in (default: `'en'`)
+ * @returns An initialised i18next instance, cached per language per test file
+ *
+ * @example
+ * ```tsx
+ * vi.unmock('i18next');
+ * vi.unmock('react-i18next');
+ *
+ * const i18n = await createRealI18n('fr');
+ * expect(i18n.t('calendar.nights', { count: 0 })).toBe('0 nuit');
+ * ```
+ */
+export function createRealI18n(
+  language: TestLanguage = DEFAULT_TEST_LANGUAGE
+): Promise<I18nInstance> {
+  const cached = instancesByLanguage.get(language);
+
+  if (cached) {
+    return cached;
+  }
+
+  // Drop a failed instance rather than caching the rejection, so a second call
+  // reports the same problem instead of an unrelated "already rejected".
+  const created = initRealI18n(language).catch((error: unknown) => {
+    instancesByLanguage.delete(language);
+    throw error;
+  });
+
+  instancesByLanguage.set(language, created);
+
+  return created;
+}
+
+/**
+ * Options for {@link renderWithRealI18n}.
+ */
+export interface RealI18nRenderOptions extends CustomRenderOptions {
+  /**
+   * Language to render in.
+   * @default 'en'
+   */
+  readonly language?: TestLanguage;
+}
+
+/**
+ * Result of {@link renderWithRealI18n}.
+ */
+export interface RealI18nRenderResult extends CustomRenderResult {
+  /** The instance the tree renders through, for `t()` in expectations. */
+  readonly i18n: I18nInstance;
+}
+
+/**
+ * Renders through a real i18next over the shipped locale files, instead of the
+ * suite-wide mock that returns translation keys verbatim.
+ *
+ * @remarks
+ * `src/test/setup.ts` mocks `react-i18next` so that `t('common.save')` returns
+ * `'common.save'`. That keeps 186 test files free of translation churn, at a
+ * price: an assertion on a key proves nothing about the catalogue. Delete both
+ * locale files and every one of those tests still passes. Plural selection is
+ * never exercised (the mock drops `count`), French is unreachable, and an
+ * accessible name asserted as `common.save` is a name no user ever hears.
+ *
+ * This helper is the opt-in escape hatch. Reach for it where a translation
+ * regression would actually hurt — icon-only controls whose accessible name is
+ * their only label, counted strings, and anything whose French wording differs
+ * in form from its English.
+ *
+ * It is deliberately **not** the default: converting the whole suite is a much
+ * larger change, and key-identity rendering is genuinely convenient for tests
+ * about behaviour rather than wording.
+ *
+ * The test file must unmock both i18n modules first — `vi.mock` and
+ * `vi.unmock` are per-file, so no helper can do it on the caller's behalf.
+ *
+ * @param ui - React element to render
+ * @param options - Render options, plus the language to render in
+ * @returns Render result with the user event instance and the i18next instance
+ *
+ * @example
+ * ```tsx
+ * vi.unmock('i18next');
+ * vi.unmock('react-i18next');
+ *
+ * it('names the previous-month button in French', async () => {
+ *   await renderWithRealI18n(<CalendarHeader {...props} />, {
+ *     language: 'fr',
+ *     withProviders: false,
+ *   });
+ *
+ *   expect(screen.getByRole('button', { name: 'Mois précédent' })).toBeInTheDocument();
+ * });
+ * ```
+ */
+export async function renderWithRealI18n(
+  ui: ReactElement,
+  options: RealI18nRenderOptions = {}
+): Promise<RealI18nRenderResult> {
+  const { language = DEFAULT_TEST_LANGUAGE, ...renderOptions } = options;
+
+  const [instance, { I18nextProvider }] = await Promise.all([
+    createRealI18n(language),
+    importRealReactI18next(),
+  ]);
+
+  const result = renderInternal(ui, {
+    ...renderOptions,
+    outerWrapper: (children) => (
+      <I18nextProvider i18n={instance}>{children}</I18nextProvider>
+    ),
+  });
+
+  return {
+    ...result,
+    i18n: instance,
   };
 }
 
