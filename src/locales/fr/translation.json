@@ -22,7 +22,8 @@
     "actions": "Actions",
     "menu": "Menu",
     "openMenu": "Ouvrir le menu",
-    "optional": "facultatif"
+    "optional": "facultatif",
+    "comingSoon": "Bientôt disponible"
   },
   "nav": {
     "calendar": "Calendrier",
@@ -263,7 +264,8 @@
     "deleteSuccess": "Participant supprimé avec succès",
     "empty": "Aucun participant pour l'instant",
     "emptyDescription": "Ajoutez les amis qui participent — ils choisiront leur chambre et ajouteront leurs trajets",
-    "cardNoTransportDetail": "Pas encore de trajet renseigné"
+    "cardNoTransportDetail": "Pas encore de trajet renseigné",
+    "badgeInteractive": "Sélectionner {{name}}"
   },
   "assignments": {
     "title": "Attribution des chambres",
@@ -290,7 +292,8 @@
     "autofilledFromTransport": "Dates pré-remplies à partir des transports",
     "openInRooms": "Ouvrir la page chambres pour modifier",
     "quickAssign": "Attribuer une chambre",
-    "quickAssignDescription": "Confirmez les dates pour cette attribution de chambre."
+    "quickAssignDescription": "Confirmez les dates pour cette attribution de chambre.",
+    "dropHere": "Déposer ici"
   },
   "transports": {
     "title": "Transports",
@@ -523,6 +526,7 @@
     "notFoundWizard": "Ce lien de voyage ne semble pas fonctionner",
     "notFoundWizardDescription": "Le lien est peut-être incorrect ou le voyage n'existe plus.",
     "returning": "Bon retour ! Redirection vers le voyage...",
+    "onboardingComingSoon": "Cette étape sera bientôt disponible.",
     "identityTitle": "Qui êtes-vous ?",
     "identitySubtitle": "Sélectionnez-vous dans la liste ci-dessous",
     "identityNotOnList": "Je ne suis pas dans la liste",
@@ -607,7 +611,16 @@
       "noGuestIdentity": "Aucune identite d'invite trouvee. Vous devez d'abord importer ce voyage via un lien de partage.",
       "noBaseline": "Aucune reference d'import trouvee. Reimportez le voyage via le lien de partage.",
       "payloadTooLargeForQr": "Cet export est trop volumineux pour un QR code lisible. Copiez le texte ci-dessous et collez-le sur l’autre appareil pour l’importer.",
+      "copyAsText": "Copier le texte",
+      "copied": "Copié !",
+      "copiedToClipboard": "Copié dans le presse-papiers",
+      "copyFailed": "Échec de la copie",
       "importInstructions": "Pointez votre camera vers le QR code d'un autre participant pour importer ses modifications.",
+      "scannerLoading": "Démarrage de la caméra...",
+      "switchToCamera": "Utiliser la caméra",
+      "switchToPaste": "Coller les données manuellement",
+      "pasteHint": "Collez ici les données exportées...",
+      "importPasted": "Importer",
       "wrongTrip": "Ce QR code correspond a un autre voyage",
       "decodeError": "Impossible de decoder les donnees du QR code",
       "processing": "Traitement des modifications...",
@@ -846,7 +859,8 @@
   },
   "validation": {
     "invalidDate": "Date invalide",
-    "capacityMin": "Minimum {{min}} lit"
+    "capacityMin": "Minimum {{min}} lit",
+    "endDateBeforeStart": "La date de fin doit être identique ou postérieure à la date de début"
   },
   "errors": {
     "generic": "Une erreur est survenue",
@@ -860,7 +874,13 @@
     "loadingFailed": "Échec du chargement",
     "saveFailed": "Échec de l'enregistrement",
     "deleteFailed": "Échec de la suppression",
-    "activityNotFound": "Activité introuvable. Veuillez réessayer."
+    "activityNotFound": "Activité introuvable. Veuillez réessayer.",
+    "dev": {
+      "details": "Détails de l'erreur (développement uniquement)",
+      "error": "Erreur :",
+      "stack": "Pile d'appels :",
+      "componentStack": "Pile de composants :"
+    }
   },
   "pwa": {
     "install": "Installer l'application",

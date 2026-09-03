@@ -13,6 +13,8 @@ import userEvent from '@testing-library/user-event';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import type { Person, PersonId, TripId } from '@/types';
 import { hexColor } from '@/test/utils';
+import enTranslations from '@/locales/en/translation.json';
+import frTranslations from '@/locales/fr/translation.json';
 
 // ============================================================================
 // Test Data Factories
@@ -277,13 +279,23 @@ describe('PersonBadge Accessibility', () => {
     expect(badge).toHaveAttribute('role', 'status');
   });
 
-  it('has aria-label when interactive', () => {
+  it('has a translated aria-label when interactive', () => {
     const onClick = vi.fn();
 
     render(<PersonBadge name="Alice" color="#000" onClick={onClick} />);
 
+    // react-i18next is mocked to echo the key, so the assertion proves the
+    // label goes through t() rather than being hardcoded English.
     const badge = screen.getByText('Alice');
-    expect(badge).toHaveAttribute('aria-label', 'Alice - click to interact');
+    expect(badge).toHaveAttribute('aria-label', 'persons.badgeInteractive');
+  });
+
+  it('names the guest in the aria-label in every language', () => {
+    // The mock echoes the key, so the rendered label cannot show that the
+    // guest's name reaches the accessible name. Assert it on the bundles
+    // instead: an accessible name with no name in it breaks WCAG 2.5.3.
+    expect(enTranslations.persons.badgeInteractive).toContain('{{name}}');
+    expect(frTranslations.persons.badgeInteractive).toContain('{{name}}');
   });
 
   it('has no aria-label when not interactive', () => {
