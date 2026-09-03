@@ -657,8 +657,12 @@ const NavLinkItem = memo(function NavLinkItem({
   */
   useEffect(() => {
     if (!isCollapsed) {
-      closeCollapsedTooltipNow();
+      return;
     }
+    // Cleared in the cleanup rather than in the effect body: the cleanup runs
+    // on exactly the transition that matters — collapsed going false — and a
+    // synchronous setState in an effect body is a cascading render.
+    return closeCollapsedTooltipNow;
   }, [isCollapsed, closeCollapsedTooltipNow]);
 
   /*
