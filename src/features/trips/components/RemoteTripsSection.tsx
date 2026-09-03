@@ -10,6 +10,10 @@
  * Downloading is explicit rather than automatic. Someone with a dozen trips on a
  * metered connection should choose which ones land on this device.
  *
+ * The names here are the server's denormalised preview, not the document: this
+ * device has no document for these trips yet, which is the whole reason the
+ * section exists. Downloading one replaces the preview with the real thing.
+ *
  * @module features/trips/components/RemoteTripsSection
  */
 
@@ -61,13 +65,10 @@ export const RemoteTripsSection = memo(function RemoteTripsSection({
     <section className="mt-8 flex flex-col gap-3" aria-labelledby="remote-trips-heading">
       <div className="flex flex-col gap-1">
         <h2 id="remote-trips-heading" className="text-sm font-semibold">
-          {t('trips.remote.title', 'Trips you joined elsewhere')}
+          {t('trips.remote.title')}
         </h2>
         <p className="text-sm text-muted-foreground">
-          {t(
-            'trips.remote.description',
-            'These are on your account but not on this device yet.',
-          )}
+          {t('trips.remote.description')}
         </p>
       </div>
 
@@ -88,9 +89,16 @@ export const RemoteTripsSection = memo(function RemoteTripsSection({
                   aria-hidden="true"
                 />
               )}
-              <span className="min-w-0 flex-1 truncate text-left">{trip.name}</span>
+              <span className="min-w-0 flex-1 truncate text-left">
+                {/* The server's preview row is the only thing this device knows
+                    about the trip, and it can be blank — a row written before
+                    the name was set, or by a client that is not this one. The
+                    placeholder is translated here rather than invented in the
+                    sync layer, which has no language. */}
+                {trip.name || t('trips.untitled')}
+              </span>
               <span className="shrink-0 text-xs text-muted-foreground">
-                {t('trips.remote.download', 'Get it')}
+                {t('trips.remote.download')}
               </span>
             </Button>
           </li>

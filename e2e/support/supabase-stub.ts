@@ -286,8 +286,7 @@ export class SupabaseStub {
         await this.selectTrips(route, url);
         return;
       case 'PATCH trips':
-        // The denormalised preview. Nothing reads the result.
-        await this.json(route, 200, []);
+        await this.updateTripPreview(route, url);
         return;
       case 'GET trip_members':
         await this.selectMembers(route, url);
@@ -373,6 +372,34 @@ export class SupabaseStub {
     );
 
     await this.representation(route, rows.map((trip) => ({ ...trip })));
+  }
+
+  /**
+   * The denormalised preview, updated the way the policy allows.
+   *
+   * `owners update their trips` narrows this to the caller's own rows, so a
+   * member's attempt matches nothing — and, as in SQL, matching nothing is not
+   * an error. Returning the affected rows rather than a blanket `[]` is what
+   * lets the client tell the two apart; answering `[]` to everybody taught it
+   * that a write it never made had succeeded.
+   */
+  private async updateTripPreview(route: Route, url: URL): Promise<void> {
+    const caller = this.callerId(route);
+    const id = operand(url.searchParams.get('id'));
+    const body = this.body<Record<string, string>>(route);
+
+    const row = this.trips.find(
+      (trip) => trip.id === id && trip.owner_id === caller,
+    );
+    if (!row) {
+      await this.representation(route, []);
+      return;
+    }
+
+    row.name = body.name ?? row.name;
+    row.start_date = body.start_date ?? row.start_date;
+    row.end_date = body.end_date ?? row.end_date;
+    await this.representation(route, [{ id: row.id }]);
   }
 
   private async selectMembers(route: Route, url: URL): Promise<void> {

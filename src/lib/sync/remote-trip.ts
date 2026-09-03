@@ -12,6 +12,23 @@
  * so "create the row for this trip" resolves to the same row every time rather
  * than littering duplicates.
  *
+ * ## Which copy of a trip's name and dates wins
+ *
+ * There are three, and they are not equals:
+ *
+ * 1. The **Y.Doc** is authoritative. Every device converges on it.
+ * 2. **Dexie** holds what this device has hydrated from that document, and is
+ *    what the whole UI renders.
+ * 3. The **server `trips` row** holds a denormalised *preview* — name and dates
+ *    only — for the one case the other two cannot serve: a device that is a
+ *    member of a trip it has never downloaded. It is a cache, never a source.
+ *
+ * The preview is therefore allowed to lag, but it must not lag *silently*, and
+ * this module is where it is kept honest: every write asks for the affected rows
+ * back and reports what happened, and `ensureRemoteTrip` republishes it whenever
+ * it finds it out of step — which is the moment a link is about to be handed to
+ * somebody whose only source it is.
+ *
  * @module lib/sync/remote-trip
  */
 
@@ -32,9 +49,66 @@ export type EnsureRemoteTripResult =
   | { readonly status: 'missing' }
   | { readonly status: 'error'; readonly message: string };
 
+/**
+ * What happened to the denormalised preview.
+ *
+ * Deliberately not `void`. The update is an UPDATE narrowed by RLS to rows this
+ * account owns, so it matches nothing at all on a *member's* device — and an
+ * UPDATE matching no row succeeds, with no error and no rows. Reported as a
+ * status rather than swallowed, so "the preview is stale and this device cannot
+ * fix it" is a fact a caller can see instead of silence.
+ */
+export type SyncPreviewResult =
+  /** No client, or the trip has never been shared. Nothing to keep in step. */
+  | { readonly status: 'skipped' }
+  | { readonly status: 'updated' }
+  /**
+   * The UPDATE matched no row. Either this account does not own the trip
+   * (`owners update their trips`) or the row is gone. Not this device's problem
+   * to solve, and not an error to shout about — but not a success either.
+   */
+  | { readonly status: 'not-applied' }
+  | { readonly status: 'error'; readonly message: string };
+
+/** The server's preview columns for one trip. */
+interface RemotePreview {
+  readonly name: string;
+  readonly startDate: string;
+  readonly endDate: string;
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * The server's own bound: `check (length(name) between 1 and 200)`.
+ *
+ * The trip form clips a name to 100, but a name adopted from a peer's document
+ * never passes through that sanitiser, so an over-long one can and does reach
+ * Dexie. Sent as-is it fails the check constraint — as a silently dropped
+ * preview update, and as an outright failure to share. The preview is a cache,
+ * so clipping it costs nothing the document does not still hold in full.
+ */
+const MAX_PREVIEW_NAME_LENGTH = 200;
+
 // ============================================================================
 // Internals
 // ============================================================================
+
+/**
+ * The name as the server will accept it: trimmed, and clipped to its check
+ * constraint.
+ *
+ * A name of nothing but whitespace keeps its whitespace. Trimming it to `''`
+ * would fail `length(name) between 1 and 200` — turning a share that used to
+ * work into a database error in the share dialog, over a name nobody can see
+ * anyway.
+ */
+function previewName(name: string): string {
+  const trimmed = name.trim().slice(0, MAX_PREVIEW_NAME_LENGTH);
+  return trimmed || name.slice(0, MAX_PREVIEW_NAME_LENGTH);
+}
 
 /**
  * Reads back the row for a trip already uploaded by this owner.
@@ -69,30 +143,67 @@ async function rememberRemoteTripId(
   await db.trips.update(tripId, { remoteTripId });
 }
 
+/** The state of the server row a local trip points at. */
+type RemoteTripState =
+  | { readonly status: 'present'; readonly preview: RemotePreview | null }
+  | { readonly status: 'absent' }
+  /** The question could not be answered. Never the same as "absent". */
+  | { readonly status: 'unknown' };
+
 /**
- * Whether the server row this trip points at still exists.
+ * Looks up the server row this trip points at.
  *
- * Null means the question could not be answered, which the caller must not read
- * as "deleted" — creating a duplicate row on every failed check would be far
- * worse than doing nothing.
+ * `unknown` is not "deleted", and the caller must not treat it as one: creating
+ * a duplicate row on every failed check would be far worse than doing nothing.
+ *
+ * The preview columns come back with it rather than `id` alone: the same round
+ * trip that answers "is it still there?" also answers "does it still say what
+ * this device says?", which is what makes republishing free.
  */
-async function remoteTripExists(
+async function readRemoteTrip(
   client: TypedSupabaseClient,
   remoteTripId: string,
-): Promise<boolean | null> {
+): Promise<RemoteTripState> {
   try {
     const { data, error } = await client
       .from('trips')
-      .select('id')
+      .select('id, name, start_date, end_date')
       .eq('id', remoteTripId)
       .limit(1);
     if (error) {
-      return null;
+      return { status: 'unknown' };
     }
-    return Array.isArray(data) && data.length > 0;
+    if (!Array.isArray(data) || data.length === 0) {
+      return { status: 'absent' };
+    }
+
+    // Remote-supplied, so read defensively: a row missing its preview columns is
+    // still a row that exists, which is the question that must not be got wrong.
+    const row = data[0] as Record<string, unknown> | undefined;
+    const name = row?.name;
+    const startDate = row?.start_date;
+    const endDate = row?.end_date;
+    const preview =
+      typeof name === 'string' &&
+      typeof startDate === 'string' &&
+      typeof endDate === 'string'
+        ? { name, startDate, endDate }
+        : null;
+
+    return { status: 'present', preview };
   } catch {
-    return null;
+    return { status: 'unknown' };
   }
+}
+
+/** Whether the server's preview still describes the trip on this device. */
+function previewMatches(preview: RemotePreview | null, trip: Trip): boolean {
+  return (
+    preview !== null &&
+    preview.name === previewName(trip.name) &&
+    preview.startDate === trip.startDate &&
+    preview.endDate === trip.endDate
+  );
 }
 
 /**
@@ -150,10 +261,18 @@ export async function ensureRemoteTrip(
     // `new row violates row-level security policy for table "trip_doc_updates"`,
     // reported from the share dialog, which reads as a permissions bug rather
     // than a missing trip.
-    const stillThere = await remoteTripExists(client, trip.remoteTripId);
+    const remote = await readRemoteTrip(client, trip.remoteTripId);
 
-    if (stillThere !== false) {
+    if (remote.status !== 'absent') {
       // Present, or unknowable. Either way, keep the link.
+      if (remote.status === 'present' && !previewMatches(remote.preview, trip)) {
+        // Sharing is the one moment the preview is certain to be read by
+        // somebody who has nothing else to go on, and the one moment the trip's
+        // owner is at the keyboard — so it is where a preview that drifted gets
+        // put right. Awaited, but its outcome cannot fail the share: the link
+        // works whatever the row says.
+        await syncRemoteTripMetadata(client, trip);
+      }
       return { status: 'ready', remoteTripId: trip.remoteTripId };
     }
 
@@ -172,7 +291,7 @@ export async function ensureRemoteTrip(
       .insert({
         local_id: trip.id,
         owner_id: userId,
-        name: trip.name,
+        name: previewName(trip.name),
         start_date: trip.startDate,
         end_date: trip.endDate,
       })
@@ -212,28 +331,65 @@ export async function ensureRemoteTrip(
  * Keeps the server's denormalised preview in step with the document.
  *
  * Only the three fields the trip list renders before hydrating: everything else
- * lives in the document, which stays authoritative. Failure is deliberately
- * swallowed — a stale preview is cosmetic, and this must never block an edit.
+ * lives in the document, which stays authoritative.
+ *
+ * It still never blocks an edit — the caller is free to ignore the result — but
+ * it no longer *hides* what happened. It used to `await` an update it never
+ * looked at, which made two very different outcomes indistinguishable: the
+ * preview being brought up to date, and the preview being permanently
+ * unmaintainable from this device because RLS narrows the UPDATE to
+ * `owner_id = auth.uid()` and a guest owns nothing. That second case matched no
+ * rows, returned no error, and left every other device reading a name the trip
+ * no longer has.
+ *
+ * @returns What actually happened to the row — including `not-applied`, the
+ *   zero-rows case an unchecked `await` reported as success.
  */
 export async function syncRemoteTripMetadata(
   client: TypedSupabaseClient | null,
   trip: Trip,
-): Promise<void> {
+): Promise<SyncPreviewResult> {
   if (!client || !trip.remoteTripId) {
-    return;
+    return { status: 'skipped' };
   }
 
   try {
-    await client
+    // `.select()` is what makes this checkable: without it PostgREST returns no
+    // rows for an UPDATE, so "nothing matched" and "everything worked" arrive
+    // as the same empty, error-free answer.
+    const { data, error } = await client
       .from('trips')
       .update({
-        name: trip.name,
+        name: previewName(trip.name),
         start_date: trip.startDate,
         end_date: trip.endDate,
       })
-      .eq('id', trip.remoteTripId);
+      .eq('id', trip.remoteTripId)
+      .select('id');
+
+    if (error) {
+      console.warn('[sync] trip preview update failed:', error.message);
+      return { status: 'error', message: error.message };
+    }
+
+    if (!Array.isArray(data) || data.length === 0) {
+      // Expected and permanent on a member's device; a deleted row on the
+      // owner's. Either way the list on other devices keeps the old name, so it
+      // is said out loud rather than passed off as an update.
+      console.info(
+        '[sync] trip preview for %s was not updated: no row this account may write',
+        trip.remoteTripId,
+      );
+      return { status: 'not-applied' };
+    }
+
+    return { status: 'updated' };
   } catch (error: unknown) {
-    console.warn('[sync] trip preview update failed (harmless):', error);
+    // Offline: the fetch rejects rather than returning an error. The preview
+    // will be republished the next time the trip is opened or shared.
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn('[sync] trip preview update failed:', message);
+    return { status: 'error', message };
   }
 }
 
@@ -243,6 +399,13 @@ export async function syncRemoteTripMetadata(
  * Drives the "trips you joined elsewhere" part of the trip list. Returns an
  * empty array rather than throwing when offline: the list still has to render
  * whatever is local.
+ *
+ * Every field here is remote-supplied — the row was written by whoever owns the
+ * trip — so it is validated and bounded on the way in rather than cast and
+ * rendered. A row without a usable id is dropped on its own; a row whose name is
+ * missing or blank keeps its place with an empty name, which the caller renders
+ * as a translated placeholder. Inventing an English one here would put an
+ * untranslated string on screen as if it were the trip's name.
  */
 export async function listRemoteTripsMissingLocally(
   client: TypedSupabaseClient | null,
@@ -253,7 +416,7 @@ export async function listRemoteTripsMissingLocally(
 
   try {
     const { data, error } = await client.from('trips').select('id, name');
-    if (error || !data) {
+    if (error || !Array.isArray(data)) {
       return [];
     }
 
@@ -263,9 +426,19 @@ export async function listRemoteTripsMissingLocally(
         .filter((id): id is string => typeof id === 'string'),
     );
 
-    return (data as { id: string; name: string }[]).filter(
-      (row) => !localRemoteIds.has(row.id),
-    );
+    const remoteOnly: { readonly id: string; readonly name: string }[] = [];
+    for (const row of data as readonly Record<string, unknown>[]) {
+      const id = row.id;
+      if (typeof id !== 'string' || id.length === 0 || localRemoteIds.has(id)) {
+        continue;
+      }
+      const name = row.name;
+      remoteOnly.push({
+        id,
+        name: typeof name === 'string' ? previewName(name) : '',
+      });
+    }
+    return remoteOnly;
   } catch {
     return [];
   }

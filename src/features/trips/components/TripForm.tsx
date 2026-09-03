@@ -31,6 +31,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toISODateStringFromString } from '@/lib/db/utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import type { Coordinates } from '@/lib/geocoding';
@@ -47,6 +48,17 @@ import type { Trip, TripFormData, TripId } from '@/types';
 
 /** Maximum character limit for trip description */
 const DESCRIPTION_MAX_LENGTH = 1000;
+
+/**
+ * Maximum characters for a trip name — the repository's own limit, not a
+ * second opinion about it.
+ *
+ * `sanitizeTripData` has always clipped the name to this on save, and the field
+ * let you type past it and said nothing: the trip came back renamed, with no
+ * indication of why. The description field next to it has been bounded like this
+ * all along.
+ */
+const NAME_MAX_LENGTH = MAX_LENGTHS.tripName;
 
 // ============================================================================
 // Type Definitions
@@ -526,6 +538,7 @@ const TripForm = memo(function TripForm({
           onChange={handleNameChange}
           onBlur={handleNameBlur}
           placeholder={t('trips.namePlaceholder')}
+          maxLength={NAME_MAX_LENGTH}
           aria-invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? 'trip-name-error' : undefined}
           disabled={isSubmitting}

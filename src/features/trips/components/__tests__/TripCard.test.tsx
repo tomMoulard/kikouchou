@@ -132,6 +132,34 @@ describe('TripCard Basic Rendering', () => {
     expect(card).toHaveAttribute('aria-label', expect.stringContaining('Beach Vacation'));
     expect(card).toHaveAttribute('aria-label', expect.stringContaining('Brittany, France'));
   });
+
+  it('says how many guests the trip has in its accessible name', () => {
+    const trip = createTestTrip();
+    const persons = Array.from({ length: 3 }, (_, i) => ({
+      id: `p${i}`, tripId: 'trip-1', name: `Person ${i}`, color: '#ef4444',
+      order: i, createdAt: Date.now(), updatedAt: Date.now(),
+    })) as never;
+    render(<TripCard trip={trip} persons={persons} onClick={vi.fn()} />);
+
+    // The card is one `role="button"`, so its accessible name is everything a
+    // screen reader is given — the badges inside it are never announced.
+    const card = screen.getByRole('button', { name: /beach vacation/i });
+    expect(card).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('trips.guestCount'),
+    );
+  });
+
+  it('says a trip has no guests yet in its accessible name', () => {
+    const trip = createTestTrip();
+    render(<TripCard trip={trip} persons={[]} onClick={vi.fn()} />);
+
+    const card = screen.getByRole('button', { name: /beach vacation/i });
+    expect(card).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('trips.noGuests'),
+    );
+  });
 });
 
 // ============================================================================
@@ -776,6 +804,70 @@ describe('TripCard Persons', () => {
       />
     );
     expect(screen.getByText('+2')).toBeInTheDocument();
+  });
+
+  it('carries the guest count in text, not only as a bare number', () => {
+    const trip = createTestTrip();
+    const persons = Array.from({ length: 6 }, (_, i) => ({
+      id: `p${i}`, tripId: 'trip-1', name: `Person ${i}`, color: '#ef4444',
+      order: i, createdAt: Date.now(), updatedAt: Date.now(),
+    })) as never;
+    render(
+      <TripCard
+        trip={trip}
+        persons={persons}
+        onClick={vi.fn()}
+      />
+    );
+    // "+2" read aloud on its own says nothing at all, and the bare number was
+    // the one string on this card that never went through i18n.
+    expect(screen.getByText('trips.moreGuests')).toBeInTheDocument();
+  });
+});
+
+// ============================================================================
+// Description Tests
+// ============================================================================
+
+describe('TripCard Description', () => {
+  it('renders the trip description', () => {
+    const trip = createTestTrip({ description: 'Bring walking boots' });
+    render(<TripCard trip={trip} persons={[]} onClick={vi.fn()} />);
+
+    // The form has always captured this and no screen has ever shown it back.
+    expect(screen.getByText('Bring walking boots')).toBeInTheDocument();
+  });
+
+  it('puts the description in the card\'s accessible name', () => {
+    const trip = createTestTrip({ description: 'Bring walking boots' });
+    render(<TripCard trip={trip} persons={[]} onClick={vi.fn()} />);
+
+    // The card is one `role="button"`, so text rendered inside it is not
+    // announced: whatever is not in the label is not read out at all.
+    const card = screen.getByRole('button', { name: /beach vacation/i });
+    expect(card).toHaveAttribute(
+      'aria-label',
+      expect.stringContaining('Bring walking boots'),
+    );
+  });
+
+  it('renders nothing when the trip has no description', () => {
+    const trip = createTestTrip();
+    const { container } = render(
+      <TripCard trip={trip} persons={[]} onClick={vi.fn()} />
+    );
+
+    expect(container.querySelector('.line-clamp-2')).toBeNull();
+  });
+
+  it('renders nothing for a description of only whitespace', () => {
+    const trip = createTestTrip({ description: '   \n  ' });
+    const { container } = render(
+      <TripCard trip={trip} persons={[]} onClick={vi.fn()} />
+    );
+
+    // Otherwise the card grows a blank line for a field nobody filled in.
+    expect(container.querySelector('.line-clamp-2')).toBeNull();
   });
 });
 
