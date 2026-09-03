@@ -74,9 +74,13 @@ describe('formatDatetime', () => {
 
     const result = formatDatetime(instant.toISOString(), 'en');
 
-    expect(result).toMatch(/^[A-Z][a-z]+ \d{1,2}(st|nd|rd|th), 2026, \d{2}:\d{2}$/);
-    expect(result.endsWith(`, ${localClock}`)).toBe(true);
-    expect(result).toContain(`${instant.getDate()}`);
+    // The day goes in the pattern, not through `toContain`: a bare
+    // `toContain('2')` is satisfied by the 2 in "2026", and a `toContain('5')`
+    // by the clock, so a third of possible dates would pass on the wrong day.
+    const dayPattern = new RegExp(
+      `^[A-Z][a-z]+ ${instant.getDate()}(st|nd|rd|th), 2026, ${localClock}$`,
+    );
+    expect(result).toMatch(dayPattern);
   });
 
   it('uses a 24-hour clock, like every other transport surface', () => {

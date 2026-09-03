@@ -11,20 +11,31 @@ import type { Trip } from '@/types';
  */
 function installPointerCaptureShims(): () => void {
   const element = window.HTMLElement.prototype as unknown as Record<string, unknown>;
-  const originals = {
-    hasPointerCapture: element.hasPointerCapture,
-    setPointerCapture: element.setPointerCapture,
-    releasePointerCapture: element.releasePointerCapture,
-    scrollIntoView: element.scrollIntoView,
+  const shims: Record<string, () => unknown> = {
+    hasPointerCapture: () => false,
+    setPointerCapture: () => undefined,
+    releasePointerCapture: () => undefined,
+    scrollIntoView: () => undefined,
   };
 
-  element.hasPointerCapture = (): boolean => false;
-  element.setPointerCapture = (): void => undefined;
-  element.releasePointerCapture = (): void => undefined;
-  element.scrollIntoView = (): void => undefined;
+  // jsdom defines none of these, so the restore has to *delete* them. Writing
+  // the captured originals back with `Object.assign` would turn four absent
+  // properties into own properties valued `undefined`, and any consumer that
+  // feature-detects with `in` would then take the true branch and throw.
+  const absent = Object.keys(shims).filter((name) => !(name in element));
+  const originals = Object.fromEntries(
+    Object.keys(shims)
+      .filter((name) => name in element)
+      .map((name) => [name, element[name]]),
+  );
+
+  Object.assign(element, shims);
 
   return () => {
     Object.assign(element, originals);
+    for (const name of absent) {
+      Reflect.deleteProperty(element, name);
+    }
   };
 }
 
@@ -72,10 +83,18 @@ vi.mock('@/lib/db', () => ({
 
 const mockChangeLanguage = vi.fn().mockResolvedValue(undefined);
 
+// `isLanguageSupported` reads the same list the options are rendered from, so
+// the mock keeps them in step here too: a language added to one is added to
+// both, which is the point of the production change this guards.
+const { MOCK_SUPPORTED_LANGUAGES } = vi.hoisted(() => ({
+  MOCK_SUPPORTED_LANGUAGES: ['en', 'fr'],
+}));
+
 vi.mock('@/lib/i18n', () => ({
-  SUPPORTED_LANGUAGES: ['en', 'fr'],
+  SUPPORTED_LANGUAGES: MOCK_SUPPORTED_LANGUAGES,
   changeLanguage: (...args: unknown[]) => mockChangeLanguage(...args),
   getCurrentLanguage: () => 'en',
+  isLanguageSupported: (value: string) => MOCK_SUPPORTED_LANGUAGES.includes(value),
 }));
 
 // The language card deliberately uses the raw sonner toast rather than the

@@ -766,6 +766,7 @@ describe('CalendarPage', () => {
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
 
     const dot = screen.getByTitle('14:00 Alice - Paris CDG').querySelector('span.rounded-full');
+    expect(dot).not.toBeNull();
     expect(dot).toHaveStyle({ backgroundColor: 'rgb(59, 130, 246)' });
   });
 

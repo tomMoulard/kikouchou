@@ -39,7 +39,7 @@ import { TripForm } from '@/features/trips/components/TripForm';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db';
 import { deleteTrip, updateTrip } from '@/lib/db';
-import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage } from '@/lib/i18n';
+import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, isLanguageSupported } from '@/lib/i18n';
 import type { TripFormData } from '@/types';
 
 // ============================================================================
@@ -65,7 +65,13 @@ const LanguageSelector = memo(function LanguageSelector(): ReactElement {
    currentLanguage = getCurrentLanguage(),
 
    handleLanguageChange = useCallback((value: string): void => {
-    if (value === 'fr' || value === 'en') {
+    // Guarded against `isLanguageSupported`, not against a second hand-written
+    // `value === 'fr' || value === 'en'`. The options are rendered from
+    // `SUPPORTED_LANGUAGES`, so a literal list here is a duplicate of it that
+    // nothing keeps in step: adding a language would render its option, fire
+    // this handler, fall through the guard, and leave the dropdown silently
+    // doing nothing.
+    if (isLanguageSupported(value)) {
       void changeLanguage(value);
       // Deliberately a raw toast: the language lives in localStorage and never
       // syncs, so the offline-aware "Saved on this device" wording adds
