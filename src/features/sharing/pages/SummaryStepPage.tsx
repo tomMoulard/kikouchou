@@ -35,6 +35,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { onboardingSurface, statusVariants } from '@/components/ui/status.variants';
 
 import {
   getAssignmentsByPersonId,
@@ -45,6 +46,7 @@ import {
   setCurrentTrip,
 } from '@/lib/db';
 import { createBaselineForGuest } from '@/lib/sharing';
+import { cn } from '@/lib/utils';
 import type {
   Person,
   PersonId,
@@ -274,18 +276,18 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
   // Not found / error state
   if (notFound || trip === undefined) {
     return (
-      <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-        <Card className="w-full max-w-md border-amber-200 text-center shadow-lg">
+      <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+        <Card className="w-full max-w-md border-warning-border text-center shadow-lg">
           <CardHeader className="pb-2 pt-8">
-            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-amber-100 text-3xl">
+            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-warning/20 text-3xl">
               🔍
             </div>
-            <CardTitle className="text-xl text-amber-900">
+            <CardTitle className="text-xl text-warning-on-surface">
               {t('sharing.notFoundWizard', "This trip link doesn't seem to work")}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-8">
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-muted-foreground">
               {t(
                 'sharing.notFoundWizardDescription',
                 'The link may be incorrect or the trip may no longer exist.',
@@ -298,19 +300,19 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-      <Card className="w-full max-w-md border-amber-200 shadow-lg">
+    <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+      <Card className="w-full max-w-md border-warning-border shadow-lg">
         <CardHeader className="pb-4 pt-8 text-center">
           {/* Warm checkmark icon */}
-          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-amber-100">
-            <ClipboardCheck className="size-10 text-amber-600" aria-hidden="true" />
+          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-warning/20">
+            <ClipboardCheck className="size-10 text-warning-on-surface" aria-hidden="true" />
           </div>
 
-          <CardTitle className="text-2xl font-bold text-amber-900">
+          <CardTitle className="text-2xl font-bold text-warning-on-surface">
             {t('sharing.summaryTitle', "You're all set!")}
           </CardTitle>
 
-          <p className="mt-1 text-sm text-amber-700">
+          <p className="mt-1 text-sm text-muted-foreground">
             {t('sharing.summarySubtitle', "Here's a summary of your trip setup")}
           </p>
         </CardHeader>
@@ -320,13 +322,13 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
           <button
             type="button"
             onClick={() => navigate(`/share/${shareId}/identity`)}
-            className="flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border border-amber-200 bg-white p-4 text-left transition-colors hover:border-amber-300"
+            className="flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border border-warning-border bg-card p-4 text-left transition-colors hover:border-warning"
             aria-label={t('sharing.summaryChangeIdentity', 'Change identity')}
           >
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <User className="size-4 text-amber-600" aria-hidden="true" />
-                <span className="text-sm font-medium text-amber-900">
+                <User className="size-4 text-warning-on-surface" aria-hidden="true" />
+                <span className="text-sm font-medium text-warning-on-surface">
                   {t('sharing.summaryIdentityLabel', 'Identity')}
                 </span>
               </div>
@@ -338,12 +340,12 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
                     aria-hidden="true"
                   />
                 )}
-                <span className="text-sm text-amber-800">
+                <span className="text-sm text-foreground">
                   {guest?.name ?? t('sharing.summaryUnknown', 'Unknown')}
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-1 text-sm text-amber-600">
+            <div className="flex items-center gap-1 text-sm text-warning-on-surface">
               {t('sharing.summaryChange', 'Change')}
               <ChevronRight className="size-4" aria-hidden="true" />
             </div>
@@ -353,27 +355,27 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
           <button
             type="button"
             onClick={() => navigate(`/share/${shareId}/room`)}
-            className="flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border border-amber-200 bg-white p-4 text-left transition-colors hover:border-amber-300"
+            className="flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border border-warning-border bg-card p-4 text-left transition-colors hover:border-warning"
             aria-label={t('sharing.summaryChangeRoom', 'Change room')}
           >
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <Bed className="size-4 text-amber-600" aria-hidden="true" />
-                <span className="text-sm font-medium text-amber-900">
+                <Bed className="size-4 text-warning-on-surface" aria-hidden="true" />
+                <span className="text-sm font-medium text-warning-on-surface">
                   {t('sharing.summaryRoomLabel', 'Room')}
                 </span>
               </div>
               <div className="mt-1">
                 {claimedRoom ? (
-                  <span className="text-sm text-amber-800">{claimedRoom.name}</span>
+                  <span className="text-sm text-foreground">{claimedRoom.name}</span>
                 ) : (
-                  <span className="text-sm italic text-amber-500">
+                  <span className="text-sm italic text-muted-foreground">
                     {t('sharing.summaryRoomEmpty', 'Not yet assigned')}
                   </span>
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-1 text-sm text-amber-600">
+            <div className="flex items-center gap-1 text-sm text-warning-on-surface">
               {t('sharing.summaryChange', 'Change')}
               <ChevronRight className="size-4" aria-hidden="true" />
             </div>
@@ -383,13 +385,13 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
           <button
             type="button"
             onClick={() => navigate(`/share/${shareId}/transport`)}
-            className="flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border border-amber-200 bg-white p-4 text-left transition-colors hover:border-amber-300"
+            className="flex min-h-[44px] w-full cursor-pointer items-center justify-between rounded-lg border border-warning-border bg-card p-4 text-left transition-colors hover:border-warning"
             aria-label={t('sharing.summaryChangeTransport', 'Change transport')}
           >
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <Train className="size-4 text-amber-600" aria-hidden="true" />
-                <span className="text-sm font-medium text-amber-900">
+                <Train className="size-4 text-warning-on-surface" aria-hidden="true" />
+                <span className="text-sm font-medium text-warning-on-surface">
                   {t('sharing.summaryTransportLabel', 'Transport')}
                 </span>
               </div>
@@ -397,7 +399,7 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
                 {transports.length > 0 ? (
                   <div className="space-y-1">
                     {transports.map((tr) => (
-                      <div key={tr.id} className="flex items-center gap-2 text-sm text-amber-800">
+                      <div key={tr.id} className="flex items-center gap-2 text-sm text-foreground">
                         {getTransportIcon(tr.transportMode, t)}
                         <span>
                           {tr.type === 'arrival'
@@ -406,10 +408,10 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
                           : {formatDatetime(tr.datetime, i18n.language)}
                         </span>
                         {tr.location && (
-                          <span className="text-amber-600">{tr.location}</span>
+                          <span className="text-muted-foreground">{tr.location}</span>
                         )}
                         {tr.needsPickup && (
-                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">
+                          <span className="rounded bg-warning-surface px-1.5 py-0.5 text-xs text-warning-on-surface">
                             {t('sharing.transportNeedsPickupBadge', 'Needs pickup')}
                           </span>
                         )}
@@ -417,13 +419,13 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
                     ))}
                   </div>
                 ) : (
-                  <span className="text-sm italic text-amber-500">
+                  <span className="text-sm italic text-muted-foreground">
                     {t('sharing.summaryTransportEmpty', 'None added')}
                   </span>
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1 text-sm text-amber-600">
+            <div className="flex shrink-0 items-center gap-1 text-sm text-warning-on-surface">
               {t('sharing.summaryChange', 'Change')}
               <ChevronRight className="size-4" aria-hidden="true" />
             </div>
@@ -434,7 +436,7 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
             type="button"
             onClick={() => { void handleEnterTrip(); }}
             disabled={isSubmitting}
-            className="mt-4 h-12 w-full bg-amber-500 text-base font-semibold text-white hover:bg-amber-600 focus-visible:ring-2 focus-visible:ring-amber-500"
+            className={cn('mt-4 h-12 w-full text-base font-semibold hover:bg-warning/90', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
             aria-describedby={submitError ? 'enter-trip-error' : undefined}
           >
             {isSubmitting
@@ -444,7 +446,7 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
 
           {/* Error message */}
           {submitError !== undefined && (
-            <p id="enter-trip-error" role="alert" className="mt-2 text-center text-sm text-red-600">
+            <p id="enter-trip-error" role="alert" className="mt-2 text-center text-sm text-destructive">
               {submitError}
             </p>
           )}

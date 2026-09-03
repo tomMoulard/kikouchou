@@ -11,6 +11,8 @@ import { type ReactElement, memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, WifiOff } from 'lucide-react';
 
+import { statusVariants } from '@/components/ui/status.variants';
+
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { cn } from '@/lib/utils';
 
@@ -135,16 +137,16 @@ export const OfflineIndicator = memo(function OfflineIndicator({
           'motion-safe:transition-colors motion-safe:duration-300',
           isOffline
             ? // Warm amber styling — offline is NOT an error, it's expected
-              'bg-amber-50 text-amber-900 border border-amber-200 dark:bg-amber-950 dark:text-amber-100 dark:border-amber-800'
+              statusVariants({ tone: 'warning' })
             : // Green "back online" styling with smooth appearance
-              'bg-green-50 text-green-900 border border-green-200 dark:bg-green-950 dark:text-green-100 dark:border-green-800',
+              statusVariants({ tone: 'success' }),
         )}
       >
         {isOffline ? (
           <>
             <WifiOff
               className={cn(
-                'size-4 shrink-0 text-amber-600 dark:text-amber-400',
+                'size-4 shrink-0',
                 // Subtle pulse animation for gentle attention
                 'motion-safe:animate-pulse',
               )}
@@ -152,7 +154,7 @@ export const OfflineIndicator = memo(function OfflineIndicator({
             />
             <div className="flex flex-col">
               <span>{t('pwa.offline', 'You are offline')}</span>
-              <span className="text-xs font-normal text-amber-700 dark:text-amber-300">
+              <span className="text-xs font-normal">
                 {t(
                   'pwa.offlineDescription',
                   'Your changes are saved locally and the app works normally',
@@ -163,7 +165,7 @@ export const OfflineIndicator = memo(function OfflineIndicator({
         ) : (
           <>
             <CheckCircle2
-              className="size-4 shrink-0 text-green-600 dark:text-green-400"
+              className="size-4 shrink-0"
               aria-hidden="true"
             />
             <span>

@@ -28,11 +28,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { statusVariants } from '@/components/ui/status.variants';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { useTripContext } from '@/contexts/TripContext';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
 import { useTripShareLink } from '../hooks/useTripShareLink';
 import type { Trip } from '@/types';
+import { cn } from '@/lib/utils';
 
 // ============================================================================
 // Type Definitions
@@ -196,6 +198,8 @@ const ShareDialog = memo(function ShareDialog({
               <>
                 {/* QR Code — full-width row so flex centering is stable inside the dialog */}
                 <div className="flex w-full min-w-0 justify-center">
+                  {/* Literal white, not `bg-card`: a QR code needs a light quiet zone to
+                      scan, in either theme. */}
                   <div className="shrink-0 rounded-xl bg-white p-4 shadow-sm">
                     <QRCodeSVG value={shareUrl} size={200} level="M" />
                   </div>
@@ -223,7 +227,10 @@ const ShareDialog = memo(function ShareDialog({
                     {shareUrl}
                   </span>
                   {copied ? (
-                    <Check className="size-4 shrink-0 text-green-500" aria-hidden="true" />
+                    <Check
+                      className={cn('size-4 shrink-0', statusVariants({ tone: 'success', emphasis: 'text' }))}
+                      aria-hidden="true"
+                    />
                   ) : (
                     <Copy className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   )}

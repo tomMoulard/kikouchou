@@ -27,6 +27,8 @@ import { type ReactElement, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertCircle, Check, Loader2, Users } from 'lucide-react';
 
+import { statusVariants } from '@/components/ui/status.variants';
+
 import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
 import { cn } from '@/lib/utils';
 
@@ -72,8 +74,8 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
   const appearance = showCount
     ? {
         icon: <Users className="size-3.5 shrink-0" aria-hidden="true" />,
-        tone: 'text-green-600 dark:text-green-500',
-        dot: 'bg-green-500',
+        tone: statusVariants({ tone: 'success', emphasis: 'text' }),
+        dot: 'bg-success',
         label:
           (state.onlineCount ?? 0) <= 1
             ? // "1 online" invites the question "online with whom?". Naming it as
@@ -89,8 +91,8 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
     : state.status === 'offline'
       ? {
           icon: <AlertCircle className="size-3.5 shrink-0" aria-hidden="true" />,
-          tone: 'text-amber-600 dark:text-amber-500',
-          dot: 'bg-amber-500',
+          tone: statusVariants({ tone: 'warning', emphasis: 'text' }),
+          dot: 'bg-warning',
           label:
             pending > 0
               ? t('nav.syncPending', {
@@ -110,8 +112,8 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
           }
         : {
             icon: <Check className="size-3.5 shrink-0" aria-hidden="true" />,
-            tone: 'text-green-600 dark:text-green-500',
-            dot: 'bg-green-500',
+            tone: statusVariants({ tone: 'success', emphasis: 'text' }),
+            dot: 'bg-success',
             label: t('nav.syncSynced', 'Everyone is up to date'),
           };
 

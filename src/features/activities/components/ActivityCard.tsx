@@ -21,6 +21,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { statusVariants } from '@/components/ui/status.variants';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -231,7 +232,7 @@ const ActivityCard = memo(function ActivityCard({
               : `${participantCount}/${cap}`}
           </span>
           {isFull && (
-            <Badge variant="outline" className="border-amber-500 text-amber-600">
+            <Badge variant="outline" className={statusVariants({ tone: 'warning', emphasis: 'outline' })}>
               {t('activities.full')}
             </Badge>
           )}

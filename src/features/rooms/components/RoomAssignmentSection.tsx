@@ -51,6 +51,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { statusVariants } from '@/components/ui/status.variants';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { type DateRange, DateRangePicker } from '@/components/shared/DateRangePicker';
@@ -685,7 +686,10 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
             {/* Capacity warning (soft enforcement) */}
             {computedCapacityWarning && (
               <div
-                className="flex items-center gap-2 rounded-md border border-amber-500 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm text-amber-800 dark:text-amber-200"
+                className={cn(
+                  statusVariants({ tone: 'warning' }),
+                  'flex items-center gap-2 rounded-md border-warning p-3 text-sm',
+                )}
                 role="alert"
               >
                 <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />

@@ -38,12 +38,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { onboardingSurface, statusVariants } from '@/components/ui/status.variants';
 
 import {
   createTransport,
   getTransportsByPersonId,
   getTripByShareId,
 } from '@/lib/db';
+import { cn } from '@/lib/utils';
 import type {
   ISODateTimeString,
   PersonId,
@@ -403,18 +405,18 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
   // Not found / error state — friendly message
   if (notFound || trip === undefined) {
     return (
-      <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-        <Card className="w-full max-w-md border-amber-200 text-center shadow-lg">
+      <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+        <Card className="w-full max-w-md border-warning-border text-center shadow-lg">
           <CardHeader className="pb-2 pt-8">
-            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-amber-100 text-3xl">
+            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-warning/20 text-3xl">
               🔍
             </div>
-            <CardTitle className="text-xl text-amber-900">
+            <CardTitle className="text-xl text-warning-on-surface">
               {t('sharing.notFoundWizard', "This trip link doesn't seem to work")}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-8">
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-muted-foreground">
               {t(
                 'sharing.notFoundWizardDescription',
                 'The link may be incorrect or the trip may no longer exist.',
@@ -429,19 +431,19 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
   const hasEnteredTransports = enteredTransports.length > 0;
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-      <Card className="w-full max-w-md border-amber-200 shadow-lg">
+    <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+      <Card className="w-full max-w-md border-warning-border shadow-lg">
         <CardHeader className="pb-4 pt-8 text-center">
           {/* Warm transport icon */}
-          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-amber-100">
-            <Train className="size-10 text-amber-600" aria-hidden="true" />
+          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-warning/20">
+            <Train className="size-10 text-warning-on-surface" aria-hidden="true" />
           </div>
 
-          <CardTitle className="text-2xl font-bold text-amber-900">
+          <CardTitle className="text-2xl font-bold text-warning-on-surface">
             {t('sharing.transportTitle', 'Your travel details')}
           </CardTitle>
 
-          <p className="mt-1 text-sm text-amber-700">
+          <p className="mt-1 text-sm text-muted-foreground">
             {t('sharing.transportSubtitle', "Tell us when you're arriving and departing")}
           </p>
         </CardHeader>
@@ -449,7 +451,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
         <CardContent className="space-y-4 pb-8">
           {/* Success indicator */}
           {showSuccess && (
-            <div className="flex items-center gap-2 rounded-xl bg-green-50 p-3 text-sm text-green-700 ring-1 ring-green-200">
+            <div className={cn('flex items-center gap-2 rounded-xl p-3 text-sm', statusVariants({ tone: 'success' }))}>
               <Check className="size-4" aria-hidden="true" />
               {t('sharing.transportAdded', 'Transport added!')}
             </div>
@@ -457,7 +459,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
 
           {/* Submit error message */}
           {errors.submit !== undefined && (
-            <p id="submit-error" role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
+            <p id="submit-error" role="alert" className={cn('rounded-xl p-3 text-sm', statusVariants({ tone: 'danger' }))}>
               {errors.submit}
             </p>
           )}
@@ -468,28 +470,28 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
               {enteredTransports.map((transport) => (
                 <div
                   key={transport.id}
-                  className="rounded-lg border border-amber-200 bg-white p-3"
+                  className="rounded-lg border border-warning-border bg-card p-3"
                 >
                   <div className="flex items-center gap-2">
                     {getTransportIcon(transport.transportMode, t)}
-                    <span className="font-medium text-amber-900 capitalize">
+                    <span className="font-medium text-warning-on-surface capitalize">
                       {transport.type === 'arrival'
                         ? t('sharing.transportArrival', 'Arrival')
                         : t('sharing.transportDeparture', 'Departure')}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm text-amber-700">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     {formatDatetime(transport.datetime, i18n.language)}
                   </p>
-                  <p className="text-sm text-amber-700">
+                  <p className="text-sm text-muted-foreground">
                     {transport.location}
                   </p>
-                  <div className="mt-1 flex items-center gap-2 text-xs text-amber-600">
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                     {transport.transportNumber && (
                       <span>{transport.transportNumber}</span>
                     )}
                     {transport.needsPickup && (
-                      <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-700">
+                      <span className="rounded bg-warning-surface px-2 py-0.5 text-warning-on-surface">
                         {t('sharing.transportNeedsPickupBadge', 'Needs pickup')}
                       </span>
                     )}
@@ -503,29 +505,33 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
           <div className="space-y-4">
             {/* Type toggle */}
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-amber-900">
+              <Label className="text-sm font-medium text-warning-on-surface">
                 {t('sharing.transportType', 'Type')}
               </Label>
               <div className="flex gap-2">
                 <Button
                   type="button"
+                  aria-pressed={transportType === 'arrival'}
                   onClick={() => handleTypeChange('arrival')}
-                  className={`h-12 flex-1 text-base font-medium ${
+                  className={cn(
+                    'h-12 flex-1 text-base font-medium',
                     transportType === 'arrival'
-                      ? 'bg-amber-500 text-white hover:bg-amber-600'
-                      : 'border border-amber-200 bg-white text-amber-700 hover:bg-amber-50'
-                  }`}
+                      ? cn(statusVariants({ tone: 'warning', emphasis: 'solid' }), 'hover:bg-warning/90')
+                      : 'border border-warning-border bg-card text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface',
+                  )}
                 >
                   {t('sharing.transportArrival', 'Arrival')}
                 </Button>
                 <Button
                   type="button"
+                  aria-pressed={transportType === 'departure'}
                   onClick={() => handleTypeChange('departure')}
-                  className={`h-12 flex-1 text-base font-medium ${
+                  className={cn(
+                    'h-12 flex-1 text-base font-medium',
                     transportType === 'departure'
-                      ? 'bg-amber-500 text-white hover:bg-amber-600'
-                      : 'border border-amber-200 bg-white text-amber-700 hover:bg-amber-50'
-                  }`}
+                      ? cn(statusVariants({ tone: 'warning', emphasis: 'solid' }), 'hover:bg-warning/90')
+                      : 'border border-warning-border bg-card text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface',
+                  )}
                 >
                   {t('sharing.transportDeparture', 'Departure')}
                 </Button>
@@ -534,7 +540,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
 
             {/* Datetime input */}
             <div className="space-y-2">
-              <Label htmlFor="transport-datetime" className="text-sm font-medium text-amber-900">
+              <Label htmlFor="transport-datetime" className="text-sm font-medium text-warning-on-surface">
                 {t('sharing.transportDatetime', 'Date and time')}
               </Label>
               <Input
@@ -548,7 +554,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
                 aria-describedby={errors.datetime ? 'datetime-error' : undefined}
               />
               {errors.datetime !== undefined && (
-                <p id="datetime-error" role="alert" className="text-sm text-red-600">
+                <p id="datetime-error" role="alert" className="text-sm text-destructive">
                   {errors.datetime}
                 </p>
               )}
@@ -556,7 +562,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
 
             {/* Location input */}
             <div className="space-y-2">
-              <Label htmlFor="transport-location" className="text-sm font-medium text-amber-900">
+              <Label htmlFor="transport-location" className="text-sm font-medium text-warning-on-surface">
                 {t('sharing.transportLocation', 'Station / Airport')}
               </Label>
               <Input
@@ -571,7 +577,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
                 aria-describedby={errors.location ? 'location-error' : undefined}
               />
               {errors.location !== undefined && (
-                <p id="location-error" role="alert" className="text-sm text-red-600">
+                <p id="location-error" role="alert" className="text-sm text-destructive">
                   {errors.location}
                 </p>
               )}
@@ -579,9 +585,9 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
 
             {/* Transport mode select */}
             <div className="space-y-2">
-              <Label htmlFor="transport-mode" className="text-sm font-medium text-amber-900">
+              <Label htmlFor="transport-mode" className="text-sm font-medium text-warning-on-surface">
                 {t('sharing.transportMode', 'Transport mode')}
-                <span className="ml-1 text-amber-600">
+                <span className="ml-1 text-muted-foreground">
                   ({t('common.optional', 'optional')})
                 </span>
               </Label>
@@ -601,7 +607,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
 
             {/* Transport number input */}
             <div className="space-y-2">
-              <Label htmlFor="transport-number" className="text-sm font-medium text-amber-900">
+              <Label htmlFor="transport-number" className="text-sm font-medium text-warning-on-surface">
                 {t('sharing.transportNumber', 'Number (optional)')}
               </Label>
               <Input
@@ -616,12 +622,12 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
             </div>
 
             {/* Needs pickup switch */}
-            <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-white p-4">
+            <div className="flex items-center justify-between rounded-lg border border-warning-border bg-card p-4">
               <div className="space-y-0.5">
-                <Label htmlFor="needs-pickup" className="text-sm font-medium text-amber-900">
+                <Label htmlFor="needs-pickup" className="text-sm font-medium text-warning-on-surface">
                   {t('sharing.transportNeedsPickup', 'Need a pickup?')}
                 </Label>
-                <p className="text-xs text-amber-600">
+                <p className="text-xs text-muted-foreground">
                   {t('sharing.transportNeedsPickupDescription', 'Let others know you need a ride from the station')}
                 </p>
               </div>
@@ -638,7 +644,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
             type="button"
             onClick={() => { void handleSubmit(); }}
             disabled={isSubmitting}
-            className="h-12 w-full bg-amber-500 text-base font-semibold text-white hover:bg-amber-600 focus-visible:ring-2 focus-visible:ring-amber-500"
+            className={cn('h-12 w-full text-base font-semibold hover:bg-warning/90', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
             aria-describedby={errors.submit ? 'submit-error' : undefined}
           >
             {isSubmitting ? (
@@ -659,7 +665,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
             variant="outline"
             onClick={handleNavigateToSummary}
             disabled={isSubmitting}
-            className="h-12 w-full border-amber-300 text-base font-semibold text-amber-700 hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-amber-500"
+            className="h-12 w-full border-warning-border text-base font-semibold text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface"
           >
             {hasEnteredTransports
               ? t('sharing.transportDone', 'Done')
@@ -672,7 +678,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
             variant="ghost"
             onClick={handleNavigateToSummary}
             disabled={isSubmitting}
-            className="h-12 w-full text-amber-700 hover:bg-amber-50 hover:text-amber-900"
+            className="h-12 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface"
           >
             {t('sharing.transportSkip', 'Skip for now')}
           </Button>

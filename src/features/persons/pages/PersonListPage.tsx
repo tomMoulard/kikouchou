@@ -45,6 +45,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Button } from '@/components/ui/button';
+import { statusVariants } from '@/components/ui/status.variants';
 import {
   Card,
   CardContent,
@@ -317,7 +318,7 @@ const PersonCard = memo(function PersonCard({
               return (
                 <div className="flex items-start gap-2 min-w-0">
                   <ArrowDownRight
-                    className="size-4 shrink-0 text-green-600"
+                    className={cn('size-4 shrink-0', statusVariants({ tone: 'arrival', emphasis: 'text' }))}
                     aria-hidden="true"
                   />
                   <div className="min-w-0">
@@ -338,7 +339,7 @@ const PersonCard = memo(function PersonCard({
               return (
                 <div className="flex items-start gap-2 min-w-0">
                   <ArrowUpRight
-                    className="size-4 shrink-0 text-orange-600"
+                    className={cn('size-4 shrink-0', statusVariants({ tone: 'departure', emphasis: 'text' }))}
                     aria-hidden="true"
                   />
                   <div className="min-w-0">
