@@ -9,18 +9,60 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
-import i18n from '@/lib/i18n';
 import {
   claimParticipant,
   fetchClaimedParticipants,
   materialiseJoinedTrip,
 } from '@/lib/sync/join-trip';
+import { syncDocToDexie } from '@/lib/yjs/dexie-bridge';
+import { DOC_SCHEMA_VERSION } from '@/lib/yjs/doc-model';
 import type { ShareId, TripId, UnixTimestamp } from '@/types';
 import { isoDate } from '@/test/utils';
-import enTranslations from '@/locales/en/translation.json';
 import frTranslations from '@/locales/fr/translation.json';
+
+/**
+ * Resolve translations against the real French bundle, not the global mock.
+ *
+ * `src/test/setup.ts` mocks `t` as `(key) => key`. Under that mock every
+ * assertion about a translated name is tautological: the code under test stores
+ * the literal 'trips.untitled' and the test compares it against the literal
+ * 'trips.untitled', so the two agree for the wrong reason and the test cannot
+ * tell a real translation from a raw key persisted as a trip's name — which is
+ * exactly the failure mode a translate-at-write design invites.
+ *
+ * `fr` because it is this app's fallback language: the string below is what a
+ * user with no stored preference actually sees. A key the bundle does not carry
+ * resolves to itself and fails the comparison, which is the point.
+ */
+vi.mock('@/lib/i18n', async () => {
+  const fr = (await import('@/locales/fr/translation.json')).default as Record<
+    string,
+    unknown
+  >;
+  const translate = (key: string): string => {
+    const value = key
+      .split('.')
+      .reduce<unknown>(
+        (node, part) => (node as Record<string, unknown> | undefined)?.[part],
+        fr,
+      );
+    return typeof value === 'string' ? value : key;
+  };
+  return {
+    default: { t: translate, language: 'fr', changeLanguage: vi.fn() },
+    i18nReady: Promise.resolve(),
+    changeLanguage: vi.fn(),
+    getCurrentLanguage: vi.fn().mockReturnValue('fr'),
+    isLanguageSupported: vi.fn().mockReturnValue(true),
+    isI18nInitialized: vi.fn().mockReturnValue(true),
+    SUPPORTED_LANGUAGES: ['en', 'fr'],
+    DEFAULT_LANGUAGE: 'fr',
+    LANGUAGE_STORAGE_KEY: 'i18nextLng',
+  };
+});
 
 // ============================================================================
 // Helpers
@@ -175,18 +217,49 @@ describe('materialiseJoinedTrip', () => {
     const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
     const trip = await db.trips.get((result as { tripId: TripId }).tripId);
 
-    expect(trip?.name).toBe(i18n.t('trips.untitled'));
+    // The resolved French string, not the key — see the mock at the top. Storing
+    // 'trips.untitled' as a trip's name would pass a key-echoing assertion and
+    // put a raw i18n key on the user's trip list.
+    expect(trip?.name).toBe(frTranslations.trips.untitled);
     expect(trip?.name).not.toBe('Shared trip');
     expect(trip?.name).not.toBe('Shared Trip');
+    expect(trip?.name).not.toBe('trips.untitled');
   });
 
-  it('uses the same fallback the CRDT bridge uses', () => {
-    // Both write into `db.trips.name`, so two keys would be two names for the
-    // same nameless trip depending on which path created the row.
-    expect(enTranslations.trips.untitled).toBeTruthy();
-    expect(frTranslations.trips.untitled).toBeTruthy();
-    // Actually translated, not English copied into the French bundle.
-    expect(frTranslations.trips.untitled).not.toBe(enTranslations.trips.untitled);
+  /**
+   * The invariant the fix exists for, asserted across both writers rather than
+   * asserted about the locale files.
+   *
+   * A previous version of this test only checked that `trips.untitled` was
+   * present in both bundles, which would still have passed if the bridge were
+   * changed to a different key — the two paths could diverge silently, which is
+   * the bug (two spellings of 'Shared trip') in a new costume.
+   */
+  it('gives a nameless trip the same name the CRDT bridge gives it', async () => {
+    const joined = await materialiseJoinedTrip(clientWithTrip(null), REMOTE_TRIP_ID);
+    const joinedTrip = await db.trips.get((joined as { tripId: TripId }).tripId);
+
+    // A local row with no name — what the assistant's create-trip action
+    // produces from an LLM that emits an empty one — projected from a document
+    // that does not name the trip either.
+    const bridgeTripId = 'bridge-trip' as TripId;
+    const now = Date.now() as UnixTimestamp;
+    await db.trips.add({
+      id: bridgeTripId,
+      name: '',
+      startDate: isoDate('2026-07-15'),
+      endDate: isoDate('2026-07-22'),
+      shareId: 'bridgeshr1' as ShareId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const doc = new Y.Doc();
+    doc.getMap('meta').set('schema', DOC_SCHEMA_VERSION);
+    await syncDocToDexie(doc, bridgeTripId);
+
+    const bridgeTrip = await db.trips.get(bridgeTripId);
+    expect(bridgeTrip?.name).toBe(joinedTrip?.name);
+    expect(bridgeTrip?.name).toBe(frTranslations.trips.untitled);
   });
 
   it.each([
@@ -207,7 +280,7 @@ describe('materialiseJoinedTrip', () => {
 
     // One substitution point, so every missing-name path agrees. Three separate
     // literals used to disagree with each other in casing alone.
-    expect(trip?.name).toBe(i18n.t('trips.untitled'));
+    expect(trip?.name).toBe(frTranslations.trips.untitled);
   });
 });
 

@@ -303,13 +303,14 @@ describe('sanitizeTripData', () => {
   });
 
   /**
-   * The only thing bounding this used to be `maxLength={1000}` on the textarea,
-   * which stops typing and nothing else: a paste, an assistant action, a QR
-   * import or any other non-form writer went straight past it. The field travels
-   * through the CRDT document and the changeset export, so an unbounded one is a
-   * payload every peer has to download, not just a long string on one device.
+   * The only thing bounding this used to be `maxLength={1000}` on the textarea.
+   * That clips typing and pasting alike, but it binds one textarea rather than
+   * the field: the assistant's trip actions, a changeset/QR import and the CRDT
+   * bridge all write a description without going near the form. The field
+   * travels through the shared document, so an unbounded one is a payload every
+   * peer downloads, not just a long string on one device.
    */
-  it('truncates a description no form could have typed', () => {
+  it('truncates a description no form could have submitted', () => {
     const pasted = 'A'.repeat(10_000);
     const result = sanitizeTripData({
       name: 'Trip',

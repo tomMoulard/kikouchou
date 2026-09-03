@@ -15,6 +15,7 @@
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
+import { MAX_LENGTHS, sanitizeOptionalText } from '@/lib/db/sanitize';
 import i18n from '@/lib/i18n';
 import {
   DOC_SCHEMA_VERSION,
@@ -62,6 +63,38 @@ function getMeta(doc: Y.Doc): Y.Map<unknown> {
  *   remote-controlled: using it as the write key once let any peer overwrite an
  *   unrelated local trip.
  */
+/**
+ * The trip's name, from the document if it has a usable one.
+ *
+ * `meta.get('name')` is peer-controlled and arrives as `unknown`, so both halves
+ * of "usable" have to be checked rather than asserted:
+ *
+ *   - **Type.** Casting it to `string` let a peer store a number in
+ *     `db.trips.name`, which is typed `string` everywhere downstream —
+ *     `previewName()` then died on `name.trim is not a function` and took the
+ *     share dialog with it.
+ *   - **Emptiness.** `??` only catches null and undefined, so an empty name was
+ *     stored verbatim and rendered as a blank card. The assistant's create-trip
+ *     action passes an unvalidated name, so this is reachable without a hostile
+ *     peer at all.
+ *
+ * Deliberately *not* clipped to `MAX_LENGTHS.tripName`. The server permits 200
+ * characters and the local form permits 100, so a name between the two is
+ * legitimate rather than hostile — and clipping it here would push the shortened
+ * value back into the document via `populateDocFromDexie` and rename the trip
+ * for the owner who chose it. See the PR for the constraint mismatch itself.
+ */
+function readTripName(meta: Y.Map<unknown>, existingTrip?: Trip): string {
+  const fromDoc = meta.get('name');
+  if (typeof fromDoc === 'string' && fromDoc.trim().length > 0) {
+    return fromDoc;
+  }
+  if (existingTrip !== undefined && existingTrip.name.trim().length > 0) {
+    return existingTrip.name;
+  }
+  return i18n.t('trips.untitled');
+}
+
 function buildTripRecord(
   doc: Y.Doc,
   tripId: TripId,
@@ -86,10 +119,7 @@ function buildTripRecord(
     // write their own placeholder; the map converges and either can rename the
     // trip. The real fix is for the bridge not to name trips at all, which needs
     // every renderer to handle a nameless one first.
-    name:
-      (meta.get('name') as string) ??
-      existingTrip?.name ??
-      i18n.t('trips.untitled'),
+    name: readTripName(meta, existingTrip),
     startDate:
       (meta.get('startDate') as Trip['startDate']) ??
       existingTrip?.startDate ??
@@ -115,14 +145,36 @@ function buildTripRecord(
       : {}),
   };
 
+  // Bounded, unlike the name above, and the asymmetry is the point.
+  //
+  // A name between 100 and 200 characters is *legitimate* — the server's check
+  // constraint allows it even though the local form does not — so clipping one
+  // here would corrupt a real trip. Nothing legitimate produces an over-long
+  // location or description: every local writer already caps them at
+  // `MAX_LENGTHS`, so a longer one came from a peer that did not, and healing it
+  // on the way back into the document is the wanted outcome rather than a
+  // hazard.
+  //
+  // Without this the description was the unbounded payload the whole exercise
+  // was about: `sanitizeTripData` guards the form and the repository, but a
+  // peer's 50,000-character description went straight into Dexie and was pushed
+  // back out by `populateDocFromDexie` for every other device to download.
   const location = meta.get('location');
-  if (typeof location === 'string' && location.length > 0) {
-    trip.location = location;
+  const boundedLocation = sanitizeOptionalText(
+    typeof location === 'string' ? location : undefined,
+    MAX_LENGTHS.tripLocation,
+  );
+  if (boundedLocation !== undefined) {
+    trip.location = boundedLocation;
   }
 
   const description = meta.get('description');
-  if (typeof description === 'string' && description.length > 0) {
-    trip.description = description;
+  const boundedDescription = sanitizeOptionalText(
+    typeof description === 'string' ? description : undefined,
+    MAX_LENGTHS.tripDescription,
+  );
+  if (boundedDescription !== undefined) {
+    trip.description = boundedDescription;
   }
 
   const coordinates = meta.get('coordinates');
