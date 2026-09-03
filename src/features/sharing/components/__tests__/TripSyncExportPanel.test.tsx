@@ -215,11 +215,21 @@ describe('TripSyncExportPanel', () => {
       new Promise((resolve) => { resolveChangeset = resolve; }),
     );
 
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { unmount } = render(<TripSyncExportPanel trip={mockTrip} />, { withProviders: false });
     unmount();
 
     resolveChangeset?.({ tripId: 'trip-1' });
-    // No assertion needed — verifying no crash
+    await waitFor(() => {
+      expect(mockBuildChangeset).toHaveBeenCalled();
+    });
+
+    // "Verifying no crash" was the whole assertion here, and there was none:
+    // a `setState` after unmount does not throw, it logs. The guard is only
+    // observable through React's warning and through the encode never running.
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(mockEncodeChangeset).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   it('skips malformed localStorage entries when searching for guest key', async () => {
