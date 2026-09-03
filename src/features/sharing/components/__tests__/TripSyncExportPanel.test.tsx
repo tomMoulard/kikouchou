@@ -219,14 +219,17 @@ describe('TripSyncExportPanel', () => {
     const { unmount } = render(<TripSyncExportPanel trip={mockTrip} />, { withProviders: false });
     unmount();
 
+    expect(mockBuildChangeset).toHaveBeenCalled();
     resolveChangeset?.({ tripId: 'trip-1' });
-    await waitFor(() => {
-      expect(mockBuildChangeset).toHaveBeenCalled();
-    });
+    // Give the resolved continuation a turn. Without this the assertions below
+    // run before the `await` in the effect has resumed and would hold whatever
+    // the guard did.
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
 
     // "Verifying no crash" was the whole assertion here, and there was none:
     // a `setState` after unmount does not throw, it logs. The guard is only
-    // observable through React's warning and through the encode never running.
+    // observable through React's warning and through the export stopping at
+    // the `isMountedRef` check instead of encoding a payload nobody will see.
     expect(consoleError).not.toHaveBeenCalled();
     expect(mockEncodeChangeset).not.toHaveBeenCalled();
     consoleError.mockRestore();
