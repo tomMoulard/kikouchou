@@ -36,7 +36,9 @@ export const THEME_STORAGE_KEY = 'theme';
 export const THEME_CLASSES = ['light', 'dark'] as const;
 
 /**
- * Every preference a user can choose.
+ * Every preference a user can choose, in the order the settings toggle shows
+ * them: the two concrete choices together, then "follow the device" last, so
+ * it reads as the fallback it is.
  */
 export const THEME_PREFERENCES = ['light', 'dark', 'system'] as const;
 

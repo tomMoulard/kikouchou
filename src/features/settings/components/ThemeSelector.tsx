@@ -23,6 +23,7 @@ import {
 import {
   DEFAULT_THEME_PREFERENCE,
   isThemePreference,
+  THEME_PREFERENCES,
   type ThemePreference,
 } from '@/lib/theme';
 
@@ -31,21 +32,17 @@ import {
 // ============================================================================
 
 /**
- * The icon for each preference, in display order.
+ * The icon for each preference.
  *
- * Ordered light -> dark -> system so the two concrete choices sit together and
- * "follow the device" reads as the fallback it is.
+ * A `Record` keyed by the union rather than a list of its own, so adding a
+ * preference to `THEME_PREFERENCES` is a type error here until it gets an
+ * icon — a parallel array would have silently rendered it iconless.
  */
 const THEME_ICONS: Record<ThemePreference, LucideIcon> = {
   light: Sun,
   dark: Moon,
   system: Monitor,
 };
-
-/**
- * Display order of the preferences.
- */
-const THEME_ORDER: readonly ThemePreference[] = ['light', 'dark', 'system'];
 
 // ============================================================================
 // Component
@@ -77,7 +74,7 @@ export const ThemeSelector = memo(function ThemeSelector(): ReactElement {
     ),
     options = useMemo<readonly ViewSwitcherOption<ThemePreference>[]>(
       () =>
-        THEME_ORDER.map((preference) => {
+        THEME_PREFERENCES.map((preference) => {
           const Icon = THEME_ICONS[preference];
 
           return {
