@@ -561,7 +561,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
                         onClick={() => { void handleClaimRoom(room); }}
                         disabled={isClaiming || claimedRoomId !== undefined}
                         aria-label={t('sharing.roomClaimNamed', 'Claim {{name}}', { name: room.name })}
-                        className={cn('h-11 min-h-[44px] w-full hover:bg-warning/90 disabled:opacity-40', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
+                        className={cn('h-11 min-h-[44px] w-full disabled:opacity-40', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
                       >
                         {isClaiming
                           ? t('common.loading', 'Loading...')
@@ -579,7 +579,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
             type="button"
             onClick={handleNavigateToTransport}
             disabled={claimedRoomId === undefined}
-            className={cn('h-12 w-full text-base font-semibold hover:bg-warning/90 disabled:opacity-40', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
+            className={cn('h-12 w-full text-base font-semibold disabled:opacity-40', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
           >
             {t('sharing.roomNext', 'Next')}
           </Button>
@@ -591,7 +591,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
             variant="ghost"
             onClick={handleNavigateToTransport}
             disabled={isClaimingRoomId !== undefined}
-            className="h-11 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface"
+            className="h-11 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface dark:hover:bg-warning-surface dark:hover:text-warning-on-surface"
           >
             {t('sharing.roomSkip', 'Skip for now')}
           </Button>

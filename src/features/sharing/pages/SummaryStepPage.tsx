@@ -436,7 +436,7 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
             type="button"
             onClick={() => { void handleEnterTrip(); }}
             disabled={isSubmitting}
-            className={cn('mt-4 h-12 w-full text-base font-semibold hover:bg-warning/90', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
+            className={cn('mt-4 h-12 w-full text-base font-semibold', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
             aria-describedby={submitError ? 'enter-trip-error' : undefined}
           >
             {isSubmitting

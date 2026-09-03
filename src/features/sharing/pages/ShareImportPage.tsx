@@ -439,7 +439,7 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
 
           {/* Get Started — primary CTA, min 44px touch target */}
           <Button
-            className={cn('h-12 w-full text-base font-semibold hover:bg-warning/90', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
+            className={cn('h-12 w-full text-base font-semibold', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
             onClick={handleGetStarted}
             disabled={isNavigating}
           >

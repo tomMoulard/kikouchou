@@ -55,7 +55,8 @@ export type StatusEmphasis = (typeof STATUS_EMPHASES)[number]
 /**
  * Status colours for panels, badges, buttons, icons and text.
  *
- * - `solid` — filled: a status button, a legend dot, a progress bar fill.
+ * - `solid` — filled, with its own hover: a status button, a legend dot, a
+ *   progress bar fill.
  * - `soft` — tinted panel that also tints its text: callouts, badges, alerts.
  * - `surface` — the same tint and border but no text colour, for a container
  *   whose children set their own (a card holding a name, a time and a button).
@@ -92,7 +93,7 @@ export const statusVariants = cva("", {
     {
       tone: ["arrival", "success"],
       emphasis: "solid",
-      class: "bg-success text-success-foreground",
+      class: "bg-success text-success-foreground hover:bg-success/90",
     },
     {
       tone: ["arrival", "success"],
@@ -119,7 +120,7 @@ export const statusVariants = cva("", {
     {
       tone: "departure",
       emphasis: "solid",
-      class: "bg-departure text-departure-foreground",
+      class: "bg-departure text-departure-foreground hover:bg-departure/90",
     },
     {
       tone: "departure",
@@ -147,7 +148,7 @@ export const statusVariants = cva("", {
     {
       tone: "warning",
       emphasis: "solid",
-      class: "bg-warning text-warning-foreground",
+      class: "bg-warning text-warning-foreground hover:bg-warning/90",
     },
     {
       tone: "warning",
@@ -174,7 +175,7 @@ export const statusVariants = cva("", {
     {
       tone: "danger",
       emphasis: "solid",
-      class: "bg-destructive text-destructive-foreground",
+      class: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
     },
     {
       tone: "danger",
@@ -202,7 +203,7 @@ export const statusVariants = cva("", {
     {
       tone: "neutral",
       emphasis: "solid",
-      class: "bg-secondary text-secondary-foreground",
+      class: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
     },
     {
       tone: "neutral",

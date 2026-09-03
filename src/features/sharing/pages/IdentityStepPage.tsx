@@ -402,7 +402,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
             <Button
               type="button"
               variant="ghost"
-              className="h-11 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface"
+              className="h-11 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface dark:hover:bg-warning-surface dark:hover:text-warning-on-surface"
               onClick={handleToggleAddForm}
             >
               {t('sharing.identityNotOnList', "I'm not on the list")}
@@ -436,7 +436,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
                   placeholder={t('sharing.identityAddName', 'Your name')}
                   aria-invalid={nameError !== undefined ? 'true' : 'false'}
                   aria-describedby={nameError !== undefined ? 'name-error' : undefined}
-                  className="border-warning-border bg-card"
+                  className="border-warning-border bg-card dark:border-warning-border dark:bg-card"
                   autoComplete="given-name"
                   maxLength={100}
                 />
@@ -451,7 +451,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
                 onClick={() => { void handleAddMyself(); }}
                 disabled={isAdding}
                 className={cn(
-                  'h-11 w-full hover:bg-warning/90',
+                  'h-11 w-full',
                   statusVariants({ tone: 'warning', emphasis: 'solid' }),
                 )}
               >
@@ -468,7 +468,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
             onClick={handleNext}
             disabled={!selectedPersonId || isNavigating}
             className={cn(
-              'h-12 w-full text-base font-semibold hover:bg-warning/90 disabled:opacity-40',
+              'h-12 w-full text-base font-semibold disabled:opacity-40',
               statusVariants({ tone: 'warning', emphasis: 'solid' }),
             )}
           >
