@@ -848,5 +848,61 @@ test.describe('PWA Installation Readiness', () => {
 
     expect(viewport).not.toBeNull();
     expect(viewport).toContain('width=device-width');
+
+    /**
+     * `viewport-fit=cover` is what makes `env(safe-area-inset-*)` report
+     * anything at all.
+     *
+     * Without it every inset is 0 on every device, so every safe-area rule in
+     * `src/index.css` is dead code that still compiles, still ships and still
+     * looks right in a desktop browser — the bottom nav bar simply renders
+     * under the home indicator on the phones this app is installed on, and the
+     * `theme-color` letterbox reappears. Nothing else in the suite can notice
+     * that, which is why it is asserted on the meta tag itself.
+     */
+    expect(viewport).toContain('viewport-fit=cover');
+  });
+
+  test('the app shell reserves the bottom safe area', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('load');
+
+    /**
+     * The safe-area utilities have to survive the production CSS pipeline.
+     *
+     * `pb-safe`, `pb-bottom-stack` and `bottom-nav-safe` are `@utility`
+     * declarations rather than stock Tailwind classes, so a rename or a
+     * Lightning CSS pass that dropped them would leave the class attribute
+     * intact and every rule gone — the failure would be silent in the DOM and
+     * visible only on a device with an inset. Reading the compiled stylesheet
+     * back is the only place that shows up in CI, where every inset is 0.
+     */
+    const rules = await page.evaluate(() => {
+      const found: string[] = [];
+      for (const sheet of Array.from(document.styleSheets)) {
+        let cssRules: CSSRuleList;
+        try {
+          cssRules = sheet.cssRules;
+        } catch {
+          // Cross-origin stylesheet — none of ours.
+          continue;
+        }
+        const walk = (list: CSSRuleList): void => {
+          for (const rule of Array.from(list)) {
+            if (rule.cssText.includes('safe-area-inset')) {
+              found.push(rule.cssText);
+            }
+            const nested = (rule as CSSGroupingRule).cssRules as CSSRuleList | undefined;
+            if (nested !== undefined) {
+              walk(nested);
+            }
+          }
+        };
+        walk(cssRules);
+      }
+      return found;
+    });
+
+    expect(rules.join('\n')).toContain('safe-area-inset-bottom');
   });
 });

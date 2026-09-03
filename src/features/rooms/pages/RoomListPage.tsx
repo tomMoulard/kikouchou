@@ -1328,8 +1328,9 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           className={cn(
             'grid gap-4',
             'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
-            // Extra bottom padding for FAB on mobile
-            'pb-20 sm:pb-4',
+            // No bottom padding of its own: `<main>`'s `pb-bottom-stack` clears
+            // the FAB and the nav bar for every page, and this grid's own
+            // `pb-20 sm:pb-4` did not protect the timeline view next to it.
           )}
         >
           {sortedRoomsWithOccupancy.map(({ room, currentOccupants, peakOccupancy, availableSpots, isFull }) => (
@@ -1381,7 +1382,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         onClick={handleAddRoom}
         size="lg"
         className={cn(
-          'fixed bottom-20 right-4 z-10',
+          'fixed bottom-nav-safe right-4 z-10',
           'size-14 rounded-full shadow-lg',
           'sm:hidden',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',

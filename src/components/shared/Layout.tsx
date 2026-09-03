@@ -269,8 +269,14 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
 
   return (
     <>
+      {/*
+        `pb-safe` rather than a taller bar: the background fills the home
+        indicator's strip while the `h-16` row of links stays above it. Without
+        it, `viewport-fit=cover` leaves the bottom of every icon under a bar the
+        OS owns. See "The mobile bottom edge" in `src/index.css`.
+      */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background pb-safe md:hidden"
         aria-label={t('nav.mobileMain', 'Mobile navigation')}
       >
         <ul className="flex h-16 items-center justify-around">
@@ -332,8 +338,13 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
 
       {/* "More" bottom sheet */}
       <Sheet open={isMoreOpen} onOpenChange={setIsMoreOpen}>
-        {/* pb-20 accounts for h-16 bottom nav + safe area buffer */}
-        <SheetContent side="bottom" showCloseButton={false} className="pb-20">
+        {/*
+          The sheet covers the nav bar rather than sitting in front of it, but
+          the bar is still visible behind the scrim — so its last row keeps clear
+          of both the bar and the home indicator. `pb-nav-safe` is that sum;
+          `pb-20` used to claim it and was a flat 80px with no inset in it.
+        */}
+        <SheetContent side="bottom" showCloseButton={false} className="pb-nav-safe">
           <SheetHeader>
             <SheetTitle>{t('nav.more', 'More')}</SheetTitle>
             <SheetDescription className="sr-only">
@@ -629,7 +640,10 @@ const DesktopSidebar = memo(function DesktopSidebar({
   return (
     <aside
       className={cn(
-        'fixed left-0 top-14 z-30 hidden h-[calc(100vh-3.5rem)] flex-col border-r bg-background transition-all duration-300 md:flex',
+        // `dvh`, not `vh`: `100vh` is the *largest* viewport height, so with
+        // browser chrome showing the sidebar overflowed by exactly the chrome's
+        // height and its bottom links scrolled out of reach.
+        'fixed left-0 top-14 z-30 hidden h-[calc(100dvh-3.5rem)] flex-col border-r bg-background transition-all duration-300 md:flex',
         isCollapsed ? 'w-16' : 'w-60',
       )}
       aria-label={t('nav.main', 'Main navigation')}
@@ -771,7 +785,11 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
   }, [setIsSidebarCollapsed]);
 
   return (
-    <div className="min-h-screen bg-background">
+    // `min-h-svh`, not `min-h-screen` (`100vh`): on a phone `100vh` is the tall
+    // viewport, the one you only get once the browser chrome has retracted, so
+    // the shell was always a chrome's-height taller than the window. `svh` is
+    // the small viewport and never overflows; the sharing pages already use it.
+    <div className="min-h-svh bg-background">
       {/* Skip link for keyboard navigation - allows users to bypass navigation */}
       <a
         href="#main-content"
@@ -803,7 +821,11 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
         id="main-content"
         tabIndex={-1}
         className={cn(
-          'pb-20 pt-4 transition-all duration-300 md:pb-4',
+          // `pb-bottom-stack` is the one place the bottom-edge arithmetic
+          // lives. `pb-20` here cleared the `h-16` nav bar and nothing else, so
+          // the last row of every list sat inside the FAB's 80-136px band and
+          // four pages had each pasted their own compensation on top of it.
+          'pb-bottom-stack pt-4 transition-all duration-300',
           // Adjust left margin based on sidebar state (desktop only)
           isSidebarCollapsed ? 'md:ml-16' : 'md:ml-60',
           'px-4 md:px-6',

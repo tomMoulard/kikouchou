@@ -2,7 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      `viewport-fit=cover` lets the layout viewport run under the notch and the
+      home indicator, which is what makes an installed PWA look installed rather
+      than letterboxed in `theme-color`. It is also what makes
+      `env(safe-area-inset-*)` report anything but 0 — without it those values
+      are always zero and every safe-area rule is dead code. The two go
+      together: see the "mobile bottom edge" block in `src/index.css` for the
+      stack that reads them.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Kikoushou</title>
 
     <!-- PWA Meta Tags -->

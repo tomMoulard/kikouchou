@@ -462,7 +462,9 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
         <div
           role="list"
           aria-label={t('activities.title')}
-          className="space-y-6 pb-20 sm:pb-4"
+          // Bottom clearance is `<main>`'s job (`pb-bottom-stack`), not this
+          // list's.
+          className="space-y-6"
         >
           {upcomingDateGroups.map((group) => (
             <ActivityDateGroupSection
@@ -532,7 +534,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
         onClick={handleAddActivity}
         size="lg"
         className={cn(
-          'fixed bottom-20 right-4 z-10',
+          'fixed bottom-nav-safe right-4 z-10',
           'size-14 rounded-full shadow-lg',
           'sm:hidden',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
