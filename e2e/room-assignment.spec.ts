@@ -14,7 +14,8 @@
  * @module e2e/room-assignment
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
+import { seedTransport } from './support/seed';
 import { clearIndexedDB } from './support/storage';
 
 // ============================================================================
@@ -408,6 +409,49 @@ async function createPerson(
 }
 
 /**
+ * Drags one element onto another in a way dnd-kit actually notices.
+ *
+ * `locator.dragTo()` is not enough here, and its failure mode is a silent
+ * no-op rather than an error. `RoomListPage` configures dnd-kit's `MouseSensor`
+ * with an 8px activation constraint and then tracks the pointer through
+ * `mousemove` events on the document: the drag only begins on the first move
+ * past 8px, and the drop target is resolved from the pointer delta accumulated
+ * by the moves that follow. Playwright's built-in drag emits too few moves, and
+ * they jump straight to the destination — so the sensor either never activates
+ * or activates at the destination with nothing left to travel, and `onDragEnd`
+ * fires with `over === null`.
+ *
+ * Nudging past the threshold first and then travelling in steps produces the
+ * event stream a real pointer would.
+ */
+async function dragOnto(page: Page, source: Locator, target: Locator): Promise<void> {
+  await target.scrollIntoViewIfNeeded();
+
+  const from = await source.boundingBox();
+  const to = await target.boundingBox();
+
+  if (!from || !to) {
+    throw new Error('Cannot drag: source or target has no bounding box');
+  }
+
+  const fromX = from.x + from.width / 2;
+  const fromY = from.y + from.height / 2;
+  const toX = to.x + to.width / 2;
+  const toY = to.y + to.height / 2;
+
+  await page.mouse.move(fromX, fromY);
+  await page.mouse.down();
+  // Clear the 8px activation constraint before setting off.
+  await page.mouse.move(fromX + 12, fromY, { steps: 5 });
+  await page.mouse.move(toX, toY, { steps: 20 });
+  // One more move at rest: dnd-kit resolves the collision on the last move it
+  // saw, and a drop that lands exactly on the final step of a travel is worth
+  // confirming rather than assuming.
+  await page.mouse.move(toX, toY);
+  await page.mouse.up();
+}
+
+/**
  * Opens the room assignment section for a specific room by clicking on the room card.
  */
 async function openRoomAssignments(page: Page, roomName: string): Promise<void> {
@@ -768,53 +812,76 @@ test.describe('Room Assignment Flow', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Test 7: Drag and drop assignment (if implemented)
+  // Test 7: Drag and drop assignment
   // --------------------------------------------------------------------------
   test('drag and drop opens quick assignment dialog', async ({ page }) => {
     tripId = await createTestTrip(page);
 
-    // Setup: Create room
-    await navigateToRooms(page, tripId);
-    await createRoom(page, TEST_DATA.room);
-
-    // Create person
-    await navigateToPersons(page, tripId);
-    await createPerson(page, TEST_DATA.person);
+    /**
+     * The whole fixture is written before the trip is ever opened, and both
+     * halves of that sentence are load-bearing.
+     *
+     * *What* is seeded: a room, a guest, and the guest's arrival **and**
+     * departure transports. The transports are not decoration. `RoomListPage`
+     * derives a guest's stay window through `deriveGuestStayDateBounds`, which
+     * needs either explicit stay dates or both ends of the journey; with
+     * neither, `calculateUnassignedDates` returns null, the unassigned-guests
+     * card never renders, and the only draggable guest in the page does not
+     * exist. That is precisely why this test skipped on every run it ever had:
+     * it created a room and a person and no transport, while its own skip
+     * message named the transport it was missing.
+     *
+     * *When*: before `navigateToRooms`, because these rows go straight into
+     * IndexedDB. Once a trip is current, `YjsTripSync` mounts a document for
+     * it and `syncDocToDexie` reprojects that document over Dexie — dropping
+     * any row the document has never heard of. See `e2e/support/seed.ts`.
+     */
+    await createRoomViaDB(page, tripId, {
+      name: TEST_DATA.room.name,
+      capacity: parseInt(TEST_DATA.room.capacity, 10),
+      description: TEST_DATA.room.description,
+    });
+    const personId = await createPersonViaDB(page, tripId, { name: TEST_DATA.person.name });
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'arrival',
+      datetime: `${TEST_DATA.assignment.startDate}T10:00:00Z`,
+    });
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'departure',
+      datetime: `${TEST_DATA.assignment.endDate}T18:00:00Z`,
+    });
 
     // Navigate to rooms page where drag and drop is available
     await navigateToRooms(page, tripId);
 
-    // Look for unassigned guests section
-    // Note: Person needs transport to appear in unassigned section
-    const unassignedSection = page.getByText(/unassigned|guests without rooms|sans chambre/i);
-    const hasUnassignedSection = await unassignedSection.isVisible().catch(() => false);
+    // The unassigned-guests card — "N guests without a room" / "N invités sans
+    // chambre" — which exists only because of the transports seeded above.
+    const unassignedSection = page.getByText(/without a room|sans chambre/i);
+    await expect(unassignedSection).toBeVisible();
 
-    if (!hasUnassignedSection) {
-      // If no unassigned section, the person doesn't have transport set up
-      // This is expected behavior - skip the drag test
-      test.skip(true, 'No unassigned guests section - person needs transport to appear');
-      return;
-    }
-
-    // Find the draggable guest element
-    const draggableGuest = page.locator('[data-draggable="true"]').filter({
-      hasText: TEST_DATA.person.name
-    });
-
-    const hasDraggable = await draggableGuest.isVisible().catch(() => false);
-
-    if (!hasDraggable) {
-      test.skip(true, 'No draggable guest element found');
-      return;
-    }
+    /**
+     * dnd-kit's `useDraggable` spreads `role="button"` and
+     * `aria-roledescription="draggable"` onto the node it is attached to.
+     * There is no `data-draggable` attribute anywhere in the application —
+     * the locator this test used to carry could never have matched anything.
+     */
+    const draggableGuest = page
+      .locator('[aria-roledescription="draggable"]')
+      .filter({ hasText: TEST_DATA.person.name });
+    await expect(draggableGuest).toBeVisible();
 
     // Find the droppable room
     const droppableRoom = page.locator('[role="listitem"]').filter({
       hasText: TEST_DATA.room.name
     });
+    await expect(droppableRoom).toBeVisible();
 
     // Perform drag and drop
-    await draggableGuest.dragTo(droppableRoom);
+    await dragOnto(page, draggableGuest, droppableRoom);
 
     // Wait for quick assignment dialog to open
     const quickAssignDialog = page.getByRole('dialog');
@@ -825,7 +892,7 @@ test.describe('Room Assignment Flow', () => {
     await expect(quickAssignDialog.getByText(TEST_DATA.room.name)).toBeVisible();
 
     // Close the dialog without saving
-    const cancelButton = page.getByRole('button', { name: /cancel|annuler/i });
+    const cancelButton = quickAssignDialog.getByRole('button', { name: /cancel|annuler/i });
     await cancelButton.click();
 
     await expect(quickAssignDialog).toBeHidden({ timeout: 5000 });
