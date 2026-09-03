@@ -32,11 +32,15 @@ vi.mock('sonner', () => ({
   },
 }));
 
-// Mock react-i18next
+// Mock react-i18next.
+//
+// `t` is one stable function, not a fresh arrow per render, because that is what
+// i18next hands back — and because an unstable `t` silently invalidates the
+// hook's `useCallback` on every render, which would hide a missing `isOnline`
+// dependency behind an accidental re-creation.
+const translate = (key: string, fallback?: string): string => fallback ?? key;
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, fallback?: string) => fallback ?? key,
-  }),
+  useTranslation: () => ({ t: translate }),
 }));
 
 // ============================================================================
