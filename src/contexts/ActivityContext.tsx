@@ -21,7 +21,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { isActivityPast } from '@/features/activities/utils/activity-utils';
 
 import { useTripContext } from '@/contexts/TripContext';
-import { areArraysEqual, wrapAndSetError } from '@/contexts/utils';
+import {
+  areArraysEqual,
+  areCoordinatesEqual,
+  wrapAndSetError,
+} from '@/contexts/utils';
 import { db } from '@/lib/db/database';
 import {
   createActivity as repositoryCreateActivity,
@@ -174,8 +178,7 @@ const compareActivities = (a: Activity, b: Activity): boolean =>
   a.endDatetime === b.endDatetime &&
   a.allDay === b.allDay &&
   a.location === b.location &&
-  a.coordinates?.lat === b.coordinates?.lat &&
-  a.coordinates?.lon === b.coordinates?.lon &&
+  areCoordinatesEqual(a.coordinates, b.coordinates) &&
   a.organizerId === b.organizerId &&
   a.maxParticipants === b.maxParticipants &&
   a.notes === b.notes &&

@@ -18,7 +18,13 @@
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 
-import { render, screen, waitFor, isoDate } from '@/test/utils';
+import {
+  createTestRoom,
+  createTestTrip,
+  render,
+  screen,
+  waitFor,
+} from '@/test/utils';
 import { AppProviders } from '../AppProviders';
 import { useTripContext } from '@/contexts/TripContext';
 import { useRoomContext } from '@/contexts/RoomContext';
@@ -28,9 +34,7 @@ import { useTransportContext } from '@/contexts/TransportContext';
 import { useActivityContext } from '@/contexts/ActivityContext';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useYjsContext } from '@/lib/yjs/YjsProvider';
-import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { setCurrentTrip } from '@/lib/db/repositories/settings-repository';
-import { createRoom } from '@/lib/db/repositories/room-repository';
 import type { TripId } from '@/types';
 
 // ============================================================================
@@ -79,13 +83,13 @@ function YjsProbe(): ReactElement {
 // ============================================================================
 
 async function seedSelectedTrip(name = 'Composed Trip'): Promise<TripId> {
-  const trip = await createTrip({
+  const tripId = await createTestTrip({
     name,
-    startDate: isoDate('2024-07-15'),
-    endDate: isoDate('2024-07-30'),
+    startDate: '2024-07-15',
+    endDate: '2024-07-30',
   });
-  await setCurrentTrip(trip.id);
-  return trip.id;
+  await setCurrentTrip(tripId);
+  return tripId;
 }
 
 function renderWithinAppProviders(children: ReactNode) {
@@ -105,9 +109,12 @@ describe('AppProviders', () => {
     // Reaching the DOM at all means no context hook threw, which is to say
     // every provider on the list is mounted above the child.
     await waitFor(() => {
-      expect(screen.getByTestId('auth')).toHaveTextContent('true');
+      expect(screen.getByTestId('auth').textContent).toBe('true');
     });
 
+    // Exact, not substring: `toHaveTextContent('0')` also passes for 10 and
+    // 100, so it could not tell an empty context from one holding every row in
+    // the database.
     for (const testId of [
       'trips',
       'rooms',
@@ -116,28 +123,28 @@ describe('AppProviders', () => {
       'transports',
       'activities',
     ]) {
-      expect(screen.getByTestId(testId)).toHaveTextContent('0');
+      expect(screen.getByTestId(testId).textContent).toBe('0');
     }
-    expect(screen.getByTestId('current-trip')).toHaveTextContent('none');
+    expect(screen.getByTestId('current-trip').textContent).toBe('none');
   });
 
   it('nests the trip-scoped providers inside TripProvider, so they see the selected trip', async () => {
     const tripId = await seedSelectedTrip('Brittany');
-    await createRoom(tripId, { name: 'Master bedroom', capacity: 2 });
-    await createRoom(tripId, { name: 'Attic', capacity: 3 });
+    await createTestRoom(tripId, { name: 'Master bedroom', capacity: 2 });
+    await createTestRoom(tripId, { name: 'Attic', capacity: 3 });
 
     renderWithinAppProviders(<ContextProbe />);
 
     // The trip reaches TripProvider...
     await waitFor(() => {
-      expect(screen.getByTestId('current-trip')).toHaveTextContent('Brittany');
+      expect(screen.getByTestId('current-trip').textContent).toBe('Brittany');
     });
 
     // ...and RoomProvider, nested inside it, scopes its live query to that trip.
     // A RoomProvider mounted above TripProvider could not do this; it would
     // throw on its own useTripContext() call instead.
     await waitFor(() => {
-      expect(screen.getByTestId('rooms')).toHaveTextContent('2');
+      expect(screen.getByTestId('rooms').textContent).toBe('2');
     });
   });
 
@@ -147,7 +154,7 @@ describe('AppProviders', () => {
     renderWithinAppProviders(<YjsProbe />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('yjs-trip')).toHaveTextContent(tripId);
+      expect(screen.getByTestId('yjs-trip').textContent).toBe(tripId);
     });
   });
 

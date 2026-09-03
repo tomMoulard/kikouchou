@@ -453,15 +453,33 @@ describe('TransportContext', () => {
       readonly field: string;
       /** Applied before the hook mounts, when the case needs a starting value. */
       readonly seed?: Partial<Transport>;
-      readonly patch: Partial<Transport>;
+      /** A plain patch, or one that needs the second guest's id. */
+      readonly patch: Partial<Transport> | ((otherPersonId: PersonId) => Partial<Transport>);
       readonly read: (transport: Transport | undefined) => unknown;
-      readonly expected: unknown;
+      readonly expected?: unknown;
+      /** Set when the expected value is the second guest's id. */
+      readonly expectOther?: boolean;
     }[] = [
       {
         field: 'type',
         patch: { type: 'departure' },
         read: (t) => t?.type,
         expected: 'departure',
+      },
+      // Both person references get a case. `personId` decides whose row this
+      // is and `driverId` who collects them, and neither is reachable from any
+      // other test in this file.
+      {
+        field: 'personId',
+        patch: (otherPersonId) => ({ personId: otherPersonId }),
+        read: (t) => t?.personId,
+        expectOther: true,
+      },
+      {
+        field: 'driverId',
+        patch: (otherPersonId) => ({ driverId: otherPersonId }),
+        read: (t) => t?.driverId,
+        expectOther: true,
       },
       {
         field: 'datetime',
@@ -547,10 +565,12 @@ describe('TransportContext', () => {
       },
     ];
 
-    for (const { field, seed, patch, read, expected } of mutations) {
+    for (const { field, seed, patch, read, expected, expectOther } of mutations) {
       it(`propagates a change to ${field}`, async () => {
         const tripId = await createTestTripData();
         const personId = await createTestPerson(tripId);
+        // The two person-reference cases point at this second guest.
+        const otherPersonId = await createTestPerson(tripId, 'Second Guest');
         const created = await createTransport(tripId, {
           type: 'arrival',
           personId,
@@ -578,14 +598,39 @@ describe('TransportContext', () => {
           expect(result.current.transport.transports).toHaveLength(1);
         });
 
-        await db.transports.update(created.id, patch);
-        await waitForLiveQuery();
+        // The seeded cases move one axis of a pair the context must already be
+        // holding. Without this the ref can still lag a query emission, the
+        // comparison under test becomes absent-vs-present, and a comparator
+        // that ignores that one axis slips through.
+        if (seed) {
+          await waitFor(() => {
+            const seeded = result.current.transport.transports.find(
+              (t) => t.id === created.id,
+            );
+            expect({
+              coordinates: seeded?.coordinates,
+              startCoordinates: seeded?.startCoordinates,
+            }).toEqual({
+              coordinates: seed.coordinates,
+              startCoordinates: seed.startCoordinates,
+            });
+          });
+        }
+
+        await act(async () => {
+          await db.transports.update(
+            created.id,
+            typeof patch === 'function' ? patch(otherPersonId) : patch,
+          );
+        });
 
         await waitFor(() => {
           const updated = result.current.transport.transports.find(
             (t) => t.id === created.id,
           );
-          expect(read(updated)).toEqual(expected);
+          expect(read(updated)).toEqual(
+            expectOther === true ? otherPersonId : expected,
+          );
         });
       });
     }
@@ -623,7 +668,6 @@ describe('TransportContext', () => {
           startLocation: 'Home',
         });
       });
-      await waitForLiveQuery();
 
       await waitFor(() => {
         const updated = result.current.transport.transports.find(
