@@ -429,9 +429,11 @@ every unit test.
 - **That module must never throw.** `main.tsx` imports it at module scope, and so
   transitively does every component test, so a throw blanks the app and fails
   test collection rather than merely losing an event.
-- **Captures are anonymous.** Nothing is passed to `identify()`: the app has no
-  accounts, trip guests are domain records rather than identities, and a shared
-  browser would misattribute events.
+- **Anonymous visitors never become a Person.** `person_profiles` is
+  `'identified_only'`, and most of this app works signed out, so a persisted
+  person per visitor would swamp the handful of real accounts. Trip guests are
+  domain records rather than identities and are never passed to `identify()`.
+  Only a signed-in Supabase account is.
 - **Send counts and enum values, not user content.** One capture breaks this
   deliberately — `assistant_prompt_sent` carries the prompt text, because what
   people ask is the only way to tell whether the assistant answers it. A prompt
@@ -444,12 +446,47 @@ every unit test.
   by event name, not by position: `calls.at(-1)` broke the moment a second event
   started firing after the one under test.
 - **Identity follows the Supabase session.** `AuthContext` calls
-  `identify(user.id)` on sign-in and `reset()` on sign-out. Both fire on the
-  *transition* only: that handler also runs on every token refresh, and `reset()`
-  mints a fresh anonymous id, so calling it on each cold load would give a
-  signed-out visitor a new identity every time and inflate unique users. The
-  sign-out `reset()` is what stops the next person on a shared browser inheriting
-  the last one's identity.
+  `identify(user.id, { supabase_user_id, email, name })` on sign-in and `reset()`
+  on sign-out. Both fire on the *transition* only: that handler also runs on
+  every token refresh, and `reset()` mints a fresh anonymous id, so calling it on
+  each cold load would give a signed-out visitor a new identity every time and
+  inflate unique users. The sign-out `reset()` is what stops the next person on a
+  shared browser inheriting the last one's identity. The properties are not
+  decoration: identified with the id alone, a person is a bare UUID that nobody
+  can line up against its `auth.users` row. Absent fields are omitted rather than
+  sent blank — `identify()` merges, so a blank overwrites a good value.
+- **Sign out through `resetAnalyticsIdentity()`, never `posthog.reset()`.**
+  `reset()` calls `persistence.clear()` internally, which drops *every* persisted
+  property — super properties included — so a bare `reset()` leaves the rest of
+  that tab reporting no `app_version` and no `signed_in`, and every event after a
+  sign-out falls out of the breakdowns the project is sliced by. The helper puts
+  back what `lib/posthog` registered; whoever registered a super property
+  elsewhere restores their own (`AuthContext` re-registers `signed_in`).
+- **A dev server must never reach PostHog, and three separate things enforce
+  that.** They exist because the project once held 20 people against 3 Supabase
+  accounts: 19 were anonymous ids and every one of their events came from
+  `localhost:3000`, `localhost:5173` or the e2e servers. Do not remove any of
+  them for being redundant — the redundancy is the point.
+  1. `lib/posthog` refuses to `init()` when `window.location.hostname` looks
+     like a development host — loopback, but also the RFC 1918 and link-local
+     ranges, `.local` and `.localhost`, because `vite --host` serves a phone on
+     the LAN a `192.168.x.x` address and that is exactly when somebody is poking
+     at the app by hand. Overridden only by `VITE_POSTHOG_ALLOW_LOCALHOST=true`,
+     set deliberately for one session. This is the layer that does not have to be
+     remembered by each new entry point.
+  2. `internal_or_test_user_hostname: null`. `defaults: '2026-05-30'` otherwise
+     sets it to `/^(localhost|127\.0\.0\.1)$/`, and a match calls
+     `setInternalOrTestUser()` → `setPersonProperties()`, which is one of the
+     library calls that **force `$process_person_profile = true` and override
+     `identified_only`**. That is the actual mechanism behind the 19.
+  3. `playwright.config.ts` (all three `webServer` env blocks) and
+     `vitest.config.ts` blank `VITE_POSTHOG_KEY`/`VITE_POSTHOG_HOST` next to the
+     Supabase pair — Vite loads `.env.local` for those servers too — and
+     `.dockerignore` keeps `.env*` out of the Docker build context, where
+     `COPY . .` used to inline a developer's real key into the bundle nginx
+     serves on :3000. `e2e/support/external-services` additionally routes every
+     `posthog.com`/`posthog.io` request to a local stub, and
+     `e2e/analytics-privacy.spec.ts` asserts a run makes zero of them.
 - **Super properties carry the context**, so a call site does not have to
   remember it: `app_version` registered at init, `signed_in` on every auth
   change. Most of this app works signed out, so that flag is the difference
