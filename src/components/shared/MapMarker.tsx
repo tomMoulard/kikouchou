@@ -9,6 +9,8 @@ import { memo, useCallback, useEffect, useMemo } from 'react';
 import { Marker, Popup, Tooltip } from 'react-leaflet';
 import { divIcon, type LatLngExpression } from 'leaflet';
 
+import { statusVariants } from '@/components/ui/status.variants';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -58,13 +60,32 @@ export interface MapMarkerProps {
 // ============================================================================
 
 /**
- * Default colors for each marker type.
+ * Default fill and glyph colour for each marker type, as utility classes.
+ *
+ * These used to be four hex literals injected into the `divIcon` HTML as an
+ * inline `background-color`. An inline style is the one thing a stylesheet
+ * cannot reach, so the markers were the only surface in the app that could not
+ * respond to `.dark` at all — and `transport`'s `#22c55e` agreed with the
+ * transport map's legend swatch only because Tailwind's `green-500` happens to
+ * be that hex. Once the legend moved to `statusVariants`, the two were one
+ * token edit away from silently disagreeing.
+ *
+ * So the two types the legend labels take their classes *from that same
+ * `statusVariants` call*, rather than restating the tokens here. They cannot
+ * drift: both sides resolve `--success` / `--departure`, and both follow the
+ * theme without any JS re-reading a computed value, because a class is live in
+ * the DOM where an inline style is frozen at icon-creation time.
+ *
+ * `trip` and `default` appear on maps that carry no legend (the trip location
+ * maps), so they name theme tokens directly — `--primary` for a trip pin, and
+ * `--muted-foreground` for the neutral one, which is the token nearest the
+ * `#6b7280` it replaces.
  */
-const MARKER_TYPE_COLORS: Record<MapMarkerType, string> = {
-  trip: '#3b82f6', // Blue
-  transport: '#22c55e', // Green
-  pickup: '#f97316', // Orange
-  default: '#6b7280', // Gray
+const MARKER_TYPE_CLASSES: Record<MapMarkerType, string> = {
+  trip: 'bg-primary text-primary-foreground',
+  transport: statusVariants({ tone: 'arrival', emphasis: 'solid' }),
+  pickup: statusVariants({ tone: 'departure', emphasis: 'solid' }),
+  default: 'bg-muted-foreground text-background',
 };
 
 /**
@@ -88,46 +109,61 @@ const MARKER_TYPE_ICONS: Record<MapMarkerType, string> = {
 const HEX_COLOR_REGEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 
 /**
- * Validates and sanitizes a color value.
- * Only allows valid hex colors to prevent XSS injection.
+ * Validates a caller-supplied colour.
+ * Only a valid hex colour survives, which is what keeps an attacker-controlled
+ * string out of the `divIcon` HTML below. Anything else returns `undefined`,
+ * and the marker falls back to its type's theme classes.
  */
-function sanitizeColor(color: string | undefined, fallback: string): string {
-  if (!color) return fallback;
-  return HEX_COLOR_REGEX.test(color) ? color : fallback;
+function sanitizeColor(color: string | undefined): string | undefined {
+  if (!color) return undefined;
+  return HEX_COLOR_REGEX.test(color) ? color : undefined;
 }
 
 /**
+ * Shape, ring and shadow shared by every marker, whatever colours it wears.
+ *
+ * `border-background` rather than the literal white it replaces: a white ring
+ * around a pin is invisible against the CartoDB dark tiles the map switches to
+ * in dark mode.
+ */
+const MARKER_BASE_CLASSES =
+  'map-marker-container flex size-8 cursor-pointer items-center justify-center ' +
+  'rounded-full border-2 border-background shadow-md transition-colors';
+
+/**
  * Creates a Leaflet DivIcon with custom styling.
+ *
+ * `divIcon` takes an HTML *string*, so this is the one place in the app that
+ * writes markup by hand rather than as JSX. Everything that can be a class is
+ * one; the single inline style is a person's colour, which lives in the
+ * database rather than in the theme and so cannot be a utility class
+ * (AGENTS.md, "the inline-style carve-out", exception 1).
  */
 function createMarkerIcon(
   type: MapMarkerType = 'default',
   color?: string
 ): ReturnType<typeof divIcon> {
-  const typeColor = MARKER_TYPE_COLORS[type];
-  const bgColor = sanitizeColor(color, typeColor);
+  const customColor = sanitizeColor(color);
   const svgIcon = MARKER_TYPE_ICONS[type];
 
+  // A person's colour is an arbitrary hex from the database, so the glyph over
+  // it must not follow the theme either — `--foreground` would turn white on a
+  // pale pin in light mode. This is the "text laid over a user-chosen colour"
+  // case AGENTS.md carves out for `text-white`.
+  const colorClasses = customColor ? 'text-white' : MARKER_TYPE_CLASSES[type];
+  const colorStyle = customColor
+    ? ` style="background-color:${customColor}"`
+    : '';
+
   const html = `
-    <div class="map-marker-container" style="
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      background-color: ${bgColor};
-      border: 2px solid white;
-      border-radius: 50%;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-      cursor: pointer;
-      transition: transform 0.1s ease;
-    " tabindex="0" role="button">
+    <div class="${MARKER_BASE_CLASSES} ${colorClasses}"${colorStyle} data-marker-type="${type}" tabindex="0" role="button">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="16"
         height="16"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="white"
+        stroke="currentColor"
         stroke-width="2"
         stroke-linecap="round"
         stroke-linejoin="round"

@@ -555,11 +555,22 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
         action={headerAction}
       />
 
-      {/* Map legend */}
+      {/*
+        Map legend.
+
+        The swatches and the pins they describe are the same two
+        `statusVariants` calls — `MapMarker`'s `MARKER_TYPE_CLASSES` maps its
+        `transport`/`pickup` types onto `arrival`/`departure` by calling this
+        exact API rather than restating the tokens. The `data-testid`s let the
+        e2e suite read both back through `getComputedStyle` and assert they
+        resolve to one colour per theme, which is the only thing that catches
+        the pair drifting apart again.
+      */}
       <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
         <div className="flex items-center gap-1.5">
           <div
             className={cn('size-3 rounded-full', statusVariants({ tone: 'arrival', emphasis: 'solid' }))}
+            data-testid="map-legend-swatch-arrival"
             aria-hidden="true"
           />
           <span>{t('transports.arrivals')}</span>
@@ -567,6 +578,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
         <div className="flex items-center gap-1.5">
           <div
             className={cn('size-3 rounded-full', statusVariants({ tone: 'departure', emphasis: 'solid' }))}
+            data-testid="map-legend-swatch-departure"
             aria-hidden="true"
           />
           <span>{t('transports.departures')}</span>
