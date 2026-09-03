@@ -176,41 +176,41 @@ describe('InstallPrompt', () => {
    * is the two ways the fix silently comes undone in a later edit.
    */
   describe('bottom-edge clearance', () => {
-    it('uses the shared bottom-stack padding rather than its own arithmetic', async () => {
+    it('is positioned above the bottom stack rather than padded away from it', async () => {
       mockCanInstall.mockReturnValue(true);
       render(<InstallPrompt />, { withProviders: false });
       await act(async () => { vi.advanceTimersByTime(1100); });
 
       const region = screen.getByRole('region');
 
-      // `pb-20` cleared the `h-16` nav bar and left the card body sitting on
-      // the `bottom-20 size-14` FAB — 80px to 136px is exactly where a 4rem
-      // bottom padding puts it. `pb-bottom-stack` is the shared rule.
-      expect(region).toHaveClass('pb-bottom-stack');
-      expect(region.className).not.toMatch(/\bpb-20\b/);
+      // Padding is part of an element's box and hit-tests like the rest of it,
+      // so `bottom-0` plus any amount of bottom padding still swallows every
+      // tap across the FAB's band. Only `bottom` moves the box itself.
+      expect(region).toHaveClass('bottom-above-stack');
+      expect(region.className).not.toMatch(/\bbottom-0\b/);
+      expect(region.className).not.toMatch(/\bpb-(20|bottom-stack)\b/);
     });
 
-    it('does not set bottom padding twice', async () => {
+    it('does not eat taps in the width the card does not fill', async () => {
       mockCanInstall.mockReturnValue(true);
       render(<InstallPrompt />, { withProviders: false });
       await act(async () => { vi.advanceTimersByTime(1100); });
 
-      // `p-4` and `pb-bottom-stack` both write `padding-bottom`, and which one
-      // wins is stylesheet order — not something `cn()`'s tailwind-merge can
-      // resolve for a custom utility it does not know about. The gutter is
-      // spelled `px-4 pt-4` so there is only ever one declaration.
-      expect(screen.getByRole('region').className).not.toMatch(/\bp-4\b/);
+      // The wrapper is `inset-x-0`; the card is `max-w-md mx-auto`. The strips
+      // either side of it paint nothing, which is exactly the case
+      // `OfflineIndicator` waves through with `pointer-events-none`.
+      expect(screen.getByRole('region').className).toMatch(/pointer-events-none/);
     });
 
-    it('keeps its buttons clickable — it is not an informational overlay', async () => {
+    it('keeps its own buttons clickable', async () => {
       mockCanInstall.mockReturnValue(true);
       render(<InstallPrompt />, { withProviders: false });
       await act(async () => { vi.advanceTimersByTime(1100); });
 
-      // `OfflineIndicator` gets `pointer-events-none` because it only informs.
-      // This one has three buttons, so the only fix available to it is being
-      // positioned clear of everything else on the bottom edge.
-      expect(screen.getByRole('region').className).not.toMatch(/pointer-events-none/);
+      // `pointer-events-none` on the wrapper is inherited, so the drawn part
+      // has to opt back in — without this the Install button is decorative.
+      const card = screen.getByRole('region').firstElementChild;
+      expect(card?.className).toMatch(/pointer-events-auto/);
     });
   });
 });
