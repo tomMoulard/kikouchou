@@ -42,7 +42,7 @@ describe('ConfirmDialog Basic Rendering', () => {
       />
     );
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
     expect(screen.getByText('Test Title')).toBeInTheDocument();
     expect(screen.getByText('Test description')).toBeInTheDocument();
   });
@@ -61,7 +61,7 @@ describe('ConfirmDialog Basic Rendering', () => {
       />
     );
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 
   it('renders confirm and cancel buttons', () => {
@@ -118,8 +118,8 @@ describe('ConfirmDialog Basic Rendering', () => {
       />
     );
 
-    // The className is applied to DialogContent
-    const dialog = screen.getByRole('dialog');
+    // The className is applied to AlertDialogContent
+    const dialog = screen.getByRole('alertdialog');
     expect(dialog).toHaveClass('custom-dialog');
   });
 });
@@ -453,7 +453,7 @@ describe('ConfirmDialog Variants', () => {
 // ============================================================================
 
 describe('ConfirmDialog Accessibility', () => {
-  it('has role="dialog"', () => {
+  it('has role="alertdialog", not the ordinary dialog role', () => {
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn();
 
@@ -461,13 +461,57 @@ describe('ConfirmDialog Accessibility', () => {
       <ConfirmDialog
         open={true}
         onOpenChange={onOpenChange}
-        title="Test"
-        description="Test"
+        title="Delete this trip?"
+        description="This cannot be undone"
         onConfirm={onConfirm}
       />
     );
 
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    // A confirmation is an interruption a screen reader must announce as such.
+    // `role="dialog"` announces "Delete this trip?" exactly like "Edit room".
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('names and describes itself from the title and description', () => {
+    const onOpenChange = vi.fn();
+    const onConfirm = vi.fn();
+
+    render(
+      <ConfirmDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        title="Delete this trip?"
+        description="This cannot be undone"
+        onConfirm={onConfirm}
+      />
+    );
+
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog).toHaveAccessibleName('Delete this trip?');
+    expect(dialog).toHaveAccessibleDescription('This cannot be undone');
+  });
+
+  it('opens with focus on the cancel button, not the destructive one', () => {
+    const onOpenChange = vi.fn();
+    const onConfirm = vi.fn();
+
+    render(
+      <ConfirmDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        title="Delete this trip?"
+        description="This cannot be undone"
+        onConfirm={onConfirm}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="destructive"
+      />
+    );
+
+    // Radix focuses AlertDialogCancel on open. Without one it prevents its own
+    // default focus and focuses nothing at all, which breaks the trap.
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
   });
 
   it('has accessible title', () => {

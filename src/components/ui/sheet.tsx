@@ -1,10 +1,15 @@
 "use client"
 
 import * as React from "react"
+import { useTranslation } from "react-i18next"
 import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import {
+  dialogCloseButtonClassName,
+  dialogOverlayClassName,
+} from "@/components/ui/dialog.variants"
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -35,10 +40,7 @@ function SheetOverlay({
   return (
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
-      className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
-        className
-      )}
+      className={cn(dialogOverlayClassName, className)}
       {...props}
     />
   )
@@ -54,6 +56,8 @@ function SheetContent({
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
+  const { t } = useTranslation()
+
   return (
     <SheetPortal>
       <SheetOverlay />
@@ -75,9 +79,15 @@ function SheetContent({
       >
         {children}
         {showCloseButton && (
-          <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
-            <XIcon className="size-4" />
-            <span className="sr-only">Close</span>
+          <SheetPrimitive.Close
+            data-slot="sheet-close"
+            className={dialogCloseButtonClassName}
+          >
+            <XIcon aria-hidden="true" />
+            {/* Screen-reader-only text is user-facing text, so it goes through t(). */}
+            <span className="sr-only">
+              {t("common.dialogClose", "Close dialog")}
+            </span>
           </SheetPrimitive.Close>
         )}
       </SheetPrimitive.Content>
