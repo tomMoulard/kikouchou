@@ -37,7 +37,6 @@ import {
   parseISO,
   subDays,
 } from 'date-fns';
-import { type Locale, enUS, fr } from 'date-fns/locale';
 import { AlertTriangle, DoorOpen, GripVertical, Plus, Sparkles } from 'lucide-react';
 import {
   DndContext,
@@ -64,6 +63,7 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ViewSwitcher } from '@/components/ui/view-switcher';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { ASSISTANT_MODEL_PRESETS } from '@/features/assistant/models';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
@@ -137,13 +137,6 @@ interface RoomAssignmentPlan {
   readonly roomId: Room['id'];
   readonly startDate: string;
   readonly endDate: string;
-}
-
-/**
- * Gets the date-fns locale based on language code.
- */
-function getDateLocale(language: string): Locale {
-  return language === 'fr' ? fr : enUS;
 }
 
 /**

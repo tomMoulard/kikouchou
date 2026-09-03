@@ -10,6 +10,7 @@ import { format, isValid, parseISO } from 'date-fns';
 import type { Locale } from 'date-fns/locale';
 
 import { toLocalISODateString } from '@/lib/db/utils';
+import { formatFullDate } from '@/lib/utils/date-format';
 import type { Activity, ISODateString, ISODateTimeString } from '@/types';
 
 // ============================================================================
@@ -277,22 +278,7 @@ export function groupActivitiesByDate(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([dateKey, groupActivities]) => ({
       dateKey,
-      displayDate: formatDayHeader(dateKey, locale),
+      displayDate: formatFullDate(dateKey, locale),
       activities: groupActivities,
     }));
-}
-
-/**
- * Formats a local date key as a full date header.
- *
- * @param dateKey - Date key in YYYY-MM-DD format
- * @param locale - date-fns locale
- * @returns Formatted date string, or the raw key when unparseable
- */
-export function formatDayHeader(dateKey: string, locale: Locale): string {
-  const parsed = parseISO(dateKey);
-  if (!isValid(parsed)) {
-    return dateKey;
-  }
-  return format(parsed, 'EEEE, MMMM d, yyyy', { locale });
 }

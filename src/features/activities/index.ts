@@ -46,7 +46,6 @@ export type { ActivityTimelineRowProps } from './components/ActivityTimelineRow'
 export {
   formatActivityDayRange,
   formatActivityTimeRange,
-  formatDayHeader,
   getActivityEndDayKey,
   getActivityEndInstant,
   getActivityStartDayKey,

@@ -270,9 +270,8 @@ describe('Layout', () => {
       renderLayout();
 
       const tripInfo = screen.getByTestId('trip-info-section');
-      // Date format: "Jul 15 - Jul 22" (depending on locale)
-      expect(tripInfo).toHaveTextContent(/Jul\s+15/);
-      expect(tripInfo).toHaveTextContent(/Jul\s+22/);
+      // Canonical range format: "15 - 22 Jul 2024" (month name follows locale)
+      expect(tripInfo).toHaveTextContent(/15\s+-\s+22\s+Jul\s+2024/);
     });
 
     it('shows trip location when available', () => {

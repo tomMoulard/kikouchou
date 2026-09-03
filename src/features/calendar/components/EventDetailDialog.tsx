@@ -8,8 +8,7 @@
 
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { differenceInDays, format, parseISO } from 'date-fns';
-import { enUS, fr } from 'date-fns/locale';
+import { type Locale, differenceInDays, format, parseISO } from 'date-fns';
 import {
   Calendar,
   Clock,
@@ -42,6 +41,7 @@ import {
   formatActivityDayRange,
   formatActivityTimeRange,
 } from '@/features/activities/utils/activity-utils';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { getActivityCategoryColor } from '@/types';
 import type {
   Activity,
@@ -138,20 +138,13 @@ function isActivityEvent(event: CalendarEventData): event is ActivityEventData {
   return event.type === 'activity';
 }
 
-/**
- * Gets the date-fns locale based on the i18n language.
- */
-function getDateLocale(language: string) {
-  return language === 'fr' ? fr : enUS;
-}
-
 // ============================================================================
 // AssignmentDetails Subcomponent
 // ============================================================================
 
 interface AssignmentDetailsProps {
   readonly event: AssignmentEventData;
-  readonly dateLocale: ReturnType<typeof getDateLocale>;
+  readonly dateLocale: Locale;
 }
 
 /**
@@ -295,7 +288,7 @@ const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }:
 
 interface TransportDetailsProps {
   readonly event: TransportEventData;
-  readonly dateLocale: ReturnType<typeof getDateLocale>;
+  readonly dateLocale: Locale;
 }
 
 /**
@@ -401,7 +394,7 @@ const TransportDetails = memo(function TransportDetails({ event, dateLocale }: T
 
 interface ActivityDetailsProps {
   readonly event: ActivityEventData;
-  readonly dateLocale: ReturnType<typeof getDateLocale>;
+  readonly dateLocale: Locale;
 }
 
 /**

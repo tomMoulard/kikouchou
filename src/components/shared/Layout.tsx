@@ -18,8 +18,6 @@ import {
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { format, isValid, parseISO } from 'date-fns';
-import type { Locale } from 'date-fns';
 import {
   BarChart2,
   Calendar,
@@ -54,6 +52,7 @@ import { useToday } from '@/hooks/useToday';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
+import { formatDateRange } from '@/lib/utils/date-format';
 import type { Trip } from '@/types';
 
 import { SyncStatusBadge } from './SyncStatusBadge';
@@ -376,30 +375,6 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
     </>
   );
 });
-
-/**
- * Formats date range for display.
- * @param startDate - Start date in ISO format
- * @param endDate - End date in ISO format
- * @returns Formatted date range string
- */
-function formatDateRange(
-  startDate: string,
-  endDate: string,
-  locale: Locale,
-): string {
-  // `new Date('2026-08-01')` is UTC midnight, and `toLocaleDateString` renders
-  // it in the LOCAL zone — one day early at any negative offset. `parseISO`
-  // gives local midnight, so the printed day matches the stored one. Passing the
-  // locale also keeps month names in the app's language rather than the
-  // browser's default.
-  const start = parseISO(startDate);
-  const end = parseISO(endDate);
-  if (!isValid(start) || !isValid(end)) {
-    return '';
-  }
-  return `${format(start, 'MMM d', { locale })} - ${format(end, 'MMM d', { locale })}`;
-}
 
 /**
  * Trip info section in the sidebar when a trip is selected (expanded rail only).
