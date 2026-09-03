@@ -35,11 +35,8 @@ import { type Locale, format, parseISO } from 'date-fns';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
-  Bus,
-  Car,
   ChevronDown,
   ChevronRight,
-  CircleDot,
   Clock,
   Edit,
   History,
@@ -48,7 +45,6 @@ import {
   MoreVertical,
   Plane,
   Plus,
-  Train,
   Trash2,
   User,
 } from 'lucide-react';
@@ -79,6 +75,7 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatFullDate } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
+import { getTransportModeIcon } from '@/lib/utils/transport-icons';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
 import {
@@ -86,7 +83,7 @@ import {
   selectPickupsNeedingDriver,
   sortTransportsByInstant,
 } from '@/features/transports/utils/pickup-utils';
-import type { Person, PersonId, Transport, TransportId, TransportMode, TransportType } from '@/types';
+import type { Person, PersonId, Transport, TransportId, TransportType } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -157,28 +154,6 @@ interface TransportListProps {
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Gets the icon component for a transport mode.
- *
- * @param mode - The transport mode
- * @returns The Lucide icon component
- */
-function getTransportModeIcon(mode: TransportMode | undefined): typeof Train {
-  switch (mode) {
-    case 'train':
-      return Train;
-    case 'plane':
-      return Plane;
-    case 'car':
-      return Car;
-    case 'bus':
-      return Bus;
-    case 'other':
-    default:
-      return CircleDot;
-  }
-}
 
 /**
  * Extracts the date key (YYYY-MM-DD) from a datetime string.

@@ -10,7 +10,6 @@ import {
   getTileUrl,
   getTilesToCache,
   estimateCacheSize,
-  formatBytes,
   isCacheAvailable,
   OSM_CACHE_NAME,
   DEFAULT_ZOOM_LEVELS,
@@ -240,34 +239,6 @@ describe('estimateCacheSize', () => {
     const result2 = estimateCacheSize({ lat: 48.8566, lon: 2.3522 }, [12], 3);
     
     expect(result2.tileCount).toBeGreaterThan(result1.tileCount);
-  });
-});
-
-// ============================================================================
-// formatBytes Tests
-// ============================================================================
-
-describe('formatBytes', () => {
-  it('formats 0 bytes', () => {
-    expect(formatBytes(0)).toBe('0 B');
-  });
-
-  it('formats bytes', () => {
-    expect(formatBytes(500)).toBe('500.0 B');
-  });
-
-  it('formats kilobytes', () => {
-    expect(formatBytes(1024)).toBe('1.0 KB');
-    expect(formatBytes(1536)).toBe('1.5 KB');
-  });
-
-  it('formats megabytes', () => {
-    expect(formatBytes(1024 * 1024)).toBe('1.0 MB');
-    expect(formatBytes(2.5 * 1024 * 1024)).toBe('2.5 MB');
-  });
-
-  it('formats gigabytes', () => {
-    expect(formatBytes(1024 * 1024 * 1024)).toBe('1.0 GB');
   });
 });
 

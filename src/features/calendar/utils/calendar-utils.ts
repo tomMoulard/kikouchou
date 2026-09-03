@@ -5,10 +5,10 @@
  * @module features/calendar/utils/calendar-utils
  */
 
-import { type Locale, format, isValid, parseISO } from 'date-fns';
 
+import { getContrastTextColor as getSharedContrastTextColor } from '@/lib/utils/color-contrast';
 import { formatTransportDatetime } from '@/lib/utils/datetime-format';
-import type { HexColor, RoomAssignment } from '@/types';
+import type { HexColor } from '@/types';
 import type { CalendarEvent, SegmentPosition } from '../types';
 
 // ============================================================================
@@ -34,51 +34,25 @@ export const MAX_VISIBLE_EVENT_SLOTS = 3;
 // ============================================================================
 
 /**
- * Calculates the relative luminance of a hex color.
- * Used to determine if text should be white or black for contrast.
- *
- * @param hex - Hex color string (with or without #)
- * @returns Relative luminance (0-1), defaults to 0.5 for invalid input
+ * Luminance and the white-or-black text decision live in
+ * `@/lib/utils/color-contrast`, shared with `PersonBadge` — which used to carry
+ * a second copy that answered differently on the same colour.
  */
-export function getLuminance(hex: string): number {
-  // Remove # if present
-  let cleanHex = hex.replace('#', '');
-
-  // Handle shorthand hex colors (e.g., #fff -> #ffffff)
-  if (cleanHex.length === 3) {
-    cleanHex = cleanHex
-      .split('')
-      .map((c) => c + c)
-      .join('');
-  }
-
-  // Validate hex format - must be exactly 6 hex characters
-  if (!/^[0-9A-Fa-f]{6}$/.test(cleanHex)) {
-    // Return middle luminance as safe default for invalid colors
-    return 0.5;
-  }
-
-  // Parse RGB values
-  const r = parseInt(cleanHex.substring(0, 2), 16) / 255,
-    g = parseInt(cleanHex.substring(2, 4), 16) / 255,
-    b = parseInt(cleanHex.substring(4, 6), 16) / 255,
-    // Calculate relative luminance using sRGB formula
-    linearize = (c: number) =>
-      c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-
-  return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
-}
+export { getLuminance } from '@/lib/utils/color-contrast';
 
 /**
  * Determines the optimal text color (white or black) for a given background.
+ *
+ * Delegates to the shared implementation but keeps the branded `HexColor`
+ * parameter: the shared helper has to take a plain `string` for `PersonBadge`,
+ * whose colour prop is unbranded, and widening the calendar's call sites too
+ * would drop the check that a colour went through `toHexColor` first.
  *
  * @param bgColor - Background hex color
  * @returns 'white' or 'black' for optimal contrast
  */
 export function getContrastTextColor(bgColor: HexColor): 'white' | 'black' {
-  const luminance = getLuminance(bgColor);
-  // WCAG recommends using white text on dark backgrounds (luminance < 0.179)
-  return luminance < 0.179 ? 'white' : 'black';
+  return getSharedContrastTextColor(bgColor);
 }
 
 // ============================================================================
@@ -146,17 +120,3 @@ export function formatTime(datetime: string): string {
   return formatTransportDatetime(datetime, undefined, 'timeOnly');
 }
 
-/**
- * Short stay label for timeline bars: first night through checkout day (assignment.endDate).
- */
-export function formatAssignmentStayRange(
-  assignment: Pick<RoomAssignment, 'startDate' | 'endDate'>,
-  locale: Locale,
-): string {
-  const start = parseISO(assignment.startDate);
-  const end = parseISO(assignment.endDate);
-  if (!isValid(start) || !isValid(end)) {
-    return '';
-  }
-  return `${format(start, 'd MMM', { locale })} – ${format(end, 'd MMM', { locale })}`;
-}

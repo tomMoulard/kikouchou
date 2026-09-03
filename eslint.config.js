@@ -50,7 +50,6 @@ export default defineConfig([
       '**/DateRangePicker.tsx',
       '**/CalendarPage.tsx',
       '**/EventDetailDialog.tsx',
-      '**/PersonCard.tsx',
       '**/PersonForm.tsx',
       '**/QuickAssignmentDialog.tsx',
       '**/RoomAssignmentSection.tsx',
