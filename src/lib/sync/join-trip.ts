@@ -19,6 +19,7 @@ import { nanoid } from 'nanoid';
 
 import { db } from '@/lib/db/database';
 import { toISODateStringFromString } from '@/lib/db/utils';
+import i18n from '@/lib/i18n';
 import type { ShareId, Trip, TripId, UnixTimestamp } from '@/types';
 
 // ============================================================================
@@ -57,30 +58,57 @@ async function fetchRemoteTripPreview(
 
   const row = data as Record<string, unknown>;
   return {
-    name: typeof row.name === 'string' ? row.name : 'Shared trip',
+    // Empty, not a name. Reading the row is not the place to decide what a
+    // nameless trip is called — `sanitisePreview` is, and it is the only place,
+    // so every missing-name path lands on one string instead of three literals
+    // that disagreed about capitalisation.
+    name: typeof row.name === 'string' ? row.name : '',
     startDate: typeof row.start_date === 'string' ? row.start_date : '',
     endDate: typeof row.end_date === 'string' ? row.end_date : '',
   };
 }
 
 /**
- * Bounds the preview before it reaches Dexie.
+ * Bounds the preview before it reaches Dexie, and names a trip that has no name.
  *
  * The server row is written by another user, which makes it remote-supplied
- * input by the same standard as a WebRTC peer's document. A 200-character cap
- * matches the server's own check constraint; a malformed date falls back to
- * today rather than poisoning every date query with an unparseable value.
+ * input by the same standard as a peer's document. A 200-character cap matches
+ * the server's own check constraint; a malformed date falls back to today rather
+ * than poisoning every date query with an unparseable value.
+ *
+ * The fallback name is translated at the point it is written, not left as a
+ * sentinel for the UI to resolve. That is the deliberately worse-looking half of
+ * a real trade-off, so it is worth stating:
+ *
+ * - It is *persisted*. `db.trips.name` is what `TripCard`, `TripListPage` and
+ *   `PageHeader` render, straight, with no `|| t(...)` in the way — an empty
+ *   sentinel would show a nameless trip as blank on every one of them. The
+ *   render-time form (`trip.name || t('trips.untitled')`) is what
+ *   `lib/sync/remote-trip.ts` does, and it can, because that list is built fresh
+ *   on every render and never stored.
+ * - So switching language later does not re-translate an already-joined trip.
+ *   That is the accepted cost. It is bounded: the trip is nameless only until
+ *   the CRDT document arrives with the owner's real name, usually seconds, and
+ *   the user can rename it. A blank trip name in the meantime is worse than a
+ *   stale-language one.
+ *
+ * The key is `trips.untitled` — the same one the CRDT bridge writes for the same
+ * situation, so the two entry paths cannot disagree about what a nameless trip
+ * is called. Importing `@/lib/i18n` from `lib/` follows that bridge: it is the
+ * framework-free i18next instance, not a React hook.
  */
 function sanitisePreview(preview: RemoteTripPreview | null): RemoteTripPreview {
   const today = new Date().toISOString().slice(0, 10);
+  const untitled = i18n.t('trips.untitled');
+
   if (!preview) {
-    return { name: 'Shared trip', startDate: today, endDate: today };
+    return { name: untitled, startDate: today, endDate: today };
   }
 
   const isIsoDate = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
   return {
-    name: preview.name.slice(0, 200) || 'Shared trip',
+    name: preview.name.trim().slice(0, 200) || untitled,
     startDate: isIsoDate(preview.startDate) ? preview.startDate : today,
     endDate: isIsoDate(preview.endDate) ? preview.endDate : today,
   };
