@@ -45,6 +45,105 @@ function fixtureDatetime(dayOfMonth: number, utcTime: string): string {
   return `${fixtureDate(dayOfMonth)}T${utcTime}`;
 }
 
+/**
+ * The days of the month a stay actually occupies, under the app's
+ * check-in/check-out model: from the check-in day up to but *not including* the
+ * check-out day. A stay from the 2nd to the 5th is three nights — the 2nd, 3rd
+ * and 4th — and the 5th is the morning the guest leaves.
+ *
+ * Derived rather than hardcoded so the fixture dates can move without the
+ * assertions quietly starting to check the wrong days.
+ */
+function stayNights(startDate: string, endDate: string): number[] {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const start = Date.parse(`${startDate}T00:00:00.000Z`);
+  const end = Date.parse(`${endDate}T00:00:00.000Z`);
+  const nights: number[] = [];
+  // UTC arithmetic throughout: a local-time loop would double or skip a day
+  // across a DST boundary.
+  for (let day = start; day < end; day += DAY_MS) {
+    nights.push(new Date(day).getUTCDate());
+  }
+  return nights;
+}
+
+/**
+ * The wall-clock time the app must render for a stored instant, `HH:mm`.
+ *
+ * The suite cannot know the runner's timezone, but it can compute what that
+ * timezone makes of the instant — which is the whole of BUG-2. Node and the
+ * browser under test share a machine, so they share a timezone.
+ */
+function localClockTime(datetime: string): string {
+  return new Date(datetime).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+/**
+ * One entry per day cell of the calendar's current month, with the accessible
+ * names of the pills it holds.
+ *
+ * Day cells carry no date attribute, so the month is located by its own first
+ * day: the leading cells are the tail of the previous month and can never hold
+ * a "1", so the first cell numbered 1 is this month's 1st, and the next one is
+ * the following month's.
+ */
+async function readMonthGrid(page: Page): Promise<{ day: number; pills: string[] }[]> {
+  return page.evaluate(() => {
+    const cells = Array.from(document.querySelectorAll('[role="gridcell"]'));
+    const dayNumberOf = (cell: Element): string =>
+      cell.querySelector('span')?.textContent?.trim() ?? '';
+
+    const firstOfMonth = cells.findIndex((cell) => dayNumberOf(cell) === '1');
+    if (firstOfMonth === -1) {
+      return [];
+    }
+    const nextMonth = cells.findIndex(
+      (cell, index) => index > firstOfMonth && dayNumberOf(cell) === '1',
+    );
+
+    return cells
+      .slice(firstOfMonth, nextMonth === -1 ? cells.length : nextMonth)
+      .map((cell, index) => ({
+        day: index + 1,
+        pills: Array.from(cell.querySelectorAll('button[aria-label]')).map(
+          (pill) => pill.getAttribute('aria-label') ?? '',
+        ),
+      }));
+  });
+}
+
+/**
+ * Picks a check-in / check-out range in the open assignment dialog's picker.
+ *
+ * Days are addressed by `data-day`, the picker's own per-date attribute, and
+ * not by their number: the month grid also renders the neighbouring months'
+ * days, so "2" matches up to three buttons.
+ */
+async function pickStayDates(page: Page, startDate: string, endDate: string): Promise<void> {
+  const toDataDay = (iso: string): Promise<string> =>
+    page.evaluate((value) => {
+      const [year, month, day] = value.split('-').map(Number);
+      return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1).toLocaleDateString();
+    }, iso);
+
+  await page.getByRole('button', { name: /check-in|arriv/i }).first().click();
+
+  const calendar = page.locator('[data-radix-popper-content-wrapper] [data-slot="calendar"]');
+  await expect(calendar).toBeVisible();
+
+  await calendar.locator(`button[data-day="${await toDataDay(startDate)}"]`).click();
+  await calendar.locator(`button[data-day="${await toDataDay(endDate)}"]`).click();
+
+  // The picker closes itself once both ends are set. Waiting for that is not
+  // cosmetic: the popover is itself a `role="dialog"`, so anything that reads
+  // `getByRole('dialog')` afterwards would match two elements.
+  await expect(calendar).toBeHidden();
+}
+
 /** The fixture month as the transport list groups it, e.g. /March|2027/. */
 const FIXTURE_MONTH_PATTERN = new RegExp(
   [
@@ -367,6 +466,47 @@ async function getAssignmentFromDB(
   }, assignmentId);
 }
 
+/**
+ * Every room assignment stored for a trip, as the database holds them.
+ *
+ * The point of reading the rows back — rather than re-reading the form — is
+ * BUG-1: the dialog showed the right check-out day while storing the day after
+ * it, and only the stored value tells those two apart.
+ */
+async function getTripAssignmentsFromDB(
+  page: Page,
+  tripId: string,
+): Promise<{ roomId: string; startDate: string; endDate: string }[]> {
+  return page.evaluate(async (id) => {
+    return new Promise((resolve, reject) => {
+      const dbRequest = indexedDB.open('kikoushou');
+      dbRequest.onerror = () => reject(new Error('Failed to open database'));
+      dbRequest.onsuccess = () => {
+        const db = dbRequest.result;
+        const tx = db.transaction('roomAssignments', 'readonly');
+        const getAll = tx.objectStore('roomAssignments').getAll();
+
+        getAll.onsuccess = () => {
+          db.close();
+          const rows = (getAll.result as Record<string, string>[])
+            .filter((row) => row.tripId === id)
+            .map((row) => ({
+              roomId: row.roomId ?? '',
+              startDate: row.startDate ?? '',
+              endDate: row.endDate ?? '',
+            }))
+            .sort((a, b) => a.startDate.localeCompare(b.startDate));
+          resolve(rows);
+        };
+        getAll.onerror = () => {
+          db.close();
+          reject(new Error('Failed to read assignments'));
+        };
+      };
+    });
+  }, tripId);
+}
+
 // ============================================================================
 // Test Data
 // ============================================================================
@@ -404,6 +544,22 @@ const TEST_DATA = {
     location: 'Paris CDG Airport',
   },
 } as const;
+
+/**
+ * The accessible name a calendar pill carries for the fixture stay.
+ *
+ * `CalendarPage` builds it as `${person} - ${room}`, and it is the pill's
+ * `aria-label`, its `title` and — on the segments that show a label — its text.
+ * Matching it exactly is what makes these assertions fail when the room name
+ * stops being rendered, which "person name is somewhere on the page" did not.
+ */
+const STAY_LABEL = `${TEST_DATA.person.name} - ${TEST_DATA.room.name}`;
+
+/** The days of the fixture month the multi-day stay occupies. */
+const STAY_NIGHTS = stayNights(
+  TEST_DATA.multiDayAssignment.startDate,
+  TEST_DATA.multiDayAssignment.endDate,
+);
 
 // ============================================================================
 // Test Suite: Trip Creation with New UI
@@ -466,14 +622,19 @@ test.describe('Trip Creation with New UI', () => {
     const tripCard = page.getByRole('button', { name: new RegExp(TEST_DATA.trip.name) });
     await expect(tripCard).toBeVisible({ timeout: 5000 });
 
-    // Verify guests are shown (PersonBadge components or count)
-    // Look for person names or guest indicators
-    const hasAlice = await page.getByText(TEST_DATA.person.name).isVisible().catch(() => false);
-    const hasBob = await page.getByText(TEST_DATA.person2.name).isVisible().catch(() => false);
-    const hasGuestCount = await page.getByText(/2.*guest|2.*invit/i).isVisible().catch(() => false);
+    // The whole card is one `role="button"`, so its accessible name is
+    // everything a screen reader is told about it — the guest count has to be
+    // in there or it is not announced at all. Anchored on a word boundary:
+    // the `/2.*guest/` this replaces also matched "12 guests", and matched it
+    // anywhere on the page rather than on this card.
+    await expect(tripCard).toHaveAccessibleName(/(^|\D)2 (guests|invités)(\D|$)/);
 
-    // At least one indication of guests should be present
-    expect(hasAlice || hasBob || hasGuestCount).toBe(true);
+    // And the badges themselves, scoped to the card. Unscoped, a guest name
+    // rendered anywhere else — the sidebar, another trip's card — stood in for
+    // this card's own guest list.
+    const card = page.locator('[data-slot="card"]').filter({ hasText: TEST_DATA.trip.name });
+    await expect(card.getByText(TEST_DATA.person.name)).toBeVisible();
+    await expect(card.getByText(TEST_DATA.person2.name)).toBeVisible();
   });
 });
 
@@ -508,27 +669,71 @@ test.describe('Calendar Multi-Day Events', () => {
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    // Wait for calendar to render
-    await page.waitForTimeout(500);
+    // One segment per night of the stay. A retrying count rather than a fixed
+    // wait: the calendar opens on today's month and only jumps to the trip's
+    // month once the trip has loaded, from inside a `setTimeout`.
+    const segments = page.getByRole('button', { name: STAY_LABEL, exact: true });
+    await expect(segments).toHaveCount(STAY_NIGHTS.length);
 
-    // Look for the assignment event
-    // Multi-day events should have a single visual element spanning multiple days
-    const eventElement = page.getByText(TEST_DATA.person.name).first();
-    await expect(eventElement).toBeVisible({ timeout: 5000 });
+    // What makes it a *spanning* event is geometry, not a class name: one bar
+    // per night, all the same size, each exactly one day cell to the right of
+    // the last until the week wraps.
+    const { bars, dayPitch } = await page.evaluate((label) => {
+      const measure = (element: Element) => {
+        const rect = element.getBoundingClientRect();
+        return { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
+      };
 
-    // The event should be clickable
-    await eventElement.click();
+      const cells = Array.from(document.querySelectorAll('[role="gridcell"]')).map(measure);
+      // Distance from one day column to the next, taken from the grid itself
+      // rather than assumed — it differs between the mobile and desktop layouts.
+      const pitch =
+        cells.length >= 2 && cells[1]!.top === cells[0]!.top
+          ? cells[1]!.left - cells[0]!.left
+          : 0;
 
-    // A dialog or detail view should open
-    const detailView = page.getByRole('dialog');
-    const hasDialog = await detailView.isVisible().catch(() => false);
+      return {
+        bars: Array.from(
+          document.querySelectorAll<HTMLElement>(`button[aria-label="${label}"]`),
+        ).map(measure),
+        dayPitch: pitch,
+      };
+    }, STAY_LABEL);
 
-    // Or an expanded detail section
-    const detailSection = page.locator('[data-event-detail], .event-detail');
-    const hasDetailSection = await detailSection.isVisible().catch(() => false);
+    // Guard against a vacuous pass: with no bars and no grid on screen every
+    // check below holds for the wrong reason.
+    expect(bars.length).toBe(STAY_NIGHTS.length);
+    expect(dayPitch).toBeGreaterThan(0);
 
-    // Some form of detail view should appear
-    expect(hasDialog || hasDetailSection).toBe(true);
+    for (let index = 1; index < bars.length; index++) {
+      const previous = bars[index - 1]!;
+      const current = bars[index]!;
+      expect(current.height).toBeCloseTo(previous.height, 0);
+      expect(current.width).toBeCloseTo(previous.width, 0);
+
+      if (Math.abs(current.top - previous.top) < 1) {
+        // Same week row: the next night sits one whole day column along. Three
+        // bars stacked in one cell, or scattered across the month, would fail.
+        expect(Math.abs(current.left - previous.left - dayPitch)).toBeLessThanOrEqual(2);
+      } else {
+        // A week boundary: the stay continues on the next row, further left.
+        expect(current.top).toBeGreaterThan(previous.top);
+        expect(current.left).toBeLessThan(previous.left);
+      }
+    }
+
+    // The bar is the way into the stay's details.
+    await segments.first().click();
+
+    const detailDialog = page.getByRole('dialog');
+    await expect(detailDialog).toBeVisible();
+    await expect(detailDialog.getByText(TEST_DATA.person.name)).toBeVisible();
+    await expect(detailDialog.getByText(TEST_DATA.room.name)).toBeVisible();
+    // The dialog spells out the length of the stay, which is the same fact the
+    // segment count above asserts — read here from the other end of the app.
+    await expect(detailDialog).toContainText(
+      new RegExp(`${STAY_NIGHTS.length}\\s+(nights?|nuits?)`, 'i'),
+    );
   });
 
   test('calendar shows room name in event', async ({ page }) => {
@@ -554,12 +759,18 @@ test.describe('Calendar Multi-Day Events', () => {
     // today's month and only jumps to the trip's start month once the trip has
     // loaded, from inside a `setTimeout`. The fixture trip is two months out,
     // so an instant read here looked at the wrong month.
-    await expect(
-      page
-        .getByText(TEST_DATA.room.name)
-        .or(page.getByText(TEST_DATA.person.name))
-        .first(),
-    ).toBeVisible();
+    //
+    // The room name is asserted as part of the pill's own label, not as text
+    // "somewhere on the page": the `room OR person` this replaces passed on the
+    // guest's name alone, which is exactly the half a dropped room name leaves
+    // behind.
+    const segment = page.getByRole('button', { name: STAY_LABEL, exact: true }).first();
+    await expect(segment).toBeVisible();
+
+    // The check-in segment is the one that renders the label — later segments
+    // deliberately show a blank so the bar reads as one continuous stay — so
+    // the room name is on screen, not only in the accessibility tree.
+    await expect(segment).toHaveText(STAY_LABEL);
   });
 
   test('clicking calendar event opens detail dialog', async ({ page }) => {
@@ -580,35 +791,22 @@ test.describe('Calendar Multi-Day Events', () => {
     await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
     await waitForRoute(page);
-    await page.waitForTimeout(500);
 
-    // Find and click the event
-    const eventElement = page.locator('[data-assignment-id], [role="button"]').filter({
-      hasText: new RegExp(`${TEST_DATA.person.name}|${TEST_DATA.room.name}`, 'i'),
-    }).first();
+    // No `if (found) … else assert the calendar exists` any more. The stay was
+    // seeded, so a missing pill is the bug this test is for; falling back to
+    // "a calendar rendered" made the failure invisible.
+    const segment = page.getByRole('button', { name: STAY_LABEL, exact: true }).first();
+    await expect(segment).toBeVisible();
+    await segment.click();
 
-    const isVisible = await eventElement.isVisible().catch(() => false);
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 3000 });
 
-    if (isVisible) {
-      await eventElement.click();
-
-      // Wait for dialog
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toBeVisible({ timeout: 3000 });
-
-      // Dialog should have edit and delete options
-      const editButton = dialog.getByRole('button', { name: /edit|modifier/i });
-      const deleteButton = dialog.getByRole('button', { name: /delete|supprimer/i });
-
-      const hasEdit = await editButton.isVisible().catch(() => false);
-      const hasDelete = await deleteButton.isVisible().catch(() => false);
-
-      expect(hasEdit || hasDelete).toBe(true);
-    } else {
-      // If specific event not found, just verify calendar rendered
-      const calendarGrid = page.locator('[role="grid"], .calendar-grid, [data-slot="calendar"]');
-      await expect(calendarGrid).toBeVisible();
-    }
+    // Both actions, not either: the dialog is the only place a stay can be
+    // edited or removed from the calendar, so one of them missing is a
+    // regression that `hasEdit || hasDelete` could not see.
+    await expect(dialog.getByRole('button', { name: /^(edit|modifier)$/i })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /^(delete|supprimer)$/i })).toBeVisible();
   });
 });
 
@@ -746,43 +944,40 @@ test.describe('Bug Fix: Assignment Dates (BUG-1)', () => {
   });
 
   test('assignment created via UI has correct dates', async ({ page }) => {
-    // Create room and person
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _roomId = await createTestRoom(page, tripId, TEST_DATA.room.name);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
-    await page.goto(`/trips/${tripId}/rooms`);
+    const roomId = await createTestRoom(page, tripId, TEST_DATA.room.name);
+    await createTestPerson(page, tripId, TEST_DATA.person.name);
+
+    // Card view: the timeline (the default) renders no room card to expand, so
+    // the assignment section this test drives does not exist there.
+    await page.goto(`/trips/${tripId}/rooms?view=card`);
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    // Open room card
-    const roomCard = page.getByText(TEST_DATA.room.name);
-    await roomCard.click();
+    await page.locator('[role="listitem"]').filter({ hasText: TEST_DATA.room.name }).click();
 
-    // Wait for room details/assignments section
-    await page.waitForTimeout(500);
+    await page.getByRole('button', { name: /^(assign a room|attribuer une chambre)$/i }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // Look for add assignment button
-    const addAssignmentBtn = page.getByRole('button', { name: /add.*assignment|assign|ajouter/i });
-    const hasAddBtn = await addAssignmentBtn.isVisible().catch(() => false);
+    await dialog.locator('#person-select').click();
+    await page.getByRole('option', { name: new RegExp(TEST_DATA.person.name) }).click();
 
-    if (hasAddBtn) {
-      await addAssignmentBtn.click();
+    const { startDate, endDate } = TEST_DATA.multiDayAssignment;
+    await pickStayDates(page, startDate, endDate);
 
-      // Dialog should open
-      const dialog = page.getByRole('dialog');
-      await expect(dialog).toBeVisible({ timeout: 3000 });
+    await dialog.getByRole('button', { name: /^(add|ajouter)$/i }).click();
+    await expect(dialog).toBeHidden({ timeout: 5000 });
 
-      // The UI flow varies - just verify dialog opens
-      // Close dialog
-      const cancelBtn = dialog.getByRole('button', { name: /cancel|annuler/i });
-      if (await cancelBtn.isVisible().catch(() => false)) {
-        await cancelBtn.click();
-      }
-    }
-
-    // Verify page is functional
-    await expect(page.getByText(TEST_DATA.room.name)).toBeVisible();
+    // The whole of BUG-1: the dialog showed the right check-out day while
+    // storing the day after it. Only the stored row tells those apart, so this
+    // reads the row back rather than re-reading the form — and it asserts the
+    // exact pair, so an off-by-one in either direction fails.
+    //
+    // Polling, because the write goes through the assignment context before it
+    // reaches Dexie.
+    await expect
+      .poll(() => getTripAssignmentsFromDB(page, tripId), { timeout: 5000 })
+      .toEqual([{ roomId, startDate, endDate }]);
   });
 
   test('calendar displays assignment with correct date range', async ({ page }) => {
@@ -790,29 +985,34 @@ test.describe('Bug Fix: Assignment Dates (BUG-1)', () => {
     const roomId = await createTestRoom(page, tripId, TEST_DATA.room.name);
     const personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
 
-    // Assignment from Mar 2 to Mar 5 (3 nights: 2nd, 3rd, 4th)
-    await createTestAssignment(page, tripId, roomId, personId, fixtureDate(2), fixtureDate(5));
+    const { startDate, endDate } = TEST_DATA.multiDayAssignment;
+    await createTestAssignment(page, tripId, roomId, personId, startDate, endDate);
 
     // Navigate to calendar. Month view: the timeline view (the default) renders
     // no `role="grid"`, so the assertions below never find the calendar.
     await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
     await waitForRoute(page);
-    await page.waitForTimeout(500);
 
-    // The assignment should appear on days 2, 3, 4 but NOT on day 5
-    // (since Mar 5 is checkout day in hotel-style booking)
-    // We can verify by checking the calendar grid
-
-    const calendarGrid = page.locator('[role="grid"], .calendar-grid, [data-slot="calendar"]');
-    await expect(calendarGrid).toBeVisible({ timeout: 5000 });
-
-    // The event should be visible somewhere in the calendar
-    const personEvent = page.getByText(TEST_DATA.person.name);
-    const hasEvent = await personEvent.first().isVisible().catch(() => false);
-
-    // Calendar should show the assignment (exact visual verification is complex)
-    expect(hasEvent || await calendarGrid.isVisible()).toBe(true);
+    // The stay runs check-in day to check-out morning, so it belongs on the
+    // 2nd, 3rd and 4th and *not* on the 5th — the day the guest leaves.
+    //
+    // This used to read `expect(hasEvent || await calendarGrid.isVisible())`,
+    // whose right-hand side was already known true three lines above, so the
+    // date range was never checked at all. Naming the exact days is what makes
+    // the assertion fail when the last night is off by one in either direction.
+    //
+    // `expect.poll` rather than a fixed wait: the calendar opens on today's
+    // month and jumps to the trip's month from inside a `setTimeout`.
+    await expect
+      .poll(
+        async () =>
+          (await readMonthGrid(page))
+            .filter((cell) => cell.pills.includes(STAY_LABEL))
+            .map((cell) => cell.day),
+        { timeout: 10_000 },
+      )
+      .toEqual(stayNights(startDate, endDate));
   });
 });
 
@@ -849,14 +1049,24 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    // The time should be displayed in local timezone
-    // In UTC+1, 13:00 UTC = 14:00 local
-    // We can't know the test runner's timezone, so just verify a time is shown
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _timePattern = /\d{1,2}:\d{2}/;
-    const timeElement = page.locator('text=/\\d{1,2}:\\d{2}/').first();
+    // BUG-2 is a *wrong* time, not a missing one, so "some string matching
+    // \d{1,2}:\d{2} is visible" — which the page's own date headers satisfy —
+    // could not see it. The suite cannot know the runner's timezone, but it can
+    // compute what that timezone makes of the stored instant, which is the
+    // claim under test.
+    const expectedTime = localClockTime(TEST_DATA.transport.datetime);
+    // The transport's own card, not the "needs a driver" banner above the list
+    // — that one is a `role="article"` naming the same guest.
+    const transportCard = page
+      .locator('[role="article"][data-slot="card"]')
+      .filter({ hasText: TEST_DATA.person.name });
 
-    await expect(timeElement).toBeVisible({ timeout: 5000 });
+    await expect(transportCard).toBeVisible({ timeout: 5000 });
+    await expect(transportCard).toHaveAttribute(
+      'aria-label',
+      new RegExp(`\\b${expectedTime}\\b`),
+    );
+    await expect(transportCard).toContainText(expectedTime);
   });
 
   test('transport time displays correctly in calendar view', async ({ page }) => {
@@ -877,28 +1087,24 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     await page.goto(`/trips/${tripId}/calendar?view=card`);
     await page.waitForLoadState('load');
     await waitForRoute(page);
-    await page.waitForTimeout(500);
 
-    // Look for transport indicator with time
-    const transportIndicator = page.locator('[data-transport], .transport-indicator').first();
-    const hasIndicator = await transportIndicator.isVisible().catch(() => false);
+    // `[data-transport]` and `.transport-indicator` appear nowhere in `src`, so
+    // the branch that used them could never run and the test fell through to
+    // "a calendar rendered". The indicator is a button inside its day cell,
+    // and this trip has exactly one transport and no stays.
+    const indicator = page.locator('[role="gridcell"] button');
+    await expect(indicator).toHaveCount(1);
 
-    if (hasIndicator) {
-      // Click to see details
-      await transportIndicator.click();
+    const expectedTime = localClockTime(TEST_DATA.transport.datetime);
+    await expect(indicator).toContainText(expectedTime);
+    await expect(indicator).toHaveAttribute('title', new RegExp(`^${expectedTime}\\b`));
 
-      // Time should be displayed in dialog
-      const dialog = page.getByRole('dialog');
-      if (await dialog.isVisible().catch(() => false)) {
-        // Look for time in the dialog
-        const timePattern = page.locator('text=/\\d{1,2}:\\d{2}/').first();
-        await expect(timePattern).toBeVisible({ timeout: 3000 });
-      }
-    }
-
-    // Verify calendar loaded
-    const calendarGrid = page.locator('[role="grid"], .calendar-grid');
-    await expect(calendarGrid).toBeVisible();
+    // The same instant, rendered by the detail dialog: BUG-2 was a surface
+    // disagreeing with its own pill.
+    await indicator.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 3000 });
+    await expect(dialog).toContainText(expectedTime);
   });
 
   test('round-trip: entered time matches displayed time', async ({ page }) => {
