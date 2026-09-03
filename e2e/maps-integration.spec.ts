@@ -29,15 +29,6 @@ const TEST_TRIP_WITH_LOCATION = {
 } as const;
 
 /**
- * Test coordinates for Paris.
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _PARIS_COORDINATES = {
-  lat: 48.8566,
-  lon: 2.3522,
-} as const;
-
-/**
  * Creates a test trip and returns its ID.
  *
  * @param page - Playwright page object
@@ -87,104 +78,6 @@ async function createTestTrip(
 
   expect(tripId).toBeTruthy();
   return tripId;
-}
-
-/**
- * Creates a test transport for a trip.
- *
- * @param page - Playwright page object
- * @param tripId - Trip ID
- * @param options - Transport options
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function _createTestTransport(
-  page: Page,
-  tripId: string,
-  options: {
-    type: 'arrival' | 'departure';
-    location: string;
-    personName?: string;
-  }
-): Promise<void> {
-  await page.goto(`/trips/${tripId}/transports/new`);
-  await page.waitForLoadState('load');
-
-  // Select transport type
-  if (options.type === 'departure') {
-    await page.getByRole('radio', { name: /departure|départ/i }).click();
-  }
-
-  // Select person if available
-  const personSelect = page.locator('[data-testid="person-select"]');
-  if (await personSelect.isVisible()) {
-    await personSelect.click();
-    // Select first available person
-    const firstOption = page.locator('[role="option"]').first();
-    if (await firstOption.isVisible()) {
-      await firstOption.click();
-    }
-  }
-
-  // Set datetime - just use today's date
-  const datetimeInput = page.locator('#transport-datetime');
-  if (await datetimeInput.isVisible()) {
-    await datetimeInput.fill('2024-07-16T10:00');
-  }
-
-  // Set location
-  const locationInput = page.locator('#transport-location');
-  await locationInput.fill(options.location);
-
-  // Submit form
-  await page.getByRole('button', { name: /save|sauvegarder/i }).click();
-
-  // Wait for navigation back to transports list or detail
-  await page.waitForURL(/\/trips\/[a-zA-Z0-9_-]+\/transports/, { timeout: 10000 });
-}
-
-/**
- * Checks if a specific cache exists and has entries.
- *
- * @param page - Playwright page object
- * @param cacheName - Cache name to check
- * @returns Whether the cache has entries
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function _hasCacheEntries(page: Page, cacheName: string): Promise<boolean> {
-  return await page.evaluate(async (name) => {
-    if (!('caches' in window)) {
-      return false;
-    }
-    try {
-      const cache = await caches.open(name);
-      const keys = await cache.keys();
-      return keys.length > 0;
-    } catch {
-      return false;
-    }
-  }, cacheName);
-}
-
-/**
- * Checks if any OSM tiles are cached.
- *
- * @param page - Playwright page object
- * @returns Whether OSM tiles are cached
- */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function _hasOsmTilesCached(page: Page): Promise<boolean> {
-  return await page.evaluate(async () => {
-    if (!('caches' in window)) {
-      return false;
-    }
-    try {
-      const cache = await caches.open('osm-tiles');
-      const keys = await cache.keys();
-      return keys.some((req) => req.url.includes('tile.openstreetmap.org'));
-    } catch {
-      return false;
-    }
-  });
 }
 
 // ============================================================================
@@ -333,10 +226,6 @@ test.describe('Transport Map View', () => {
     await page.goto(`/trips/${tripId}/transports/map`);
     await page.waitForLoadState('load');
     await waitForRoute(page);
-
-    // Should show empty state or message about no locations
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const emptyState = page.getByText(/no location|aucun lieu|no transport/i);
 
     // Either empty state or the map should be visible
     const pageContent = await page.content();

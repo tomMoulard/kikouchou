@@ -708,7 +708,7 @@ function AssistantPageComponent(): ReactElement {
     chatHistoryRef.current = messagesToLLMChatHistory(messages);
     // Sync only on mount: live updates stay in runTurn (a queued prompt and the
     // streaming placeholder must not enter history before the turn runs).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Mount-only by design, for the reason directly above.
   }, []);
 
   // Persist chat locally (debounced — avoids writes on every streaming chunk).

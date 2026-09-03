@@ -267,6 +267,7 @@ const RoomCard = memo(function RoomCard({
         )}
 
         {/* Dropdown Menu - positioned absolutely in top-right corner */}
+        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- The div has no behaviour of its own: the handlers only stop propagation so the full-card activation button underneath does not swallow a click meant for the menu. The interactive elements are the ones inside it. */}
         <div
           className="absolute top-2 right-2 z-20"
           onClick={handleMenuAreaClick}
@@ -400,6 +401,7 @@ const RoomCard = memo(function RoomCard({
 
         {/* Expanded Content (e.g., RoomAssignmentSection) */}
         {expandedContent && isExpanded && (
+          // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- The div has no behaviour of its own: the handlers only stop propagation so the full-card activation button underneath does not swallow a click meant for the assignment controls. The interactive elements are the ones inside it.
           <div
             className="relative z-20 border-t px-4 py-4"
             onClick={handleMenuAreaClick}

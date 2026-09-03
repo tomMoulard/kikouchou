@@ -108,6 +108,7 @@ function renderInline(tokens: InlineToken[]): ReactNode[] {
         return (
           <code
             key={i}
+            // eslint-disable-next-line kikoushou/no-raw-palette-class -- A translucent scrim over whatever the bubble is painted with, not a colour: it has to darken in light mode and lighten in dark, which is what the pair spells out.
             className="rounded bg-black/10 px-1 py-0.5 text-[0.85em] dark:bg-white/10"
           >
             {token.value}
@@ -160,6 +161,7 @@ function renderBlocks(content: string): ReactNode[] {
       elements.push(
         <pre
           key={key++}
+          // eslint-disable-next-line kikoushou/no-raw-palette-class -- A translucent scrim over whatever the bubble is painted with, not a colour: it has to darken in light mode and lighten in dark, which is what the pair spells out.
           className="my-1.5 overflow-x-auto rounded-lg bg-black/10 p-2.5 text-xs dark:bg-white/10"
         >
           <code>{codeLines.join('\n')}</code>
