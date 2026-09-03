@@ -207,16 +207,22 @@ describe('useOnlineStatus', () => {
       configurable: true,
     });
 
-    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
-    const { unmount } = renderHook(() => useOnlineStatus());
+    const { result, unmount } = renderHook(() => useOnlineStatus());
 
-    // Unmount immediately. Nothing went offline, so there is no recent-change
-    // timer, and the cleanup must not clear some unrelated one on its way out.
-    clearTimeoutSpy.mockClear();
+    // Nothing went offline, so no recent-change timer was ever started.
+    expect(result.current.hasRecentlyChanged).toBe(false);
+
     unmount();
-    expect(clearTimeoutSpy).not.toHaveBeenCalled();
 
-    clearTimeoutSpy.mockRestore();
+    // Advancing past the recent-change window must produce no work at all: a
+    // cleanup that cleared the wrong handle, or none, would let a stray
+    // setState fire here and React would warn about updating an unmounted
+    // component. Asserting on a global clearTimeout spy instead would fail the
+    // day React or RTL clears a timer of their own during teardown.
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   /**

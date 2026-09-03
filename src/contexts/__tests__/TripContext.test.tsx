@@ -11,7 +11,7 @@
  * @module contexts/__tests__/TripContext.test
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 
@@ -89,6 +89,15 @@ async function callAndCatch(action: () => Promise<unknown>): Promise<unknown> {
 // ============================================================================
 
 describe('TripContext', () => {
+  // Several cases below spy on `db.trips.count` and make it reject. A
+  // `mockRestore()` after the assertions only runs when they pass, and the
+  // global setup calls `vi.clearAllMocks()`, which clears call records but
+  // keeps implementations — so one failure would leave the database rejecting
+  // for the rest of the file and blame an innocent test for it.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe('Initial State', () => {
     it('provides trips list from database', async () => {
       // Create test data
@@ -346,6 +355,13 @@ describe('TripContext', () => {
         await result.current.setCurrentTrip(null);
       });
 
+      // Settle the live query's follow-up render first: reading settings is
+      // itself a Dexie call, and the re-render it wakes would otherwise land
+      // outside act.
+      await waitFor(() => {
+        expect(result.current.currentTrip).toBeNull();
+      });
+
       const settings = await getSettings();
       expect(settings.currentTripId).toBeUndefined();
     });
@@ -436,8 +452,6 @@ describe('TripContext', () => {
 
       expect(countSpy).toHaveBeenCalledTimes(1);
       expect(result.current.error).toBeNull();
-
-      countSpy.mockRestore();
     });
 
     it('reopens a closed database', async () => {
@@ -449,7 +463,12 @@ describe('TripContext', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      db.close();
+      // Closing under act: TripProvider's live query catches the failure and
+      // calls setError, and an unwrapped one landing after the check below
+      // would repopulate `error` and fail this intermittently.
+      await act(async () => {
+        db.close();
+      });
       expect(db.isOpen()).toBe(false);
 
       await act(async () => {
@@ -457,7 +476,9 @@ describe('TripContext', () => {
       });
 
       expect(db.isOpen()).toBe(true);
-      expect(result.current.error).toBeNull();
+      await waitFor(() => {
+        expect(result.current.error).toBeNull();
+      });
     });
 
     it('clears a stale error left by an earlier failure', async () => {
@@ -493,16 +514,13 @@ describe('TripContext', () => {
       });
 
       const failure = new Error('IndexedDB is gone');
-      const countSpy = vi.spyOn(db.trips, 'count');
-      countSpy.mockRejectedValue(failure);
+      vi.spyOn(db.trips, 'count').mockRejectedValue(failure);
 
       // Callers await this inside a try/catch, so the rejection has to reach them.
       const caught = await callAndCatch(() => result.current.checkConnection());
 
       expect(caught).toBe(failure);
       expect(result.current.error).toBe(failure);
-
-      countSpy.mockRestore();
     });
 
     it('wraps a non-Error rejection in an Error', async () => {
@@ -514,16 +532,13 @@ describe('TripContext', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      const countSpy = vi.spyOn(db.trips, 'count');
-      countSpy.mockRejectedValue('not an error object');
+      vi.spyOn(db.trips, 'count').mockRejectedValue('not an error object');
 
       const caught = await callAndCatch(() => result.current.checkConnection());
 
       expect(caught).toBeInstanceOf(Error);
       expect((caught as Error).message).toBe('Failed to connect to database');
       expect(result.current.error).toBe(caught);
-
-      countSpy.mockRestore();
     });
   });
 
@@ -722,8 +737,11 @@ describe('TripContext', () => {
             expect(result.current.currentTrip?.id).toBe(tripId);
           });
 
-          await db.trips.update(tripId, patch);
-          await waitForLiveQuery(100);
+          // `waitFor` below already polls, so no sleep is needed — only the
+          // act wrapper, so the live query's state update is not left loose.
+          await act(async () => {
+            await db.trips.update(tripId, patch);
+          });
 
           await waitFor(() => {
             expect(read(result.current.currentTrip)).toEqual(expected);

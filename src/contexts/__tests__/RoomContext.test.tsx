@@ -472,6 +472,15 @@ describe('RoomContext', () => {
         read: (room) => room?.icon,
         expected: 'tent',
       },
+      // `order` needs its own case even though `reorders rooms` exists: that
+      // test passes because reordering changes which room sits at each index,
+      // not because `order` is compared. Drop the term and it stays green.
+      {
+        field: 'order',
+        patch: { order: 7 },
+        read: (room) => room?.order,
+        expected: 7,
+      },
     ];
 
     for (const { field, patch, read, expected } of mutations) {
@@ -495,8 +504,11 @@ describe('RoomContext', () => {
           expect(result.current.room.rooms).toHaveLength(1);
         });
 
-        await db.rooms.update(room.id, patch);
-        await waitForLiveQuery();
+        // `waitFor` below already polls, so the sleep buys nothing — but the
+        // write does need act(), or the live query's setState lands loose.
+        await act(async () => {
+          await db.rooms.update(room.id, patch);
+        });
 
         await waitFor(() => {
           const updated = result.current.room.rooms.find((r) => r.id === room.id);

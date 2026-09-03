@@ -23,7 +23,11 @@ import {
   sortTransportsByInstant,
 } from '@/features/transports/utils/pickup-utils';
 import { useTripContext } from '@/contexts/TripContext';
-import { areArraysEqual, wrapAndSetError } from '@/contexts/utils';
+import {
+  areArraysEqual,
+  areCoordinatesEqual,
+  wrapAndSetError,
+} from '@/contexts/utils';
 import { db } from '@/lib/db/database';
 import {
   createTransport as repositoryCreateTransport,
@@ -151,18 +155,6 @@ interface TransportProviderProps {
 // ============================================================================
 // Utility Functions
 // ============================================================================
-
-/**
- * Deep equality for an optional lat/lon pair.
- *
- * A nested object is a new reference on every live-query read, so it has to be
- * compared field by field; `a.coordinates === b.coordinates` would report every
- * transport as changed and defeat the whole memoisation.
- */
-const areCoordinatesEqual = (
-  a: Transport['coordinates'],
-  b: Transport['coordinates'],
-): boolean => a === b || (a?.lat === b?.lat && a?.lon === b?.lon);
 
 /**
  * Comparison function for Transport objects.

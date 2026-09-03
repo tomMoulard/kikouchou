@@ -449,8 +449,11 @@ describe('PersonContext', () => {
           expect(result.current.person.persons).toHaveLength(1);
         });
 
-        await db.persons.update(person.id, patch);
-        await waitForLiveQuery();
+        // `waitFor` below already polls, so the sleep buys nothing — but the
+        // write does need act(), or the live query's setState lands loose.
+        await act(async () => {
+          await db.persons.update(person.id, patch);
+        });
 
         await waitFor(() => {
           const updated = result.current.person.persons.find(

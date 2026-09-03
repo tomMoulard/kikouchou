@@ -17,6 +17,7 @@ import {
 } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 
+import { areCoordinatesEqual } from '@/contexts/utils';
 import { db } from '@/lib/db/database';
 import {
   getSettings,
@@ -52,8 +53,7 @@ function areTripsEqual(a: Trip | null, b: Trip | null): boolean {
     a.createdAt === b.createdAt &&
     a.updatedAt === b.updatedAt &&
     // Compare coordinates if present
-    a.coordinates?.lat === b.coordinates?.lat &&
-    a.coordinates?.lon === b.coordinates?.lon &&
+    areCoordinatesEqual(a.coordinates, b.coordinates) &&
     // Whether the trip is shared. Listed because the comparator must cover every
     // mutable field — a missing one means a change that never re-renders.
     a.remoteTripId === b.remoteTripId
