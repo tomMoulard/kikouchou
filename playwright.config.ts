@@ -213,6 +213,13 @@ export default defineConfig({
          * then exercise. A developer's real Supabase project and real PostHog
          * key would ship into that build, and the specs in this project assert
          * local-only behaviour anyway.
+         *
+         * Measured, not assumed: with dummy values under these four names in
+         * `.env.local`, all four appear in `dist/assets/index-*.js` when these
+         * lines are absent and none of them when they are present.
+         * `src/test/e2e-env-isolation.test.ts` pins that for every server here,
+         * so deleting a line now fails the suite instead of quietly restoring
+         * the leak.
          */
         VITE_SUPABASE_URL: '',
         VITE_SUPABASE_PUBLISHABLE_KEY: '',
