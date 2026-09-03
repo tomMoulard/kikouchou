@@ -17,6 +17,7 @@
 import { eachDayOfInterval, format, parseISO } from 'date-fns';
 
 import { isDateInStayRange } from '@/features/rooms/utils/capacity-utils';
+import { localDayKeyOfInstant } from '@/lib/utils/trip-days';
 import type {
   ISODateString,
   Person,
@@ -56,6 +57,14 @@ export interface GuestPresenceQuery {
 /**
  * Resolves arrival and departure calendar dates for a person.
  * Prefers explicit `stayStartDate` / `stayEndDate`; otherwise earliest arrival / latest departure transport day.
+ *
+ * The transport day is the guest's **local** day, through the same
+ * `localDayKeyOfInstant` the timeline and the headcount use. This used to be
+ * `datetime.slice(0, 10)`, which reads the UTC prefix of a stored instant: a
+ * 22:30 arrival in Paris is `…T20:30:00Z`, still the same day, but a 01:30 one
+ * is `…T23:30:00Z` on the *previous* date, so the stay window began a day early
+ * — while the transport pill for that very journey sat on the day the guest
+ * typed. The two conventions have to be the same one.
  */
 export function deriveGuestStayDateBounds(
   person: Person,
@@ -70,8 +79,8 @@ export function deriveGuestStayDateBounds(
 
   if (!arrivalDate) {
     for (const arrival of personArrivals) {
-      const date = arrival.datetime.slice(0, 10) as ISODateString;
-      if (!arrivalDate || date < arrivalDate) {
+      const date = localDayKeyOfInstant(arrival.datetime);
+      if (date && (!arrivalDate || date < arrivalDate)) {
         arrivalDate = date;
       }
     }
@@ -79,8 +88,8 @@ export function deriveGuestStayDateBounds(
 
   if (!departureDate) {
     for (const departure of personDepartures) {
-      const date = departure.datetime.slice(0, 10) as ISODateString;
-      if (!departureDate || date > departureDate) {
+      const date = localDayKeyOfInstant(departure.datetime);
+      if (date && (!departureDate || date > departureDate)) {
         departureDate = date;
       }
     }

@@ -19,6 +19,19 @@ function iso(s: string): ISODateString {
   return s as ISODateString;
 }
 
+/**
+ * The instant a guest's picker produced for a local wall clock, which is what
+ * `TransportForm` stores (`new Date(localDatetime).toISOString()`).
+ *
+ * A literal `…T10:00:00.000Z` would name a different calendar day for a viewer
+ * far enough east or west, so the day these bounds derive would move with the
+ * machine running the suite. Building the instant from local parts keeps the
+ * expected day fixed in every timezone.
+ */
+function localInstant(year: number, month: number, day: number, hour: number): string {
+  return new Date(year, month - 1, day, hour).toISOString();
+}
+
 /** A room assignment covering `start` (inclusive) to `end` (check-out, exclusive). */
 function assignment(personId: string, start: string, end: string): RoomAssignment {
   return {
@@ -58,7 +71,7 @@ describe('deriveGuestStayDateBounds', () => {
         tripId: 't1' as Transport['tripId'],
         personId: p.id,
         type: 'arrival',
-        datetime: '2026-04-12T10:00:00.000Z',
+        datetime: localInstant(2026, 4, 12, 10),
         location: 'X',
         needsPickup: false,
       },
@@ -69,11 +82,52 @@ describe('deriveGuestStayDateBounds', () => {
         tripId: 't1' as Transport['tripId'],
         personId: p.id,
         type: 'departure',
-        datetime: '2026-04-18T15:00:00.000Z',
+        datetime: localInstant(2026, 4, 18, 15),
         location: 'Y',
         needsPickup: false,
       },
     ];
+    expect(deriveGuestStayDateBounds(p, arrivals, departures)).toEqual({
+      arrival: iso('2026-04-12'),
+      departure: iso('2026-04-18'),
+    });
+  });
+
+  it('derives the day the guest travelled on, not the UTC day of the instant', () => {
+    // The regression this fixes: the bounds were read off `datetime.slice(0, 10)`,
+    // the UTC prefix of a stored instant, while the calendar pill for the same
+    // journey was keyed with `localDayKeyOfInstant`. A guest landing at 00:30 in
+    // Paris is stored as the previous day in UTC, so their stay began a day
+    // before the arrival shown next to it.
+    //
+    // Both ends of the night are here on purpose: 00:30 crosses the date line
+    // backwards for any viewer east of UTC, 23:30 crosses it forwards for any
+    // viewer west of UTC, so whichever side the suite runs on, one of these two
+    // would have come back wrong.
+    const p = person('p1');
+    const arrivals: Transport[] = [
+      {
+        id: 'a1' as Transport['id'],
+        tripId: 't1' as Transport['tripId'],
+        personId: p.id,
+        type: 'arrival',
+        datetime: localInstant(2026, 4, 12, 0) as Transport['datetime'],
+        location: 'X',
+        needsPickup: false,
+      },
+    ];
+    const departures: Transport[] = [
+      {
+        id: 'd1' as Transport['id'],
+        tripId: 't1' as Transport['tripId'],
+        personId: p.id,
+        type: 'departure',
+        datetime: localInstant(2026, 4, 18, 23) as Transport['datetime'],
+        location: 'Y',
+        needsPickup: false,
+      },
+    ];
+
     expect(deriveGuestStayDateBounds(p, arrivals, departures)).toEqual({
       arrival: iso('2026-04-12'),
       departure: iso('2026-04-18'),
@@ -88,7 +142,7 @@ describe('deriveGuestStayDateBounds', () => {
         tripId: 't1' as Transport['tripId'],
         personId: p.id,
         type: 'arrival',
-        datetime: '2026-04-15T10:00:00.000Z',
+        datetime: localInstant(2026, 4, 15, 10),
         location: 'X',
         needsPickup: false,
       },
@@ -97,7 +151,7 @@ describe('deriveGuestStayDateBounds', () => {
         tripId: 't1' as Transport['tripId'],
         personId: p.id,
         type: 'arrival',
-        datetime: '2026-04-10T08:00:00.000Z',
+        datetime: localInstant(2026, 4, 10, 8),
         location: 'Y',
         needsPickup: false,
       },
@@ -113,7 +167,7 @@ describe('deriveGuestStayDateBounds', () => {
         tripId: 't1' as Transport['tripId'],
         personId: p.id,
         type: 'departure',
-        datetime: '2026-04-18T10:00:00.000Z',
+        datetime: localInstant(2026, 4, 18, 10),
         location: 'X',
         needsPickup: false,
       },
@@ -122,7 +176,7 @@ describe('deriveGuestStayDateBounds', () => {
         tripId: 't1' as Transport['tripId'],
         personId: p.id,
         type: 'departure',
-        datetime: '2026-04-22T15:00:00.000Z',
+        datetime: localInstant(2026, 4, 22, 15),
         location: 'Y',
         needsPickup: false,
       },
@@ -146,7 +200,7 @@ describe('deriveGuestStayDateBounds', () => {
         tripId: 't1' as Transport['tripId'],
         personId: 'other' as Transport['personId'],
         type: 'arrival',
-        datetime: '2026-04-12T10:00:00.000Z',
+        datetime: localInstant(2026, 4, 12, 10),
         location: 'X',
         needsPickup: false,
       },
