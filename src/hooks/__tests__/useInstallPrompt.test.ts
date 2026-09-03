@@ -4,6 +4,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { StrictMode } from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { useInstallPrompt } from '../useInstallPrompt';
 
@@ -354,4 +355,46 @@ describe('useInstallPrompt', () => {
     const installResult = await installPromise!;
     expect(installResult).toBe(true);
   });
+
+  /**
+   * `isMountedRef` guards every `setCanInstall` / `setIsInstalled` in this hook,
+   * and has to be set true on effect *setup*, not only reset to false in
+   * cleanup.
+   *
+   * StrictMode runs setup -> cleanup -> setup on one component instance, so a
+   * ref written only in cleanup latches false on the first pass and stays false
+   * for the life of the component. Every guarded setState then silently no-ops:
+   * the install button never appears, and nothing throws to say so. None of the
+   * tests above can see it, because none runs a cleanup before the update it
+   * checks.
+   */
+  describe('unmount guard under StrictMode', () => {
+    it('still offers the install prompt after the double-invoked effect', () => {
+      const { result } = renderHook(() => useInstallPrompt(), {
+        wrapper: StrictMode,
+      });
+
+      expect(result.current.canInstall).toBe(false);
+
+      act(() => {
+        dispatchBeforeInstallPrompt();
+      });
+
+      expect(result.current.canInstall).toBe(true);
+    });
+
+    it('still records the app as installed after the double-invoked effect', () => {
+      const { result } = renderHook(() => useInstallPrompt(), {
+        wrapper: StrictMode,
+      });
+
+      act(() => {
+        window.dispatchEvent(new Event('appinstalled'));
+      });
+
+      expect(result.current.isInstalled).toBe(true);
+      expect(result.current.canInstall).toBe(false);
+    });
+  });
+
 });

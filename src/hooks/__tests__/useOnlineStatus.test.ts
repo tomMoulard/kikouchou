@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { StrictMode } from 'react';
 import { renderHook, act } from '@testing-library/react';
 
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
@@ -206,10 +207,57 @@ describe('useOnlineStatus', () => {
       configurable: true,
     });
 
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
     const { unmount } = renderHook(() => useOnlineStatus());
 
-    // Unmount immediately — no timer should be running
+    // Unmount immediately. Nothing went offline, so there is no recent-change
+    // timer, and the cleanup must not clear some unrelated one on its way out.
+    clearTimeoutSpy.mockClear();
     unmount();
+    expect(clearTimeoutSpy).not.toHaveBeenCalled();
+
+    clearTimeoutSpy.mockRestore();
+  });
+
+  /**
+   * `isMountedRef` guards the `setHasRecentlyChanged` inside the recent-change
+   * timeout, and has to be set true on effect *setup*, not only reset to false
+   * in cleanup.
+   *
+   * StrictMode runs setup -> cleanup -> setup on one component instance, so a
+   * ref written only in cleanup latches false on the first pass and stays false.
+   * The guarded setState then silently no-ops for the life of the component: the
+   * "back online" banner never goes away, and nothing throws to say so. The
+   * tests above cannot see it, because none of them runs a cleanup before the
+   * update it checks.
+   */
+  it('still clears hasRecentlyChanged under StrictMode, after the double-invoked effect', () => {
+    Object.defineProperty(navigator, 'onLine', {
+      value: false,
+      writable: true,
+      configurable: true,
+    });
+
+    const { result } = renderHook(() => useOnlineStatus(), {
+      wrapper: StrictMode,
+    });
+
+    act(() => {
+      Object.defineProperty(navigator, 'onLine', {
+        value: true,
+        writable: true,
+        configurable: true,
+      });
+      window.dispatchEvent(new Event('online'));
+    });
+
+    expect(result.current.hasRecentlyChanged).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(3100);
+    });
+
+    expect(result.current.hasRecentlyChanged).toBe(false);
   });
 
   it('handles rapid online/offline/online transitions', () => {
