@@ -197,6 +197,49 @@ async function createTrip(
   await page.getByRole('button', { name: /save/i }).click();
 }
 
+/**
+ * Asserts the calendar route is on screen for `tripName`, and returns its id.
+ *
+ * Fourteen assertions in this file were `expect(page).toHaveURL(...)` and
+ * nothing else, most of them the last statement in their test. The calendar
+ * route could render a blank `<main>` and every one of them would still pass —
+ * and asserting a URL and calling it a screen is exactly how the share wizard
+ * shipped broken for months: `/identity` matched while the parent route painted
+ * the welcome screen over it.
+ *
+ * The trip name is part of it on purpose. Two of these tests click one card out
+ * of two and only ever checked that *a* calendar URL resulted, so opening the
+ * wrong trip was indistinguishable from opening the right one.
+ *
+ * @param page - Playwright page object
+ * @param tripName - The trip whose calendar must be showing
+ * @returns The trip id from the URL
+ */
+async function expectCalendarPage(page: Page, tripName: string): Promise<string> {
+  await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
+
+  // Scoped to the page's own header: the trip name is also painted in the top
+  // banner and the sidebar, because it is the current trip.
+  const header = page.locator('main header').first();
+  await expect(header.getByRole('heading', { level: 1 })).toHaveText(/calendar/i);
+  await expect(header.getByText(tripName, { exact: true })).toBeVisible();
+
+  const tripId = /\/trips\/([^/]+)\/calendar/.exec(page.url())?.[1];
+  expect(tripId).toBeTruthy();
+  return tripId ?? '';
+}
+
+/**
+ * Asserts the trip form is rendered and empty-headed, not merely routed to.
+ */
+async function expectTripFormPage(page: Page, heading: RegExp): Promise<void> {
+  await expect(
+    page.locator('main header').first().getByRole('heading', { level: 1 }),
+  ).toHaveText(heading);
+  await expect(page.getByLabel(/trip name/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /save/i })).toBeVisible();
+}
+
 // ============================================================================
 // Test Setup
 // ============================================================================
@@ -260,15 +303,16 @@ test.describe('Trip Lifecycle', () => {
     // They are the same action, so either will do.
     await page.getByRole('button', { name: /new trip/i }).first().click();
 
-    // Verify we're on the create trip page
+    // Verify we're on the create trip page — and that the form is on it.
     await expect(page).toHaveURL('/trips/new');
+    await expectTripFormPage(page, /new trip/i);
 
     // Fill in the trip form
     await createTrip(page, TEST_TRIP);
 
     // Wait for navigation after successful creation
     // The app navigates to /trips/:id/calendar after creation
-    await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
+    await expectCalendarPage(page, TEST_TRIP.name);
 
     // Verify success toast appears
     await expect(page.getByText(/trip created successfully/i)).toBeVisible();
@@ -299,12 +343,7 @@ test.describe('Trip Lifecycle', () => {
     await createTrip(page, TEST_TRIP);
 
     // Wait for navigation to calendar
-    await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
-
-    // Extract the trip ID from the URL for later verification
-    const calendarUrl = page.url();
-    const tripId = calendarUrl.match(/\/trips\/([^/]+)\/calendar/)?.[1];
-    expect(tripId).toBeTruthy();
+    const tripId = await expectCalendarPage(page, TEST_TRIP.name);
 
     // Navigate to the edit page
     await page.goto(`/trips/${tripId}/edit`);
@@ -330,22 +369,15 @@ test.describe('Trip Lifecycle', () => {
     // Save the changes
     await page.getByRole('button', { name: /save/i }).click();
 
-    // Wait for the save operation - give time for IndexedDB transaction
-    await page.waitForTimeout(1000);
-
-    // The sidebar should show updated trip name once saved
-    const updatedNameInSidebar = page.locator(`text=${UPDATED_TRIP.name}`).first();
-
-    // Wait for either navigation OR for the updated name to appear in sidebar
-    // This handles cases where the transaction completes but navigation doesn't happen
-    try {
-      await Promise.race([
-        expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 5000 }),
-        expect(updatedNameInSidebar).toBeVisible({ timeout: 5000 }),
-      ]);
-    } catch {
-      // If save seems stuck, navigate manually
-    }
+    // `TripEditPage.handleSubmit` navigates to the trip's calendar, so this is
+    // deterministic and is asserted rather than raced.
+    //
+    // What was here was a `Promise.race` between a URL check and a sidebar text
+    // check, wrapped in `try { … } catch { /* If save seems stuck */ }` — so a
+    // save that never happened at all reached the next line unremarked, and the
+    // 1 s `waitForTimeout` before it was there to make that likely enough to
+    // pass. Both are gone: if the save does not land, this fails here.
+    expect(await expectCalendarPage(page, UPDATED_TRIP.name)).toBe(tripId);
 
     // Navigate to trips list to verify changes persisted
     // (also handles case where save navigation didn't work)
@@ -371,12 +403,7 @@ test.describe('Trip Lifecycle', () => {
     await createTrip(page, TEST_TRIP);
 
     // Wait for navigation to calendar
-    await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
-
-    // Extract the trip ID
-    const calendarUrl = page.url();
-    const tripId = calendarUrl.match(/\/trips\/([^/]+)\/calendar/)?.[1];
-    expect(tripId).toBeTruthy();
+    const tripId = await expectCalendarPage(page, TEST_TRIP.name);
 
     // Navigate to the edit page (where delete button is)
     await page.goto(`/trips/${tripId}/edit`);
@@ -396,46 +423,19 @@ test.describe('Trip Lifecycle', () => {
     const deleteConfirmButton = dialog.getByRole('button', { name: /delete/i });
     await expect(deleteConfirmButton).toBeEnabled();
 
-    // Small wait to ensure dialog is fully ready
-    await page.waitForTimeout(100);
-
     // Confirm the deletion with force option in case of overlay issues
     await deleteConfirmButton.click({ force: true });
 
-    // Wait for the delete operation - the loading state will show
-    // Give time for IndexedDB transaction to complete
-    await page.waitForTimeout(1000);
-
-    // The sidebar should show "No trips" once deleted, even if dialog is stuck
-    // Check if deletion actually happened by looking at sidebar
-    const noTripsIndicator = page.locator('text=No trips').first();
-
-    // Wait for either dialog to close OR for "No trips" to appear
-    // This handles cases where the transaction completes but UI doesn't update
-    try {
-      await Promise.race([
-        expect(dialog).not.toBeVisible({ timeout: 5000 }),
-        expect(noTripsIndicator).toBeVisible({ timeout: 5000 }),
-      ]);
-    } catch {
-      // If neither worked, continue - we'll handle navigation below
-    }
-
-    // Navigate to trips list manually if we're still on edit page
-    const currentUrl = page.url();
-    if (currentUrl.includes('/edit')) {
-      // Dialog might be stuck. An alert dialog has no close button by design —
-      // it is answered, not dismissed — and Escape is blocked while the delete
-      // is still in flight, so this is a best effort before navigating away
-      // rather than a guaranteed way out.
-      if (await dialog.isVisible({ timeout: 500 }).catch(() => false)) {
-        await page.keyboard.press('Escape');
-      }
-      await page.goto('/trips');
-    }
-
-    // Wait for trips page to be ready
+    // `TripEditPage.handleDelete` replaces the history entry with `/trips`, so
+    // the app navigates itself and the dialog goes with the page.
+    //
+    // What was here instead: a 1 s sleep, a `Promise.race` in a `try`/`catch`
+    // that swallowed both outcomes, then `if (url.includes('/edit')) { … await
+    // page.goto('/trips') }` — a manual rescue that made "the delete never
+    // navigated" and "the delete worked" produce the same green result. The
+    // navigation is part of the feature, so it is asserted.
     await expect(page).toHaveURL('/trips', { timeout: 10000 });
+    await expect(dialog).toHaveCount(0);
 
     // Verify the trip is no longer in the list (most important assertion)
     await expect(getTripCard(page, TEST_TRIP.name)).not.toBeVisible();
@@ -454,7 +454,7 @@ test.describe('Trip Lifecycle', () => {
     // Create the first trip
     await page.goto('/trips/new');
     await createTrip(page, TEST_TRIP);
-    await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
+    const firstTripId = await expectCalendarPage(page, TEST_TRIP.name);
 
     // Navigate back to trips list
     await page.goto('/trips');
@@ -462,7 +462,8 @@ test.describe('Trip Lifecycle', () => {
     // Create the second trip
     await page.getByRole('button', { name: /new trip/i }).first().click();
     await createTrip(page, SECOND_TRIP);
-    await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
+    const secondTripId = await expectCalendarPage(page, SECOND_TRIP.name);
+    expect(secondTripId).not.toBe(firstTripId);
 
     // Navigate back to trips list
     await page.goto('/trips');
@@ -474,26 +475,20 @@ test.describe('Trip Lifecycle', () => {
     await expect(getTripCard(page, TEST_TRIP.name)).toBeVisible();
     await expect(getTripCard(page, SECOND_TRIP.name)).toBeVisible();
 
-    // Click on the first trip
+    // Click on the first trip — and land on *that* trip's calendar. Both of
+    // these used to assert only `/trips/<something>/calendar`, so opening the
+    // wrong trip was indistinguishable from opening the right one.
     await getTripCard(page, TEST_TRIP.name).click();
-
-    // Verify we navigated to the first trip's calendar
-    await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
+    expect(await expectCalendarPage(page, TEST_TRIP.name)).toBe(firstTripId);
 
     // Navigate back to trips list
     await page.goto('/trips');
 
     // Click on the second trip
     await getTripCard(page, SECOND_TRIP.name).click();
-
-    // Verify we navigated to the second trip's calendar
-    await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
+    expect(await expectCalendarPage(page, SECOND_TRIP.name)).toBe(secondTripId);
 
     // Verify correct trip is loaded by going to edit and checking the name
-    const secondCalendarUrl = page.url();
-    const secondTripId = secondCalendarUrl.match(/\/trips\/([^/]+)\/calendar/)?.[1];
-    expect(secondTripId).toBeTruthy();
-
     await page.goto(`/trips/${secondTripId}/edit`);
     await expect(page.getByLabel(/trip name/i)).toHaveValue(SECOND_TRIP.name);
   });
@@ -508,7 +503,7 @@ test.describe('Trip Lifecycle', () => {
     await createTrip(page, TEST_TRIP);
 
     // Wait for navigation to calendar
-    await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
+    const createdTripId = await expectCalendarPage(page, TEST_TRIP.name);
 
     // Navigate to trips list to verify trip exists
     await page.goto('/trips');
@@ -527,14 +522,9 @@ test.describe('Trip Lifecycle', () => {
     // Also verify by navigating to edit and checking the form values
     // Click the trip card to navigate to calendar first
     await getTripCard(page, TEST_TRIP.name).click();
-    await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
+    expect(await expectCalendarPage(page, TEST_TRIP.name)).toBe(createdTripId);
 
-    // Extract trip ID and navigate to edit
-    const calendarUrl = page.url();
-    const tripId = calendarUrl.match(/\/trips\/([^/]+)\/calendar/)?.[1];
-    expect(tripId).toBeTruthy();
-
-    await page.goto(`/trips/${tripId}/edit`);
+    await page.goto(`/trips/${createdTripId}/edit`);
 
     // Verify form is populated with correct data
     await expect(page.getByLabel(/trip name/i)).toHaveValue(TEST_TRIP.name);
@@ -565,8 +555,12 @@ test.describe('Trip Lifecycle', () => {
     // Click cancel
     await page.getByRole('button', { name: /cancel/i }).click();
 
-    // Verify we returned to trips list
+    // Verify we returned to trips list — and that the list is on screen, not
+    // merely in the address bar.
     await expect(page).toHaveURL('/trips');
+    await expect(
+      page.locator('main header').first().getByRole('heading', { level: 1 }),
+    ).toHaveText(/my trips/i);
 
     // Verify the cancelled trip was not created
     await expect(getTripCard(page, 'Cancelled Trip')).not.toBeVisible();
@@ -593,19 +587,20 @@ test.describe('Trip Lifecycle', () => {
     // Verify date validation errors appear (at least one alert for dates)
     await expect(page.getByRole('alert').first()).toBeVisible();
 
-    // Verify we're still on the create page (form didn't submit)
+    // Still on the create page, still holding what was typed. The URL alone
+    // was the last statement here, and a form that had unmounted itself into a
+    // blank page would have satisfied it.
     await expect(page).toHaveURL('/trips/new');
+    await expectTripFormPage(page, /new trip/i);
+    await expect(page.getByLabel(/trip name/i)).toHaveValue('Test Trip');
   });
 
   test('cancels deletion when clicking cancel in dialog', async ({ page }) => {
     // Create a trip
     await page.goto('/trips/new');
     await createTrip(page, TEST_TRIP);
-    await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
+    const tripId = await expectCalendarPage(page, TEST_TRIP.name);
 
-    // Extract trip ID and navigate to edit
-    const calendarUrl = page.url();
-    const tripId = calendarUrl.match(/\/trips\/([^/]+)\/calendar/)?.[1];
     await page.goto(`/trips/${tripId}/edit`);
 
     // Click delete to open confirmation dialog
@@ -624,6 +619,10 @@ test.describe('Trip Lifecycle', () => {
       page.getByText(/this will permanently delete the trip/i),
     ).not.toBeVisible();
     await expect(page).toHaveURL(`/trips/${tripId}/edit`);
+    // The edit form is still there, still on this trip: cancelling a deletion
+    // must leave the page exactly as it was, and a URL cannot say that.
+    await expectTripFormPage(page, /edit trip/i);
+    await expect(page.getByLabel(/trip name/i)).toHaveValue(TEST_TRIP.name);
 
     // Verify trip still exists by going to trips list
     await page.goto('/trips');
