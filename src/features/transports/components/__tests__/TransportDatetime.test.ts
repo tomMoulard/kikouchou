@@ -1,86 +1,76 @@
 /**
- * @fileoverview Tests for transport datetime handling
- * Verifies the datetime flow from form input through storage to display.
+ * @fileoverview Regression tests for transport datetime handling.
  *
- * BUG-2 Regression Tests: Transport time should display the same time
- * that was entered, regardless of the user's timezone.
+ * BUG-2: a transport must display the time that was entered, whatever timezone
+ * the viewer is in.
  *
- * Datetime Flow:
- * 1. User enters time in form (local time via datetime-local input)
- * 2. Form converts to ISO string for storage (UTC)
- * 3. Display extracts and shows time (should convert back to local)
+ * Datetime flow:
+ * 1. The user enters a wall clock in the form's `datetime-local` input.
+ * 2. `toISODatetime` reads it as local time and stores the UTC instant.
+ * 3. `formatTransportDatetimeParts` renders that instant back in local time.
+ * 4. `formatDatetimeLocal` feeds it back into the input for edit mode.
  *
- * The key insight is that:
- * - Storage is in UTC (ISO format: 2024-01-10T13:00:00.000Z)
- * - Display must convert back to local time
- * - Round-trip: local → UTC → local should be consistent
+ * Every function under test here is the **shipped** one. This file used to
+ * declare private copies of all three and assert those, so reintroducing the
+ * UTC-slicing bug in the app left the whole file green — a regression guard
+ * that exercises its own reimplementation guards nothing.
  *
- * The display half of that flow is asserted against the shipped renderer,
- * `formatTransportDatetimeParts`, not against a copy of it: a regression guard
- * that only ever exercises its own private reimplementation cannot catch the
- * regression it guards against. The two form-side helpers below are still
- * replicated from `TransportForm.tsx`, which does not export them.
+ * Fixtures are built with `new Date(y, m, d, h, min)` rather than written as
+ * literal UTC strings: a local constructor pins the *wall clock*, which reads
+ * the same in every timezone, so nothing here encodes the machine's offset.
+ * The one place the offset is unavoidable — telling a correct local rendering
+ * apart from a naive UTC slice — is guarded explicitly and explained there.
  */
 
 import { describe, it, expect } from 'vitest';
-import { format, parseISO } from 'date-fns';
 
+import {
+  formatDatetimeLocal,
+  toISODatetime,
+} from '@/features/transports/components/TransportForm';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 
 // ============================================================================
-// Helper Functions (replicate from actual code for testing)
+// Helpers
 // ============================================================================
 
 /**
- * Converts datetime-local input format to ISO datetime string.
- * This is the function used in TransportForm.tsx for storage.
- * 
- * @param localDatetime - datetime-local format (YYYY-MM-DDTHH:mm)
- * @returns ISO datetime string (UTC)
+ * The UTC instant of a local wall clock, the way the form stores one.
+ *
+ * @param year - Full year
+ * @param month - 1-based month
+ * @param day - Day of month
+ * @param hours - Local hour
+ * @param minutes - Local minute
+ * @returns The stored ISO instant
  */
-function toISODatetime(localDatetime: string): string {
-  if (!localDatetime) return '';
-  try {
-    // Datetime-local gives us local time, convert to ISO (UTC)
-    const date = new Date(localDatetime);
-    if (isNaN(date.getTime())) return '';
-    return date.toISOString();
-  } catch {
-    return '';
-  }
-}
-
-/**
- * Converts ISO datetime string to datetime-local input format.
- * This is the function used in TransportForm.tsx for edit mode.
- * 
- * @param isoDatetime - ISO datetime string (UTC)
- * @returns datetime-local format (YYYY-MM-DDTHH:mm) in local timezone
- */
-function formatDatetimeLocal(isoDatetime: string): string {
-  try {
-    const date = parseISO(isoDatetime);
-    if (isNaN(date.getTime())) return '';
-    return format(date, "yyyy-MM-dd'T'HH:mm");
-  } catch {
-    return '';
-  }
+function storedInstantOf(
+  year: number,
+  month: number,
+  day: number,
+  hours: number,
+  minutes: number,
+): string {
+  return new Date(year, month - 1, day, hours, minutes, 0, 0).toISOString();
 }
 
 /**
  * The time as the app actually renders it: the shipped single renderer, in its
- * `timeOnly` variant. Every screen that shows a bare clock goes through this.
+ * `timeOnly` variant. Every surface showing a bare clock goes through this.
  *
- * @param datetime - ISO datetime string (UTC)
- * @returns Time string in HH:mm format (local timezone)
+ * @param datetime - ISO datetime string (a UTC instant)
+ * @returns Time string in HH:mm, in the viewer's timezone
  */
 function formatTime(datetime: string): string {
   return formatTransportDatetimeParts(datetime, undefined, 'timeOnly').time;
 }
 
 /**
- * BUGGY version of formatTime that extracts UTC time directly.
- * This was the original implementation that caused BUG-2.
+ * BUG-2 itself: the original renderer, which sliced the characters after the
+ * `T` out of the stored UTC string and called that the time.
+ *
+ * @param datetime - ISO datetime string
+ * @returns The UTC time, whatever timezone the viewer is in
  */
 function formatTimeUTCBuggy(datetime: string): string {
   const timePart = datetime.split('T')[1];
@@ -88,71 +78,80 @@ function formatTimeUTCBuggy(datetime: string): string {
   return timePart.substring(0, 5);
 }
 
+/** Whether the machine running these tests is offset from UTC. */
+const HAS_UTC_OFFSET = new Date().getTimezoneOffset() !== 0;
+
 // ============================================================================
 // Tests: Datetime Storage and Retrieval
 // ============================================================================
 
 describe('Transport Datetime Handling', () => {
-  describe('Form Input to Storage (toISODatetime)', () => {
-    it('converts datetime-local to ISO string', () => {
-      // User enters "2024-01-10T14:30" in datetime-local input (local time)
-      const localInput = '2024-01-10T14:30';
-      const isoString = toISODatetime(localInput);
-      
-      // Should produce a valid ISO string
-      expect(isoString).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$/);
-      
-      // The ISO string represents the same instant in time
-      const inputDate = new Date(localInput);
-      const isoDate = new Date(isoString);
-      expect(inputDate.getTime()).toBe(isoDate.getTime());
+  describe('Form input to storage (toISODatetime)', () => {
+    it('stores the UTC instant of the wall clock the user typed', () => {
+      // The user types 14:30 on 10 January 2024 into a datetime-local input,
+      // which has no offset and therefore means 14:30 where they are standing.
+      expect(toISODatetime('2024-01-10T14:30')).toBe(
+        storedInstantOf(2024, 1, 10, 14, 30),
+      );
     });
 
-    it('handles empty input', () => {
+    it('stores midnight and the last minute of the day', () => {
+      expect(toISODatetime('2024-01-10T00:00')).toBe(
+        storedInstantOf(2024, 1, 10, 0, 0),
+      );
+      expect(toISODatetime('2024-01-10T23:59')).toBe(
+        storedInstantOf(2024, 1, 10, 23, 59),
+      );
+    });
+
+    it('returns an empty string for empty input', () => {
       expect(toISODatetime('')).toBe('');
     });
 
-    it('handles invalid input', () => {
+    it('returns an empty string for unparseable input', () => {
       expect(toISODatetime('invalid')).toBe('');
       expect(toISODatetime('not-a-date')).toBe('');
+      expect(toISODatetime('2024-13-45T99:99')).toBe('');
     });
   });
 
-  describe('Storage to Form Display (formatDatetimeLocal)', () => {
-    it('converts ISO string back to datetime-local format', () => {
-      // Given an ISO string stored in the database
-      const isoString = '2024-01-10T14:30:00.000Z';
-      const localFormat = formatDatetimeLocal(isoString);
-      
-      // Should produce datetime-local format
-      expect(localFormat).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  describe('Storage to form input (formatDatetimeLocal)', () => {
+    it('renders the stored instant as the local wall clock', () => {
+      expect(formatDatetimeLocal(storedInstantOf(2024, 1, 10, 14, 30))).toBe(
+        '2024-01-10T14:30',
+      );
     });
 
-    it('handles empty input', () => {
+    it('renders an instant that falls on another UTC day', () => {
+      // 23:30 local is the previous or next UTC day in most of the world, so a
+      // renderer that trusted the stored string's date half would slip a day.
+      expect(formatDatetimeLocal(storedInstantOf(2024, 6, 30, 23, 30))).toBe(
+        '2024-06-30T23:30',
+      );
+      expect(formatDatetimeLocal(storedInstantOf(2024, 6, 30, 0, 30))).toBe(
+        '2024-06-30T00:30',
+      );
+    });
+
+    it('returns an empty string for empty input', () => {
       expect(formatDatetimeLocal('')).toBe('');
     });
 
-    it('handles invalid input', () => {
+    it('returns an empty string for unparseable input', () => {
       expect(formatDatetimeLocal('invalid')).toBe('');
     });
   });
 
-  describe('Round-trip Consistency', () => {
-    it('local → ISO → local should preserve the original time', () => {
-      // User enters a time in local format
+  describe('Round-trip consistency', () => {
+    it('local → ISO → local preserves the original wall clock', () => {
       const originalInput = '2024-01-10T14:30';
-      
-      // Convert to ISO for storage
-      const isoString = toISODatetime(originalInput);
-      
-      // Convert back to local for edit display
-      const displayValue = formatDatetimeLocal(isoString);
-      
-      // Should match the original input
-      expect(displayValue).toBe(originalInput);
+
+      expect(formatDatetimeLocal(toISODatetime(originalInput))).toBe(
+        originalInput,
+      );
     });
 
-    it('preserves time across multiple round-trips', () => {
+    it('preserves the wall clock across the whole day', () => {
       const times = [
         '2024-01-10T00:00', // Midnight
         '2024-01-10T06:30', // Early morning
@@ -162,63 +161,41 @@ describe('Transport Datetime Handling', () => {
       ];
 
       for (const originalTime of times) {
-        const iso = toISODatetime(originalTime);
-        const roundTripped = formatDatetimeLocal(iso);
-        expect(roundTripped).toBe(originalTime);
+        expect(formatDatetimeLocal(toISODatetime(originalTime))).toBe(
+          originalTime,
+        );
       }
     });
   });
 });
 
 // ============================================================================
-// Tests: Calendar Display (BUG-2 Specific)
+// Tests: Display (BUG-2)
 // ============================================================================
 
 describe('BUG-2: Transport Time Display', () => {
-  describe('formatTime (the shipped renderer)', () => {
-    it('displays time in local timezone', () => {
-      // Given a stored ISO datetime
-      const isoDatetime = '2024-01-10T14:30:00.000Z';
-      
-      // The displayed time should be in local timezone
-      const displayedTime = formatTime(isoDatetime);
-      
-      // Verify it's a valid HH:mm format
-      expect(displayedTime).toMatch(/^\d{2}:\d{2}$/);
-      
-      // Verify it matches what date-fns format produces (local time)
-      const expectedTime = format(parseISO(isoDatetime), 'HH:mm');
-      expect(displayedTime).toBe(expectedTime);
+  describe('the shipped renderer', () => {
+    it('renders the stored instant as the local wall clock', () => {
+      expect(formatTime(storedInstantOf(2024, 1, 10, 14, 30))).toBe('14:30');
     });
 
-    it('handles empty input', () => {
+    it('renders an empty time for empty input', () => {
       expect(formatTime('')).toBe('');
     });
 
-    it('handles invalid input', () => {
+    it('renders an empty time for unparseable input', () => {
       expect(formatTime('invalid')).toBe('');
     });
   });
 
-  describe('formatTime consistency with form', () => {
-    it('displayed time matches what user entered', () => {
-      // User enters a local time
+  describe('consistency with the form', () => {
+    it('displays the time the user entered', () => {
       const userEnteredTime = '2024-06-15T14:30';
-      
-      // Form stores as ISO
-      const storedISO = toISODatetime(userEnteredTime);
-      
-      // Calendar displays the time
-      const displayedTime = formatTime(storedISO);
-      
-      // Extract just the time part from user input for comparison
-      const expectedTime = userEnteredTime.split('T')[1];
-      
-      // Should match!
-      expect(displayedTime).toBe(expectedTime);
+
+      expect(formatTime(toISODatetime(userEnteredTime))).toBe('14:30');
     });
 
-    it('works for various times throughout the day', () => {
+    it('works for times throughout the day', () => {
       const testCases = [
         { input: '2024-06-15T00:00', expectedTime: '00:00' },
         { input: '2024-06-15T06:30', expectedTime: '06:30' },
@@ -228,29 +205,50 @@ describe('BUG-2: Transport Time Display', () => {
       ];
 
       for (const { input, expectedTime } of testCases) {
-        const storedISO = toISODatetime(input);
-        const displayedTime = formatTime(storedISO);
-        expect(displayedTime).toBe(expectedTime);
+        expect(formatTime(toISODatetime(input))).toBe(expectedTime);
       }
     });
   });
 
-  describe('BUGGY version comparison', () => {
-    it('buggy version extracts UTC time, not local time', () => {
-      // This test demonstrates the bug that was fixed
-      // The buggy version extracts time directly from ISO string (UTC)
-      const isoDatetime = '2024-01-10T14:30:00.000Z';
-      
-      const buggyTime = formatTimeUTCBuggy(isoDatetime);
-      const fixedTime = formatTime(isoDatetime);
-      
-      // Buggy version always returns UTC time (14:30)
-      expect(buggyTime).toBe('14:30');
-      
-      // Fixed version returns local time (varies by timezone)
-      // In UTC+1, this would be 15:30; in UTC-5, this would be 09:30
-      // The key is that it uses date-fns format which handles timezone
-      expect(fixedTime).toMatch(/^\d{2}:\d{2}$/);
+  describe('versus the UTC-slicing bug', () => {
+    /**
+     * The assertion that actually fails if BUG-2 comes back.
+     *
+     * A stored instant only differs from its local wall clock when the viewer
+     * is offset from UTC, so under `TZ=UTC` a correct renderer and a
+     * character-slicing one are indistinguishable *by construction* — nothing
+     * written here can change that. The suite is therefore run under
+     * `Pacific/Kiritimati` (UTC+14) and `Pacific/Midway` (UTC-11) as well, and
+     * the divergence half of this test only asserts where an offset exists.
+     */
+    it('renders local time where slicing the stored string would not', () => {
+      const stored = storedInstantOf(2024, 1, 10, 14, 30);
+
+      // The shipped renderer gives back the wall clock that was entered.
+      expect(formatTime(stored)).toBe('14:30');
+
+      if (HAS_UTC_OFFSET) {
+        // The bug gives back the UTC clock, which is a different time.
+        expect(formatTimeUTCBuggy(stored)).not.toBe('14:30');
+        expect(formatTimeUTCBuggy(stored)).not.toBe(formatTime(stored));
+      } else {
+        // Under UTC the two agree; that is the whole reason for the matrix.
+        expect(formatTimeUTCBuggy(stored)).toBe(formatTime(stored));
+      }
+    });
+
+    it('renders the day the viewer experiences, not the stored UTC day', () => {
+      // 23:30 local on 30 June: UTC has already rolled over east of Greenwich
+      // and has not reached it yet to the west, so a renderer reading the
+      // stored string's date half shows the wrong day for most of the planet.
+      const { date, time } = formatTransportDatetimeParts(
+        storedInstantOf(2024, 6, 30, 23, 30),
+        undefined,
+        'dayAndTime',
+      );
+
+      expect(time).toBe('23:30');
+      expect(date).toBe('Sun 30 Jun');
     });
   });
 });
@@ -262,60 +260,40 @@ describe('BUG-2: Transport Time Display', () => {
 describe('Datetime Edge Cases', () => {
   describe('Date boundaries', () => {
     it('handles midnight correctly', () => {
-      const midnight = '2024-01-10T00:00';
-      const iso = toISODatetime(midnight);
-      const display = formatTime(iso);
-      expect(display).toBe('00:00');
+      expect(formatTime(toISODatetime('2024-01-10T00:00'))).toBe('00:00');
     });
 
     it('handles 23:59 correctly', () => {
-      const lateNight = '2024-01-10T23:59';
-      const iso = toISODatetime(lateNight);
-      const display = formatTime(iso);
-      expect(display).toBe('23:59');
+      expect(formatTime(toISODatetime('2024-01-10T23:59'))).toBe('23:59');
     });
   });
 
   describe('Year boundaries', () => {
     it('handles New Year Eve correctly', () => {
-      const newYearEve = '2024-12-31T23:30';
-      const iso = toISODatetime(newYearEve);
-      const display = formatTime(iso);
-      expect(display).toBe('23:30');
+      expect(formatTime(toISODatetime('2024-12-31T23:30'))).toBe('23:30');
     });
 
     it('handles New Year Day correctly', () => {
-      const newYearDay = '2025-01-01T00:30';
-      const iso = toISODatetime(newYearDay);
-      const display = formatTime(iso);
-      expect(display).toBe('00:30');
+      expect(formatTime(toISODatetime('2025-01-01T00:30'))).toBe('00:30');
     });
   });
 
-  describe('DST transitions (if applicable)', () => {
-    // Note: These tests verify the round-trip works during DST transitions
-    // The actual DST handling depends on the local timezone
-    
-    it('handles spring forward date correctly', () => {
+  describe('DST transitions', () => {
+    it('handles the spring-forward date correctly', () => {
       // 2024-03-10 is the US spring-forward day, where 02:00-03:00 local time
       // DOES NOT EXIST: `new Date('2024-03-10T02:30')` normalises to 03:30, so
       // asserting a 02:30 round-trip only held in zones that shift on another
       // date (Europe shifts on the 31st). 04:30 exists everywhere on that date
       // and still exercises the transition day.
-      const springDate = '2024-03-10T04:30';
-      const iso = toISODatetime(springDate);
-      const display = formatTime(iso);
-      // Should round-trip correctly regardless of DST
-      expect(display).toBe('04:30');
+      expect(formatTime(toISODatetime('2024-03-10T04:30'))).toBe('04:30');
     });
 
-    it('handles fall back date correctly', () => {
-      // November (typical fall back month in Northern Hemisphere)
-      const fallDate = '2024-11-03T01:30';
-      const iso = toISODatetime(fallDate);
-      const display = formatTime(iso);
-      // Should round-trip correctly regardless of DST
-      expect(display).toBe('01:30');
+    it('handles the fall-back date correctly', () => {
+      // November: the repeated hour in the Northern Hemisphere. 01:30 is
+      // ambiguous where it falls back, and `Date` resolves it to the first of
+      // the two — a round trip has to land back on the same wall clock either
+      // way.
+      expect(formatTime(toISODatetime('2024-11-03T01:30'))).toBe('01:30');
     });
   });
 });

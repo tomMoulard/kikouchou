@@ -362,7 +362,7 @@ describe('TransportForm', () => {
     );
   });
 
-  it('validates datetime on blur', async () => {
+  it('flags the empty datetime on blur and describes the input with it', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     render(
@@ -370,28 +370,45 @@ describe('TransportForm', () => {
       { withProviders: false },
     );
     const datetimeInput = screen.getByLabelText(/transports.datetime/);
+    expect(datetimeInput).toHaveAttribute('aria-invalid', 'false');
+
     await user.click(datetimeInput);
     await user.tab();
-    // Should show datetime validation error
-    const alerts = screen.getAllByRole('alert');
-    expect(alerts.length).toBeGreaterThanOrEqual(0);
+
+    // Blur is the only thing that has run, so the datetime error is the only
+    // one on screen — a bare "at least zero alerts" said nothing about which.
+    const error = screen.getByRole('alert');
+    expect(error).toHaveTextContent('common.required');
+    expect(error).toHaveAttribute('id', 'transport-datetime-error');
+    expect(datetimeInput).toHaveAttribute('aria-invalid', 'true');
+    expect(datetimeInput).toHaveAttribute(
+      'aria-describedby',
+      'transport-datetime-error',
+    );
   });
 
-  it('clears datetime error when user types', async () => {
+  it('clears the datetime error as soon as the user types, leaving the others', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     render(
       <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { withProviders: false },
     );
-    // Trigger submit to get errors
+    // Submitting an empty form flags person, datetime and location at once
     await user.click(screen.getByText('common.save'));
-    const alertsBefore = screen.getAllByRole('alert');
-    expect(alertsBefore.length).toBeGreaterThanOrEqual(1);
-    // Type in datetime to clear its error
+    expect(screen.getAllByRole('alert')).toHaveLength(3);
     const datetimeInput = screen.getByLabelText(/transports.datetime/);
+    expect(datetimeInput).toHaveAttribute('aria-invalid', 'true');
+
     await user.type(datetimeInput, '2027-07-15T14:00');
-    // Datetime error should be cleared (though others may remain)
+
+    // Only this field's error clears; the untouched ones stay flagged
+    expect(datetimeInput).toHaveAttribute('aria-invalid', 'false');
+    expect(datetimeInput).not.toHaveAttribute('aria-describedby');
+    expect(
+      document.getElementById('transport-datetime-error'),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole('alert')).toHaveLength(2);
   });
 
   it('toggles needs pickup switch', async () => {
