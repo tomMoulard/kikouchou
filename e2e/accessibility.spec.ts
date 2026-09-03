@@ -76,6 +76,12 @@ const TEST_DATA = {
  * If a rule genuinely has to come off, disable it for the one page that cannot
  * pass yet by passing `disableRules` to {@link analyzeA11y}, so the other five
  * pages keep enforcing it.
+ *
+ * A test that re-enables a rule locally — by building its own `AxeBuilder`
+ * rather than calling {@link analyzeA11y} — is now redundant rather than
+ * wrong: nothing is disabled here for it to work around. Prefer routing it
+ * back through {@link analyzeA11y} so there is one configuration to reason
+ * about, and so a rule added here later cannot be silently bypassed.
  */
 const ACCEPTABLE_VIOLATIONS = {
   rules: [] as string[],
