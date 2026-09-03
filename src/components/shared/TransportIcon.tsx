@@ -6,9 +6,9 @@
  */
 
 import { memo } from 'react';
-import { Bus, Car, Plane, Train, User } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { TRANSPORT_MODE_ICONS } from '@/lib/utils/transport-icons';
 import type { TransportMode } from '@/types';
 
 // ============================================================================
@@ -26,21 +26,6 @@ interface TransportIconProps {
   /** Accessible label for screen readers */
   readonly 'aria-label'?: string;
 }
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/**
- * Maps transport modes to their corresponding Lucide icons.
- */
-const TRANSPORT_ICONS = {
-  plane: Plane,
-  train: Train,
-  car: Car,
-  bus: Bus,
-  other: User,
-} as const;
 
 // ============================================================================
 // Component
@@ -63,7 +48,9 @@ const TransportIcon = memo(function TransportIcon({
   className,
   'aria-label': ariaLabel,
 }: TransportIconProps): React.ReactElement {
-  const Icon = TRANSPORT_ICONS[mode] ?? TRANSPORT_ICONS.other;
+  // Indexed rather than through `getTransportModeIcon`: the React Compiler
+  // reads a call returning a component as a component created during render.
+  const Icon = TRANSPORT_MODE_ICONS[mode] ?? TRANSPORT_MODE_ICONS.other;
 
   return (
     <Icon

@@ -7,14 +7,13 @@
 import { describe, it, expect } from 'vitest';
 import { enUS, fr } from 'date-fns/locale';
 
-import type { HexColor, ISODateString } from '@/types';
+import type { HexColor } from '@/types';
 import {
   getDateLocale,
   getLuminance,
   getContrastTextColor,
   getSegmentBorderRadiusClasses,
   formatTime,
-  formatAssignmentStayRange,
   EMPTY_EVENTS,
   EMPTY_TRANSPORTS,
   MAX_VISIBLE_EVENT_SLOTS,
@@ -186,37 +185,3 @@ describe('formatTime', () => {
   });
 });
 
-// ============================================================================
-// formatAssignmentStayRange
-// ============================================================================
-
-describe('formatAssignmentStayRange', () => {
-  it('formats a date range in English', () => {
-    const result = formatAssignmentStayRange(
-      { startDate: '2024-07-15' as ISODateString, endDate: '2024-07-22' as ISODateString },
-      enUS,
-    );
-    expect(result).toContain('15');
-    expect(result).toContain('22');
-    expect(result).toContain('Jul');
-  });
-
-  it('formats a date range in French', () => {
-    const result = formatAssignmentStayRange(
-      { startDate: '2024-07-15' as ISODateString, endDate: '2024-07-22' as ISODateString },
-      fr,
-    );
-    expect(result).toContain('15');
-    expect(result).toContain('22');
-    expect(result).toContain('juil.');
-  });
-
-  it('returns empty string for invalid dates', () => {
-    expect(
-      formatAssignmentStayRange(
-        { startDate: 'invalid' as ISODateString, endDate: '2024-07-22' as ISODateString },
-        enUS,
-      ),
-    ).toBe('');
-  });
-});

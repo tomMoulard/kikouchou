@@ -9,7 +9,6 @@
  * import {
  *   PersonListPage,
  *   PersonForm,
- *   PersonCard,
  *   PersonDialog,
  *   personRoutes,
  * } from '@/features/persons';
@@ -28,9 +27,6 @@ export { PersonListPage } from './pages/PersonListPage';
 
 export { PersonForm } from './components/PersonForm';
 export type { PersonFormProps } from './components/PersonForm';
-
-export { PersonCard } from './components/PersonCard';
-export type { PersonCardProps, TransportSummary } from './components/PersonCard';
 
 export { PersonDialog } from './components/PersonDialog';
 export type { PersonDialogProps } from './components/PersonDialog';
