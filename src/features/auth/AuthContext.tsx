@@ -115,7 +115,7 @@ AuthContext.displayName = 'AuthContext';
  * Where Google should send the user back to.
  *
  * Deliberately the app **root**, not a dedicated callback route: GitHub Pages
- * has no SPA rewrite, so a cold load of `/kikoushou/auth/callback` would 404
+ * has no SPA rewrite, so a cold load of `/auth/callback` would 404
  * before the service worker exists. The root is a real file on every target, and
  * `detectSessionInUrl` picks the `?code=` off whatever URL it lands on.
  *

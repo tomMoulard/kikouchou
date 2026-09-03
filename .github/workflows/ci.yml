@@ -212,7 +212,7 @@ jobs:
         run: bun run build
         env:
           VITE_APP_VERSION: ${{ github.sha }}
-          VITE_SIGNALING_URL: wss://kikoushou.cyprin.eu
+          VITE_SIGNALING_URL: wss://signaling.kikouchou.app
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -251,7 +251,7 @@ jobs:
       # Playwright project serves the built output through `vite preview`, and
       # its webServer command runs `bun run build` itself with GITHUB_ACTIONS
       # cleared — because the `build` job's artifact is compiled with
-      # base='/kikoushou/' for Pages, which would 404 every navigation the
+      # base='/kikouchou/' for Pages, which would 404 every navigation the
       # tests make against '/'. Downloading it only ever cost time.
       #
       # `needs: [build]` stays, so a broken build still fails before this runs.

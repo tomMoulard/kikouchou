@@ -256,7 +256,7 @@ async function createTestTrip(page: Page): Promise<string> {
       const now = Date.now();
 
       return new Promise<string>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -319,7 +319,7 @@ async function createBulkPersons(page: Page, tripId: string, count: number): Pro
       ];
 
       return new Promise<string[]>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -363,7 +363,7 @@ async function createBulkRooms(page: Page, tripId: string, count: number): Promi
       const icons = ['bed-double', 'bed-single', 'sofa', 'bath', 'tent', 'home'];
 
       return new Promise<string[]>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -413,7 +413,7 @@ async function createBulkAssignments(
   await page.evaluate(
     async ({ tripId, personIds, roomIds, count, tripStart }) => {
       return new Promise<void>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -845,7 +845,7 @@ test.describe('Performance Tests', () => {
 
       await measureOperation('Open DB', async () => {
         await new Promise<void>((resolve, reject) => {
-          const req = indexedDB.open('kikoushou');
+          const req = indexedDB.open('kikouchou');
           req.onerror = () => reject(req.error);
           req.onsuccess = () => {
             req.result.close();
@@ -856,7 +856,7 @@ test.describe('Performance Tests', () => {
 
       await measureOperation('Read all persons', async () => {
         await new Promise<void>((resolve, reject) => {
-          const req = indexedDB.open('kikoushou');
+          const req = indexedDB.open('kikouchou');
           req.onerror = () => reject(req.error);
           req.onsuccess = () => {
             const db = req.result;
@@ -877,7 +877,7 @@ test.describe('Performance Tests', () => {
 
       await measureOperation('Read all rooms', async () => {
         await new Promise<void>((resolve, reject) => {
-          const req = indexedDB.open('kikoushou');
+          const req = indexedDB.open('kikouchou');
           req.onerror = () => reject(req.error);
           req.onsuccess = () => {
             const db = req.result;

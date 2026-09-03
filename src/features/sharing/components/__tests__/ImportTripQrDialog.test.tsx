@@ -104,7 +104,7 @@ describe('ImportTripQrDialog', () => {
     // This is what the Share dialog now produces. A scanner that cannot read the
     // app's own current QR code looks like a broken camera rather than an
     // unsupported format, which is why invite tokens are matched first.
-    capturedOnScan!('https://kikoushou.app/join/aBcDeFgHiJkL3456');
+    capturedOnScan!('https://kikouchou.app/join/aBcDeFgHiJkL3456');
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(mockNavigate).toHaveBeenCalledWith('/join/aBcDeFgHiJkL3456');

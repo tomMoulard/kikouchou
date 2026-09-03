@@ -90,7 +90,7 @@ interface FormErrors {
  * @returns The localStorage key string
  */
 const getGuestStorageKey = (shareId: string): string =>
-  `kikoushou_guest_${shareId}`;
+  `kikouchou_guest_${shareId}`;
 
 /**
  * Available transport modes for the select dropdown.

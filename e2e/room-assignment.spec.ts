@@ -95,7 +95,7 @@ async function createTestTrip(page: Page): Promise<string> {
       const now = Date.now();
 
       return new Promise<string>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -152,7 +152,7 @@ async function createRoomViaDB(
       const id = `room-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       return new Promise<string>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -201,7 +201,7 @@ async function createPersonViaDB(
       const color = personData.color ?? colors[Math.floor(Math.random() * colors.length)];
 
       return new Promise<string>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -248,7 +248,7 @@ async function createAssignmentViaDB(
       const id = `assignment-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
       return new Promise<string>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;

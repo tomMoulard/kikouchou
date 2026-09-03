@@ -168,7 +168,7 @@ function setStoredIdentity(
   shareId: string,
   identity: { personId: string; tripId: string },
 ): void {
-  localStorageMock[`kikoushou_guest_${shareId}`] = JSON.stringify(identity);
+  localStorageMock[`kikouchou_guest_${shareId}`] = JSON.stringify(identity);
 }
 
 /** Sets up all mocks for a fully-loaded summary page (guest with room + transports). */
@@ -329,7 +329,7 @@ describe('SummaryStepPage — 5.6: missing identity redirects', () => {
   });
 
   it('redirects when stored identity JSON is invalid', async () => {
-    localStorageMock['kikoushou_guest_abc123'] = 'not-valid-json{{{';
+    localStorageMock['kikouchou_guest_abc123'] = 'not-valid-json{{{';
     mockGetTripByShareId.mockResolvedValue(makeTrip());
 
     renderSummaryPage('abc123');
@@ -355,7 +355,7 @@ describe('SummaryStepPage — 5.6b: stale tripId redirects to identity step', ()
       expect(screen.getByTestId('identity-page')).toBeInTheDocument();
     });
 
-    expect(localStorageMock['kikoushou_guest_abc123']).toBeUndefined();
+    expect(localStorageMock['kikouchou_guest_abc123']).toBeUndefined();
   });
 });
 
@@ -480,7 +480,7 @@ describe('SummaryStepPage — 5.11: wizard-complete flag set in localStorage', (
     await user.click(enterButton);
 
     await waitFor(() => {
-      expect(localStorageMock['kikoushou_wizard_complete_abc123']).toBe('true');
+      expect(localStorageMock['kikouchou_wizard_complete_abc123']).toBe('true');
     });
   });
 });
@@ -588,7 +588,7 @@ describe('SummaryStepPage — additional branch coverage', () => {
   });
 
   it('redirects when stored identity has whitespace-only personId', async () => {
-    localStorageMock['kikoushou_guest_abc123'] = JSON.stringify({
+    localStorageMock['kikouchou_guest_abc123'] = JSON.stringify({
       personId: '   ',
       tripId: 'trip-1',
     });
@@ -601,7 +601,7 @@ describe('SummaryStepPage — additional branch coverage', () => {
   });
 
   it('redirects when stored identity has whitespace-only tripId', async () => {
-    localStorageMock['kikoushou_guest_abc123'] = JSON.stringify({
+    localStorageMock['kikouchou_guest_abc123'] = JSON.stringify({
       personId: 'p1',
       tripId: '  ',
     });
@@ -614,7 +614,7 @@ describe('SummaryStepPage — additional branch coverage', () => {
   });
 
   it('redirects when stored identity JSON is malformed', async () => {
-    localStorageMock['kikoushou_guest_abc123'] = '{invalid json';
+    localStorageMock['kikouchou_guest_abc123'] = '{invalid json';
 
     renderSummaryPage('abc123');
 

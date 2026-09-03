@@ -78,7 +78,7 @@ export async function seedTrip(
       const now = Date.now();
 
       return new Promise<{ tripId: string; shareId: string }>((resolve, reject) => {
-        const dbRequest = indexedDB.open('kikoushou');
+        const dbRequest = indexedDB.open('kikouchou');
         dbRequest.onerror = () => reject(new Error('Failed to open database'));
         dbRequest.onsuccess = () => {
           const db = dbRequest.result;
@@ -144,7 +144,7 @@ export async function seedPerson(
       const id = `seed-person-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
       return new Promise<string>((resolve, reject) => {
-        const request = indexedDB.open('kikoushou');
+        const request = indexedDB.open('kikouchou');
         request.onerror = () => reject(new Error('Failed to open database'));
         request.onsuccess = () => {
           const db = request.result;
@@ -196,7 +196,7 @@ export async function seedRoom(
     const id = `seed-room-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
     return new Promise<string>((resolve, reject) => {
-      const request = indexedDB.open('kikoushou');
+      const request = indexedDB.open('kikouchou');
       request.onerror = () => reject(new Error('Failed to open database'));
       request.onsuccess = () => {
         const db = request.result;
@@ -256,7 +256,7 @@ export async function seedTransport(
     const id = `seed-transport-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
     return new Promise<string>((resolve, reject) => {
-      const request = indexedDB.open('kikoushou');
+      const request = indexedDB.open('kikouchou');
       request.onerror = () => reject(new Error('Failed to open database'));
       request.onsuccess = () => {
         const db = request.result;

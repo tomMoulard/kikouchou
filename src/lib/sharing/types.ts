@@ -221,7 +221,7 @@ export const MAX_QR_BYTES = 2200;
 /**
  * localStorage key prefix for import baselines.
  */
-export const BASELINE_STORAGE_PREFIX = 'kikoushou_import_baseline_';
+export const BASELINE_STORAGE_PREFIX = 'kikouchou_import_baseline_';
 
 /**
  * Gets the localStorage key for a trip's import baseline.

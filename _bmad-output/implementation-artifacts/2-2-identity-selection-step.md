@@ -26,7 +26,7 @@ so that the app knows who I am for room and transport assignments.
 
 4. **Given** the guest has selected (or created) their identity
    **When** they tap "Next"
-   **Then** their identity is stored to `localStorage` under key `kikoushou_guest_${shareId}` as `{ personId: string, tripId: string }` and navigation proceeds to `/share/:shareId/room`
+   **Then** their identity is stored to `localStorage` under key `kikouchou_guest_${shareId}` as `{ personId: string, tripId: string }` and navigation proceeds to `/share/:shareId/room`
 
 5. **Given** all text in the identity step
    **When** it is rendered
@@ -43,7 +43,7 @@ so that the app knows who I am for room and transport assignments.
 
 - [x] Task 2: Wire the identity step into the routing scaffold (AC: 4)
   - [x] 2.1 Update `src/features/sharing/routes.tsx`: replace the `OnboardingPlaceholderPage` element for `path: 'identity'` with lazy-loaded `IdentityStepPage`
-  - [x] 2.2 On "Next", write `localStorage.setItem(kikoushou_guest_${shareId}, JSON.stringify({ personId, tripId }))` before navigating to `/share/:shareId/room`
+  - [x] 2.2 On "Next", write `localStorage.setItem(kikouchou_guest_${shareId}, JSON.stringify({ personId, tripId }))` before navigating to `/share/:shareId/room`
   - [x] 2.3 Keep `OnboardingPlaceholderPage` in place for `room`, `transport`, `summary` routes (stories 2.3–2.5)
   - [x] 2.4 Update `src/features/sharing/index.ts` to export `IdentityStepPage`
 
@@ -84,7 +84,7 @@ This is **Story 2.2 of Epic 2 (Guest Onboarding)**. It replaces the `OnboardingP
 
 **localStorage key contract established in Story 2.1:**
 ```typescript
-const GUEST_STORAGE_KEY = (shareId: string) => `kikoushou_guest_${shareId}`;
+const GUEST_STORAGE_KEY = (shareId: string) => `kikouchou_guest_${shareId}`;
 
 interface StoredGuestIdentity {
   personId: string;
@@ -188,7 +188,7 @@ Add to both `src/locales/en/translation.json` and `src/locales/fr/translation.js
 Write this right before `navigate(`/share/${shareId}/room`)` in the "Next" handler:
 
 ```typescript
-const GUEST_STORAGE_KEY = (shareId: string) => `kikoushou_guest_${shareId}`;
+const GUEST_STORAGE_KEY = (shareId: string) => `kikouchou_guest_${shareId}`;
 
 interface StoredGuestIdentity {
   personId: string;
@@ -323,7 +323,7 @@ Consistent with the amber theme established in Story 2.1:
 ### Previous Story Intelligence (2.1)
 
 - `ShareImportPage.tsx` is the canonical pattern for this story's async load and `isMountedRef` usage — read it carefully before implementing.
-- Story 2.1 established the `getStoredGuestIdentity(shareId)` function that *reads* from localStorage. This story *writes* to that same key. The key and interface shape MUST match: `kikoushou_guest_${shareId}` → `{ personId: string, tripId: string }`.
+- Story 2.1 established the `getStoredGuestIdentity(shareId)` function that *reads* from localStorage. This story *writes* to that same key. The key and interface shape MUST match: `kikouchou_guest_${shareId}` → `{ personId: string, tripId: string }`.
 - Story 2.1 confirmed: `Palmtree` icon (lucide-react), amber gradient background (`from-amber-50 to-orange-50`), amber card theme (`border-amber-200`). Reuse this design language.
 - Story 2.1 added the wizard sub-routes to `routes.tsx`; the `withSuspense()` helper is already defined there. Use it for `IdentityStepPage`.
 - Story 2.1 created `OnboardingPlaceholderPage` — it stays for routes `room`, `transport`, `summary` until those stories are implemented.
@@ -345,7 +345,7 @@ Consistent with the amber theme established in Story 2.1:
 
 ### Project Context
 
-- Project: kikoushou — vacation house coordination PWA. No backend. IndexedDB (Dexie.js). Offline-first.
+- Project: kikouchou — vacation house coordination PWA. No backend. IndexedDB (Dexie.js). Offline-first.
 - This story is in the wizard flow, outside AppProviders. Pattern established by Story 2.1.
 - Epic 2 goal: first-time guests can self-service setup in under 2 minutes.
 - After this story: story 2.3 (room selection) will read the stored guest identity to pre-select the person.

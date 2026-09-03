@@ -22,7 +22,7 @@ import { KikoushouDatabase } from '@/lib/db/database';
 // Helpers
 // ============================================================================
 
-const DB_NAME = 'kikoushou-schema-8-probe';
+const DB_NAME = 'kikouchou-schema-8-probe';
 
 /** The v7 schema, verbatim, so the fixture is a genuine old database. */
 function openV7(): Dexie {

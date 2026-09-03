@@ -47,7 +47,7 @@ export const STUB_URL = 'http://stub.invalid';
 export const STUB_PUBLISHABLE_KEY = 'sb_publishable_e2e_stub';
 
 /** Matches the key `lib/supabase/client` persists the session under. */
-const AUTH_STORAGE_KEY = 'kikoushou-auth';
+const AUTH_STORAGE_KEY = 'kikouchou-auth';
 
 // ============================================================================
 // Type Definitions

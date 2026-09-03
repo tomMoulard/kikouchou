@@ -44,7 +44,7 @@ so that I'm confident everything is correct before I start using the app.
 
 - [x] Task 1: Create `SummaryStepPage` component (AC: 1, 5, 6, 7)
   - [x] 1.1 Create `src/features/sharing/pages/SummaryStepPage.tsx` — the final wizard step page
-  - [x] 1.2 On mount: read stored guest identity from localStorage key `kikoushou_guest_${shareId}` → `{ personId, tripId }`; if not found, redirect to `/share/${shareId}/identity` (same guard pattern as TransportEntryStepPage)
+  - [x] 1.2 On mount: read stored guest identity from localStorage key `kikouchou_guest_${shareId}` → `{ personId, tripId }`; if not found, redirect to `/share/${shareId}/identity` (same guard pattern as TransportEntryStepPage)
   - [x] 1.3 Call `getTripByShareId(shareId as ShareId)` to get the trip; show `<LoadingState variant="fullPage" />` while loading, handle not-found with friendly error card
   - [x] 1.4 Cross-validate: if stored `tripId` doesn't match loaded trip's `id`, clear localStorage and redirect to identity step (same guard as previous steps)
   - [x] 1.5 Load guest data in parallel:
@@ -65,7 +65,7 @@ so that I'm confident everything is correct before I start using the app.
 
 - [x] Task 3: Implement "Enter trip" action (AC: 3)
   - [x] 3.1 "Enter trip" / "Let's go!" button calls `setCurrentTrip(trip.id)` from `@/lib/db/repositories/settings-repository`
-  - [x] 3.2 After `setCurrentTrip`, mark wizard completed: `localStorage.setItem(\`kikoushou_wizard_complete_${shareId}\`, 'true')`
+  - [x] 3.2 After `setCurrentTrip`, mark wizard completed: `localStorage.setItem(\`kikouchou_wizard_complete_${shareId}\`, 'true')`
   - [x] 3.3 Navigate to `/trips/${trip.id}/calendar` — this crosses the context boundary into `AppProviders`
   - [x] 3.4 Wrap in `isSubmittingRef` guard + `try/catch/finally` per canonical pattern
   - [x] 3.5 On error: show inline error message (do not navigate), allow retry
@@ -149,10 +149,10 @@ The `/share/:shareId/summary` route does NOT have a `tripId` param — only `sha
 
 ### Getting the Guest personId
 
-Read from localStorage under key `kikoushou_guest_${shareId}`:
+Read from localStorage under key `kikouchou_guest_${shareId}`:
 
 ```typescript
-const GUEST_STORAGE_KEY = (shareId: string) => `kikoushou_guest_${shareId}`;
+const GUEST_STORAGE_KEY = (shareId: string) => `kikouchou_guest_${shareId}`;
 
 interface StoredGuestIdentity {
   personId: string;
@@ -167,7 +167,7 @@ If the stored identity is missing or invalid, redirect to `/share/${shareId}/ide
 When the guest taps "Enter trip", set a localStorage flag:
 
 ```typescript
-const WIZARD_COMPLETE_KEY = (shareId: string) => `kikoushou_wizard_complete_${shareId}`;
+const WIZARD_COMPLETE_KEY = (shareId: string) => `kikouchou_wizard_complete_${shareId}`;
 
 // On "Enter trip" action:
 localStorage.setItem(WIZARD_COMPLETE_KEY(shareId), 'true');
@@ -253,7 +253,7 @@ const handleEnterTrip = useCallback(async (): Promise<void> => {
     if (!isMountedRef.current) return;
 
     // Mark wizard as completed for this share link
-    localStorage.setItem(`kikoushou_wizard_complete_${shareId}`, 'true');
+    localStorage.setItem(`kikouchou_wizard_complete_${shareId}`, 'true');
 
     // Navigate INTO the context boundary
     navigate(`/trips/${trip.id}/calendar`);
@@ -435,7 +435,7 @@ None — clean implementation, all tests passed first run.
 
 - Created `SummaryStepPage.tsx` — final wizard step displaying identity, room, and transport summary sections as tappable cards with amber theme
 - Each section navigates back to its wizard step using `navigate()` (not `replace`) for browser back support
-- "Let's go!" button calls `setCurrentTrip(trip.id)`, sets `kikoushou_wizard_complete_${shareId}` localStorage flag, then navigates to `/trips/:tripId/calendar`
+- "Let's go!" button calls `setCurrentTrip(trip.id)`, sets `kikouchou_wizard_complete_${shareId}` localStorage flag, then navigates to `/trips/:tripId/calendar`
 - Full identity guard pattern with localStorage read + cross-validation (matching TransportEntryStepPage)
 - `isMountedRef` + `isSubmittingRef` + cancelled-flag pattern for async safety
 - 16 i18n keys added to EN and FR translations under `sharing.summary*`

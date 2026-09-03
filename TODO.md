@@ -57,7 +57,7 @@
 ### Project Structure
 
 ```
-kikoushou/
+kikouchou/
 ├── public/
 │   ├── icons/              # PWA icons (192x192, 512x512)
 │   └── manifest.json       # PWA manifest
@@ -169,8 +169,8 @@ interface AppSettings {
 
 **Commands**:
 ```bash
-bun create vite kikoushou --template react-ts
-cd kikoushou
+bun create vite kikouchou --template react-ts
+cd kikouchou
 bun install
 ```
 
@@ -184,7 +184,7 @@ bun install
 **Notes**:
 - Used temporary directory approach since workspace was non-empty
 - Preserved existing documentation files (README.md, TODO.md, IDEAS.md)
-- Fixed package name from template default to "kikoushou"
+- Fixed package name from template default to "kikouchou"
 - Build output: 193.91 kB JS (60.94 kB gzip), 1.38 kB CSS
 
 ---
@@ -575,7 +575,7 @@ export class KikoushouDatabase extends Dexie {
   settings!: Table<AppSettings, string>;
 
   constructor() {
-    super('kikoushou');
+    super('kikouchou');
 
     this.version(1).stores({
       trips: 'id, shareId, startDate, createdAt',
@@ -7022,7 +7022,7 @@ catch (error) {
 
 **Fix**: Update User-Agent:
 ```typescript
-'User-Agent': 'Kikoushou/1.0 (https://github.com/tomMoulard/kikoushou)',
+'User-Agent': 'Kikoushou/1.0 (https://github.com/tomMoulard/kikouchou)',
 ```
 
 **Acceptance Criteria**:
@@ -7032,7 +7032,7 @@ catch (error) {
 **Status**: COMPLETED (2026-02-03)
 
 **Notes**:
-- Updated User-Agent header to `Kikoushou/1.0 (https://github.com/tomMoulard/kikoushou)` in LocationPicker.tsx
+- Updated User-Agent header to `Kikoushou/1.0 (https://github.com/tomMoulard/kikouchou)` in LocationPicker.tsx
 - Compliant with Nominatim usage policy requirements
 
 ---

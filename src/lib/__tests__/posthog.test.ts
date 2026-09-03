@@ -110,7 +110,7 @@ describe('lib/posthog', () => {
     ['10.0.0.5', 'a private network'],
     ['172.20.1.9', 'the other RFC 1918 range'],
     ['169.254.4.4', 'a link-local address'],
-    ['kikoushou.local', 'mDNS'],
+    ['kikouchou.local', 'mDNS'],
     ['app.localhost', 'an RFC 6761 loopback subdomain'],
   ])('refuses to initialize on %s — %s', async (hostname) => {
     withCredentials();
