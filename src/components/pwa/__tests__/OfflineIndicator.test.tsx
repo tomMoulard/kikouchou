@@ -9,6 +9,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 
+import { CheckCircle2, WifiOff } from 'lucide-react';
+
 import { OfflineIndicator } from '@/components/pwa/OfflineIndicator';
 
 // ============================================================================
@@ -190,6 +192,58 @@ describe('OfflineIndicator', () => {
       const wifiOffIcon = svgs[0];
       expect(wifiOffIcon).toBeDefined();
       expect(wifiOffIcon?.className.baseVal || wifiOffIcon?.getAttribute('class') || '').toContain('motion-safe:animate-pulse');
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Iconography
+  // --------------------------------------------------------------------------
+
+  describe('iconography', () => {
+    /** The paths a lucide icon draws, so a rendered glyph can be identified. */
+    function shapeOf(Icon: typeof WifiOff): string {
+      const { container, unmount } = render(<Icon />);
+      const markup = container.querySelector('svg')?.innerHTML ?? '';
+      unmount();
+      return markup;
+    }
+
+    it('draws a struck-through wifi glyph while offline', () => {
+      mockUseOnlineStatus.mockReturnValue({
+        isOnline: false,
+        hasRecentlyChanged: false,
+      });
+
+      render(<OfflineIndicator />);
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+
+      // The tests above only asked that *an* svg was there with the right
+      // animation class, which a tick, a cross or a blank box would satisfy.
+      expect(screen.getByRole('status').querySelector('svg')?.innerHTML).toBe(
+        shapeOf(WifiOff),
+      );
+    });
+
+    it('draws a tick, not a wifi glyph, once the connection is back', () => {
+      mockUseOnlineStatus.mockReturnValue({
+        isOnline: true,
+        hasRecentlyChanged: true,
+      });
+
+      render(<OfflineIndicator />);
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+
+      // "Connection restored" beside a struck-through wifi icon says two
+      // opposite things at once.
+      const drawn = screen.getByRole('status').querySelector('svg')?.innerHTML;
+      expect(drawn).toBe(shapeOf(CheckCircle2));
+      expect(drawn).not.toBe(shapeOf(WifiOff));
     });
   });
 
