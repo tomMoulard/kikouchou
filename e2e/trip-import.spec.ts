@@ -66,7 +66,9 @@ async function navigateToMonth(
       }
       const currentMonthMatch = captionText.match(/(\w+)\s*(\d{4})/);
       if (currentMonthMatch) {
-        const [, monthName, yearStr] = currentMonthMatch;
+        // Both groups are guaranteed by the pattern that just matched;
+        // the defaults are what tell the compiler so.
+        const [, monthName = '', yearStr = ''] = currentMonthMatch;
         const currentYear = parseInt(yearStr, 10);
         const monthNames = [
           'January', 'February', 'March', 'April', 'May', 'June',
