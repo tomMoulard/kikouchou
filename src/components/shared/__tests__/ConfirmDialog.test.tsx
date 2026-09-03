@@ -38,10 +38,25 @@ function setupUser(): ReturnType<typeof userEvent.setup> {
 }
 
 /**
- * Creates a delay promise for testing async behavior.
+ * An `onConfirm` result that never settles, for asserting on the loading state.
+ *
+ * Six tests here used a timed `delay(...)` and then asserted *during* that
+ * window. That makes each assertion a race between a wall-clock timer and
+ * however long jsdom takes to dispatch the events — fine on an idle laptop, and
+ * a real failure on a busy one, which is how this file earned its reputation
+ * for flakiness. `prevents double-click during loading` was the sharpest: once
+ * 50ms elapsed between the two clicks the dialog had already closed, so the
+ * second click genuinely did call `onConfirm` again, and the test was right to
+ * fail.
+ *
+ * A promise that never settles removes time from the assertion entirely: the
+ * dialog is loading until the test ends, so "while loading" means exactly that.
+ * Two tests further down already used `new Promise(() => {})` for this; this is
+ * the same idea with a name. Nothing needs to resolve it — the component is
+ * unmounted by the global `cleanup()` in `afterEach`.
  */
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function neverSettles(): Promise<void> {
+  return new Promise<void>(() => {});
 }
 
 // ============================================================================
@@ -278,7 +293,7 @@ describe('ConfirmDialog Loading State', () => {
 
   it('shows loading spinner during async confirm', async () => {
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(100));
+    const onConfirm = vi.fn().mockImplementation(neverSettles);
 
     render(
       <ConfirmDialog
@@ -300,7 +315,7 @@ describe('ConfirmDialog Loading State', () => {
 
   it('disables buttons during loading', async () => {
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(100));
+    const onConfirm = vi.fn().mockImplementation(neverSettles);
 
     render(
       <ConfirmDialog
@@ -325,7 +340,7 @@ describe('ConfirmDialog Loading State', () => {
 
   it('prevents close during loading', async () => {
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(100));
+    const onConfirm = vi.fn().mockImplementation(neverSettles);
 
     render(
       <ConfirmDialog
@@ -352,7 +367,7 @@ describe('ConfirmDialog Loading State', () => {
 
   it('prevents double-click during loading', async () => {
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(50));
+    const onConfirm = vi.fn().mockImplementation(neverSettles);
 
     render(
       <ConfirmDialog
@@ -377,7 +392,7 @@ describe('ConfirmDialog Loading State', () => {
 
   it('resets loading state when dialog closes externally', async () => {
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(100));
+    const onConfirm = vi.fn().mockImplementation(neverSettles);
 
     const { rerender } = render(
       <ConfirmDialog
@@ -571,7 +586,7 @@ describe('ConfirmDialog Accessibility', () => {
 
   it('loading spinner has aria-hidden', async () => {
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(100));
+    const onConfirm = vi.fn().mockImplementation(neverSettles);
 
     render(
       <ConfirmDialog
@@ -670,7 +685,7 @@ describe('ConfirmDialog Sync vs Async', () => {
   });
 
   it('guards handleConfirm when isLoading is true (fireEvent bypasses disabled)', async () => {
-    const onConfirm = vi.fn().mockImplementation(() => new Promise(() => {})); // never resolves
+    const onConfirm = vi.fn().mockImplementation(neverSettles);
     const onOpenChange = vi.fn();
 
     render(
@@ -702,7 +717,7 @@ describe('ConfirmDialog Sync vs Async', () => {
   });
 
   it('guards handleOpenChange when isLoading is true (cancel during loading)', async () => {
-    const onConfirm = vi.fn().mockImplementation(() => new Promise(() => {})); // never resolves
+    const onConfirm = vi.fn().mockImplementation(neverSettles);
     const onOpenChange = vi.fn();
 
     render(
