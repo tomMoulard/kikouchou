@@ -225,8 +225,10 @@ test.describe('Trip Lifecycle', () => {
     if (await clearDataButton.isVisible({ timeout: 2000 }).catch(() => false)) {
       await clearDataButton.click();
 
-      // Confirm the dialog if it appears
-      const confirmButton = page.getByRole('dialog').getByRole('button', { name: /clear|confirm/i });
+      // Confirm the dialog if it appears. ConfirmDialog is an alert dialog.
+      const confirmButton = page
+        .getByRole('alertdialog')
+        .getByRole('button', { name: /clear|confirm/i });
       if (await confirmButton.isVisible({ timeout: 1000 }).catch(() => false)) {
         await confirmButton.click();
         // Wait for the operation to complete
@@ -382,8 +384,9 @@ test.describe('Trip Lifecycle', () => {
     // Click the delete button in the header (not the one that might appear elsewhere)
     await page.getByRole('button', { name: /delete/i }).first().click();
 
-    // Verify the confirmation dialog appears
-    const dialog = page.getByRole('dialog');
+    // Verify the confirmation dialog appears. A destructive confirmation is an
+    // alert dialog: `getByRole('dialog')` no longer matches it.
+    const dialog = page.getByRole('alertdialog');
     await expect(dialog).toBeVisible();
     await expect(
       page.getByText(/this will permanently delete the trip/i),
@@ -421,10 +424,12 @@ test.describe('Trip Lifecycle', () => {
     // Navigate to trips list manually if we're still on edit page
     const currentUrl = page.url();
     if (currentUrl.includes('/edit')) {
-      // Dialog might be stuck, close it and navigate manually
-      const closeButton = dialog.getByRole('button', { name: /close/i });
-      if (await closeButton.isVisible({ timeout: 500 }).catch(() => false)) {
-        await closeButton.click({ force: true });
+      // Dialog might be stuck. An alert dialog has no close button by design —
+      // it is answered, not dismissed — and Escape is blocked while the delete
+      // is still in flight, so this is a best effort before navigating away
+      // rather than a guaranteed way out.
+      if (await dialog.isVisible({ timeout: 500 }).catch(() => false)) {
+        await page.keyboard.press('Escape');
       }
       await page.goto('/trips');
     }

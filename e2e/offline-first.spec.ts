@@ -91,7 +91,8 @@ async function resetApp(page: Page): Promise<void> {
   const clearButton = page.getByRole('button', { name: /clear.*data/i });
   if (await clearButton.isVisible().catch(() => false)) {
     await clearButton.click();
-    const dialog = page.getByRole('dialog');
+    // ConfirmDialog is an alert dialog, not a plain one.
+    const dialog = page.getByRole('alertdialog');
     await dialog.getByRole('button', { name: /clear|confirm/i }).first().click();
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
   }

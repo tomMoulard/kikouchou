@@ -568,7 +568,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
-          className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto"
+          className="sm:max-w-[425px]"
           onPointerDownOutside={(e) => isSubmitting && e.preventDefault()}
           onEscapeKeyDown={(e) => isSubmitting && e.preventDefault()}
         >
