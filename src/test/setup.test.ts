@@ -1,108 +1,99 @@
 /**
- * @fileoverview Test to verify the test setup is working correctly.
- * This test file validates that all mocks and configurations are properly initialized.
+ * @fileoverview The one effect of `setup.ts` a test can actually observe.
+ *
+ * This file used to hold twelve assertions about Vitest and jsdom — that
+ * `describe` is a function, that `new ResizeObserver()` has an `observe`
+ * method, that the identity `t` mock returns its key. Every one of them
+ * restated a literal written a few lines above it in `setup.ts`, and none could
+ * fail while the file ran at all.
+ *
+ * What is genuinely worth pinning is the *cross-test* guarantee: `setup.ts`
+ * empties every Dexie table before each test, so no test can see rows written
+ * by the one before it. That has broken twice — the hook's table list used to
+ * be hand-maintained, and it silently missed `yjsUpdates` and then `activities`
+ * when the schema grew, leaking rows into whichever file ran next. It is now
+ * derived from `db.tables`, and this file is what holds that derivation in
+ * place.
+ *
+ * The two tests below are deliberately order-dependent: the first fills every
+ * table, the second asserts the tables it finds are empty. Nothing runs between
+ * them except `setup.ts`'s `beforeEach`, so the second passes only if that hook
+ * really cleared all of them.
  *
  * @module test/setup.test
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import type { Table } from 'dexie';
+
+import { db } from '@/lib/db/database';
 
 // ============================================================================
-// Setup Verification Tests
+// Helpers
 // ============================================================================
 
-describe('Test Setup', () => {
-  describe('Vitest Globals', () => {
-    it('should have describe, it, expect available globally', () => {
-      expect(typeof describe).toBe('function');
-      expect(typeof it).toBe('function');
-      expect(typeof expect).toBe('function');
-    });
+/** Normalises Dexie's `string | string[] | null` key paths to a list. */
+function keyPathSegments(keyPath: string | string[] | null | undefined): string[] {
+  if (keyPath === null || keyPath === undefined) return [];
+  return Array.isArray(keyPath) ? keyPath : [keyPath];
+}
 
-    it('should have vi mock utilities available', () => {
-      expect(typeof vi.fn).toBe('function');
-      expect(typeof vi.mock).toBe('function');
-    });
+/**
+ * Builds the smallest row Dexie will accept into `table`.
+ *
+ * Derived from the table's own schema rather than hand-written per table, for
+ * the same reason the hook under test derives its list from `db.tables`: a
+ * literal here would go stale the next time the schema grows, and this file
+ * would then stop covering the very table most likely to leak.
+ */
+function probeRow(table: Table): Record<string, unknown> {
+  const row: Record<string, unknown> = {},
+    { primKey, indexes } = table.schema,
+    fields = [
+      // An auto-incrementing key ("++id") must be left for Dexie to assign.
+      ...(primKey.auto
+        ? []
+        : keyPathSegments(primKey.keyPath).map((path) => ({ path, multi: false }))),
+      ...indexes.flatMap((index) =>
+        keyPathSegments(index.keyPath).map((path) => ({ path, multi: index.multi === true })),
+      ),
+    ];
+
+  for (const { path, multi } of fields) {
+    // No nested key path exists in this schema; skip rather than invent one.
+    if (path.includes('.')) continue;
+    row[path] = multi ? ['isolation-probe'] : 'isolation-probe';
+  }
+
+  return row;
+}
+
+/** Names of the tables that currently hold at least one row. */
+async function populatedTables(): Promise<string[]> {
+  const counts = await Promise.all(db.tables.map((table) => table.count()));
+
+  return db.tables.filter((_, index) => (counts[index] ?? 0) > 0).map((table) => table.name);
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+describe('setup.ts database isolation', () => {
+  it('fills every table in the schema', async () => {
+    // Guards the pair: were `db.tables` ever empty — an unopened database, a
+    // schema that failed to apply — the emptiness assertion below would pass
+    // for the wrong reason.
+    expect(db.tables.length).toBeGreaterThanOrEqual(11);
+    expect(db.tables.map((table) => table.name)).toContain('activities');
+
+    await Promise.all(db.tables.map((table) => table.add(probeRow(table))));
+
+    expect(await populatedTables()).toEqual(db.tables.map((table) => table.name));
   });
 
-  describe('DOM Environment', () => {
-    it('should have document available', () => {
-      expect(typeof document).toBe('object');
-      expect(document.createElement).toBeDefined();
-    });
-
-    it('should have window available', () => {
-      expect(typeof window).toBe('object');
-    });
-  });
-
-  describe('Browser API Mocks', () => {
-    it('should have matchMedia mocked', () => {
-      expect(typeof window.matchMedia).toBe('function');
-      const mediaQuery = window.matchMedia('(min-width: 768px)');
-      expect(mediaQuery.matches).toBe(false);
-      expect(mediaQuery.media).toBe('(min-width: 768px)');
-    });
-
-    it('should have ResizeObserver mocked', () => {
-      expect(typeof ResizeObserver).toBe('function');
-      const observer = new ResizeObserver(() => {});
-      expect(observer.observe).toBeDefined();
-      expect(observer.unobserve).toBeDefined();
-      expect(observer.disconnect).toBeDefined();
-    });
-
-    it('should have IntersectionObserver mocked', () => {
-      expect(typeof IntersectionObserver).toBe('function');
-      const observer = new IntersectionObserver(() => {});
-      expect(observer.observe).toBeDefined();
-      expect(observer.unobserve).toBeDefined();
-      expect(observer.disconnect).toBeDefined();
-    });
-
-    it('should have scrollTo mocked', () => {
-      expect(typeof window.scrollTo).toBe('function');
-      // Should not throw
-      window.scrollTo(0, 0);
-    });
-  });
-
-  describe('IndexedDB Mock', () => {
-    it('should have IndexedDB available', () => {
-      expect(typeof indexedDB).toBe('object');
-      expect(indexedDB.open).toBeDefined();
-    });
-
-    it('should be able to import and use the database', async () => {
-      const { db } = await import('@/lib/db/database');
-      expect(db).toBeDefined();
-      expect(db.trips).toBeDefined();
-      expect(db.rooms).toBeDefined();
-      expect(db.persons).toBeDefined();
-    });
-  });
-
-  describe('Testing Library Matchers', () => {
-    it('should have extended matchers from jest-dom', () => {
-      const div = document.createElement('div');
-      div.textContent = 'Hello';
-      document.body.appendChild(div);
-
-      expect(div).toBeInTheDocument();
-      expect(div).toHaveTextContent('Hello');
-      expect(div).toBeVisible();
-
-      document.body.removeChild(div);
-    });
-  });
-
-  describe('i18n Mock', () => {
-    it('should return translation keys directly', async () => {
-      const { useTranslation } = await import('react-i18next');
-      const { t } = useTranslation();
-
-      expect(t('common.save')).toBe('common.save');
-      expect(t('trips.title')).toBe('trips.title');
-    });
+  it('hands the next test every one of those tables empty', async () => {
+    // Only `setup.ts`'s beforeEach runs between this test and the one above.
+    expect(await populatedTables()).toEqual([]);
   });
 });
