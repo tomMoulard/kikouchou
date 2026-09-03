@@ -7,6 +7,7 @@
  * @module components/shared/__tests__/ConfirmDialog.test
  */
 import { describe, it, expect, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -27,14 +28,14 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
  */
 interface PendingConfirm {
   /** The mock to pass as `onConfirm`. */
-  readonly onConfirm: ReturnType<typeof vi.fn>;
+  readonly onConfirm: Mock<() => Promise<void>>;
   /** Resolves the in-flight confirm. */
   readonly finish: () => void;
 }
 
 function pendingConfirm(): PendingConfirm {
   let release: () => void = () => undefined;
-  const onConfirm = vi.fn(
+  const onConfirm = vi.fn<() => Promise<void>>(
     () =>
       new Promise<void>((resolve) => {
         release = resolve;
