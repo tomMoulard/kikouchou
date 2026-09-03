@@ -174,3 +174,97 @@ describe('CalendarDay', () => {
     expect(onDayFocus).toHaveBeenCalledWith('2026-07-15');
   });
 });
+
+// ============================================================================
+// Out-of-month readability
+// ============================================================================
+
+/**
+ * The day number and the headcount used to fade to `text-muted-foreground/50`
+ * outside the current month: 2.23:1 against the cell's `bg-muted/30` in light
+ * and 2.75:1 in dark, where WCAG 1.4.3 asks 4.5:1 for 14px medium text.
+ *
+ * They are not decorative. `CalendarPage` looks events, transports, activities
+ * and headcounts up by date with no `isCurrentMonth` gate, so a trip that
+ * straddles a month boundary fills these cells — and they stay focusable grid
+ * cells either way. The tests below pin both the readable colour and the two
+ * *other* carriers of "outside this month", so nobody restores the fade on the
+ * grounds that the distinction would otherwise be lost.
+ */
+describe('CalendarDay outside the current month', () => {
+  it('keeps the day number at a readable opacity', () => {
+    render(
+      <CalendarDay {...makeDefaultProps({ isCurrentMonth: false })} />,
+      { withProviders: false },
+    );
+
+    const dayNumber = screen.getByText('15');
+    expect(dayNumber.className).toContain('text-muted-foreground');
+    expect(dayNumber.className).not.toMatch(/text-muted-foreground\/\d+/);
+  });
+
+  it('keeps the headcount at a readable opacity', () => {
+    render(
+      <CalendarDay
+        {...makeDefaultProps({
+          isCurrentMonth: false,
+          headcount: { guests: 3, people: 4 },
+        })}
+      />,
+      { withProviders: false },
+    );
+
+    const headcount = screen.getByTestId('day-headcount-2026-07-15');
+    expect(headcount.className).toContain('text-muted-foreground');
+    expect(headcount.className).not.toMatch(/text-muted-foreground\/\d+/);
+  });
+
+  it('still ranks below an in-month day, by token rather than by opacity', () => {
+    const { unmount } = render(
+      <CalendarDay {...makeDefaultProps({ isCurrentMonth: false })} />,
+      { withProviders: false },
+    );
+    const outside = screen.getByText('15').className;
+    unmount();
+
+    render(<CalendarDay {...makeDefaultProps()} />, { withProviders: false });
+    const inside = screen.getByText('15').className;
+
+    expect(inside).toContain('text-foreground');
+    expect(outside).not.toContain('text-foreground');
+  });
+
+  it('tints the cell, so colour is not the only thing marking it', () => {
+    render(
+      <CalendarDay {...makeDefaultProps({ isCurrentMonth: false })} />,
+      { withProviders: false },
+    );
+
+    expect(screen.getByRole('gridcell').className).toContain('bg-muted/30');
+  });
+
+  it('says so in the cell summary a screen reader reads', () => {
+    render(
+      <CalendarDay {...makeDefaultProps({ isCurrentMonth: false })} />,
+      { withProviders: false },
+    );
+
+    const cell = screen.getByRole('gridcell');
+    const summaryId = cell.getAttribute('aria-describedby');
+    expect(summaryId).toBe('2026-07-15-summary');
+    expect(document.getElementById(summaryId!)?.textContent).toContain(
+      'calendar.outsideCurrentMonth',
+    );
+  });
+
+  it('renders the events an out-of-month cell is given', () => {
+    render(
+      <CalendarDay
+        {...makeDefaultProps({ isCurrentMonth: false, events: [makeEvent()] })}
+      />,
+      { withProviders: false },
+    );
+
+    expect(screen.getByText('Alice - Room 1')).toBeInTheDocument();
+  });
+});
