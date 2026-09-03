@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { defineConfig, devices } from '@playwright/test';
 
 /**
@@ -38,11 +40,68 @@ const channel = ((): 'chrome' | 'msedge' | undefined => {
 })();
 
 /**
+ * The first of the three ports this config serves on, derived from where the
+ * checkout lives.
+ *
+ * The three ports used to be the literals 4173/4174/4175 in every checkout,
+ * which is fine with one of them and actively dangerous with several. This
+ * machine carries 20-plus agent worktrees of this repo; `reuseExistingServer`
+ * (below) treats *anything already answering* on the URL as "my server is
+ * already up", so a second run would find another worktree's dev server, skip
+ * starting its own, and drive **that checkout's code** to a full sheet of
+ * results. It produced false failures for three workers in one batch and at
+ * least one false pass, and nothing in the output said so — the reused server
+ * is only mentioned in a line Playwright prints before the run.
+ *
+ * Hashing the config's own directory gives a base that is stable across reruns
+ * in one worktree (so `reuseExistingServer` still earns its keep) and disjoint
+ * across worktrees (so the reuse can only ever find *our* server).
+ *
+ * Under CI the literals come back: one checkout, one runner, no collision to
+ * avoid, and a workflow that can name a port in a log or a firewall rule.
+ *
+ * The range is 4173-5072 (300 slots of 3). Checked against everything this
+ * repo and its toolchain bind: Vite's dev default 5173 and its preview default
+ * 4173, the Docker/nginx image on 3000, and the local Supabase stack on
+ * 54321-54323 — the top of the range stops 101 ports below 5173, the nearest
+ * of them. A derived port can still land on some unrelated process; see
+ * `PW_PORT_BASE` below for the way out.
+ */
+const PORT_BASE = ((): number => {
+  const override = process.env.PW_PORT_BASE;
+  if (override !== undefined && override !== '') {
+    const parsed = Number(override);
+    // Loud rather than silently ignored, as with PW_CHANNEL above: a typo would
+    // otherwise send the whole suite at a port nobody meant. Three consecutive
+    // ports are needed, and the top of the ephemeral range is not ours to take.
+    if (!Number.isInteger(parsed) || parsed < 1024 || parsed > 65_532) {
+      throw new Error(
+        `PW_PORT_BASE must be an integer between 1024 and 65532, got '${override}'`,
+      );
+    }
+    return parsed;
+  }
+  if (process.env.CI) {
+    return 4173;
+  }
+  const digest = createHash('sha256').update(import.meta.dirname).digest('hex').slice(0, 8);
+  return 4173 + (parseInt(digest, 16) % 300) * 3;
+})();
+
+const DEV_PORT = PORT_BASE;
+const SYNC_PORT = PORT_BASE + 1;
+const PREVIEW_PORT = PORT_BASE + 2;
+
+const DEV_URL = `http://127.0.0.1:${DEV_PORT}`;
+const SYNC_URL = `http://127.0.0.1:${SYNC_PORT}`;
+const PREVIEW_URL = `http://127.0.0.1:${PREVIEW_PORT}`;
+
+/**
  * The specs that only mean anything against the built output, served by `vite
- * preview` on :4175 — see the `production` project below. Named once so the
- * projects that must run them and the projects that must skip them cannot
- * drift apart, which is how `pwa.spec.ts` ended up running against the dev
- * server and failing all 23 of its tests.
+ * preview` on {@link PREVIEW_PORT} — see the `production` project below. Named
+ * once so the projects that must run them and the projects that must skip them
+ * cannot drift apart, which is how `pwa.spec.ts` ended up running against the
+ * dev server and failing all 23 of its tests.
  */
 const PRODUCTION_BUILD_SPECS_PATTERN =
   /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts/;
@@ -85,7 +144,7 @@ export default defineConfig({
   /* Shared settings for all the projects below */
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: DEV_URL,
 
     /* Timeout for user actions (click, fill, etc.) */
     actionTimeout: 10_000,
@@ -147,7 +206,7 @@ export default defineConfig({
       name: 'production',
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://127.0.0.1:4175',
+        baseURL: PREVIEW_URL,
       },
       testMatch: PRODUCTION_BUILD_SPECS_PATTERN,
       /**
@@ -175,7 +234,7 @@ export default defineConfig({
       name: 'sync',
       use: {
         ...devices['Desktop Chrome'],
-        baseURL: 'http://127.0.0.1:4174',
+        baseURL: SYNC_URL,
       },
       testMatch: /trip-sharing-sync\.spec\.ts/,
       /**
@@ -187,7 +246,16 @@ export default defineConfig({
     },
   ],
 
-  /* Servers started before the tests run */
+  /**
+   * Servers started before the tests run, on the three ports derived from this
+   * checkout's path — see {@link PORT_BASE}.
+   *
+   * Every one of them passes `--strictPort`. Vite's default is to walk to the
+   * next free port when the one asked for is taken, which would put the server
+   * somewhere `url` below is not looking; Playwright would then sit out its
+   * whole timeout waiting for a server that is already up one port over. Fail
+   * on the bind instead, and say which port.
+   */
   webServer: [
     {
       /**
@@ -199,8 +267,15 @@ export default defineConfig({
        * vite.config.ts would otherwise set base to '/kikoushou/' and every
        * navigation would 404.
        */
-      command: 'bun run build && bun x vite preview --host 127.0.0.1 --port 4175',
-      url: 'http://127.0.0.1:4175',
+      command: `bun run build && bun x vite preview --host 127.0.0.1 --port ${PREVIEW_PORT} --strictPort`,
+      url: PREVIEW_URL,
+      /**
+       * Kept on, now that it is safe: {@link PORT_BASE} is derived from this
+       * checkout's path, so the only thing that can already be answering here
+       * is this worktree's own server. It saves the ~40 s rebuild on every
+       * rerun while iterating on a spec, which is most of the reason to run
+       * this project locally at all.
+       */
       reuseExistingServer: !process.env.CI,
       timeout: 180 * 1000,
       env: {
@@ -224,8 +299,9 @@ export default defineConfig({
       // The dev server, for every project except `production` — which needs a real
       // service worker and so runs against the production build above — and
       // `sync`, which needs a stubbed backend.
-      command: 'bun x vite --host 127.0.0.1 --port 4173',
-      url: 'http://127.0.0.1:4173',
+      command: `bun x vite --host 127.0.0.1 --port ${DEV_PORT} --strictPort`,
+      url: DEV_URL,
+      // Safe to reuse, and worth it — see the production server above.
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
       env: {
@@ -265,8 +341,9 @@ export default defineConfig({
        * request escaping interception fails loudly instead of reaching anything
        * real.
        */
-      command: 'bun x vite --host 127.0.0.1 --port 4174',
-      url: 'http://127.0.0.1:4174',
+      command: `bun x vite --host 127.0.0.1 --port ${SYNC_PORT} --strictPort`,
+      url: SYNC_URL,
+      // Safe to reuse, and worth it — see the production server above.
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
       env: {
