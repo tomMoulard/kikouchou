@@ -75,27 +75,52 @@ function tokenizeInline(text: string): InlineToken[] {
   const tokens: InlineToken[] = [];
   let lastIndex = 0;
 
+  /**
+   * Append plain text, folding it into the previous token when that is also
+   * plain text. Without the fold, a passage that contains a literal `**` comes
+   * back as three text tokens and renders as three `<span>`s, which splits what
+   * the reader sees as one sentence across elements.
+   */
+  const pushText = (value: string): void => {
+    if (value === '') return;
+    const previous = tokens.at(-1);
+    if (previous?.type === 'text') {
+      previous.value += value;
+      return;
+    }
+    tokens.push({ type: 'text', value });
+  };
+
   INLINE_REGEX.lastIndex = 0;
   let match: RegExpExecArray | null;
 
   while ((match = INLINE_REGEX.exec(text)) !== null) {
     // Push any plain text before this match
     if (match.index > lastIndex) {
-      tokens.push({ type: 'text', value: text.slice(lastIndex, match.index) });
+      pushText(text.slice(lastIndex, match.index));
     }
 
-    if (match[1] !== undefined) {
+    // An emphasis run with nothing between its markers renders as an empty
+    // `<strong>`/`<em>`, which is to say it renders as nothing: `2 ** 3 = 8`
+    // reached the user as `2  3 = 8`, and `a *** b` lost three characters. The
+    // markers are the content in that case, so emit them verbatim. Empty
+    // `` `` `` code follows the same rule — an empty chip is no more useful
+    // than an empty `<em>`.
+    const value = match[2] ?? match[4] ?? match[6] ?? match[8] ?? '';
+    if (value === '') {
+      pushText(match[0]);
+    } else if (match[1] !== undefined) {
       // ***bold italic*** or ___bold italic___
-      tokens.push({ type: 'boldItalic', value: match[2]! });
+      tokens.push({ type: 'boldItalic', value });
     } else if (match[3] !== undefined) {
       // **bold** or __bold__
-      tokens.push({ type: 'bold', value: match[4]! });
+      tokens.push({ type: 'bold', value });
     } else if (match[5] !== undefined) {
       // *italic* or _italic_
-      tokens.push({ type: 'italic', value: match[6]! });
+      tokens.push({ type: 'italic', value });
     } else if (match[7] !== undefined) {
       // `code`
-      tokens.push({ type: 'code', value: match[8]! });
+      tokens.push({ type: 'code', value });
     }
 
     lastIndex = match.index + match[0].length;
@@ -103,7 +128,7 @@ function tokenizeInline(text: string): InlineToken[] {
 
   // Remaining plain text
   if (lastIndex < text.length) {
-    tokens.push({ type: 'text', value: text.slice(lastIndex) });
+    pushText(text.slice(lastIndex));
   }
 
   return tokens;
