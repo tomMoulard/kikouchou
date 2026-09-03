@@ -54,6 +54,8 @@ export const MultiFrameQR = memo(function MultiFrameQR({
     try {
       await navigator.clipboard.writeText(rawPayload);
       setCopied(true);
+      // Deliberately a raw toast, not the offline-aware one: nothing was
+      // written to the database, so "Saved on this device" would be a lie.
       toast.success(t('sharing.sync.copiedToClipboard', 'Copied to clipboard'));
       setTimeout(() => setCopied(false), 2000);
     } catch {

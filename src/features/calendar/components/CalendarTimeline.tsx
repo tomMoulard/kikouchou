@@ -6,8 +6,9 @@
 
 import { type ReactElement, type ReactNode, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Users } from 'lucide-react';
+import { Calendar as CalendarIcon, Users } from 'lucide-react';
 
+import { EmptyState } from '@/components/shared/EmptyState';
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
 import { ActivityTimelineRow } from '@/features/activities/components/ActivityTimelineRow';
 import { buildActivityTimelineModel } from '@/features/activities/utils/activity-timeline-utils';
@@ -165,8 +166,14 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
             </>
           )}
 
+          {/* Same EmptyState, copy and icon as the month view's, so switching
+              views does not change how "nothing here yet" is presented. */}
           {showEmptyState && (
-            <div className="p-6 text-center text-muted-foreground">{t('calendar.noAssignments')}</div>
+            <EmptyState
+              icon={CalendarIcon}
+              title={t('calendar.noAssignmentsTitle', 'Nothing scheduled yet')}
+              description={t('calendar.noAssignments')}
+            />
           )}
         </>
       )}
