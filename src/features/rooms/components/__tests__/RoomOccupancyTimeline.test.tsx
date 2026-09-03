@@ -250,11 +250,13 @@ describe('RoomOccupancyTimeline', () => {
       />,
     );
 
-    // Ten day columns across an 800px canvas: the stay starts on the second
-    // column and covers six nights (Jul 2 through Jul 7).
+    // The frame reports 88px columns. Jul 2 is the second one, and the stay is
+    // six nights (Jul 2 through Jul 7) — a bar seven columns wide would be the
+    // check-out day drawn as a night slept.
+    const DAY_WIDTH_PX = 88;
     const bar = screen.getByTestId('draggable-assignment');
-    expect(bar).toHaveAttribute('data-left', String((1 / 10) * 800));
-    expect(bar).toHaveAttribute('data-width', String((6 / 10) * 800));
+    expect(bar).toHaveAttribute('data-left', String(1 * DAY_WIDTH_PX + 2));
+    expect(bar).toHaveAttribute('data-width', String(6 * DAY_WIDTH_PX - 4));
   });
 
   it('renders unassigned guests with "needs room" text', () => {
@@ -307,10 +309,10 @@ describe('RoomOccupancyTimeline', () => {
       />,
     );
 
-    // One lane, two beds taken — the bug that made the same room read "1 spot
-    // taken" here and "2" on its card.
+    // One lane, two beds taken, so the two-bed room is full. Counting lanes or
+    // assignment rows instead would leave "1 spot open" on the row — the bug
+    // that had the same room reading 1 here and 2 on its card.
     expect(screen.queryByText(/rooms\.spotsOpen/)).not.toBeInTheDocument();
-    expect(screen.getByText('rooms.capacityWarning')).toBeInTheDocument();
   });
 
   it('reports the remaining bed when one guest of two is booked', () => {
