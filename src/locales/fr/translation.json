@@ -797,15 +797,32 @@
       "signInAction": "Se connecter",
       "signedInAs": "Connecté en tant que",
       "signOutAction": "Se déconnecter",
-      "signInFailed": "La dernière connexion n'a pas abouti :"
+      "signInFailed": "La dernière connexion n'a pas abouti :",
+      "passkeyDescription": "Ajoutez une clé d'accès pour vous connecter sur cet appareil avec son verrouillage d'écran, sans passer par un fournisseur.",
+      "passkeyAdded": "Clé d'accès ajoutée pour cet appareil.",
+      "passkeyAction": "Ajouter une clé d'accès"
     },
     "signIn": {
       "title": "Créez un compte pour partager",
       "description": "Votre séjour n'existe que sur cet appareil. Un compte permet aux personnes que vous invitez de le voir et de le modifier avec vous.",
       "localDataKept": "Rien de ce que vous avez déjà préparé n'est perdu : le séjour est envoyé tel quel.",
       "offline": "Vous êtes hors ligne. La connexion à un compte demande Internet ; tout le reste fonctionne sans.",
-      "withGoogle": "Continuer avec Google",
-      "notNow": "Plus tard"
+      "notNow": "Plus tard",
+      "pageTitle": "Connexion",
+      "pageDescription": "Un compte sert uniquement à partager un séjour et à le modifier à plusieurs. Tout le reste fonctionne sans.",
+      "continueWith": "Continuer avec",
+      "continue": "Continuer",
+      "or": "ou",
+      "emailLabel": "Adresse e-mail",
+      "emailPlaceholder": "vous@exemple.com",
+      "sendEmailLink": "Envoyer le lien",
+      "emailSent": "Consultez votre boîte de réception : le lien envoyé vous connecte sur cet appareil.",
+      "useAnotherEmail": "Utiliser une autre adresse",
+      "withWallet": "Continuer avec votre portefeuille {{chain}}",
+      "walletStatement": "Connexion à Kikoushou. Aucune transaction n'est approuvée.",
+      "signupDisabled": "Ce projet n'accepte pas de nouveaux comptes pour le moment. La connexion fonctionne toujours si vous en avez déjà un.",
+      "noProviders": "Aucun moyen de connexion n'est activé sur ce projet actuellement.",
+      "withPasskey": "Continuer avec une clé d'accès"
     },
     "errors": {
       "unavailable": "La connexion n'est pas configurée dans cette version."

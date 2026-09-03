@@ -797,15 +797,32 @@
       "signInAction": "Sign in",
       "signedInAs": "Signed in as",
       "signOutAction": "Sign out",
-      "signInFailed": "The last sign-in did not complete:"
+      "signInFailed": "The last sign-in did not complete:",
+      "passkeyDescription": "Add a passkey to sign in on this device with your screen lock instead of a provider.",
+      "passkeyAdded": "Passkey added for this device.",
+      "passkeyAction": "Add a passkey"
     },
     "signIn": {
       "title": "Create an account to share",
       "description": "Your trip lives on this device today. An account lets the people you invite see it and edit it with you.",
       "localDataKept": "Nothing you have already planned is lost — this trip is uploaded as it is.",
       "offline": "You are offline. Signing in needs a connection — everything else keeps working without one.",
-      "withGoogle": "Continue with Google",
-      "notNow": "Not now"
+      "notNow": "Not now",
+      "pageTitle": "Sign in",
+      "pageDescription": "An account is needed only to share a trip and edit it with other people. Everything else works without one.",
+      "continueWith": "Continue with",
+      "continue": "Continue",
+      "or": "or",
+      "emailLabel": "Email address",
+      "emailPlaceholder": "you@example.com",
+      "sendEmailLink": "Send link",
+      "emailSent": "Check your inbox — the link we sent signs you in on this device.",
+      "useAnotherEmail": "Use a different address",
+      "withWallet": "Continue with your {{chain}} wallet",
+      "walletStatement": "Sign in to Kikoushou. This does not approve any transaction.",
+      "signupDisabled": "This project is not accepting new accounts at the moment. Signing in still works if you already have one.",
+      "noProviders": "No way to sign in is enabled on this project right now.",
+      "withPasskey": "Continue with a passkey"
     },
     "errors": {
       "unavailable": "Sign-in is not configured in this build."

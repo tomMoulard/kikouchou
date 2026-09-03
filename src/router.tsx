@@ -33,6 +33,7 @@ import { activityRoutes } from '@/features/activities/routes';
 import { joinRoutes, sharingRoutes, sharingSyncRoutes } from '@/features/sharing/routes';
 import { assistantRoutes } from '@/features/assistant/routes';
 import { analyticsRoutes } from '@/features/analytics/routes';
+import { authRoutes } from '@/features/auth/routes';
 
 // ============================================================================
 // Lazy-loaded Components
@@ -238,6 +239,9 @@ export const appRoutes: RouteObject = {
     // Settings route
     settingsRoute,
 
+    // Sign-in page: the ways into an account, discovered from the project
+    ...authRoutes,
+
     // AI Assistant route
     ...assistantRoutes,
 
@@ -287,6 +291,7 @@ const publicRoutes: RouteObject = {
  *   - `/trips/:tripId/analytics` - Trip analytics
  *   - `/analytics` - Analytics across all trips
  *   - `/settings` - App settings
+ *   - `/signin` - Sign in (providers come from the project's own config)
  */
 export const routes: RouteObject[] = [
   // Public routes (outside Layout)
