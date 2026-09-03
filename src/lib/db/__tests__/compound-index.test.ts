@@ -280,17 +280,21 @@ describe('Compound Index Verification', () => {
         // 50 assignments per trip (using first room and first person)
         const room = tripRooms[0];
         const person = tripPersons[0];
-        if (room && person) {
-          for (let a = 0; a < 50; a++) {
-            assignments.push(createTestAssignment(trip.id, room.id, person.id, a % 7));
-          }
+        // Throw rather than skip: an `if (room && person)` guard here would
+        // build no assignments at all and leave the count assertions below to
+        // report "expected 0 to be 250", pointing at the query instead of at
+        // the fixture. Same pattern as the `tripToDelete` check further down.
+        if (!room || !person) {
+          throw new Error(`Trip ${trip.id} was seeded with no rooms or no persons`);
+        }
+
+        for (let a = 0; a < 50; a++) {
+          assignments.push(createTestAssignment(trip.id, room.id, person.id, a % 7));
         }
 
         // 30 transports per trip
-        if (person) {
-          for (let tr = 0; tr < 30; tr++) {
-            transports.push(createTestTransport(trip.id, person.id, tr % 8));
-          }
+        for (let tr = 0; tr < 30; tr++) {
+          transports.push(createTestTransport(trip.id, person.id, tr % 8));
         }
       }
 

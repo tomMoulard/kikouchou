@@ -406,11 +406,17 @@ describe('deleteRoom', () => {
   it('handles room with no assignments', async () => {
     const tripId = await createTestTrip();
     const room = await createRoom(tripId, createTestRoomData());
+    const survivor = await createRoom(tripId, createTestRoomData({ name: 'Untouched' }));
 
     // Delete room without assignments - should not throw
     await expect(deleteRoom(room.id)).resolves.not.toThrow();
 
-    expect(await db.rooms.count()).toBe(0);
+    // Not just "did not throw", and not just a count: the named room is the one
+    // that went, and the other is still there. A `deleteRoom` that resolved
+    // without deleting, or one that cleared the table, both used to pass here.
+    expect(await db.rooms.get(room.id)).toBeUndefined();
+    expect(await db.rooms.get(survivor.id)).toBeDefined();
+    expect(await db.rooms.count()).toBe(1);
   });
 
   it('is idempotent - deleting non-existent room does not throw', async () => {

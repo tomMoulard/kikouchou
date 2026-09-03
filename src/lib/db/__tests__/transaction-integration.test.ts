@@ -618,14 +618,19 @@ describe('Edge Cases', () => {
     for (let i = 0; i < 20; i++) {
       const roomId = roomIds[i % roomIds.length];
       const personId = personIds[i % personIds.length];
-      if (roomId && personId) {
-        await createAssignment(tripId, {
-          roomId,
-          personId,
-          startDate: isoDate(`2024-07-${15 + (i % 7)}`),
-          endDate: isoDate(`2024-07-${16 + (i % 7)}`),
-        });
+      // Throw rather than skip: an `if (roomId && personId)` guard would create
+      // fewer assignments than the setup assertion below expects and blame the
+      // cascade delete for it.
+      if (!roomId || !personId) {
+        throw new Error(`Fixture is missing a room or a person at index ${i}`);
       }
+
+      await createAssignment(tripId, {
+        roomId,
+        personId,
+        startDate: isoDate(`2024-07-${15 + (i % 7)}`),
+        endDate: isoDate(`2024-07-${16 + (i % 7)}`),
+      });
     }
 
     // Verify setup
