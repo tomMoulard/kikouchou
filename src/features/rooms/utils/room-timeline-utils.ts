@@ -7,7 +7,7 @@
 import { addDays, subDays } from 'date-fns';
 
 import { deriveGuestStayDateBounds } from '@/features/persons/utils/guest-presence';
-import { parseISODateString, toISODateString } from '@/lib/db/utils';
+import { toLocalISODateString } from '@/lib/db/utils';
 import { dedupeContainedTimelineSpansByGroup } from '@/lib/utils/dedupe-timeline-spans';
 import {
   computeRoomTimelineViewportLayout,
@@ -15,6 +15,7 @@ import {
   ROOM_TIMELINE_PREFERRED_DAY_WIDTH_PX,
   type RoomTimelineViewportLayout,
 } from '@/lib/utils/timeline-viewport-layout';
+import { buildDayColumns, parseLocalDayKey, toDayKeys } from '@/lib/utils/trip-days';
 import type { ISODateString, Person, Room, RoomAssignment, Transport, Trip } from '@/types';
 
 export {
@@ -70,30 +71,6 @@ export interface RoomTimelineModel {
 // Helpers
 // ============================================================================
 
-function buildUtcDays(startKey: ISODateString, endKey: ISODateString): readonly Date[] {
-  const start = parseISODateString(startKey);
-  const end = parseISODateString(endKey);
-  if (!start || !end) return [];
-
-  const raw: Date[] = [];
-  let cursor = new Date(start.getTime());
-  const endTime = end.getTime();
-  while (cursor.getTime() <= endTime) {
-    raw.push(new Date(cursor.getTime()));
-    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
-  }
-
-  const seen = new Set<ISODateString>();
-  const days: Date[] = [];
-  for (const d of raw) {
-    const k = toISODateString(d);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    days.push(d);
-  }
-  return days;
-}
-
 function allocateLanes<TItem extends RoomTimelineItemBase>(
   items: readonly TItem[],
 ): readonly (TItem & { readonly laneIndex: number })[] {
@@ -137,8 +114,8 @@ function clipAssignmentToPersonStayAndTripGrid(
   readonly displayStayStart: ISODateString;
   readonly displayStayEnd: ISODateString;
 } | null {
-  const start = parseISODateString(assignment.startDate);
-  const end = parseISODateString(assignment.endDate);
+  const start = parseLocalDayKey(assignment.startDate);
+  const end = parseLocalDayKey(assignment.endDate);
   if (!start || !end) {
     return null;
   }
@@ -148,15 +125,15 @@ function clipAssignmentToPersonStayAndTripGrid(
     return null;
   }
 
-  let fn = toISODateString(start);
-  let ln = toISODateString(assignmentLastNight);
+  let fn = toLocalISODateString(start);
+  let ln = toLocalISODateString(assignmentLastNight);
 
   if (person) {
     const { arrival, departure } = deriveGuestStayDateBounds(person, arrivals, departures);
     if (arrival && departure && arrival < departure) {
-      const depParsed = parseISODateString(departure);
+      const depParsed = parseLocalDayKey(departure);
       if (depParsed) {
-        const stayLastNight = toISODateString(subDays(depParsed, 1));
+        const stayLastNight = toLocalISODateString(subDays(depParsed, 1));
         const clipFn = fn > arrival ? fn : arrival;
         const clipLn = ln < stayLastNight ? ln : stayLastNight;
         if (clipFn <= clipLn) {
@@ -194,7 +171,7 @@ function clipAssignmentToPersonStayAndTripGrid(
     return null;
   }
 
-  const visLnParsed = parseISODateString(visLn);
+  const visLnParsed = parseLocalDayKey(visLn);
   if (!visLnParsed) {
     return null;
   }
@@ -203,7 +180,7 @@ function clipAssignmentToPersonStayAndTripGrid(
     startIndex,
     endIndex,
     displayStayStart: visFn,
-    displayStayEnd: toISODateString(addDays(visLnParsed, 1)),
+    displayStayEnd: toLocalISODateString(addDays(visLnParsed, 1)),
   };
 }
 
@@ -340,7 +317,7 @@ function mergeOverlappingOrAdjacentClusterForPerson(
     if (!visStartKey || !visEndKey) {
       continue;
     }
-    const visLnParsed = parseISODateString(visEndKey);
+    const visLnParsed = parseLocalDayKey(visEndKey);
     if (!visLnParsed) {
       continue;
     }
@@ -354,7 +331,7 @@ function mergeOverlappingOrAdjacentClusterForPerson(
       label: canonical.label,
       color: canonical.color,
       displayStayStart: visStartKey,
-      displayStayEnd: toISODateString(addDays(visLnParsed, 1)),
+      displayStayEnd: toLocalISODateString(addDays(visLnParsed, 1)),
     });
   }
   return result;
@@ -398,8 +375,8 @@ export function buildRoomTimelineModel(args: {
 }): RoomTimelineModel {
   const { range, rooms, assignments, personsById, unknownLabel, arrivals, departures } = args;
 
-  const days = buildUtcDays(range.startDate, range.endDate);
-  const dayKeys = days.map((d) => toISODateString(d));
+  const days = buildDayColumns(range.startDate, range.endDate);
+  const dayKeys = toDayKeys(days);
   const dayIndexByKey = new Map<ISODateString, number>();
   for (let i = 0; i < dayKeys.length; i++) {
     const key = dayKeys[i];

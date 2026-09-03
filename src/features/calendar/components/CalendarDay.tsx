@@ -41,8 +41,6 @@ const CalendarDay = memo(function CalendarDay({
 }: CalendarDayProps): ReactElement {
   const { t } = useTranslation();
   const dayNumber = format(date, 'd', { locale: dateLocale });
-  // `dateKey` is UTC-derived; use the local calendar day the cell actually shows.
-  const localDateKey = format(date, 'yyyy-MM-dd');
   const dateLabel = format(date, 'PPPP', { locale: dateLocale });
   const summaryId = `${dateKey}-summary`;
 
@@ -197,7 +195,7 @@ const CalendarDay = memo(function CalendarDay({
             title={t('calendar.peopleOnSite', '{{count}} people on site', {
               count: peopleOnSite,
             })}
-            data-testid={`day-headcount-${localDateKey}`}
+            data-testid={`day-headcount-${dateKey}`}
             aria-hidden="true"
           >
             <Users className="size-3 shrink-0" />
