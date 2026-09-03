@@ -25,6 +25,16 @@ export const MAX_LENGTHS = {
   tripName: 100,
   /** Trip location (e.g., "Beach House, Brittany") */
   tripLocation: 200,
+  /**
+   * Trip description (instructions, tricount link, notes).
+   *
+   * Matches the `maxLength` the form's textarea has always carried, so bounding
+   * the field on save rejects nothing the form itself would have accepted. That
+   * attribute was the *only* limit until now, and it only stops typing: a paste,
+   * an assistant action, a QR import or any other non-form writer went straight
+   * past it into the CRDT document, which every peer then downloads.
+   */
+  tripDescription: 1000,
   /** Room name (e.g., "Master Bedroom") */
   roomName: 100,
   /** Room description (e.g., "King bed with ensuite bathroom") */
@@ -97,16 +107,23 @@ export function sanitizeOptionalText(
 /**
  * Sanitizes trip form data.
  *
+ * `description` is bounded here for the same reason `name` and `location` are:
+ * a field this function does not name falls through the spread untouched, and
+ * the only thing standing behind it was a DOM attribute on one textarea. The
+ * sibling {@link sanitizeRoomData} has always bounded its description; a trip's
+ * was simply missing from the constraint.
+ *
  * @param data - Trip form data to sanitize
  * @returns Sanitized trip form data
  */
-export function sanitizeTripData<T extends { name: string; location?: string }>(
-  data: T,
-): T {
+export function sanitizeTripData<
+  T extends { name: string; location?: string; description?: string },
+>(data: T): T {
   return {
     ...data,
     name: sanitizeText(data.name, MAX_LENGTHS.tripName),
     location: sanitizeOptionalText(data.location, MAX_LENGTHS.tripLocation),
+    description: sanitizeOptionalText(data.description, MAX_LENGTHS.tripDescription),
   };
 }
 

@@ -173,6 +173,15 @@ export async function updateTrip(
       location: sanitizedData.location,
     }).location;
   }
+  // Editing an existing trip is the field's main paste target, and this
+  // enumeration is the reason bounding `sanitizeTripData` alone is not enough:
+  // a field nobody lists here reaches Dexie exactly as it arrived.
+  if (sanitizedData.description !== undefined) {
+    sanitizedData.description = sanitizeTripData({
+      name: '',
+      description: sanitizedData.description,
+    }).description;
+  }
 
   // Use update() return value to check existence atomically (avoids TOCTOU race)
   const updatedCount = await db.trips.update(id, {
