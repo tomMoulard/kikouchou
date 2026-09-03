@@ -16,7 +16,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { useUnsavedChanges } from '@/hooks';
+import { useOfflineAwareToast, useUnsavedChanges } from '@/hooks';
 import { Trash2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -61,6 +61,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   const { t } = useTranslation();
   const { tripId } = useParams<{ tripId: string }>();
   const { currentTrip, setCurrentTrip } = useTripContext();
+  const { successToast } = useOfflineAwareToast();
 
   // ============================================================================
   // State
@@ -193,13 +194,13 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
       setIsDirty(false);
       skipNextBlock();
 
-      // Show success toast with fallback for missing translation key
-      toast.success(t('trips.updated', 'Trip updated successfully'));
+      // Offline-aware, like every other entity.
+      successToast(t('trips.updated', 'Trip updated successfully'));
 
       // Navigate to the trip's calendar
       navigate(`/trips/${tripId}/calendar`);
     },
-    [tripId, navigate, skipNextBlock, t],
+    [tripId, navigate, skipNextBlock, successToast, t],
   );
 
   /**
@@ -235,7 +236,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
         }
       }
 
-      toast.success(t('trips.deleted', 'Trip deleted successfully'));
+      successToast(t('trips.deleted', 'Trip deleted successfully'));
       posthog?.capture('trip_deleted');
 
       skipNextBlock();
@@ -257,7 +258,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
     } finally {
       isDeletingRef.current = false;
     }
-  }, [currentTrip?.id, navigate, setCurrentTrip, skipNextBlock, t, tripId]);
+  }, [currentTrip?.id, navigate, setCurrentTrip, skipNextBlock, successToast, t, tripId]);
 
   /**
    * Handles opening the delete confirmation dialog.

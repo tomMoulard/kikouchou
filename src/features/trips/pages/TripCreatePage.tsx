@@ -9,7 +9,7 @@ import { type ReactElement, memo, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { useUnsavedChanges } from '@/hooks';
+import { useOfflineAwareToast, useUnsavedChanges } from '@/hooks';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
@@ -44,6 +44,7 @@ import type { TripFormData, TripId } from '@/types';
 export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { successToast } = useOfflineAwareToast();
 
   // ============================================================================
   // Dirty State & Unsaved Changes Guard
@@ -106,17 +107,18 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
       setIsDirty(false);
       skipNextBlock();
 
-      // Show success toast with fallback for missing translation key
+      // Offline-aware, like every other entity: a trip created on a train is
+      // saved on this device and not yet anywhere else, and the toast says so.
       if (didImportRooms) {
-        toast.success(t('trips.createdWithImport', 'Trip created with rooms imported'));
+        successToast(t('trips.createdWithImport', 'Trip created with rooms imported'));
       } else if (!importSourceRef.current) {
-        toast.success(t('trips.created', 'Trip created successfully'));
+        successToast(t('trips.created', 'Trip created successfully'));
       }
 
       // Navigate to the new trip's calendar
       navigate(`/trips/${newTrip.id}/calendar`);
     },
-    [navigate, skipNextBlock, t],
+    [navigate, skipNextBlock, successToast, t],
   );
 
   // ============================================================================

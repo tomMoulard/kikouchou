@@ -115,6 +115,39 @@ describe('TripSyncPage', () => {
     await waitFor(() => {
       expect(screen.getByText('sharing.sync.tripNotFound')).toBeInTheDocument();
     });
+    // An empty state, announced politely — not a bare paragraph.
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveTextContent('sharing.sync.tripNotFound');
+  });
+
+  it('surfaces a load failure as a retryable error, not as "trip not found"', async () => {
+    // A read that threw is not the same thing as a trip that is not there.
+    mockGetTripById.mockRejectedValueOnce(new Error('IndexedDB is unavailable'));
+
+    renderWithRouter(<TripSyncPage />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveAttribute('aria-live', 'assertive');
+    expect(alert).toHaveTextContent('sharing.sync.loadError');
+    expect(alert).toHaveTextContent('IndexedDB is unavailable');
+    expect(screen.queryByText('sharing.sync.tripNotFound')).not.toBeInTheDocument();
+  });
+
+  it('retries the load and recovers when the second read succeeds', async () => {
+    const user = userEvent.setup();
+    mockGetTripById.mockRejectedValueOnce(new Error('IndexedDB is unavailable'));
+
+    renderWithRouter(<TripSyncPage />);
+
+    await screen.findByRole('alert');
+    // Second call falls through to the beforeEach resolved value.
+    await user.click(screen.getByRole('button', { name: 'common.retry' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('sharing.sync.importTab')).toBeInTheDocument();
+    });
+    expect(mockGetTripById).toHaveBeenCalledTimes(2);
   });
 
   it('renders sync page with import and export tabs after loading', async () => {

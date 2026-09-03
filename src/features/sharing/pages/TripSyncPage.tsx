@@ -28,6 +28,7 @@ import {
   ChevronDown,
   ChevronUp,
   GitMerge,
+  Luggage,
   ScanLine,
   Train,
   Upload,
@@ -35,13 +36,16 @@ import {
   Download,
 } from 'lucide-react';
 
-import { PageHeader } from '@/components/shared/PageHeader';
-import { LoadingState } from '@/components/shared/LoadingState';
-import { QRScanner } from '@/components/shared/QRScanner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { type StatusTone, statusVariants } from '@/components/ui/status.variants';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
+import { LoadingState } from '@/components/shared/LoadingState';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { QRScanner } from '@/components/shared/QRScanner';
+import { useOfflineAwareToast } from '@/hooks';
 
 import { getTripById } from '@/lib/db';
 import {
@@ -234,6 +238,7 @@ interface MergeReviewProps {
 const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: MergeReviewProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { successToast } = useOfflineAwareToast();
 
   const [conflictResolutions, setConflictResolutions] = useState<Map<string, ConflictResolution>>(
     () => new Map(),
@@ -274,7 +279,7 @@ const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: 
       const totalApplied = result.roomsUpserted + result.personsUpserted +
         result.assignmentsUpserted + result.transportsUpserted + result.conflictsAccepted;
 
-      toast.success(
+      successToast(
         t('sharing.sync.mergeSuccess', 'Merged {{count}} changes successfully', {
           count: totalApplied,
         }),
@@ -288,7 +293,7 @@ const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: 
       isSubmittingRef.current = false;
       setIsApplying(false);
     }
-  }, [mergeResult, allConflictsResolved, conflictResolutions, navigate, tripId, t]);
+  }, [mergeResult, allConflictsResolved, conflictResolutions, navigate, successToast, tripId, t]);
 
   const { summary, autoApply, conflicts, warnings } = mergeResult;
   const hasChanges = summary.additions > 0 || summary.autoUpdates > 0 || summary.conflicts > 0;
@@ -527,10 +532,14 @@ const ConflictCard = memo(function ConflictCard({ conflict, resolution, onResolv
 
 export const TripSyncPage = memo(function TripSyncPage(): ReactElement {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { tripId } = useParams<{ tripId: string }>();
 
   const [trip, setTrip] = useState<Trip | undefined>();
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<Error | null>(null);
+  // Bumped by the retry button so the load effect runs again.
+  const [reloadToken, setReloadToken] = useState(0);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -539,7 +548,10 @@ export const TripSyncPage = memo(function TripSyncPage(): ReactElement {
   }, []);
 
   useEffect(() => {
-    if (!tripId) return;
+    if (!tripId) {
+      setIsLoading(false);
+      return;
+    }
     let cancelled = false;
 
     async function loadTrip(): Promise<void> {
@@ -547,8 +559,15 @@ export const TripSyncPage = memo(function TripSyncPage(): ReactElement {
         const loaded = await getTripById(tripId as TripId);
         if (cancelled || !isMountedRef.current) return;
         setTrip(loaded ?? undefined);
+        setLoadError(null);
       } catch (error) {
         console.error('Failed to load trip:', error);
+        // A read that threw is not the same thing as a trip that is not
+        // there: swallowing it showed "Trip not found" for what was really
+        // an IndexedDB failure, with nothing to retry.
+        if (!cancelled && isMountedRef.current) {
+          setLoadError(error instanceof Error ? error : new Error(String(error)));
+        }
       } finally {
         if (!cancelled && isMountedRef.current) {
           setIsLoading(false);
@@ -558,13 +577,39 @@ export const TripSyncPage = memo(function TripSyncPage(): ReactElement {
 
     void loadTrip();
     return () => { cancelled = true; };
-  }, [tripId]);
+  }, [tripId, reloadToken]);
+
+  const handleRetry = useCallback(() => {
+    setIsLoading(true);
+    setLoadError(null);
+    setReloadToken((token) => token + 1);
+  }, []);
+
+  const handleBackToTrips = useCallback(() => {
+    navigate('/trips');
+  }, [navigate]);
 
   if (isLoading) {
     return (
       <div className="container max-w-2xl py-6 md:py-8">
-        <PageHeader title={t('sharing.sync.pageTitle', 'Sync')} backLink="/settings" />
-        <LoadingState variant="inline" />
+        <PageHeader title={t('sharing.sync.pageTitle', 'Sync')} backLink="/trips" />
+        <div className="flex justify-center">
+          <LoadingState variant="inline" size="lg" />
+        </div>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="container max-w-2xl py-6 md:py-8">
+        <PageHeader title={t('sharing.sync.pageTitle', 'Sync')} backLink="/trips" />
+        <ErrorDisplay
+          error={loadError}
+          title={t('sharing.sync.loadError', 'Could not load this trip')}
+          onRetry={handleRetry}
+          onBack={handleBackToTrips}
+        />
       </div>
     );
   }
@@ -573,21 +618,31 @@ export const TripSyncPage = memo(function TripSyncPage(): ReactElement {
     return (
       <div className="container max-w-2xl py-6 md:py-8">
         <PageHeader title={t('sharing.sync.pageTitle', 'Sync')} backLink="/trips" />
-        <Card>
-          <CardContent className="p-6 text-center">
-            <p className="text-muted-foreground">{t('sharing.sync.tripNotFound', 'Trip not found')}</p>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Luggage}
+          title={t('sharing.sync.tripNotFound', 'Trip not found')}
+          description={t(
+            'errors.tripNotFoundDescription',
+            'The trip you are looking for does not exist or you do not have access to it.',
+          )}
+          action={{
+            label: t('sharing.sync.backToTrips', 'Back to trips'),
+            onClick: handleBackToTrips,
+          }}
+        />
       </div>
     );
   }
 
   return (
     <div className="container max-w-2xl py-6 md:py-8">
+      {/* Back goes to the trip list, the same target the loading, error and
+          not-found states use. It used to point at /settings, which was both
+          inconsistent with those states and wrong for a trip-scoped route. */}
       <PageHeader
         title={t('sharing.sync.pageTitle', 'Sync')}
         description={trip.name}
-        backLink="/settings"
+        backLink="/trips"
       />
 
       <Tabs defaultValue="import" className="mt-4">

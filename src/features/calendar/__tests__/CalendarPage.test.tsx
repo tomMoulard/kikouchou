@@ -322,6 +322,12 @@ describe('CalendarPage', () => {
     // Switch to month/card view
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
     expect(screen.getByText('calendar.noAssignments')).toBeInTheDocument();
+    // The same EmptyState the timeline view uses, so switching views does not
+    // change how "nothing here yet" is presented.
+    expect(screen.getByText('calendar.noAssignmentsTitle')).toBeInTheDocument();
+    const status = screen.getByRole('status');
+    expect(status).toHaveAttribute('aria-live', 'polite');
+    expect(status).toHaveTextContent('calendar.noAssignmentsTitle');
   });
 
   it('syncs current trip from URL when context does not match', () => {

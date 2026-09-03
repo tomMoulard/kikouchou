@@ -998,6 +998,7 @@ function AssistantPageComponent(): ReactElement {
 
     const droppedIds = new Set(dropped.map((prompt) => prompt.messageId));
     setMessages((prev) => prev.filter((msg) => !droppedIds.has(msg.id)));
+    // Deliberately a raw toast: the queue lives in memory, nothing was saved.
     toast.success(t('assistant.queueCleared', { count: dropped.length }));
   }, [t]);
 
@@ -1012,6 +1013,7 @@ function AssistantPageComponent(): ReactElement {
     clearAssistantChatStorage();
     // A cleared transcript is a new conversation for AI observability too.
     sessionIdRef.current = getOrCreateAssistantSessionId();
+    // Deliberately a raw toast: this erases local chat state, it saves nothing.
     toast.success(t('assistant.conversationCleared'));
   }, [interrupt, t]);
 
@@ -1030,6 +1032,9 @@ function AssistantPageComponent(): ReactElement {
           await unload();
         }
         await updateSettings({ assistantModelId: value });
+        // Deliberately a raw toast: the chosen model is a device preference
+        // that never syncs, so "Saved on this device" adds nothing while
+        // dropping the model name the user needs to see.
         toast.success(
           t('assistant.modelChanged', {
             model: t(
