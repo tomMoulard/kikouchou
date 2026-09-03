@@ -7,6 +7,7 @@
 import { subDays } from 'date-fns';
 
 import { toLocalISODateString } from '@/lib/db/utils';
+import { deriveGuestStayDateBounds } from '@/features/persons/utils/guest-presence';
 import { dedupeContainedTimelineSpans } from '@/lib/utils/dedupe-timeline-spans';
 import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
 import {
@@ -205,41 +206,15 @@ export function buildCalendarTimelineModel(args: {
 
   const rows: CalendarTimelineRowModel[] = persons.map((person) => {
     const baseItems: TimelineItem[] = [];
-    let stayStartKey: ISODateString | null = null;
-    let stayEndKey: ISODateString | null = null;
 
-    // Presence range: explicit stay dates take precedence over transports.
-    // This keeps timeline behavior consistent with the rest of the app when
-    // users manually edit a guest's stay window.
-    if (person.stayStartDate) {
-      stayStartKey = person.stayStartDate;
-    }
-    if (person.stayEndDate) {
-      stayEndKey = person.stayEndDate;
-    }
-
-    // Fallback to transports only when explicit stay bounds are missing.
-    // We treat the stay as nights: start=arrival day, end=day before departure.
-    if (!stayStartKey) {
-      for (const arrival of arrivals) {
-        if (arrival.personId !== person.id) continue;
-        const key = localDayKeyOfInstant(arrival.datetime);
-        if (!key) continue;
-        if (!stayStartKey || key < stayStartKey) {
-          stayStartKey = key;
-        }
-      }
-    }
-    if (!stayEndKey) {
-      for (const departure of departures) {
-        if (departure.personId !== person.id) continue;
-        const key = localDayKeyOfInstant(departure.datetime);
-        if (!key) continue;
-        if (!stayEndKey || key > stayEndKey) {
-          stayEndKey = key;
-        }
-      }
-    }
+    // Presence range: explicit stay dates take precedence over transports,
+    // falling back to earliest arrival / latest departure. Shared with the rest
+    // of the app so the timeline never disagrees about when a guest is here.
+    const { arrival: stayStartKey, departure: stayEndKey } = deriveGuestStayDateBounds(
+      person,
+      arrivals,
+      departures,
+    );
 
     const staySpan = (() => {
       if (!stayStartKey || !stayEndKey) return undefined;

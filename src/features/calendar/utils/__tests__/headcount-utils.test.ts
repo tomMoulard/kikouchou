@@ -18,6 +18,8 @@ import type {
   TransportId,
   TripId,
 } from '@/types';
+import { listGuestsOnSiteOnDate } from '@/features/persons/utils/guest-presence';
+
 import { buildDailyHeadcounts, isGuestOnSiteOnDate } from '../headcount-utils';
 
 // ============================================================================
@@ -319,5 +321,82 @@ describe('isGuestOnSiteOnDate', () => {
         dateKey: day('2024-07-16'),
       }),
     ).toBe(false);
+  });
+});
+
+// ============================================================================
+// Sidebar list vs calendar count
+// ============================================================================
+
+describe('sidebar list and calendar headcount agree', () => {
+  // Regression: the sidebar read a stay-window-only definition of presence and
+  // the calendar a room-aware one, so a guest with a bed and nothing else was
+  // counted on the calendar and missing from the list beside it.
+  it('names the same people it counts when a guest has only a room', () => {
+    const dated = makePerson({
+      id: 'p-dated',
+      name: 'Tom',
+      stayStartDate: day('2024-07-15'),
+      stayEndDate: day('2024-07-18'),
+    });
+    const roomOnly = makePerson({ id: 'p-room-only', name: 'Zoe' });
+    const assignments = [
+      makeAssignment({
+        id: 'a-1',
+        personId: 'p-room-only',
+        startDate: '2024-07-15',
+        endDate: '2024-07-18',
+      }),
+    ];
+    const dateKey = day('2024-07-16');
+
+    const listed = listGuestsOnSiteOnDate({
+      persons: [dated, roomOnly],
+      arrivals: [],
+      departures: [],
+      assignments,
+      dateKey,
+    });
+    const counts = buildDailyHeadcounts({
+      persons: [dated, roomOnly],
+      arrivals: [],
+      departures: [],
+      assignments,
+      dayKeys: [dateKey],
+    });
+
+    expect(listed.map((p) => p.name)).toEqual(['Tom', 'Zoe']);
+    expect(counts.get(dateKey)?.guests).toBe(listed.length);
+  });
+
+  it('keeps the people total above the row count for a multi-person entry', () => {
+    const couple = makePerson({ id: 'p-couple', name: 'Alice+Auré', headcount: 2 });
+    const assignments = [
+      makeAssignment({
+        id: 'a-1',
+        personId: 'p-couple',
+        startDate: '2024-07-15',
+        endDate: '2024-07-18',
+      }),
+    ];
+    const dateKey = day('2024-07-16');
+
+    const listed = listGuestsOnSiteOnDate({
+      persons: [couple],
+      arrivals: [],
+      departures: [],
+      assignments,
+      dateKey,
+    });
+    const counts = buildDailyHeadcounts({
+      persons: [couple],
+      arrivals: [],
+      departures: [],
+      assignments,
+      dayKeys: [dateKey],
+    });
+
+    expect(listed).toHaveLength(1);
+    expect(counts.get(dateKey)).toEqual({ guests: 1, people: 2 });
   });
 });

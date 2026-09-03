@@ -6,13 +6,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { addDays, subDays } from 'date-fns';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 import { Layout } from '../Layout';
-import type { Trip } from '@/types';
+import { toLocalISODateString } from '@/lib/db/utils';
+import type { HexColor, ISODateString, Person, RoomAssignment, Trip } from '@/types';
 import { isoDate } from '@/test/utils';
 
 // ============================================================================
@@ -44,6 +46,17 @@ const mockTripNoLocation: Trip = {
 // Mocks
 // ============================================================================
 
+// Mock useToday so "tonight" is a fixed calendar day rather than whichever day
+// the suite happens to run on (and never straddles local midnight mid-run).
+const { fixedToday } = vi.hoisted(() => ({
+  // Local noon, so the local calendar day is unambiguous at any UTC offset.
+  fixedToday: new Date(2026, 3, 15, 12, 0, 0),
+}));
+
+vi.mock('@/hooks/useToday', () => ({
+  useToday: () => ({ today: fixedToday }),
+}));
+
 // Mock TripContext
 const mockUseTripContext = vi.fn();
 
@@ -52,9 +65,11 @@ vi.mock('@/contexts/TripContext', () => ({
 }));
 
 // Mock PersonContext
+const mockPersons = vi.fn<() => readonly Person[]>(() => []);
+
 vi.mock('@/contexts/PersonContext', () => ({
   usePersonContext: () => ({
-    persons: [],
+    persons: mockPersons(),
     isLoading: false,
     error: null,
     createPerson: vi.fn(),
@@ -75,6 +90,24 @@ vi.mock('@/contexts/TransportContext', () => ({
     createTransport: vi.fn(),
     updateTransport: vi.fn(),
     deleteTransport: vi.fn(),
+  }),
+}));
+
+// Mock AssignmentContext — the sidebar's guest list reads room assignments, so
+// a guest with a bed and no stay dates still shows up there.
+const mockAssignments = vi.fn<() => readonly RoomAssignment[]>(() => []);
+
+vi.mock('@/contexts/AssignmentContext', () => ({
+  useAssignmentContext: () => ({
+    assignments: mockAssignments(),
+    isLoading: false,
+    error: null,
+    createAssignment: vi.fn(),
+    updateAssignment: vi.fn(),
+    deleteAssignment: vi.fn(),
+    getAssignmentsByRoom: vi.fn(() => []),
+    getAssignmentsByPerson: vi.fn(() => []),
+    hasConflict: vi.fn(() => false),
   }),
 }));
 
@@ -114,6 +147,8 @@ function getMobileNav() {
 describe('Layout', () => {
   beforeEach(() => {
     mockUseTripContext.mockReset();
+    mockPersons.mockReturnValue([]);
+    mockAssignments.mockReturnValue([]);
     // Default: no trip selected
     mockUseTripContext.mockReturnValue({
       currentTrip: null,
@@ -480,6 +515,91 @@ describe('Layout', () => {
 
       const button = screen.getByRole('button', { name: /collapse|expand/i });
       expect(button).toHaveAttribute('aria-label');
+    });
+  });
+
+  // ============================================================================
+  // Guests tonight
+  // ============================================================================
+
+  describe('Guests tonight', () => {
+    // Derived from the mocked "today" with the same converter the sidebar uses,
+    // so the assertion never encodes the machine's timezone offset.
+    const todayKey = toLocalISODateString(fixedToday);
+    const yesterdayKey = toLocalISODateString(subDays(fixedToday, 1));
+    const tomorrowKey = toLocalISODateString(addDays(fixedToday, 1));
+
+    const ongoingTrip: Trip = {
+      ...mockTrip,
+      startDate: yesterdayKey,
+      endDate: tomorrowKey,
+    };
+
+    function guest(id: string, stay?: { start: ISODateString; end: ISODateString }): Person {
+      return {
+        id: id as Person['id'],
+        tripId: ongoingTrip.id,
+        name: id,
+        color: '#3b82f6' as HexColor,
+        ...(stay ? { stayStartDate: stay.start, stayEndDate: stay.end } : {}),
+      };
+    }
+
+    beforeEach(() => {
+      mockUseTripContext.mockReturnValue({
+        currentTrip: ongoingTrip,
+        trips: [ongoingTrip],
+        isLoading: false,
+        error: null,
+        setCurrentTrip: vi.fn(),
+        checkConnection: vi.fn(),
+      });
+    });
+
+    // Regression: this list used a stay-window-only definition of presence
+    // while the calendar counted rooms too, so a guest with a bed and no stay
+    // dates was counted on the calendar and missing from the list beside it.
+    it('lists a guest whose only trace is a room assignment', () => {
+      mockPersons.mockReturnValue([
+        guest('Dated', { start: todayKey, end: tomorrowKey }),
+        guest('RoomOnly'),
+      ]);
+      mockAssignments.mockReturnValue([
+        {
+          id: 'ra-1' as RoomAssignment['id'],
+          tripId: ongoingTrip.id,
+          roomId: 'room-1' as RoomAssignment['roomId'],
+          personId: 'RoomOnly' as RoomAssignment['personId'],
+          startDate: todayKey,
+          endDate: tomorrowKey,
+        },
+      ]);
+
+      renderLayout();
+
+      const list = screen.getByRole('list', { name: 'nav.guestsOfTheDay' });
+      expect(within(list).getByText('Dated')).toBeInTheDocument();
+      expect(within(list).getByText('RoomOnly')).toBeInTheDocument();
+    });
+
+    it('leaves out a guest whose room ends before tonight', () => {
+      mockPersons.mockReturnValue([guest('CheckedOut')]);
+      mockAssignments.mockReturnValue([
+        {
+          id: 'ra-2' as RoomAssignment['id'],
+          tripId: ongoingTrip.id,
+          roomId: 'room-1' as RoomAssignment['roomId'],
+          personId: 'CheckedOut' as RoomAssignment['personId'],
+          startDate: yesterdayKey,
+          endDate: todayKey,
+        },
+      ]);
+
+      renderLayout();
+
+      const tripInfo = screen.getByTestId('trip-info-section');
+      expect(screen.queryByRole('list', { name: 'nav.guestsOfTheDay' })).not.toBeInTheDocument();
+      expect(within(tripInfo).getByText('nav.guestsOfTheDayEmpty')).toBeInTheDocument();
     });
   });
 });

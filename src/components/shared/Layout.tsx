@@ -44,7 +44,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { listGuestsPresentOnDate } from '@/features/persons/utils/guest-presence';
+import { listGuestsOnSiteOnDate } from '@/features/persons/utils/guest-presence';
+import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
@@ -390,6 +391,7 @@ const TripInfoSection = memo(function TripInfoSection({
   const { today } = useToday();
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
   const { arrivals, departures, isLoading: isTransportsLoading } = useTransportContext();
+  const { assignments, isLoading: isAssignmentsLoading } = useAssignmentContext();
 
   const { i18n } = useTranslation();
   const dateRange = useMemo(
@@ -404,14 +406,22 @@ const TripInfoSection = memo(function TripInfoSection({
     [todayKey, trip.endDate, trip.startDate],
   );
 
+  // Same definition of presence as the calendar headcounts: a guest with a bed
+  // and no stay dates is here tonight, and must not go missing from this list.
   const guestsTonight = useMemo(() => {
     if (!todayWithinTrip) {
       return [];
     }
-    return listGuestsPresentOnDate(persons, arrivals, departures, todayKey);
-  }, [arrivals, departures, persons, todayKey, todayWithinTrip]);
+    return listGuestsOnSiteOnDate({
+      persons,
+      arrivals,
+      departures,
+      assignments,
+      dateKey: todayKey,
+    });
+  }, [arrivals, assignments, departures, persons, todayKey, todayWithinTrip]);
 
-  const isGuestsLoading = isPersonsLoading || isTransportsLoading;
+  const isGuestsLoading = isPersonsLoading || isTransportsLoading || isAssignmentsLoading;
 
   if (isCollapsed) {
     // Icon-only sidebar already has trip nav; a duplicate luggage chip adds no usable info.

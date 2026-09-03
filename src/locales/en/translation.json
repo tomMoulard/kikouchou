@@ -40,7 +40,7 @@
     "tripSections": "Trip navigation",
     "settingsNavigation": "Settings navigation",
     "guestsOfTheDay": "Guests tonight",
-    "guestsOfTheDayHint": "Who is staying overnight on today’s date (stay dates and travel).",
+    "guestsOfTheDayHint": "Who is staying overnight on today’s date, from stay dates, travel or a room.",
     "guestsOfTheDayEmpty": "No guests tonight",
     "guestsOfTheDayOutsideTrip": "Today is outside this trip’s dates",
     "guestsOfTheDayLoading": "Loading guests…",

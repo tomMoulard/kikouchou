@@ -8,8 +8,7 @@
  * @module features/calendar/utils/headcount-utils
  */
 
-import { isGuestPresentOnDate } from '@/features/persons/utils/guest-presence';
-import { isDateInStayRange } from '@/features/rooms/utils/capacity-utils';
+import { isGuestOnSiteOnDate } from '@/features/persons/utils/guest-presence';
 import { getPersonHeadcount } from '@/types';
 import type { ISODateString, Person, RoomAssignment, Transport } from '@/types';
 
@@ -32,30 +31,11 @@ export interface DailyHeadcount {
 // ============================================================================
 
 /**
- * True if the guest sleeps on `dateKey`, from either their stay window
- * (explicit dates or transports) or a room assignment covering that night.
- *
- * Room assignments are included because a guest can be given a room without
- * ever filling in stay dates or travel details.
+ * Re-exported so calendar code can ask about presence without reaching across
+ * features. There is exactly one implementation — see
+ * `features/persons/utils/guest-presence`.
  */
-export function isGuestOnSiteOnDate(args: {
-  readonly person: Person;
-  readonly arrivals: readonly Transport[];
-  readonly departures: readonly Transport[];
-  readonly assignments: readonly RoomAssignment[];
-  readonly dateKey: ISODateString;
-}): boolean {
-  const { person, arrivals, departures, assignments, dateKey } = args;
-
-  if (isGuestPresentOnDate(person, arrivals, departures, dateKey)) {
-    return true;
-  }
-
-  return assignments.some(
-    (a) =>
-      a.personId === person.id && isDateInStayRange(a.startDate, a.endDate, dateKey),
-  );
-}
+export { isGuestOnSiteOnDate };
 
 /**
  * Maps each requested calendar day to the guests and people present that night.
