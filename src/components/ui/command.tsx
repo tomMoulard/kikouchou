@@ -13,6 +13,33 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
+/**
+ * NON-STOCK addition — keep it if `shadcn add command` is ever re-run.
+ *
+ * Stock `CommandItem` is `py-1.5 text-sm` with no height of its own: 6px of
+ * padding either side of a 20px line box is a 32px row, the same defect the
+ * identical constant in `select.tsx` and `dropdown-menu.tsx` fixes.
+ *
+ * Latent here, unlike those two. Both current call sites
+ * (`LocationAutocomplete`) pass `className="flex items-start gap-3 py-2"` and
+ * render two lines, so nothing on screen today is 32px. The default is fixed
+ * anyway so the next call site — one that renders a single line and passes no
+ * padding — is not silently wrong on a phone.
+ *
+ * `min-h` rather than more padding, so desktop stays byte-for-byte stock and a
+ * caller's own `py-*` still decides the padding. `max-md:` and not
+ * `min-h-11 md:min-h-0` for the reason `button.variants.ts` documents at
+ * length: the variant prefix makes this a hard floor tailwind-merge keeps
+ * alongside an unprefixed caller class, where the `md:` form would survive a
+ * cancelled base and re-inflate desktop. Note this is a floor, not a height —
+ * `LocationAutocomplete`'s two-line rows are already taller and are untouched.
+ *
+ * Duplicated rather than shared with the sibling primitives on purpose:
+ * `shadcn add` rewrites one file at a time, and a shared import would make
+ * that regeneration break the others instead of just losing itself here.
+ */
+const TOUCH_TARGET_MIN_HEIGHT = "max-md:min-h-11"
+
 function Command({
   className,
   ...props
@@ -148,6 +175,8 @@ function CommandItem({
       data-slot="command-item"
       className={cn(
         "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
+        // NON-STOCK — see TOUCH_TARGET_MIN_HEIGHT at the top of this file.
+        TOUCH_TARGET_MIN_HEIGHT,
         className
       )}
       {...props}
