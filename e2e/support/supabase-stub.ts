@@ -336,6 +336,22 @@ export class SupabaseStub {
   // --------------------------------------------------------------------------
 
   private async handleAuth(route: Route, path: string): Promise<void> {
+    if (path === '/auth/v1/settings') {
+      // The sign-in surfaces build themselves from this, so the stub has to
+      // answer it the way a project does: `external` mixes OAuth ids with
+      // `email`, and carries no web3 key whatever the project has enabled.
+      await this.json(route, 200, {
+        external: { google: true, spotify: true, email: true, phone: false },
+        disable_signup: false,
+        mailer_autoconfirm: false,
+        // Deliberately off here even though the real project has them on:
+        // Playwright's Chromium *does* implement WebAuthn, so a `true` would put
+        // a passkey button on every sign-in surface these specs walk through,
+        // and it could not be clicked without a virtual authenticator.
+        passkeys_enabled: false,
+      });
+      return;
+    }
     if (path === '/auth/v1/user') {
       const userId = this.callerId(route);
       await this.json(route, 200, {

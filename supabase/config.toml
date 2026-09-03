@@ -187,15 +187,22 @@ minimum_password_length = 6
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
 password_requirements = ""
 
-# Configure passkey sign-ins.
-# [auth.passkey]
-# enabled = false
+# On, to match the hosted project, which reports `passkeys_enabled: true` at
+# `GET /auth/v1/settings`. The client also needs `experimental.passkey` set —
+# see `lib/supabase/client` — because every passkey method in `@supabase/auth-js`
+# throws without it.
+[auth.passkey]
+enabled = true
 
-# Configure WebAuthn relying party settings (required when passkey is enabled).
-# [auth.webauthn]
-# rp_display_name = "Supabase"
-# rp_id = "localhost"
-# rp_origins = ["http://127.0.0.1:3000"]
+# Required whenever passkeys are on. A passkey is bound to an *origin*: one
+# enrolled against `rp_id` here does not exist on the deployed hosts, and vice
+# versa, which is why the account panel talks about "this device" rather than
+# the account. `rp_origins` has to name the dev server exactly — the port
+# included — or the browser refuses the ceremony with a mismatch.
+[auth.webauthn]
+rp_display_name = "Kikoushou"
+rp_id = "localhost"
+rp_origins = ["http://localhost:5173"]
 
 [auth.rate_limit]
 # Number of emails that can be sent per hour. Requires auth.email.smtp to be enabled.
@@ -220,12 +227,16 @@ web3 = 30
 # secret = ""
 
 [auth.email]
-# Google is the only way in for now. Email signup stays off so there is exactly
-# one authentication path to reason about rather than a second one nobody tested
-# — and because the built-in sender is capped at a couple of messages an hour,
-# so an email flow would be broken in practice anyway. Turning magic link on
-# later means flipping this to true and configuring [auth.email.smtp].
-enable_signup = false
+# On, to match the hosted project — `GET /auth/v1/settings` there reports
+# `email: true`, and a local stack that refuses email sign-in while production
+# accepts it is a difference you only discover in production.
+#
+# The caveat that kept this off is unchanged and still applies: the built-in
+# sender is capped at `auth.rate_limit.email_sent` messages an hour (2 below),
+# which is fine for trying the flow and useless for real traffic. Configure
+# [auth.email.smtp] before anyone depends on it. The app surfaces whatever
+# rate-limit error the server returns rather than pretending the mail was sent.
+enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
@@ -352,10 +363,27 @@ url = ""
 skip_nonce_check = true
 email_optional = false
 
+# Enabled in the hosted project, so it is enabled here too. The app does not
+# read this file — it asks the project at `GET /auth/v1/settings` which providers
+# are on and builds the sign-in page from the answer — so this block exists to
+# keep `supabase start` behaving like production, not to drive the UI.
+[auth.external.spotify]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_SPOTIFY_CLIENT_ID)"
+# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+secret = "env(SUPABASE_AUTH_EXTERNAL_SPOTIFY_SECRET)"
+redirect_uri = ""
+url = ""
+email_optional = false
+
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
+# Unlike every other provider, this one is invisible to the app: the settings
+# endpoint reports no web3 field at all, whether it is on or off. The client is
+# told separately, through `VITE_SUPABASE_WEB3_CHAINS` — so enabling a chain
+# takes two edits, here (or in the dashboard) and in the deploy's environment.
 [auth.web3.solana]
-enabled = false
+enabled = true
 
 # Use Firebase Auth as a third-party provider alongside Supabase Auth.
 [auth.third_party.firebase]
