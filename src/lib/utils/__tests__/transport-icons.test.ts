@@ -5,11 +5,26 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { Bus, Car, CircleDot, Plane, Train } from 'lucide-react';
 
 import { TRANSPORT_MODE_ICONS, getTransportModeIcon } from '@/lib/utils/transport-icons';
 import type { TransportMode } from '@/types';
 
 const MODES: readonly TransportMode[] = ['plane', 'train', 'car', 'bus', 'other'];
+
+describe('TRANSPORT_MODE_ICONS', () => {
+  it('draws each mode with the icon that names it', () => {
+    // Pinned, not merely "distinct": the three maps this replaced disagreed
+    // about `other`, and a swap of two of these would have gone unnoticed.
+    expect(TRANSPORT_MODE_ICONS).toEqual({
+      plane: Plane,
+      train: Train,
+      car: Car,
+      bus: Bus,
+      other: CircleDot,
+    });
+  });
+});
 
 describe('getTransportModeIcon', () => {
   it.each(MODES)('returns the mapped icon for %s', (mode) => {

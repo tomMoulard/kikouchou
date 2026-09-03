@@ -23,8 +23,9 @@ export interface RgbColor {
  * The luminance at which white and black text contrast equally against a
  * background: `sqrt(1.05 * 0.05) - 0.05`, per the WCAG contrast formula.
  *
- * Below it white wins, above it black — so the comparison is `<`, and a colour
- * sitting exactly on the line gets white text.
+ * Below it white wins, above it black. The comparison is `<`, so a colour
+ * sitting exactly on the line gets *black* text — the calendar's answer, kept
+ * over `PersonBadge`'s, though no 8-bit colour lands on it.
  */
 export const LUMINANCE_THRESHOLD = 0.179;
 
@@ -54,8 +55,10 @@ const UNKNOWN_LUMINANCE = 0.5;
 export function parseHexColor(hex: string): RgbColor | null {
   let normalized = hex.replace(/^#/, '').toLowerCase();
 
-  // Drop an alpha suffix.
-  if (normalized.length === 8) {
+  // Drop an alpha suffix — but only from something that is hex all the way
+  // through. Slicing first would let `#003366zz` through as a valid colour,
+  // which is a hole the calendar's stricter parser did not have.
+  if (/^[0-9a-f]{8}$/.test(normalized)) {
     normalized = normalized.slice(0, 6);
   }
 

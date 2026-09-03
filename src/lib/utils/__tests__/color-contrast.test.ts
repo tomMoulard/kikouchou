@@ -37,6 +37,12 @@ describe('parseHexColor', () => {
     expect(parseHexColor('#12345')).toBeNull();
     expect(parseHexColor('')).toBeNull();
   });
+
+  it('rejects an eight-character value whose alpha pair is not hex', () => {
+    // Slicing to six before validating would have accepted these.
+    expect(parseHexColor('#003366zz')).toBeNull();
+    expect(parseHexColor('#ffffff!!')).toBeNull();
+  });
 });
 
 describe('getLuminance', () => {

@@ -11,8 +11,9 @@
  */
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { screen } from '@testing-library/react';
-import { render as rtlRender } from '@testing-library/react';
+// A bare RTL render, not `@/test/utils`: that helper wraps children in its own
+// MemoryRouter, and this file's whole point is to mount the real route table.
+import { render as rtlRender, screen } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 
 // ============================================================================
