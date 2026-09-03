@@ -50,7 +50,6 @@ export {
 // ============================================================================
 
 export {
-  getDateLocale,
   getLuminance,
   getContrastTextColor,
   getSegmentBorderRadiusClasses,

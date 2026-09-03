@@ -10,10 +10,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { TripCard, formatDateRange, getDateLocale } from '../TripCard';
+import { TripCard } from '../TripCard';
 import type { Trip, TripId, ShareId } from '@/types';
 import { isoDate } from '@/test/utils';
-import { enUS, fr } from 'date-fns/locale';
 
 // ============================================================================
 // Test Data Factories
@@ -35,47 +34,6 @@ function createTestTrip(overrides?: Partial<Trip>): Trip {
     ...overrides,
   };
 }
-
-// ============================================================================
-// Utility Function Tests
-// ============================================================================
-
-describe('getDateLocale', () => {
-  it('returns French locale for "fr"', () => {
-    expect(getDateLocale('fr')).toBe(fr);
-  });
-
-  it('returns English locale for "en"', () => {
-    expect(getDateLocale('en')).toBe(enUS);
-  });
-
-  it('returns English locale for unknown language', () => {
-    expect(getDateLocale('de')).toBe(enUS);
-    expect(getDateLocale('es')).toBe(enUS);
-  });
-});
-
-describe('formatDateRange', () => {
-  it('formats same month dates compactly', () => {
-    const result = formatDateRange('2024-07-15', '2024-07-22', enUS);
-    expect(result).toMatch(/15.*-.*22.*Jul.*2024/i);
-  });
-
-  it('formats different month dates with both months', () => {
-    const result = formatDateRange('2024-07-28', '2024-08-05', enUS);
-    expect(result).toMatch(/Jul.*-.*Aug.*2024/i);
-  });
-
-  it('handles invalid dates gracefully', () => {
-    const result = formatDateRange('invalid', '2024-07-22', enUS);
-    expect(result).toBe('invalid - 2024-07-22');
-  });
-
-  it('handles both invalid dates', () => {
-    const result = formatDateRange('bad', 'dates', enUS);
-    expect(result).toBe('bad - dates');
-  });
-});
 
 // ============================================================================
 // Basic Rendering Tests

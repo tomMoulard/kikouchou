@@ -26,7 +26,7 @@ import {
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { enUS, fr } from 'date-fns/locale';
+import type { Locale } from 'date-fns';
 import { CalendarDays, ChevronDown, ChevronRight, History, Plus } from 'lucide-react';
 
 import { useOfflineAwareToast } from '@/hooks';
@@ -42,6 +42,7 @@ import { useActivityContext } from '@/contexts/ActivityContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { toLocalISODateString } from '@/lib/db/utils';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { cn } from '@/lib/utils';
 import type { Activity, ActivityId, ISODateString, Person, PersonId } from '@/types';
@@ -71,22 +72,11 @@ interface ActivityDateGroupSectionProps {
   readonly group: ActivityDateGroup;
   readonly personsMap: ReadonlyMap<PersonId, Person>;
   readonly currentPersonId?: PersonId;
-  readonly dateLocale: typeof fr | typeof enUS;
+  readonly dateLocale: Locale;
   readonly isPast?: boolean;
   readonly onEdit: (activityId: ActivityId) => void;
   readonly onDelete: (activityId: ActivityId) => void;
   readonly onToggleParticipation: (activityId: ActivityId, joining: boolean) => void;
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Gets the date-fns locale based on the current i18n language.
- */
-function getDateLocale(language: string): typeof fr | typeof enUS {
-  return language === 'fr' ? fr : enUS;
 }
 
 // ============================================================================

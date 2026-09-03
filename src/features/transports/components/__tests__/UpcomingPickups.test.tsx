@@ -1,6 +1,5 @@
 /**
  * @fileoverview Tests for UpcomingPickups helper functions.
- * Tests the pure functions: formatRelativeTime, getUrgencyClasses, getDateLocale.
  * @module features/transports/components/__tests__/UpcomingPickups.test
  */
 

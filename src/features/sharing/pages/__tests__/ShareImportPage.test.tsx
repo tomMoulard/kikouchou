@@ -130,10 +130,9 @@ describe('ShareImportPage — 3.1: valid shareId renders welcome screen', () => 
     mockGetTripByShareId.mockResolvedValue(makeTrip());
     renderShareImportPage();
 
-    // date-fns formats the dates; Jul 15, 2024 – Jul 22, 2024 should appear
-    // Use regex to handle hyphen vs en-dash variations across environments
+    // The canonical range collapses the shared month and year: "15 - 22 Jul 2024"
     await waitFor(() => {
-      expect(screen.getByText(/Jul 15, 2024.*Jul 22, 2024/)).toBeInTheDocument();
+      expect(screen.getByText(/15\s+-\s+22\s+Jul\s+2024/)).toBeInTheDocument();
     });
   });
 
@@ -401,7 +400,7 @@ describe('ShareImportPage — 3.5: error handling', () => {
     });
 
     // Single date (no range separator)
-    expect(screen.getByText('Jul 15, 2024')).toBeInTheDocument();
+    expect(screen.getByText('15 Jul 2024')).toBeInTheDocument();
   });
 
   it('does not render location row when trip location is empty string', async () => {

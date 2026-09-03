@@ -5,8 +5,7 @@
  * @module features/calendar/utils/calendar-utils
  */
 
-import { format, isValid, parseISO } from 'date-fns';
-import { type Locale, enUS, fr } from 'date-fns/locale';
+import { type Locale, format, isValid, parseISO } from 'date-fns';
 import type { HexColor, RoomAssignment } from '@/types';
 import type { CalendarEvent, SegmentPosition } from '../types';
 
@@ -27,20 +26,6 @@ export const EMPTY_TRANSPORTS: readonly import('../types').CalendarTransport[] =
 
 /** Maximum number of visible event slots before showing "+N more" */
 export const MAX_VISIBLE_EVENT_SLOTS = 3;
-
-// ============================================================================
-// Date Locale Functions
-// ============================================================================
-
-/**
- * Gets the date-fns locale based on the i18n language.
- *
- * @param language - The i18n language code (e.g., 'en', 'fr')
- * @returns The corresponding date-fns locale
- */
-export function getDateLocale(language: string): Locale {
-  return language === 'fr' ? fr : enUS;
-}
 
 // ============================================================================
 // Color Functions

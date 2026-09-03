@@ -25,8 +25,7 @@ import {
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { format, parseISO } from 'date-fns';
-import { enUS, fr } from 'date-fns/locale';
+import { type Locale, format, parseISO } from 'date-fns';
 import {
   ArrowDownToLine,
   ArrowLeft,
@@ -57,6 +56,7 @@ import {
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import type { Person, PersonId, Transport, TransportMode } from '@/types';
 
 // ============================================================================
@@ -78,20 +78,11 @@ interface TransportWithCoordinates extends Transport {
 // ============================================================================
 
 /**
- * Gets the date-fns locale based on the current i18n language.
- */
-function getDateLocale(language: string): typeof fr | typeof enUS {
-  return language === 'fr' ? fr : enUS;
-}
-
-
-
-/**
  * Safely formats a datetime string for display.
  */
 function formatTransportDatetime(
   datetime: string,
-  locale: typeof fr | typeof enUS
+  locale: Locale
 ): { date: string; time: string } {
   try {
     const parsedDate = parseISO(datetime);
@@ -144,7 +135,7 @@ function hasStartCoordinates(transport: Transport): boolean {
 interface TransportPopupContentProps {
   readonly transport: TransportWithCoordinates;
   readonly person: Person | undefined;
-  readonly dateLocale: typeof fr | typeof enUS;
+  readonly dateLocale: Locale;
 }
 
 /**
