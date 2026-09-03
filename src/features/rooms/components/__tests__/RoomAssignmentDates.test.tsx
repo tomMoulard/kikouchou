@@ -327,14 +327,16 @@ describe('the nights model (listStayNights)', () => {
   });
 
   it('treats a same-day room move as two stays, not a double booking', () => {
-    const outOfRoomOne = { startDate: '2024-01-05', endDate: '2024-01-10' };
-    const intoRoomTwo = { startDate: '2024-01-10', endDate: '2024-01-12' };
+    const stay = (startDate: string, endDate: string) => ({
+      startDate: startDate as ISODateString,
+      endDate: endDate as ISODateString,
+    });
+    const outOfRoomOne = stay('2024-01-05', '2024-01-10');
 
-    expect(stayNightsOverlap(outOfRoomOne, intoRoomTwo)).toBe(false);
+    // Checking out on the 10th and into another room the same day is a move.
+    expect(stayNightsOverlap(outOfRoomOne, stay('2024-01-10', '2024-01-12'))).toBe(false);
     // One night earlier and they really do share the night of the 9th.
-    expect(
-      stayNightsOverlap(outOfRoomOne, { startDate: '2024-01-09', endDate: '2024-01-12' }),
-    ).toBe(true);
+    expect(stayNightsOverlap(outOfRoomOne, stay('2024-01-09', '2024-01-12'))).toBe(true);
   });
 });
 

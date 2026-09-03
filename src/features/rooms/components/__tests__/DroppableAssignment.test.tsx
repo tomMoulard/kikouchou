@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { useEffect } from 'react';
 import { DndContext, useDndContext } from '@dnd-kit/core';
 import { render, screen } from '@/test/utils';
 import { DroppableAssignment } from '../DroppableAssignment';
@@ -30,7 +31,12 @@ type DndSnapshot = ReturnType<typeof useDndContext>;
 let dnd: DndSnapshot | null = null;
 
 function DndProbe(): null {
-  dnd = useDndContext();
+  // Captured in an effect rather than during render: the lint rules rightly
+  // treat writing to an outer binding while rendering as a side effect.
+  const context = useDndContext();
+  useEffect(() => {
+    dnd = context;
+  });
   return null;
 }
 
