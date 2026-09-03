@@ -27,6 +27,13 @@ interface EmptyStateAction {
 }
 
 /**
+ * The heading levels an empty state may render its title at.
+ *
+ * A union rather than an enum: `erasableSyntaxOnly` forbids enums.
+ */
+type EmptyStateHeadingLevel = 2 | 3 | 4;
+
+/**
  * Props for the EmptyState component.
  */
 interface EmptyStateProps {
@@ -40,6 +47,22 @@ interface EmptyStateProps {
   readonly action?: EmptyStateAction;
   /** Optional additional CSS classes for the container */
   readonly className?: string;
+  /**
+   * Heading level for the title.
+   *
+   * This is not decoration: the level has to match where the empty state
+   * actually sits, or the document outline skips a level and screen-reader
+   * users lose the structure. It used to be a hardcoded `h3`, which is why
+   * `heading-order` was switched off for the whole a11y suite.
+   *
+   * Defaults to `2`, which is what every current caller needs — each one
+   * renders directly under a page's `PageHeader`, and that renders the `h1`.
+   * Pass `3` when the empty state sits inside a section that already has its
+   * own `h2`.
+   *
+   * @default 2
+   */
+  readonly headingLevel?: EmptyStateHeadingLevel;
 }
 
 // ============================================================================
@@ -81,13 +104,19 @@ interface EmptyStateProps {
  * />
  * ```
  */
-const EmptyState = memo(({
+const EmptyState = memo(function EmptyState({
   icon: Icon,
   title,
   description,
   action,
   className,
-}: EmptyStateProps): React.ReactElement => (
+  headingLevel = 2,
+}: EmptyStateProps): React.ReactElement {
+  // Rendered as a variable so the level follows the page's outline instead of
+  // being fixed at `h3` wherever the component happens to be dropped.
+  const Heading = `h${headingLevel}` as 'h2' | 'h3' | 'h4';
+
+  return (
     <section
       role="status"
       aria-live="polite"
@@ -109,9 +138,9 @@ const EmptyState = memo(({
       )}
 
       {/* Title */}
-      <h3 className="text-lg font-semibold text-foreground text-balance">
+      <Heading className="text-lg font-semibold text-foreground text-balance">
         {title}
-      </h3>
+      </Heading>
 
       {/* Description */}
       <p className="mt-2 text-sm text-muted-foreground text-pretty">
@@ -125,11 +154,12 @@ const EmptyState = memo(({
         </div>
       )}
     </section>
-  ));
+  );
+});
 
 // ============================================================================
 // Exports
 // ============================================================================
 
 export { EmptyState };
-export type { EmptyStateProps, EmptyStateAction };
+export type { EmptyStateProps, EmptyStateAction, EmptyStateHeadingLevel };

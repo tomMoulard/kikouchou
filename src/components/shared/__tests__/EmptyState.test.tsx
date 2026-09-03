@@ -235,7 +235,7 @@ describe('EmptyState Accessibility', () => {
     expect(icon).toHaveAttribute('aria-hidden', 'true');
   });
 
-  it('title uses heading element', () => {
+  it('title uses a level-2 heading by default', () => {
     render(
       <EmptyState
         title="Empty State Title"
@@ -243,9 +243,51 @@ describe('EmptyState Accessibility', () => {
       />
     );
 
-    // Title should be an h3
-    const heading = screen.getByRole('heading', { level: 3 });
+    // Every caller renders directly under a page's `PageHeader`, which is the
+    // `h1` — so `h2` is the level that keeps the outline unbroken. It used to
+    // be a hardcoded `h3`, which skipped a level and is why `heading-order`
+    // was switched off for the whole a11y suite.
+    const heading = screen.getByRole('heading', { level: 2 });
     expect(heading).toHaveTextContent('Empty State Title');
+  });
+
+  it('renders the title at the requested heading level', () => {
+    render(
+      <EmptyState
+        title="Nested Empty State"
+        description="Description"
+        headingLevel={3}
+      />
+    );
+
+    const heading = screen.getByRole('heading', { level: 3 });
+    expect(heading).toHaveTextContent('Nested Empty State');
+    expect(heading.tagName).toBe('H3');
+    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
+  });
+
+  it('supports level 4 for empty states two sections deep', () => {
+    render(
+      <EmptyState
+        title="Deeply Nested"
+        description="Description"
+        headingLevel={4}
+      />
+    );
+
+    expect(screen.getByRole('heading', { level: 4 })).toHaveTextContent('Deeply Nested');
+  });
+
+  it('keeps the heading styling regardless of level', () => {
+    render(
+      <EmptyState
+        title="Styled"
+        description="Description"
+        headingLevel={4}
+      />
+    );
+
+    expect(screen.getByRole('heading', { level: 4 })).toHaveClass('text-lg', 'font-semibold');
   });
 });
 

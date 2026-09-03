@@ -6,7 +6,6 @@
  */
 
 import {
-  type KeyboardEvent,
   type MouseEvent,
   Suspense,
   lazy,
@@ -173,21 +172,6 @@ const TripCard = memo(function TripCard({
   }, [onClick, isDisabled, trip]),
 
   /**
-   * Handles keyboard activation (Enter or Space) on the card.
-   */
-   handleCardKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (isDisabled) {return;}
-
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        onClick(trip);
-      }
-    },
-    [onClick, isDisabled, trip],
-  ),
-
-  /**
    * Stops event propagation to prevent card click when interacting with menu.
    */
    handleMenuTriggerClick = useCallback((e: MouseEvent) => {
@@ -226,23 +210,45 @@ const TripCard = memo(function TripCard({
 
   return (
     <Card
-      role="button"
-      tabIndex={isDisabled ? -1 : 0}
-      aria-label={ariaLabel}
-      aria-disabled={isDisabled}
       onClick={handleCardClick}
-      onKeyDown={handleCardKeyDown}
       className={cn(
         'relative cursor-pointer transition-all duration-200',
         'hover:shadow-md hover:border-primary/20',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isDisabled && 'opacity-50 cursor-not-allowed',
       )}
     >
+      {/*
+        The card's activation target, as a real button covering the card.
+
+        The card used to carry `role="button"` itself, which made the share
+        button, the overflow menu and the map preview controls buttons nested
+        inside a button — not expressible in the accessibility tree, since a
+        button's children are presentational, and the reason
+        `nested-interactive` was disabled for the whole a11y suite.
+
+        Rendered first so it keeps its place at the head of the card's tab
+        order, and overlaid so the whole card stays clickable and the focus
+        ring still frames the whole card. It carries no click handler of its
+        own: its click — including the synthetic one a keyboard Enter/Space
+        produces — bubbles to the card's `onClick`, which is also what a click
+        on the card's text does.
+      */}
+      <button
+        type="button"
+        tabIndex={isDisabled ? -1 : 0}
+        aria-label={ariaLabel}
+        aria-disabled={isDisabled}
+        className={cn(
+          'absolute inset-0 z-10 rounded-xl',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          isDisabled && 'cursor-not-allowed',
+        )}
+      />
+
       {/* Share + overflow menu — top-right */}
       {showCornerActions && (
       <div
-        className="absolute top-2 right-2 z-10 flex items-center gap-0.5"
+        className="absolute top-2 right-2 z-20 flex items-center gap-0.5"
         onClick={handleMenuTriggerClick}
         onKeyDown={(e) => e.stopPropagation()}
       >
@@ -355,6 +361,9 @@ const TripCard = memo(function TripCard({
         {/* Map Preview - only shown when coordinates are available */}
         {trip.coordinates && (
           <div
+            // `relative z-20` lifts the map above the full-card activation
+            // button, which would otherwise swallow every interaction with it.
+            className="relative z-20"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >

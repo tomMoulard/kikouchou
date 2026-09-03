@@ -172,21 +172,6 @@ const RoomCard = memo(function RoomCard({
   }, [onClick, room, isInteractive]),
 
   /**
-   * Handles keyboard activation (Enter or Space) on the card.
-   */
-   handleCardKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (!isInteractive) {return;}
-
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        onClick?.(room);
-      }
-    },
-    [onClick, room, isInteractive],
-  ),
-
-  /**
    * Stops event propagation to prevent card click when interacting with menu.
    */
    handleMenuAreaClick = useCallback((e: MouseEvent) => {
@@ -238,26 +223,52 @@ const RoomCard = memo(function RoomCard({
   return (
     <>
       <Card
-        role={isInteractive ? 'button' : undefined}
-        tabIndex={isInteractive ? 0 : undefined}
-        aria-label={isInteractive ? ariaLabel : undefined}
-        aria-disabled={isDisabled || undefined}
         onClick={handleCardClick}
-        onKeyDown={isInteractive ? handleCardKeyDown : undefined}
         className={cn(
           'relative transition-all duration-200',
           isInteractive && [
             'cursor-pointer',
             'hover:shadow-md hover:border-primary/20',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           ],
           isDisabled && 'opacity-50 cursor-not-allowed',
           isFull && 'opacity-75 bg-muted/30',
         )}
       >
+        {/*
+          The card's activation target, as a real button covering the card.
+
+          The card used to carry `role="button"` itself, which made every
+          control inside it — the menu trigger below, "claim this room" — a
+          button nested in a button. That is not expressible in the
+          accessibility tree (a button's children are presentational), so a
+          screen reader announced one control where there were three, and it
+          is why `nested-interactive` was disabled for the whole a11y suite.
+
+          As a sibling laid over the card it keeps the whole-card hit area and
+          the whole-card focus ring, while the menu and the claim button sit
+          above it in the stacking order and stay reachable. It carries no
+          click handler of its own: its click — including the synthetic one a
+          keyboard Enter/Space produces — bubbles to the card's `onClick`,
+          which is also what a click on the card's text does.
+        */}
+        {onClick && (
+          <button
+            type="button"
+            tabIndex={isDisabled ? -1 : 0}
+            aria-label={ariaLabel}
+            aria-disabled={isDisabled || undefined}
+            {...(expandedContent ? { 'aria-expanded': isExpanded } : {})}
+            className={cn(
+              'absolute inset-0 z-10 rounded-xl',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+              isDisabled && 'cursor-not-allowed',
+            )}
+          />
+        )}
+
         {/* Dropdown Menu - positioned absolutely in top-right corner */}
         <div
-          className="absolute top-2 right-2 z-10"
+          className="absolute top-2 right-2 z-20"
           onClick={handleMenuAreaClick}
           onKeyDown={handleMenuAreaKeyDown}
         >
@@ -357,7 +368,9 @@ const RoomCard = memo(function RoomCard({
             <Button
               variant="default"
               size="sm"
-              className="w-full mt-3 h-11 md:h-8"
+              // `relative z-20` lifts it above the full-card activation
+              // button, which would otherwise swallow the click.
+              className="relative z-20 w-full mt-3 h-11 md:h-8"
               disabled={isDisabled}
               onClick={(e) => {
                 e.stopPropagation();
@@ -388,7 +401,7 @@ const RoomCard = memo(function RoomCard({
         {/* Expanded Content (e.g., RoomAssignmentSection) */}
         {expandedContent && isExpanded && (
           <div
-            className="border-t px-4 py-4"
+            className="relative z-20 border-t px-4 py-4"
             onClick={handleMenuAreaClick}
             onKeyDown={handleMenuAreaKeyDown}
           >
