@@ -7,7 +7,10 @@
  * @module hooks/__tests__/useOfflineAwareToast.test
  */
 
+import type { ReactElement } from 'react';
+import { isValidElement } from 'react';
 import { renderHook } from '@testing-library/react';
+import { Smartphone } from 'lucide-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOfflineAwareToast } from '../useOfflineAwareToast';
 
@@ -113,15 +116,29 @@ describe('useOfflineAwareToast', () => {
       expect(firstCall[0]).toBe('Saved on this device');
     });
 
-    it('provides a custom icon option for the offline toast', () => {
+    it('shows the offline toast with a decorative device icon', () => {
       const { result } = renderHook(() => useOfflineAwareToast());
 
       result.current.successToast('Room created successfully');
 
-      // Second argument should be an options object with icon
-      const firstCall = mockToastSuccess.mock.calls[0] as Record<string, unknown>[];
-      expect(firstCall[1]).toBeDefined();
-      expect(firstCall[1]).toHaveProperty('icon');
+      const [, options] = mockToastSuccess.mock.calls[0] as [
+        string,
+        { icon?: unknown } | undefined,
+      ];
+
+      // `toHaveProperty('icon')` passed for any value at all, `undefined`
+      // included. The icon is what carries the "this lives on your phone"
+      // reassurance, so assert which element it is and that a screen reader
+      // skips it — the message beside it already says the same thing.
+      const icon = options?.icon;
+      expect(isValidElement(icon)).toBe(true);
+      const element = icon as ReactElement<{
+        className?: string;
+        'aria-hidden'?: string;
+      }>;
+      expect(element.type).toBe(Smartphone);
+      expect(element.props['aria-hidden']).toBe('true');
+      expect(element.props.className).toBe('size-4');
     });
 
     it('does NOT show the original online message when offline', () => {
@@ -139,17 +156,64 @@ describe('useOfflineAwareToast', () => {
   // Return Value
   // --------------------------------------------------------------------------
 
-  describe('return value', () => {
-    it('returns an object with successToast function', () => {
+  // --------------------------------------------------------------------------
+  // Reacting to a change in connectivity
+  // --------------------------------------------------------------------------
+
+  describe('when connectivity changes under it', () => {
+    /**
+     * `successToast` is memoised on `[isOnline, t]`. Asserting its shape —
+     * `toHaveProperty('successToast')` and `typeof … === 'function'`, which is
+     * all this block used to do — passes for a hook returning any function at
+     * all, including one closed over a connectivity reading from three renders
+     * ago. What matters is that the reading it uses is the current one.
+     */
+    it('switches to the offline message after going offline', () => {
       mockUseOnlineStatus.mockReturnValue({
         isOnline: true,
         hasRecentlyChanged: false,
       });
 
-      const { result } = renderHook(() => useOfflineAwareToast());
+      const { result, rerender } = renderHook(() => useOfflineAwareToast());
 
-      expect(result.current).toHaveProperty('successToast');
-      expect(typeof result.current.successToast).toBe('function');
+      result.current.successToast('Room created successfully');
+      expect(mockToastSuccess).toHaveBeenLastCalledWith(
+        'Room created successfully',
+      );
+
+      mockUseOnlineStatus.mockReturnValue({
+        isOnline: false,
+        hasRecentlyChanged: true,
+      });
+      rerender();
+
+      result.current.successToast('Room created successfully');
+      const [message] = mockToastSuccess.mock.calls[1] as [string];
+      expect(message).toBe('Saved on this device');
+    });
+
+    it('switches back to the caller message after coming online', () => {
+      mockUseOnlineStatus.mockReturnValue({
+        isOnline: false,
+        hasRecentlyChanged: false,
+      });
+
+      const { result, rerender } = renderHook(() => useOfflineAwareToast());
+
+      result.current.successToast('Room created successfully');
+      const [offlineMessage] = mockToastSuccess.mock.calls[0] as [string];
+      expect(offlineMessage).toBe('Saved on this device');
+
+      mockUseOnlineStatus.mockReturnValue({
+        isOnline: true,
+        hasRecentlyChanged: true,
+      });
+      rerender();
+
+      result.current.successToast('Room created successfully');
+      expect(mockToastSuccess).toHaveBeenLastCalledWith(
+        'Room created successfully',
+      );
     });
   });
 });
