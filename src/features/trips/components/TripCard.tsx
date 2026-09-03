@@ -296,7 +296,7 @@ const TripCard = memo(function TripCard({
             type="button"
             variant="ghost"
             size="icon"
-            className="size-11 md:size-8"
+            className="md:size-8"
             aria-label={t('trips.shareTripAria', 'Share trip — link and QR code')}
             disabled={isDisabled}
             onClick={handleShareClick}
@@ -310,7 +310,7 @@ const TripCard = memo(function TripCard({
             <Button
               variant="ghost"
               size="icon"
-              className="size-11 md:size-8"
+              className="md:size-8"
               aria-label={t('common.openMenu', 'Open menu')}
               disabled={isDisabled}
             >

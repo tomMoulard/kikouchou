@@ -265,7 +265,7 @@ const RoomCard = memo(function RoomCard({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-10 md:size-8"
+                className="md:size-8"
                 aria-label={t('common.openMenu', 'Open menu')}
                 disabled={isDisabled}
               >

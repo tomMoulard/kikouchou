@@ -18,13 +18,35 @@ export const buttonVariants = cva(
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
+        // NON-STOCK: `xs` / `icon-xs` / `icon-sm` / `icon-lg` do not exist in
+        // shadcn's button. Keep them if `shadcn add button` is ever re-run.
         xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
         lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9",
+        /*
+          NON-STOCK, and the reason this file exists as a deviation.
+
+          Stock shadcn is a flat `size-9` — 36px, under the 44px minimum touch
+          target every mobile platform asks for, on what is the *only* edit and
+          delete affordance on most cards in this app. That had been patched ad
+          hoc with `size-11 md:size-8` at about ten call sites and missed
+          everywhere else, so the rule now lives here instead.
+
+          `max-md:` rather than `size-11 md:size-9` on purpose. A call site that
+          overrides the size with a plain utility (`components/ui/calendar.tsx`
+          passes `size-auto` so a day button fills its grid cell) cancels an
+          unprefixed `size-11` but would *not* cancel a `md:`-prefixed one,
+          which would then re-apply at desktop and break the layout. Anchoring
+          the floor to the mobile range instead means an override behaves the
+          way its author expected on desktop, and the touch minimum still
+          applies below `md` where it matters.
+        */
+        icon: "size-9 max-md:size-11",
+        // The deliberate opt-out: an inline chip inside dense text, never a
+        // primary affordance. Below the touch minimum by design.
         "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-8",
-        "icon-lg": "size-10",
+        "icon-sm": "size-8 max-md:size-11",
+        "icon-lg": "size-10 max-md:size-11",
       },
     },
     defaultVariants: {

@@ -278,12 +278,12 @@ const AssignmentItem = memo(function AssignmentItem({
         )}
       </div>
 
-      {/* Action buttons - min 44px touch targets on mobile */}
+      {/* Action buttons — the 44px mobile floor comes from the `icon` button size */}
       <div className="flex items-center gap-1 shrink-0">
         <Button
           variant="ghost"
           size="icon"
-          className="size-11 md:size-7"
+          className="md:size-7"
           disabled={isDisabled}
           onClick={handleEditClick}
           onKeyDown={handleEditKeyDown}
@@ -294,7 +294,7 @@ const AssignmentItem = memo(function AssignmentItem({
         <Button
           variant="ghost"
           size="icon"
-          className="size-11 md:size-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+          className="md:size-7 text-destructive hover:text-destructive hover:bg-destructive/10"
           disabled={isDisabled}
           onClick={handleDeleteClick}
           onKeyDown={handleDeleteKeyDown}
