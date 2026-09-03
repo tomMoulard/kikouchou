@@ -13,9 +13,11 @@ import { cn } from "@/lib/utils"
  * target sitting a few pixels from its neighbour. `min-h` rather than more
  * padding so the icon/label row stays centred and desktop stays exactly stock.
  *
- * `max-md:` and not `min-h-11 md:min-h-0`: a caller passing its own `min-h-*`
- * expects that to win, and an unprefixed override does not cancel a `md:`
- * prefixed one. Scoping the floor to the mobile range keeps overrides sane.
+ * `max-md:` and not `min-h-11 md:min-h-0` for the same reason as the button's
+ * `icon` size, which documents it at length: the variant prefix makes this a
+ * hard floor that an unprefixed caller class cannot cancel, while the `md:`
+ * form would leak past the breakpoint when a caller cancelled the base. A row
+ * that genuinely must be shorter on a phone has to say `max-md:min-h-*`.
  */
 const TOUCH_TARGET_MIN_HEIGHT = "max-md:min-h-11"
 

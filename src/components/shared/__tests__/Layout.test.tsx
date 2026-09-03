@@ -85,9 +85,12 @@ vi.mock('@/contexts/TransportContext', () => ({
 /**
  * Renders Layout with router context.
  */
-function renderLayout(children: ReactNode = <div>Page Content</div>) {
+function renderLayout(
+  children: ReactNode = <div>Page Content</div>,
+  initialPath = '/',
+) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Layout>{children}</Layout>
     </MemoryRouter>,
   );
@@ -209,20 +212,55 @@ describe('Layout', () => {
       expect(screen.queryByTestId('trip-info-section')).not.toBeInTheDocument();
     });
 
-    it('does NOT show trip navigation links (Calendar, Rooms, etc.) in sidebar', () => {
+    it('shows trip navigation links in the sidebar, disabled rather than absent', () => {
       renderLayout();
 
-      const sidebar = getSidebar();
-      // Trip nav items should not be in the sidebar when no trip is selected
-      // They'll still be in mobile nav but disabled
-      const sidebarContent = sidebar?.textContent || '';
-      
-      // The sidebar should NOT contain these trip-specific items
-      expect(sidebarContent).not.toContain('nav.calendar');
-      expect(sidebarContent).not.toContain('nav.rooms');
-      expect(sidebarContent).not.toContain('nav.persons');
-      expect(sidebarContent).not.toContain('nav.transports');
-      expect(sidebarContent).not.toContain('nav.tripAnalytics');
+      const sidebar = getSidebar() as HTMLElement;
+
+      // These used to be behind `{trip && …}`, so with no trip selected they
+      // were not in the DOM at all — the sidebar silently changed shape and a
+      // screen-reader user never learned the sections existed.
+      for (const labelKey of [
+        'nav.calendar',
+        'nav.rooms',
+        'nav.persons',
+        'nav.transports',
+        'nav.activities',
+        'nav.tripAnalytics',
+      ]) {
+        const link = within(sidebar).getByText(labelKey).closest('a');
+        expect(link, `${labelKey} is missing from the sidebar`).toBeInTheDocument();
+        expect(link).toHaveAttribute('aria-disabled', 'true');
+        expect(link).not.toHaveAttribute('tabindex');
+      }
+    });
+
+    it('does not let a disabled link claim to be the current page', () => {
+      // On '/trips' specifically. `buildNavPath` collapses every trip-gated
+      // path to '/trips' while no trip is selected, and `NavLink` has no `end`,
+      // so this is the route where the router marked all of them current at
+      // once — the app's own landing page.
+      renderLayout(<div>Page Content</div>, '/trips');
+
+      const currentInSidebar = within(getSidebar() as HTMLElement)
+        .getAllByRole('link')
+        .filter((link) => link.getAttribute('aria-current') === 'page')
+        .filter((link) => link.getAttribute('aria-disabled') === 'true');
+
+      const currentInBar = within(getMobileNav() as HTMLElement)
+        .getAllByRole('link')
+        .filter((link) => link.getAttribute('aria-current') === 'page')
+        .filter((link) => link.getAttribute('aria-disabled') === 'true');
+
+      expect(currentInSidebar).toHaveLength(0);
+      expect(currentInBar).toHaveLength(0);
+
+      // And the guard itself has to be reachable: something *is* current here,
+      // otherwise the two assertions above would hold for the wrong reason.
+      const anyCurrent = within(getSidebar() as HTMLElement)
+        .getAllByRole('link')
+        .filter((link) => link.getAttribute('aria-current') === 'page');
+      expect(anyCurrent.length).toBeGreaterThan(0);
     });
 
     it('shows empty trip placeholder in header', () => {
@@ -548,12 +586,13 @@ describe('Layout', () => {
       // Focusable is the point of the fix; activating it must still do nothing.
       act(() => calendarLink.focus());
       expect(document.activeElement).toBe(calendarLink);
-      expect(screen.getByTestId('location-probe')).toHaveTextContent('/');
+      // Exact, not `toHaveTextContent('/')`: that is a substring match, and it
+      // also passes for the '/trips' this test exists to rule out.
+      expect(screen.getByTestId('location-probe').textContent).toBe('/');
 
       await user.click(calendarLink);
 
       // Without the guard this link resolves to '/trips'.
-      expect(screen.getByTestId('location-probe')).toHaveTextContent('/');
       expect(screen.getByTestId('location-probe').textContent).toBe('/');
     });
 
@@ -575,6 +614,45 @@ describe('Layout', () => {
       expect(document.getElementById(hintId as string)).toHaveTextContent(
         'nav.requiresTrip',
       );
+    });
+
+    it('does not park the "More" sheet\'s opening focus on a disabled item', async () => {
+      const user = userEvent.setup();
+      renderLayout();
+
+      await user.click(
+        within(getMobileNav() as HTMLElement).getByRole('button', { name: 'nav.more' }),
+      );
+      await screen.findByRole('button', { name: /nav\.persons/ });
+
+      // Radix's focus scope skips natively `disabled` nodes but not
+      // `aria-disabled` ones, so swapping the attribute moved the sheet's
+      // opening focus onto the first item — which, with no trip, is disabled.
+      const focused = document.activeElement as HTMLElement | null;
+      expect(focused).not.toBeNull();
+      // Inside the sheet, or the focus trap has nothing to trap. `document.body`
+      // would satisfy a bare "not disabled" check, so assert both halves.
+      const sheet = screen.getByRole('dialog');
+      expect(sheet.contains(focused)).toBe(true);
+      expect(focused?.getAttribute('aria-disabled')).not.toBe('true');
+    });
+
+    it('drops the trip-gated hint entirely once a trip is selected', () => {
+      mockUseTripContext.mockReturnValue({
+        currentTrip: mockTrip,
+        trips: [mockTrip],
+        isLoading: false,
+        error: null,
+        setCurrentTrip: vi.fn(),
+        checkConnection: vi.fn(),
+      });
+
+      renderLayout();
+
+      // An sr-only span is still in the accessibility tree. Rendered
+      // unconditionally it would be read out on every screen of the app,
+      // explaining a restriction that no longer applies to anything.
+      expect(screen.queryByText('nav.requiresTrip')).not.toBeInTheDocument();
     });
   });
 
