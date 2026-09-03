@@ -927,11 +927,23 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         <div className="flex items-center gap-4 mb-6 text-sm text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <ArrowDownToLine className="size-4 text-green-600" aria-hidden="true" />
-            <span>{arrivals.length} {t('transports.arrivals').toLowerCase()}</span>
+            <span>
+              {t('transports.arrivalsCount', {
+                count: arrivals.length,
+                defaultValue_one: '{{count}} arrival',
+                defaultValue_other: '{{count}} arrivals',
+              })}
+            </span>
           </div>
           <div className="flex items-center gap-1.5">
             <ArrowUpFromLine className="size-4 text-orange-600" aria-hidden="true" />
-            <span>{departures.length} {t('transports.departures').toLowerCase()}</span>
+            <span>
+              {t('transports.departuresCount', {
+                count: departures.length,
+                defaultValue_one: '{{count}} departure',
+                defaultValue_other: '{{count}} departures',
+              })}
+            </span>
           </div>
         </div>
       )}
