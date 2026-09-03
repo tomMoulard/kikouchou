@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@/test/utils';
 import userEvent from '@testing-library/user-event';
 
 import { DateRangePicker, type DateRange } from '../DateRangePicker';
@@ -31,7 +31,7 @@ import { DateRangePicker, type DateRange } from '../DateRangePicker';
  * @param isoDay - Calendar day as `YYYY-MM-DD`
  * @returns The `<button>` inside that day's gridcell
  */
-function dayButton(isoDay: string): HTMLElement {
+function dayCell(isoDay: string): HTMLElement {
   const cells = screen.getAllByRole('gridcell'),
    cell = cells.find((c) => c.getAttribute('data-day') === isoDay);
 
@@ -40,14 +40,27 @@ function dayButton(isoDay: string): HTMLElement {
     throw new Error(`No calendar cell for ${isoDay}. Rendered days: ${rendered}`);
   }
 
-  return within(cell).getByRole('button');
+  return cell;
+}
+
+/**
+ * The day button inside that cell.
+ *
+ * Note the split: `modifiers`/`modifiersClassNames` land on the gridcell,
+ * `disabled` lands on the button. Asserting a modifier class against the
+ * button silently never fails.
+ */
+function dayButton(isoDay: string): HTMLElement {
+  return within(dayCell(isoDay)).getByRole('button');
 }
 
 /** Opens the picker's popover and waits for the calendar to appear. */
 async function openCalendar(
   user: ReturnType<typeof userEvent.setup>
 ): Promise<void> {
-  await user.click(screen.getAllByRole('button')[0]!);
+  await user.click(
+    screen.getByRole('button', { name: 'dateRangePicker.ariaLabel' })
+  );
   await waitFor(() => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
@@ -60,7 +73,7 @@ async function openCalendar(
 describe('DateRangePicker', () => {
   describe('Basic Rendering', () => {
     it('renders placeholder when no value is set', () => {
-      render(<DateRangePicker value={undefined} onChange={vi.fn()} />);
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, { withProviders: false });
       
       // The mock returns the translation key
       expect(screen.getByText('dateRangePicker.placeholder')).toBeInTheDocument();
@@ -68,14 +81,15 @@ describe('DateRangePicker', () => {
 
     it('renders custom placeholder when provided', () => {
       render(
-        <DateRangePicker value={undefined} onChange={vi.fn()} placeholder="Pick dates" />
+        <DateRangePicker value={undefined} onChange={vi.fn()} placeholder="Pick dates" />,
+      { withProviders: false }
       );
       
       expect(screen.getByText('Pick dates')).toBeInTheDocument();
     });
 
     it('renders trigger button with calendar icon', () => {
-      render(<DateRangePicker value={undefined} onChange={vi.fn()} />);
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, { withProviders: false });
       
       const button = screen.getByRole('button');
       expect(button).toBeInTheDocument();
@@ -89,7 +103,7 @@ describe('DateRangePicker', () => {
         to: new Date(2024, 6, 20),   // July 20, 2024
       };
 
-      render(<DateRangePicker value={value} onChange={vi.fn()} />);
+      render(<DateRangePicker value={value} onChange={vi.fn()} />, { withProviders: false });
       
       // Exact, not three `toContain` probes: "Jul", "15" and "20" all appear
       // in a plain "Jul 15, 2024" too, so the substring form kept passing with
@@ -104,7 +118,7 @@ describe('DateRangePicker', () => {
         to: new Date(2024, 6, 15), // Same as from
       };
 
-      render(<DateRangePicker value={value} onChange={vi.fn()} />);
+      render(<DateRangePicker value={value} onChange={vi.fn()} />, { withProviders: false });
       
       // The date still has to be shown: the arrow check on its own also holds
       // for a button that renders no label at all.
@@ -119,7 +133,7 @@ describe('DateRangePicker', () => {
         to: undefined,
       };
 
-      render(<DateRangePicker value={value} onChange={vi.fn()} />);
+      render(<DateRangePicker value={value} onChange={vi.fn()} />, { withProviders: false });
       
       const button = screen.getByRole('button');
       // The mock interpolates the translation key with date
@@ -134,7 +148,7 @@ describe('DateRangePicker', () => {
   describe('Interaction', () => {
     it('opens calendar popover on click', async () => {
       const user = userEvent.setup();
-      render(<DateRangePicker value={undefined} onChange={vi.fn()} />);
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, { withProviders: false });
       
       const button = screen.getByRole('button');
       await user.click(button);
@@ -157,7 +171,8 @@ describe('DateRangePicker', () => {
           onChange={onChange}
           minDate={new Date(2024, 6, 1)}
           maxDate={new Date(2024, 6, 31)}
-        />
+        />,
+      { withProviders: false }
       );
 
       await openCalendar(user);
@@ -182,7 +197,8 @@ describe('DateRangePicker', () => {
           onChange={onChange}
           minDate={new Date(2024, 6, 1)}
           maxDate={new Date(2024, 6, 31)}
-        />
+        />,
+      { withProviders: false }
       );
 
       await openCalendar(user);
@@ -209,7 +225,8 @@ describe('DateRangePicker', () => {
           onChange={vi.fn()}
           minDate={new Date(2024, 6, 1)}
           maxDate={new Date(2024, 6, 31)}
-        />
+        />,
+      { withProviders: false }
       );
 
       await openCalendar(user);
@@ -235,7 +252,8 @@ describe('DateRangePicker', () => {
           value={undefined}
           onChange={vi.fn()}
           minDate={new Date(2024, 6, 15)}
-        />
+        />,
+      { withProviders: false }
       );
 
       await openCalendar(user);
@@ -255,7 +273,8 @@ describe('DateRangePicker', () => {
           onChange={vi.fn()}
           minDate={new Date(2024, 6, 1)}
           maxDate={new Date(2024, 6, 20)}
-        />
+        />,
+      { withProviders: false }
       );
 
       await openCalendar(user);
@@ -264,7 +283,7 @@ describe('DateRangePicker', () => {
       expect(dayButton('2024-07-21')).toBeDisabled();
     });
 
-    it('disables a day that a disabled range cannot be clicked through', async () => {
+    it('does not report a click on a day outside the allowed range', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
 
@@ -274,7 +293,8 @@ describe('DateRangePicker', () => {
           onChange={onChange}
           minDate={new Date(2024, 6, 15)}
           maxDate={new Date(2024, 6, 20)}
-        />
+        />,
+      { withProviders: false }
       );
 
       await openCalendar(user);
@@ -288,7 +308,8 @@ describe('DateRangePicker', () => {
       const minDate = new Date(2024, 11, 1); // December 2024
       
       render(
-        <DateRangePicker value={undefined} onChange={vi.fn()} minDate={minDate} />
+        <DateRangePicker value={undefined} onChange={vi.fn()} minDate={minDate} />,
+      { withProviders: false }
       );
       
       await user.click(screen.getByRole('button'));
@@ -308,7 +329,8 @@ describe('DateRangePicker', () => {
   describe('Disabled State', () => {
     it('disables the trigger button when disabled prop is true', () => {
       render(
-        <DateRangePicker value={undefined} onChange={vi.fn()} disabled={true} />
+        <DateRangePicker value={undefined} onChange={vi.fn()} disabled={true} />,
+      { withProviders: false }
       );
       
       const button = screen.getByRole('button');
@@ -318,7 +340,8 @@ describe('DateRangePicker', () => {
     it('does not open calendar when disabled', async () => {
       const user = userEvent.setup();
       render(
-        <DateRangePicker value={undefined} onChange={vi.fn()} disabled={true} />
+        <DateRangePicker value={undefined} onChange={vi.fn()} disabled={true} />,
+      { withProviders: false }
       );
       
       // Try to click the disabled button
@@ -341,7 +364,8 @@ describe('DateRangePicker', () => {
           value={undefined}
           onChange={vi.fn()}
           aria-label="Select stay dates"
-        />
+        />,
+      { withProviders: false }
       );
       
       const button = screen.getByRole('button');
@@ -349,7 +373,7 @@ describe('DateRangePicker', () => {
     });
 
     it('has default aria-label when not provided', () => {
-      render(<DateRangePicker value={undefined} onChange={vi.fn()} />);
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, { withProviders: false });
       
       const button = screen.getByRole('button');
       // Mock returns the translation key
@@ -358,7 +382,7 @@ describe('DateRangePicker', () => {
 
     it('has correct aria-expanded attribute', async () => {
       const user = userEvent.setup();
-      render(<DateRangePicker value={undefined} onChange={vi.fn()} />);
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, { withProviders: false });
       
       const button = screen.getByRole('button');
       expect(button).toHaveAttribute('aria-expanded', 'false');
@@ -370,7 +394,7 @@ describe('DateRangePicker', () => {
     });
 
     it('has aria-haspopup="dialog" attribute', () => {
-      render(<DateRangePicker value={undefined} onChange={vi.fn()} />);
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, { withProviders: false });
       
       const button = screen.getByRole('button');
       expect(button).toHaveAttribute('aria-haspopup', 'dialog');
@@ -382,7 +406,8 @@ describe('DateRangePicker', () => {
           value={undefined}
           onChange={vi.fn()}
           aria-describedby="help-text"
-        />
+        />,
+      { withProviders: false }
       );
       
       const button = screen.getByRole('button');
@@ -391,7 +416,8 @@ describe('DateRangePicker', () => {
 
     it('applies custom id when provided', () => {
       render(
-        <DateRangePicker value={undefined} onChange={vi.fn()} id="date-picker-1" />
+        <DateRangePicker value={undefined} onChange={vi.fn()} id="date-picker-1" />,
+      { withProviders: false }
       );
       
       const button = screen.getByRole('button');
@@ -417,7 +443,8 @@ describe('DateRangePicker', () => {
           bookedRanges={bookedRanges}
           minDate={new Date(2024, 6, 1)}
           maxDate={new Date(2024, 6, 31)}
-        />
+        />,
+      { withProviders: false }
       );
       
       await user.click(screen.getByRole('button'));
@@ -441,7 +468,8 @@ describe('DateRangePicker', () => {
           bookedRanges={[{ from: new Date(2024, 6, 10), to: new Date(2024, 6, 15) }]}
           minDate={new Date(2024, 6, 1)}
           maxDate={new Date(2024, 6, 31)}
-        />
+        />,
+      { withProviders: false }
       );
 
       await openCalendar(user);
@@ -455,10 +483,11 @@ describe('DateRangePicker', () => {
         '14',
       ]);
       // Drop the `slice(0, -1)` and the 15th joins the list, showing the room
-      // as taken on a night nobody is in it.
-      expect(dayButton('2024-07-15')).not.toHaveClass('rdp-day-booked');
-      // Still selectable — a checkout day is a valid check-in day.
-      expect(dayButton('2024-07-15')).toBeEnabled();
+      // as taken on a night nobody is in it. Asserted on the gridcell, not the
+      // button inside it: react-day-picker puts `modifiersClassNames` on the
+      // <td>, so the same check against the <button> can never fail.
+      expect(dayCell('2024-07-15')).not.toHaveClass('rdp-day-booked');
+      expect(dayCell('2024-07-14')).toHaveClass('rdp-day-booked');
     });
 
     it('does not show booked indicator when no bookedRanges', async () => {
@@ -470,7 +499,8 @@ describe('DateRangePicker', () => {
           onChange={vi.fn()}
           minDate={new Date(2024, 6, 1)}
           maxDate={new Date(2024, 6, 31)}
-        />
+        />,
+      { withProviders: false }
       );
       
       await user.click(screen.getByRole('button'));
@@ -490,7 +520,7 @@ describe('DateRangePicker', () => {
   describe('Number of Months', () => {
     it('defaults to 1 month display', async () => {
       const user = userEvent.setup();
-      render(<DateRangePicker value={undefined} onChange={vi.fn()} />);
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, { withProviders: false });
       
       await user.click(screen.getByRole('button'));
       await waitFor(() => {
@@ -505,7 +535,8 @@ describe('DateRangePicker', () => {
     it('shows 2 months when numberOfMonths is 2', async () => {
       const user = userEvent.setup();
       render(
-        <DateRangePicker value={undefined} onChange={vi.fn()} numberOfMonths={2} />
+        <DateRangePicker value={undefined} onChange={vi.fn()} numberOfMonths={2} />,
+      { withProviders: false }
       );
       
       await user.click(screen.getByRole('button'));
@@ -525,7 +556,7 @@ describe('DateRangePicker', () => {
 
   describe('Edge Cases', () => {
     it('handles undefined value gracefully', () => {
-      render(<DateRangePicker value={undefined} onChange={vi.fn()} />);
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, { withProviders: false });
       
       expect(screen.getByText('dateRangePicker.placeholder')).toBeInTheDocument();
     });
@@ -536,7 +567,8 @@ describe('DateRangePicker', () => {
           value={undefined}
           onChange={vi.fn()}
           className="custom-class"
-        />
+        />,
+      { withProviders: false }
       );
       
       const button = screen.getByRole('button');
@@ -549,7 +581,7 @@ describe('DateRangePicker', () => {
         to: new Date(2024, 6, 20),
       };
       
-      render(<DateRangePicker value={valueWithSelection} onChange={vi.fn()} />);
+      render(<DateRangePicker value={valueWithSelection} onChange={vi.fn()} />, { withProviders: false });
       
       const button = screen.getByRole('button');
       // When there's no selection, button has text-muted-foreground class
@@ -558,7 +590,7 @@ describe('DateRangePicker', () => {
     });
 
     it('shows muted style when no selection', () => {
-      render(<DateRangePicker value={undefined} onChange={vi.fn()} />);
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, { withProviders: false });
       
       const button = screen.getByRole('button');
       // When there's no selection, button should have text-muted-foreground class
@@ -578,7 +610,7 @@ describe('DateRangePicker', () => {
         to: new Date(2024, 6, 20),
       };
 
-      render(<DateRangePicker value={value} onChange={vi.fn()} />);
+      render(<DateRangePicker value={value} onChange={vi.fn()} />, { withProviders: false });
 
       // Open the calendar
       await user.click(screen.getByRole('button'));
@@ -593,7 +625,7 @@ describe('DateRangePicker', () => {
     it('does not show clear button when no selection', async () => {
       const user = userEvent.setup();
 
-      render(<DateRangePicker value={undefined} onChange={vi.fn()} />);
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, { withProviders: false });
 
       // Open the calendar
       await user.click(screen.getByRole('button'));
@@ -613,7 +645,7 @@ describe('DateRangePicker', () => {
         to: new Date(2024, 6, 20),
       };
 
-      render(<DateRangePicker value={value} onChange={onChange} />);
+      render(<DateRangePicker value={value} onChange={onChange} />, { withProviders: false });
 
       // Open the calendar
       await user.click(screen.getByRole('button'));
@@ -636,7 +668,7 @@ describe('DateRangePicker', () => {
         to: undefined,
       };
 
-      render(<DateRangePicker value={value} onChange={vi.fn()} />);
+      render(<DateRangePicker value={value} onChange={vi.fn()} />, { withProviders: false });
 
       // Open the calendar
       await user.click(screen.getByRole('button'));

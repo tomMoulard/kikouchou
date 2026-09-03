@@ -11,6 +11,15 @@ import { LoadingState } from '@/components/shared/LoadingState';
 // Tests
 // ============================================================================
 
+/**
+ * The visible label span, picked by what marks it out rather than by DOM
+ * position: `getAllByText(...)[1]` also matches the sr-only span, so reordering
+ * the two would redden these tests for the wrong reason.
+ */
+function visibleLabel(container: HTMLElement): Element | null {
+  return container.querySelector('span[aria-hidden="true"]');
+}
+
 describe('LoadingState', () => {
   // ------------------------------------------------------------------
   // Inline variant (default)
@@ -87,14 +96,14 @@ describe('LoadingState', () => {
       });
 
       expect(container.querySelector('svg')).toHaveClass('size-4');
-      expect(screen.getAllByText('common.loading')[1]).toHaveClass('text-xs');
+      expect(visibleLabel(container)).toHaveClass('text-xs');
     });
 
     it('renders a 24px spinner by default', () => {
       const { container } = render(<LoadingState showLabel />, { withProviders: false });
 
       expect(container.querySelector('svg')).toHaveClass('size-6');
-      expect(screen.getAllByText('common.loading')[1]).toHaveClass('text-sm');
+      expect(visibleLabel(container)).toHaveClass('text-sm');
     });
 
     it('renders a 32px spinner at size="lg"', () => {
@@ -103,7 +112,7 @@ describe('LoadingState', () => {
       });
 
       expect(container.querySelector('svg')).toHaveClass('size-8');
-      expect(screen.getAllByText('common.loading')[1]).toHaveClass('text-base');
+      expect(visibleLabel(container)).toHaveClass('text-base');
     });
   });
 

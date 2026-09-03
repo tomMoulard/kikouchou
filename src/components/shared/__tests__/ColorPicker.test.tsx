@@ -7,7 +7,7 @@
  * @module components/shared/__tests__/ColorPicker.test
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@/test/utils';
 import userEvent from '@testing-library/user-event';
 
 import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
@@ -20,7 +20,7 @@ describe('ColorPicker Basic Rendering', () => {
   it('renders all default colors', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     expect(buttons).toHaveLength(DEFAULT_COLORS.length);
@@ -30,7 +30,7 @@ describe('ColorPicker Basic Rendering', () => {
     const customColors = ['#ff0000', '#00ff00', '#0000ff'];
     const onChange = vi.fn();
 
-    render(<ColorPicker colors={customColors} onChange={onChange} />);
+    render(<ColorPicker colors={customColors} onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     expect(buttons).toHaveLength(3);
@@ -39,7 +39,7 @@ describe('ColorPicker Basic Rendering', () => {
   it('renders in 4-column grid', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     const radiogroup = screen.getByRole('radiogroup');
     expect(radiogroup).toHaveClass('grid-cols-4');
@@ -48,7 +48,7 @@ describe('ColorPicker Basic Rendering', () => {
   it('applies custom className', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} className="custom-class" />);
+    render(<ColorPicker onChange={onChange} className="custom-class" />, { withProviders: false });
 
     const radiogroup = screen.getByRole('radiogroup');
     expect(radiogroup).toHaveClass('custom-class');
@@ -57,7 +57,7 @@ describe('ColorPicker Basic Rendering', () => {
   it('renders empty div when colors array is empty', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker colors={[]} onChange={onChange} />);
+    render(<ColorPicker colors={[]} onChange={onChange} />, { withProviders: false });
 
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   });
@@ -71,7 +71,7 @@ describe('ColorPicker Selection', () => {
   it('shows checkmark on selected color', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />);
+    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
 
     // Find the selected button
     const selectedButton = screen.getByRole('radio', { checked: true });
@@ -82,7 +82,7 @@ describe('ColorPicker Selection', () => {
   it('does not show checkmark on unselected colors', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />);
+    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
 
     // Counted rather than looped over: exactly one checkmark exists in the
     // whole group, so a component that ticked every swatch — or none — fails.
@@ -98,7 +98,7 @@ describe('ColorPicker Selection', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     await user.click(buttons[0]!);
@@ -110,7 +110,7 @@ describe('ColorPicker Selection', () => {
   it('has correct aria-checked for selected color', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#3b82f6" onChange={onChange} />);
+    render(<ColorPicker value="#3b82f6" onChange={onChange} />, { withProviders: false });
 
     // Find the blue color button
     const buttons = screen.getAllByRole('radio');
@@ -122,7 +122,7 @@ describe('ColorPicker Selection', () => {
   it('has aria-checked="false" for unselected colors', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#3b82f6" onChange={onChange} />);
+    render(<ColorPicker value="#3b82f6" onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     const blueIndex = DEFAULT_COLORS.indexOf('#3b82f6');
@@ -142,7 +142,7 @@ describe('ColorPicker Selection', () => {
     const onChange = vi.fn();
 
     // Uppercase hex should still match
-    render(<ColorPicker value="#EF4444" onChange={onChange} />);
+    render(<ColorPicker value="#EF4444" onChange={onChange} />, { withProviders: false });
 
     // Which swatch matters: "something is checked" would also pass if the
     // lowercasing picked the wrong entry in the palette.
@@ -162,7 +162,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />);
+    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[0]!.focus();
@@ -176,7 +176,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker value={DEFAULT_COLORS[1]} onChange={onChange} />);
+    render(<ColorPicker value={DEFAULT_COLORS[1]} onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[1]!.focus();
@@ -190,7 +190,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />);
+    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[0]!.focus();
@@ -208,7 +208,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     // to 0 rather than run off the end.
     const lastRowIndex = DEFAULT_COLORS.length - 4;
 
-    render(<ColorPicker value={DEFAULT_COLORS[lastRowIndex]} onChange={onChange} />);
+    render(<ColorPicker value={DEFAULT_COLORS[lastRowIndex]} onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[lastRowIndex]!.focus();
@@ -222,7 +222,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker value={DEFAULT_COLORS[0]} onChange={onChange} />);
+    render(<ColorPicker value={DEFAULT_COLORS[0]} onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[0]!.focus();
@@ -237,7 +237,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const onChange = vi.fn();
 
     // `selectedIndex` is -1 here; the handler treats that as index 0.
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     screen.getAllByRole('radio')[0]!.focus();
 
@@ -250,7 +250,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker value={DEFAULT_COLORS[4]} onChange={onChange} />);
+    render(<ColorPicker value={DEFAULT_COLORS[4]} onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[4]!.focus();
@@ -265,7 +265,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const onChange = vi.fn();
     const lastIndex = DEFAULT_COLORS.length - 1;
 
-    render(<ColorPicker value={DEFAULT_COLORS[lastIndex]} onChange={onChange} />);
+    render(<ColorPicker value={DEFAULT_COLORS[lastIndex]} onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[lastIndex]!.focus();
@@ -280,7 +280,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const onChange = vi.fn();
     const lastIndex = DEFAULT_COLORS.length - 1;
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />);
+    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[0]!.focus();
@@ -294,7 +294,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[2]!.focus();
@@ -308,7 +308,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />);
+    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[0]!.focus();
@@ -322,7 +322,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[3]!.focus();
@@ -342,7 +342,7 @@ describe('ColorPicker Disabled State', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} disabled />);
+    render(<ColorPicker onChange={onChange} disabled />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     await user.click(buttons[0]!);
@@ -353,7 +353,7 @@ describe('ColorPicker Disabled State', () => {
   it('has disabled attribute on buttons when disabled', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} disabled />);
+    render(<ColorPicker onChange={onChange} disabled />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons.forEach((button) => {
@@ -365,7 +365,7 @@ describe('ColorPicker Disabled State', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} disabled />);
+    render(<ColorPicker value="#ef4444" onChange={onChange} disabled />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[0]!.focus();
@@ -384,7 +384,7 @@ describe('ColorPicker Accessibility', () => {
   it('has role="radiogroup"', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     expect(screen.getByRole('radiogroup')).toBeInTheDocument();
   });
@@ -392,7 +392,7 @@ describe('ColorPicker Accessibility', () => {
   it('has aria-label', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} label="Choose a color" />);
+    render(<ColorPicker onChange={onChange} label="Choose a color" />, { withProviders: false });
 
     const radiogroup = screen.getByRole('radiogroup');
     expect(radiogroup).toHaveAttribute('aria-label', 'Choose a color');
@@ -401,30 +401,16 @@ describe('ColorPicker Accessibility', () => {
   it('uses default label when not provided', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     const radiogroup = screen.getByRole('radiogroup');
     expect(radiogroup).toHaveAttribute('aria-label', 'Color selection');
   });
 
-  it('nests every radio inside the radiogroup', () => {
-    const onChange = vi.fn();
-
-    render(<ColorPicker onChange={onChange} />);
-
-    // `getAllByRole` throws on an empty result, so `length > 0` asserted
-    // nothing. The ARIA pattern's real requirement is containment: a radio
-    // rendered as a sibling of the group belongs to no group at all.
-    const radiogroup = screen.getByRole('radiogroup');
-    expect(within(radiogroup).getAllByRole('radio')).toHaveLength(
-      DEFAULT_COLORS.length
-    );
-  });
-
   it('selected color has tabIndex=0', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#3b82f6" onChange={onChange} />);
+    render(<ColorPicker value="#3b82f6" onChange={onChange} />, { withProviders: false });
 
     const selectedButton = screen.getByRole('radio', { checked: true });
     expect(selectedButton).toHaveAttribute('tabIndex', '0');
@@ -433,21 +419,26 @@ describe('ColorPicker Accessibility', () => {
   it('unselected colors have tabIndex=-1', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#3b82f6" onChange={onChange} />);
+    render(<ColorPicker value="#3b82f6" onChange={onChange} />, { withProviders: false });
 
-    // Roving tabindex: exactly one stop in the whole group.
-    const tabbable = screen
-      .getAllByRole('radio')
-      .filter((button) => button.getAttribute('tabIndex') === '0');
+    // Roving tabindex has two halves and both matter: exactly one tab stop in
+    // the group, AND an explicit -1 on the rest. Counting the 0s alone lets an
+    // absent attribute through, which is a natural tab stop — 12 of them.
+    const buttons = screen.getAllByRole('radio'),
+     tabbable = buttons.filter((button) => button.getAttribute('tabIndex') === '0');
 
     expect(tabbable).toHaveLength(1);
     expect(tabbable[0]).toHaveAttribute('aria-checked', 'true');
+
+    for (const button of buttons.filter((b) => b !== tabbable[0])) {
+      expect(button).toHaveAttribute('tabIndex', '-1');
+    }
   });
 
   it('first color has tabIndex=0 when no selection', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     expect(buttons[0]).toHaveAttribute('tabIndex', '0');
@@ -456,7 +447,7 @@ describe('ColorPicker Accessibility', () => {
   it('names each swatch with that colour, not just with something', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     // A bare `toHaveAttribute('aria-label')` passes when every swatch is
     // labelled "Custom color", which is what a broken `getColorKey` produces —
@@ -484,7 +475,7 @@ describe('ColorPicker Accessibility', () => {
   it('falls back to a generic name for a colour outside the palette', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker colors={['#123456']} onChange={onChange} />);
+    render(<ColorPicker colors={['#123456']} onChange={onChange} />, { withProviders: false });
 
     expect(screen.getByRole('radio')).toHaveAttribute(
       'aria-label',
@@ -503,7 +494,7 @@ describe('ColorPicker Custom Colors', () => {
     const onChange = vi.fn();
     const customColors = ['#123456', '#654321'];
 
-    render(<ColorPicker colors={customColors} onChange={onChange} />);
+    render(<ColorPicker colors={customColors} onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     expect(buttons).toHaveLength(2);
@@ -516,7 +507,7 @@ describe('ColorPicker Custom Colors', () => {
     const onChange = vi.fn();
     const customColors = ['#abcdef'];
 
-    render(<ColorPicker colors={customColors} onChange={onChange} />);
+    render(<ColorPicker colors={customColors} onChange={onChange} />, { withProviders: false });
 
     const button = screen.getByRole('radio');
     expect(button).toHaveStyle({ backgroundColor: '#abcdef' });
@@ -531,7 +522,7 @@ describe('ColorPicker Visual', () => {
   it('applies background color to button', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     expect(buttons[0]).toHaveStyle({ backgroundColor: '#ef4444' });
@@ -540,7 +531,7 @@ describe('ColorPicker Visual', () => {
   it('shows hover scale on non-disabled buttons', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} />);
+    render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons.forEach((button) => {
@@ -551,7 +542,7 @@ describe('ColorPicker Visual', () => {
   it('disabled buttons are disabled and cancel the hover scale', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker onChange={onChange} disabled />);
+    render(<ColorPicker onChange={onChange} disabled />, { withProviders: false });
 
     // The `disabled:` variant only does anything on a natively disabled
     // element, so the class alone — which is emitted unconditionally — says

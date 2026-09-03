@@ -318,12 +318,17 @@ describe('EmptyState Different Icons', () => {
     expect(container.querySelector('svg')).toHaveClass('lucide-search');
   });
 
-  it('sizes the icon consistently whichever one is passed', () => {
-    const { container } = render(
-      <EmptyState icon={Search} title="No results" description="Try again" />
-    );
+  it('sizes every icon the same, whichever one is passed', () => {
+    // Rendered across all three so a component that special-cased one glyph —
+    // `Icon === Search ? 'size-12' : 'size-10'` — cannot pass.
+    for (const icon of [Users, Package, Search]) {
+      const { container, unmount } = render(
+        <EmptyState icon={icon} title="No results" description="Try again" />
+      );
 
-    expect(container.querySelector('svg')).toHaveClass('size-12');
+      expect(container.querySelector('svg')).toHaveClass('size-12');
+      unmount();
+    }
   });
 });
 
