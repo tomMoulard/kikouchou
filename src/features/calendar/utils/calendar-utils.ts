@@ -6,6 +6,8 @@
  */
 
 import { type Locale, format, isValid, parseISO } from 'date-fns';
+
+import { formatTransportDatetime } from '@/lib/utils/datetime-format';
 import type { HexColor, RoomAssignment } from '@/types';
 import type { CalendarEvent, SegmentPosition } from '../types';
 
@@ -131,21 +133,17 @@ export function getSegmentBorderRadiusClasses(
 // ============================================================================
 
 /**
- * Formats a datetime string to show just the time (HH:mm) in local timezone.
+ * Formats a stored instant to show just the wall-clock time, in the viewer's
+ * local timezone.
+ *
+ * Delegates to the app-wide renderer so a calendar pill shows exactly the time
+ * the transport list, the map popup and the detail dialog show.
  *
  * @param datetime - ISO datetime string (e.g., "2024-01-10T13:00:00.000Z")
  * @returns Time string in HH:mm format (local timezone)
  */
 export function formatTime(datetime: string): string {
-  try {
-    // Parse ISO datetime to Date object (preserves UTC instant)
-    const date = parseISO(datetime);
-    if (Number.isNaN(date.getTime())) return '';
-    // Format in local timezone using date-fns format
-    return format(date, 'HH:mm');
-  } catch {
-    return '';
-  }
+  return formatTransportDatetime(datetime, undefined, 'timeOnly');
 }
 
 /**

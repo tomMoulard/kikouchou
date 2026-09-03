@@ -36,6 +36,7 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 import { TransportIcon } from '@/components/shared/TransportIcon';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
+import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
 import {
   formatActivityDayRange,
@@ -216,9 +217,8 @@ const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }:
           <div className="space-y-3">
             <h3 className="text-sm font-medium">{t('calendar.relatedTravel', 'Travel')}</h3>
             {relatedTransports.map((tr) => {
-              const dt = parseISO(tr.datetime);
-              const formattedDate = format(dt, 'PPP', { locale: dateLocale });
-              const formattedTime = format(dt, 'HH:mm', { locale: dateLocale });
+              const { date: formattedDate, time: formattedTime } =
+                formatTransportDatetimeParts(tr.datetime, dateLocale, 'fullDayAndTime');
               const mode = tr.transportMode ?? 'other';
               const modeLabel = t(`transports.modes.${mode}`);
 
@@ -298,10 +298,12 @@ const TransportDetails = memo(function TransportDetails({ event, dateLocale }: T
   const { t } = useTranslation();
   const { transport, person, driver } = event;
 
-  // Parse and format datetime
-  const datetime = parseISO(transport.datetime);
-  const formattedDate = format(datetime, 'PPP', { locale: dateLocale });
-  const formattedTime = format(datetime, 'HH:mm', { locale: dateLocale });
+  // Render the stored instant the same way every other surface does
+  const { date: formattedDate, time: formattedTime } = formatTransportDatetimeParts(
+    transport.datetime,
+    dateLocale,
+    'fullDayAndTime',
+  );
 
   // Transport mode and number
   const transportMode = transport.transportMode ?? 'other';

@@ -49,6 +49,7 @@ import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
+import { formatTransportDatetime } from '@/lib/utils/datetime-format';
 import { DEFAULT_TIME_WINDOW_MINUTES, groupPickupsByProximity } from '@/features/transports/utils/pickup-utils';
 import type { Person, PersonId, Transport, TransportId } from '@/types';
 
@@ -131,7 +132,9 @@ function formatRelativeTime(
       return t('upcomingPickups.tomorrowAt', { time });
     }
 
-    return format(date, 'EEE d MMM HH:mm', { locale });
+    // Beyond tomorrow a relative distance stops being useful, so fall back to
+    // the same wall-clock rendering every other transport surface uses.
+    return formatTransportDatetime(datetime, locale, 'dayAndTime');
   } catch {
     return t('common.unknown');
   }
@@ -549,8 +552,8 @@ const UpcomingPickups = memo(function UpcomingPickups({
                   <span className="font-medium text-sm">
                     {t('pickups.stationWindow', {
                       station: group.displayStation,
-                      startTime: format(parseISO(group.startTime), 'HH:mm', { locale: dateLocale }),
-                      endTime: format(parseISO(group.endTime), 'HH:mm', { locale: dateLocale }),
+                      startTime: formatTransportDatetime(group.startTime, dateLocale, 'timeOnly'),
+                      endTime: formatTransportDatetime(group.endTime, dateLocale, 'timeOnly'),
                     })}
                   </span>
                   <Badge
