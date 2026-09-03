@@ -61,6 +61,7 @@ import { useTransportContext } from '@/contexts/TransportContext';
 import {
   calculatePeakOccupancy,
   createHeadcountResolver,
+  stayNightsOverlap,
 } from '@/features/rooms/utils/capacity-utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
@@ -762,7 +763,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
   const { persons, isLoading: isPersonsLoading, getPersonById } = usePersonContext();
   const { rooms } = useRoomContext();
   const {
-    getAssignmentsByRoom,
+    assignments: tripAssignments,
     createAssignment,
     updateAssignment,
     deleteAssignment,
@@ -799,11 +800,37 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
   // Get date locale
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
 
-  // Get assignments for this room
+  // Get assignments for this room.
+  //
+  // Filtered from the context's array rather than looked up through
+  // `getAssignmentsByRoom`: that callback is memoised on `[]` and reads a ref,
+  // so a memo keyed on it never recomputes and this expanded list froze at the
+  // moment the room card was opened.
   const assignments = useMemo(
-    () => getAssignmentsByRoom(roomId),
-    [getAssignmentsByRoom, roomId],
+    () => tripAssignments.filter((assignment) => assignment.roomId === roomId),
+    [tripAssignments, roomId],
   );
+
+  // Ids of the room's assignments whose guest is also booked somewhere else on
+  // one of the same nights. The form dialog checks this while you edit; the list
+  // used to hardcode `false`, so a double booking already in the database could
+  // never surface. Back-to-back stays (check out on the 10th, check in on the
+  // 10th) are a room move, not a conflict — hence the nights model.
+  const conflictingAssignmentIds = useMemo(() => {
+    const ids = new Set<RoomAssignmentId>();
+    for (const assignment of assignments) {
+      const clashes = tripAssignments.some(
+        (other) =>
+          other.id !== assignment.id &&
+          other.personId === assignment.personId &&
+          stayNightsOverlap(assignment, other),
+      );
+      if (clashes) {
+        ids.add(assignment.id);
+      }
+    }
+    return ids;
+  }, [assignments, tripAssignments]);
 
   // Get trip date constraints
   const tripDates = useMemo(() => {
@@ -1043,7 +1070,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
               key={assignment.id}
               assignment={assignment}
               person={getPersonById(assignment.personId)}
-              hasConflict={false} // Conflict detection happens in the form dialog during add/edit
+              hasConflict={conflictingAssignmentIds.has(assignment.id)}
               dateLocale={dateLocale}
               isDisabled={isDisabled}
               onEdit={handleEditAssignment}
