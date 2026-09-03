@@ -440,8 +440,14 @@ describe('SettingsPage', () => {
       const user = userEvent.setup();
       render(<SettingsPage />, { withProviders: false });
 
+      // `isDirty` is not internal — it renders the unsaved-changes notice, so
+      // "should reset" is observable rather than a comment. This test used to
+      // click Cancel and assert nothing at all.
+      await user.click(screen.getByTestId('trip-form-dirty'));
+      expect(screen.getByText('settings.unsavedTripChanges')).toBeInTheDocument();
+
       await user.click(screen.getByTestId('trip-form-cancel'));
-      // No crash expected; isDirty should reset
+      expect(screen.queryByText('settings.unsavedTripChanges')).not.toBeInTheDocument();
     });
 
     it('handles delete error gracefully', async () => {
@@ -596,11 +602,13 @@ describe('SettingsPage', () => {
       const { userEvent } = await import('@testing-library/user-event');
       const user = userEvent.setup();
       render(<SettingsPage />, { withProviders: false });
-      // Click the dirty button to trigger onDirtyChange(true)
-      const dirtyBtn = screen.getByTestId('trip-form-dirty');
-      await user.click(dirtyBtn);
-      // The dirty state is internal; just verify no crash
-      expect(dirtyBtn).toBeInTheDocument();
+      expect(screen.queryByText('settings.unsavedTripChanges')).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId('trip-form-dirty'));
+
+      // Asserting the button is still in the document (what this used to do)
+      // cannot see whether the callback did anything.
+      expect(screen.getByText('settings.unsavedTripChanges')).toBeInTheDocument();
     });
 
     it('closes delete confirm dialog via onOpenChange', async () => {
