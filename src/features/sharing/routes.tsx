@@ -17,8 +17,8 @@
  * ```
  */
 
-import { type ReactElement, lazy } from 'react';
-import { Outlet, type RouteObject } from 'react-router-dom';
+import { lazy } from 'react';
+import type { RouteObject } from 'react-router-dom';
 
 import { withSuspense } from '@/components/shared/with-suspense';
 
@@ -94,24 +94,6 @@ const TripSyncPage = lazy(() =>
 // Route Wrapper Components
 // ============================================================================
 
-/**
- * Layout for the whole `/share/:shareId` branch.
- *
- * It renders nothing but an `Outlet`, and that is the point: a parent route
- * that supplies `element` swallows its children unless that element renders
- * one. `ShareImportPage` used to be that element and never did, so every step
- * of the guest onboarding wizard resolved its URL and then rendered the
- * welcome screen instead — four screens that could not appear at all.
- *
- * The welcome screen is now the `index` child rather than the parent, which
- * also keeps its returning-guest redirect off the step URLs: mounted as the
- * parent it would send anyone reloading `/share/:shareId/room` straight to the
- * trip calendar, since the identity step has by then written localStorage.
- */
-function ShareWizardLayout(): ReactElement {
-  return <Outlet />;
-}
-
 // ============================================================================
 // Route Definitions
 // ============================================================================
@@ -143,7 +125,14 @@ function ShareWizardLayout(): ReactElement {
 export const sharingRoutes: RouteObject[] = [
   {
     path: 'share/:shareId',
-    element: <ShareWizardLayout />,
+    // Deliberately no `element`: React Router renders the matched child in a
+    // parent that supplies none. `ShareImportPage` used to sit here and
+    // rendered no `<Outlet />`, so every wizard step resolved its URL and then
+    // drew the welcome screen instead — four screens that could not appear at
+    // all. It is the `index` child now, which also keeps its returning-guest
+    // redirect off the step URLs: as the parent it would send anyone reloading
+    // `/share/:shareId/room` to the trip calendar, the identity step having by
+    // then written the localStorage entry that redirect looks for.
     children: [
       {
         index: true,

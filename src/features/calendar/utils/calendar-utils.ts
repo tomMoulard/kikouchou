@@ -7,6 +7,9 @@
 
 import { format, parseISO } from 'date-fns';
 import { type Locale, enUS, fr } from 'date-fns/locale';
+
+import { getContrastTextColor as getSharedContrastTextColor } from '@/lib/utils/color-contrast';
+import type { HexColor } from '@/types';
 import type { CalendarEvent, SegmentPosition } from '../types';
 
 // ============================================================================
@@ -48,10 +51,24 @@ export function getDateLocale(language: string): Locale {
 /**
  * Luminance and the white-or-black text decision live in
  * `@/lib/utils/color-contrast`, shared with `PersonBadge` — which used to carry
- * a second copy that answered differently on the same colour. Re-exported here
- * so calendar code keeps one import for its calendar helpers.
+ * a second copy that answered differently on the same colour.
  */
-export { getContrastTextColor, getLuminance } from '@/lib/utils/color-contrast';
+export { getLuminance } from '@/lib/utils/color-contrast';
+
+/**
+ * Determines the optimal text color (white or black) for a given background.
+ *
+ * Delegates to the shared implementation but keeps the branded `HexColor`
+ * parameter: the shared helper has to take a plain `string` for `PersonBadge`,
+ * whose colour prop is unbranded, and widening the calendar's call sites too
+ * would drop the check that a colour went through `toHexColor` first.
+ *
+ * @param bgColor - Background hex color
+ * @returns 'white' or 'black' for optimal contrast
+ */
+export function getContrastTextColor(bgColor: HexColor): 'white' | 'black' {
+  return getSharedContrastTextColor(bgColor);
+}
 
 // ============================================================================
 // Event Rendering Functions

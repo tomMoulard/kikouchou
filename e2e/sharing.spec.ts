@@ -35,7 +35,12 @@ import { seedPerson, seedTrip, type SeededTrip } from './support/seed';
 function isoDaysFromToday(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  // Read back the *local* fields. `toISOString()` would convert to UTC, which
+  // shifts the date by a day either side of midnight and can turn a 10-day
+  // span into 9 across a DST boundary.
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 /**
