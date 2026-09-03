@@ -240,20 +240,34 @@ describe('Layout', () => {
       expect(screen.queryByTestId('trip-info-section')).not.toBeInTheDocument();
     });
 
-    it('does NOT show trip navigation links (Calendar, Rooms, etc.) in sidebar', () => {
+    it('shows trip navigation links in the sidebar as disabled, not absent', () => {
       renderLayout();
 
       const sidebar = getSidebar();
-      // Trip nav items should not be in the sidebar when no trip is selected
-      // They'll still be in mobile nav but disabled
-      const sidebarContent = sidebar?.textContent || '';
-      
-      // The sidebar should NOT contain these trip-specific items
-      expect(sidebarContent).not.toContain('nav.calendar');
-      expect(sidebarContent).not.toContain('nav.rooms');
-      expect(sidebarContent).not.toContain('nav.persons');
-      expect(sidebarContent).not.toContain('nav.transports');
-      expect(sidebarContent).not.toContain('nav.tripAnalytics');
+      expect(sidebar).not.toBeNull();
+
+      // These used to be omitted from the DOM entirely with no trip selected,
+      // which meant a keyboard or screen-reader user never learned the app had
+      // a calendar at all — and it made the sidebar disagree with the mobile
+      // bar, which always rendered them disabled. They are rendered now, marked
+      // unavailable, with the reason announced.
+      for (const key of [
+        'nav.calendar',
+        'nav.rooms',
+        'nav.persons',
+        'nav.transports',
+        'nav.tripAnalytics',
+      ]) {
+        const link = within(sidebar as HTMLElement).getByText(key).closest('a');
+        expect(link).toHaveAttribute('aria-disabled', 'true');
+        // Still reachable: removing it from the tab order is what hid it.
+        expect(link).not.toHaveAttribute('tabindex', '-1');
+      }
+
+      // The reason is announced rather than conveyed by dimming alone.
+      expect(within(sidebar as HTMLElement).getAllByText('nav.requiresTrip').length).toBeGreaterThan(
+        0,
+      );
     });
 
     it('shows empty trip placeholder in header', () => {
