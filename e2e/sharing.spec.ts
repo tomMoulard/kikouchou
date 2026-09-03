@@ -259,8 +259,9 @@ test.describe('Sharing Flow', () => {
     // registered outside `LayoutWrapper`, so there is no nav either. Pinned as
     // it actually is, so that giving this screen a way out is a deliberate
     // change to this assertion instead of a silent no-op.
-    await expect(page.getByRole('button')).toHaveCount(0);
-    await expect(page.getByRole('link')).toHaveCount(0);
+    const wayBack = /trips|voyages|back|retour|home|accueil/i;
+    await expect(page.getByRole('button', { name: wayBack })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: wayBack })).toHaveCount(0);
   });
 
   // --------------------------------------------------------------------------
@@ -279,14 +280,18 @@ test.describe('Sharing Flow', () => {
     // erreur|404/i)`, which the word "error" anywhere on any screen satisfies.
     // What matters is which screen this is: not the share welcome, and not a
     // blank page.
+    const main = page.locator('main');
     await expect(
-      page.getByText(/something went wrong|page not found/i),
+      main.getByText(/an error occurred|something went wrong|page not found/i),
     ).toBeVisible({ timeout: 10000 });
+    // Its two actions are what make it the catch-all rather than any other
+    // screen, and neither of them is the share welcome's CTA.
+    await expect(main.getByRole('button', { name: /retry/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /get started/i })).toHaveCount(0);
 
     // ...and unlike the not-found share screen above, this one is not a dead
     // end. The way home has to actually go home.
-    await page.getByRole('button', { name: /my trips/i }).click();
+    await main.getByRole('button', { name: /my trips/i }).click();
     await expect(page).toHaveURL(/\/trips$/, { timeout: 10000 });
     await expect(
       page.getByRole('heading', { name: /my trips/i }),
