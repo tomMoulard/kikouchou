@@ -145,35 +145,38 @@ function formatRelativeTime(
   }
 }
 
-/** Pickup card + badge classes for one urgency level. */
-const WARNING_BADGE = statusVariants({ tone: 'warning', emphasis: 'soft' });
-
 /**
  * Urgency treatments, warning-toned except when the pickup is already overdue.
  *
- * The four levels differ only in how strongly the warning surface is laid over
- * the page, which is why they can share one token: the theme decides the hue
- * (and its dark-mode counterpart), the alpha decides the urgency.
+ * The rungs have to be legible *as* rungs — "due today" and "due next week"
+ * carry different actions — so they step through fill AND border rather than
+ * through alpha alone. `--warning-surface` sits about a percent of lightness
+ * off the page behind it, so 80%/60%/40% of it is not a ladder anybody can
+ * see; a filled card with a strong border, a filled card with a hairline, and
+ * an unfilled outline are three steps you can tell apart at a glance.
+ *
+ * Every value here is cva output, so the theme still owns the hue and its
+ * dark-mode counterpart.
  */
 const URGENCY = {
   overdue: {
-    card: cn(statusVariants({ tone: 'danger', emphasis: 'surface' }), 'bg-destructive-surface/60'),
-    badge: statusVariants({ tone: 'danger', emphasis: 'soft' }),
+    card: cn(statusVariants({ tone: 'danger', emphasis: 'surface' }), 'border-destructive'),
+    badge: cn(statusVariants({ tone: 'danger', emphasis: 'soft' }), 'border-destructive'),
     isOverdue: true,
   },
   today: {
-    card: cn(statusVariants({ tone: 'warning', emphasis: 'surface' }), 'border-warning bg-warning-surface/80'),
-    badge: WARNING_BADGE,
+    card: cn(statusVariants({ tone: 'warning', emphasis: 'surface' }), 'border-warning'),
+    badge: cn(statusVariants({ tone: 'warning', emphasis: 'soft' }), 'border-warning'),
     isOverdue: false,
   },
   tomorrow: {
-    card: cn(statusVariants({ tone: 'warning', emphasis: 'surface' }), 'bg-warning-surface/60'),
-    badge: WARNING_BADGE,
+    card: statusVariants({ tone: 'warning', emphasis: 'surface' }),
+    badge: statusVariants({ tone: 'warning', emphasis: 'soft' }),
     isOverdue: false,
   },
   later: {
-    card: cn(statusVariants({ tone: 'warning', emphasis: 'surface' }), 'bg-warning-surface/40'),
-    badge: WARNING_BADGE,
+    card: statusVariants({ tone: 'warning', emphasis: 'outline' }),
+    badge: statusVariants({ tone: 'warning', emphasis: 'outline' }),
     isOverdue: false,
   },
 } as const;
@@ -181,15 +184,14 @@ const URGENCY = {
 /**
  * Returns urgency-based classes for a pickup based on its datetime.
  */
-function getUrgencyClasses(datetime: string): {
-  card: string;
-  badge: string;
-  isOverdue: boolean;
-} {
+function getUrgencyClasses(
+  datetime: string,
+): (typeof URGENCY)[keyof typeof URGENCY] {
   try {
     const date = parseISO(datetime);
     if (isNaN(date.getTime())) {
-      return URGENCY.tomorrow;
+      // A date we cannot read is a thing to look at, not a thing to soften.
+      return URGENCY.today;
     }
 
     const now = new Date();
@@ -208,7 +210,7 @@ function getUrgencyClasses(datetime: string): {
 
     return URGENCY.later;
   } catch {
-    return URGENCY.tomorrow;
+    return URGENCY.today;
   }
 }
 

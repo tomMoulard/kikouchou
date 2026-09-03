@@ -36,13 +36,22 @@ describe('statusVariants', () => {
     }
   });
 
-  it('paints a solid fill with the matching on-fill foreground', () => {
+  it('paints a solid fill with the matching on-fill foreground and its own hover', () => {
     expect(statusVariants({ tone: 'warning', emphasis: 'solid' })).toBe(
-      'bg-warning text-warning-foreground',
+      'bg-warning text-warning-foreground hover:bg-warning/90',
     );
     expect(statusVariants({ tone: 'danger', emphasis: 'solid' })).toBe(
-      'bg-destructive text-destructive-foreground',
+      'bg-destructive text-destructive-foreground hover:bg-destructive/90',
     );
+  });
+
+  it('carries a hover on every solid tone, so no call site hand-writes one', () => {
+    for (const tone of STATUS_TONES) {
+      expect(
+        statusVariants({ tone, emphasis: 'solid' }),
+        `${tone}/solid has no hover`,
+      ).toMatch(/hover:bg-/);
+    }
   });
 
   it('gives soft a text colour and surface none, so containers do not tint children', () => {

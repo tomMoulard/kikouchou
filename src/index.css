@@ -109,7 +109,7 @@
   --warning-surface: oklch(0.975 0.025 90);
   --warning-on-surface: oklch(0.45 0.11 55);
   --warning-border: oklch(0.9 0.1 88);
-  --departure: oklch(0.575 0.185 42);
+  --departure: oklch(0.55 0.185 42);
   --departure-foreground: oklch(0.99 0.01 60);
   --departure-surface: oklch(0.97 0.025 70);
   --departure-on-surface: oklch(0.5 0.16 42);

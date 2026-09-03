@@ -516,7 +516,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
                   className={cn(
                     'h-12 flex-1 text-base font-medium',
                     transportType === 'arrival'
-                      ? cn(statusVariants({ tone: 'warning', emphasis: 'solid' }), 'hover:bg-warning/90')
+                      ? statusVariants({ tone: 'warning', emphasis: 'solid' })
                       : 'border border-warning-border bg-card text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface',
                   )}
                 >
@@ -529,7 +529,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
                   className={cn(
                     'h-12 flex-1 text-base font-medium',
                     transportType === 'departure'
-                      ? cn(statusVariants({ tone: 'warning', emphasis: 'solid' }), 'hover:bg-warning/90')
+                      ? statusVariants({ tone: 'warning', emphasis: 'solid' })
                       : 'border border-warning-border bg-card text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface',
                   )}
                 >
@@ -644,7 +644,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
             type="button"
             onClick={() => { void handleSubmit(); }}
             disabled={isSubmitting}
-            className={cn('h-12 w-full text-base font-semibold hover:bg-warning/90', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
+            className={cn('h-12 w-full text-base font-semibold', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
             aria-describedby={errors.submit ? 'submit-error' : undefined}
           >
             {isSubmitting ? (
@@ -665,7 +665,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
             variant="outline"
             onClick={handleNavigateToSummary}
             disabled={isSubmitting}
-            className="h-12 w-full border-warning-border text-base font-semibold text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface"
+            className="h-12 w-full border-warning-border text-base font-semibold text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface dark:border-warning-border dark:bg-transparent dark:hover:bg-warning-surface dark:hover:text-warning-on-surface"
           >
             {hasEnteredTransports
               ? t('sharing.transportDone', 'Done')
@@ -678,7 +678,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
             variant="ghost"
             onClick={handleNavigateToSummary}
             disabled={isSubmitting}
-            className="h-12 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface"
+            className="h-12 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface dark:hover:bg-warning-surface dark:hover:text-warning-on-surface"
           >
             {t('sharing.transportSkip', 'Skip for now')}
           </Button>
