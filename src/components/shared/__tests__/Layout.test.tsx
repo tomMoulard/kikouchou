@@ -191,11 +191,20 @@ describe('Layout', () => {
       expect(skipLink).toHaveAttribute('href', '#main-content');
     });
 
-    it('renders main content area with correct id', () => {
-      renderLayout();
+    it('points the skip link at a focusable <main>', () => {
+      renderLayout(<div>Page Content</div>);
 
-      const main = document.getElementById('main-content');
-      expect(main).toBeInTheDocument();
+      // "An element with that id exists" was the whole assertion, and it holds
+      // for a stray <div id="main-content"> anywhere on the page. The skip
+      // link only works if its target is the landmark *and* is focusable —
+      // a plain <main> is not a tab stop, hence tabIndex={-1}.
+      const main = screen.getByRole('main');
+      expect(main).toHaveAttribute('id', 'main-content');
+      expect(main).toHaveAttribute('tabindex', '-1');
+      expect(main).toHaveTextContent('Page Content');
+
+      const skipHref = screen.getByText('nav.skipToMain').getAttribute('href');
+      expect(document.querySelector(skipHref as string)).toBe(main);
     });
   });
 
@@ -529,11 +538,23 @@ describe('Layout', () => {
       expect(disabledLinks).toHaveLength(3);
     });
 
-    it('collapse button has appropriate aria-label', () => {
+    it('collapse button carries the same name in its tooltip and its label', async () => {
+      const user = userEvent.setup();
       renderLayout();
 
-      const button = screen.getByRole('button', { name: /collapse|expand/i });
-      expect(button).toHaveAttribute('aria-label');
+      // `toHaveAttribute('aria-label')` with no value was circular: the query
+      // above had already matched *by* that attribute. What is worth pinning
+      // is that the visual tooltip and the accessible name agree, and that
+      // both flip with the state — a mouse user and a screen-reader user must
+      // not be told different things about the same button.
+      const collapse = screen.getByRole('button', { name: 'nav.collapse' });
+      expect(collapse).toHaveAttribute('title', 'nav.collapse');
+
+      await user.click(collapse);
+
+      const expand = screen.getByRole('button', { name: 'nav.expand' });
+      expect(expand).toHaveAttribute('title', 'nav.expand');
+      expect(screen.queryByRole('button', { name: 'nav.collapse' })).not.toBeInTheDocument();
     });
   });
 

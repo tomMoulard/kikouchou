@@ -79,16 +79,31 @@ describe('LoadingState', () => {
   // Size variants
   // ------------------------------------------------------------------
   describe('sizes', () => {
-    it('renders with small size', () => {
-      const { container } = render(<LoadingState size="sm" />, { withProviders: false });
-      const svg = container.querySelector('svg');
-      expect(svg).toBeInTheDocument();
+    // These two used to share one assertion — "an svg exists" — which held
+    // whatever `size` was passed, and would still hold with the prop deleted.
+    it('renders a 16px spinner at size="sm"', () => {
+      const { container } = render(<LoadingState size="sm" showLabel />, {
+        withProviders: false,
+      });
+
+      expect(container.querySelector('svg')).toHaveClass('size-4');
+      expect(screen.getAllByText('common.loading')[1]).toHaveClass('text-xs');
     });
 
-    it('renders with large size', () => {
-      const { container } = render(<LoadingState size="lg" />, { withProviders: false });
-      const svg = container.querySelector('svg');
-      expect(svg).toBeInTheDocument();
+    it('renders a 24px spinner by default', () => {
+      const { container } = render(<LoadingState showLabel />, { withProviders: false });
+
+      expect(container.querySelector('svg')).toHaveClass('size-6');
+      expect(screen.getAllByText('common.loading')[1]).toHaveClass('text-sm');
+    });
+
+    it('renders a 32px spinner at size="lg"', () => {
+      const { container } = render(<LoadingState size="lg" showLabel />, {
+        withProviders: false,
+      });
+
+      expect(container.querySelector('svg')).toHaveClass('size-8');
+      expect(screen.getAllByText('common.loading')[1]).toHaveClass('text-base');
     });
   });
 

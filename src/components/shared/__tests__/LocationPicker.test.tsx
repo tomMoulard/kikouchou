@@ -239,7 +239,36 @@ describe('LocationPicker', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toBeInTheDocument();
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'locationPicker.searchError'
+        );
+      });
+
+      // A failed search must not leave a stale dropdown open over the input.
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    it('reports a timed-out search differently from a failed one', async () => {
+      // `searchPlaces` maps an AbortError raised by its own 10s timer — the
+      // caller's signal is untouched — to `kind: 'timeout'`.
+      const abortError = new Error('The operation was aborted.');
+      abortError.name = 'AbortError';
+      fetchMock.mockRejectedValueOnce(abortError);
+
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LocationPicker value="" onChange={mockOnChange} />);
+
+      await user.type(screen.getByRole('combobox'), 'Paris');
+
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+        await Promise.resolve();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'locationPicker.timeoutError'
+        );
       });
     });
   });
@@ -525,7 +554,7 @@ describe('LocationPicker', () => {
       expect(input).toHaveValue('New York');
     });
 
-    it('cancels pending requests on unmount', async () => {
+    it('never issues a search when unmounted before the debounce elapses', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       const { unmount } = render(
         <LocationPicker value="" onChange={mockOnChange} />
@@ -539,8 +568,41 @@ describe('LocationPicker', () => {
 
       await act(() => { vi.advanceTimersByTime(350); });
 
-      // Should not throw or cause issues
-      expect(true).toBe(true);
+      // The cleanup clears the debounce timer. Without it the timer still
+      // fires and Nominatim is queried on behalf of a component nobody can
+      // see — the request the user walked away from.
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('aborts an in-flight request on unmount', async () => {
+      // Capture the signal handed to fetch and never settle, so the request is
+      // genuinely in flight when the component goes away.
+      let requestSignal: AbortSignal | undefined;
+      fetchMock.mockImplementation((_url: unknown, init?: RequestInit) => {
+        requestSignal = init?.signal ?? undefined;
+        return new Promise(() => {});
+      });
+
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const { unmount } = render(
+        <LocationPicker value="" onChange={mockOnChange} />
+      );
+
+      await user.type(screen.getByRole('combobox'), 'Paris');
+      await act(() => { vi.advanceTimersByTime(350); });
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      });
+      expect(requestSignal).toBeInstanceOf(AbortSignal);
+      expect(requestSignal?.aborted).toBe(false);
+
+      unmount();
+
+      // Drop `abortControllerRef.current?.abort()` from the cleanup and this
+      // stays false: the socket stays open and the response lands on a
+      // component that no longer exists.
+      expect(requestSignal?.aborted).toBe(true);
     });
 
     it('hides clear button when disabled', () => {

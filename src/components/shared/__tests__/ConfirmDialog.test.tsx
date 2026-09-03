@@ -17,10 +17,31 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 // ============================================================================
 
 /**
- * Creates a delay promise for testing async behavior.
+ * A confirm handler whose promise the test finishes by hand.
+ *
+ * The suite used to hand `onConfirm` a `setTimeout(…, 100)` and then assert
+ * "during loading" against the wall clock. On a loaded machine the 100 ms
+ * elapsed before the assertion ran, so the loading tests failed intermittently
+ * — and, worse, a passing run proved only that the assertion won a race.
+ * Nothing here resolves until {@link PendingConfirm.finish} is called.
  */
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+interface PendingConfirm {
+  /** The mock to pass as `onConfirm`. */
+  readonly onConfirm: ReturnType<typeof vi.fn>;
+  /** Resolves the in-flight confirm. */
+  readonly finish: () => void;
+}
+
+function pendingConfirm(): PendingConfirm {
+  let release: () => void = () => undefined;
+  const onConfirm = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      })
+  );
+
+  return { onConfirm, finish: () => { release(); } };
 }
 
 // ============================================================================
@@ -257,7 +278,7 @@ describe('ConfirmDialog Loading State', () => {
   it('shows loading spinner during async confirm', async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(100));
+    const { onConfirm, finish } = pendingConfirm();
 
     render(
       <ConfirmDialog
@@ -273,14 +294,22 @@ describe('ConfirmDialog Loading State', () => {
     await user.click(screen.getByRole('button', { name: 'Confirm' }));
 
     // Loading spinner should be visible (uses motion-safe:animate-spin for NFR12 compliance)
-    const spinner = document.querySelector('.motion-safe\\:animate-spin');
-    expect(spinner).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.querySelector('.motion-safe\\:animate-spin')).toBeInTheDocument();
+    });
+
+    // …and gone again once the work finishes, which is what makes its earlier
+    // presence mean something rather than being a snapshot of a slow machine.
+    finish();
+    await waitFor(() => {
+      expect(document.querySelector('.motion-safe\\:animate-spin')).not.toBeInTheDocument();
+    });
   });
 
   it('disables buttons during loading', async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(100));
+    const { onConfirm } = pendingConfirm();
 
     render(
       <ConfirmDialog
@@ -306,7 +335,7 @@ describe('ConfirmDialog Loading State', () => {
   it('prevents close during loading', async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(100));
+    const { onConfirm } = pendingConfirm();
 
     render(
       <ConfirmDialog
@@ -320,8 +349,11 @@ describe('ConfirmDialog Loading State', () => {
       />
     );
 
-    // Start loading
+    // Start loading, and wait until it has actually begun.
     await user.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    });
 
     // Try to cancel during loading
     const cancelButton = screen.getByRole('button', { name: 'Cancel' });
@@ -329,12 +361,13 @@ describe('ConfirmDialog Loading State', () => {
 
     // Should not have called onOpenChange with false (cancel blocked during loading)
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
   });
 
   it('prevents double-click during loading', async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(50));
+    const { onConfirm } = pendingConfirm();
 
     render(
       <ConfirmDialog
@@ -359,7 +392,9 @@ describe('ConfirmDialog Loading State', () => {
 
   it('resets loading state when dialog closes externally', async () => {
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(100));
+    // Never settles, so the loading state cannot clear on its own and the
+    // reset effect is the only thing that can lift it.
+    const onConfirm = vi.fn().mockImplementation(() => new Promise<void>(() => {}));
 
     const { rerender } = render(
       <ConfirmDialog
@@ -371,6 +406,14 @@ describe('ConfirmDialog Loading State', () => {
         confirmLabel="Confirm"
       />
     );
+
+    // Actually enter the loading state first. Without this the button was
+    // never disabled to begin with, so the assertion below held with the
+    // reset effect deleted outright.
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled();
+    });
 
     // Close dialog externally
     rerender(
@@ -398,6 +441,7 @@ describe('ConfirmDialog Loading State', () => {
 
     // Confirm button should not be disabled (loading was reset)
     expect(screen.getByRole('button', { name: 'Confirm' })).not.toBeDisabled();
+    expect(document.querySelector('.motion-safe\\:animate-spin')).not.toBeInTheDocument();
   });
 });
 
@@ -422,7 +466,9 @@ describe('ConfirmDialog Variants', () => {
     );
 
     const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-    // Default variant should not have destructive class
+    // Both halves: the absence check alone also passes for a button that
+    // rendered with no variant classes at all.
+    expect(confirmButton).toHaveClass('bg-primary');
     expect(confirmButton).not.toHaveClass('bg-destructive');
   });
 
@@ -445,6 +491,7 @@ describe('ConfirmDialog Variants', () => {
     const confirmButton = screen.getByRole('button', { name: 'Delete' });
     // Destructive variant should have destructive styling
     expect(confirmButton).toHaveClass('bg-destructive');
+    expect(confirmButton).not.toHaveClass('bg-primary');
   });
 });
 
@@ -514,7 +561,7 @@ describe('ConfirmDialog Accessibility', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
   });
 
-  it('has accessible title', () => {
+  it('references the rendered title and description by id', () => {
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn();
 
@@ -523,36 +570,29 @@ describe('ConfirmDialog Accessibility', () => {
         open={true}
         onOpenChange={onOpenChange}
         title="Confirm Action"
-        description="Are you sure?"
-        onConfirm={onConfirm}
-      />
-    );
-
-    // DialogTitle should be present
-    expect(screen.getByText('Confirm Action')).toBeInTheDocument();
-  });
-
-  it('has accessible description', () => {
-    const onOpenChange = vi.fn();
-    const onConfirm = vi.fn();
-
-    render(
-      <ConfirmDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        title="Test"
         description="This action is permanent"
         onConfirm={onConfirm}
       />
     );
 
-    expect(screen.getByText('This action is permanent')).toBeInTheDocument();
+    // `getByText(...)` alone said only that the strings reached the DOM
+    // somewhere. What matters is that they are the *referenced* nodes: a title
+    // rendered outside `AlertDialogTitle` still displays, and still leaves the
+    // dialog unnamed for a screen reader.
+    const dialog = screen.getByRole('alertdialog'),
+     titleEl = screen.getByText('Confirm Action'),
+     descriptionEl = screen.getByText('This action is permanent');
+
+    expect(titleEl.id).not.toBe('');
+    expect(descriptionEl.id).not.toBe('');
+    expect(dialog).toHaveAttribute('aria-labelledby', titleEl.id);
+    expect(dialog).toHaveAttribute('aria-describedby', descriptionEl.id);
   });
 
   it('loading spinner has aria-hidden', async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(() => delay(100));
+    const { onConfirm } = pendingConfirm();
 
     render(
       <ConfirmDialog
@@ -567,8 +607,14 @@ describe('ConfirmDialog Accessibility', () => {
 
     await user.click(screen.getByRole('button', { name: 'Confirm' }));
 
-    const spinner = document.querySelector('.motion-safe\\:animate-spin');
-    expect(spinner).toHaveAttribute('aria-hidden', 'true');
+    await waitFor(() => {
+      expect(
+        document.querySelector('.motion-safe\\:animate-spin')
+      ).toHaveAttribute('aria-hidden', 'true');
+    });
+    // The label stays in the accessible name while the spinner is hidden, so
+    // the button does not go anonymous mid-flight.
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
   });
 });
 

@@ -7,7 +7,7 @@
  * @module components/shared/__tests__/ColorPicker.test
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
@@ -84,12 +84,14 @@ describe('ColorPicker Selection', () => {
 
     render(<ColorPicker value="#ef4444" onChange={onChange} />);
 
-    // Get all unselected buttons
-    const unselectedButtons = screen.getAllByRole('radio', { checked: false });
-    unselectedButtons.forEach((button) => {
-      const checkIcon = button.querySelector('svg');
-      expect(checkIcon).not.toBeInTheDocument();
-    });
+    // Counted rather than looped over: exactly one checkmark exists in the
+    // whole group, so a component that ticked every swatch — or none — fails.
+    const withCheck = screen
+      .getAllByRole('radio')
+      .filter((button) => button.querySelector('svg') !== null);
+
+    expect(withCheck).toHaveLength(1);
+    expect(withCheck[0]).toHaveAttribute('aria-checked', 'true');
   });
 
   it('calls onChange when color clicked', async () => {
@@ -124,12 +126,16 @@ describe('ColorPicker Selection', () => {
 
     const buttons = screen.getAllByRole('radio');
     const blueIndex = DEFAULT_COLORS.indexOf('#3b82f6');
-    
-    buttons.forEach((button, index) => {
-      if (index !== blueIndex) {
-        expect(button).toHaveAttribute('aria-checked', 'false');
-      }
-    });
+
+    // A guarded `expect` inside a loop asserts nothing when the guard never
+    // opens; the counts pin down that exactly one swatch is checked and every
+    // other one carries an explicit `false` rather than no attribute at all.
+    const checked = buttons.filter((b) => b.getAttribute('aria-checked') === 'true');
+    const unchecked = buttons.filter((b) => b.getAttribute('aria-checked') === 'false');
+
+    expect(checked).toHaveLength(1);
+    expect(unchecked).toHaveLength(DEFAULT_COLORS.length - 1);
+    expect(checked[0]).toBe(buttons[blueIndex]);
   });
 
   it('handles case-insensitive color matching', () => {
@@ -138,8 +144,12 @@ describe('ColorPicker Selection', () => {
     // Uppercase hex should still match
     render(<ColorPicker value="#EF4444" onChange={onChange} />);
 
+    // Which swatch matters: "something is checked" would also pass if the
+    // lowercasing picked the wrong entry in the palette.
+    const buttons = screen.getAllByRole('radio');
     const selectedButton = screen.getByRole('radio', { checked: true });
-    expect(selectedButton).toBeInTheDocument();
+
+    expect(buttons.indexOf(selectedButton)).toBe(DEFAULT_COLORS.indexOf('#ef4444'));
   });
 });
 
@@ -189,6 +199,51 @@ describe('ColorPicker Keyboard Navigation', () => {
 
     // Grid is 4 columns, so down should go to index 4
     expect(onChange).toHaveBeenCalledWith(DEFAULT_COLORS[4]);
+  });
+
+  it('wraps ArrowDown past the last row back to the top', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    // 12 colours in a 4-wide grid: index 8 is the last row, and +4 must wrap
+    // to 0 rather than run off the end.
+    const lastRowIndex = DEFAULT_COLORS.length - 4;
+
+    render(<ColorPicker value={DEFAULT_COLORS[lastRowIndex]} onChange={onChange} />);
+
+    const buttons = screen.getAllByRole('radio');
+    buttons[lastRowIndex]!.focus();
+
+    await user.keyboard('{ArrowDown}');
+
+    expect(onChange).toHaveBeenCalledWith(DEFAULT_COLORS[0]);
+  });
+
+  it('wraps ArrowUp from the first row round to the last', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+
+    render(<ColorPicker value={DEFAULT_COLORS[0]} onChange={onChange} />);
+
+    const buttons = screen.getAllByRole('radio');
+    buttons[0]!.focus();
+
+    await user.keyboard('{ArrowUp}');
+
+    expect(onChange).toHaveBeenCalledWith(DEFAULT_COLORS[DEFAULT_COLORS.length - 4]);
+  });
+
+  it('starts navigation at the first colour when nothing is selected', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+
+    // `selectedIndex` is -1 here; the handler treats that as index 0.
+    render(<ColorPicker onChange={onChange} />);
+
+    screen.getAllByRole('radio')[0]!.focus();
+
+    await user.keyboard('{ArrowRight}');
+
+    expect(onChange).toHaveBeenCalledWith(DEFAULT_COLORS[1]);
   });
 
   it('moves focus up with ArrowUp', async () => {
@@ -352,13 +407,18 @@ describe('ColorPicker Accessibility', () => {
     expect(radiogroup).toHaveAttribute('aria-label', 'Color selection');
   });
 
-  it('each color button has role="radio"', () => {
+  it('nests every radio inside the radiogroup', () => {
     const onChange = vi.fn();
 
     render(<ColorPicker onChange={onChange} />);
 
-    const buttons = screen.getAllByRole('radio');
-    expect(buttons.length).toBeGreaterThan(0);
+    // `getAllByRole` throws on an empty result, so `length > 0` asserted
+    // nothing. The ARIA pattern's real requirement is containment: a radio
+    // rendered as a sibling of the group belongs to no group at all.
+    const radiogroup = screen.getByRole('radiogroup');
+    expect(within(radiogroup).getAllByRole('radio')).toHaveLength(
+      DEFAULT_COLORS.length
+    );
   });
 
   it('selected color has tabIndex=0', () => {
@@ -375,10 +435,13 @@ describe('ColorPicker Accessibility', () => {
 
     render(<ColorPicker value="#3b82f6" onChange={onChange} />);
 
-    const unselectedButtons = screen.getAllByRole('radio', { checked: false });
-    unselectedButtons.forEach((button) => {
-      expect(button).toHaveAttribute('tabIndex', '-1');
-    });
+    // Roving tabindex: exactly one stop in the whole group.
+    const tabbable = screen
+      .getAllByRole('radio')
+      .filter((button) => button.getAttribute('tabIndex') === '0');
+
+    expect(tabbable).toHaveLength(1);
+    expect(tabbable[0]).toHaveAttribute('aria-checked', 'true');
   });
 
   it('first color has tabIndex=0 when no selection', () => {
@@ -390,15 +453,43 @@ describe('ColorPicker Accessibility', () => {
     expect(buttons[0]).toHaveAttribute('tabIndex', '0');
   });
 
-  it('color buttons have aria-label for screen readers', () => {
+  it('names each swatch with that colour, not just with something', () => {
     const onChange = vi.fn();
 
     render(<ColorPicker onChange={onChange} />);
 
-    const buttons = screen.getAllByRole('radio');
-    buttons.forEach((button) => {
-      expect(button).toHaveAttribute('aria-label');
-    });
+    // A bare `toHaveAttribute('aria-label')` passes when every swatch is
+    // labelled "Custom color", which is what a broken `getColorKey` produces —
+    // twelve identically-named radios in one group.
+    const labels = screen
+      .getAllByRole('radio')
+      .map((button) => button.getAttribute('aria-label'));
+
+    expect(labels).toEqual([
+      'colors.red',
+      'colors.orange',
+      'colors.amber',
+      'colors.yellow',
+      'colors.lime',
+      'colors.green',
+      'colors.teal',
+      'colors.cyan',
+      'colors.blue',
+      'colors.indigo',
+      'colors.violet',
+      'colors.pink',
+    ]);
+  });
+
+  it('falls back to a generic name for a colour outside the palette', () => {
+    const onChange = vi.fn();
+
+    render(<ColorPicker colors={['#123456']} onChange={onChange} />);
+
+    expect(screen.getByRole('radio')).toHaveAttribute(
+      'aria-label',
+      'colors.custom'
+    );
   });
 });
 
@@ -457,14 +548,18 @@ describe('ColorPicker Visual', () => {
     });
   });
 
-  it('disabled buttons do not scale on hover', () => {
+  it('disabled buttons are disabled and cancel the hover scale', () => {
     const onChange = vi.fn();
 
     render(<ColorPicker onChange={onChange} disabled />);
 
+    // The `disabled:` variant only does anything on a natively disabled
+    // element, so the class alone — which is emitted unconditionally — says
+    // nothing without the `disabled` half.
     const buttons = screen.getAllByRole('radio');
-    buttons.forEach((button) => {
+    for (const button of buttons) {
+      expect(button).toBeDisabled();
       expect(button).toHaveClass('disabled:hover:scale-100');
-    });
+    }
   });
 });
