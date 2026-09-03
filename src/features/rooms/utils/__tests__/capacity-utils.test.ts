@@ -9,8 +9,12 @@ import { describe, it, expect } from 'vitest';
 import type { ISODateString, PersonId, RoomAssignment, RoomAssignmentId, RoomId, TripId } from '@/types';
 import {
   calculatePeakOccupancy,
+  calculatePeakOccupancyByRoom,
   createHeadcountResolver,
   isDateInStayRange,
+  listStayNights,
+  stayNightsOverlap,
+  summarizeRoomOccupancy,
 } from '../capacity-utils';
 
 /** Every guest stands for exactly one person. */
@@ -190,5 +194,158 @@ describe('occupancy counts people, not assignment rows', () => {
 
     expect(headcountOf('person-1' as PersonId)).toBe(1);
     expect(headcountOf('person-2' as PersonId)).toBe(1);
+  });
+});
+
+// ============================================================================
+// listStayNights
+// ============================================================================
+
+describe('listStayNights', () => {
+  it('lists check-in through the night before check-out', () => {
+    expect(listStayNights('2024-07-15', '2024-07-18')).toEqual([
+      '2024-07-15',
+      '2024-07-16',
+      '2024-07-17',
+    ]);
+  });
+
+  it('returns no nights for a same-day check-in and check-out', () => {
+    expect(listStayNights('2024-07-15', '2024-07-15')).toEqual([]);
+  });
+
+  it('returns no nights for an inverted or empty window', () => {
+    expect(listStayNights('2024-07-16', '2024-07-15')).toEqual([]);
+    expect(listStayNights('', '2024-07-15')).toEqual([]);
+    expect(listStayNights('2024-07-15', '')).toEqual([]);
+  });
+});
+
+// ============================================================================
+// stayNightsOverlap
+// ============================================================================
+
+describe('stayNightsOverlap', () => {
+  it('reports an overlap when two stays share a night', () => {
+    expect(
+      stayNightsOverlap(
+        { startDate: '2024-07-15' as ISODateString, endDate: '2024-07-18' as ISODateString },
+        { startDate: '2024-07-17' as ISODateString, endDate: '2024-07-20' as ISODateString },
+      ),
+    ).toBe(true);
+  });
+
+  it('does not report a room move as a conflict', () => {
+    // Checking out of one room and into another on the same day is one night
+    // in each, not a double booking.
+    expect(
+      stayNightsOverlap(
+        { startDate: '2024-07-15' as ISODateString, endDate: '2024-07-18' as ISODateString },
+        { startDate: '2024-07-18' as ISODateString, endDate: '2024-07-20' as ISODateString },
+      ),
+    ).toBe(false);
+  });
+
+  it('ignores stays that hold no nights at all', () => {
+    expect(
+      stayNightsOverlap(
+        { startDate: '2024-07-18' as ISODateString, endDate: '2024-07-18' as ISODateString },
+        { startDate: '2024-07-15' as ISODateString, endDate: '2024-07-20' as ISODateString },
+      ),
+    ).toBe(false);
+  });
+});
+
+// ============================================================================
+// calculatePeakOccupancyByRoom
+// ============================================================================
+
+describe('calculatePeakOccupancyByRoom', () => {
+  function inRoom(
+    roomId: string,
+    startDate: string,
+    endDate: string,
+    id: string,
+    personId: string,
+  ): RoomAssignment {
+    return { ...makeAssignment(startDate, endDate, id, personId), roomId: roomId as RoomId };
+  }
+
+  it('agrees with calculatePeakOccupancy for every room', () => {
+    const headcountOf = createHeadcountResolver([
+      { id: 'person-1' as PersonId, headcount: 2 },
+      { id: 'person-2' as PersonId, headcount: 1 },
+      { id: 'person-3' as PersonId, headcount: 3 },
+    ]);
+    const assignments = [
+      inRoom('room-a', '2024-07-15', '2024-07-18', 'a1', 'person-1'),
+      inRoom('room-a', '2024-07-16', '2024-07-20', 'a2', 'person-2'),
+      inRoom('room-b', '2024-07-15', '2024-07-20', 'a3', 'person-3'),
+    ];
+
+    const byRoom = calculatePeakOccupancyByRoom(
+      assignments,
+      '2024-07-15',
+      '2024-07-20',
+      headcountOf,
+    );
+
+    for (const roomId of ['room-a', 'room-b'] as RoomId[]) {
+      expect(byRoom.get(roomId)).toBe(
+        calculatePeakOccupancy(
+          assignments.filter((a) => a.roomId === roomId),
+          '2024-07-15',
+          '2024-07-20',
+          headcountOf,
+        ),
+      );
+    }
+    // room-a peaks on the 16th and 17th: a couple plus one.
+    expect(byRoom.get('room-a' as RoomId)).toBe(3);
+    expect(byRoom.get('room-b' as RoomId)).toBe(3);
+  });
+
+  it('omits rooms with no assignment in the window', () => {
+    const assignments = [inRoom('room-a', '2024-07-01', '2024-07-03', 'a1', 'person-1')];
+
+    const byRoom = calculatePeakOccupancyByRoom(
+      assignments,
+      '2024-07-15',
+      '2024-07-20',
+      ONE,
+    );
+
+    expect(byRoom.get('room-a' as RoomId)).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// summarizeRoomOccupancy
+// ============================================================================
+
+describe('summarizeRoomOccupancy', () => {
+  it('reports the spare beds on the busiest night', () => {
+    expect(summarizeRoomOccupancy(3, 2)).toEqual({
+      peakOccupancy: 2,
+      availableSpots: 1,
+      isFull: false,
+      isOverCapacity: false,
+    });
+  });
+
+  it('is full but not over capacity at exactly capacity', () => {
+    expect(summarizeRoomOccupancy(2, 2)).toEqual({
+      peakOccupancy: 2,
+      availableSpots: 0,
+      isFull: true,
+      isOverCapacity: false,
+    });
+  });
+
+  it('never reports negative spare beds when over capacity', () => {
+    const summary = summarizeRoomOccupancy(2, 4);
+    expect(summary.availableSpots).toBe(0);
+    expect(summary.isFull).toBe(true);
+    expect(summary.isOverCapacity).toBe(true);
   });
 });
