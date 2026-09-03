@@ -16,7 +16,6 @@
  */
 
 import {
-  type KeyboardEvent,
   type MouseEvent,
   type ReactElement,
   memo,
@@ -179,19 +178,6 @@ const PersonCard = memo(function PersonCard({
 }: PersonCardProps): ReactElement {
   const { t } = useTranslation(),
 
-  // Handle keyboard activation (Enter or Space)
-   handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (isDisabled) {return;}
-
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        onClick(person.id);
-      }
-    },
-    [person.id, onClick, isDisabled],
-  ),
-
   // Handle click
    handleClick = useCallback(() => {
     if (isDisabled) {return;}
@@ -248,19 +234,38 @@ const PersonCard = memo(function PersonCard({
 
   return (
     <Card
-      role="button"
-      tabIndex={isDisabled ? -1 : 0}
-      aria-label={ariaLabel}
-      aria-disabled={isDisabled}
       onClick={handleClick}
-      onKeyDown={handleKeyDown}
       className={cn(
-        'cursor-pointer transition-all duration-200',
+        'relative cursor-pointer transition-all duration-200',
         'hover:shadow-md hover:border-primary/20',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         isDisabled && 'opacity-50 cursor-not-allowed',
       )}
     >
+      {/*
+        The card's activation target, as a real button covering the card.
+
+        A card carrying `role="button"` cannot legally contain the delete
+        button below it — `nested-interactive`: a button's children are
+        presentational, so the delete control simply vanished from the
+        accessibility tree. As an overlaid sibling this keeps the whole-card
+        hit area and focus ring while leaving the delete button reachable.
+
+        No click handler of its own: its click — including the synthetic one a
+        keyboard Enter/Space produces — bubbles to the card's `onClick`, which
+        is also what a click on the card's text does.
+      */}
+      <button
+        type="button"
+        tabIndex={isDisabled ? -1 : 0}
+        aria-label={ariaLabel}
+        aria-disabled={isDisabled}
+        className={cn(
+          'absolute inset-0 z-10 rounded-xl',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          isDisabled && 'cursor-not-allowed',
+        )}
+      />
+
       <CardHeader className="pb-2">
         <div className="flex items-center gap-3">
           {/* Color indicator */}
@@ -284,8 +289,10 @@ const PersonCard = memo(function PersonCard({
           <Button
             type="button"
             size="icon"
+            // `relative z-20` lifts it above the full-card activation button,
+            // which would otherwise swallow the click.
+            className="relative z-20 ml-auto size-8 text-muted-foreground hover:text-destructive"
             variant="ghost"
-            className="ml-auto size-8 text-muted-foreground hover:text-destructive"
             aria-label={t('common.delete')}
             onClick={handleDeleteClick}
             disabled={isDisabled}

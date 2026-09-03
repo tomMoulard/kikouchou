@@ -451,8 +451,11 @@ describe('TripCard Disabled State', () => {
       />
     );
 
-    const card = screen.getByRole('button', { name: /beach vacation/i });
-    expect(card).toHaveClass('opacity-50');
+    // The dimming lives on the card container, not on the activation button
+    // overlaid on it — the button is transparent, so dimming it would show
+    // nothing. `getByRole('button')` now returns that overlay.
+    const activation = screen.getByRole('button', { name: /beach vacation/i });
+    expect(activation.closest('[data-slot="card"]')).toHaveClass('opacity-50');
   });
 });
 
