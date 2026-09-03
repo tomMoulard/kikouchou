@@ -8,9 +8,8 @@
  * @module features/activities/utils/activity-timeline-utils
  */
 
-import { toISODateString } from '@/lib/db/utils';
 import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
-import { buildTripDayColumns } from '@/lib/utils/trip-days';
+import { buildTripDayColumns, toDayKeys } from '@/lib/utils/trip-days';
 import { ACTIVITY_CATEGORIES } from '@/types';
 import type { Activity, ActivityCategory, ISODateString, Trip } from '@/types';
 
@@ -98,7 +97,9 @@ export function buildActivityTimelineModel(args: {
   const { trip, activities } = args;
 
   const tripDays = buildTripDayColumns(trip);
-  const dayKeys = tripDays.map((day) => toISODateString(day));
+  // Local keys, matching `getActivityStartDayKey` — an activity has to land in
+  // the column whose date the guest reads off their own clock.
+  const dayKeys = toDayKeys(tripDays);
 
   if (dayKeys.length === 0) {
     return {

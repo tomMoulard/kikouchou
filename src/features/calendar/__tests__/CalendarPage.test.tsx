@@ -117,8 +117,11 @@ vi.mock('@/hooks', () => ({
   useOfflineAwareToast: () => ({ successToast: vi.fn() }),
 }));
 
+// Local midnight, exactly what `useToday` returns in production (`startOfDay`).
+// An instant literal would mean a different calendar day on a machine east of
+// UTC than on one west of it, so "today" would move with the runner.
 vi.mock('@/hooks/useToday', () => ({
-  useToday: () => ({ today: new Date('2026-04-04T12:00:00.000Z') }),
+  useToday: () => ({ today: new Date(2026, 3, 4) }),
 }));
 
 vi.mock('@/features/transports', () => ({
@@ -460,6 +463,85 @@ describe('CalendarPage', () => {
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
 
     expect(screen.queryByTestId('day-headcount-2026-04-05')).not.toBeInTheDocument();
+  });
+
+  // ============================================================================
+  // Day-key tests (the grid and the timeline must agree on which day a thing is on)
+  // ============================================================================
+
+  it('keys every month cell by the calendar day it displays', async () => {
+    // A cell's number comes from its Date, its key from a converter. Reading a
+    // local midnight in UTC yields the previous day for any viewer ahead of UTC
+    // — Paris included — so the cell showing "6" was keyed 2026-04-05 while the
+    // headcount and activities on it were keyed locally. Assert the number and
+    // the key name the same day, in whatever timezone the suite runs in.
+    const { user } = renderCalendarPage();
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
+    const allCells = screen.getAllByRole('gridcell');
+    const cells = allCells.filter((cell) =>
+      cell.getAttribute('aria-describedby')?.endsWith('-summary'),
+    );
+
+    // Only cells with an accessibility summary carry their key in the DOM, and
+    // in this fixture that is all of them. Assert the coverage too, so a future
+    // fixture that drops a cell's summary fails here instead of silently
+    // shrinking what this test checks.
+    expect(allCells.length).toBeGreaterThan(0);
+    expect(cells).toHaveLength(allCells.length);
+
+    for (const cell of cells) {
+      const dateKey = cell.getAttribute('aria-describedby')!.replace('-summary', '');
+      const dayNumber = cell.querySelector('span')?.textContent;
+      expect(dayNumber).toBe(String(Number(dateKey.slice(8, 10))));
+    }
+  });
+
+  it('puts a transport in the cell for the day it happens on', async () => {
+    // Transports are bucketed by their own day, then looked up by the cell's
+    // key, so the two conventions have to match. Both fixtures are built the way
+    // `TransportForm` writes: the picker's local datetime through `toISOString`.
+    // The midnight one is the trap — its UTC day is the 5th east of Greenwich
+    // and the 6th west of it, so only reading it back locally puts it on the
+    // day the guest typed, in every timezone the suite may run in.
+    const justAfterMidnight = new Date(2026, 3, 6, 0, 30);
+    const midday = new Date(2026, 3, 6, 12, 0);
+
+    mockUseTransportContext.mockReturnValue({
+      arrivals: [],
+      departures: [
+        {
+          ...mockArrival,
+          id: 'transport-2' as Transport['id'],
+          type: 'departure',
+          datetime: justAfterMidnight.toISOString() as Transport['datetime'],
+          location: 'Gare de Lyon',
+        },
+        {
+          ...mockArrival,
+          id: 'transport-3' as Transport['id'],
+          type: 'departure',
+          datetime: midday.toISOString() as Transport['datetime'],
+          location: 'Gare Montparnasse',
+        },
+      ],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const { user } = renderCalendarPage();
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
+    for (const location of ['Gare de Lyon', 'Gare Montparnasse']) {
+      const cell = screen
+        .getAllByRole('gridcell')
+        .find((c) => c.textContent?.includes(location));
+
+      expect(cell, location).toBeDefined();
+      expect(cell!.querySelector('span')?.textContent).toBe('6');
+      expect(cell!).toHaveAttribute('aria-describedby', '2026-04-06-summary');
+    }
   });
 
   // ============================================================================
