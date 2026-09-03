@@ -302,7 +302,7 @@ export async function createTestRoom(
 // Branded Type Test Helpers
 // ============================================================================
 
-import type { HexColor, ISODateString } from '@/types';
+import type { HexColor, ISODateString, ISODateTimeString } from '@/types';
 
 /**
  * Creates an ISODateString for use in tests.
@@ -337,6 +337,32 @@ export function isoDate(value: string): ISODateString {
  */
 export function hexColor(value: string): HexColor {
   return value as HexColor;
+}
+
+/**
+ * The instant the app stores when a user types a wall-clock date and time.
+ *
+ * `TransportForm` and `ActivityForm` both persist
+ * `new Date(<datetime-local value>).toISOString()`, and a bare
+ * `YYYY-MM-DDTHH:mm` literal is parsed as **local** time — so this reproduces a
+ * stored instant exactly, in whatever zone the suite happens to run in.
+ *
+ * Use it instead of writing a `…Z` literal whenever a test cares which calendar
+ * day a datetime falls on. A hard-coded `2026-04-11T00:30:00.000Z` silently
+ * means a different local day in Paris than in Midway, so such a test either
+ * encodes the machine's offset or stops testing the day boundary at all.
+ *
+ * @param day - Calendar day in `YYYY-MM-DD` form, as the user sees it
+ * @param time - Wall-clock time in `HH:mm` form (defaults to midnight)
+ * @returns The UTC ISO instant that day and time denote locally
+ * @example
+ * ```tsx
+ * // A flight landing just after midnight on the 11th, wherever you run this:
+ * const datetime = localInstant('2026-04-11', '00:30');
+ * ```
+ */
+export function localInstant(day: string, time = '00:00'): ISODateTimeString {
+  return new Date(`${day}T${time}`).toISOString() as ISODateTimeString;
 }
 
 // ============================================================================
