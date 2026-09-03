@@ -31,63 +31,16 @@ const TEST_TRIP_WITH_LOCATION = {
 /**
  * Test coordinates for Paris.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _PARIS_COORDINATES = {
+const PARIS_COORDINATES = {
   lat: 48.8566,
   lon: 2.3522,
 } as const;
 
-/**
- * Creates a test trip and returns its ID.
- *
- * @param page - Playwright page object
- * @param options - Trip options
- * @returns The created trip's ID
- */
-async function createTestTrip(
-  page: Page,
-  options: { name: string; location?: string } = { name: 'Test Trip' }
-): Promise<string> {
-  await page.goto('/trips/new');
-  await page.waitForLoadState('load');
-
-  // Fill trip form
-  await page.locator('#trip-name').fill(options.name);
-
-  if (options.location) {
-    await page.locator('#trip-location').fill(options.location);
-  }
-
-  // Set start date
-  await page.locator('#trip-start-date').click();
-  await page.waitForSelector('[data-slot="calendar"]', { state: 'visible' });
-
-  const calendar = page.locator('[data-slot="calendar"]').first();
-  const dayButton = calendar.locator('button').filter({ hasText: /^15$/ }).first();
-  await dayButton.click();
-
-  // Set end date
-  await page.locator('#trip-end-date').click();
-  await page.waitForSelector('[data-slot="calendar"]', { state: 'visible' });
-
-  const endCalendar = page.locator('[data-slot="calendar"]').first();
-  const endDayButton = endCalendar.locator('button').filter({ hasText: /^22$/ }).first();
-  await endDayButton.click();
-
-  // Submit form
-  await page.getByRole('button', { name: /save|sauvegarder/i }).click();
-
-  // Wait for navigation
-  await page.waitForURL(/\/trips\/[a-zA-Z0-9_-]+\/(calendar)?/, { timeout: 10000 });
-
-  // Extract trip ID
-  const url = page.url();
-  const match = url.match(/\/trips\/([a-zA-Z0-9_-]+)/);
-  const tripId = match?.[1] ?? '';
-
-  expect(tripId).toBeTruthy();
-  return tripId;
-}
+/** Somewhere else entirely, for the trip whose map is expanded. */
+const LONDON_COORDINATES = {
+  lat: 51.5074,
+  lon: -0.1278,
+} as const;
 
 /**
  * Creates a test transport for a trip.
@@ -187,6 +140,82 @@ async function _hasOsmTilesCached(page: Page): Promise<boolean> {
   });
 }
 
+/**
+ * The trip list, scoped so the sidebar's own lists cannot answer for it.
+ */
+function tripCard(page: Page, name: string) {
+  return page
+    .getByRole('list', { name: /my trips/i })
+    .getByRole('listitem')
+    .filter({ hasText: name });
+}
+
+/**
+ * Console errors and uncaught exceptions, collected from *before* whatever
+ * navigation is about to happen.
+ *
+ * Order is the whole point. Two tests here used to attach their listener after
+ * `goto` + `waitForLoadState` and then assert the collection was empty — so
+ * every error emitted while the page loaded, the ones they are named for, fired
+ * before anything was listening and the assertion held by construction.
+ */
+interface CollectedErrors {
+  /** `console.error(...)` calls. */
+  readonly console: string[];
+  /** Uncaught exceptions and unhandled rejections. */
+  readonly uncaught: string[];
+}
+
+/**
+ * Failures that say nothing about the app: a stubbed tile answers with an empty
+ * body on purpose, and the favicon is not part of any contract here.
+ */
+const IGNORABLE_CONSOLE_ERROR =
+  /Failed to load resource|net::ERR_|tile\.openstreetmap\.org|basemaps\.cartocdn\.com|favicon/i;
+
+/**
+ * Presses Enter the way a browser does, including the `keypress` a real key
+ * press produces.
+ *
+ * `page.keyboard.press('Enter')` emits only `keydown` and `keyup` — measured,
+ * by listening on the element — and Leaflet activates a marker's popup from
+ * `keypress` (`Map._onKeyPress`, keyCode 13). So the built-in press cannot
+ * drive the production path at all, and a test using it would report the
+ * feature broken when it is not. CDP's `char` event is the missing half.
+ */
+async function pressEnterWithKeypress(page: Page): Promise<void> {
+  const key = {
+    key: 'Enter',
+    code: 'Enter',
+    windowsVirtualKeyCode: 13,
+    nativeVirtualKeyCode: 13,
+    text: '\r',
+    unmodifiedText: '\r',
+  } as const;
+
+  const client = await page.context().newCDPSession(page);
+  try {
+    await client.send('Input.dispatchKeyEvent', { type: 'keyDown', ...key });
+    await client.send('Input.dispatchKeyEvent', { type: 'char', ...key });
+    await client.send('Input.dispatchKeyEvent', { type: 'keyUp', ...key });
+  } finally {
+    await client.detach();
+  }
+}
+
+function collectErrors(page: Page): CollectedErrors {
+  const collected: CollectedErrors = { console: [], uncaught: [] };
+  page.on('console', (message) => {
+    if (message.type() === 'error' && !IGNORABLE_CONSOLE_ERROR.test(message.text())) {
+      collected.console.push(message.text());
+    }
+  });
+  page.on('pageerror', (error) => {
+    collected.uncaught.push(error.message);
+  });
+  return collected;
+}
+
 // ============================================================================
 // Test Suite: Trip Location Map
 // ============================================================================
@@ -196,6 +225,9 @@ const SEEDED_TRIP_DATES = { startDate: '2026-07-13', endDate: '2026-07-25' } as 
 
 /** Charles de Gaulle, so a seeded transport has somewhere to be on the map. */
 const SEEDED_TRANSPORT_COORDINATES = { lat: 49.0097, lon: 2.5479 } as const;
+
+/** A datetime inside {@link SEEDED_TRIP_DATES}. */
+const SEEDED_TRANSPORT_DATETIME = '2026-07-15T10:00:00.000Z';
 
 test.describe('Trip Location Map', () => {
   test.beforeEach(async ({ page }) => {
@@ -214,57 +246,110 @@ test.describe('Trip Location Map', () => {
     await waitForRoute(page);
   });
 
-  test('trip card shows map preview when location has coordinates', async ({ page }) => {
-    // Create a trip with a known location
-    await createTestTrip(page, {
+  /**
+   * Two trips, one pinned and one not.
+   *
+   * Seeded rather than created through the form, and that is not a shortcut:
+   * `LocationPicker` resolves coordinates by geocoding against Nominatim, which
+   * this suite stubs out with `[]`, so a trip created through the UI here can
+   * never carry coordinates and can never get a preview. That is why the
+   * previous version of this test could only assert
+   * `expect(typeof hasMapElement).toBe('boolean')` — true whether or not a map
+   * had rendered, and true with the whole feature deleted.
+   *
+   * The unpinned trip is the control: without it, "a map is on the page"
+   * would also pass if every card rendered one unconditionally.
+   */
+  test('a trip card renders a map preview only when the trip has coordinates', async ({
+    page,
+  }) => {
+    await seedTrip(page, {
       name: TEST_TRIP_WITH_LOCATION.name,
       location: 'Paris, France',
+      startDate: TEST_TRIP_WITH_LOCATION.startDate,
+      endDate: TEST_TRIP_WITH_LOCATION.endDate,
+      coordinates: PARIS_COORDINATES,
+    });
+    await seedTrip(page, {
+      name: 'Unpinned Trip',
+      location: 'Nowhere In Particular',
+      startDate: TEST_TRIP_WITH_LOCATION.startDate,
+      endDate: TEST_TRIP_WITH_LOCATION.endDate,
     });
 
-    // Navigate to trips list
+    await page.goto('/trips');
+    await page.waitForLoadState('load');
+
+    // The list itself, not `waitForRoute`: this route pulls in Leaflet through
+    // two lazy chunks, and on a loaded machine the dev server takes longer than
+    // that helper's fixed 15 s to serve them.
+    const list = page.getByRole('list', { name: /my trips/i });
+    await expect(list).toBeVisible({ timeout: 30000 });
+
+    const pinned = tripCard(page, TEST_TRIP_WITH_LOCATION.name);
+    const unpinned = tripCard(page, 'Unpinned Trip');
+    await expect(pinned).toHaveCount(1);
+    await expect(unpinned).toHaveCount(1);
+
+    // The preview is a lazy chunk behind a Suspense placeholder, so it arrives
+    // after the card does.
+    await expect(pinned.locator('.leaflet-container')).toBeVisible({ timeout: 15000 });
+    // The marker is a `divIcon`, i.e. plain DOM, so this holds whether or not a
+    // tile ever loads — which matters, since the tiles here are stubbed empty.
+    await expect(pinned.locator('.leaflet-marker-icon')).toHaveCount(1);
+    await expect(
+      pinned.getByRole('button', { name: /view location on map: Paris, France/i }),
+    ).toBeVisible();
+
+    await expect(unpinned.locator('.leaflet-container')).toHaveCount(0);
+  });
+
+  /**
+   * The preview is a button that opens the full map, and the two maps differ:
+   * the thumbnail is `interactive={false}` and the dialog's is not. Leaflet
+   * only makes a keyboard-enabled container focusable, so `tabindex` tells the
+   * two apart and the assertion cannot be satisfied by the thumbnail leaking
+   * into the dialog.
+   */
+  test('the trip card map preview expands into an interactive map dialog', async ({
+    page,
+  }) => {
+    await seedTrip(page, {
+      name: 'Map Test Trip',
+      location: 'London, UK',
+      startDate: TEST_TRIP_WITH_LOCATION.startDate,
+      endDate: TEST_TRIP_WITH_LOCATION.endDate,
+      coordinates: LONDON_COORDINATES,
+    });
+
     await page.goto('/trips');
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    // Find the trip card
-    const tripCard = page.getByRole('button', { name: new RegExp(TEST_TRIP_WITH_LOCATION.name) });
-    await expect(tripCard).toBeVisible();
-
-    // Check if the trip card contains a map element or map-related content
-    // The map preview should be visible within the card
-    const hasMapElement = await page.evaluate(() => {
-      // Look for leaflet container or map-related elements
-      const mapElements = document.querySelectorAll('.leaflet-container, [data-testid="map-preview"]');
-      return mapElements.length > 0;
+    const preview = tripCard(page, 'Map Test Trip').getByRole('button', {
+      name: /view location on map: London, UK/i,
     });
+    await expect(preview).toBeVisible({ timeout: 15000 });
+    await expect(preview).toHaveAttribute('aria-expanded', 'false');
+    await expect(preview.locator('.leaflet-container')).not.toHaveAttribute('tabindex', '0');
 
-    // Map preview may or may not be visible depending on whether coordinates were resolved
-    // This is acceptable as location resolution depends on external API
-    expect(typeof hasMapElement).toBe('boolean');
-  });
+    await preview.click();
 
-  test('trip detail shows location on map when coordinates exist', async ({ page }) => {
-    // Create a trip
-    const tripId = await createTestTrip(page, {
-      name: 'Map Test Trip',
-      location: 'London, UK',
-    });
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText('London, UK')).toBeVisible();
+    await expect(preview).toHaveAttribute('aria-expanded', 'true');
 
-    // Navigate to trip calendar (main trip view)
-    await page.goto(`/trips/${tripId}/calendar`);
-    await page.waitForLoadState('load');
-    await waitForRoute(page);
+    const expandedMap = dialog.locator('.leaflet-container');
+    await expect(expandedMap).toBeVisible();
+    await expect(expandedMap).toHaveAttribute('tabindex', '0');
+    await expect(dialog.locator('.leaflet-marker-icon')).toHaveCount(1);
+    await expect(dialog.locator('.leaflet-control-zoom')).toBeVisible();
 
-    // The trip detail page should be accessible
-    await expect(page.locator('body')).toBeVisible();
-
-    // If there's a "view on map" button or map preview, it should work
-    const viewMapButton = page.getByRole('button', { name: /map|carte/i });
-    if (await viewMapButton.isVisible()) {
-      await viewMapButton.click();
-      // Map should expand or navigate
-      await page.waitForTimeout(500);
-    }
+    // The footer's Close, not the dialog chrome's — both are named "Close".
+    await dialog.getByRole('button', { name: /^close$/i }).last().click();
+    await expect(dialog).toHaveCount(0);
+    await expect(preview).toHaveAttribute('aria-expanded', 'false');
   });
 });
 
@@ -274,6 +359,7 @@ test.describe('Trip Location Map', () => {
 
 test.describe('Transport Map View', () => {
   let tripId: string;
+  let personId: string;
 
   test.beforeEach(async ({ page }) => {
     await clearIndexedDB(page);
@@ -297,7 +383,7 @@ test.describe('Transport Map View', () => {
     tripId = (
       await seedTrip(page, { name: 'Transport Map Trip', ...SEEDED_TRIP_DATES })
     ).tripId;
-    await seedPerson(page, tripId, 'Test Person');
+    personId = await seedPerson(page, tripId, 'Test Person');
   });
 
   test('transport list page has map view button', async ({ page }, testInfo) => {
@@ -327,73 +413,116 @@ test.describe('Transport Map View', () => {
     await expect(mapViewButton).toBeVisible();
   });
 
+  /**
+   * A transport with no coordinates is still a transport, so it is seeded here:
+   * otherwise "no locations on the map" would also be what an empty trip shows,
+   * and the test would not distinguish the two.
+   *
+   * The assertion this replaces was `page.content()` containing 'location' or
+   * 'transport' or 'map' — satisfied by the nav, the `<title>` and half the
+   * Tailwind classes on the page. AGENTS.md records that exact assertion
+   * passing against a page correctly showing "No locations on the map yet".
+   */
   test('transport map page shows empty state when no transports have coordinates', async ({
     page,
   }) => {
-    await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('load');
-    await waitForRoute(page);
-
-    // Should show empty state or message about no locations
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const emptyState = page.getByText(/no location|aucun lieu|no transport/i);
-
-    // Either empty state or the map should be visible
-    const pageContent = await page.content();
-    const hasContent =
-      pageContent.includes('location') ||
-      pageContent.includes('transport') ||
-      pageContent.includes('map');
-
-    expect(hasContent).toBe(true);
-  });
-
-  test('transport map page loads without errors', async ({ page }) => {
-    await page.goto(`/trips/${tripId}/transports/map`);
-    await page.waitForLoadState('load');
-    await waitForRoute(page);
-
-    // Page should load without console errors
-    const consoleErrors: string[] = [];
-    page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        consoleErrors.push(msg.text());
-      }
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'arrival',
+      datetime: SEEDED_TRANSPORT_DATETIME,
+      location: 'Gare du Nord',
     });
 
-    // Wait a bit for any async errors
-    await page.waitForTimeout(1000);
+    await page.goto(`/trips/${tripId}/transports/map`);
+    await page.waitForLoadState('load');
+    await waitForRoute(page);
 
-    // Filter out expected errors (like 404 for missing tiles when offline)
-    const criticalErrors = consoleErrors.filter(
-      (err) =>
-        !err.includes('404') &&
-        !err.includes('Failed to load resource') &&
-        !err.includes('tile')
-    );
+    await expect(
+      page.getByRole('heading', { name: /no locations on the map yet/i }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(/add a location to transport entries/i),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /back to list|retour à la liste/i }),
+    ).toBeVisible();
 
-    expect(criticalErrors.length).toBe(0);
+    // And no map: the empty state replaces it rather than sitting beside it.
+    await expect(page.locator('.leaflet-container')).toHaveCount(0);
   });
 
-  test('navigating from list view to map view works', async ({ page }) => {
+  /**
+   * The listeners are attached before the navigation they observe, and the map
+   * has to actually be on screen before the "no errors" claim means anything —
+   * a page that rendered nothing also emits no errors.
+   */
+  test('transport map page loads without errors', async ({ page }) => {
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'arrival',
+      datetime: SEEDED_TRANSPORT_DATETIME,
+      location: 'Paris Charles de Gaulle',
+      coordinates: SEEDED_TRANSPORT_COORDINATES,
+    });
+
+    const errors = collectErrors(page);
+
+    await page.goto(`/trips/${tripId}/transports/map`);
+    await page.waitForLoadState('load');
+    await waitForRoute(page);
+
+    // Vacuity guard: the map, and the marker on it, really rendered.
+    await expect(page.locator('.leaflet-container')).toBeVisible();
+    await expect(page.locator('.leaflet-marker-icon')).toHaveCount(1);
+
+    // Leaflet does its sizing and tile work on a later frame; give the async
+    // half of the page a chance to throw before declaring it clean.
+    await page.waitForTimeout(1000);
+
+    expect(errors.uncaught).toEqual([]);
+    expect(errors.console).toEqual([]);
+  });
+
+  test('navigating from list view to map view works', async ({ page }, testInfo) => {
+    // Same product gap as `transport list page has map view button` above: the
+    // header button is `hidden sm:flex` and there is no mobile equivalent.
+    test.skip(
+      testInfo.project.name === 'Mobile Chrome',
+      'No mobile affordance exists for the transport map (header button is `hidden sm:flex`).',
+    );
+
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'arrival',
+      datetime: SEEDED_TRANSPORT_DATETIME,
+      location: 'Paris Charles de Gaulle',
+      coordinates: SEEDED_TRANSPORT_COORDINATES,
+    });
+
     await page.goto(`/trips/${tripId}/transports`);
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    // Click on map view button
-    const mapViewButton = page.getByRole('button', { name: /map|carte/i }).or(
-      page.getByRole('link', { name: /map|carte/i })
-    );
+    // Unconditional. Wrapped in `if (await button.isVisible())`, this whole
+    // body was skipped whenever the button was missing — which is the one
+    // failure the test exists to catch.
+    const mapViewButton = page.getByRole('button', { name: /^map view$/i });
+    await expect(mapViewButton).toBeVisible();
+    await mapViewButton.click();
 
-    if (await mapViewButton.isVisible()) {
-      await mapViewButton.click();
+    await page.waitForURL(new RegExp(`/trips/${tripId}/transports/map$`), {
+      timeout: 5000,
+    });
+    await waitForRoute(page);
 
-      // Should navigate to map view
-      await page.waitForURL(/\/map/, { timeout: 5000 });
-
-      // Map page should be visible
-      await expect(page.locator('body')).toBeVisible();
-    }
+    // The destination, not just its URL: the map, its marker, and the control
+    // that goes back the other way.
+    await expect(page.locator('.leaflet-container')).toBeVisible();
+    await expect(page.locator('.leaflet-marker-icon')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /^list view$/i })).toBeVisible();
   });
 });
 
@@ -402,13 +531,29 @@ test.describe('Transport Map View', () => {
 // ============================================================================
 
 test.describe('Directions Button', () => {
-  test('directions button opens external maps app', async ({ page, context }) => {
+  test('directions button opens external maps app', async ({ page }) => {
     // Mock external tile requests
     await page.route('**/tile.openstreetmap.org/**', (route) =>
       route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
     );
 
-    // Create a trip with transports
+    // Record `window.open` rather than letting it happen.
+    //
+    // The previous version waited for a real popup and read its `url()`, with
+    // every step wrapped in `.catch(() => null)` — so when the button was
+    // absent, which is the failure it exists to catch, zero assertions ran. It
+    // also could not have worked: `window.open` to google.com must not be a
+    // thing this suite does, and a fresh popup reports `about:blank` until it
+    // commits.
+    await page.addInitScript(() => {
+      const opened: string[] = [];
+      (window as unknown as { __openedUrls: string[] }).__openedUrls = opened;
+      window.open = (url?: string | URL): Window | null => {
+        opened.push(String(url));
+        return null;
+      };
+    });
+
     await clearIndexedDB(page);
     await page.goto('/');
     await page.waitForLoadState('load');
@@ -418,42 +563,44 @@ test.describe('Directions Button', () => {
       name: 'Directions Test Trip',
       ...SEEDED_TRIP_DATES,
     });
-    await seedPerson(page, tripId, 'Traveler');
+    const personId = await seedPerson(page, tripId, 'Traveler');
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'arrival',
+      datetime: SEEDED_TRANSPORT_DATETIME,
+      location: 'Paris Charles de Gaulle',
+      coordinates: SEEDED_TRANSPORT_COORDINATES,
+    });
 
-    // Navigate to transport map page (where directions button exists)
     await page.goto(`/trips/${tripId}/transports/map`);
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    // Look for directions button (might be in popup or always visible)
+    // The button lives inside the marker's popup, so the marker has to be
+    // opened first.
+    const marker = page.locator('.leaflet-marker-icon');
+    await expect(marker).toHaveCount(1);
+    await marker.click();
+
     const directionsButton = page.getByRole('button', {
-      name: /direction|itinéraire|get directions/i,
+      name: /get directions|itinéraire/i,
     });
+    await expect(directionsButton).toBeVisible();
+    await directionsButton.click();
 
-    // The button might not be visible if there are no transports with coordinates
-    // This is expected behavior
-    const isVisible = await directionsButton.isVisible().catch(() => false);
+    const opened = await page.evaluate(
+      () => (window as unknown as { __openedUrls: string[] }).__openedUrls,
+    );
+    expect(opened).toHaveLength(1);
 
-    if (isVisible) {
-      // Set up listener for new tabs/windows
-      const [newPage] = await Promise.all([
-        context.waitForEvent('page', { timeout: 5000 }).catch(() => null),
-        directionsButton.click(),
-      ]);
-
-      // Should open a new page/tab with maps URL
-      if (newPage) {
-        const url = newPage.url();
-        // Should be a maps URL (Google, Apple, or OSM)
-        const isMapsUrl =
-          url.includes('google.com/maps') ||
-          url.includes('maps.apple.com') ||
-          url.includes('openstreetmap.org');
-
-        expect(isMapsUrl).toBe(true);
-        await newPage.close();
-      }
-    }
+    // The destination is the assertion: a maps URL pointing anywhere else is
+    // exactly as useless as no URL at all.
+    const target = new URL(opened[0] ?? '');
+    expect(`${target.origin}${target.pathname}`).toBe('https://www.google.com/maps/dir/');
+    expect(target.searchParams.get('destination')).toBe(
+      `${SEEDED_TRANSPORT_COORDINATES.lat},${SEEDED_TRANSPORT_COORDINATES.lon}`,
+    );
   });
 });
 
@@ -477,7 +624,7 @@ test.describe('Map Accessibility', () => {
       tripId,
       personId,
       type: 'arrival',
-      datetime: '2026-07-15T10:00:00.000Z',
+      datetime: SEEDED_TRANSPORT_DATETIME,
       location: 'Paris Charles de Gaulle',
       coordinates: SEEDED_TRANSPORT_COORDINATES,
     });
@@ -491,8 +638,21 @@ test.describe('Map Accessibility', () => {
     const mapContainer = page.locator('[role="application"]').first();
     await expect(mapContainer).toBeVisible();
     await expect(mapContainer).toHaveAttribute('aria-label', /.+/);
+
+    // The live region that tells a screen reader how much is on the map has to
+    // agree with what is on it.
+    await expect(mapContainer.getByText(/1 location on map/i)).toBeAttached();
   });
 
+  /**
+   * "Navigable" means a keyboard can reach a marker and act on it, which is
+   * what is asserted: the container takes focus, the marker takes focus, and
+   * Enter on the focused marker opens its details.
+   *
+   * The previous version ended in `expect(typeof isFocused).toBe('boolean')`,
+   * inside `if (await mapContainer.isVisible())` — so it asserted nothing when
+   * the map rendered and ran nothing at all when it did not.
+   */
   test('map markers are keyboard navigable', async ({ page }) => {
     await clearIndexedDB(page);
     await page.route('**/tile.openstreetmap.org/**', (route) =>
@@ -508,7 +668,7 @@ test.describe('Map Accessibility', () => {
       tripId,
       personId,
       type: 'arrival',
-      datetime: '2026-07-15T10:00:00.000Z',
+      datetime: SEEDED_TRANSPORT_DATETIME,
       location: 'Paris Charles de Gaulle',
       coordinates: SEEDED_TRANSPORT_COORDINATES,
     });
@@ -517,23 +677,29 @@ test.describe('Map Accessibility', () => {
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    // The map should be focusable
-    const mapContainer = page.locator('[role="application"]').first();
+    // Leaflet only makes the container focusable when its keyboard handler is
+    // enabled, which `MapView` ties to `interactive`.
+    const leafletContainer = page.locator('.leaflet-container');
+    await expect(leafletContainer).toBeVisible();
+    await expect(leafletContainer).toHaveAttribute('tabindex', '0');
 
-    if (await mapContainer.isVisible()) {
-      // Try to focus the map
-      await mapContainer.focus();
+    const marker = page.locator('.leaflet-marker-icon');
+    await expect(marker).toHaveCount(1);
+    await expect(marker).toHaveAttribute('tabindex', '0');
+    await expect(marker).toHaveAttribute('role', 'button');
 
-      // Check if map received focus
-      const isFocused = await page.evaluate(() => {
-        const focused = document.activeElement;
-        return focused?.getAttribute('role') === 'application' ||
-               focused?.classList.contains('leaflet-container');
-      });
+    // Tab out of the map container lands on the marker — that is what makes it
+    // reachable at all, and it is not something the markup can be assumed to
+    // give for free.
+    await leafletContainer.focus();
+    await page.keyboard.press('Tab');
+    await expect(marker).toBeFocused();
 
-      // Map should be focusable
-      expect(typeof isFocused).toBe('boolean');
-    }
+    await pressEnterWithKeypress(page);
+
+    const popup = page.getByRole('dialog', { name: /details for/i });
+    await expect(popup).toBeVisible();
+    await expect(popup.getByText('Paris Charles de Gaulle')).toBeVisible();
   });
 });
 
@@ -542,42 +708,70 @@ test.describe('Map Accessibility', () => {
 // ============================================================================
 
 test.describe('Map Error Handling', () => {
+  /**
+   * "Gracefully" is spelled out: the transports whose coordinates are not a
+   * point on Earth are dropped, the one that is survives, and nothing throws.
+   *
+   * The previous version seeded no transports at all — so there were no
+   * coordinates, valid or otherwise — asserted `body` was visible, and attached
+   * its `pageerror` listener *after* the navigation, which is the only place an
+   * error could have come from.
+   */
   test('handles invalid coordinates gracefully', async ({ page }) => {
     await clearIndexedDB(page);
     await page.route('**/tile.openstreetmap.org/**', (route) =>
       route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
     );
 
-    // Create a trip
     const { tripId } = await seedTrip(page, {
       name: 'Error Test Trip',
       ...SEEDED_TRIP_DATES,
     });
+    const personId = await seedPerson(page, tripId, 'Coordinate Tester');
 
-    // Navigate to map page
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'arrival',
+      datetime: SEEDED_TRANSPORT_DATETIME,
+      location: 'Paris Charles de Gaulle',
+      coordinates: SEEDED_TRANSPORT_COORDINATES,
+    });
+    // NaN survives a structured clone, so this is what a half-parsed geocode
+    // actually looks like in IndexedDB.
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'departure',
+      datetime: SEEDED_TRANSPORT_DATETIME,
+      location: 'Not A Number Station',
+      coordinates: { lat: Number.NaN, lon: Number.NaN },
+    });
+    // Numeric, finite, and nowhere: past the `isNaN` guard but off the globe.
+    await seedTransport(page, {
+      tripId,
+      personId,
+      type: 'departure',
+      datetime: SEEDED_TRANSPORT_DATETIME,
+      location: 'Out Of Range Station',
+      coordinates: { lat: 999, lon: 999 },
+    });
+
+    const errors = collectErrors(page);
+
     await page.goto(`/trips/${tripId}/transports/map`);
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    // Page should not crash
-    await expect(page.locator('body')).toBeVisible();
+    await expect(page.locator('.leaflet-container')).toBeVisible();
 
-    // No uncaught errors in console
-    const consoleErrors: string[] = [];
-    page.on('pageerror', (error) => {
-      consoleErrors.push(error.message);
-    });
+    // Exactly one pin, and it is the only one that names a real place.
+    const markers = page.locator('.leaflet-marker-icon');
+    await expect(markers).toHaveCount(1);
+    await expect(markers).toHaveAttribute('title', /Paris Charles de Gaulle/);
 
     await page.waitForTimeout(1000);
-
-    // Filter out expected errors
-    const criticalErrors = consoleErrors.filter(
-      (err) =>
-        !err.includes('ResizeObserver') && // Common in Leaflet
-        !err.includes('ChunkLoadError')
-    );
-
-    expect(criticalErrors.length).toBe(0);
+    expect(errors.uncaught).toEqual([]);
   });
 
 });
