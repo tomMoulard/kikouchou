@@ -237,7 +237,7 @@ const DriverSelectDialog = memo(function DriverSelectDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[425px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>{t('pickups.selectDriver')}</DialogTitle>
           <DialogDescription>
