@@ -275,7 +275,11 @@ test.describe('Trip Import Feature', () => {
     // else. Scoped to the rooms list and counted: an unscoped `getByText` per
     // name says nothing about how many rooms the clone actually produced, so a
     // clone that duplicated each room would have passed.
-    const rooms = page.getByRole('list', { name: /rooms/i }).getByRole('listitem');
+    //
+    // The rooms page opens on its occupancy timeline, whose rows are the
+    // `role="list"` named "Room rows" — the card grid's own list is not
+    // rendered in that view.
+    const rooms = page.getByRole('list', { name: /room rows/i }).getByRole('listitem');
     await expect(rooms).toHaveCount(ROOMS.length);
     for (const roomName of ROOMS) {
       await expect(rooms.filter({ hasText: roomName })).toHaveCount(1);
