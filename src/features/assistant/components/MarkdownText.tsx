@@ -13,6 +13,27 @@ import { type ReactElement, type ReactNode, memo, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * The tint behind inline code and fenced code blocks.
+ *
+ * `bg-foreground/10` rather than the `bg-black/10 dark:bg-white/10` pair it
+ * replaces: one self-theming class instead of two raw palette colours, and a
+ * warm grey (`--foreground` is `oklch(… 0.03 50)`) instead of the pure neutral
+ * that clashed with this app's palette. Same weight either way — 1.24:1 in
+ * light, 1.34:1 in dark against the assistant bubble, versus 1.25 / 1.37 for
+ * the pair it replaces.
+ *
+ * Deliberately *not* `bg-muted`, the obvious-looking token: `ChatMessage`
+ * paints the assistant bubble `bg-muted`, so `bg-muted` here would be exactly
+ * the colour it sits on — 1.000:1 — and every code span in every assistant
+ * reply would disappear. `MarkdownText.test.tsx` asserts the two differ.
+ */
+const CODE_SURFACE = 'bg-foreground/10';
+
+// ============================================================================
 // Type Definitions
 // ============================================================================
 
@@ -108,7 +129,7 @@ function renderInline(tokens: InlineToken[]): ReactNode[] {
         return (
           <code
             key={i}
-            className="rounded bg-black/10 px-1 py-0.5 text-[0.85em] dark:bg-white/10"
+            className={cn('rounded px-1 py-0.5 text-[0.85em]', CODE_SURFACE)}
           >
             {token.value}
           </code>
@@ -160,7 +181,10 @@ function renderBlocks(content: string): ReactNode[] {
       elements.push(
         <pre
           key={key++}
-          className="my-1.5 overflow-x-auto rounded-lg bg-black/10 p-2.5 text-xs dark:bg-white/10"
+          className={cn(
+            'my-1.5 overflow-x-auto rounded-lg p-2.5 text-xs',
+            CODE_SURFACE,
+          )}
         >
           <code>{codeLines.join('\n')}</code>
         </pre>,

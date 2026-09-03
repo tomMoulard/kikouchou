@@ -172,12 +172,30 @@ const CalendarDay = memo(function CalendarDay({
       onFocus={handleFocus}
       onKeyDown={handleKeyDown}
     >
-      {/* Day number + people on site (meal planning) */}
+      {/*
+        Day number + people on site (meal planning).
+
+        Both used to dim to `text-muted-foreground/50` outside the current
+        month, which measures 2.23:1 in light and 2.75:1 in dark against the
+        cell's own `bg-muted/30` — under half of WCAG 1.4.3's 4.5:1 for 14px
+        medium text, and worse for the 12px headcount. Nothing here is
+        decorative: `CalendarPage` looks events, transports, activities and
+        headcounts up by date with no `isCurrentMonth` gate, so an out-of-month
+        cell in a trip that straddles a month boundary is a fully populated,
+        focusable `gridcell` whose date is the only thing telling you which day
+        you are on.
+
+        Full-opacity `text-muted-foreground` measures 6.66:1 / 7.40:1 and still
+        reads as secondary: the step to `text-foreground` on in-month days is
+        6.66 → 19.85, and "outside the current month" is carried twice over
+        besides — by the cell's `bg-muted/30` and by the cell's
+        `aria-describedby` summary.
+      */}
       <div className="relative flex items-center justify-center mb-1">
         <span
           className={cn(
             'text-sm font-medium size-6 flex items-center justify-center rounded-full',
-            !isCurrentMonth && 'text-muted-foreground/50',
+            !isCurrentMonth && 'text-muted-foreground',
             isCurrentMonth && !isToday && 'text-foreground',
             isToday && 'bg-primary text-primary-foreground',
           )}
@@ -188,10 +206,7 @@ const CalendarDay = memo(function CalendarDay({
         {/* Screen readers get this count from the cell's aria-describedby summary. */}
         {peopleOnSite > 0 && (
           <span
-            className={cn(
-              'absolute right-0 flex items-center gap-0.5 text-xs font-medium',
-              isCurrentMonth ? 'text-muted-foreground' : 'text-muted-foreground/50',
-            )}
+            className="absolute right-0 flex items-center gap-0.5 text-xs font-medium text-muted-foreground"
             title={t('calendar.peopleOnSite', '{{count}} people on site', {
               count: peopleOnSite,
             })}
