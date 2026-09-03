@@ -65,6 +65,7 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { statusVariants } from '@/components/ui/status.variants';
 import {
   Card,
   CardContent,
@@ -398,7 +399,7 @@ const TransportCard = memo(function TransportCard({
             <TypeIcon
               className={cn(
                 'size-5 shrink-0',
-                transport.type === 'arrival' ? 'text-green-600' : 'text-orange-600',
+                statusVariants({ tone: transport.type, emphasis: 'text' }),
               )}
               aria-hidden="true"
             />
@@ -413,7 +414,7 @@ const TransportCard = memo(function TransportCard({
             {showNeedsPickupBadge && (
               <Badge
                 variant="outline"
-                className="shrink-0 border-amber-500 text-amber-600 bg-amber-50 dark:bg-amber-950/30"
+                className={cn('shrink-0', statusVariants({ tone: 'warning' }))}
               >
                 {t('transports.needsPickup')}
               </Badge>
@@ -422,7 +423,7 @@ const TransportCard = memo(function TransportCard({
             {driver && transport.needsPickup && (
               <Badge
                 variant="outline"
-                className="shrink-0 border-green-500 text-green-600 bg-green-50 dark:bg-green-950/30"
+                className={cn('shrink-0', statusVariants({ tone: 'success' }))}
               >
                 {t('transports.driver')}: {driver.name}
               </Badge>
@@ -1004,11 +1005,17 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       {allTransports.length > 0 && (
         <div className="flex items-center gap-4 mb-6 text-sm text-muted-foreground">
           <div className="flex items-center gap-1.5">
-            <ArrowDownToLine className="size-4 text-green-600" aria-hidden="true" />
+            <ArrowDownToLine
+              className={cn('size-4', statusVariants({ tone: 'arrival', emphasis: 'text' }))}
+              aria-hidden="true"
+            />
             <span>{arrivals.length} {t('transports.arrivals').toLowerCase()}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <ArrowUpFromLine className="size-4 text-orange-600" aria-hidden="true" />
+            <ArrowUpFromLine
+              className={cn('size-4', statusVariants({ tone: 'departure', emphasis: 'text' }))}
+              aria-hidden="true"
+            />
             <span>{departures.length} {t('transports.departures').toLowerCase()}</span>
           </div>
         </div>
@@ -1016,7 +1023,12 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
 
       {/* Pickup alerts section - only when a driver is still needed */}
       {hasUnassignedUpcomingPickup && (
-        <div className="mb-6 p-4 rounded-xl border-2 border-amber-200 bg-amber-50/20 dark:border-amber-800 dark:bg-amber-950/10">
+        <div
+          className={cn(
+            statusVariants({ tone: 'warning', emphasis: 'surface' }),
+            'mb-6 rounded-xl border-2 bg-warning-surface/40 p-4',
+          )}
+        >
           <UpcomingPickups />
         </div>
       )}

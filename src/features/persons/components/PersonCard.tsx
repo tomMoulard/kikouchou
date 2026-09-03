@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { statusVariants } from '@/components/ui/status.variants';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { cn } from '@/lib/utils';
 import type { Person, TransportMode } from '@/types';
@@ -365,7 +366,7 @@ const PersonCard = memo(function PersonCard({
                 return (
                   <div className="flex items-start gap-2 min-w-0" title={fullText} aria-label={fullText}>
                     <ArrowDownRight
-                      className="size-4 shrink-0 text-green-600"
+                      className={cn('size-4 shrink-0', statusVariants({ tone: 'arrival', emphasis: 'text' }))}
                       aria-hidden="true"
                     />
                     <div className="min-w-0">
@@ -387,7 +388,7 @@ const PersonCard = memo(function PersonCard({
                 return (
                   <div className="flex items-start gap-2 min-w-0" title={fullText} aria-label={fullText}>
                     <ArrowUpRight
-                      className="size-4 shrink-0 text-orange-600"
+                      className={cn('size-4 shrink-0', statusVariants({ tone: 'departure', emphasis: 'text' }))}
                       aria-hidden="true"
                     />
                     <div className="min-w-0">

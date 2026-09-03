@@ -64,6 +64,7 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ViewSwitcher } from '@/components/ui/view-switcher';
+import { statusVariants } from '@/components/ui/status.variants';
 import { cn } from '@/lib/utils';
 import { ASSISTANT_MODEL_PRESETS } from '@/features/assistant/models';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
@@ -1244,14 +1245,18 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         <Card
           className={cn(
             'mb-6',
-            'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20',
+            statusVariants({ tone: 'warning', emphasis: 'surface' }),
+            'bg-warning-surface/50',
           )}
         >
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-                <span className="text-amber-800 dark:text-amber-200">
+                <AlertTriangle
+                  className={cn('size-4', statusVariants({ tone: 'warning', emphasis: 'text' }))}
+                  aria-hidden="true"
+                />
+                <span className="text-warning-on-surface">
                   {t('rooms.unassignedGuests', 'Guests without rooms')} ({unassignedGuests.length})
                 </span>
               </CardTitle>

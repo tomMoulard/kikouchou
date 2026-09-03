@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { statusVariants } from '@/components/ui/status.variants';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { cn } from '@/lib/utils';
@@ -136,10 +137,10 @@ const RoomCard = memo(function RoomCard({
 
   // Progress bar color based on capacity usage
    progressColor = capacityRatio >= 1
-    ? 'bg-red-500 dark:bg-red-400'
+    ? 'bg-destructive'
     : capacityRatio >= 0.5
-      ? 'bg-amber-500 dark:bg-amber-400'
-      : 'bg-emerald-500 dark:bg-emerald-400',
+      ? 'bg-warning'
+      : 'bg-success',
 
   // Build aria-label for screen readers
    ariaLabel = useMemo(
@@ -336,7 +337,7 @@ const RoomCard = memo(function RoomCard({
               />
             </div>
             {availableSpots > 0 && (
-              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+              <p className={cn('text-xs mt-1', statusVariants({ tone: 'success', emphasis: 'text' }))}>
                 {t('rooms.spotsOpen', { count: availableSpots })}
               </p>
             )}

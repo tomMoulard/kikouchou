@@ -28,6 +28,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { onboardingSurface, statusVariants } from '@/components/ui/status.variants';
 
 import {
   checkAssignmentConflict,
@@ -36,6 +37,7 @@ import {
   getRoomsByTripId,
   getTripByShareId,
 } from '@/lib/db';
+import { cn } from '@/lib/utils';
 import type {
   PersonId,
   Room,
@@ -358,18 +360,18 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
   // Recoverable data-fetch error (trip found, but rooms/assignments failed to load)
   if (loadError) {
     return (
-      <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-        <Card className="w-full max-w-md border-amber-200 text-center shadow-lg">
+      <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+        <Card className="w-full max-w-md border-warning-border text-center shadow-lg">
           <CardHeader className="pb-2 pt-8">
-            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-amber-100 text-3xl">
+            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-warning/20 text-3xl">
               ⚠️
             </div>
-            <CardTitle className="text-xl text-amber-900">
+            <CardTitle className="text-xl text-warning-on-surface">
               {t('sharing.roomLoadError', 'Could not load rooms')}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-8">
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-muted-foreground">
               {t('sharing.roomLoadErrorDescription', 'Something went wrong loading the room list. Please go back and try again.')}
             </p>
           </CardContent>
@@ -381,18 +383,18 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
   // Trip not found / link invalid
   if (notFound || trip === undefined) {
     return (
-      <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-        <Card className="w-full max-w-md border-amber-200 text-center shadow-lg">
+      <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+        <Card className="w-full max-w-md border-warning-border text-center shadow-lg">
           <CardHeader className="pb-2 pt-8">
-            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-amber-100 text-3xl">
+            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-warning/20 text-3xl">
               🔍
             </div>
-            <CardTitle className="text-xl text-amber-900">
+            <CardTitle className="text-xl text-warning-on-surface">
               {t('sharing.notFoundWizard', "This trip link doesn't seem to work")}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-8">
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-muted-foreground">
               {t(
                 'sharing.notFoundWizardDescription',
                 'The link may be incorrect or the trip may no longer exist.',
@@ -407,19 +409,19 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
   const isEmpty = rooms.length === 0;
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-      <Card className="w-full max-w-md border-amber-200 shadow-lg">
+    <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+      <Card className="w-full max-w-md border-warning-border shadow-lg">
         <CardHeader className="pb-4 pt-8 text-center">
           {/* Warm room icon */}
-          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-amber-100">
-            <BedDouble className="size-10 text-amber-600" aria-hidden="true" />
+          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-warning/20">
+            <BedDouble className="size-10 text-warning-on-surface" aria-hidden="true" />
           </div>
 
-          <CardTitle className="text-2xl font-bold text-amber-900">
+          <CardTitle className="text-2xl font-bold text-warning-on-surface">
             {t('sharing.roomTitle', 'Pick your room')}
           </CardTitle>
 
-          <p className="mt-1 text-sm text-amber-700">
+          <p className="mt-1 text-sm text-muted-foreground">
             {t('sharing.roomSubtitle', 'Choose a room for your stay')}
           </p>
         </CardHeader>
@@ -427,18 +429,18 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
         <CardContent className="space-y-4 pb-8">
           {/* Inline claim error message */}
           {claimError !== undefined && (
-            <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">
+            <p role="alert" className={cn('rounded-xl p-3 text-sm', statusVariants({ tone: 'danger' }))}>
               {claimError}
             </p>
           )}
 
           {/* Empty rooms state */}
           {isEmpty ? (
-            <div className="rounded-xl bg-amber-50 p-6 text-center ring-1 ring-amber-200">
-              <p className="text-sm font-medium text-amber-900">
+            <div className={cn('rounded-xl p-6 text-center', statusVariants({ tone: 'warning' }))}>
+              <p className="text-sm font-medium text-warning-on-surface">
                 {t('sharing.roomEmpty', 'No rooms available')}
               </p>
-              <p className="mt-1 text-xs text-amber-700">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {t(
                   'sharing.roomEmptyDescription',
                   "The organizer hasn't added any rooms yet. Check back later!",
@@ -460,35 +462,48 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
                 return (
                   <div
                     key={room.id}
-                    className={[
-                      'rounded-xl border-2 p-4 transition-colors',
+                    className={cn(
                       isClaimed
-                        ? 'border-green-400 bg-green-50'
+                        ? statusVariants({ tone: 'success', emphasis: 'surface' })
                         : full
-                          ? 'border-gray-200 bg-gray-50 opacity-60'
-                          : 'border-amber-200 bg-white',
-                    ].join(' ')}
+                          ? 'border-border bg-muted opacity-60'
+                          : 'border-warning-border bg-card',
+                      'rounded-xl border-2 p-4 transition-colors',
+                    )}
                   >
                     {/* Room header */}
                     <div className="mb-3 flex items-center gap-3">
                       <BedDouble
-                        className={[
+                        className={cn(
                           'size-5 flex-shrink-0',
-                          isClaimed ? 'text-green-600' : full ? 'text-gray-400' : 'text-amber-600',
-                        ].join(' ')}
+                          isClaimed
+                            ? 'text-success-on-surface'
+                            : full
+                              ? 'text-muted-foreground'
+                              : 'text-warning-on-surface',
+                        )}
                         aria-hidden="true"
                       />
                       <span
-                        className={[
+                        className={cn(
                           'flex-1 font-medium',
-                          isClaimed ? 'text-green-800' : full ? 'text-gray-500' : 'text-amber-900',
-                        ].join(' ')}
+                          isClaimed
+                            ? 'text-success-on-surface'
+                            : full
+                              ? 'text-muted-foreground'
+                              : 'text-foreground',
+                        )}
                       >
                         {room.name}
                       </span>
                       {/* Full badge */}
                       {full && !isClaimed && (
-                        <span className="rounded bg-gray-100 px-2 py-1 text-sm text-gray-500">
+                        <span
+                          className={cn(
+                            'rounded px-2 py-1 text-sm',
+                            statusVariants({ tone: 'neutral', emphasis: 'outline' }),
+                          )}
+                        >
                           {t('sharing.roomFull', 'Full')}
                         </span>
                       )}
@@ -496,10 +511,12 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
 
                     {/* Capacity indicator */}
                     <div className="mb-3 space-y-1">
-                      <p className={[
-                        'text-sm',
-                        isClaimed ? 'text-green-700' : full ? 'text-gray-500' : 'text-amber-700',
-                      ].join(' ')}>
+                      <p
+                        className={cn(
+                          'text-sm',
+                          isClaimed ? 'text-success-on-surface' : 'text-muted-foreground',
+                        )}
+                      >
                         {t('sharing.roomSpotsTaken', '{{occupied}} of {{capacity}} spots taken', {
                           occupied,
                           capacity: room.capacity,
@@ -507,7 +524,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
                       </p>
                       {/* Visual progress bar */}
                       <div
-                        className="h-1 w-full overflow-hidden rounded-full bg-gray-100"
+                        className="h-1 w-full overflow-hidden rounded-full bg-border"
                         role="progressbar"
                         aria-valuenow={occupancyPct}
                         aria-valuemin={0}
@@ -518,10 +535,10 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
                         })}
                       >
                         <div
-                          className={[
+                          className={cn(
                             'h-1 rounded-full transition-all',
-                            isClaimed ? 'bg-green-400' : full ? 'bg-gray-400' : 'bg-amber-400',
-                          ].join(' ')}
+                            isClaimed ? 'bg-success' : full ? 'bg-muted-foreground' : 'bg-warning',
+                          )}
                           style={{ width: `${occupancyPct}%` }}
                         />
                       </div>
@@ -529,7 +546,12 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
 
                     {/* Action button */}
                     {isClaimed ? (
-                      <div className="flex items-center gap-2 text-green-700 font-medium">
+                      <div
+                        className={cn(
+                          'flex items-center gap-2 font-medium',
+                          statusVariants({ tone: 'success', emphasis: 'text' }),
+                        )}
+                      >
                         <Check size={16} aria-hidden="true" />
                         <span>{t('sharing.roomClaimed', 'Claimed ✓')}</span>
                       </div>
@@ -539,7 +561,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
                         onClick={() => { void handleClaimRoom(room); }}
                         disabled={isClaiming || claimedRoomId !== undefined}
                         aria-label={t('sharing.roomClaimNamed', 'Claim {{name}}', { name: room.name })}
-                        className="h-11 min-h-[44px] w-full bg-amber-500 text-white hover:bg-amber-600 focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-40"
+                        className={cn('h-11 min-h-[44px] w-full hover:bg-warning/90 disabled:opacity-40', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
                       >
                         {isClaiming
                           ? t('common.loading', 'Loading...')
@@ -557,7 +579,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
             type="button"
             onClick={handleNavigateToTransport}
             disabled={claimedRoomId === undefined}
-            className="h-12 w-full bg-amber-500 text-base font-semibold text-white hover:bg-amber-600 focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-40"
+            className={cn('h-12 w-full text-base font-semibold hover:bg-warning/90 disabled:opacity-40', statusVariants({ tone: 'warning', emphasis: 'solid' }))}
           >
             {t('sharing.roomNext', 'Next')}
           </Button>
@@ -569,7 +591,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
             variant="ghost"
             onClick={handleNavigateToTransport}
             disabled={isClaimingRoomId !== undefined}
-            className="h-11 w-full text-amber-700 hover:bg-amber-50 hover:text-amber-900"
+            className="h-11 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface"
           >
             {t('sharing.roomSkip', 'Skip for now')}
           </Button>

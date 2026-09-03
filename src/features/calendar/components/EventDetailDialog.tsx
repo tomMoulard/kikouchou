@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { statusVariants } from '@/components/ui/status.variants';
 import { Separator } from '@/components/ui/separator';
 import { ActivityCategoryIcon } from '@/components/shared/ActivityCategoryIcon';
 import { PersonBadge } from '@/components/shared/PersonBadge';
@@ -237,11 +238,7 @@ const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }:
                   <div className="flex items-center gap-2">
                     <Badge
                       variant={tr.type === 'arrival' ? 'default' : 'secondary'}
-                      className={
-                        tr.type === 'arrival'
-                          ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
-                          : 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400'
-                      }
+                      className={statusVariants({ tone: tr.type })}
                     >
                       {tr.type === 'arrival' ? '↓' : '↑'}{' '}
                       {tr.type === 'arrival'
@@ -477,7 +474,7 @@ const ActivityDetails = memo(function ActivityDetails({
               : `${participantCount}/${cap}`}
           </span>
           {cap !== undefined && participantCount >= cap && (
-            <Badge variant="outline" className="border-amber-500 text-amber-600">
+            <Badge variant="outline" className={statusVariants({ tone: 'warning', emphasis: 'outline' })}>
               {t('activities.full')}
             </Badge>
           )}
@@ -625,10 +622,7 @@ const EventDetailDialog = memo(function EventDetailDialog({
               {isTransportEvent(event) && (
                 <Badge
                   variant={event.transport.type === 'arrival' ? 'default' : 'secondary'}
-                  className={event.transport.type === 'arrival' 
-                    ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400'
-                    : 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400'
-                  }
+                  className={statusVariants({ tone: event.transport.type })}
                 >
                   {event.transport.type === 'arrival' ? '↓' : '↑'}
                 </Badge>

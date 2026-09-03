@@ -41,6 +41,7 @@ import { QRScanner } from '@/components/shared/QRScanner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { type StatusTone, statusVariants } from '@/components/ui/status.variants';
 
 import { getTripById } from '@/lib/db';
 import {
@@ -310,29 +311,29 @@ const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: 
           )}
           {summary.autoUpdates > 0 && (
             <SummaryRow
-              icon={<Check className="h-4 w-4 text-green-600" />}
+              icon={<Check className={cn('h-4 w-4', statusVariants({ tone: 'success', emphasis: 'text' }))} />}
               label={t('sharing.sync.autoApplyCount', '{{count}} auto-applied changes', {
                 count: summary.autoUpdates,
               })}
-              color="green"
+              tone="success"
             />
           )}
           {summary.conflicts > 0 && (
             <SummaryRow
-              icon={<AlertTriangle className="h-4 w-4 text-orange-500" />}
+              icon={<AlertTriangle className={cn('h-4 w-4', statusVariants({ tone: 'danger', emphasis: 'text' }))} />}
               label={t('sharing.sync.conflictCount', '{{count}} conflicts to resolve', {
                 count: summary.conflicts,
               })}
-              color="orange"
+              tone="danger"
             />
           )}
           {summary.warnings > 0 && (
             <SummaryRow
-              icon={<AlertTriangle className="h-4 w-4 text-yellow-500" />}
+              icon={<AlertTriangle className={cn('h-4 w-4', statusVariants({ tone: 'warning', emphasis: 'text' }))} />}
               label={t('sharing.sync.warningCount', '{{count}} warnings', {
                 count: summary.warnings,
               })}
-              color="yellow"
+              tone="warning"
             />
           )}
         </CardContent>
@@ -340,14 +341,14 @@ const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: 
 
       {/* Auto-apply details (collapsible) */}
       {(autoApply.persons.length > 0 || autoApply.assignments.length > 0 || autoApply.transports.length > 0) && (
-        <Card className="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/20">
+        <Card className={cn(statusVariants({ tone: 'success', emphasis: 'surface' }), 'bg-success-surface/50')}>
           <CardHeader className="pb-2">
             <button
               type="button"
               className="flex w-full items-center justify-between"
               onClick={() => setShowDetails(!showDetails)}
             >
-              <CardTitle className="text-sm font-medium text-green-800 dark:text-green-200">
+              <CardTitle className="text-sm font-medium text-success-on-surface">
                 {t('sharing.sync.autoApplied', 'Auto-applied changes')}
               </CardTitle>
               {showDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -372,7 +373,7 @@ const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: 
       {/* Conflicts */}
       {conflicts.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-orange-800 dark:text-orange-200">
+          <h2 className="text-sm font-semibold text-destructive-on-surface">
             {t('sharing.sync.conflictsTitle', 'Conflicts')}
           </h2>
           {conflicts.map(conflict => (
@@ -388,15 +389,15 @@ const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: 
 
       {/* Warnings */}
       {warnings.length > 0 && (
-        <Card className="border-yellow-200 bg-yellow-50/50 dark:border-yellow-900 dark:bg-yellow-950/20">
+        <Card className={cn(statusVariants({ tone: 'warning', emphasis: 'surface' }), 'bg-warning-surface/50')}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+            <CardTitle className="text-sm font-medium text-warning-on-surface">
               {t('sharing.sync.warningsTitle', 'Warnings')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
             {warnings.map((w, i) => (
-              <p key={i} className="text-xs text-yellow-700 dark:text-yellow-300">{w.message}</p>
+              <p key={i} className="text-xs text-warning-on-surface">{w.message}</p>
             ))}
           </CardContent>
         </Card>
@@ -434,16 +435,14 @@ const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: 
 interface SummaryRowProps {
   readonly icon: ReactElement;
   readonly label: string;
-  readonly color: 'green' | 'orange' | 'yellow';
+  readonly tone: StatusTone;
 }
 
-const SummaryRow = memo(function SummaryRow({ icon, label, color }: SummaryRowProps) {
+const SummaryRow = memo(function SummaryRow({ icon, label, tone }: SummaryRowProps) {
   return (
     <div className={cn(
-      'flex items-center gap-2 rounded-md px-3 py-2 text-sm',
-      color === 'green' && 'bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-200',
-      color === 'orange' && 'bg-orange-50 text-orange-800 dark:bg-orange-950/30 dark:text-orange-200',
-      color === 'yellow' && 'bg-yellow-50 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200',
+      statusVariants({ tone }),
+      'flex items-center gap-2 rounded-md border-0 px-3 py-2 text-sm',
     )}>
       {icon}
       <span>{label}</span>
@@ -458,7 +457,7 @@ interface EntityRowProps {
 
 const EntityRow = memo(function EntityRow({ icon, label }: EntityRowProps) {
   return (
-    <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-300">
+    <div className={cn('flex items-center gap-2 text-xs', statusVariants({ tone: 'success', emphasis: 'text' }))}>
       {icon}
       <span>{label}</span>
     </div>
@@ -483,7 +482,9 @@ const ConflictCard = memo(function ConflictCard({ conflict, resolution, onResolv
   return (
     <Card className={cn(
       'shadow-sm',
-      resolution ? 'border-green-200 bg-green-50/30 dark:border-green-900 dark:bg-green-950/10' : 'border-orange-200 dark:border-orange-900',
+      resolution
+        ? cn(statusVariants({ tone: 'success', emphasis: 'surface' }), 'bg-success-surface/40')
+        : 'border-destructive-border',
     )}>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm">
@@ -501,7 +502,7 @@ const ConflictCard = memo(function ConflictCard({ conflict, resolution, onResolv
           <Button
             variant={resolution === 'keep-host' ? 'default' : 'outline'}
             size="sm"
-            className={cn('flex-1 text-xs', resolution === 'keep-host' && 'bg-blue-600 hover:bg-blue-700')}
+            className="flex-1 text-xs"
             onClick={() => onResolve(conflict.entityId, 'keep-host')}
           >
             {t('sharing.sync.keepMine', 'Keep mine')}
@@ -509,7 +510,7 @@ const ConflictCard = memo(function ConflictCard({ conflict, resolution, onResolv
           <Button
             variant={resolution === 'accept-guest' ? 'default' : 'outline'}
             size="sm"
-            className={cn('flex-1 text-xs', resolution === 'accept-guest' && 'bg-primary hover:bg-primary/90')}
+            className="flex-1 text-xs"
             onClick={() => onResolve(conflict.entityId, 'accept-guest')}
           >
             {t('sharing.sync.acceptGuest', 'Accept theirs')}
