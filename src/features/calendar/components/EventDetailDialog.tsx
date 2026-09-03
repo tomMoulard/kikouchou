@@ -212,8 +212,11 @@ const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }:
       <div className="flex items-center gap-3">
         <Moon className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
         <span className="text-sm">
-          {t('calendar.nights', '{{count}} night', { count: nights })}
-          {nights !== 1 && 's'}
+          {t('calendar.nights', {
+            count: nights,
+            defaultValue_one: '{{count}} night',
+            defaultValue_other: '{{count}} nights',
+          })}
         </span>
       </div>
 
@@ -471,8 +474,10 @@ const ActivityDetails = memo(function ActivityDetails({
           <Users className="size-4 text-muted-foreground shrink-0" aria-hidden="true" />
           <span className="text-sm text-muted-foreground">
             {cap === undefined
-              ? t('activities.participantCount', '{{count}} participants', {
+              ? t('activities.participantCount', {
                   count: participantCount,
+                  defaultValue_one: '{{count}} participant',
+                  defaultValue_other: '{{count}} participants',
                 })
               : `${participantCount}/${cap}`}
           </span>

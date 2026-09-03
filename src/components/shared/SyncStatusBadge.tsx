@@ -81,9 +81,12 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
               t('nav.syncOnlineJustYou', 'Just you right now')
             : t('nav.syncOnlineCount', {
                 count: state.onlineCount ?? 0,
-                // Matches the shipped string, so the inline fallback and the
-                // locale file cannot drift apart.
-                defaultValue: '{{count}} people online',
+                // Matches the shipped strings, so the inline fallback and the
+                // locale file cannot drift apart. A counted string needs one
+                // default per plural form: a single `defaultValue` would be
+                // wrong for every count it was not written for.
+                defaultValue_one: '{{count}} person online',
+                defaultValue_other: '{{count}} people online',
               }),
       }
     : state.status === 'offline'
@@ -95,7 +98,8 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
             pending > 0
               ? t('nav.syncPending', {
                   count: pending,
-                  defaultValue: '{{count}} not sent yet',
+                  defaultValue_one: '{{count}} change not sent yet',
+                  defaultValue_other: '{{count}} changes not sent yet',
                 })
               : t('nav.syncOffline', 'Not connected'),
         }

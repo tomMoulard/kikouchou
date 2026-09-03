@@ -29,11 +29,17 @@ vi.mock('react-i18next', () => ({
       if (typeof fallback === 'string') {
         return fallback;
       }
-      // Mirrors i18next interpolation closely enough to assert the number.
+      // Mirrors i18next closely enough to assert the number *and* the plural
+      // form it is wrapped in. A counted string carries one default per CLDR
+      // category, so a mock that only reads `defaultValue` would happily let
+      // "1 changes not sent yet" through.
       const options = fallback ?? {};
-      const template =
-        typeof options.defaultValue === 'string' ? options.defaultValue : key;
-      return template.replace('{{count}}', String(options.count ?? ''));
+      const count = options.count;
+      const suffix =
+        typeof count === 'number' ? `_${new Intl.PluralRules('en').select(count)}` : '';
+      const candidate = options[`defaultValue${suffix}`] ?? options.defaultValue;
+      const template = typeof candidate === 'string' ? candidate : key;
+      return template.replace('{{count}}', String(count ?? ''));
     },
   }),
 }));
@@ -77,8 +83,19 @@ describe('SyncStatusBadge', () => {
     render(<SyncStatusBadge />);
 
     // The one state a person must not miss while closing the tab.
-    expect(screen.getByText('2 not sent yet')).toBeInTheDocument();
+    expect(screen.getByText('2 changes not sent yet')).toBeInTheDocument();
     expect(screen.queryByText(/online/i)).not.toBeInTheDocument();
+  });
+
+  it('says "1 change", not "1 changes"', () => {
+    withState({ status: 'offline', pendingCount: 1, onlineCount: null });
+
+    render(<SyncStatusBadge />);
+
+    // The badge used to pass a single inline default — '{{count}} not sent yet'
+    // — that contradicted the shipped `nav.syncPending_one`. Whichever of the
+    // two won, the other was dead, and neither could be right at every count.
+    expect(screen.getByText('1 change not sent yet')).toBeInTheDocument();
   });
 
   it('does not claim the trip is empty when the count is unknown', () => {

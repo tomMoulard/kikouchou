@@ -130,8 +130,10 @@ const ActivityCard = memo(function ActivityCard({
       t(`activities.categories.${activity.category}`),
       activity.allDay ? t('activities.allDay') : timeRange,
       activity.location,
-      t('activities.participantCount', '{{count}} participants', {
+      t('activities.participantCount', {
         count: participantCount,
+        defaultValue_one: '{{count}} participant',
+        defaultValue_other: '{{count}} participants',
       }),
     ];
     return parts.filter(Boolean).join(', ');
@@ -225,8 +227,10 @@ const ActivityCard = memo(function ActivityCard({
           <Users className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <span className="text-sm text-muted-foreground">
             {cap === undefined
-              ? t('activities.participantCount', '{{count}} participants', {
+              ? t('activities.participantCount', {
                   count: participantCount,
+                  defaultValue_one: '{{count}} participant',
+                  defaultValue_other: '{{count}} participants',
                 })
               : `${participantCount}/${cap}`}
           </span>
