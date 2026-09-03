@@ -578,11 +578,15 @@ test.describe('Dialog Viewport Fit', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // The case has to be real: a dialog that already fits proves nothing.
-    const overflows = await dialog.evaluate(
-      (el) => el.scrollHeight > el.clientHeight + 1,
-    );
-    expect(overflows).toBe(true);
+    // The case has to be real: a dialog that already fits proves nothing. The
+    // scrolling belongs to the body, one level inside the box, so that the
+    // close button positioned against the box does not scroll away with it.
+    const body = dialog.locator('[data-slot="dialog-body"]');
+    const overflow = await body.evaluate((el) => ({
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+    expect(overflow.scrollHeight).toBeGreaterThan(overflow.clientHeight + 1);
 
     // 1. The box itself is inside the viewport — neither edge is cut off.
     const box = await dialog.boundingBox();
@@ -603,13 +607,26 @@ test.describe('Dialog Viewport Fit', () => {
     await saveButton.scrollIntoViewIfNeeded();
     await expect(saveButton).toBeInViewport();
 
-    // The close button is reachable too, and big enough to hit: 44px on mobile.
+    // 4. The close button is still on screen after that scroll. It is
+    //    positioned against the box, so this fails the moment the box itself
+    //    becomes the scroll container: the button rides the content off the
+    //    top exactly when the dialog is tall enough to need scrolling.
+    //    `boundingBox()` alone would not catch it — it reports 44x44 for an
+    //    element that has scrolled out of view.
     const closeButton = dialog.getByRole('button', {
       name: /close dialog|fermer la bo/i,
     });
-    const closeBox = await closeButton.boundingBox();
-    expect(closeBox?.width ?? 0).toBeGreaterThanOrEqual(44);
-    expect(closeBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await expect(closeButton).toBeInViewport();
+
+    // ... and it is big enough to hit: 44px, the mobile touch target. Measured
+    // from the layout box rather than `boundingBox()`, which reports the
+    // painted size and so reads 42px while the open animation's zoom-in-95 is
+    // still running.
+    const closeSize = await closeButton.evaluate((el) => [
+      (el as HTMLElement).offsetWidth,
+      (el as HTMLElement).offsetHeight,
+    ]);
+    expect(closeSize).toEqual([44, 44]);
   });
 });
 

@@ -425,7 +425,9 @@ test.describe('Trip Lifecycle', () => {
     const currentUrl = page.url();
     if (currentUrl.includes('/edit')) {
       // Dialog might be stuck. An alert dialog has no close button by design —
-      // it is answered, not dismissed — so Escape is the way out here.
+      // it is answered, not dismissed — and Escape is blocked while the delete
+      // is still in flight, so this is a best effort before navigating away
+      // rather than a guaranteed way out.
       if (await dialog.isVisible({ timeout: 500 }).catch(() => false)) {
         await page.keyboard.press('Escape');
       }
