@@ -132,12 +132,16 @@ const ActivityCard = memo(function ActivityCard({
   const participantLabel = useMemo(
     () =>
       cap === undefined
-        ? t('activities.participantCount', '{{count}} participants', {
+        ? t('activities.participantCount', {
             count: participantCount,
+            defaultValue_one: '{{count}} participant',
+            defaultValue_other: '{{count}} participants',
           })
-        : t('activities.participantCountCapped', '{{count}}/{{max}} participants', {
+        : t('activities.participantCountCapped', {
             count: participantCount,
             max: cap,
+            defaultValue_one: '{{count}}/{{max}} participant',
+            defaultValue_other: '{{count}}/{{max}} participants',
           }),
     [cap, participantCount, t],
   );
