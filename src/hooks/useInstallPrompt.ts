@@ -99,7 +99,7 @@ function isRunningStandalone(): boolean {
   }
 
   // Check iOS standalone mode
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- `navigator.standalone` is a non-standard iOS Safari property, absent from lib.dom.
   const nav = navigator as any;
   if (nav.standalone === true) {
     return true;
@@ -118,7 +118,7 @@ async function checkInstalledRelatedApps(): Promise<boolean> {
   if (typeof navigator === 'undefined') {return false;}
 
   // Feature detection for getInstalledRelatedApps
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- `getInstalledRelatedApps` is Chromium-only and absent from lib.dom.
   const nav = navigator as any;
   if (typeof nav.getInstalledRelatedApps !== 'function') {
     return false;

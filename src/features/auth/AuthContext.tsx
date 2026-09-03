@@ -26,7 +26,7 @@
  *
  * @module features/auth/AuthContext
  */
-/* eslint-disable react-refresh/only-export-components */
+/* eslint-disable react-refresh/only-export-components -- The provider, its `useAuth` hook and the context type are one concept; splitting them across three files to please Fast Refresh costs more than the refresh it buys. */
 
 import {
   type ReactElement,

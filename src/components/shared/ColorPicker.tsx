@@ -226,6 +226,7 @@ const ColorPicker = memo(({
   }
 
   return (
+    // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- APG's radio-group pattern puts a roving `tabIndex` on the radios (see the `tabIndex` on each option below) and leaves the group itself out of the tab order; making the group focusable too would give the control two tab stops.
     <div
       role="radiogroup"
       aria-label={label}
@@ -278,6 +279,7 @@ const ColorPicker = memo(({
             {/* Checkmark icon for selected state */}
             {isSelected && (
               <Check
+                // eslint-disable-next-line kikoushou/no-raw-palette-class -- The tick sits on a user-chosen swatch colour, so neither `--foreground` nor `--background` applies; white plus the drop shadow is legible on every swatch.
                 className="size-5 mx-auto text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
                 aria-hidden="true"
                 strokeWidth={3}

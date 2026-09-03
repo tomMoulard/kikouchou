@@ -91,6 +91,7 @@ export const MultiFrameQR = memo(function MultiFrameQR({
       ) : (
         // Literal white, not `bg-card`: a QR code needs a light quiet zone to
         // scan, in either theme.
+        // eslint-disable-next-line kikoushou/no-raw-palette-class -- A QR quiet zone must be literally white to scan; `bg-card` would go dark with the theme.
         <div className="rounded-xl bg-white p-4 shadow-md">
           <QRCodeCanvas
             value={singleFrameData}

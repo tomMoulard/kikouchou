@@ -238,6 +238,7 @@ const PersonCard = memo(function PersonCard({
         <div className="flex items-center gap-3">
           {/* Color indicator */}
           <div
+            // eslint-disable-next-line kikoushou/no-raw-palette-class -- A hairline over a user-chosen colour (see the `backgroundColor` below); a theme border would vanish against half the palette.
             className="size-4 rounded-full shrink-0 ring-1 ring-inset ring-black/10"
             style={{ backgroundColor: person.color }}
             aria-hidden="true"
