@@ -215,7 +215,6 @@ describe('TripSyncExportPanel', () => {
       new Promise((resolve) => { resolveChangeset = resolve; }),
     );
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { unmount } = render(<TripSyncExportPanel trip={mockTrip} />, { withProviders: false });
     unmount();
 
@@ -226,13 +225,12 @@ describe('TripSyncExportPanel', () => {
     // the guard did.
     await new Promise((resolve) => { setTimeout(resolve, 0); });
 
-    // "Verifying no crash" was the whole assertion here, and there was none:
-    // a `setState` after unmount does not throw, it logs. The guard is only
-    // observable through React's warning and through the export stopping at
-    // the `isMountedRef` check instead of encoding a payload nobody will see.
-    expect(consoleError).not.toHaveBeenCalled();
+    // "Verifying no crash" was the whole assertion here, and there was none.
+    // Nor is a console spy one: React dropped the "setState on an unmounted
+    // component" warning in v18 and this repo is on 19, so nothing is logged
+    // either way. The abort check is observable in exactly one place — the
+    // export stops before encoding a payload nobody will ever see.
     expect(mockEncodeChangeset).not.toHaveBeenCalled();
-    consoleError.mockRestore();
   });
 
   it('skips malformed localStorage entries when searching for guest key', async () => {

@@ -20,7 +20,7 @@
  */
 
 import { act } from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@/test/utils';
 import type {
   HexColor,
@@ -210,6 +210,12 @@ describe('ImportTripQrDialog', () => {
     vi.clearAllMocks();
     capturedOnScan = null;
     dbFailures.getTripByShareId = null;
+  });
+
+  // Undoes any `vi.spyOn` a test installed. The global setup only clears
+  // recorded calls, so a stubbed `console.error` would outlive its test.
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('scanner surface', () => {
@@ -481,7 +487,6 @@ describe('ImportTripQrDialog', () => {
       });
       expect(mockToastError).not.toHaveBeenCalledWith('trips.importQrSnapshotRequired');
       expect(mockNavigate).not.toHaveBeenCalled();
-      consoleError.mockRestore();
     });
   });
 

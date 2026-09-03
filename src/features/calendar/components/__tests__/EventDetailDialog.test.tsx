@@ -4,7 +4,7 @@
  * @module features/calendar/components/__tests__/EventDetailDialog.test
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -128,6 +128,13 @@ const defaultProps = {
 // ============================================================================
 // Type Guard Tests
 // ============================================================================
+
+// Undoes any `vi.spyOn` a test installed. The global setup's `vi.clearAllMocks()`
+// only clears recorded calls, so a stubbed `console.error` would otherwise
+// outlive the test that stubbed it.
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('Type Guards', () => {
   it('isAssignmentEvent returns true for assignment events', () => {
@@ -342,11 +349,13 @@ describe('EventDetailDialog', () => {
       // the whole `onDelete` wiring — the thing it is named for — unverified.
       await user.click(within(confirm).getByRole('button', { name: 'common.delete' }));
 
+      // Both inside the same `waitFor`: `onDelete` is called synchronously and
+      // `onOpenChange` only after the await resumes, so a poll landing between
+      // the two would see zero calls on an assertion left outside.
       await waitFor(() => {
         expect(onDelete).toHaveBeenCalledOnce();
+        expect(onOpenChange).toHaveBeenCalledWith(false);
       });
-      // The event dialog closes only after the delete resolves.
-      expect(onOpenChange).toHaveBeenCalledWith(false);
       await waitFor(() => {
         expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
       });
@@ -355,6 +364,9 @@ describe('EventDetailDialog', () => {
     it('keeps the event dialog open when the delete fails', async () => {
       const onDelete = vi.fn().mockRejectedValue(new Error('Delete failed'));
       const onOpenChange = vi.fn();
+      // Restored by the file-level `afterEach`, not by a trailing
+      // `mockRestore()`: a failing assertion would skip that line and leave
+      // `console.error` stubbed for every later test in the file.
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
       render(
@@ -381,8 +393,6 @@ describe('EventDetailDialog', () => {
       expect(onOpenChange).not.toHaveBeenCalled();
       expect(screen.getByText('Arrival')).toBeInTheDocument();
       expect(consoleError).toHaveBeenCalled();
-
-      consoleError.mockRestore();
     });
   });
 });
