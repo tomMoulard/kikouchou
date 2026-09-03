@@ -6,6 +6,7 @@
  */
 
 import { type KeyboardEvent, type MouseEvent, memo, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -172,6 +173,8 @@ function calculateLuminance(rgb: RGB): number {
 const PersonBadge = memo((
   props: PersonBadgeProps
 ): React.ReactElement => {
+  const { t } = useTranslation();
+
   // Extract name and color from either prop pattern
   const name = props.person?.name ?? props.name ?? '',
    color = props.person?.color ?? props.color ?? FALLBACK_COLOR,
@@ -241,7 +244,11 @@ const PersonBadge = memo((
       onKeyDown={isInteractive ? handleKeyDown : undefined}
       tabIndex={isInteractive ? 0 : undefined}
       role={isInteractive ? 'button' : 'status'}
-      aria-label={isInteractive ? `${name} - click to interact` : undefined}
+      aria-label={
+        isInteractive
+          ? t('persons.badgeInteractive', 'Select {{name}}', { name })
+          : undefined
+      }
     >
       {name}
     </Badge>

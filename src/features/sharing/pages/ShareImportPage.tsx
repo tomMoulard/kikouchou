@@ -21,7 +21,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { format, isValid, parseISO } from 'date-fns';
 import { type Locale, enUS, fr } from 'date-fns/locale';
-import { Calendar, MapPin, Palmtree } from 'lucide-react';
+import { Calendar, MapPin, Palmtree, SearchX } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -371,8 +371,8 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
       <div className="flex min-h-svh items-center justify-center bg-gradient-to-b from-amber-50 to-orange-50 p-4">
         <Card className="w-full max-w-md border-amber-200 text-center shadow-lg">
           <CardHeader className="pb-2 pt-8">
-            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-amber-100 text-3xl">
-              🔍
+            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-amber-100">
+              <SearchX className="size-8 text-amber-700" aria-hidden="true" />
             </div>
             <CardTitle className="text-xl text-amber-900">
               {t('sharing.notFoundWizard', 'This trip link doesn\'t seem to work')}
