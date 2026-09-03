@@ -26,6 +26,24 @@ function iso(value: string): ISODateString {
   return value as ISODateString;
 }
 
+/**
+ * A stored instant for a wall-clock time in the runner's timezone — the shape
+ * `TransportForm` writes (`new Date(datetimeLocalInput).toISOString()`).
+ *
+ * A literal like `'2026-04-01T14:00:00Z'` would name a different calendar day
+ * depending on the machine's offset (2 April at UTC+14, 1 April at UTC-11), so
+ * a test asserting which day column it lands on would encode that offset.
+ */
+function localInstant(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute = 0,
+): Transport['datetime'] {
+  return new Date(year, month - 1, day, hour, minute).toISOString() as Transport['datetime'];
+}
+
 function createTrip(overrides?: Partial<Trip>): Trip {
   return {
     id: 'trip-1' as TripId,
@@ -172,7 +190,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'arrival',
-      datetime: '2026-04-01T14:00:00Z',
+      datetime: localInstant(2026, 4, 1, 14),
       location: 'Airport',
       needsPickup: false,
     };
@@ -182,7 +200,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'departure',
-      datetime: '2026-04-05T10:00:00Z',
+      datetime: localInstant(2026, 4, 5, 10),
       location: 'Train Station',
       needsPickup: false,
     };
@@ -208,7 +226,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'arrival',
-      datetime: '2026-04-01T14:00:00Z',
+      datetime: localInstant(2026, 4, 1, 14),
       location: 'Airport',
       needsPickup: false,
     };
@@ -218,7 +236,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'departure',
-      datetime: '2026-04-05T10:00:00Z',
+      datetime: localInstant(2026, 4, 5, 10),
       location: 'Airport',
       needsPickup: false,
     };
@@ -274,7 +292,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'arrival',
-      datetime: '2026-04-01T14:00:00Z',
+      datetime: localInstant(2026, 4, 1, 14),
       location: 'Airport',
       needsPickup: false,
     };
@@ -283,7 +301,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'departure',
-      datetime: '2026-04-05T10:00:00Z',
+      datetime: localInstant(2026, 4, 5, 10),
       location: 'Airport',
       needsPickup: false,
     };
@@ -384,7 +402,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'arrival',
-      datetime: '2026-04-01T14:00:00Z',
+      datetime: localInstant(2026, 4, 1, 14),
       location: 'Airport',
       needsPickup: false,
     };
@@ -634,7 +652,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'arrival',
-      datetime: '2026-04-01T14:00:00Z',
+      datetime: localInstant(2026, 4, 1, 14),
       location: 'Airport',
       needsPickup: false,
     };
@@ -644,7 +662,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'departure',
-      datetime: '2026-04-05T10:00:00Z',
+      datetime: localInstant(2026, 4, 5, 10),
       location: 'Airport',
       needsPickup: false,
     };
@@ -679,7 +697,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'arrival',
-      datetime: '2026-04-01T14:00:00Z',
+      datetime: localInstant(2026, 4, 1, 14),
       location: 'Airport',
       needsPickup: false,
     };
@@ -689,7 +707,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'departure',
-      datetime: '2026-04-05T10:00:00Z',
+      datetime: localInstant(2026, 4, 5, 10),
       location: 'Airport',
       needsPickup: false,
     };
@@ -725,7 +743,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'arrival',
-      datetime: '2026-04-02T14:00:00Z',
+      datetime: localInstant(2026, 4, 2, 14),
       location: '',
       needsPickup: false,
     };
@@ -766,7 +784,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'departure',
-      datetime: '2026-04-03T10:00:00Z',
+      datetime: localInstant(2026, 4, 3, 10),
       location: 'Airport',
       needsPickup: false,
     };
@@ -806,7 +824,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'arrival',
-      datetime: '2026-06-01T14:00:00Z', // Way outside trip range
+      datetime: localInstant(2026, 6, 1, 14), // Way outside trip range
       location: 'Airport',
       needsPickup: false,
     };

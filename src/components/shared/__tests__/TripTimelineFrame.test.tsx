@@ -5,7 +5,9 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { addDays, format } from 'date-fns';
 import { TripTimelineFrame } from '../TripTimelineFrame';
+import { toDayKeys } from '@/lib/utils/trip-days';
 import type { ISODateString } from '@/types';
 import { enUS } from 'date-fns/locale';
 
@@ -20,22 +22,21 @@ vi.mock('react-i18next', () => ({
 // Helpers
 // ============================================================================
 
+/**
+ * Day columns exactly as production supplies them: LOCAL midnights, with keys
+ * from the same converter (`lib/utils/trip-days`). Building them from a UTC
+ * instant instead — `new Date('2026-01-05')`, `.toISOString().slice(0, 10)` —
+ * makes the fixture mean a different calendar day depending on the machine's
+ * offset, which is the very confusion this frame used to work around.
+ */
 function makeDays(count: number, startDate = '2026-01-05'): Date[] {
-  const start = new Date(startDate);
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    return d;
-  });
+  const [year, month, day] = startDate.split('-').map(Number) as [number, number, number];
+  const start = new Date(year, month - 1, day);
+  return Array.from({ length: count }, (_, i) => addDays(start, i));
 }
 
 function makeDayKeys(count: number, startDate = '2026-01-05'): ISODateString[] {
-  const start = new Date(startDate);
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i);
-    return d.toISOString().slice(0, 10) as ISODateString;
-  });
+  return [...toDayKeys(makeDays(count, startDate))];
 }
 
 // ============================================================================
@@ -80,6 +81,27 @@ describe('TripTimelineFrame', () => {
     expect(screen.getByText('05')).toBeInTheDocument();
     expect(screen.getByText('06')).toBeInTheDocument();
     expect(screen.getByText('07')).toBeInTheDocument();
+  });
+
+  it('labels every column with the day its key names', () => {
+    // The header prints the column Date with date-fns (local components) but
+    // highlights and looks up by `dayKeys`. If the two disagree — as they did
+    // while columns were stepped in UTC — a guest reads a stay off the wrong day.
+    const days = makeDays(5);
+    const dayKeys = makeDayKeys(5);
+
+    render(
+      <TripTimelineFrame {...defaultProps} days={days} dayKeys={dayKeys}>
+        {() => <div>content</div>}
+      </TripTimelineFrame>
+    );
+
+    for (const [index, key] of dayKeys.entries()) {
+      // The column the frame drew for this Date, found by the full date it
+      // printed, has to show the day number the matching key names.
+      const column = screen.getByTitle(format(days[index]!, 'PPPP', { locale: enUS }));
+      expect(column).toHaveTextContent(key.slice(8, 10));
+    }
   });
 
   it('renders month abbreviations', () => {

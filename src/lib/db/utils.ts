@@ -141,8 +141,20 @@ export const fromUnixTimestamp = (timestamp: UnixTimestamp): Date =>
   new Date(timestamp);
 
 /**
- * Formats a Date to an ISO date string (YYYY-MM-DD) in UTC.
- * Uses UTC to ensure consistency with parseISODateString.
+ * Formats a Date to an ISO date string (YYYY-MM-DD) read in **UTC**.
+ *
+ * NOT the app's day-key convention — `toLocalISODateString` is. Calendar days
+ * (trip dates, stay dates, assignment check-in/check-out, activity days) are the
+ * days the viewer sees on their own wall calendar, and they are written locally;
+ * reading one of those local Dates back in UTC yields the *previous* day for
+ * every viewer ahead of UTC, Paris included. No calendar view keys a day this
+ * way any more; `lib/sync/join-trip.ts` still derives "today" in UTC for a
+ * placeholder trip's dates, which is the last known holdout.
+ *
+ * What is left for: reading the UTC calendar day *of an instant* — the sense in
+ * which a timestamp "happened on" a date in UTC — and round-tripping a Date that
+ * `parseISODateString` produced, which is UTC midnight by construction.
+ *
  * @param date - The Date to format (must be a valid Date)
  * @returns ISO date string in YYYY-MM-DD format (UTC)
  * @throws Error if date is invalid
@@ -154,7 +166,7 @@ export const toISODateString = (date: Date): ISODateString => {
   if (isNaN(date.getTime())) {
     throw new Error('Invalid Date passed to toISODateString');
   }
-  // Use UTC methods for consistency with parseISODateString
+  // UTC components, so this round-trips with parseISODateString
   const year = date.getUTCFullYear(),
    month = String(date.getUTCMonth() + 1).padStart(2, '0'),
    day = String(date.getUTCDate()).padStart(2, '0');
@@ -163,8 +175,22 @@ export const toISODateString = (date: Date): ISODateString => {
 
 /**
  * Calendar date in the user's local timezone (YYYY-MM-DD from getFullYear/Month/Date).
- * Use for matching `useToday()` / start-of-day Dates to trip day strings. `toISODateString`
- * uses UTC and can be one calendar day behind local "today" for timezones ahead of UTC.
+ *
+ * **This is the canonical day key.** Every calendar day the app stores or looks
+ * up — trip dates, stay dates, room check-in/check-out, activity days, "today" —
+ * is the day the viewer reads off their own clock, and this is the converter
+ * that produces it. `RoomAssignmentSection` and `QuickAssignmentDialog` write
+ * assignment dates with it, so every reader has to agree: a key and the lookup
+ * that reads it must use the same converter.
+ *
+ * Use it for Dates that carry local calendar components — `new Date()`,
+ * `useToday()`, `startOfDay`, `eachDayOfInterval`, `DateRangePicker` /
+ * react-day-picker selections, and the day columns from `lib/utils/trip-days`.
+ * Read a key back with `parseLocalDayKey` from that module.
+ *
+ * @param date - The Date to format (must be a valid Date)
+ * @returns ISO date string in YYYY-MM-DD format (local)
+ * @throws Error if date is invalid
  */
 export const toLocalISODateString = (date: Date): ISODateString => {
   if (isNaN(date.getTime())) {

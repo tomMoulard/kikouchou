@@ -60,7 +60,8 @@ import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ViewSwitcher } from '@/components/ui/view-switcher';
 import { AssignmentFormDialog } from '@/features/rooms/components/RoomAssignmentSection';
-import { toISODateString, toLocalISODateString } from '@/lib/db/utils';
+import { toLocalISODateString } from '@/lib/db/utils';
+import { localDayKeyOfInstant } from '@/lib/utils/trip-days';
 import { getActivityCategoryColor } from '@/types';
 import type {
   Activity,
@@ -303,8 +304,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       return map;
     }
 
-    const calendarStartStr = toISODateString(firstDay);
-    const calendarEndStr = toISODateString(lastDay);
+    const calendarStartStr = toLocalISODateString(firstDay);
+    const calendarEndStr = toLocalISODateString(lastDay);
     const tripStart = tripBoundaries?.start;
     const tripEnd = tripBoundaries?.end;
 
@@ -399,7 +400,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
 
     const markSlotOccupied = (spanDays: readonly Date[], slot: number) => {
       for (const day of spanDays) {
-        const dateKey = toISODateString(day);
+        const dateKey = toLocalISODateString(day);
         let occupiedSlots = slotOccupancy.get(dateKey);
         if (!occupiedSlots) {
           occupiedSlots = new Set<number>();
@@ -419,7 +420,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         let slotAvailable = true;
 
         for (const day of spanDays) {
-          const dateKey = toISODateString(day);
+          const dateKey = toLocalISODateString(day);
           const occupiedSlots = slotOccupancy.get(dateKey);
           if (occupiedSlots?.has(slot)) {
             slotAvailable = false;
@@ -456,7 +457,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           continue;
         }
 
-        const dateKey = toISODateString(day);
+        const dateKey = toLocalISODateString(day);
         const dayOfWeek = day.getDay();
         const isRowStart = dayOfWeek === 1; // Monday
         const isRowEnd = dayOfWeek === 0; // Sunday
@@ -523,13 +524,17 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       return map;
     }
 
-    const calendarStartStr = toISODateString(firstDay);
-    const calendarEndStr = toISODateString(lastDay);
+    const calendarStartStr = toLocalISODateString(firstDay);
+    const calendarEndStr = toLocalISODateString(lastDay);
 
     // Process arrivals
     for (const transport of arrivals) {
-      const transportDate = transport.datetime.substring(0, 10);
-      if (transportDate < calendarStartStr || transportDate > calendarEndStr) {
+      const transportDate = localDayKeyOfInstant(transport.datetime);
+      if (
+        transportDate === null ||
+        transportDate < calendarStartStr ||
+        transportDate > calendarEndStr
+      ) {
         continue;
       }
 
@@ -553,8 +558,12 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
 
     // Process departures
     for (const transport of departures) {
-      const transportDate = transport.datetime.substring(0, 10);
-      if (transportDate < calendarStartStr || transportDate > calendarEndStr) {
+      const transportDate = localDayKeyOfInstant(transport.datetime);
+      if (
+        transportDate === null ||
+        transportDate < calendarStartStr ||
+        transportDate > calendarEndStr
+      ) {
         continue;
       }
 
@@ -593,16 +602,11 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     return weeks;
   }, [calendarDays]);
 
+  // `calendarDays` are local midnights (`eachDayOfInterval`), so they are keyed
+  // the local way — the same converter `RoomAssignmentSection` writes stay dates
+  // with. One key set for the whole page: events, headcounts and activities all
+  // land in the cell whose date the user is reading.
   const visibleDateKeys = useMemo(
-    () => calendarDays.map((day) => toISODateString(day)),
-    [calendarDays],
-  );
-
-  // Headcounts compare against stored stay dates, so they need the calendar day
-  // as the user sees it. `visibleDateKeys` uses `toISODateString` (UTC), which is
-  // a day behind local midnight east of Greenwich — self-consistent for grid keys,
-  // but wrong when matched against `stayStartDate` & co.
-  const visibleLocalDateKeys = useMemo(
     () => calendarDays.map((day) => toLocalISODateString(day)),
     [calendarDays],
   );
@@ -616,23 +620,21 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         arrivals,
         departures,
         assignments,
-        dayKeys: visibleLocalDateKeys,
+        dayKeys: visibleDateKeys,
       }),
-    [assignments, arrivals, departures, persons, visibleLocalDateKeys],
+    [assignments, arrivals, departures, persons, visibleDateKeys],
   );
 
-  // Activities are keyed by the LOCAL day the guest experiences, the same
-  // convention `headcountsByDate` uses, so a pill lands in the cell whose number
-  // the user actually sees. Multi-day activities repeat across every day they cover.
-  const activitiesByLocalDate = useMemo(() => {
+  // Multi-day activities repeat across every day they cover.
+  const activitiesByDate = useMemo(() => {
     const map = new Map<string, CalendarActivity[]>();
 
-    if (visibleLocalDateKeys.length === 0 || activities.length === 0) {
+    if (visibleDateKeys.length === 0 || activities.length === 0) {
       return map;
     }
 
-    const firstKey = visibleLocalDateKeys[0]!;
-    const lastKey = visibleLocalDateKeys[visibleLocalDateKeys.length - 1]!;
+    const firstKey = visibleDateKeys[0]!;
+    const lastKey = visibleDateKeys[visibleDateKeys.length - 1]!;
 
     for (const activity of activities) {
       const startKey = getActivityStartDayKey(activity);
@@ -644,7 +646,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
 
       const color = getActivityCategoryColor(activity.category);
 
-      for (const dayKey of visibleLocalDateKeys) {
+      for (const dayKey of visibleDateKeys) {
         if (dayKey < startKey || dayKey > endKey) {
           continue;
         }
@@ -673,14 +675,14 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     }
 
     return map;
-  }, [activities, visibleLocalDateKeys]);
+  }, [activities, visibleDateKeys]);
 
   const defaultFocusedDateKey = useMemo(() => {
     if (calendarDays.length === 0) {
       return null;
     }
 
-    const todayKey = toISODateString(today);
+    const todayKey = toLocalISODateString(today);
     if (visibleDateKeys.includes(todayKey)) {
       return todayKey;
     }
@@ -690,7 +692,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     );
 
     if (firstDayInCurrentMonth) {
-      return toISODateString(firstDayInCurrentMonth);
+      return toLocalISODateString(firstDayInCurrentMonth);
     }
 
     return visibleDateKeys[0] ?? null;
@@ -1022,7 +1024,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // ============================================================================
 
   const hasVisibleCalendarItems =
-    eventsByDate.size > 0 || transportsByDate.size > 0 || activitiesByLocalDate.size > 0;
+    eventsByDate.size > 0 || transportsByDate.size > 0 || activitiesByDate.size > 0;
 
   return (
     <div className="container max-w-6xl py-6 md:py-8">
@@ -1085,12 +1087,11 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
                     role="row"
                   >
                     {week.map((day) => {
-                      const dateKey = toISODateString(day);
-                      const localDateKey = toLocalISODateString(day);
+                      const dateKey = toLocalISODateString(day);
                       const events = eventsByDate.get(dateKey) ?? EMPTY_EVENTS;
                       const transports = transportsByDate.get(dateKey) ?? EMPTY_TRANSPORTS;
                       const dayActivities =
-                        activitiesByLocalDate.get(localDateKey) ?? EMPTY_CALENDAR_ACTIVITIES;
+                        activitiesByDate.get(dateKey) ?? EMPTY_CALENDAR_ACTIVITIES;
                       const isCurrentMonth = isSameMonth(day, currentMonth);
                       const isDayToday = isSameDay(day, today);
                       const isWithinTrip =
@@ -1104,7 +1105,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
                           events={events}
                           transports={transports}
                           activities={dayActivities}
-                          headcount={headcountsByDate.get(localDateKey)}
+                          headcount={headcountsByDate.get(dateKey)}
                           isCurrentMonth={isCurrentMonth}
                           isToday={isDayToday}
                           isWithinTrip={isWithinTrip}

@@ -26,6 +26,24 @@ function createTrip(): Trip {
   };
 }
 
+/**
+ * A stored instant for a wall-clock time in the runner's timezone — the shape
+ * `TransportForm` writes (`new Date(datetimeLocalInput).toISOString()`).
+ *
+ * A literal like `'2026-04-01T14:00:00Z'` would name a different calendar day
+ * depending on the machine's offset (2 April at UTC+14, 1 April at UTC-11), so
+ * a test asserting which day column it lands on would encode that offset.
+ */
+function localInstant(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute = 0,
+): Transport['datetime'] {
+  return new Date(year, month - 1, day, hour, minute).toISOString() as Transport['datetime'];
+}
+
 describe('buildCalendarTimelineModel', () => {
   it('allocates two lanes for overlapping stays in different rooms', () => {
     const trip = createTrip();
@@ -221,7 +239,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: trip.id,
       personId: person.id,
       type: 'arrival',
-      datetime: '2026-04-01T12:10:00.000Z',
+      datetime: localInstant(2026, 4, 1, 12, 10),
       location: 'Station',
       needsPickup: false,
     };
@@ -263,7 +281,7 @@ describe('buildCalendarTimelineModel', () => {
       tripId: trip.id,
       personId: person.id,
       type: 'arrival',
-      datetime: '2026-04-02T10:00:00.000Z',
+      datetime: localInstant(2026, 4, 2, 10),
       location: 'Station',
       needsPickup: false,
     };

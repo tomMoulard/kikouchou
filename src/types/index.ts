@@ -47,8 +47,12 @@ export type ShareId = Brand<'ShareId'>;
 
 /**
  * ISO 8601 date string in YYYY-MM-DD format (branded type).
- * Use `toISODateStringFromString()` to create from a validated string,
- * or `toISODateString()` to create from a Date object.
+ *
+ * A calendar day as the viewer sees it. Use `toISODateStringFromString()` to
+ * create one from a validated string and `toLocalISODateString()` from a Date;
+ * `toISODateString()` reads UTC components and is not the day-key convention
+ * (see `lib/utils/trip-days`).
+ *
  * @example "2024-07-15"
  */
 export type ISODateString = Brand<'ISODateString'>;
