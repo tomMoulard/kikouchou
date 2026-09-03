@@ -11,7 +11,6 @@ import type { Activity, ActivityId, TripId } from '@/types';
 import {
   formatActivityDayRange,
   formatActivityTimeRange,
-  formatDayHeader,
   getActivityEndDayKey,
   getActivityEndInstant,
   getActivityStartDayKey,
@@ -178,12 +177,6 @@ describe('activity-utils', () => {
       const broken = makeActivity({ startDatetime: 'not-a-date' });
 
       expect(groupActivitiesByDate([broken], enUS)).toEqual([]);
-    });
-  });
-
-  describe('formatDayHeader', () => {
-    it('returns the raw key when it cannot be parsed', () => {
-      expect(formatDayHeader('nope', enUS)).toBe('nope');
     });
   });
 });

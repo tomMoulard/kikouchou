@@ -21,8 +21,7 @@ import { useNavigate } from 'react-router-dom';
 import { useFormSubmission, useOfflineAwareToast } from '@/hooks';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { format, isValid, parseISO } from 'date-fns';
-import { type Locale, enUS, fr } from 'date-fns/locale';
+import { type Locale, isValid, parseISO } from 'date-fns';
 import {
   AlertTriangle,
   Calendar,
@@ -63,7 +62,9 @@ import {
   calculatePeakOccupancy,
   createHeadcountResolver,
 } from '@/features/rooms/utils/capacity-utils';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
+import { formatDateRange } from '@/lib/utils/date-format';
 import type {
   ISODateString,
   Person,
@@ -143,42 +144,6 @@ interface AssignmentFormDialogProps {
 }
 
 // Utility functions (isDateInStayRange, calculatePeakOccupancy) imported from capacity-utils
-
-/**
- * Gets the date-fns locale based on the i18n language.
- */
-function getDateLocale(language: string): Locale {
-  return language === 'fr' ? fr : enUS;
-}
-
-/**
- * Formats a date range for display.
- */
-function formatDateRange(
-  startDate: ISODateString,
-  endDate: ISODateString,
-  locale: Locale,
-): string {
-  const start = parseISO(startDate);
-  const end = parseISO(endDate);
-
-  if (!isValid(start) || !isValid(end)) {
-    return `${startDate} - ${endDate}`;
-  }
-
-  const dateFormat = 'PP'; // Localized date format
-  const startStr = format(start, dateFormat, { locale });
-  const endStr = format(end, dateFormat, { locale });
-
-  // Same day
-  if (startDate === endDate) {
-    return startStr;
-  }
-
-  return `${startStr} - ${endStr}`;
-}
-
-
 
 // ============================================================================
 // AssignmentItem Subcomponent

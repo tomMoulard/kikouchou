@@ -9,7 +9,6 @@ import { enUS, fr } from 'date-fns/locale';
 
 import type { HexColor, ISODateString } from '@/types';
 import {
-  getDateLocale,
   getLuminance,
   getContrastTextColor,
   getSegmentBorderRadiusClasses,
@@ -37,25 +36,6 @@ describe('Constants', () => {
 
   it('MAX_VISIBLE_EVENT_SLOTS is 3', () => {
     expect(MAX_VISIBLE_EVENT_SLOTS).toBe(3);
-  });
-});
-
-// ============================================================================
-// getDateLocale
-// ============================================================================
-
-describe('getDateLocale', () => {
-  it('returns French locale for "fr"', () => {
-    expect(getDateLocale('fr')).toBe(fr);
-  });
-
-  it('returns English US locale for "en"', () => {
-    expect(getDateLocale('en')).toBe(enUS);
-  });
-
-  it('returns English US locale for unknown languages', () => {
-    expect(getDateLocale('de')).toBe(enUS);
-    expect(getDateLocale('')).toBe(enUS);
   });
 });
 

@@ -19,8 +19,6 @@ import {
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { format, isValid, parseISO } from 'date-fns';
-import { type Locale, enUS, fr } from 'date-fns/locale';
 import { Calendar, MapPin, Palmtree } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -34,7 +32,9 @@ import {
 } from '@/components/ui/card';
 
 import { getTripByShareId, setCurrentTrip } from '@/lib/db';
-import type { ISODateString, ShareId, Trip } from '@/types';
+import { getDateLocale } from '@/lib/i18n/date-locale';
+import { formatDateRange } from '@/lib/utils/date-format';
+import type { ShareId, Trip } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -72,49 +72,6 @@ const getGuestStorageKey = (shareId: string): string =>
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Returns the date-fns locale based on the current language.
- *
- * @param language - The current i18n language code
- * @returns The corresponding date-fns locale
- */
-function getDateLocale(language: string): Locale {
-  return language === 'fr' ? fr : enUS;
-}
-
-/**
- * Formats a date range for display.
- *
- * @param startDate - Start date in ISO format
- * @param endDate - End date in ISO format
- * @param locale - The date-fns locale for formatting
- * @returns Formatted date range string
- */
-function formatDateRange(
-  startDate: ISODateString,
-  endDate: ISODateString,
-  locale: Locale,
-): string {
-  const start = parseISO(startDate),
-   end = parseISO(endDate);
-
-  // Fallback to raw values if parsing fails
-  if (!isValid(start) || !isValid(end)) {
-    return `${startDate} - ${endDate}`;
-  }
-
-  const dateFormat = 'PP', // Localized date format (e.g., "Jan 15, 2024")
-   startStr = format(start, dateFormat, { locale }),
-   endStr = format(end, dateFormat, { locale });
-
-  // Same day - show single date
-  if (startDate === endDate) {
-    return startStr;
-  }
-
-  return `${startStr} - ${endStr}`;
-}
 
 /**
  * Type guard that validates a parsed JSON value matches StoredGuestIdentity.

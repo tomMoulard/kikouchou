@@ -31,8 +31,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useOfflineAwareToast } from '@/hooks';
-import { format, parseISO } from 'date-fns';
-import { enUS, fr } from 'date-fns/locale';
+import { type Locale, format, parseISO } from 'date-fns';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -76,7 +75,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
+import { formatFullDate } from '@/lib/utils/date-format';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
 import type { Person, PersonId, Transport, TransportId, TransportMode, TransportType } from '@/types';
@@ -100,7 +101,7 @@ interface TransportCardProps {
   /** Callback when delete is clicked */
   readonly onDelete: (transportId: TransportId) => void;
   /** Date locale for formatting */
-  readonly dateLocale: typeof fr | typeof enUS;
+  readonly dateLocale: Locale;
   /** Whether actions are disabled */
   readonly isActionsDisabled?: boolean;
   /** Whether this transport is in the past */
@@ -136,7 +137,7 @@ interface TransportListProps {
   /** Callback when delete is clicked */
   readonly onDelete: (transportId: TransportId) => void;
   /** Date locale for formatting */
-  readonly dateLocale: typeof fr | typeof enUS;
+  readonly dateLocale: Locale;
   /** Accessible label for the list */
   readonly listLabel: string;
   /** Empty state message */
@@ -150,16 +151,6 @@ interface TransportListProps {
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Gets the date-fns locale based on the current i18n language.
- *
- * @param language - The current i18n language code
- * @returns The date-fns locale object
- */
-function getDateLocale(language: string): typeof fr | typeof enUS {
-  return language === 'fr' ? fr : enUS;
-}
 
 /**
  * Gets the icon component for a transport mode.
@@ -193,7 +184,7 @@ function getTransportModeIcon(mode: TransportMode | undefined): typeof Train {
  */
 function formatTransportDatetime(
   datetime: string,
-  locale: typeof fr | typeof enUS,
+  locale: Locale,
 ): { date: string; time: string } {
   try {
     const parsedDate = parseISO(datetime);
@@ -226,23 +217,6 @@ function getDateKey(datetime: string): string {
 }
 
 /**
- * Formats a date key for display as a date header.
- *
- * @param dateKey - Date key in YYYY-MM-DD format
- * @param locale - date-fns locale object
- * @returns Formatted date string (e.g., "Monday, January 5, 2026")
- */
-function formatDateHeader(dateKey: string, locale: typeof fr | typeof enUS): string {
-  try {
-    const parsedDate = parseISO(dateKey);
-    if (isNaN(parsedDate.getTime())) {return dateKey;}
-    return format(parsedDate, 'EEEE, MMMM d, yyyy', { locale });
-  } catch {
-    return dateKey;
-  }
-}
-
-/**
  * Checks if a transport is in the past.
  *
  * @param datetime - ISO datetime string
@@ -267,7 +241,7 @@ function isTransportPast(datetime: string): boolean {
  */
 function groupTransportsByDate(
   transports: readonly Transport[],
-  locale: typeof fr | typeof enUS,
+  locale: Locale,
 ): DateGroup[] {
   // Create a map of date key to transports
   const groupsMap = new Map<string, Transport[]>();
@@ -294,7 +268,7 @@ function groupTransportsByDate(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([dateKey, transports]) => ({
       dateKey,
-      displayDate: formatDateHeader(dateKey, locale),
+      displayDate: formatFullDate(dateKey, locale),
       transports,
     }));
   
@@ -527,7 +501,7 @@ interface DateGroupSectionProps {
   /** Callback when delete is clicked */
   readonly onDelete: (transportId: TransportId) => void;
   /** Date locale for formatting */
-  readonly dateLocale: typeof fr | typeof enUS;
+  readonly dateLocale: Locale;
   /** Whether actions are disabled */
   readonly isActionsDisabled?: boolean;
   /** Whether transports in this group are past */

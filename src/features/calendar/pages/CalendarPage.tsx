@@ -96,6 +96,7 @@ import {
   getActivityEndDayKey,
   getActivityStartDayKey,
 } from '@/features/activities/utils/activity-utils';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 
 // Import types and utilities
 import type {
@@ -107,7 +108,6 @@ import type {
 import {
   EMPTY_EVENTS,
   EMPTY_TRANSPORTS,
-  getDateLocale,
   getContrastTextColor,
 } from '../utils/calendar-utils';
 import { buildDailyHeadcounts } from '../utils/headcount-utils';
