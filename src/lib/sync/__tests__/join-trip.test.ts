@@ -11,6 +11,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { db } from '@/lib/db/database';
+import i18n from '@/lib/i18n';
 import {
   claimParticipant,
   fetchClaimedParticipants,
@@ -18,6 +19,8 @@ import {
 } from '@/lib/sync/join-trip';
 import type { ShareId, TripId, UnixTimestamp } from '@/types';
 import { isoDate } from '@/test/utils';
+import enTranslations from '@/locales/en/translation.json';
+import frTranslations from '@/locales/fr/translation.json';
 
 // ============================================================================
 // Helpers
@@ -158,13 +161,53 @@ describe('materialiseJoinedTrip', () => {
     expect(trip?.startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it('substitutes a name when the server sends none', async () => {
+  /**
+   * The name a join writes is persisted, not rendered on the fly: every screen
+   * that shows a trip reads `trip.name` straight out of Dexie. So it has to be a
+   * real string, and in an app whose fallback language is French it has to be a
+   * translated one — 'Shared trip' put an English label on a French user's trip
+   * list, and the second spelling ('Shared Trip', from the CRDT bridge) meant the
+   * same guest saw a different name depending on how they got in.
+   */
+  it('names an unnamed trip through i18n rather than in English', async () => {
     const client = clientWithTrip({ start_date: '2026-07-15', end_date: '2026-07-22' });
 
     const result = await materialiseJoinedTrip(client, REMOTE_TRIP_ID);
     const trip = await db.trips.get((result as { tripId: TripId }).tripId);
 
-    expect(trip?.name).toBe('Shared trip');
+    expect(trip?.name).toBe(i18n.t('trips.untitled'));
+    expect(trip?.name).not.toBe('Shared trip');
+    expect(trip?.name).not.toBe('Shared Trip');
+  });
+
+  it('uses the same fallback the CRDT bridge uses', () => {
+    // Both write into `db.trips.name`, so two keys would be two names for the
+    // same nameless trip depending on which path created the row.
+    expect(enTranslations.trips.untitled).toBeTruthy();
+    expect(frTranslations.trips.untitled).toBeTruthy();
+    // Actually translated, not English copied into the French bundle.
+    expect(frTranslations.trips.untitled).not.toBe(enTranslations.trips.untitled);
+  });
+
+  it.each([
+    ['no preview row at all', null],
+    ['a row with no name', { start_date: '2026-07-15', end_date: '2026-07-22' }],
+    ['a blank name', { name: '', start_date: '2026-07-15', end_date: '2026-07-22' }],
+    [
+      'a whitespace-only name',
+      { name: '   \n ', start_date: '2026-07-15', end_date: '2026-07-22' },
+    ],
+    [
+      'a name of the wrong type',
+      { name: 42, start_date: '2026-07-15', end_date: '2026-07-22' },
+    ],
+  ])('resolves %s to one fallback name', async (_label, row) => {
+    const result = await materialiseJoinedTrip(clientWithTrip(row), REMOTE_TRIP_ID);
+    const trip = await db.trips.get((result as { tripId: TripId }).tripId);
+
+    // One substitution point, so every missing-name path agrees. Three separate
+    // literals used to disagree with each other in casing alone.
+    expect(trip?.name).toBe(i18n.t('trips.untitled'));
   });
 });
 
