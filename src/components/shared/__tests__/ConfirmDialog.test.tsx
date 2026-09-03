@@ -17,6 +17,27 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 // ============================================================================
 
 /**
+ * One `userEvent` instance per describe, not one per test.
+ *
+ * `userEvent.setup()` was being called in all 13 interactive tests here, each
+ * time re-attaching to the same jsdom `document` and re-stubbing the clipboard.
+ * The default `delay: 0` is the more expensive half: user-event awaits a
+ * macrotask between every synthetic event, so a single `click` — pointerover,
+ * pointerenter, pointermove, pointerdown, mousedown, focus, pointerup, mouseup,
+ * click — costs ten trips through the event loop, against Radix's portalled
+ * alertdialog. `delay: null` fires them back to back; nothing in this component
+ * depends on wall-clock spacing between the events of one click, only on React
+ * having flushed, which user-event's `act` wrapper still guarantees.
+ *
+ * That mattered because this file was one of the five repeatedly reported as
+ * "flaky" — it was not flaky, it was slow, and slow is what a 10s `testTimeout`
+ * turns into a failure when the machine is loaded.
+ */
+function setupUser(): ReturnType<typeof userEvent.setup> {
+  return userEvent.setup({ delay: null });
+}
+
+/**
  * Creates a delay promise for testing async behavior.
  */
 function delay(ms: number): Promise<void> {
@@ -129,8 +150,9 @@ describe('ConfirmDialog Basic Rendering', () => {
 // ============================================================================
 
 describe('ConfirmDialog Confirm Action', () => {
+  const user = setupUser();
+
   it('calls onConfirm when confirm button clicked', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn();
 
@@ -151,7 +173,6 @@ describe('ConfirmDialog Confirm Action', () => {
   });
 
   it('closes dialog on successful confirm', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockResolvedValue(undefined);
 
@@ -174,7 +195,6 @@ describe('ConfirmDialog Confirm Action', () => {
   });
 
   it('stays open on confirm error for retry', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockRejectedValue(new Error('Failed'));
 
@@ -206,8 +226,9 @@ describe('ConfirmDialog Confirm Action', () => {
 // ============================================================================
 
 describe('ConfirmDialog Cancel Action', () => {
+  const user = setupUser();
+
   it('calls onOpenChange(false) when cancel clicked', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn();
 
@@ -228,7 +249,6 @@ describe('ConfirmDialog Cancel Action', () => {
   });
 
   it('does not call onConfirm when cancelled', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn();
 
@@ -254,8 +274,9 @@ describe('ConfirmDialog Cancel Action', () => {
 // ============================================================================
 
 describe('ConfirmDialog Loading State', () => {
+  const user = setupUser();
+
   it('shows loading spinner during async confirm', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockImplementation(() => delay(100));
 
@@ -278,7 +299,6 @@ describe('ConfirmDialog Loading State', () => {
   });
 
   it('disables buttons during loading', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockImplementation(() => delay(100));
 
@@ -304,7 +324,6 @@ describe('ConfirmDialog Loading State', () => {
   });
 
   it('prevents close during loading', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockImplementation(() => delay(100));
 
@@ -332,7 +351,6 @@ describe('ConfirmDialog Loading State', () => {
   });
 
   it('prevents double-click during loading', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockImplementation(() => delay(50));
 
@@ -453,6 +471,8 @@ describe('ConfirmDialog Variants', () => {
 // ============================================================================
 
 describe('ConfirmDialog Accessibility', () => {
+  const user = setupUser();
+
   it('has role="alertdialog", not the ordinary dialog role', () => {
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn();
@@ -550,7 +570,6 @@ describe('ConfirmDialog Accessibility', () => {
   });
 
   it('loading spinner has aria-hidden', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockImplementation(() => delay(100));
 
@@ -577,8 +596,9 @@ describe('ConfirmDialog Accessibility', () => {
 // ============================================================================
 
 describe('ConfirmDialog Sync vs Async', () => {
+  const user = setupUser();
+
   it('handles synchronous onConfirm', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn(); // Sync function
 
@@ -602,7 +622,6 @@ describe('ConfirmDialog Sync vs Async', () => {
   });
 
   it('handles async onConfirm that resolves', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockResolvedValue(undefined);
 
@@ -625,7 +644,6 @@ describe('ConfirmDialog Sync vs Async', () => {
   });
 
   it('handles async onConfirm that rejects', async () => {
-    const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockRejectedValue(new Error('Error'));
 
