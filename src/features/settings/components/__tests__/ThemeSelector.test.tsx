@@ -37,8 +37,15 @@ function installLocalStorage(): void {
 }
 
 /**
- * Wraps the selector in the same provider `App.tsx` mounts, so the test
- * exercises the real storage and class-writing behaviour rather than a stub.
+ * Wraps the selector in the same provider `App.tsx` mounts, with the same
+ * props, so the test exercises the real storage and class-writing behaviour
+ * rather than a stub.
+ *
+ * `disableTransitionOnChange` is repeated deliberately even though it looks
+ * cosmetic: it is the one prop with side effects, appending a
+ * `*{transition:none}` style element to `document.head` and removing it on a
+ * timer at every theme change. Omitting it here would have the tests exercise
+ * a code path production never takes.
  *
  * @param children - Element under test
  * @returns The wrapped element
@@ -50,6 +57,7 @@ function withTheme(children: ReactNode): ReactElement {
       defaultTheme="system"
       storageKey={THEME_STORAGE_KEY}
       enableSystem
+      disableTransitionOnChange
     >
       {children}
     </ThemeProvider>

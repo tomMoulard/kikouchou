@@ -83,6 +83,16 @@ test.describe('Offline Map Tiles', () => {
     expect(await fetchServiceWorkerSource(page)).toContain('osm-tiles');
   });
 
+  /**
+   * The dark basemap is a different host from the OSM one above, so it needs
+   * its own rule. Without it a dark-mode user's map is blank offline while the
+   * same map works in light mode — and nothing else would notice, because
+   * every existing map assertion runs in the default light theme.
+   */
+  test('the service worker declares the dark basemap tile cache', async ({ page }) => {
+    expect(await fetchServiceWorkerSource(page)).toContain('carto-dark-tiles');
+  });
+
   test('the service worker declares the Nominatim geocoding cache', async ({ page }) => {
     expect(await fetchServiceWorkerSource(page)).toContain('nominatim-geocoding');
   });

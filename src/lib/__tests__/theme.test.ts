@@ -180,6 +180,48 @@ describe('lib/theme', () => {
       expect(document.documentElement.classList.contains('light')).toBe(true);
     });
 
+    it('normalises an unrecognised stored value so next-themes cannot diverge', () => {
+      // next-themes reads `localStorage.getItem(key) || defaultTheme` with no
+      // validation, so leaving 'sepia' in storage would have it add a `sepia`
+      // class and strip the one applied here.
+      window.localStorage.setItem(THEME_STORAGE_KEY, 'sepia');
+      mockPrefersDark(false);
+
+      applyStoredTheme();
+
+      expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe(
+        DEFAULT_THEME_PREFERENCE,
+      );
+      expect(document.documentElement.classList.contains('light')).toBe(true);
+    });
+
+    it('leaves a valid stored value untouched', () => {
+      window.localStorage.setItem(THEME_STORAGE_KEY, 'dark');
+      mockPrefersDark(false);
+
+      applyStoredTheme();
+
+      expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark');
+    });
+
+    it('does not throw when the root element cannot be written to', () => {
+      window.localStorage.setItem(THEME_STORAGE_KEY, 'dark');
+      mockPrefersDark(false);
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => undefined);
+      vi.spyOn(document.documentElement.classList, 'add').mockImplementation(
+        () => {
+          throw new Error('read-only');
+        },
+      );
+
+      // App.tsx calls this at module scope on the boot path, so a throw here
+      // would blank the app before React renders.
+      expect(() => applyStoredTheme()).not.toThrow();
+      expect(consoleError).toHaveBeenCalled();
+    });
+
     it('leaves unrelated classes on the root element alone', () => {
       document.documentElement.classList.add('js-enabled');
       window.localStorage.setItem(THEME_STORAGE_KEY, 'dark');

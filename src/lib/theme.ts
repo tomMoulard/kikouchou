@@ -106,13 +106,42 @@ export function resolveThemePreference(
     return preference;
   }
 
-  if (typeof window.matchMedia !== 'function') {
+  // `typeof window.matchMedia` still evaluates `window`, so it throws rather
+  // than returning 'undefined' where `window` is undeclared. This is exported,
+  // so it guards itself instead of relying on its one current caller.
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
     return 'light';
   }
 
   return window.matchMedia('(prefers-color-scheme: dark)').matches
     ? 'dark'
     : 'light';
+}
+
+/**
+ * Writes a validated preference back to storage.
+ *
+ * This is what stops this module and `next-themes` disagreeing. Their readers
+ * are not equally strict: this one runs `isThemePreference` and falls back,
+ * next-themes' is `localStorage.getItem(key) || defaultTheme` with no
+ * validation at all. So a stored `'sepia'` — a downgrade after a future theme,
+ * or a hand-edited value — has this module paint `light` while next-themes
+ * strips `light` and adds a `sepia` class, leaving `<html>` with no theme
+ * class, `colorScheme` cleared, `MapView`'s probe reading false and the
+ * settings toggle showing a selection nobody chose. Normalising the value at
+ * the first read means next-themes never sees one it cannot handle.
+ *
+ * @param preference - The already-validated preference
+ */
+function persistThemePreference(preference: ThemePreference): void {
+  try {
+    if (window.localStorage.getItem(THEME_STORAGE_KEY) !== preference) {
+      window.localStorage.setItem(THEME_STORAGE_KEY, preference);
+    }
+  } catch {
+    // Storage unavailable. The class is already applied; next-themes will fall
+    // back to its own default, which is the same `system`.
+  }
 }
 
 /**
@@ -128,12 +157,24 @@ export function applyStoredTheme(): void {
     return;
   }
 
-  const resolved = resolveThemePreference(readStoredThemePreference()),
-    root = document.documentElement;
+  // Everything here is wrapped, because `App.tsx` calls this at module scope
+  // and `main.tsx` imports `App.tsx` at module scope: a throw would blank the
+  // app before React ever renders. Same hazard AGENTS.md records for
+  // `lib/posthog`. A theme that fails to apply is a cosmetic bug; a theme that
+  // throws is a white screen.
+  try {
+    const preference = readStoredThemePreference(),
+      resolved = resolveThemePreference(preference),
+      root = document.documentElement;
 
-  root.classList.remove(...THEME_CLASSES);
-  root.classList.add(resolved);
-  // Matches `next-themes`' `enableColorScheme`, so native widgets (scrollbars,
-  // date pickers, form controls) are dark from the first frame too.
-  root.style.colorScheme = resolved;
+    root.classList.remove(...THEME_CLASSES);
+    root.classList.add(resolved);
+    // Matches `next-themes`' `enableColorScheme`, so native widgets (scrollbars,
+    // date pickers, form controls) are dark from the first frame too.
+    root.style.colorScheme = resolved;
+
+    persistThemePreference(preference);
+  } catch (error) {
+    console.error('Failed to apply the stored theme:', error);
+  }
 }
