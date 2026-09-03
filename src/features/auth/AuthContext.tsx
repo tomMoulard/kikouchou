@@ -46,7 +46,7 @@ import {
   getCapturedAuthError,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import posthog from '@/lib/posthog';
+import posthog, { resetAnalyticsIdentity } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -134,6 +134,52 @@ function toMessage(error: unknown): string {
   return String(error);
 }
 
+/**
+ * The account's display name, as Google returned it.
+ *
+ * `user_metadata` is provider-shaped and typed as an open record, so both keys
+ * are checked and both are type-guarded: a provider that ever sends a non-string
+ * there must not put an object into an analytics property.
+ */
+function toDisplayName(user: User): string | undefined {
+  const metadata: Record<string, unknown> = user.user_metadata ?? {};
+  for (const key of ['full_name', 'name'] as const) {
+    const value = metadata[key];
+    if (typeof value === 'string' && value !== '') {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * What PostHog is told about the person it just identified.
+ *
+ * Without this an identified person shows up as a bare UUID with no way to line
+ * it up against the `auth.users` row it *is* — which is how a project ended up
+ * holding 20 people for 3 accounts with nobody able to tell which was which.
+ * `email` and `name` are also what PostHog's own person display falls back to.
+ *
+ * Deliberately nothing else. The rule for this app is counts and enum values,
+ * not user content, and an account's own identity is the one thing `identify()`
+ * is for. Absent fields are omitted rather than sent as `undefined`, so a person
+ * profile is never overwritten with a blank.
+ */
+function toPersonProperties(user: User): Record<string, string> {
+  const properties: Record<string, string> = { supabase_user_id: user.id };
+
+  if (user.email !== undefined && user.email !== '') {
+    properties['email'] = user.email;
+  }
+
+  const name = toDisplayName(user);
+  if (name !== undefined) {
+    properties['name'] = name;
+  }
+
+  return properties;
+}
+
 // ============================================================================
 // Provider
 // ============================================================================
@@ -216,7 +262,8 @@ export function AuthProvider({
 
         // Tie analytics to the Supabase account, so a person's events line up
         // across their devices and browsers under the same id.
-        const nextUserId = nextSession?.user.id ?? null;
+        const nextUser = nextSession?.user ?? null;
+        const nextUserId = nextUser?.id ?? null;
 
         // A super property, so every event — not just the ones fired near here —
         // can be split by whether the person had an account. Most of this app
@@ -224,12 +271,14 @@ export function AuthProvider({
         // sharing" and "nobody signs in".
         posthog?.register({ signed_in: nextUserId !== null });
 
-        if (nextUserId !== null) {
+        if (nextUser !== null) {
           // Only on a change. This handler also fires on every token refresh,
           // where re-identifying the same id is pointless churn.
-          if (identifiedRef.current !== nextUserId) {
-            posthog?.identify(nextUserId);
-            identifiedRef.current = nextUserId;
+          if (identifiedRef.current !== nextUser.id) {
+            // The properties are what make the person recognisable: an id on
+            // its own is a UUID nobody can match to an account.
+            posthog?.identify(nextUser.id, toPersonProperties(nextUser));
+            identifiedRef.current = nextUser.id;
           }
           return;
         }
@@ -243,7 +292,14 @@ export function AuthProvider({
         // matters — and that transition is what makes a shared browser safe,
         // since without it the next person inherits the last one's identity.
         if (identifiedRef.current !== null) {
-          posthog?.reset();
+          resetAnalyticsIdentity();
+          // `reset()` clears every persisted property, super properties
+          // included, so the `signed_in` registered a few lines up is gone by
+          // the time it returns. Registering it again is what keeps the rest of
+          // this session's events attributable to a signed-out visitor rather
+          // than to nothing at all. `resetAnalyticsIdentity` restores the
+          // properties `lib/posthog` owns; this one is ours.
+          posthog?.register({ signed_in: false });
           identifiedRef.current = null;
         }
       });

@@ -37,9 +37,12 @@ vi.mock('@/lib/posthog', () => ({
   // tests, so nothing here could observe a call without this.
   default: {
     identify: (...args: unknown[]) => mockIdentify(...args),
-    reset: (...args: unknown[]) => mockReset(...args),
     register: (...args: unknown[]) => mockRegister(...args),
   },
+  // Not `posthog.reset()`: the real helper also puts back the super properties
+  // that `reset()` wipes. Mocking the named export is what keeps this test
+  // honest about which one the provider calls.
+  resetAnalyticsIdentity: (...args: unknown[]) => mockReset(...args),
 }));
 
 vi.mock('@/lib/supabase/client', () => ({
@@ -120,6 +123,11 @@ const SESSION = {
   access_token: 'token',
   user: { id: 'user-1', email: 'someone@example.test', user_metadata: {} },
 };
+
+/** The same session with different provider metadata, for the identify tests. */
+function sessionWithMetadata(metadata: Record<string, unknown>): typeof SESSION {
+  return { ...SESSION, user: { ...SESSION.user, user_metadata: metadata } };
+}
 
 function wrapper({ children }: { children: ReactNode }) {
   return <AuthProvider>{children}</AuthProvider>;
@@ -254,10 +262,105 @@ describe('AuthProvider — state', () => {
 
     // The same id on both sides is the point: it is what lets one person's
     // events line up across their devices.
+    //
+    // The properties are the other half. Identified with the id alone, a person
+    // is a bare UUID in PostHog with nothing to match against the `auth.users`
+    // row it *is* — which is how a project came to hold 20 people for 3 accounts
+    // with no way to tell which was which.
     await waitFor(() => {
-      expect(mockIdentify).toHaveBeenCalledWith('user-1');
+      expect(mockIdentify).toHaveBeenCalledWith('user-1', {
+        supabase_user_id: 'user-1',
+        email: 'someone@example.test',
+      });
     });
     expect(mockRegister).toHaveBeenCalledWith({ signed_in: true });
+  });
+
+  it("sends the account's display name when the provider supplied one", async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    client.emit('SIGNED_IN', sessionWithMetadata({ full_name: 'Ada Lovelace' }));
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledWith('user-1', {
+        supabase_user_id: 'user-1',
+        email: 'someone@example.test',
+        name: 'Ada Lovelace',
+      });
+    });
+  });
+
+  it('falls back to `name` when the provider sends no `full_name`', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    // Google sends both; other providers send only one, and `user_metadata` is
+    // provider-shaped so neither key is guaranteed.
+    client.emit('SIGNED_IN', sessionWithMetadata({ name: 'Ada' }));
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledWith('user-1', {
+        supabase_user_id: 'user-1',
+        email: 'someone@example.test',
+        name: 'Ada',
+      });
+    });
+  });
+
+  it('omits a property rather than sending a blank one', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    // A non-string `full_name`, no email at all: `identify()` merges into the
+    // person profile, so sending an empty or wrongly-typed value would overwrite
+    // a good one rather than leave it alone.
+    client.emit('SIGNED_IN', {
+      access_token: 'token',
+      user: { id: 'user-1', user_metadata: { full_name: { given: 'Ada' } } },
+    });
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledWith('user-1', {
+        supabase_user_id: 'user-1',
+      });
+    });
+  });
+
+  it('sends nothing about the account beyond its id, email and name', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    // Supabase puts the whole provider payload in `user_metadata`. Only the
+    // three fields that identify the account may cross into analytics; the rest
+    // — avatar URLs, provider ids, phone numbers — must not.
+    client.emit(
+      'SIGNED_IN',
+      sessionWithMetadata({
+        full_name: 'Ada Lovelace',
+        avatar_url: 'https://example.test/ada.png',
+        provider_id: '1234567890',
+        phone: '+33123456789',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalled();
+    });
+    const properties = mockIdentify.mock.calls.at(-1)?.[1] as Record<string, unknown>;
+    expect(Object.keys(properties).sort()).toEqual(['email', 'name', 'supabase_user_id']);
   });
 
   it('does not re-identify on a token refresh', async () => {
@@ -306,7 +409,7 @@ describe('AuthProvider — state', () => {
 
     client.emit('SIGNED_IN', SESSION);
     await waitFor(() => {
-      expect(mockIdentify).toHaveBeenCalledWith('user-1');
+      expect(mockIdentify).toHaveBeenCalled();
     });
 
     client.emit('SIGNED_OUT', null);
@@ -314,6 +417,36 @@ describe('AuthProvider — state', () => {
     await waitFor(() => {
       expect(mockReset).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('puts the signed-out context back after the reset that wipes it', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    client.emit('SIGNED_IN', SESSION);
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalled();
+    });
+
+    mockRegister.mockClear();
+    client.emit('SIGNED_OUT', null);
+
+    // `reset()` calls `persistence.clear()`, which drops super properties too —
+    // so the `signed_in` registered before it is gone by the time it returns.
+    // Without re-registering, every later event in this tab carries neither
+    // `signed_in` nor `app_version`, and falls out of the breakdowns the whole
+    // project is sliced by.
+    await waitFor(() => {
+      expect(mockReset).toHaveBeenCalled();
+    });
+    const afterReset = mockRegister.mock.invocationCallOrder.filter(
+      (order) => order > mockReset.mock.invocationCallOrder[0]!,
+    );
+    expect(afterReset.length).toBeGreaterThan(0);
+    expect(mockRegister).toHaveBeenLastCalledWith({ signed_in: false });
   });
 
   it('subscribes once, and reads the persisted session as a fallback', async () => {
