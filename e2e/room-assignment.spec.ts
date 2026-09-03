@@ -282,6 +282,124 @@ async function createAssignmentViaDB(
 }
 
 /**
+ * Every room assignment stored for a trip, as the database holds them.
+ *
+ * Several tests below turn on whether a row was written at all — "the dialog is
+ * still open" and "the save is still in flight" look identical from the DOM,
+ * and one of them is a passing capacity check while the other is a slow
+ * success.
+ */
+async function getTripAssignmentsFromDB(
+  page: Page,
+  tripId: string,
+): Promise<{ roomId: string; startDate: string; endDate: string }[]> {
+  return page.evaluate(async (id) => {
+    return new Promise((resolve, reject) => {
+      const dbRequest = indexedDB.open('kikoushou');
+      dbRequest.onerror = () => reject(new Error('Failed to open database'));
+      dbRequest.onsuccess = () => {
+        const db = dbRequest.result;
+        const tx = db.transaction('roomAssignments', 'readonly');
+        const getAll = tx.objectStore('roomAssignments').getAll();
+
+        getAll.onsuccess = () => {
+          db.close();
+          const rows = (getAll.result as Record<string, string>[])
+            .filter((row) => row.tripId === id)
+            .map((row) => ({
+              roomId: row.roomId ?? '',
+              startDate: row.startDate ?? '',
+              endDate: row.endDate ?? '',
+            }))
+            .sort((a, b) => a.startDate.localeCompare(b.startDate));
+          resolve(rows);
+        };
+        getAll.onerror = () => {
+          db.close();
+          reject(new Error('Failed to read assignments'));
+        };
+      };
+    });
+  }, tripId);
+}
+
+/**
+ * The number of nights a stay occupies under the check-in / check-out model:
+ * the check-out day is the morning the guest leaves, not a night.
+ *
+ * Derived from the fixture dates rather than hardcoded, so those can move.
+ */
+function nightCount(startDate: string, endDate: string): number {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  // UTC arithmetic: a local-time subtraction is off by an hour across a DST
+  // boundary, and off by a whole night once rounded.
+  return Math.round(
+    (Date.parse(`${endDate}T00:00:00.000Z`) - Date.parse(`${startDate}T00:00:00.000Z`)) / DAY_MS,
+  );
+}
+
+/**
+ * Clicks a page's "add" affordance, whichever of the two is on screen.
+ *
+ * This replaces `page.locator('button.fixed')` — the mobile FAB named by a
+ * Tailwind class, which any styling change breaks silently — read through a
+ * chain of instant `isVisible()` calls taken right after
+ * `waitForLoadState('load')`, which races the lazy route every time. The header
+ * button and the FAB carry the same accessible name and exactly one of them is
+ * visible at a given viewport, so a retrying count both waits for the route and
+ * asserts there is one unambiguous way in.
+ */
+async function clickAddButton(page: Page, name: RegExp): Promise<void> {
+  const addButton = page.getByRole('button', { name }).filter({ visible: true });
+  await expect(addButton).toHaveCount(1);
+  await addButton.click();
+}
+
+/**
+ * Picks a check-in / check-out range in the open assignment dialog's picker.
+ *
+ * Days are addressed by `data-day`, the picker's own per-date attribute, and
+ * not by their number: the month grid also renders the neighbouring months'
+ * days, so "2" matches up to three buttons.
+ */
+async function pickStayDates(page: Page, startDate: string, endDate: string): Promise<void> {
+  const toDataDay = (iso: string): Promise<string> =>
+    page.evaluate((value) => {
+      const [year, month, day] = value.split('-').map(Number);
+      return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1).toLocaleDateString();
+    }, iso);
+
+  await page.getByRole('button', { name: /check-in|arriv/i }).first().click();
+
+  const calendar = page.locator('[data-radix-popper-content-wrapper] [data-slot="calendar"]');
+  await expect(calendar).toBeVisible();
+
+  await calendar.locator(`button[data-day="${await toDataDay(startDate)}"]`).click();
+  await calendar.locator(`button[data-day="${await toDataDay(endDate)}"]`).click();
+
+  // The picker closes itself once both ends are set. Waiting for that is not
+  // cosmetic: the popover is itself a `role="dialog"`, so anything reading
+  // `getByRole('dialog')` afterwards would match two elements.
+  await expect(calendar).toBeHidden();
+}
+
+/**
+ * Closes the assignment dialog through the discard confirmation.
+ *
+ * Escape alone is not enough once the form holds anything: the dialog raises a
+ * "Discard changes?" `alertdialog` that has to be answered, or the form stays
+ * open and the next assertion times out on the wrong element.
+ */
+async function discardAssignmentDialog(page: Page): Promise<void> {
+  await page.keyboard.press('Escape');
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: /^(discard|abandonner)$/i })
+    .click();
+  await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5000 });
+}
+
+/**
  * Navigates to the rooms page for a given trip.
  */
 async function navigateToRooms(page: Page, tripId: string): Promise<void> {
@@ -331,18 +449,7 @@ async function createRoom(
   page: Page,
   roomData: { name: string; capacity: string; description?: string }
 ): Promise<void> {
-  // Click add room button - check for header button or FAB
-  const headerAddButton = page.locator('header').getByRole('button', { name: /new|nouveau/i });
-  const fabAddButton = page.locator('button.fixed');
-
-  if (await headerAddButton.isVisible()) {
-    await headerAddButton.click();
-  } else if (await fabAddButton.isVisible()) {
-    await fabAddButton.click();
-  } else {
-    // Try generic button with room-related text
-    await page.getByRole('button', { name: /new|add|nouveau|ajouter/i }).first().click();
-  }
+  await clickAddButton(page, /^(new room|nouvelle chambre)$/i);
 
   // Wait for dialog to open
   await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
@@ -376,17 +483,7 @@ async function createPerson(
   page: Page,
   personData: { name: string }
 ): Promise<void> {
-  // Click add person button
-  const headerAddButton = page.locator('header').getByRole('button', { name: /new|nouveau/i });
-  const fabAddButton = page.locator('button.fixed');
-
-  if (await headerAddButton.isVisible()) {
-    await headerAddButton.click();
-  } else if (await fabAddButton.isVisible()) {
-    await fabAddButton.click();
-  } else {
-    await page.getByRole('button', { name: /new|add|nouveau|ajouter/i }).first().click();
-  }
+  await clickAddButton(page, /^(new guest|nouveau participant)$/i);
 
   // Wait for dialog to open
   await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
@@ -505,6 +602,16 @@ test.describe('Room Assignment Flow', () => {
     // this legitimately matches more than one element.
     await expect(page.getByText(new RegExp(TEST_DATA.person.name, 'i')).first()).toBeVisible({ timeout: 10000 });
 
+    // One bar per night, each labelled with the guest *and* the room. The name
+    // match above is satisfied by any list of guests on the page; this is the
+    // stay itself, and its length.
+    await expect(
+      page.getByRole('button', {
+        name: `${TEST_DATA.person.name} - ${TEST_DATA.room.name}`,
+        exact: true,
+      }),
+    ).toHaveCount(nightCount(TEST_DATA.assignment.startDate, TEST_DATA.assignment.endDate));
+
     // Also verify on rooms page - expand room to see assignment
     await navigateToRooms(page, tripId);
     await openRoomAssignments(page, TEST_DATA.room.name);
@@ -514,9 +621,14 @@ test.describe('Room Assignment Flow', () => {
   });
 
   // --------------------------------------------------------------------------
-  // Test 4: Shows conflict error when dates overlap
+  // Test 4: Warns when a second guest would fill the room past its capacity
+  //
+  // Named for what the dialog actually does. Capacity here is deliberately
+  // soft — `computedCapacityWarning` is not part of `isFormValid`, so the save
+  // is still allowed — and a test asserting prevention would be asserting a
+  // behaviour the product does not have. What it must not do is stay silent.
   // --------------------------------------------------------------------------
-  test('shows conflict error when dates overlap', async ({ page }) => {
+  test('warns when a second guest would put the room over capacity', async ({ page }) => {
     tripId = await createTestTrip(page);
 
     // Setup: Create room and TWO persons via IndexedDB
@@ -551,71 +663,112 @@ test.describe('Room Assignment Flow', () => {
     // Verify first assignment exists
     await expect(page.getByText(TEST_DATA.person.name)).toBeVisible();
 
-    // Try to create overlapping assignment for person2 (same dates = conflict due to capacity)
-    // Click add assignment
-    const addButton = page.locator('section, [aria-label*="assignment"]').getByRole('button').filter({
-      has: page.locator('svg')
-    }).first();
-    await addButton.click();
+    // Add a second guest over the same nights, in a room with one bed.
+    const roomItem = page.locator('[role="listitem"]').filter({ hasText: TEST_DATA.room.name });
+    await roomItem
+      .getByRole('button', { name: /^(assign a room|attribuer une chambre)$/i })
+      .click();
 
-    // Wait for dialog
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // Select person2
-    const personSelect = page.locator('#person-select');
-    await personSelect.click();
+    await dialog.locator('#person-select').click();
     await page.getByRole('option', { name: new RegExp(person2Name, 'i') }).click();
 
-    // The dates should default to trip dates or we need to open the date picker
-    // Check if there's an error/conflict message shown
-    // Either the conflict shows immediately (if dates are pre-filled with overlapping range)
-    // or we need to manually select dates
-    
-    // Wait a bit for any conflict validation to run
-    await page.waitForTimeout(500);
+    // The dates are what make this an over-capacity request, and the test this
+    // replaces never set them: it opened the form, waited 500 ms and accepted
+    // "any role=alert exists" (every Sonner toast is one) OR "the button is
+    // disabled" (it was — for having no dates yet) OR "the dialog is still
+    // open" (which is also what a slow success looks like). It passed with
+    // capacity checking deleted outright.
+    await pickStayDates(page, TEST_DATA.assignment.startDate, TEST_DATA.assignment.endDate);
 
-    // Check for conflict error or try to submit and see if it fails
-    const conflictError = page.getByRole('alert').or(
-      page.getByText(/conflict|conflit|capacity|capacité|full|complet/i)
+    // The warning, inside the dialog, by its own copy.
+    await expect(
+      dialog.getByRole('alert').filter({ hasText: /over capacity|surchargée/i }),
+    ).toBeVisible();
+
+    // And nothing has been written: the guest is not in the room yet, which is
+    // the fact the DOM cannot distinguish from a save still in flight.
+    expect(await getTripAssignmentsFromDB(page, tripId)).toHaveLength(1);
+
+    await discardAssignmentDialog(page);
+    expect(await getTripAssignmentsFromDB(page, tripId)).toHaveLength(1);
+  });
+
+  // --------------------------------------------------------------------------
+  // Test 4b: The assignment the form genuinely refuses
+  //
+  // Capacity is a warning; a guest sleeping in two rooms on the same night is
+  // not. `isFormValid` excludes `conflictError`, so this is the one path where
+  // the save is actually blocked — and nothing covered it.
+  // --------------------------------------------------------------------------
+  test('blocks assigning a guest who already has a room those nights', async ({ page }) => {
+    tripId = await createTestTrip(page);
+
+    const roomId = await createRoomViaDB(page, tripId, {
+      name: TEST_DATA.room.name,
+      capacity: parseInt(TEST_DATA.room.capacity, 10),
+    });
+    const otherRoomId = await createRoomViaDB(
+      page,
+      tripId,
+      { name: TEST_DATA.room2.name, capacity: parseInt(TEST_DATA.room2.capacity, 10) },
+      1,
+    );
+    const personId = await createPersonViaDB(page, tripId, { name: TEST_DATA.person.name });
+
+    // The guest already sleeps in the other room for these nights.
+    await createAssignmentViaDB(
+      page,
+      tripId,
+      otherRoomId,
+      personId,
+      TEST_DATA.assignment.startDate,
+      TEST_DATA.assignment.endDate,
     );
 
-    // If no immediate error, the submit button should be disabled or show error on click
-    const submitButton = page.getByRole('dialog').getByRole('button', { name: /add|ajouter/i }).last();
-    
-    // Either there's an immediate conflict message, or the button is disabled
-    const hasConflict = await conflictError.isVisible().catch(() => false);
-    const isDisabled = await submitButton.isDisabled().catch(() => false);
-    
-    // At minimum, verify the dialog is functional (shows person selection)
-    await expect(page.getByRole('dialog')).toBeVisible();
-    
-    // Verify one of: conflict message shown OR button disabled OR assignment count doesn't change
-    if (!hasConflict && !isDisabled) {
-      // If neither, click submit and verify error appears
-      await submitButton.click();
-      await page.waitForTimeout(500);
-      // Should see an error or the dialog should stay open
-      const errorAfterSubmit = page.getByRole('alert').or(
-        page.getByText(/error|erreur|conflict|conflit/i)
-      );
-      const dialogStillOpen = await page.getByRole('dialog').isVisible();
-      expect(dialogStillOpen || await errorAfterSubmit.isVisible().catch(() => false)).toBe(true);
-    }
+    await page.reload();
+    await page.waitForLoadState('load');
 
-    // Close the dialog.
-    //
-    // Escape alone is not enough: the form is dirty by this point, so closing
-    // it raises a "Discard changes?" confirmation. That one is a
-    // `role="alertdialog"` now, so it no longer collides with the assertion
-    // below — but it still has to be answered, or the form dialog stays put.
-    await page.keyboard.press('Escape');
+    await navigateToRooms(page, tripId);
+    await openRoomAssignments(page, TEST_DATA.room.name);
 
-    const discardButton = page.getByRole('button', { name: /^discard$/i });
-    if (await discardButton.isVisible().catch(() => false)) {
-      await discardButton.click();
-    }
+    const roomItem = page.locator('[role="listitem"]').filter({ hasText: TEST_DATA.room.name });
+    await roomItem
+      .getByRole('button', { name: /^(assign a room|attribuer une chambre)$/i })
+      .click();
 
-    await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5000 });
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    await dialog.locator('#person-select').click();
+    await page.getByRole('option', { name: new RegExp(TEST_DATA.person.name) }).click();
+
+    // Overlapping the existing stay by a night is enough — back-to-back stays
+    // are a room move, not a double booking.
+    await pickStayDates(
+      page,
+      TEST_DATA.overlappingAssignment.startDate,
+      TEST_DATA.overlappingAssignment.endDate,
+    );
+
+    await expect(
+      dialog.getByRole('alert').filter({ hasText: /already assigned|déjà assign/i }),
+    ).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /^(add|ajouter)$/i })).toBeDisabled();
+
+    await discardAssignmentDialog(page);
+
+    // Still one stay, still in the other room.
+    expect(await getTripAssignmentsFromDB(page, tripId)).toEqual([
+      {
+        roomId: otherRoomId,
+        startDate: TEST_DATA.assignment.startDate,
+        endDate: TEST_DATA.assignment.endDate,
+      },
+    ]);
+    expect(otherRoomId).not.toBe(roomId);
   });
 
   // --------------------------------------------------------------------------
@@ -756,15 +909,17 @@ test.describe('Room Assignment Flow', () => {
     // Re-navigate to the room assignments
     await openRoomAssignments(page, TEST_DATA.room.name);
 
-    // Wait for the assignments to load
-    await page.waitForTimeout(500);
+    // `toBeHidden` passes when the locator matches nothing at all — which is
+    // also what a page that never rendered looks like, and the 500 ms wait it
+    // followed made that outcome likely. Assert the section is there and says
+    // it is empty first, so the absence below is a real absence.
+    await expect(
+      page.getByText(/no room assignments yet|aucune attribution/i),
+    ).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(uniquePersonName)).toBeHidden();
 
-    // Verify the person is no longer in the assignments list
-    // Either the assignment list is empty or the person is not there
-    const personInAssignments = page.getByText(uniquePersonName);
-    
-    // The person should not be visible anywhere on the page
-    await expect(personInAssignments).toBeHidden({ timeout: 5000 });
+    // And the row is gone from storage, not just from this render.
+    expect(await getTripAssignmentsFromDB(page, tripId)).toEqual([]);
   });
 
   // --------------------------------------------------------------------------
