@@ -1,6 +1,32 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@/test/utils';
 import type { Trip } from '@/types';
+
+/**
+ * Radix's Select trigger calls `hasPointerCapture` on pointerdown and scrolls
+ * the chosen item into view; jsdom implements neither, and the resulting
+ * `TypeError` escapes as an uncaught exception rather than a failed assertion.
+ * Without these the language dropdown cannot be opened in a test at all —
+ * which is why the language test used to assert that a `vi.fn()` was defined.
+ */
+function installPointerCaptureShims(): () => void {
+  const element = window.HTMLElement.prototype as unknown as Record<string, unknown>;
+  const originals = {
+    hasPointerCapture: element.hasPointerCapture,
+    setPointerCapture: element.setPointerCapture,
+    releasePointerCapture: element.releasePointerCapture,
+    scrollIntoView: element.scrollIntoView,
+  };
+
+  element.hasPointerCapture = (): boolean => false;
+  element.setPointerCapture = (): void => undefined;
+  element.releasePointerCapture = (): void => undefined;
+  element.scrollIntoView = (): void => undefined;
+
+  return () => {
+    Object.assign(element, originals);
+  };
+}
 
 const mockNavigate = vi.fn();
 const mockTrip: Trip = {
@@ -52,6 +78,18 @@ vi.mock('@/lib/i18n', () => ({
   getCurrentLanguage: () => 'en',
 }));
 
+// The language card deliberately uses the raw sonner toast rather than the
+// offline-aware one, so both have to be observable to tell them apart.
+const mockToastSuccess = vi.fn();
+const mockToastError = vi.fn();
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: (...args: unknown[]) => mockToastSuccess(...args),
+    error: (...args: unknown[]) => mockToastError(...args),
+  },
+}));
+
 const mockSuccessToast = vi.fn();
 
 vi.mock('@/hooks', () => ({
@@ -93,6 +131,16 @@ import { SettingsPage } from '../SettingsPage';
 import { useTripContext } from '@/contexts/TripContext';
 
 describe('SettingsPage', () => {
+  let restorePointerCaptureShims: () => void;
+
+  beforeAll(() => {
+    restorePointerCaptureShims = installPointerCaptureShims();
+  });
+
+  afterAll(() => {
+    restorePointerCaptureShims();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     // Re-establish context mock after clearAllMocks resets return values
@@ -348,7 +396,24 @@ describe('SettingsPage', () => {
   describe('LanguageSelector interactions', () => {
     it('renders language selector with current language', () => {
       render(<SettingsPage />, { withProviders: false });
-      expect(screen.getByRole('combobox', { name: 'settings.language' })).toBeInTheDocument();
+      const selector = screen.getByRole('combobox', { name: 'settings.language' });
+      // Not a placeholder: the trigger has to show what the app is already set
+      // to, which `getCurrentLanguage()` reports as English here.
+      expect(selector).toHaveTextContent('settings.languages.en');
+    });
+
+    it('offers every supported language', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<SettingsPage />, { withProviders: false });
+
+      await user.click(screen.getByRole('combobox', { name: 'settings.language' }));
+
+      const options = await screen.findAllByRole('option');
+      expect(options.map((option) => option.textContent)).toEqual([
+        'settings.languages.en',
+        'settings.languages.fr',
+      ]);
     });
   });
 
@@ -465,13 +530,40 @@ describe('SettingsPage', () => {
   });
 
   describe('Language change interactions', () => {
-    it('calls changeLanguage when language is changed', async () => {
-      // Verify language selector is present
+    it('switches the app language when a different one is picked', async () => {
+      // This test used to end on `expect(mockChangeLanguage).toBeDefined()`,
+      // with the comment "Verify the mock is set up" — a `vi.fn()` is always
+      // defined, the language was never changed, and deleting the whole
+      // `onValueChange` handler passed. Now it picks French and checks that
+      // French is what `changeLanguage` was asked for.
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
       render(<SettingsPage />, { withProviders: false });
-      const selector = screen.getByRole('combobox', { name: 'settings.language' });
-      expect(selector).toBeInTheDocument();
-      // Verify the mock is set up
-      expect(mockChangeLanguage).toBeDefined();
+
+      await user.click(screen.getByRole('combobox', { name: 'settings.language' }));
+      await user.click(await screen.findByRole('option', { name: 'settings.languages.fr' }));
+
+      expect(mockChangeLanguage).toHaveBeenCalledWith('fr');
+      expect(mockChangeLanguage).toHaveBeenCalledTimes(1);
+      // A raw toast on purpose: the language lives in localStorage and never
+      // syncs, so the offline-aware "saved on this device" wording would be a
+      // lie about a device-local preference.
+      expect(mockToastSuccess).toHaveBeenCalledWith('settings.languageChanged');
+      expect(mockSuccessToast).not.toHaveBeenCalled();
+    });
+
+    it('does not re-announce a language that is already active', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<SettingsPage />, { withProviders: false });
+
+      await user.click(screen.getByRole('combobox', { name: 'settings.language' }));
+      await user.click(await screen.findByRole('option', { name: 'settings.languages.en' }));
+
+      // Radix does not fire `onValueChange` for the value already selected, so
+      // re-picking English must not reload i18n or pop a toast.
+      expect(mockChangeLanguage).not.toHaveBeenCalled();
+      expect(mockToastSuccess).not.toHaveBeenCalled();
     });
   });
 
