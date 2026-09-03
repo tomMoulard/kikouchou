@@ -52,6 +52,7 @@ import {
 } from '@/components/ui/card';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
+import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
 import { getPersonHeadcount } from '@/types';
 import type { Person, PersonId, TransportMode } from '@/types';
@@ -103,30 +104,6 @@ interface PersonCardProps {
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Safely formats a datetime string for display.
- * Returns formatted date and time or empty strings on error.
- *
- * @param datetime - ISO datetime string
- * @param locale - date-fns locale object
- * @returns Object with formatted date (e.g., "15 Jul") and time (e.g., "14:30")
- */
-function formatTransportDatetime(
-  datetime: string,
-  locale: Locale,
-): { date: string; time: string } {
-  try {
-    const date = parseISO(datetime);
-    if (isNaN(date.getTime())) {return { date: '', time: '' };}
-    return {
-      date: format(date, 'd MMM', { locale }),
-      time: format(date, 'HH:mm', { locale }),
-    };
-  } catch {
-    return { date: '', time: '' };
-  }
-}
 
 /**
  * Formats guest stay dates for the card (check-out day exclusive in storage, shown as end date).
@@ -208,12 +185,12 @@ const PersonCard = memo(function PersonCard({
       parts.push(`${t('assignments.room')}: ${roomsDisplay}`);
     }
     if (transportSummary.arrival) {
-      const { date, time } = formatTransportDatetime(transportSummary.arrival.datetime, dateLocale);
-      parts.push(`${t('transports.arrival')}: ${date} ${time}`);
+      const { full } = formatTransportDatetimeParts(transportSummary.arrival.datetime, dateLocale, 'dayAndTime');
+      parts.push(`${t('transports.arrival')}: ${full}`);
     }
     if (transportSummary.departure) {
-      const { date, time } = formatTransportDatetime(transportSummary.departure.datetime, dateLocale);
-      parts.push(`${t('transports.departure')}: ${date} ${time}`);
+      const { full } = formatTransportDatetimeParts(transportSummary.departure.datetime, dateLocale, 'dayAndTime');
+      parts.push(`${t('transports.departure')}: ${full}`);
     }
     const rawNotes = person.notes?.trim();
     if (rawNotes) {
@@ -303,7 +280,7 @@ const PersonCard = memo(function PersonCard({
           <div className="space-y-2 text-sm text-muted-foreground">
             {/* Arrival info */}
             {transportSummary.arrival && (() => {
-              const { date, time } = formatTransportDatetime(transportSummary.arrival.datetime, dateLocale);
+              const { full } = formatTransportDatetimeParts(transportSummary.arrival.datetime, dateLocale, 'dayAndTime');
               return (
                 <div className="flex items-start gap-2 min-w-0">
                   <ArrowDownRight
@@ -312,7 +289,7 @@ const PersonCard = memo(function PersonCard({
                   />
                   <div className="min-w-0">
                     <div className="font-medium text-foreground tabular-nums">
-                      {date}, {time}
+                      {full}
                     </div>
                     <div className="text-muted-foreground truncate" title={transportSummary.arrival.location}>
                       {transportSummary.arrival.location}
@@ -324,7 +301,7 @@ const PersonCard = memo(function PersonCard({
 
             {/* Departure info */}
             {transportSummary.departure && (() => {
-              const { date, time } = formatTransportDatetime(transportSummary.departure.datetime, dateLocale);
+              const { full } = formatTransportDatetimeParts(transportSummary.departure.datetime, dateLocale, 'dayAndTime');
               return (
                 <div className="flex items-start gap-2 min-w-0">
                   <ArrowUpRight
@@ -333,7 +310,7 @@ const PersonCard = memo(function PersonCard({
                   />
                   <div className="min-w-0">
                     <div className="font-medium text-foreground tabular-nums">
-                      {date}, {time}
+                      {full}
                     </div>
                     <div className="text-muted-foreground truncate" title={transportSummary.departure.location}>
                       {transportSummary.departure.location}
