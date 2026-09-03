@@ -26,6 +26,40 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  /*
+   * Status palette (DESIGN_BOARD_BRIEF §5 "Status coloring"):
+   * green = arrival / success / online · orange = departure ·
+   * amber = warning / offline reassurance / pickups / guest onboarding ·
+   * red = destructive / errors (the existing `--destructive`).
+   *
+   * Four slots per tone, so a status can be drawn four ways without anyone
+   * reaching for a raw palette shade again:
+   *   `--x`            solid fill (button, dot, progress bar, strong border)
+   *   `--x-foreground` content ON that solid fill
+   *   `--x-surface`    tinted panel background
+   *   `--x-on-surface` content on that tint, and on `--background`/`--card`
+   *   `--x-border`     hairline around the tint
+   * `src/components/ui/status.variants.ts` is the only intended consumer.
+   */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-surface: var(--success-surface);
+  --color-success-on-surface: var(--success-on-surface);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-on-surface: var(--warning-on-surface);
+  --color-warning-border: var(--warning-border);
+  --color-departure: var(--departure);
+  --color-departure-foreground: var(--departure-foreground);
+  --color-departure-surface: var(--departure-surface);
+  --color-departure-on-surface: var(--departure-on-surface);
+  --color-departure-border: var(--departure-border);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-surface: var(--destructive-surface);
+  --color-destructive-on-surface: var(--destructive-on-surface);
+  --color-destructive-border: var(--destructive-border);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -61,6 +95,25 @@
   --accent: oklch(0.96 0.02 70);
   --accent-foreground: oklch(0.25 0.03 50);
   --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0.01 25);
+  --destructive-surface: oklch(0.965 0.02 20);
+  --destructive-on-surface: oklch(0.47 0.2 27);
+  --destructive-border: oklch(0.89 0.06 20);
+  --success: oklch(0.53 0.15 150);
+  --success-foreground: oklch(0.98 0.01 150);
+  --success-surface: oklch(0.965 0.03 155);
+  --success-on-surface: oklch(0.45 0.13 150);
+  --success-border: oklch(0.9 0.07 155);
+  --warning: oklch(0.8 0.16 78);
+  --warning-foreground: oklch(0.28 0.06 60);
+  --warning-surface: oklch(0.975 0.025 90);
+  --warning-on-surface: oklch(0.45 0.11 55);
+  --warning-border: oklch(0.9 0.1 88);
+  --departure: oklch(0.55 0.185 42);
+  --departure-foreground: oklch(0.99 0.01 60);
+  --departure-surface: oklch(0.97 0.025 70);
+  --departure-on-surface: oklch(0.5 0.16 42);
+  --departure-border: oklch(0.89 0.08 65);
   --border: oklch(0.92 0.02 55);
   --input: oklch(0.92 0.02 55);
   --ring: oklch(0.65 0.08 185);
@@ -95,6 +148,25 @@
   --accent: oklch(0.28 0.025 70);
   --accent-foreground: oklch(0.96 0.01 55);
   --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.18 0.04 25);
+  --destructive-surface: oklch(0.28 0.06 22);
+  --destructive-on-surface: oklch(0.83 0.13 22);
+  --destructive-border: oklch(0.42 0.1 22);
+  --success: oklch(0.7 0.16 150);
+  --success-foreground: oklch(0.18 0.04 150);
+  --success-surface: oklch(0.27 0.05 152);
+  --success-on-surface: oklch(0.85 0.14 152);
+  --success-border: oklch(0.4 0.08 150);
+  --warning: oklch(0.82 0.15 80);
+  --warning-foreground: oklch(0.22 0.05 60);
+  --warning-surface: oklch(0.28 0.05 75);
+  --warning-on-surface: oklch(0.87 0.13 85);
+  --warning-border: oklch(0.42 0.08 78);
+  --departure: oklch(0.72 0.17 47);
+  --departure-foreground: oklch(0.18 0.04 47);
+  --departure-surface: oklch(0.28 0.05 55);
+  --departure-on-surface: oklch(0.83 0.13 55);
+  --departure-border: oklch(0.42 0.09 50);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.55 0.06 185);

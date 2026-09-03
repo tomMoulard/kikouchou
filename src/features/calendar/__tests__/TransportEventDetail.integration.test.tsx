@@ -104,7 +104,7 @@ describe('TransportIndicator', () => {
       expect(screen.getByText(/Paris Charles de Gaulle/)).toBeInTheDocument();
     });
 
-    it('renders arrival type with green styling', () => {
+    it('renders arrival type with the arrival tone', () => {
       const transport = createCalendarTransport();
 
       render(
@@ -112,11 +112,11 @@ describe('TransportIndicator', () => {
       );
 
       const indicator = screen.getByLabelText('calendar.personArriving');
-      // Check it has arrival styling classes (green)
-      expect(indicator.className).toContain('bg-green');
+      // Check it carries the arrival status tone (the brief's green)
+      expect(indicator.className).toContain('bg-success-surface');
     });
 
-    it('renders departure type with orange styling', () => {
+    it('renders departure type with the departure tone', () => {
       const transport = createCalendarTransport(
         createTestTransport({ type: 'departure' }),
       );
@@ -126,8 +126,8 @@ describe('TransportIndicator', () => {
       );
 
       const indicator = screen.getByLabelText('calendar.personDeparting');
-      // Check it has departure styling classes (orange)
-      expect(indicator.className).toContain('bg-orange');
+      // Check it carries the departure status tone (the brief's orange)
+      expect(indicator.className).toContain('bg-departure-surface');
     });
 
     it('displays time correctly', () => {
@@ -326,8 +326,8 @@ describe('EventDetailDialog - Transport Events', () => {
       // Find the badge with the arrow indicator
       const badge = screen.getByText('↓');
       expect(badge).toBeInTheDocument();
-      // Green styling for arrivals
-      expect(badge.className).toContain('bg-green');
+      // Arrival tone for arrivals
+      expect(badge.className).toContain('bg-success-surface');
     });
 
     it('displays departure badge with correct styling', () => {
@@ -351,8 +351,8 @@ describe('EventDetailDialog - Transport Events', () => {
       // Find the badge with the arrow indicator
       const badge = screen.getByText('↑');
       expect(badge).toBeInTheDocument();
-      // Orange styling for departures
-      expect(badge.className).toContain('bg-orange');
+      // Departure tone for departures
+      expect(badge.className).toContain('bg-departure-surface');
     });
 
     it('displays person name with PersonBadge', () => {

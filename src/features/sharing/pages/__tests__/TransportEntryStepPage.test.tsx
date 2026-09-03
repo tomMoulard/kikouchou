@@ -379,10 +379,10 @@ describe('TransportEntryStepPage — 4.5: successful submit shows card and reset
     expect(datetimeInput).toHaveValue('');
     expect(locationInput).toHaveValue('');
 
-    // Type should flip from arrival to departure
-    // The departure button should now be active (amber background)
+    // Type should flip from arrival to departure. Assert the pressed state
+    // rather than the fill, so the test survives a re-theme.
     const departureButton = screen.getByRole('button', { name: 'sharing.transportDeparture' });
-    expect(departureButton).toHaveClass('bg-amber-500');
+    expect(departureButton).toHaveAttribute('aria-pressed', 'true');
   });
 });
 

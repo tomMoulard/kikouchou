@@ -502,6 +502,32 @@ every unit test.
 - **`cn()`** (`@/lib/utils`) for conditional/merged classes — wraps `clsx` + `tailwind-merge`.
 - shadcn/ui components from `@/components/ui/*`; do not modify generated files directly.
 - Theme tokens (`bg-background`, `text-foreground`, `text-muted-foreground`, etc.) over raw colors.
+- **Status colours go through `statusVariants`** (`@/components/ui/status.variants`), not
+  raw palette shades. It encodes the four meanings `DESIGN_BOARD_BRIEF.md` §5 defines —
+  green = arrival / success / online, orange = departure, amber = warning / offline
+  reassurance / pickups / guest onboarding, red = destructive / errors — as
+  `tone` × `emphasis` (`solid` · `soft` · `surface` · `outline` · `text`) over the
+  semantic tokens in `src/index.css`. A single-property tint may name the token directly
+  (`text-warning-on-surface`, `border-success-border`) — what must not come back is the
+  palette shade. Needing a fifth spelling of amber means adding a variant there, not a
+  `bg-amber-*` at the call site. Colour still never carries meaning alone: keep the
+  `↓`/`↑` on arrival/departure and the text on a warning.
+
+### The inline-style carve-out
+
+"No inline styles" has exactly two exceptions, both because the value is only known at
+runtime and therefore cannot be a utility class:
+
+1. **A user-chosen colour** — `style={{ backgroundColor: person.color }}` and the guest
+   swatches in `ColorPicker`. The palette lives in the database, not in the theme.
+2. **Computed pixel geometry** — the timeline rows (`CalendarTimelineRow`,
+   `ActivityTimelineRow`, `RoomOccupancyTimeline`, `TripTimelineFrame`) and progress-bar
+   widths, where a position is a percentage of measured content.
+
+Anything else — a colour, a spacing, a radius you could have written down in advance —
+is a utility class. Nearby, `bg-white`/`text-white` similarly survive only where the
+literal is the requirement rather than a theme choice: a QR code's quiet zone, and text
+laid over a user-chosen colour where neither `--foreground` nor `--background` applies.
 
 ---
 
