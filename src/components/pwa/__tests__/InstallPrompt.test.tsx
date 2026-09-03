@@ -166,4 +166,51 @@ describe('InstallPrompt', () => {
     expect(screen.getByRole('region')).toBeInTheDocument();
     getItemSpy.mockRestore();
   });
+
+  /**
+   * The bottom edge.
+   *
+   * jsdom loads no stylesheet, so these assert the *classes* — which is as far
+   * as a unit test can go. The geometry itself is hit-tested in
+   * `e2e/mobile-bottom-edge.spec.ts`, at the FAB's own centre. What these catch
+   * is the two ways the fix silently comes undone in a later edit.
+   */
+  describe('bottom-edge clearance', () => {
+    it('is positioned above the bottom stack rather than padded away from it', async () => {
+      mockCanInstall.mockReturnValue(true);
+      render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+
+      const region = screen.getByRole('region');
+
+      // Padding is part of an element's box and hit-tests like the rest of it,
+      // so `bottom-0` plus any amount of bottom padding still swallows every
+      // tap across the FAB's band. Only `bottom` moves the box itself.
+      expect(region).toHaveClass('bottom-above-stack');
+      expect(region.className).not.toMatch(/\bbottom-0\b/);
+      expect(region.className).not.toMatch(/\bpb-(20|bottom-stack)\b/);
+    });
+
+    it('does not eat taps in the width the card does not fill', async () => {
+      mockCanInstall.mockReturnValue(true);
+      render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+
+      // The wrapper is `inset-x-0`; the card is `max-w-md mx-auto`. The strips
+      // either side of it paint nothing, which is exactly the case
+      // `OfflineIndicator` waves through with `pointer-events-none`.
+      expect(screen.getByRole('region').className).toMatch(/pointer-events-none/);
+    });
+
+    it('keeps its own buttons clickable', async () => {
+      mockCanInstall.mockReturnValue(true);
+      render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+
+      // `pointer-events-none` on the wrapper is inherited, so the drawn part
+      // has to opt back in — without this the Install button is decorative.
+      const card = screen.getByRole('region').firstElementChild;
+      expect(card?.className).toMatch(/pointer-events-auto/);
+    });
+  });
 });
