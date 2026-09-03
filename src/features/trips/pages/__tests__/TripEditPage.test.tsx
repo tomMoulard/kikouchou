@@ -43,6 +43,8 @@ vi.mock('@/lib/db', () => ({
   deleteTrip: (...args: unknown[]) => mockDeleteTrip(...args),
 }));
 
+const mockSuccessToast = vi.fn();
+
 vi.mock('@/hooks', () => ({
   useUnsavedChanges: () => ({
     isBlocked: false,
@@ -50,6 +52,7 @@ vi.mock('@/hooks', () => ({
     reset: vi.fn(),
     skipNextBlock: vi.fn(),
   }),
+  useOfflineAwareToast: () => ({ successToast: mockSuccessToast }),
 }));
 
 // Mock TripForm to avoid deep component tree
@@ -116,6 +119,8 @@ describe('TripEditPage', () => {
       endDate: '2026-07-15',
     });
     expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/calendar');
+    // Through the offline-aware helper, like every other entity.
+    expect(mockSuccessToast).toHaveBeenCalledWith('trips.updated');
   });
 
   it('deletes trip when confirm dialog is confirmed', async () => {

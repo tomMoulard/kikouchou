@@ -18,6 +18,8 @@ vi.mock('@/lib/db', () => ({
   cloneRoomsToTrip: (...args: unknown[]) => mockCloneRoomsToTrip(...args),
 }));
 
+const mockSuccessToast = vi.fn();
+
 vi.mock('@/hooks', () => ({
   useUnsavedChanges: () => ({
     isBlocked: false,
@@ -25,6 +27,7 @@ vi.mock('@/hooks', () => ({
     reset: vi.fn(),
     skipNextBlock: vi.fn(),
   }),
+  useOfflineAwareToast: () => ({ successToast: mockSuccessToast }),
 }));
 
 // Mock TripForm to avoid deep component tree
@@ -79,6 +82,9 @@ describe('TripCreatePage', () => {
     });
     expect(mockSetCurrentTrip).toHaveBeenCalledWith('new-trip-1');
     expect(mockNavigate).toHaveBeenCalledWith('/trips/new-trip-1/calendar');
+    // Through the offline-aware helper, like every other entity: a trip
+    // created offline must not claim a success the network never saw.
+    expect(mockSuccessToast).toHaveBeenCalledWith('trips.created');
   });
 
   it('clones rooms when import source is set', async () => {

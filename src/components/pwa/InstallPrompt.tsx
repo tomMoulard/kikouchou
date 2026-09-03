@@ -190,6 +190,8 @@ export const InstallPrompt = memo(function InstallPrompt({
    */
   useEffect(() => {
     if (isInstalled && !isDismissed) {
+      // Deliberately a raw toast: installing the app is not a data write, so
+      // the offline-aware "Saved on this device" wording does not apply.
       toast.success(t('pwa.installSuccess', 'App installed successfully!'));
       // Use timeout to avoid synchronous setState in effect
       const timer = setTimeout(() => {

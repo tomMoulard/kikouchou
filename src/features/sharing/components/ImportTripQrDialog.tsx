@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useOfflineAwareToast } from '@/hooks';
 import posthog from '@/lib/posthog';
 import {
   applyMerge,
@@ -55,6 +56,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
 }: ImportTripQrDialogProps): ReactElement {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { successToast } = useOfflineAwareToast();
   const handledRef = useRef(false);
   const framesRef = useRef<Map<number, string>>(new Map());
   /**
@@ -95,7 +97,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
         };
         await applyMerge(resolved);
         posthog?.capture('trip_imported', { conflict_count: merge.conflicts.length });
-        toast.success(
+        successToast(
           t('trips.importQrMergeSuccess', 'Trip data imported and merged successfully.'),
         );
         onOpenChange(false);
@@ -126,7 +128,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
         framesRef.current.clear();
       }
     },
-    [navigate, onOpenChange, t],
+    [navigate, onOpenChange, successToast, t],
   );
 
   const handleScan = useCallback(

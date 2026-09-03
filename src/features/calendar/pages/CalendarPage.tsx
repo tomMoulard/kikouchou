@@ -1142,11 +1142,16 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         />
       )}
 
-      {/* Empty state message when no assignments */}
+      {/* Empty state when nothing is scheduled. Same component, same copy and
+          same icon as the timeline view's empty state, so switching views does
+          not change how "nothing here yet" is presented. */}
       {currentView === 'card' && !hasVisibleCalendarItems && (
-        <div className="mt-6 text-center text-muted-foreground">
-          <p>{t('calendar.noAssignments')}</p>
-        </div>
+        <EmptyState
+          className="mt-6"
+          icon={CalendarIcon}
+          title={t('calendar.noAssignmentsTitle', 'Nothing scheduled yet')}
+          description={t('calendar.noAssignments')}
+        />
       )}
 
       {/* Event Detail Dialog */}
