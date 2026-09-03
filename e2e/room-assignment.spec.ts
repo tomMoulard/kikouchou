@@ -605,9 +605,9 @@ test.describe('Room Assignment Flow', () => {
     // Close the dialog.
     //
     // Escape alone is not enough: the form is dirty by this point, so closing
-    // it raises a "Discard changes?" confirmation, which is itself a
-    // `role="dialog"`. The old assertion saw that second dialog and reported
-    // the first one as never having closed.
+    // it raises a "Discard changes?" confirmation. That one is a
+    // `role="alertdialog"` now, so it no longer collides with the assertion
+    // below — but it still has to be answered, or the form dialog stays put.
     await page.keyboard.press('Escape');
 
     const discardButton = page.getByRole('button', { name: /^discard$/i });
@@ -729,8 +729,8 @@ test.describe('Room Assignment Flow', () => {
     await expect(deleteButton).toBeVisible();
     await deleteButton.click();
 
-    // Wait for confirmation dialog (ConfirmDialog uses Dialog, not AlertDialog)
-    const confirmDialog = page.getByRole('dialog');
+    // Wait for confirmation dialog (ConfirmDialog is a Radix AlertDialog)
+    const confirmDialog = page.getByRole('alertdialog');
     await expect(confirmDialog).toBeVisible({ timeout: 5000 });
 
     // Verify confirmation message appears in the dialog

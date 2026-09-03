@@ -69,8 +69,10 @@ async function clearAppData(page: Page): Promise<void> {
   if (await clearDataButton.isVisible({ timeout: 2000 }).catch(() => false)) {
     await clearDataButton.click();
 
-    // Confirm the dialog if it appears
-    const confirmButton = page.getByRole('dialog').getByRole('button', { name: /clear|confirm/i });
+    // Confirm the dialog if it appears. ConfirmDialog is an alert dialog.
+    const confirmButton = page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: /clear|confirm/i });
     if (await confirmButton.isVisible({ timeout: 1000 }).catch(() => false)) {
       await confirmButton.click();
       await page.waitForTimeout(500);
