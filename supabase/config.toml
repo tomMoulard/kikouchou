@@ -385,6 +385,13 @@ email_optional = false
 [auth.web3.solana]
 enabled = true
 
+# Both chains at once is the ordinary case: the app renders one button per
+# chain, and a browser typically carries a wallet for one of them (Phantom for
+# Solana, MetaMask for Ethereum) rather than both. `VITE_SUPABASE_WEB3_CHAINS`
+# has to name both too — this file only tells the local stack what to verify.
+[auth.web3.ethereum]
+enabled = true
+
 # Use Firebase Auth as a third-party provider alongside Supabase Auth.
 [auth.third_party.firebase]
 enabled = false

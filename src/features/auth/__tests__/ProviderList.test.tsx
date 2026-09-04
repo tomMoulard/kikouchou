@@ -259,6 +259,26 @@ describe('the wallet button', () => {
     expect(signInWithWallet).toHaveBeenCalledWith('solana', 'auth.signIn.walletStatement');
   });
 
+  it('offers one per chain when the project accepts both', async () => {
+    const signInWithWallet = vi.fn(async () => ({ status: 'signed-in' as const }));
+    mockedUseAuth.mockReturnValue(authState({ signInWithWallet }));
+    discovered({}, { walletChains: ['solana', 'ethereum'] });
+
+    render(<ProviderList />, { withProviders: false });
+
+    // Two buttons, in the configured order. They share an accessible name here
+    // only because the harness echoes translation keys — the real string
+    // interpolates the chain, so a reader sees "…your Solana wallet" and
+    // "…your Ethereum wallet".
+    const buttons = screen.getAllByRole('button', { name: 'auth.signIn.withWallet' });
+    expect(buttons).toHaveLength(2);
+
+    // The second one must ask for the second chain: a single shared handler
+    // that always signed with `solana` would look right and be wrong.
+    await userEvent.click(buttons[1] as HTMLElement);
+    expect(signInWithWallet).toHaveBeenCalledWith('ethereum', 'auth.signIn.walletStatement');
+  });
+
   it('reports a session that arrived without a redirect', async () => {
     const onSignedIn = vi.fn();
     mockedUseAuth.mockReturnValue(
