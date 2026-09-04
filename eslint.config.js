@@ -62,11 +62,13 @@ export default defineConfig([
       // violations on `main` before being switched on.
       //
       // `control-has-associated-label` is AGENTS.md's "ARIA labels on all
-      // icon-only buttons", as far as a linter can take it. The options are
-      // `recommended`'s own, minus its `includeRoles: ['alert', 'dialog']` —
-      // that whitelist is what stops the rule ever looking at a button, which
-      // is the one thing this project wants it to look at. `depth: 3` reaches
-      // an icon inside a `<span>` wrapper.
+      // icon-only buttons", as far as a linter can take it. `recommended` ships
+      // it as `off`, so the only thing switching it on requires is a severity —
+      // but a severity alone inherits `recommended`'s options, and passing any
+      // options at all replaces that array wholesale. Hence the restatement:
+      // drop `ignoreElements` and the `<canvas>` stubs in the react-leaflet and
+      // QR tests start failing. The one real change is `depth`, raised from
+      // upstream's 2 to 3, which is what reaches an icon inside a `<span>`.
       //
       // What it catches: `<button />` with no children, and `<button><svg
       // aria-hidden /></button>`. What it cannot: `<button><X /></button>`
@@ -115,6 +117,30 @@ export default defineConfig([
       // carries the semantics. Landing it would mean 62 disable comments
       // teaching people that disable comments are routine, which is the exact
       // habit the two rules above are here to break.
+    },
+  },
+  // The tooling that enforces the conventions is not exempt from them.
+  //
+  // Every block above is scoped to `**/*.{ts,tsx}`, which left the ESLint plugin
+  // implementing those conventions, this config, and the build scripts linted
+  // with no rules at all — not even `reportUnusedDisableDirectives`. A guard
+  // that does not apply to itself is the aspirational kind this file is trying
+  // to stop shipping.
+  {
+    files: ['eslint-rules/**/*.js', 'eslint.config.js', 'scripts/**/*.js'],
+    extends: [js.configs.recommended],
+    plugins: { kikoushou },
+    linterOptions: {
+      reportUnusedDisableDirectives: 'error',
+    },
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: globals.node,
+    },
+    rules: {
+      'kikoushou/no-raw-palette-class': 'error',
+      'kikoushou/require-disable-description': 'error',
     },
   },
   // Disable React Compiler rules for context files that use intentional patterns

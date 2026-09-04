@@ -26,8 +26,24 @@ import { matchRawPalette } from './raw-palette.js';
  */
 const DESCRIPTION_SEPARATOR = /\s-{2,}\s/u;
 
-/** Directive comments that suppress a diagnostic and therefore owe a reason. */
-const SUPPRESSING_DIRECTIVE = /^eslint-disable(?:-next-line|-line)?(?![\w-])/u;
+/**
+ * Directive comments that suppress a diagnostic and therefore owe a reason.
+ *
+ * Split by comment kind because ESLint itself is: a `Line` comment only carries
+ * a directive in the `-line` / `-next-line` forms, so `// eslint-disable foo`
+ * suppresses precisely nothing. Demanding a reason for it would send a
+ * developer off to justify a comment that does not do anything; the honest
+ * answer there is "delete it", and `reportUnusedDisableDirectives` is not going
+ * to give it either, because ESLint never saw a directive in the first place.
+ *
+ * The terminator is ESLint's own `(?:\s|$)`, so `// eslint-disable-next-line:
+ * no-console` — which ESLint does not parse as a directive, because the name
+ * runs up against a colon rather than whitespace — is not one here either.
+ */
+const SUPPRESSING_DIRECTIVE = {
+  Line: /^eslint-disable-(?:next-line|line)(?=\s|$)/u,
+  Block: /^eslint-disable(?:-next-line|-line)?(?=\s|$)/u,
+};
 
 /**
  * Rejects Tailwind palette shades (`bg-amber-100`, `text-white`) in source
@@ -123,8 +139,12 @@ const requireDisableDescription = {
     return {
       Program() {
         for (const comment of context.sourceCode.getAllComments()) {
+          const pattern = SUPPRESSING_DIRECTIVE[comment.type];
+          if (pattern === undefined) {
+            continue;
+          }
           const value = comment.value.trim();
-          if (!SUPPRESSING_DIRECTIVE.test(value)) {
+          if (!pattern.test(value)) {
             continue;
           }
           const [, ...description] = value.split(DESCRIPTION_SEPARATOR);
@@ -132,7 +152,13 @@ const requireDisableDescription = {
             continue;
           }
           // Quote back whichever rule they disabled so the fix is copy-paste.
-          const ruleList = value.replace(SUPPRESSING_DIRECTIVE, '').trim();
+          // The trailing `-` strip matters for the half-written case
+          // `-- ` with no reason after it: ESLint reads the hyphens as part of
+          // the rule name, and echoing them back would suggest `-- -- <reason>`.
+          const ruleList = value
+            .replace(pattern, '')
+            .replace(/\s*-{2,}\s*$/u, '')
+            .trim();
           context.report({
             loc: comment.loc ?? { line: 1, column: 0 },
             messageId: 'missingDescription',

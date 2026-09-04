@@ -48,6 +48,47 @@ describe('raw-palette', () => {
     expect(RAW_PALETTE.test('text-muted-foreground')).toBe(false);
   });
 
+  it('covers every utility prefix that can carry a colour, not just the obvious four', () => {
+    // A prefix missing from the list is a shade the rule silently permits while
+    // still reading like a guarantee — `shadow-black/15` shipped that way once.
+    for (const shade of [
+      'shadow-red-500',
+      'inset-shadow-red-500',
+      'text-shadow-red-500',
+      'outline-blue-500',
+      'border-t-amber-100',
+      'divide-y-slate-200',
+      'ring-offset-white',
+      'inset-ring-white',
+      'accent-pink-500',
+      'caret-red-500',
+      'decoration-sky-500',
+      'placeholder-gray-400',
+    ]) {
+      expect(RAW_PALETTE.test(shade), `${shade} slipped through`).toBe(true);
+    }
+  });
+
+  it('takes a hyphen as part of a word, not as a class boundary', () => {
+    // `\b` would read these as gradient stops, turning every route segment and
+    // i18n key containing `-to-<colour>-` into a lint error with no honest fix.
+    for (const notAClass of [
+      'navigate-to-blue-page',
+      'trip-from-white-label',
+      'to-blue-thing',
+      'drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]',
+    ]) {
+      expect(RAW_PALETTE.test(notAClass), `${notAClass} was flagged`).toBe(
+        false,
+      );
+    }
+    // ...while the real gradient stops, delimited by whitespace, still match.
+    expect(matchRawPalette('bg-gradient-to-r from-amber-500 to-orange-500')).toEqual([
+      'from-amber-500',
+      'to-orange-500',
+    ]);
+  });
+
   it('has no `g` flag, so repeated matching is not stateful', () => {
     // A global regex carries `lastIndex` between calls, which would make
     // `expect(x).toMatch(RAW_PALETTE)` answer differently on identical input.
@@ -107,6 +148,11 @@ ruleTester.run(
         errors: [{ messageId: 'rawPalette' }],
       },
       {
+        // A shadow is a colour too, and was the one that got away.
+        code: 'const x = "rounded-full shadow-sm shadow-black/15";',
+        errors: [{ messageId: 'rawPalette', data: { classes: "'shadow-black'" } }],
+      },
+      {
         // One report per literal, naming every distinct shade it carries.
         code: 'const x = "bg-black/10 dark:bg-white/10";',
         errors: [
@@ -138,6 +184,13 @@ ruleTester.run(
       { code: '// we could eslint-disable this, but the fix is cheap\nconst x = 1;' },
       // The directive name must match exactly: this is not one.
       { code: '// eslint-disabled-for-now no-console\nconst x = 1;' },
+      // ESLint honours bare `eslint-disable` only in a block comment, so this
+      // line comment suppresses nothing and owes nothing. Demanding a reason
+      // would send someone off to justify a comment that does not do anything.
+      { code: '// eslint-disable no-console\nconsole.log(1);' },
+      // Same divergence at the other end: ESLint terminates a directive name on
+      // whitespace, so a colon means this was never parsed as one.
+      { code: '// eslint-disable-next-line:no-console\nconsole.log(1);' },
     ],
     invalid: [
       {
@@ -149,6 +202,8 @@ ruleTester.run(
         errors: [{ messageId: 'missingDescription' }],
       },
       {
+        // Bare `eslint-disable` IS a directive in a block comment, unlike the
+        // line-comment form two cases above.
         code: '/* eslint-disable no-console */\nconsole.log(1);',
         errors: [{ messageId: 'missingDescription' }],
       },
@@ -156,8 +211,14 @@ ruleTester.run(
         // A separator with nothing after it is not a reason. (The trailing
         // space is load-bearing: without it ESLint reads the `--` as part of
         // the rule name, so this is the shape a half-written reason takes.)
+        //
+        // The `data` assertion is the point of this case: the suggested fix is
+        // built from the rule list, and echoing the dangling hyphens back would
+        // suggest `no-console -- -- <reason>`.
         code: '// eslint-disable-next-line no-console -- \nconsole.log(1);',
-        errors: [{ messageId: 'missingDescription' }],
+        errors: [
+          { messageId: 'missingDescription', data: { example: 'no-console' } },
+        ],
       },
     ],
   },
