@@ -279,12 +279,12 @@ The `/share/:shareId` route operates **outside `AppProviders`**. This is a hard 
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| **Hosting** | GitHub Pages (via `actions/deploy-pages@v4`) | Free, static-only, HTTPS enforced. Base URL: `/kikouchou/`. |
+| **Hosting** | GitHub Pages (via `actions/deploy-pages@v4`) | Free, static-only, HTTPS enforced. Custom domain `app.kikouchou.app`, base URL `/`. |
 | **Package manager** | Bun (`bun install --frozen-lockfile`) | Used in all CI jobs and local development. |
 | **CI pipeline** | GitHub Actions with 6 jobs | lint → typecheck → test → generate-icons → build → e2e (parallel where possible). |
 | **Concurrency** | `cancel-in-progress: true` per branch | Saves CI minutes on rapid pushes. |
 | **Versioning** | `VITE_APP_VERSION` set from git SHA/ref in CI | Displayed in SettingsPage. Defaults to `"devel"` locally. |
-| **Base URL** | Dynamic: `/kikouchou/` in CI, `/` locally | `process.env.GITHUB_ACTIONS` conditional in `vite.config.ts`. |
+| **Base URL** | `/` everywhere | The app is served from the root of `app.kikouchou.app`; constant `base` in `vite.config.ts`. |
 | **Test coverage** | **80% line coverage** (aligned with PRD NFR25) | vitest.config.ts threshold MUST be updated from 70% to 80%. |
 | **Accessibility testing** | `@axe-core/playwright` in E2E tests (SHOULD, not MUST) | Runs on critical user flows: share link landing, room assignment, transport entry. Does not gate CI. |
 | **Performance testing** | Calendar rendering benchmark MUST exist | Synthetic test: render CalendarPage with 15 persons, 20+ assignments. Thresholds: initial render < 500ms, re-render < 100ms. Regression guard. |
@@ -896,7 +896,7 @@ Dexie useLiveQuery (reactive, auto-subscribes to table changes)
 - `bun run dev` → Vite dev server with HMR, base URL `/`
 - `bun run test` → Vitest in watch mode
 - `bun run lint` → ESLint check
-- `bun run build` → Production build (base URL `/kikouchou/` if `GITHUB_ACTIONS`)
+- `bun run build` → Production build (base URL `/`)
 
 **CI Pipeline (`.github/workflows/ci.yml`):**
 ```

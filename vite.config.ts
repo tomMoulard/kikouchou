@@ -5,7 +5,13 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// Base URL for deployment - set to repo name for GitHub Pages
+// The app is served from the root of its own host — `app.kikouchou.app` on
+// GitHub Pages, `127.0.0.1` in dev and in the Playwright `production` project.
+// It used to be `/<repo>/` under GITHUB_ACTIONS, back when Pages served it at
+// `tommoulard.github.io/<repo>/`; with a custom domain there is no subpath, and
+// keeping this constant is also what makes the build survive a repo rename.
+// Everything that builds a URL reads `import.meta.env.BASE_URL` rather than
+// assuming '/', so a subpath deploy still works if this ever changes back.
 const base = '/'
 
 /**

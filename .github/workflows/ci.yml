@@ -232,7 +232,6 @@ jobs:
         run: bun run build
         env:
           VITE_APP_VERSION: ${{ github.sha }}
-          VITE_SIGNALING_URL: wss://signaling.kikouchou.app
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -267,12 +266,10 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # No build artifact is downloaded here on purpose. The `production`
-      # Playwright project serves the built output through `vite preview`, and
-      # its webServer command runs `bun run build` itself with GITHUB_ACTIONS
-      # cleared — because the `build` job's artifact is compiled with
-      # base='/kikouchou/' for Pages, which would 404 every navigation the
-      # tests make against '/'. Downloading it only ever cost time.
+      # No build artifact is downloaded here on purpose: the `production`
+      # Playwright project runs `bun run build` itself, because it also has to
+      # blank the Supabase and PostHog variables that would otherwise be inlined
+      # into the bundle it serves. Downloading the artifact only ever cost time.
       #
       # `needs: [build]` stays, so a broken build still fails before this runs.
 
