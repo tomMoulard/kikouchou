@@ -1,23 +1,34 @@
 /**
- * @fileoverview Tests for i18n configuration and translation coverage.
- * Verifies language switching, translation completeness, and locale consistency.
+ * @fileoverview The shipped en/fr bundles, read as data.
  *
+ * Everything here parses the two `translation.json` files and compares them:
+ * key parity in both directions, no empty or non-string values, matching
+ * interpolation variables, the namespaces the app expects, and a handful of
+ * quality rules a reviewer would otherwise have to remember.
+ *
+ * Three describe blocks used to sit alongside them and tested `src/test/setup.ts`
+ * instead of the app:
+ *
+ * - "i18n Module Exports" `await import`ed `@/lib/i18n` — which `setup.ts`
+ *   replaces with a stub — and asserted the stub's own literals back, four times
+ *   over as `typeof isLanguageSupported === 'function'`. One of them carried the
+ *   comment "the mock always returns true, but we test the interface". The real
+ *   module is now driven for real in `./module.test.ts`.
+ * - "useTranslation Hook (mocked)" asserted that the identity `t` in `setup.ts`
+ *   returns its argument.
+ * - "Date Formatting with Locales" asserted that date-fns formats French dates
+ *   in French. No `src/` code ran in it; its `await import('date-fns/locale')`
+ *   pulled the whole locale barrel through Vite's transform and timed out at
+ *   10s roughly half the time. The app's own locale lookup is covered by
+ *   `./date-locale.test.ts`.
+ *
+ * @see ./module.test.ts — the real `@/lib/i18n`, unmocked
+ * @see ./plurals.test.ts — counted strings against a real i18next instance
+ * @see ./translationKeys.test.ts — every key referenced from `src/` resolves
  * @module lib/i18n/__tests__/index.test
  */
 
 import { describe, it, expect } from 'vitest';
-import { format, formatDistanceToNow } from 'date-fns';
-// `date-fns/locale` is a ~180-entry barrel. Importing it here rather than with
-// `await import(...)` inside a test body is not a style preference: a dynamic
-// import in the body makes Vite transform the barrel *during* the test, and
-// that transform is charged against `testTimeout`, not `hookTimeout`. Five
-// tests below were paying it. Hoisting took this file from 1472ms to 298ms on
-// an idle machine, which is the difference between sitting near the 10s budget
-// and nowhere near it — and files near that budget are the ones that start
-// failing first when the machine is busy, then get called flaky. The module
-// under test, `lib/i18n/date-locale.ts`, imports it statically for the same
-// reason, and `calendar-utils.test.ts` was never reported flaky.
-import { enUS, fr } from 'date-fns/locale';
 
 // Import translation files directly for key comparison
 import enTranslations from '@/locales/en/translation.json';
@@ -299,67 +310,6 @@ describe('i18n Namespace Structure', () => {
 });
 
 // ============================================================================
-// i18n Module Tests
-// ============================================================================
-
-describe('i18n Module Exports', () => {
-  // Note: These tests use the mocked i18n from setup.ts
-  // For actual i18n functionality, we test the exports and constants
-
-  it('exports SUPPORTED_LANGUAGES', async () => {
-    const { SUPPORTED_LANGUAGES } = await import('@/lib/i18n');
-    expect(SUPPORTED_LANGUAGES).toEqual(['en', 'fr']);
-  });
-
-  it('exports DEFAULT_LANGUAGE as fr', async () => {
-    const { DEFAULT_LANGUAGE } = await import('@/lib/i18n');
-    expect(DEFAULT_LANGUAGE).toBe('fr');
-  });
-
-  it('exports LANGUAGE_STORAGE_KEY', async () => {
-    const { LANGUAGE_STORAGE_KEY } = await import('@/lib/i18n');
-    expect(LANGUAGE_STORAGE_KEY).toBe('i18nextLng');
-  });
-
-  it('exports isLanguageSupported function', async () => {
-    const { isLanguageSupported } = await import('@/lib/i18n');
-    expect(typeof isLanguageSupported).toBe('function');
-  });
-
-  it('isLanguageSupported returns true for supported languages', async () => {
-    const { isLanguageSupported } = await import('@/lib/i18n');
-    expect(isLanguageSupported('en')).toBe(true);
-    expect(isLanguageSupported('fr')).toBe(true);
-  });
-
-  it('isLanguageSupported returns false for unsupported languages', async () => {
-    const { isLanguageSupported } = await import('@/lib/i18n');
-    // The mock always returns true, but we test the interface
-    expect(typeof isLanguageSupported('de')).toBe('boolean');
-  });
-
-  it('exports getCurrentLanguage function', async () => {
-    const { getCurrentLanguage } = await import('@/lib/i18n');
-    expect(typeof getCurrentLanguage).toBe('function');
-  });
-
-  it('exports changeLanguage function', async () => {
-    const { changeLanguage } = await import('@/lib/i18n');
-    expect(typeof changeLanguage).toBe('function');
-  });
-
-  it('exports i18nReady promise', async () => {
-    const { i18nReady } = await import('@/lib/i18n');
-    expect(i18nReady).toBeInstanceOf(Promise);
-  });
-
-  it('exports isI18nInitialized function', async () => {
-    const { isI18nInitialized } = await import('@/lib/i18n');
-    expect(typeof isI18nInitialized).toBe('function');
-  });
-});
-
-// ============================================================================
 // Translation Quality Tests
 // ============================================================================
 
@@ -412,79 +362,5 @@ describe('Translation Quality', () => {
     expect(enTranslations.trips.locationPlaceholder).toMatch(/e\.g\./);
     expect(frTranslations.trips.namePlaceholder).toMatch(/Ex/);
     expect(frTranslations.trips.locationPlaceholder).toMatch(/Ex/);
-  });
-});
-
-// ============================================================================
-// Date/Number Formatting Tests
-// ============================================================================
-
-describe('Date Formatting with Locales', () => {
-  it('date-fns French locale is available', () => {
-    expect(fr).toBeDefined();
-    expect(fr.code).toBe('fr');
-  });
-
-  it('date-fns English locale is available', () => {
-    expect(enUS).toBeDefined();
-    expect(enUS.code).toBe('en-US');
-  });
-
-  it('formats dates correctly in French', () => {
-    const date = new Date(2024, 0, 15); // January 15, 2024
-    const formatted = format(date, 'EEEE d MMMM yyyy', { locale: fr });
-
-    expect(formatted).toContain('janvier');
-    expect(formatted).toContain('2024');
-  });
-
-  it('formats dates correctly in English', () => {
-    const date = new Date(2024, 0, 15); // January 15, 2024
-    const formatted = format(date, 'EEEE, MMMM d, yyyy', { locale: enUS });
-
-    expect(formatted).toContain('January');
-    expect(formatted).toContain('2024');
-  });
-
-  it('formats relative time correctly', () => {
-    const pastDate = new Date(Date.now() - 3600000); // 1 hour ago
-
-    const enRelative = formatDistanceToNow(pastDate, { locale: enUS, addSuffix: true });
-    const frRelative = formatDistanceToNow(pastDate, { locale: fr, addSuffix: true });
-
-    expect(enRelative).toMatch(/hour|minute/i);
-    expect(frRelative).toMatch(/heure|minute/i);
-  });
-});
-
-// ============================================================================
-// useTranslation Hook Tests (via mock)
-// ============================================================================
-
-describe('useTranslation Hook (mocked)', () => {
-  it('returns translation key when translation not found', async () => {
-    // This tests our mock behavior which returns keys directly
-    const { useTranslation } = await import('react-i18next');
-    const { t } = useTranslation();
-
-    expect(t('nonexistent.key')).toBe('nonexistent.key');
-  });
-
-  it('handles interpolation in mock', async () => {
-    const { useTranslation } = await import('react-i18next');
-    const { t } = useTranslation();
-
-    // Our mock replaces {{key}} with values
-    const result = t('test.key', { name: 'John' });
-    expect(typeof result).toBe('string');
-  });
-
-  it('provides i18n object', async () => {
-    const { useTranslation } = await import('react-i18next');
-    const { i18n } = useTranslation();
-
-    expect(i18n).toBeDefined();
-    expect(i18n.language).toBe('en');
-    expect(typeof i18n.changeLanguage).toBe('function');
   });
 });

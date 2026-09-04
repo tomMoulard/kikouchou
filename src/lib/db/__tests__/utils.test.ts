@@ -496,17 +496,6 @@ describe('utils', () => {
         expect(isValidISODateString('abc2024-07-15')).toBe(false);
       });
 
-      it('should return a boolean true (not truthy)', () => {
-        const result = isValidISODateString('2024-07-15');
-        expect(result).toBe(true);
-        expect(typeof result).toBe('boolean');
-      });
-
-      it('should return a boolean false (not falsy)', () => {
-        const result = isValidISODateString('invalid');
-        expect(result).toBe(false);
-        expect(typeof result).toBe('boolean');
-      });
     });
 
     describe('isValidISODateTimeString', () => {
@@ -565,9 +554,33 @@ describe('utils', () => {
         expect(isValidISODateTimeString('not a datetime')).toBe(false);
       });
 
-      it('should return a boolean type', () => {
-        const result = isValidISODateTimeString('2024-07-15T14:30:00.000Z');
-        expect(typeof result).toBe('boolean');
+      // Boundaries of the fractional-second and timezone-offset groups. These
+      // replace a test named "should return a boolean type" whose only
+      // assertion was `expect(typeof result).toBe('boolean')` — already
+      // guaranteed by the declared return type, and true of every input.
+      it('should accept one to three fractional-second digits and no more', () => {
+        expect(isValidISODateTimeString('2024-07-15T14:30:00.5Z')).toBe(true);
+        expect(isValidISODateTimeString('2024-07-15T14:30:00.12Z')).toBe(true);
+        expect(isValidISODateTimeString('2024-07-15T14:30:00.123Z')).toBe(true);
+        // Microseconds: more precision than the stored format carries.
+        expect(isValidISODateTimeString('2024-07-15T14:30:00.123456Z')).toBe(false);
+        // A decimal point with nothing after it.
+        expect(isValidISODateTimeString('2024-07-15T14:30:00.Z')).toBe(false);
+      });
+
+      it('should bound the timezone offset to a real one', () => {
+        expect(isValidISODateTimeString('2024-07-15T14:30:00+00:00')).toBe(true);
+        expect(isValidISODateTimeString('2024-07-15T14:30:00-23:59')).toBe(true);
+        expect(isValidISODateTimeString('2024-07-15T14:30:00+24:00')).toBe(false);
+        expect(isValidISODateTimeString('2024-07-15T14:30:00+02:60')).toBe(false);
+        // Offsets are always signed and colon-separated here.
+        expect(isValidISODateTimeString('2024-07-15T14:30:0002:00')).toBe(false);
+        expect(isValidISODateTimeString('2024-07-15T14:30:00+0200')).toBe(false);
+      });
+
+      it('should require the T separator', () => {
+        // The shape a naive `toISOString().replace('T', ' ')` produces.
+        expect(isValidISODateTimeString('2024-07-15 14:30:00Z')).toBe(false);
       });
     });
 
@@ -637,9 +650,20 @@ describe('utils', () => {
         expect(isValidHexColor('rgb(255, 0, 0)')).toBe(false);
       });
 
-      it('should return a boolean type', () => {
-        const result = isValidHexColor('#ff0000');
-        expect(typeof result).toBe('boolean');
+      // Replaces a test named "should return a boolean type" whose only
+      // assertion was `expect(typeof result).toBe('boolean')`. Surrounding
+      // whitespace is the realistic way a bad value arrives — pasted from a
+      // design tool, or read out of an imported file — and it is the anchors,
+      // not the character class, that reject it.
+      it('should return false for surrounding whitespace', () => {
+        expect(isValidHexColor(' #ff0000')).toBe(false);
+        expect(isValidHexColor('#ff0000 ')).toBe(false);
+        expect(isValidHexColor('#ff0000\n')).toBe(false);
+        expect(isValidHexColor('#ff 0000')).toBe(false);
+      });
+
+      it('should return false for a doubled hash', () => {
+        expect(isValidHexColor('##ff0000')).toBe(false);
       });
     });
   });
