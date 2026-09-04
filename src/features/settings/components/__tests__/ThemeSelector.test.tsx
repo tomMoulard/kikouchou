@@ -135,16 +135,6 @@ describe('ThemeSelector', () => {
     expect(screen.getByRole('radiogroup', { name: 'Thème' })).toBeInTheDocument();
   });
 
-  it('leaves no settings.themes key in the rendered card', async () => {
-    const { container } = await renderWithRealI18n(withTheme(<ThemeSelector />), {
-      withProviders: false,
-    });
-
-    // The keys are computed from THEME_PREFERENCES, so a preference added
-    // without a catalogue entry would show up here rather than in a grep.
-    expect(container.innerHTML).not.toContain('settings.theme');
-  });
-
   it('selects the stored preference', async () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'dark');
 

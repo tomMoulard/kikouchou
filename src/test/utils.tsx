@@ -223,25 +223,24 @@ function renderInternal(
  */
 export type TestLanguage = 'en' | 'fr';
 
-/** Every language {@link renderWithRealI18n} loads, in both directions. */
-const TEST_LANGUAGES: readonly TestLanguage[] = ['en', 'fr'];
-
 /**
  * The language a test renders in unless it says otherwise.
  *
  * Matches the language the suite-wide mock reports, so switching a file over to
  * {@link renderWithRealI18n} changes the *strings* under assertion and nothing
- * else.
+ * else. `src/test/utils.i18n-guard.test.tsx` asserts that agreement, because
+ * the two constants live in different files and prose cannot enforce it.
  */
-const DEFAULT_TEST_LANGUAGE: TestLanguage = 'en';
+export const DEFAULT_TEST_LANGUAGE: TestLanguage = 'en';
 
 /**
  * The app's fallback language: what a user actually sees for a key the active
  * bundle is missing. Mirrors `DEFAULT_LANGUAGE` in `@/lib/i18n` — which is
  * French, so an English-only key gap is a French string on an English screen,
- * not a raw key.
+ * not a raw key. Also asserted against the mock in
+ * `src/test/utils.i18n-guard.test.tsx`.
  */
-const FALLBACK_TEST_LANGUAGE: TestLanguage = 'fr';
+export const FALLBACK_TEST_LANGUAGE: TestLanguage = 'fr';
 
 /** Told to the caller whenever a mocked i18n module reaches the helper. */
 const UNMOCK_HINT =
@@ -310,10 +309,14 @@ let bundlesPromise: Promise<Resource> | undefined;
 /**
  * Loads the shipped locale files as an i18next resource tree.
  *
+ * The single source of truth for which languages the helper knows: `initRealI18n`
+ * derives `supportedLngs` from these keys rather than from a parallel list, so a
+ * third bundle cannot be declared supported while never being loaded.
+ *
  * Deliberately a dynamic import: a static one would add the JSON parse to all
  * 186 test files, nearly none of which render real translations.
  *
- * @returns Resources for every {@link TEST_LANGUAGES} entry
+ * @returns One resource entry per shipped locale file
  */
 async function loadBundles(): Promise<Resource> {
   bundlesPromise ??= (async () => {
@@ -354,12 +357,16 @@ async function initRealI18n(language: TestLanguage): Promise<I18nInstance> {
   await instance.use(initReactI18next).init({
     lng: language,
     fallbackLng: FALLBACK_TEST_LANGUAGE,
-    supportedLngs: [...TEST_LANGUAGES],
+    supportedLngs: Object.keys(resources),
     defaultNS: 'translation',
     ns: ['translation'],
     resources,
     interpolation: { escapeValue: false },
     react: { useSuspense: false },
+    // i18next defaults this to true. The app sets it false, so an empty
+    // catalogue value falls through to French there; without this line the
+    // helper would render the blank instead and call it a pass.
+    returnEmptyString: false,
   });
 
   return instance;
@@ -377,6 +384,12 @@ async function initRealI18n(language: TestLanguage): Promise<I18nInstance> {
  *
  * @param language - Language to resolve keys in (default: `'en'`)
  * @returns An initialised i18next instance, cached per language per test file
+ *
+ * @remarks
+ * The instance is **shared** by every call for that language in the file, so
+ * treat it as read-only: `await i18n.changeLanguage('fr')` would leave the
+ * cached English instance on French, and the resulting failure would surface in
+ * some later, unrelated test. Ask for the other language instead.
  *
  * @example
  * ```tsx
@@ -396,12 +409,7 @@ export function createRealI18n(
     return cached;
   }
 
-  // Drop a failed instance rather than caching the rejection, so a second call
-  // reports the same problem instead of an unrelated "already rejected".
-  const created = initRealI18n(language).catch((error: unknown) => {
-    instancesByLanguage.delete(language);
-    throw error;
-  });
+  const created = initRealI18n(language);
 
   instancesByLanguage.set(language, created);
 
@@ -450,6 +458,15 @@ export interface RealI18nRenderResult extends CustomRenderResult {
  *
  * The test file must unmock both i18n modules first — `vi.mock` and
  * `vi.unmock` are per-file, so no helper can do it on the caller's behalf.
+ *
+ * Two boundaries this does **not** move. `@/lib/i18n` stays mocked, so a
+ * component reaching translations through `import i18n from '@/lib/i18n'`
+ * (`lib/yjs/dexie-bridge`, `features/assistant/hooks/useWebLLM`) still renders
+ * keys, silently, alongside the prose from `useTranslation`; unmock that module
+ * too if the surface under test uses it. And a call site passing an inline
+ * `defaultValue` is backstopped by that default, so an English assertion on it
+ * can pass with the key gone from both catalogues — the French assertion is the
+ * one that can only come from the bundle.
  *
  * @param ui - React element to render
  * @param options - Render options, plus the language to render in

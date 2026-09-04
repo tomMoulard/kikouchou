@@ -289,7 +289,10 @@ vi.mock('@/lib/i18n', () => ({
   getCurrentLanguage: vi.fn().mockReturnValue(TEST_LANGUAGE),
   isLanguageSupported: vi.fn().mockReturnValue(true),
   isI18nInitialized: vi.fn().mockReturnValue(true),
-  SUPPORTED_LANGUAGES: [TEST_LANGUAGE, FALLBACK_LANGUAGE],
+  // The set the app supports, which is not derived from either constant above:
+  // it happens to contain both, and building it out of them would collapse to
+  // ['fr', 'fr'] the moment someone runs the suite in French.
+  SUPPORTED_LANGUAGES: ['en', 'fr'],
   // The *fallback*, mirroring the real module's export. Not the active
   // language: see the note above TEST_LANGUAGE.
   DEFAULT_LANGUAGE: FALLBACK_LANGUAGE,
