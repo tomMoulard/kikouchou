@@ -347,6 +347,7 @@
     "upcomingPickups": "Prochains transports à prévoir",
     "pastTransports": "Transports passés",
     "mapView": "Vue carte",
+    "tripLocation": "Hébergement",
     "listView": "Vue liste",
     "noLocations": "Aucun lieu sur la carte pour l'instant",
     "noLocationsDescription": "Ajoutez un lieu aux transports et ils apparaîtront ici",

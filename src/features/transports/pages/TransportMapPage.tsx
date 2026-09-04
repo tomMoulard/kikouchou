@@ -319,6 +319,30 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
   // Create markers (optional start marker + end marker per transport)
   const markers = useMemo((): readonly MapMarkerData[] => {
     const result: MapMarkerData[] = [];
+
+    // Where everyone is heading. Without it the map is a scatter of stations
+    // with no indication of which way is "home", which is the one thing you
+    // want when you are working out who to collect and in what order.
+    const tripCoordinates = currentTrip?.coordinates;
+    if (tripCoordinates) {
+      result.push({
+        id: 'trip-location',
+        position: [tripCoordinates.lat, tripCoordinates.lon] as readonly [number, number],
+        label: currentTrip?.location ?? currentTrip?.name ?? t('trips.title'),
+        type: 'trip',
+        tooltipContent: (
+          <div className="space-y-0.5">
+            <div className="font-medium">{currentTrip?.name}</div>
+            {currentTrip?.location && (
+              <div className="text-muted-foreground truncate max-w-[220px]">
+                {currentTrip.location}
+              </div>
+            )}
+          </div>
+        ),
+      });
+    }
+
     for (const transport of transportsWithCoordinates) {
       const person = personsMap.get(transport.personId);
       const { date, time } = formatTransportDatetimeParts(transport.datetime, dateLocale, 'dayAndTime');
@@ -374,7 +398,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
       });
     }
     return result;
-  }, [transportsWithCoordinates, personsMap, dateLocale, t]);
+  }, [transportsWithCoordinates, personsMap, dateLocale, t, currentTrip]);
 
   // Calculate map center based on markers
   const mapCenter = useMemo((): [number, number] => {
@@ -586,6 +610,16 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
           />
           <span>{t('transports.departures')}</span>
         </div>
+        {currentTrip?.coordinates && (
+          <div className="flex items-center gap-1.5">
+            <div
+              className="size-3 rounded-full bg-primary"
+              data-testid="map-legend-swatch-trip"
+              aria-hidden="true"
+            />
+            <span>{t('transports.tripLocation', 'Accommodation')}</span>
+          </div>
+        )}
         {/*
           Counts transports, not map pins: this sits beside the arrival and
           departure swatches, and a transport with a start location contributes
