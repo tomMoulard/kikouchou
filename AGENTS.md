@@ -423,6 +423,17 @@ call the REST API with that key.
 - **Never paste the database password or the `service_role` key into a chat or a
   migration.** `supabase link` / `db push` are run by a human. Secrets that a
   migration needs live in Supabase Vault.
+- **Push config with `bun run db:config-push`, never `supabase config push`.**
+  The `env(...)` references under `[auth.external.*]` are resolved from the
+  calling shell, and an unresolved one is pushed *verbatim* as the credential,
+  overwriting the hosted project's copy — which is the only copy. A bare push on
+  2026-09-04 wrote `env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)` into the
+  Google client ID and took Google and Spotify sign-in down together;
+  `/auth/v1/settings` still reported both enabled, so the app kept offering two
+  buttons that returned `401 invalid_client`. The wrapper refuses that push and
+  names what is missing. Verify a provider from the outside afterwards — the
+  redirect carries the client ID, so nothing needs a browser:
+  `curl -sS -o /dev/null -w '%{redirect_url}\n' "$VITE_SUPABASE_URL/auth/v1/authorize?provider=google"`
 - **Types are generated, not written.** `bun run db:types` reads the *linked*
   project, so `src/lib/supabase/database.types.ts` describes what is deployed
   rather than what the migrations would produce; the difference is worth seeing.
