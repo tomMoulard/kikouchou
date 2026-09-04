@@ -712,8 +712,17 @@ export function localInstant(day: string, time = '00:00'): ISODateTimeString {
 // This includes: screen, within, waitFor, waitForElementToBeRemoved, etc.
 export * from '@testing-library/react';
 
-// Re-export userEvent for user interaction simulation
-export { userEvent };
+// Re-export userEvent for user interaction simulation.
+//
+// Straight from the package rather than `export { userEvent }` over the default
+// import above. That form exported the *name* with an `undefined` value —
+// `Object.keys` showed `userEvent`, reading it gave nothing, and the first use
+// failed as "Cannot read properties of undefined (reading 'click')" far from
+// the cause. The default import still works for this module's own
+// `userEvent.setup()` on line 192; it is only re-exporting that binding which
+// does not survive. Nothing in the suite consumed this export, so it went
+// unnoticed until `features/auth/__tests__` followed the docblock above.
+export { userEvent } from '@testing-library/user-event';
 
 // Re-export branded type helpers from utils for convenience
 export { toISODateStringFromString, toHexColor } from '@/lib/db/utils';
