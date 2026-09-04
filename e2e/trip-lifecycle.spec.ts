@@ -324,7 +324,7 @@ async function readTripDates(
   return await page.evaluate(
     async (id) =>
       new Promise<{ startDate: string; endDate: string }>((resolve, reject) => {
-        const request = indexedDB.open('kikoushou');
+        const request = indexedDB.open('kikouchou');
         request.onerror = () => reject(new Error('Failed to open database'));
         request.onsuccess = () => {
           const db = request.result;
