@@ -305,7 +305,7 @@ async function getTripAssignmentsFromDB(
 ): Promise<{ roomId: string; startDate: string; endDate: string }[]> {
   return page.evaluate(async (id) => {
     return new Promise((resolve, reject) => {
-      const dbRequest = indexedDB.open('kikoushou');
+      const dbRequest = indexedDB.open('kikouchou');
       dbRequest.onerror = () => reject(new Error('Failed to open database'));
       dbRequest.onsuccess = () => {
         const db = dbRequest.result;

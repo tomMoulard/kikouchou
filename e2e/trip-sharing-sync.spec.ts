@@ -162,7 +162,7 @@ async function renameTrip(page: Page, localTripId: string, to: string): Promise<
 /** How many rows the outbox is holding for delivery, read from IndexedDB. */
 async function outboxDepth(page: Page): Promise<number> {
   return page.evaluate(async () => {
-    const request = indexedDB.open('kikoushou');
+    const request = indexedDB.open('kikouchou');
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
