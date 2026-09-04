@@ -747,10 +747,8 @@ test.describe('Bug Fix: Assignment Dates (BUG-1)', () => {
 
   test('assignment created via UI has correct dates', async ({ page }) => {
     // Create room and person
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _roomId = await createTestRoom(page, tripId, TEST_DATA.room.name);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
+    await createTestRoom(page, tripId, TEST_DATA.room.name);
+    await createTestPerson(page, tripId, TEST_DATA.person.name);
     await page.goto(`/trips/${tripId}/rooms`);
     await page.waitForLoadState('load');
     await waitForRoute(page);
@@ -852,8 +850,6 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     // The time should be displayed in local timezone
     // In UTC+1, 13:00 UTC = 14:00 local
     // We can't know the test runner's timezone, so just verify a time is shown
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _timePattern = /\d{1,2}:\d{2}/;
     const timeElement = page.locator('text=/\\d{1,2}:\\d{2}/').first();
 
     await expect(timeElement).toBeVisible({ timeout: 5000 });
@@ -903,8 +899,7 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
 
   test('round-trip: entered time matches displayed time', async ({ page }) => {
     // Create person
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _personId = await createTestPerson(page, tripId, TEST_DATA.person.name);
+    await createTestPerson(page, tripId, TEST_DATA.person.name);
 
     // Navigate to transports
     await page.goto(`/trips/${tripId}/transports`);

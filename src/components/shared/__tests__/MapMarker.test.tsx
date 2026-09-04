@@ -30,6 +30,7 @@ vi.mock('react-leaflet', () => ({
     'aria-label'?: string;
     title?: string;
   }) => (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/interactive-supports-focus -- A stand-in for react-leaflet's <Marker>, which renders its own DOM inside the Leaflet canvas. The double exists to expose the click handler to the test, not to be operated by a user.
     <div
       data-testid="mock-marker"
       data-position={JSON.stringify(position)}

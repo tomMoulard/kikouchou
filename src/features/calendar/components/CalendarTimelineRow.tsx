@@ -223,9 +223,11 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
                     className={cn(
                       'flex h-[18px] max-w-[2.75rem] shrink-0 items-center justify-center rounded-full px-1',
                       'text-[9px] font-semibold leading-none tabular-nums',
+                      /* eslint-disable kikoushou/no-raw-palette-class -- The pill sits on the person's own colour, and `item.textColor` is the contrast decision made against it at runtime; a theme token knows nothing about that background. */
                       item.textColor === 'white'
                         ? 'bg-white/25 text-white shadow-sm shadow-black/15'
                         : 'bg-black/12 text-black/80',
+                      /* eslint-enable kikoushou/no-raw-palette-class */
                     )}
                     aria-hidden="true"
                     title={item.label}

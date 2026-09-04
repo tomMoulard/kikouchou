@@ -53,7 +53,7 @@ env.allowLocalModels = false;
 // ============================================================================
 
 /** Loaded text-generation pipeline, or `null` when nothing is loaded. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- transformers.js exports no type for a loaded pipeline: `pipeline()` returns a union of task-specific classes with no shared interface.
 let pipelineInstance: any = null;
 
 /** Hugging Face model ID backing {@link pipelineInstance}. */

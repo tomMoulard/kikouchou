@@ -198,8 +198,7 @@ const ShareDialog = memo(function ShareDialog({
               <>
                 {/* QR Code — full-width row so flex centering is stable inside the dialog */}
                 <div className="flex w-full min-w-0 justify-center">
-                  {/* Literal white, not `bg-card`: a QR code needs a light quiet zone to
-                      scan, in either theme. */}
+                  {/* eslint-disable-next-line kikoushou/no-raw-palette-class -- Literal white, not `bg-card`: a QR code needs a light quiet zone to scan, in either theme. */}
                   <div className="shrink-0 rounded-xl bg-white p-4 shadow-sm">
                     <QRCodeSVG value={shareUrl} size={200} level="M" />
                   </div>

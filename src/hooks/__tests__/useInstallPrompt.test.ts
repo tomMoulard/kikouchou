@@ -268,7 +268,7 @@ describe('useInstallPrompt', () => {
   });
 
   it('detects installed via getInstalledRelatedApps API', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stubbing the Chromium-only `getInstalledRelatedApps`, which lib.dom does not declare.
     const nav = navigator as any;
     nav.getInstalledRelatedApps = vi.fn().mockResolvedValue([{ platform: 'webapp' }]);
 
@@ -287,7 +287,7 @@ describe('useInstallPrompt', () => {
   });
 
   it('handles getInstalledRelatedApps returning empty array', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stubbing the Chromium-only `getInstalledRelatedApps`, which lib.dom does not declare.
     const nav = navigator as any;
     nav.getInstalledRelatedApps = vi.fn().mockResolvedValue([]);
 
@@ -304,7 +304,7 @@ describe('useInstallPrompt', () => {
   });
 
   it('handles getInstalledRelatedApps API error gracefully', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stubbing the Chromium-only `getInstalledRelatedApps`, which lib.dom does not declare.
     const nav = navigator as any;
     nav.getInstalledRelatedApps = vi.fn().mockRejectedValue(new Error('Not supported'));
 

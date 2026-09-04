@@ -196,6 +196,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
       */}
       <div
         ref={scrollRef}
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Deliberate, and the comment above says why: axe's `scrollable-region-focusable` requires an overflowing scroll container to be reachable by keyboard, which is the one case where a non-interactive element must be tabbable.
         tabIndex={0}
         className={cn('w-full min-w-0 max-h-[70vh]', 'overflow-x-auto overflow-y-auto')}
       >

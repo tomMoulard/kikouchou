@@ -435,6 +435,7 @@ const PersonForm = memo(function PersonForm({
           aria-invalid={Boolean(errors.name)}
           aria-describedby={errors.name ? 'person-name-error' : undefined}
           disabled={isSubmitting}
+          // eslint-disable-next-line jsx-a11y/no-autofocus -- The first control of a form the user has just chosen to open. Without it focus stays on the trigger — or, in a dialog, on the close button — and the user tabs to reach the field they came for.
           autoFocus
         />
         {errors.name && (

@@ -10,7 +10,7 @@
  *
  * @module lib/sync/SupabaseTripSync
  */
-/* eslint-disable react-refresh/only-export-components */
+/* eslint-disable react-refresh/only-export-components -- The provider ships with the `SyncStatusContext` its badge reads; separating them would put a one-line context in its own module. */
 
 import {
   type ReactElement,
@@ -124,7 +124,7 @@ export function SupabaseTripSync({
     };
     // Keyed on the three fields the preview holds, so an unrelated edit — a room,
     // a guest — does not fire a pointless update.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Keyed on `previewKey` deliberately, for the reason directly above.
   }, [previewKey]);
 
   /**

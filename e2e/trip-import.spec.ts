@@ -67,6 +67,18 @@ async function navigateToMonth(
       const currentMonthMatch = captionText.match(/(\w+)\s*(\d{4})/);
       if (currentMonthMatch) {
         const [, monthName, yearStr] = currentMonthMatch;
+        // Both groups are mandatory in the pattern that just matched, so this
+        // cannot fire. It throws rather than defaulting because the quiet
+        // alternative is worse than the loud one: an empty `yearStr` makes
+        // `currentYear` NaN, every comparison below false, and the helper
+        // returns as though the calendar were already on the target month —
+        // after which the test clicks a day in the wrong month and fails
+        // somewhere with nothing to do with the cause.
+        if (monthName === undefined || yearStr === undefined) {
+          throw new Error(
+            `Calendar caption matched but yielded no month/year: ${captionText}`,
+          );
+        }
         const currentYear = parseInt(yearStr, 10);
         const monthNames = [
           'January', 'February', 'March', 'April', 'May', 'June',
