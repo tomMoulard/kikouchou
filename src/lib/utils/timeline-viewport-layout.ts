@@ -222,3 +222,46 @@ export function resolveLabelCollapse(args: {
 
   return { collapsed: false, nextScrollLeft: null, changed: false };
 }
+
+// ============================================================================
+// Page width
+// ============================================================================
+
+/**
+ * Tailwind's `max-w-7xl`, in pixels — the widest cap a timeline page uses.
+ */
+export const TIMELINE_PAGE_WIDTH_CAP_PX = 1280;
+
+/**
+ * Whether a timeline needs the page's full width rather than a reading-width cap.
+ *
+ * A timeline page is normally capped so text does not run to the edges of a
+ * wide monitor. That cap is the right call only while the whole trip fits
+ * inside it: once it does not, the cap is spending screen the day axis needs,
+ * and the reader pays for it by scrolling further to see the same trip.
+ *
+ * Answered from the day count rather than from a measurement on purpose.
+ * Removing the cap widens the container, a wider container fits more days, and
+ * a rule that read the resulting width back would flip-flop between the two
+ * layouts — the same feedback loop that made the sticky label column jitter.
+ * The day count cannot be changed by the layout it decides, so it settles.
+ *
+ * @param args - Day count, the sticky label column, and the cap being tested
+ * @returns True when the trip cannot be shown at once within `cappedWidth`
+ */
+export function timelineNeedsFullPageWidth(args: {
+  readonly dayCount: number;
+  readonly labelColumnWidth: number;
+  readonly cappedWidth?: number;
+}): boolean {
+  const { dayCount, labelColumnWidth, cappedWidth = TIMELINE_PAGE_WIDTH_CAP_PX } = args;
+
+  if (dayCount < 1) {
+    return false;
+  }
+
+  const widthToShowEveryDay =
+    dayCount * TIMELINE_PREFERRED_DAY_WIDTH_PX + labelColumnWidth;
+
+  return widthToShowEveryDay > cappedWidth;
+}

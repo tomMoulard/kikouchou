@@ -82,6 +82,7 @@ import {
   CalendarDay,
   EventDetailDialog,
   CalendarTimeline,
+  CALENDAR_TIMELINE_LABEL_COLUMN_WIDTH_PX,
   type ActivityEventData,
   type AssignmentEventData,
   type TransportEventData,
@@ -98,6 +99,9 @@ import {
   getActivityStartDayKey,
 } from '@/features/activities/utils/activity-utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
+import { cn } from '@/lib/utils';
+import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
+import { buildDayColumns } from '@/lib/utils/trip-days';
 
 // Import types and utilities
 import type {
@@ -196,6 +200,16 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       });
     },
     [setSearchParams],
+  );
+
+  // The frame's own day-axis builder, so the width decision counts exactly the
+  // columns the timeline will draw.
+  const timelineDayCount = useMemo(
+    () =>
+      currentTrip?.startDate && currentTrip?.endDate
+        ? buildDayColumns(currentTrip.startDate, currentTrip.endDate).length
+        : 0,
+    [currentTrip?.startDate, currentTrip?.endDate],
   );
 
   // Track if user has manually navigated to avoid overwriting their selection
@@ -1036,7 +1050,23 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     eventsByDate.size > 0 || transportsByDate.size > 0 || activitiesByDate.size > 0;
 
   return (
-    <div className="container max-w-6xl py-6 md:py-8">
+    <div
+      className={cn(
+        'py-6 md:py-8',
+        // A trip too long to show at once should not also be paying for a
+        // reading-width cap — that width is the day axis's to use. The month
+        // view is a fixed seven-column grid, so it keeps its cap. `container`
+        // goes with the cap: here it contributes only a 1536px max-width, no
+        // padding and no centring, which `main` owns.
+        currentView === 'timeline' &&
+          timelineNeedsFullPageWidth({
+            dayCount: timelineDayCount,
+            labelColumnWidth: CALENDAR_TIMELINE_LABEL_COLUMN_WIDTH_PX,
+          })
+          ? 'w-full'
+          : 'container max-w-6xl',
+      )}
+    >
       <PageHeader
         title={t('calendar.title')}
         description={currentTrip.name}
