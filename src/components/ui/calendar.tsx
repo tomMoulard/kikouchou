@@ -33,7 +33,28 @@ function Calendar({
     <DayPicker
       showOutsideDays={showOutsideDays}
       className={cn(
-        "bg-background group/calendar p-3 [--cell-size:--spacing(8)] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
+        /*
+          NON-STOCK: the `max-md:` cell size. Stock shadcn is `--cell-size:
+          --spacing(8)` alone — 32px — which the day buttons already escape,
+          because `Button`'s `icon` size carries a `max-md:size-11` floor that
+          their `size-auto` cannot cancel. The month arrows do not: they are
+          plain `<button>`s wearing `buttonVariants()` classes, so nothing
+          raised them and they stayed 32px square beside 44px days.
+
+          They are the worst 32px target in the app to leave alone. Open the
+          end-date picker for a trip a few months out and every day in view is
+          disabled — the arrows are the only thing on the popover that does
+          anything, and in portrait the right one sits far enough into the edge
+          of the screen to compete with the browser's back-swipe gesture. It was
+          reported as having to rotate the phone to landscape to hit it.
+
+          Raising the variable rather than the two arrows keeps the caption row,
+          the arrows and the day columns on one measurement, which is what
+          `--cell-size` is for. `max-md:` and not a bare override, for the reason
+          spelled out in `button.variants.ts`: below `md` a variant-prefixed
+          utility wins, and above it desktop density is untouched.
+        */
+        "bg-background group/calendar p-3 [--cell-size:--spacing(8)] max-md:[--cell-size:--spacing(11)] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
         String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
         String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
         className

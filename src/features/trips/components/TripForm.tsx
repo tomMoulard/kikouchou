@@ -450,17 +450,32 @@ const TripForm = memo(function TripForm({
       setStartDate(isoDate);
       setIsStartDateOpen(false);
 
-      // Clear start date error and validate end date
+      /*
+        A start date that has moved past the end date leaves the form holding a
+        range the end picker itself cannot produce — it disables every day
+        before the start — and the only thing the form did about it was report
+        an error and refuse to submit.
+
+        Drop the stale end date instead. The end picker now opens on the new
+        start's month (below), so a valid range is one tap away, and the invalid
+        one stops being reachable at all rather than being reachable and
+        rejected. `validateEndDate` stays as the backstop for the orders this
+        cannot cover: a trip that arrived already inverted, from an import or a
+        peer.
+      */
+      const endDateOvertaken =
+        endDate !== '' && validateEndDate(isoDate, endDate) !== undefined;
+      if (endDateOvertaken) {
+        setEndDate('');
+      }
+
       setErrors((prev) => {
-        const newErrors = { ...prev };
-        // Clear start date error
-        if (newErrors.startDate) {
-          newErrors.startDate = undefined;
-        }
-        // Validate end date if already set
-        if (endDate && date) {
-          const endDateError = validateEndDate(isoDate, endDate);
-          newErrors.endDate = endDateError;
+        const newErrors: FormErrors = { ...prev, startDate: undefined };
+        if (endDateOvertaken) {
+          // Nothing left to complain about: the date complained of is gone.
+          newErrors.endDate = undefined;
+        } else if (endDate) {
+          newErrors.endDate = validateEndDate(isoDate, endDate);
         }
         return newErrors;
       });
@@ -641,6 +656,12 @@ const TripForm = memo(function TripForm({
                 mode="single"
                 selected={startDateValue}
                 onSelect={handleStartDateSelect}
+                // A selected date does not move react-day-picker's month on its
+                // own; without this the picker opens on today, so re-opening
+                // the dates of any trip not in the current month starts with
+                // paging back to it.
+                defaultMonth={startDateValue}
+                locale={locale}
                 initialFocus
               />
             </PopoverContent>
@@ -693,6 +714,12 @@ const TripForm = memo(function TripForm({
                 selected={endDateValue}
                 onSelect={handleEndDateSelect}
                 disabled={startDateValue ? { before: startDateValue } : undefined}
+                // Falling back to the start date is the half that matters: with
+                // that `disabled` above and a trip a few months out, opening on
+                // today put the user in front of a month where every day was
+                // greyed out and the only live control was the month arrow.
+                defaultMonth={endDateValue ?? startDateValue}
+                locale={locale}
                 initialFocus
               />
             </PopoverContent>
