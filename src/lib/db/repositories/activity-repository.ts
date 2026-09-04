@@ -10,6 +10,7 @@
 import { db } from '@/lib/db/database';
 import { sanitizeActivityData } from '@/lib/db/sanitize';
 import { createActivityId } from '@/lib/db/utils';
+import { localDayKeyOfInstant } from '@/lib/utils/trip-days';
 import type {
   Activity,
   ActivityFormData,
@@ -149,8 +150,14 @@ export async function getActivitiesByOrganizerId(
  * An activity overlaps the date when the date falls between its start day and
  * its end day (inclusive). Activities without an end fall on their start day only.
  *
+ * `date` is a **local** day key — the day the viewer reads off their own
+ * calendar, which is what every caller has to hand. Activity datetimes are
+ * stored as UTC instants, so their days are read with `localDayKeyOfInstant`;
+ * taking the first ten characters of the stored string compared a UTC day
+ * against a local one and hid a midnight activity from the day it happens on.
+ *
  * @param tripId - The trip ID to search within
- * @param date - The date to filter by (YYYY-MM-DD)
+ * @param date - The local calendar day to filter by (YYYY-MM-DD)
  * @returns Array of activities on the given date, sorted by start datetime
  *
  * @example
@@ -165,8 +172,12 @@ export async function getActivitiesForDate(
   const activities = await getActivitiesByTripId(tripId);
 
   return activities.filter((activity) => {
-    const startDay = activity.startDatetime.substring(0, 10);
-    const endDay = (activity.endDatetime ?? activity.startDatetime).substring(0, 10);
+    const startDay = localDayKeyOfInstant(activity.startDatetime);
+    if (!startDay) {
+      return false;
+    }
+    const endDay =
+      localDayKeyOfInstant(activity.endDatetime ?? activity.startDatetime) ?? startDay;
     return startDay <= date && date <= endDay;
   });
 }

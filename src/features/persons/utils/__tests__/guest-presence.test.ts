@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 
+import { localInstant } from '@/test/utils';
 import type { HexColor, ISODateString, Person, RoomAssignment, Transport } from '@/types';
 
 import {
@@ -41,6 +42,28 @@ function person(id: string, stay?: { start: string; end: string }): Person {
   };
 }
 
+/**
+ * A transport stored the way the form stores it: the instant denoted by a
+ * wall-clock day and time in the viewer's own zone.
+ */
+function transport(
+  id: string,
+  personId: string,
+  type: Transport['type'],
+  day: string,
+  time: string,
+): Transport {
+  return {
+    id: id as Transport['id'],
+    tripId: 't1' as Transport['tripId'],
+    personId: personId as Transport['personId'],
+    type,
+    datetime: localInstant(day, time),
+    location: 'X',
+    needsPickup: false,
+  };
+}
+
 describe('deriveGuestStayDateBounds', () => {
   it('uses stay dates when set', () => {
     const p = person('p1', { start: '2026-04-10', end: '2026-04-20' });
@@ -52,80 +75,45 @@ describe('deriveGuestStayDateBounds', () => {
 
   it('falls back to transports when stay dates missing', () => {
     const p = person('p1');
-    const arrivals: Transport[] = [
-      {
-        id: 'a1' as Transport['id'],
-        tripId: 't1' as Transport['tripId'],
-        personId: p.id,
-        type: 'arrival',
-        datetime: '2026-04-12T10:00:00.000Z',
-        location: 'X',
-        needsPickup: false,
-      },
-    ];
-    const departures: Transport[] = [
-      {
-        id: 'd1' as Transport['id'],
-        tripId: 't1' as Transport['tripId'],
-        personId: p.id,
-        type: 'departure',
-        datetime: '2026-04-18T15:00:00.000Z',
-        location: 'Y',
-        needsPickup: false,
-      },
-    ];
+    const arrivals = [transport('a1', p.id, 'arrival', '2026-04-12', '10:00')];
+    const departures = [transport('d1', p.id, 'departure', '2026-04-18', '15:00')];
     expect(deriveGuestStayDateBounds(p, arrivals, departures)).toEqual({
       arrival: iso('2026-04-12'),
       departure: iso('2026-04-18'),
     });
   });
 
+  // Regression: transports are stored as UTC instants, so slicing the first ten
+  // characters off the string answered with the *UTC* day. A guest landing at
+  // 00:30 in Paris is stored at 22:30Z the evening before and was given a stay
+  // starting a day early — one column left on the timeline, one night too many
+  // in the room maths. The mirror image bites viewers behind UTC: a 23:30
+  // departure is stored on the following UTC day and pushed check-out out by
+  // one. Both bounds are asserted so neither direction can regress.
+  it('reads the local calendar day of an after-midnight arrival, not the UTC day', () => {
+    const p = person('p1');
+    const arrivals = [transport('a1', p.id, 'arrival', '2026-04-11', '00:30')];
+    const departures = [transport('d1', p.id, 'departure', '2026-04-18', '23:30')];
+    expect(deriveGuestStayDateBounds(p, arrivals, departures)).toEqual({
+      arrival: iso('2026-04-11'),
+      departure: iso('2026-04-18'),
+    });
+  });
+
   it('picks earliest arrival from multiple arrivals', () => {
     const p = person('p1');
-    const arrivals: Transport[] = [
-      {
-        id: 'a1' as Transport['id'],
-        tripId: 't1' as Transport['tripId'],
-        personId: p.id,
-        type: 'arrival',
-        datetime: '2026-04-15T10:00:00.000Z',
-        location: 'X',
-        needsPickup: false,
-      },
-      {
-        id: 'a2' as Transport['id'],
-        tripId: 't1' as Transport['tripId'],
-        personId: p.id,
-        type: 'arrival',
-        datetime: '2026-04-10T08:00:00.000Z',
-        location: 'Y',
-        needsPickup: false,
-      },
+    const arrivals = [
+      transport('a1', p.id, 'arrival', '2026-04-15', '10:00'),
+      transport('a2', p.id, 'arrival', '2026-04-10', '08:00'),
     ];
     expect(deriveGuestStayDateBounds(p, arrivals, []).arrival).toBe(iso('2026-04-10'));
   });
 
   it('picks latest departure from multiple departures', () => {
     const p = person('p1');
-    const departures: Transport[] = [
-      {
-        id: 'd1' as Transport['id'],
-        tripId: 't1' as Transport['tripId'],
-        personId: p.id,
-        type: 'departure',
-        datetime: '2026-04-18T10:00:00.000Z',
-        location: 'X',
-        needsPickup: false,
-      },
-      {
-        id: 'd2' as Transport['id'],
-        tripId: 't1' as Transport['tripId'],
-        personId: p.id,
-        type: 'departure',
-        datetime: '2026-04-22T15:00:00.000Z',
-        location: 'Y',
-        needsPickup: false,
-      },
+    const departures = [
+      transport('d1', p.id, 'departure', '2026-04-18', '10:00'),
+      transport('d2', p.id, 'departure', '2026-04-22', '15:00'),
     ];
     expect(deriveGuestStayDateBounds(p, [], departures).departure).toBe(iso('2026-04-22'));
   });
@@ -140,17 +128,7 @@ describe('deriveGuestStayDateBounds', () => {
 
   it('ignores transports for other persons', () => {
     const p = person('p1');
-    const arrivals: Transport[] = [
-      {
-        id: 'a1' as Transport['id'],
-        tripId: 't1' as Transport['tripId'],
-        personId: 'other' as Transport['personId'],
-        type: 'arrival',
-        datetime: '2026-04-12T10:00:00.000Z',
-        location: 'X',
-        needsPickup: false,
-      },
-    ];
+    const arrivals = [transport('a1', 'other', 'arrival', '2026-04-12', '10:00')];
     expect(deriveGuestStayDateBounds(p, arrivals, [])).toEqual({
       arrival: null,
       departure: null,
@@ -231,6 +209,27 @@ describe('isGuestOnSiteOnDate', () => {
     expect(on('2026-04-11')).toBe(true);
     // Check-out morning is not a night on site.
     expect(on('2026-04-12')).toBe(false);
+  });
+
+  // The visible half of the same bug: the guest lands at 00:30 on the 11th and
+  // is on site that night, not the 10th.
+  it('puts an after-midnight arrival on site the night they land, not the night before', () => {
+    const p = person('p1');
+    const arrivals = [transport('a1', p.id, 'arrival', '2026-04-11', '00:30')];
+    const departures = [transport('d1', p.id, 'departure', '2026-04-14', '18:00')];
+    const on = (d: string) =>
+      isGuestOnSiteOnDate({
+        person: p,
+        arrivals,
+        departures,
+        assignments: [],
+        dateKey: iso(d),
+      });
+    expect(on('2026-04-10')).toBe(false);
+    expect(on('2026-04-11')).toBe(true);
+    expect(on('2026-04-13')).toBe(true);
+    // Check-out day is not a night on site.
+    expect(on('2026-04-14')).toBe(false);
   });
 
   it('ignores a room assigned to somebody else', () => {

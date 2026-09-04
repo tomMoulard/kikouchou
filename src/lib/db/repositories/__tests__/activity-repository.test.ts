@@ -27,7 +27,7 @@ import {
   createPerson,
   deletePersonWithOwnershipCheck,
 } from '@/lib/db/repositories/person-repository';
-import { isoDate, hexColor } from '@/test/utils';
+import { isoDate, hexColor, localInstant } from '@/test/utils';
 import type { ActivityFormData, ActivityId, PersonId, TripId } from '@/types';
 
 // ============================================================================
@@ -176,15 +176,38 @@ describe('activity-repository', () => {
         tripId,
         createTestActivityData({
           title: 'Festival',
-          startDatetime: '2024-07-16T10:00:00.000Z',
-          endDatetime: '2024-07-18T18:00:00.000Z',
+          startDatetime: localInstant('2024-07-16', '10:00'),
+          endDatetime: localInstant('2024-07-18', '18:00'),
         }),
       );
 
+      expect(await getActivitiesForDate(tripId, '2024-07-15')).toHaveLength(0);
       expect(await getActivitiesForDate(tripId, '2024-07-16')).toHaveLength(1);
       expect(await getActivitiesForDate(tripId, '2024-07-17')).toHaveLength(1);
       expect(await getActivitiesForDate(tripId, '2024-07-18')).toHaveLength(1);
       expect(await getActivitiesForDate(tripId, '2024-07-19')).toHaveLength(0);
+    });
+
+    // Regression: activities are stored as UTC instants, so slicing the first
+    // ten characters off `startDatetime` answered with the UTC day. A midnight
+    // apéro on the 16th is stored at 22:30Z on the 15th in Paris and was only
+    // ever returned for the 15th; the mirror image west of Greenwich hid a
+    // late-evening activity behind the following day.
+    it('matches the local calendar day of a late-night activity, not the UTC day', async () => {
+      const tripId = await createTestTrip();
+
+      await createActivity(
+        tripId,
+        createTestActivityData({
+          title: 'Apéro de minuit',
+          startDatetime: localInstant('2024-07-16', '00:30'),
+          endDatetime: localInstant('2024-07-16', '23:30'),
+        }),
+      );
+
+      expect(await getActivitiesForDate(tripId, '2024-07-15')).toHaveLength(0);
+      expect(await getActivitiesForDate(tripId, '2024-07-16')).toHaveLength(1);
+      expect(await getActivitiesForDate(tripId, '2024-07-17')).toHaveLength(0);
     });
   });
 

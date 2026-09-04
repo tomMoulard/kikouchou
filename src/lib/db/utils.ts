@@ -147,9 +147,10 @@ export const fromUnixTimestamp = (timestamp: UnixTimestamp): Date =>
  * (trip dates, stay dates, assignment check-in/check-out, activity days) are the
  * days the viewer sees on their own wall calendar, and they are written locally;
  * reading one of those local Dates back in UTC yields the *previous* day for
- * every viewer ahead of UTC, Paris included. No calendar view keys a day this
- * way any more; `lib/sync/join-trip.ts` still derives "today" in UTC for a
- * placeholder trip's dates, which is the last known holdout.
+ * every viewer ahead of UTC, Paris included. Nothing in the app keys a calendar
+ * day this way any more — the last holdout, the "today" fallback for a
+ * placeholder trip in `lib/sync/join-trip.ts`, now uses the local converter too.
+ * Adding a caller back is almost certainly a bug.
  *
  * What is left for: reading the UTC calendar day *of an instant* — the sense in
  * which a timestamp "happened on" a date in UTC — and round-tripping a Date that
