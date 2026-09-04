@@ -287,6 +287,183 @@ test.describe('Transport Map View', () => {
 });
 
 // ============================================================================
+// Test Suite: Transport Map Legend
+// ============================================================================
+
+/**
+ * The legend describes the pins by colour, and the two lived in different
+ * places: the swatches painted themselves from a theme token while the pins
+ * interpolated a hex literal into the inline style of a Leaflet `divIcon`. They
+ * agreed only because Tailwind's `green-500` happens to be the `#22c55e`
+ * somebody typed — an agreement no test could see, that no stylesheet could
+ * keep across `.dark`, and that one edit to the token would have ended
+ * silently.
+ *
+ * Both sides now resolve the same custom property, which only a browser can
+ * confirm: a unit test sees class names, and two different class names can
+ * still resolve to one colour (or, worse, one class name to two). So this reads
+ * `backgroundColor` back off both elements, in both themes.
+ *
+ * The pins are seeded against a person that does not exist. `TransportMapPage`
+ * passes `color: person?.color` and `Person.color` is required, so a transport
+ * whose person row is present is painted that person's colour and the legend
+ * describes nothing on screen — the type colour only surfaces on the
+ * missing-person path the `?.` is written for. That is a product question
+ * beyond this test; what it does mean is that the honest way to exercise the
+ * legend's own colours is the path that actually uses them.
+ */
+test.describe('Transport Map Legend', () => {
+  /** A person id with no row behind it, so the pins fall back to type colours. */
+  const ORPHANED_PERSON = 'person-does-not-exist';
+
+  /** `[legend swatch, pin]` background colours, as the browser resolves them. */
+  type SwatchAndPin = readonly [string, string];
+
+  async function readColours(
+    page: Page,
+    tone: 'arrival' | 'departure',
+    markerType: 'transport' | 'pickup',
+  ): Promise<SwatchAndPin> {
+    const swatch = page.locator(`[data-testid="map-legend-swatch-${tone}"]`);
+    const pin = page.locator(`[data-marker-type="${markerType}"]`);
+
+    await expect(swatch).toBeVisible();
+    await expect(pin.first()).toBeVisible();
+
+    return [
+      await swatch.evaluate((el) => getComputedStyle(el).backgroundColor),
+      await pin.first().evaluate((el) => getComputedStyle(el).backgroundColor),
+    ] as const;
+  }
+
+  async function openMapInTheme(
+    page: Page,
+    tripId: string,
+    theme: 'light' | 'dark',
+  ): Promise<void> {
+    await page.evaluate((value) => localStorage.setItem('theme', value), theme);
+    await page.goto(`/trips/${tripId}/transports/map`);
+    await page.waitForLoadState('load');
+    await waitForRoute(page);
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.classList.contains('dark')),
+      )
+      .toBe(theme === 'dark');
+  }
+
+  let tripId: string;
+
+  test.beforeEach(async ({ page }) => {
+    await clearIndexedDB(page);
+
+    await page.route('**/tile.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
+    );
+    await page.route('**/basemaps.cartocdn.com/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.alloc(0) }),
+    );
+
+    await page.goto('/');
+    await page.waitForLoadState('load');
+    await waitForRoute(page);
+
+    tripId = (
+      await seedTrip(page, { name: 'Legend Trip', ...SEEDED_TRIP_DATES })
+    ).tripId;
+
+    // One of each, so both legend rows have something to describe.
+    await seedTransport(page, {
+      tripId,
+      personId: ORPHANED_PERSON,
+      type: 'arrival',
+      datetime: '2026-07-15T10:00:00+02:00',
+      location: 'CDG Terminal 2',
+      coordinates: SEEDED_TRANSPORT_COORDINATES,
+    });
+    await seedTransport(page, {
+      tripId,
+      personId: ORPHANED_PERSON,
+      type: 'departure',
+      datetime: '2026-07-20T18:00:00+02:00',
+      location: 'Gare de Lyon',
+      coordinates: { lat: 48.8443, lon: 2.3743 },
+    });
+  });
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`arrival pins are the colour the legend says, in ${theme} mode`, async ({
+      page,
+    }) => {
+      await openMapInTheme(page, tripId, theme);
+      const [swatch, pin] = await readColours(page, 'arrival', 'transport');
+
+      expect(pin).toBe(swatch);
+      // A pin that failed to resolve its token would be transparent and this
+      // would pass against itself.
+      expect(pin).not.toBe('rgba(0, 0, 0, 0)');
+    });
+
+    test(`departure pins are the colour the legend says, in ${theme} mode`, async ({
+      page,
+    }) => {
+      await openMapInTheme(page, tripId, theme);
+      const [swatch, pin] = await readColours(page, 'departure', 'pickup');
+
+      expect(pin).toBe(swatch);
+      expect(pin).not.toBe('rgba(0, 0, 0, 0)');
+    });
+  }
+
+  test('arrival and departure stay distinguishable from each other', async ({
+    page,
+  }) => {
+    await openMapInTheme(page, tripId, 'light');
+    const [, arrival] = await readColours(page, 'arrival', 'transport');
+    const [, departure] = await readColours(page, 'departure', 'pickup');
+
+    expect(arrival).not.toBe(departure);
+  });
+
+  /**
+   * The point of the whole conversion. An inline `background-color` is frozen
+   * at the moment the `divIcon` is built; a class is live, so the same pin
+   * repaints when the theme changes. If this ever comes back equal, somebody
+   * has put a literal colour back into the icon HTML.
+   */
+  test('pins and swatches both repaint when the theme changes', async ({ page }) => {
+    await openMapInTheme(page, tripId, 'light');
+    const light = await readColours(page, 'arrival', 'transport');
+
+    await openMapInTheme(page, tripId, 'dark');
+    const dark = await readColours(page, 'arrival', 'transport');
+
+    expect(dark[0]).not.toBe(light[0]);
+    expect(dark[1]).not.toBe(light[1]);
+  });
+
+  /**
+   * Colour is never the only carrier of meaning here: the two rows are also
+   * labelled, and each pin carries the person, the direction and the place in
+   * its tooltip and popup.
+   *
+   * Scoped to the legend rather than the page, or deleting both labels would
+   * still pass on any other element that says "arrivals" — the transport list's
+   * own counters do. And matched in both languages, because `DEFAULT_LANGUAGE`
+   * is `fr` and detection reads the browser: an English-only regex asserts the
+   * developer's locale, not the app's behaviour.
+   */
+  test('the legend labels its swatches in words', async ({ page }) => {
+    await openMapInTheme(page, tripId, 'light');
+
+    const legend = page.getByTestId('map-legend');
+    await expect(legend).toBeVisible();
+    await expect(legend).toContainText(/arrivals|arriv[ée]es/i);
+    await expect(legend).toContainText(/departures|d[ée]parts/i);
+  });
+});
+
+// ============================================================================
 // Test Suite: Directions Button
 // ============================================================================
 

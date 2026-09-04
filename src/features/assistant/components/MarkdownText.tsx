@@ -13,6 +13,27 @@ import { type ReactElement, type ReactNode, memo, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * The tint behind inline code and fenced code blocks.
+ *
+ * `bg-foreground/10` rather than the `bg-black/10 dark:bg-white/10` pair it
+ * replaces: one self-theming class instead of two raw palette colours, and a
+ * warm grey (`--foreground` is `oklch(… 0.03 50)`) instead of the pure neutral
+ * that clashed with this app's palette. Same weight either way — 1.24:1 in
+ * light, 1.34:1 in dark against the assistant bubble, versus 1.25 / 1.37 for
+ * the pair it replaces.
+ *
+ * Deliberately *not* `bg-muted`, the obvious-looking token: `ChatMessage`
+ * paints the assistant bubble `bg-muted`, so `bg-muted` here would be exactly
+ * the colour it sits on — 1.000:1 — and every code span in every assistant
+ * reply would disappear. `MarkdownText.test.tsx` asserts the two differ.
+ */
+const CODE_SURFACE = 'bg-foreground/10';
+
+// ============================================================================
 // Type Definitions
 // ============================================================================
 
@@ -54,27 +75,52 @@ function tokenizeInline(text: string): InlineToken[] {
   const tokens: InlineToken[] = [];
   let lastIndex = 0;
 
+  /**
+   * Append plain text, folding it into the previous token when that is also
+   * plain text. Without the fold, a passage that contains a literal `**` comes
+   * back as three text tokens and renders as three `<span>`s, which splits what
+   * the reader sees as one sentence across elements.
+   */
+  const pushText = (value: string): void => {
+    if (value === '') return;
+    const previous = tokens.at(-1);
+    if (previous?.type === 'text') {
+      previous.value += value;
+      return;
+    }
+    tokens.push({ type: 'text', value });
+  };
+
   INLINE_REGEX.lastIndex = 0;
   let match: RegExpExecArray | null;
 
   while ((match = INLINE_REGEX.exec(text)) !== null) {
     // Push any plain text before this match
     if (match.index > lastIndex) {
-      tokens.push({ type: 'text', value: text.slice(lastIndex, match.index) });
+      pushText(text.slice(lastIndex, match.index));
     }
 
-    if (match[1] !== undefined) {
+    // An emphasis run with nothing between its markers renders as an empty
+    // `<strong>`/`<em>`, which is to say it renders as nothing: `2 ** 3 = 8`
+    // reached the user as `2  3 = 8`, and `a *** b` lost three characters. The
+    // markers are the content in that case, so emit them verbatim. Empty
+    // `` `` `` code follows the same rule — an empty chip is no more useful
+    // than an empty `<em>`.
+    const value = match[2] ?? match[4] ?? match[6] ?? match[8] ?? '';
+    if (value === '') {
+      pushText(match[0]);
+    } else if (match[1] !== undefined) {
       // ***bold italic*** or ___bold italic___
-      tokens.push({ type: 'boldItalic', value: match[2]! });
+      tokens.push({ type: 'boldItalic', value });
     } else if (match[3] !== undefined) {
       // **bold** or __bold__
-      tokens.push({ type: 'bold', value: match[4]! });
+      tokens.push({ type: 'bold', value });
     } else if (match[5] !== undefined) {
       // *italic* or _italic_
-      tokens.push({ type: 'italic', value: match[6]! });
+      tokens.push({ type: 'italic', value });
     } else if (match[7] !== undefined) {
       // `code`
-      tokens.push({ type: 'code', value: match[8]! });
+      tokens.push({ type: 'code', value });
     }
 
     lastIndex = match.index + match[0].length;
@@ -82,7 +128,7 @@ function tokenizeInline(text: string): InlineToken[] {
 
   // Remaining plain text
   if (lastIndex < text.length) {
-    tokens.push({ type: 'text', value: text.slice(lastIndex) });
+    pushText(text.slice(lastIndex));
   }
 
   return tokens;
@@ -108,8 +154,7 @@ function renderInline(tokens: InlineToken[]): ReactNode[] {
         return (
           <code
             key={i}
-            // eslint-disable-next-line kikoushou/no-raw-palette-class -- A translucent scrim over whatever the bubble is painted with, not a colour: it has to darken in light mode and lighten in dark, which is what the pair spells out.
-            className="rounded bg-black/10 px-1 py-0.5 text-[0.85em] dark:bg-white/10"
+            className={cn('rounded px-1 py-0.5 text-[0.85em]', CODE_SURFACE)}
           >
             {token.value}
           </code>
@@ -161,8 +206,10 @@ function renderBlocks(content: string): ReactNode[] {
       elements.push(
         <pre
           key={key++}
-          // eslint-disable-next-line kikoushou/no-raw-palette-class -- A translucent scrim over whatever the bubble is painted with, not a colour: it has to darken in light mode and lighten in dark, which is what the pair spells out.
-          className="my-1.5 overflow-x-auto rounded-lg bg-black/10 p-2.5 text-xs dark:bg-white/10"
+          className={cn(
+            'my-1.5 overflow-x-auto rounded-lg p-2.5 text-xs',
+            CODE_SURFACE,
+          )}
         >
           <code>{codeLines.join('\n')}</code>
         </pre>,
