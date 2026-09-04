@@ -54,12 +54,21 @@ export const RAW_PALETTE_PATTERN = `\\b(?:${COLOUR_PREFIXES})-(?:${PALETTE_SHADE
 export const RAW_PALETTE = new RegExp(RAW_PALETTE_PATTERN);
 
 /**
+ * The same pattern, global.
+ *
+ * Hoisted rather than constructed per call: the lint rule runs `matchRawPalette`
+ * on every string literal and template chunk in the repo, and `String#match`
+ * zeroes `lastIndex` itself, so sharing one instance is both cheaper and safe.
+ */
+const RAW_PALETTE_GLOBAL = new RegExp(RAW_PALETTE_PATTERN, 'g');
+
+/**
  * Every palette class in `text`, in source order, deduplicated.
  *
  * @param {string} text Arbitrary source text — a string literal, a template chunk.
  * @returns {string[]} The matched class names, e.g. `['bg-white', 'text-black/80']`.
  */
 export function matchRawPalette(text) {
-  const matches = text.match(new RegExp(RAW_PALETTE_PATTERN, 'g'));
+  const matches = text.match(RAW_PALETTE_GLOBAL);
   return matches === null ? [] : [...new Set(matches)];
 }
