@@ -12,6 +12,14 @@ import { useInstallPrompt } from '../useInstallPrompt';
 // Mocks
 // ============================================================================
 
+const mockCapture = vi.fn();
+
+vi.mock('@/lib/posthog', () => ({
+  // The real module exports `undefined` without env config, which is the case
+  // in tests, so nothing here could observe a capture without this.
+  default: { capture: (...args: unknown[]) => mockCapture(...args) },
+}));
+
 function dispatchBeforeInstallPrompt(
   outcome: 'accepted' | 'dismissed' = 'accepted',
 ) {
@@ -650,6 +658,78 @@ describe('useInstallPrompt', () => {
       const { result } = renderHook(() => useInstallPrompt());
 
       expect(result.current.manualInstallPlatform).toBe('generic');
+    });
+  });
+
+  /**
+   * Reporting the install.
+   *
+   * `appinstalled` is the browser's own word for "this app is installed now",
+   * and the only signal that fires however it happened — the native prompt, the
+   * browser's menu, an iOS share sheet. The capture used to hang off the
+   * Install button's success instead, so every install outside Chromium's
+   * prompt went unrecorded, which is most of them on a phone.
+   */
+  describe('analytics', () => {
+    it('reports the install when the browser says it happened', () => {
+      renderHook(() => useInstallPrompt());
+
+      act(() => {
+        window.dispatchEvent(new Event('appinstalled'));
+      });
+
+      expect(mockCapture).toHaveBeenCalledWith('pwa_install_completed', {
+        via_prompt: false,
+        from_install_link: false,
+      });
+    });
+
+    it('marks an install the app own prompt produced', async () => {
+      const { result } = renderHook(() => useInstallPrompt());
+
+      act(() => {
+        dispatchBeforeInstallPrompt('accepted');
+      });
+      await act(async () => {
+        await result.current.install();
+      });
+
+      act(() => {
+        window.dispatchEvent(new Event('appinstalled'));
+      });
+
+      expect(mockCapture).toHaveBeenCalledWith('pwa_install_completed', {
+        via_prompt: true,
+        from_install_link: false,
+      });
+    });
+
+    it('marks an install that started on the landing page link', () => {
+      visit('/?install=1');
+
+      renderHook(() => useInstallPrompt());
+
+      act(() => {
+        window.dispatchEvent(new Event('appinstalled'));
+      });
+
+      expect(mockCapture).toHaveBeenCalledWith('pwa_install_completed', {
+        via_prompt: false,
+        from_install_link: true,
+      });
+    });
+
+    it('reports nothing for an app that was already installed', () => {
+      window.matchMedia = vi.fn().mockReturnValue({
+        matches: true, // opened as an app, which is not an install
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      });
+
+      renderHook(() => useInstallPrompt());
+
+      // A launch is not a conversion. Only the event fired above is.
+      expect(mockCapture).not.toHaveBeenCalled();
     });
   });
 
