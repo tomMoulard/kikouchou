@@ -98,6 +98,43 @@ export function areArraysEqual<T>(
 }
 
 // ============================================================================
+// Geo Comparison
+// ============================================================================
+
+/**
+ * A lat/lon pair as every entity that carries one declares it.
+ */
+export interface Coordinates {
+  readonly lat: number;
+  readonly lon: number;
+}
+
+/**
+ * Deep equality for an optional lat/lon pair.
+ *
+ * Nested objects come back as a fresh reference on every live-query read, so
+ * they have to be compared field by field: `a.coordinates === b.coordinates`
+ * would report every row as changed and defeat the memoisation the context
+ * comparators exist for. Both axes are compared, because a comparator that
+ * reads only one silently freezes movement along the other.
+ *
+ * @param a - First coordinate pair, or undefined
+ * @param b - Second coordinate pair, or undefined
+ * @returns True when both are absent, the same object, or equal on both axes
+ *
+ * @example
+ * ```typescript
+ * areCoordinatesEqual(a.coordinates, b.coordinates);
+ * ```
+ */
+export function areCoordinatesEqual(
+  a: Coordinates | undefined,
+  b: Coordinates | undefined,
+): boolean {
+  return a === b || (a?.lat === b?.lat && a?.lon === b?.lon);
+}
+
+// ============================================================================
 // Type Guards
 // ============================================================================
 

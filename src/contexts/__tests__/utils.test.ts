@@ -6,7 +6,13 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-import { wrapAndSetError, clearErrorIfNeeded, areArraysEqual, isDefined } from '../utils';
+import {
+  wrapAndSetError,
+  clearErrorIfNeeded,
+  areArraysEqual,
+  areCoordinatesEqual,
+  isDefined,
+} from '../utils';
 
 // ============================================================================
 // wrapAndSetError
@@ -115,6 +121,57 @@ describe('areArraysEqual', () => {
     const objCompare = (a: { id: number }, b: { id: number }) => a.id === b.id;
     expect(areArraysEqual([{ id: 1 }], [{ id: 1 }], objCompare)).toBe(true);
     expect(areArraysEqual([{ id: 1 }], [{ id: 2 }], objCompare)).toBe(false);
+  });
+});
+
+// ============================================================================
+// areCoordinatesEqual
+// ============================================================================
+
+describe('areCoordinatesEqual', () => {
+  it('returns true for the same reference', () => {
+    const coords = { lat: 48.8566, lon: 2.3522 };
+    expect(areCoordinatesEqual(coords, coords)).toBe(true);
+  });
+
+  it('returns true when both are undefined', () => {
+    expect(areCoordinatesEqual(undefined, undefined)).toBe(true);
+  });
+
+  it('returns true for equal values in different objects', () => {
+    expect(
+      areCoordinatesEqual(
+        { lat: 48.8566, lon: 2.3522 },
+        { lat: 48.8566, lon: 2.3522 },
+      ),
+    ).toBe(true);
+  });
+
+  // One case per axis. A single case that moves both passes for a comparator
+  // reading only one of them, which is the half-written deep compare this
+  // helper exists to prevent.
+  it('returns false when only the latitude differs', () => {
+    expect(
+      areCoordinatesEqual(
+        { lat: 48.8566, lon: 2.3522 },
+        { lat: 43.2965, lon: 2.3522 },
+      ),
+    ).toBe(false);
+  });
+
+  it('returns false when only the longitude differs', () => {
+    expect(
+      areCoordinatesEqual(
+        { lat: 48.8566, lon: 2.3522 },
+        { lat: 48.8566, lon: 5.3698 },
+      ),
+    ).toBe(false);
+  });
+
+  it('returns false when one side is absent', () => {
+    const coords = { lat: 48.8566, lon: 2.3522 };
+    expect(areCoordinatesEqual(coords, undefined)).toBe(false);
+    expect(areCoordinatesEqual(undefined, coords)).toBe(false);
   });
 });
 

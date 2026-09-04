@@ -115,7 +115,11 @@ const comparePersons = (a: Person, b: Person): boolean =>
   a.color === b.color &&
   a.stayStartDate === b.stayStartDate &&
   a.stayEndDate === b.stayEndDate &&
-  a.notes === b.notes;
+  a.notes === b.notes &&
+  // How many real people the entry stands for. Listed because the comparator
+  // must cover every mutable field — without it, editing a guest's headcount
+  // left every headcount-derived total (meals, groceries) on the old number.
+  a.headcount === b.headcount;
 
 /**
  * Compares two person arrays for equality based on IDs and mutable properties.

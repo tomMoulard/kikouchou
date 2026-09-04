@@ -32,6 +32,23 @@ vi.mock('react-router-dom', () => ({
 }));
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Fires a real `beforeunload` on window and reports whether anything guarded it.
+ *
+ * Asking the event, rather than the spy, is what makes the leak tests mean
+ * something: a listener that was added and never removed still answers here
+ * long after its component is gone.
+ */
+function dispatchBeforeUnload(): Event {
+  const event = new Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event);
+  return event;
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -135,19 +152,24 @@ describe('useUnsavedChanges', () => {
       );
 
       // The listener was added
-      expect(addEventListenerSpy).toHaveBeenCalledWith(
-        'beforeunload',
-        expect.any(Function),
-      );
+      const addedHandler = addEventListenerSpy.mock.calls.find(
+        ([event]: [string, ...unknown[]]) => event === 'beforeunload',
+      )?.[1];
+      expect(addedHandler).toEqual(expect.any(Function));
 
       // Change to not dirty
       rerender({ isDirty: false });
 
-      // The listener should have been removed
-      const removedCalls = removeEventListenerSpy.mock.calls.filter(
-        ([event]: [string, ...unknown[]]) => event === 'beforeunload',
+      // The handler that was added is the one that must come off. Merely
+      // counting removals passes for a cleanup that removes some other
+      // function, which leaves the real listener attached forever.
+      expect(removeEventListenerSpy).toHaveBeenCalledWith(
+        'beforeunload',
+        addedHandler,
       );
-      expect(removedCalls.length).toBeGreaterThan(0);
+
+      // And with the listener gone, the browser prompt no longer fires.
+      expect(dispatchBeforeUnload().defaultPrevented).toBe(false);
     });
 
     it('calls preventDefault on beforeunload event', () => {
@@ -187,11 +209,33 @@ describe('useUnsavedChanges', () => {
       );
     });
 
-    it('does not fail on unmount when isDirty=false', () => {
+    it('leaves no beforeunload listener behind on unmount when isDirty=true', () => {
+      const { unmount } = renderHook(() => useUnsavedChanges(true));
+
+      // The guard is live while mounted...
+      expect(dispatchBeforeUnload().defaultPrevented).toBe(true);
+
+      unmount();
+
+      // ...and gone afterwards. `expect(() => unmount()).not.toThrow()` was the
+      // whole of this test before, and an effect that never returns a cleanup
+      // does not throw either: it just leaves every unmounted form's handler
+      // attached, so the browser keeps warning about changes nobody is making.
+      expect(dispatchBeforeUnload().defaultPrevented).toBe(false);
+    });
+
+    it('registers nothing to clean up when isDirty=false', () => {
       const { unmount } = renderHook(() => useUnsavedChanges(false));
 
-      // Should not throw
-      expect(() => unmount()).not.toThrow();
+      const beforeunloadCalls = addEventListenerSpy.mock.calls.filter(
+        ([event]: [string, ...unknown[]]) => event === 'beforeunload',
+      );
+      expect(beforeunloadCalls).toHaveLength(0);
+      expect(dispatchBeforeUnload().defaultPrevented).toBe(false);
+
+      unmount();
+
+      expect(dispatchBeforeUnload().defaultPrevented).toBe(false);
     });
   });
 
