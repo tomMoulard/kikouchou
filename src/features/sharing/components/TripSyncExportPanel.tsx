@@ -1,5 +1,5 @@
 /**
- * @fileoverview Full trip / guest-delta export UI — same as Settings → Sync → Export.
+ * @fileoverview Full trip / guest-delta export UI — same as Share on the trips page.
  * Used by TripSyncPage and ShareDialog so behavior and layout stay identical.
  *
  * @module features/sharing/components/TripSyncExportPanel
