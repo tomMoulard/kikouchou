@@ -46,6 +46,14 @@ export const MAX_LENGTHS = {
   personName: 100,
   /** Person notes (allergies, diet, etc.) */
   personNotes: 2000,
+  /**
+   * Person phone number (e.g., "+33 6 12 34 56 78").
+   *
+   * Generous next to E.164's 15 digits, because the value is stored as typed:
+   * spaces, dashes, parentheses and a leading country code all have to fit, and
+   * an address book will happily hand over "+33 (0)6 12-34-56-78 (mobile)".
+   */
+  personPhone: 32,
   /** Transport location (e.g., "Gare Montparnasse") */
   transportLocation: 200,
   /** Transport number (e.g., "TGV 8541") */
@@ -154,12 +162,13 @@ export function sanitizeRoomData<T extends { name: string; description?: string 
  * @returns Sanitized person form data
  */
 export function sanitizePersonData<
-  T extends { name: string; notes?: string; headcount?: number },
+  T extends { name: string; notes?: string; phone?: string; headcount?: number },
 >(data: T): T {
   return {
     ...data,
     name: sanitizeText(data.name, MAX_LENGTHS.personName),
     notes: sanitizeOptionalText(data.notes, MAX_LENGTHS.personNotes),
+    phone: sanitizeOptionalText(data.phone, MAX_LENGTHS.personPhone),
     headcount:
       data.headcount === undefined ? undefined : normalizePersonHeadcount(data.headcount),
   };

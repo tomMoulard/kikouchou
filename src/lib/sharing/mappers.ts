@@ -29,6 +29,7 @@ import {
   TransportSchema,
   TripChangesetSchema,
 } from '@/gen/changeset_pb';
+import { MAX_LENGTHS, sanitizeOptionalText } from '@/lib/db/sanitize';
 import { normalizePersonHeadcount } from '@/types';
 import type {
   HexColor,
@@ -123,6 +124,7 @@ export function personToProto(person: Person): ProtoPerson {
     stayStartDate: person.stayStartDate ?? undefined,
     stayEndDate: person.stayEndDate ?? undefined,
     notes: person.notes ?? undefined,
+    phone: person.phone ?? undefined,
     headcount: person.headcount ?? undefined,
   });
 }
@@ -261,6 +263,12 @@ export function protoToPerson(proto: ProtoPerson): Person {
   };
   if (proto.notes) {
     person.notes = proto.notes;
+  }
+  // Bounded here rather than trusted: a changeset is scanned off someone else's
+  // screen, and nothing upstream of this point clips the string.
+  const phone = sanitizeOptionalText(proto.phone, MAX_LENGTHS.personPhone);
+  if (phone !== undefined) {
+    person.phone = phone;
   }
   if (proto.headcount) {
     person.headcount = normalizePersonHeadcount(proto.headcount);

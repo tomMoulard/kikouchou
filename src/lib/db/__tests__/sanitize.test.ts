@@ -35,6 +35,7 @@ describe('MAX_LENGTHS constants', () => {
 
   it('has expected person field limits', () => {
     expect(MAX_LENGTHS.personName).toBe(100);
+    expect(MAX_LENGTHS.personPhone).toBe(32);
   });
 
   it('has expected transport field limits', () => {
@@ -52,6 +53,7 @@ describe('MAX_LENGTHS constants', () => {
       'roomDescription',
       'personName',
       'personNotes',
+      'personPhone',
       'transportLocation',
       'transportNumber',
       'transportNotes',
@@ -447,6 +449,36 @@ describe('sanitizePersonData', () => {
       color: '#ef4444',
     });
     expect(result.name).toBe('François');
+  });
+
+  it('trims an optional phone and drops a blank one', () => {
+    expect(
+      sanitizePersonData({ name: 'Marie', color: '#ef4444', phone: '  +33 6 12 34 56 78 ' })
+        .phone,
+    ).toBe('+33 6 12 34 56 78');
+    expect(
+      sanitizePersonData({ name: 'Marie', color: '#ef4444', phone: '   ' }).phone,
+    ).toBeUndefined();
+  });
+
+  it('truncates a long phone', () => {
+    const result = sanitizePersonData({
+      name: 'Marie',
+      color: '#ef4444',
+      phone: '0'.repeat(50),
+    });
+    expect(result.phone).toBe('0'.repeat(32));
+  });
+
+  it('leaves the phone formatting alone', () => {
+    // Numbers arrive in a dozen national conventions; rewriting one is how a
+    // working number stops working.
+    const result = sanitizePersonData({
+      name: 'Marie',
+      color: '#ef4444',
+      phone: '+33 (0)6 12-34-56-78',
+    });
+    expect(result.phone).toBe('+33 (0)6 12-34-56-78');
   });
 
   it('trims and truncates optional notes', () => {
