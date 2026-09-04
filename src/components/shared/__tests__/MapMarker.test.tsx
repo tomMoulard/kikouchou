@@ -406,9 +406,14 @@ describe('MapMarker custom colour', () => {
   ])('rejects %s (%s) and falls back to the type classes', (color) => {
     const html = renderedIconHtml(createTestMarker({ type: 'transport', color }));
 
-    expect(html).not.toContain(color);
-    expect(html).not.toContain('<script');
+    // Not a bare `not.toContain(color)`: `red` is a substring of any future
+    // base class that happens to contain it, which would fail this for the
+    // wrong reason. What matters is that the rejected value did not become the
+    // background, and that no attribute or tag was opened.
+    expect(html).not.toContain(`background-color:${color}`);
     expect(html).not.toContain('style=');
+    expect(html).not.toContain('<script');
+    expect(html).not.toMatch(/\son[a-z]+=/);
     expect(html).toContain('bg-success');
   });
 

@@ -566,7 +566,10 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
         resolve to one colour per theme, which is the only thing that catches
         the pair drifting apart again.
       */}
-      <div className="flex items-center gap-4 mb-4 text-sm text-muted-foreground">
+      <div
+        className="flex items-center gap-4 mb-4 text-sm text-muted-foreground"
+        data-testid="map-legend"
+      >
         <div className="flex items-center gap-1.5">
           <div
             className={cn('size-3 rounded-full', statusVariants({ tone: 'arrival', emphasis: 'solid' }))}

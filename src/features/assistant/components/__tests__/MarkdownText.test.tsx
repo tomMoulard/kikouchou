@@ -69,9 +69,6 @@ describe('MarkdownText code surface', () => {
 
     expect(bubbleBackgrounds.length).toBeGreaterThan(0);
     expect(codeBackgrounds.length).toBeGreaterThan(0);
-    expect(codeBackgrounds).not.toEqual(
-      expect.arrayContaining(bubbleBackgrounds),
-    );
     for (const background of codeBackgrounds) {
       expect(bubbleBackgrounds).not.toContain(background);
     }
