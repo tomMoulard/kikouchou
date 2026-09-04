@@ -8,7 +8,7 @@
  *
  * @module lib/yjs/YjsProvider
  */
-/* eslint-disable react-refresh/only-export-components */
+/* eslint-disable react-refresh/only-export-components -- The provider ships with its document hook and context type; splitting them would be three files for one concept. */
 
 import {
   type ReactElement,

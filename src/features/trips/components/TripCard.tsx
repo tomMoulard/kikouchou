@@ -247,6 +247,7 @@ const TripCard = memo(function TripCard({
 
       {/* Share + overflow menu — top-right */}
       {showCornerActions && (
+      // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- The div has no behaviour of its own: the handlers only stop propagation so the full-card activation button underneath does not swallow a click meant for the share or overflow button. The interactive elements are the ones inside it.
       <div
         className="absolute top-2 right-2 z-20 flex items-center gap-0.5"
         onClick={handleMenuTriggerClick}
@@ -360,6 +361,7 @@ const TripCard = memo(function TripCard({
 
         {/* Map Preview - only shown when coordinates are available */}
         {trip.coordinates && (
+          // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- The div has no behaviour of its own: the handlers only stop propagation so the full-card activation button underneath does not swallow a drag or click meant for the map. The interactive elements are the ones inside it.
           <div
             // `relative z-20` lifts the map above the full-card activation
             // button, which would otherwise swallow every interaction with it.

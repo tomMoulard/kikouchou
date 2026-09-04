@@ -11,6 +11,7 @@
 
 /** Backdrop behind every modal. */
 export const dialogOverlayClassName =
+  // eslint-disable-next-line kikoushou/no-raw-palette-class -- shadcn's scrim. A backdrop darkens whatever is behind it in both themes; a theme token would make the dark-mode overlay invisible.
   'fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0';
 
 /**

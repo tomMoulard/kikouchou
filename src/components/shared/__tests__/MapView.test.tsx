@@ -76,6 +76,7 @@ vi.mock('@/components/shared/MapMarker', () => ({
     marker: MapMarkerData;
     onClick?: (m: MapMarkerData) => void;
   }) => (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- A stand-in for <MapMarker>. The double exists to expose the click handler to the test, not to be operated by a user.
     <div
       data-testid={`mock-marker-${marker.id}`}
       data-label={marker.label}

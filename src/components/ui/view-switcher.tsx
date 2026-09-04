@@ -80,6 +80,7 @@ export function ViewSwitcher<TValue extends string>({
   };
 
   return (
+    // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- APG's radio-group pattern puts a roving `tabIndex` on the radios (see the `tabIndex` on each option below) and leaves the group itself out of the tab order; making the group focusable too would give the control two tab stops.
     <div
       role="radiogroup"
       aria-label={ariaLabel}

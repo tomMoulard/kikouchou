@@ -19,9 +19,10 @@ import {
 } from '@/components/ui/status.variants';
 import type { TransportType } from '@/types';
 
-/** Any Tailwind palette shade — what this module exists to keep out. */
-const RAW_PALETTE =
-  /\b(?:bg|text|border|ring|from|to|via|fill|stroke|divide)-(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone|white|black)(?:-\d{2,3})?\b/;
+// The same regex the `kikoushou/no-raw-palette-class` ESLint rule matches on.
+// Imported rather than restated: if this test and the lint rule disagreed about
+// what a palette shade is, whichever ran second would be the one that mattered.
+import { RAW_PALETTE } from '../../../../eslint-rules/raw-palette.js';
 
 describe('statusVariants', () => {
   it('resolves every tone and emphasis to semantic tokens only', () => {
