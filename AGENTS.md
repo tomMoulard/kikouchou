@@ -18,9 +18,12 @@ bun run validate              # generate-proto + test:run + lint + build + gener
 
 # Unit tests (Vitest)
 bun run test                  # Single run (alias of test:run — NOT watch mode)
-bun run test:run              # Single run (use in CI)
+bun run test:run              # Single run (what `validate` uses)
 bun run test:ui               # Watch mode with the Vitest UI
-bun run test:coverage         # Coverage report (target: 80% — not yet enforced in CI)
+bun run test:coverage         # Coverage + thresholds — this is what CI runs, and it FAILS
+                              # the job below them. ~4x slower than test:run, which is why
+                              # `validate` still uses test:run; run this before pushing a
+                              # change that removes tests or adds untested branches.
 bun run test src/features/trips/components/__tests__/TripForm.test.tsx  # Single file
 bun run test -t "TripForm"    # Pattern match (vitest has no --grep)
 
@@ -350,6 +353,17 @@ The E2E job was the third: `timeout-minutes: 30` killed it on every run since
 the workflow was written, so the suite had never finished in CI and the
 `production` and `sync` projects had never run there at all. A job that always
 dies at its limit reads as a failure and hides whatever the tests were saying.
+
+The coverage thresholds were the fourth, and the cheapest to miss: they were
+declared in `vitest.config.ts`, argued for in a comment, and passed to nothing.
+`test:run` is a bare `vitest run`, and `test:coverage` was invoked by no script
+and no workflow, so no run had ever compared the declared numbers to the real
+ones. When one finally did, branches was at 75.35% against a declared 79% — the
+gate had been failing all along, invisibly. The tell was sitting in the log the
+whole time: the next CI step uploads `coverage/`, a directory `test:run` never
+writes, so every run warned "No files were found with the provided path" and
+shipped an empty artifact. **An artifact-upload warning is evidence that the
+step before it did not do what its name says.**
 
 #### `page.waitForFunction` does not await an async predicate
 
