@@ -29,14 +29,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useOfflineAwareToast } from '@/hooks';
-import {
-  addDays,
-  differenceInCalendarDays,
-  format,
-  parseISO,
-  subDays,
-} from 'date-fns';
-import { AlertTriangle, DoorOpen, GripVertical, Plus, Sparkles } from 'lucide-react';
+import { addDays, parseISO } from 'date-fns';
+import { DoorOpen, Plus, Sparkles } from 'lucide-react';
 import {
   DndContext,
   type DragEndEvent,
@@ -60,16 +54,14 @@ import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ViewSwitcher } from '@/components/ui/view-switcher';
-import { statusVariants } from '@/components/ui/status.variants';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { ASSISTANT_MODEL_PRESETS } from '@/features/assistant/models';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
 import { RoomDialog } from '@/features/rooms/components/RoomDialog';
 import { RoomAssignmentSection } from '@/features/rooms/components/RoomAssignmentSection';
-import { DraggableGuest, type DraggableGuestData } from '@/features/rooms/components/DraggableGuest';
+import type { DraggableGuestData } from '@/features/rooms/components/DraggableGuest';
 import { DroppableRoom, type DroppableRoomData } from '@/features/rooms/components/DroppableRoom';
 import { QuickAssignmentDialog } from '@/features/rooms/components/QuickAssignmentDialog';
 import { RoomOccupancyTimeline } from '@/features/rooms/components/RoomOccupancyTimeline';
@@ -349,53 +341,6 @@ function planAutoAssignments(
   }
 
   return { plans, unplacedSegments };
-}
-
-function getStaySpanPercent(args: {
-  readonly tripStartDate: string | undefined;
-  readonly tripEndDate: string | undefined;
-  readonly stayStartDate: string;
-  readonly stayEndDate: string;
-}): { leftPercent: number; widthPercent: number } | null {
-  const { tripStartDate, tripEndDate, stayStartDate, stayEndDate } = args;
-  if (!tripStartDate || !tripEndDate) {
-    return null;
-  }
-
-  const tripStart = parseISO(tripStartDate);
-  const tripEnd = parseISO(tripEndDate);
-  const stayStart = parseISO(stayStartDate);
-  const stayEnd = parseISO(stayEndDate);
-
-  if (
-    Number.isNaN(tripStart.getTime()) ||
-    Number.isNaN(tripEnd.getTime()) ||
-    Number.isNaN(stayStart.getTime()) ||
-    Number.isNaN(stayEnd.getTime())
-  ) {
-    return null;
-  }
-
-  // Nights model: guest needs a room from stayStart night to (stayEnd - 1) night.
-  const lastNight = subDays(stayEnd, 1);
-  if (lastNight < stayStart) {
-    return null;
-  }
-
-  const clippedStart = stayStart < tripStart ? tripStart : stayStart;
-  const clippedEnd = lastNight > tripEnd ? tripEnd : lastNight;
-  if (clippedEnd < clippedStart) {
-    return null;
-  }
-
-  const totalNights = Math.max(1, differenceInCalendarDays(tripEnd, tripStart));
-  const startOffset = Math.max(0, differenceInCalendarDays(clippedStart, tripStart));
-  const spanNights = Math.max(1, differenceInCalendarDays(clippedEnd, clippedStart) + 1);
-
-  return {
-    leftPercent: (startOffset / totalNights) * 100,
-    widthPercent: (spanNights / totalNights) * 100,
-  };
 }
 
 // ============================================================================
@@ -1115,7 +1060,28 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         <PageHeader
           title={t('rooms.title')}
           backLink={`/trips/${tripIdFromUrl}/calendar`}
-          action={headerAction}
+          action={
+            <>
+              {persons.length > 0 &&
+                unassignedGuests.length > 0 &&
+                hasCachedAssistantModel && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      void handleOptimizeAssignments();
+                    }}
+                    disabled={isOptimizingAssignments}
+                  >
+                    <Sparkles className="mr-2 size-4" aria-hidden="true" />
+                    {isOptimizingAssignments
+                      ? t('rooms.autoAssignWorking', 'Optimizing...')
+                      : t('rooms.autoAssignButton', 'Optimize automatically')}
+                  </Button>
+                )}
+              {headerAction}
+            </>
+          }
         />
 
       <ViewSwitcher
@@ -1143,97 +1109,6 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             aria-label={t('rooms.filterDates')}
           />
         </div>
-      )}
-
-      {/* Unassigned guests section */}
-      {persons.length > 0 && unassignedGuests.length > 0 && (
-        <Card
-          className={cn(
-            'mb-6',
-            statusVariants({ tone: 'warning', emphasis: 'surface' }),
-            'bg-warning-surface/50',
-          )}
-        >
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle
-                  className={cn('size-4', statusVariants({ tone: 'warning', emphasis: 'text' }))}
-                  aria-hidden="true"
-                />
-                <span className="text-warning-on-surface">
-                  {t('rooms.unassignedGuestsCount', { count: unassignedGuests.length })}
-                </span>
-              </CardTitle>
-              {hasCachedAssistantModel ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8"
-                  onClick={() => {
-                    void handleOptimizeAssignments();
-                  }}
-                  disabled={isOptimizingAssignments}
-                >
-                  <Sparkles className="mr-1.5 size-3.5" aria-hidden="true" />
-                  {isOptimizingAssignments
-                    ? t('rooms.autoAssignWorking', 'Optimizing...')
-                    : t('rooms.autoAssignButton', 'Optimize automatically')}
-                </Button>
-              ) : null}
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="space-y-2">
-              {unassignedGuests.map(({ person, startDate, endDate }) => {
-                  const formattedStart = format(parseISO(startDate), 'MMM d', { locale: dateLocale });
-                  const formattedEnd = format(parseISO(endDate), 'MMM d', { locale: dateLocale });
-                  const staySpan = getStaySpanPercent({
-                    tripStartDate: currentTrip?.startDate,
-                    tripEndDate: currentTrip?.endDate,
-                    stayStartDate: startDate,
-                    stayEndDate: endDate,
-                  });
-                  return (
-                    <div key={person.id} className="flex items-center gap-3 flex-wrap">
-                      <div className="flex items-center gap-1">
-                        <GripVertical className="size-4 text-muted-foreground/50" aria-hidden="true" />
-                        <DraggableGuest
-                          person={person}
-                          startDate={startDate}
-                          endDate={endDate}
-                          size="sm"
-                        />
-                      </div>
-                      {staySpan && (
-                        <div className="w-full sm:w-40">
-                          <div className="h-2 rounded-full bg-muted/60 relative overflow-hidden">
-                            <div
-                              className="absolute top-0 bottom-0 rounded-full"
-                              style={{
-                                left: `${staySpan.leftPercent}%`,
-                                width: `${staySpan.widthPercent}%`,
-                                backgroundColor: person.color,
-                              }}
-                              aria-hidden="true"
-                            />
-                          </div>
-                        </div>
-                      )}
-                      <span className="text-sm text-muted-foreground">
-                        {formattedStart} - {formattedEnd} {t('rooms.needsRoom', 'needs room')}
-                      </span>
-                    </div>
-                  );
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
-              <GripVertical className="size-3" aria-hidden="true" />
-              {t('rooms.dragHint', 'Drag a guest to a room below to assign')}
-            </p>
-          </CardContent>
-        </Card>
       )}
 
       {/* Room grid */}

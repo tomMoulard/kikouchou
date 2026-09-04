@@ -7,23 +7,25 @@
 import { type CSSProperties, type ReactElement, memo, useMemo } from 'react';
 import { differenceInCalendarDays, format, parseISO, subDays } from 'date-fns';
 import { useTranslation } from 'react-i18next';
+import { TriangleAlert } from 'lucide-react';
 
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
 import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
 import { cn } from '@/lib/utils';
 import { timelineAssignmentBarStyle, TIMELINE_LANE_HEIGHT_PX } from '@/lib/utils/timeline-bar-geometry';
+import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
 import type { ISODateString, Person, Room, RoomAssignment, Transport, Trip } from '@/types';
 import { DroppableRoom } from '@/features/rooms/components/DroppableRoom';
 import { DraggableGuest } from '@/features/rooms/components/DraggableGuest';
 import { DraggableRoomAssignment } from '@/features/rooms/components/DraggableRoomAssignment';
 import { DroppableAssignment } from '@/features/rooms/components/DroppableAssignment';
 import { buildRoomTimelineModel } from '@/features/rooms/utils/room-timeline-utils';
+import { groupUnassignedNightsIntoStays } from '@/features/rooms/utils/unassigned-guests';
 import {
   calculatePeakOccupancyByRoom,
   createHeadcountResolver,
   summarizeRoomOccupancy,
 } from '@/features/rooms/utils/capacity-utils';
-import { GripVertical } from 'lucide-react';
 
 // ============================================================================
 // Constants
@@ -39,34 +41,50 @@ function buildUnassignedSegments(
   readonly person: Person;
   readonly startDate: string;
   readonly endDate: string;
-  readonly startOffset: number;
-  readonly spanNights: number;
+  readonly startIndex: number;
+  readonly endIndex: number;
 }[] {
   if (!unassignedGuests?.length) {
     return [];
   }
   return unassignedGuests
-    .map(({ person, startDate, endDate }) => {
-      const start = parseISO(startDate);
-      const end = parseISO(endDate);
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        return null;
-      }
-      const lastNight = subDays(end, 1);
-      if (lastNight < start) {
-        return null;
-      }
+    .flatMap(({ person, startDate, endDate, unassignedDates }) => {
+      // One bar per unbroken run of nights with no bed. A guest with nothing
+      // recorded falls back to their whole window, which is what a guest with
+      // no room at all has always been drawn as.
+      const stays =
+        unassignedDates && unassignedDates.length > 0
+          ? groupUnassignedNightsIntoStays(unassignedDates)
+          : [{ startDate, endDate }];
 
-      const clippedStart = start < tripStart ? tripStart : start;
-      const clippedEnd = lastNight > tripEnd ? tripEnd : lastNight;
-      if (clippedEnd < clippedStart) {
-        return null;
-      }
+      return stays.map((stay) => {
+        const start = parseISO(stay.startDate);
+        const end = parseISO(stay.endDate);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+          return null;
+        }
+        const lastNight = subDays(end, 1);
+        if (lastNight < start) {
+          return null;
+        }
 
-      const startOffset = Math.max(0, differenceInCalendarDays(clippedStart, tripStart));
-      const spanNights = Math.max(1, differenceInCalendarDays(clippedEnd, clippedStart) + 1);
+        const clippedStart = start < tripStart ? tripStart : start;
+        const clippedEnd = lastNight > tripEnd ? tripEnd : lastNight;
+        if (clippedEnd < clippedStart) {
+          return null;
+        }
 
-      return { person, startDate, endDate, startOffset, spanNights };
+        const startIndex = Math.max(0, differenceInCalendarDays(clippedStart, tripStart));
+        const spanNights = Math.max(1, differenceInCalendarDays(clippedEnd, clippedStart) + 1);
+
+        return {
+          person,
+          startDate: stay.startDate,
+          endDate: stay.endDate,
+          startIndex,
+          endIndex: startIndex + spanNights - 1,
+        };
+      });
     })
     .filter(
       (x): x is NonNullable<typeof x> => x !== null,
@@ -88,6 +106,14 @@ export interface RoomOccupancyTimelineProps {
     readonly person: Person;
     readonly startDate: string;
     readonly endDate: string;
+    /**
+     * The nights inside the window that actually have no room.
+     *
+     * The pills are drawn from these, not from the window: a guest housed for
+     * part of their stay must not claim the nights they already have a bed for.
+     * Omitted, the whole window is taken to be uncovered.
+     */
+    readonly unassignedDates?: readonly string[];
   }[];
   readonly dateLocale: import('date-fns/locale').Locale;
   readonly range: { readonly startDate: ISODateString; readonly endDate: ISODateString };
@@ -143,9 +169,15 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
   const tripStart = parseISO(range.startDate);
   const tripEnd = parseISO(range.endDate);
 
-  const unassignedSegments = useMemo(
-    () => buildUnassignedSegments(unassignedGuests, tripStart, tripEnd),
+  // One row for everyone still without a bed, packed into lanes exactly like a
+  // room's — guests who overlap stack instead of drawing over each other.
+  const unassignedLanes = useMemo(
+    () => allocateTimelineLanes(buildUnassignedSegments(unassignedGuests, tripStart, tripEnd)),
     [unassignedGuests, tripStart, tripEnd],
+  );
+  const unassignedLaneCount = unassignedLanes.reduce(
+    (max, lane) => Math.max(max, lane.laneIndex + 1),
+    0,
   );
 
   return (
@@ -160,45 +192,45 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
     >
       {(viewport) => {
         const { canvasWidth, dayGridTemplateColumns, dayWidthPx, useFractionalColumns } = viewport;
-        const dayDen = Math.max(1, dayCount);
 
         return (
           <>
             <div role="list" aria-label={t('rooms.timeline.rows', 'Room rows')}>
-              {unassignedSegments.map((row) => {
-                const left = (row.startOffset / dayDen) * canvasWidth;
-                const width = (row.spanNights / dayDen) * canvasWidth;
-                return (
-                <div key={`unassigned-${row.person.id}`} role="listitem" className="flex border-t border-muted">
+              {unassignedLaneCount > 0 && (
+                <div
+                  role="listitem"
+                  className="flex border-t border-muted"
+                  aria-label={t('rooms.needsRoom', 'needs room')}
+                >
                   <div
                     className={cn(
-                      'sticky left-0 z-10 min-w-0 bg-background border-r border-muted px-3 flex items-center gap-2',
+                      'sticky left-0 z-10 min-w-0 bg-background border-r border-muted px-3 flex items-center',
                     )}
                     style={{
                       width: ROOM_COL_PX_COMPACT,
                       minWidth: ROOM_COL_PX_COMPACT,
-                      height: TIMELINE_LANE_HEIGHT_PX,
+                      height: unassignedLaneCount * TIMELINE_LANE_HEIGHT_PX,
                     }}
-                    title={row.person.name}
+                    title={t('rooms.needsRoom', 'needs room')}
                   >
-                    <GripVertical className="size-4 shrink-0 text-muted-foreground/50" aria-hidden="true" />
-                    <DraggableGuest
-                      person={row.person}
-                      startDate={row.startDate}
-                      endDate={row.endDate}
-                      size="sm"
+                    {/* Icon only. The pills beside it already carry the names,
+                        and the label read as a truncated "a besoin d'u…" in a
+                        140px column — a caption nobody can finish is worse than
+                        no caption. The sentence stays on hover and on the row's
+                        accessible name. */}
+                    <TriangleAlert
+                      className="size-3.5 shrink-0 text-destructive"
+                      aria-hidden="true"
                     />
-                    <span
-                      className="min-w-0 flex-1 text-xs leading-tight whitespace-normal break-words text-muted-foreground"
-                      title={t('rooms.needsRoom', 'needs room')}
-                    >
-                      {t('rooms.needsRoom', 'needs room')}
-                    </span>
+                    <span className="sr-only">{t('rooms.needsRoom', 'needs room')}</span>
                   </div>
 
                   <div
                     className="relative bg-background"
-                    style={{ width: canvasWidth, height: TIMELINE_LANE_HEIGHT_PX }}
+                    style={{
+                      width: canvasWidth,
+                      height: unassignedLaneCount * TIMELINE_LANE_HEIGHT_PX,
+                    }}
                   >
                     <div className="absolute inset-0 pointer-events-none">
                       <div
@@ -211,7 +243,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                       >
                         {Array.from({ length: dayCount }).map((_, i) => (
                           <div
-                            key={`grid-unassigned-${row.person.id}-${i}`}
+                            key={`grid-unassigned-${i}`}
                             className={cn(
                               'min-w-0 h-full border-r border-muted/50',
                               i % 2 === 0 && 'bg-muted/10',
@@ -222,20 +254,32 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                       </div>
                     </div>
 
-                    <div
-                      className="absolute top-1 bottom-1 rounded-md border border-dashed"
-                      style={{
-                        left: Math.max(2, left + 2),
-                        width: Math.max(12, width - 4),
-                        borderColor: row.person.color,
-                        backgroundColor: `${row.person.color}22`,
-                      }}
-                      aria-hidden="true"
-                    />
+                    {/* The same pill an assigned guest gets, on the same day
+                        axis and through the same bar geometry. Only the row
+                        says they have no bed — the guest does not have to be
+                        drawn as an absence to make that readable, and the empty
+                        dashed outline it replaces carried no name at all. */}
+                    {unassignedLanes.map((lane) => (
+                      <DraggableGuest
+                        // A partially housed guest has one bar per gap, so the
+                        // person alone no longer identifies a bar.
+                        key={`unassigned-${lane.person.id}-${lane.startDate}`}
+                        person={lane.person}
+                        startDate={lane.startDate}
+                        endDate={lane.endDate}
+                        bar
+                        style={timelineAssignmentBarStyle(lane, {
+                          dayCount,
+                          useFractionalColumns,
+                          dayWidthPx,
+                          laneIndex: lane.laneIndex,
+                          laneHeightPx: viewport.laneHeightPx,
+                        })}
+                      />
+                    ))}
                   </div>
                 </div>
-                );
-              })}
+              )}
 
               {model.rows.map((row) => {
                 const visualLaneCount = Math.max(row.laneCount, row.room.capacity);

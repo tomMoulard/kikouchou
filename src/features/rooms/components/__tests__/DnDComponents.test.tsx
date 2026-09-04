@@ -197,8 +197,11 @@ describe('DraggableGuest', () => {
       <DraggableGuest person={mockPerson} startDate="2026-04-01" endDate="2026-04-05" />,
     );
 
-    const node = snapshot().draggableNodes.get('guest-p1');
-    expect(node).toBeDefined();
+    // Found by walking the registry rather than by its id string: the payload
+    // is what this asserts, and the id's shape is free to change.
+    const nodes = [...snapshot().draggableNodes.values()];
+    expect(nodes).toHaveLength(1);
+    const node = nodes[0];
     // These three fields become the quick-assign dialog's pre-filled dates.
     expect(node?.data.current).toEqual({
       person: mockPerson,
@@ -206,6 +209,25 @@ describe('DraggableGuest', () => {
       endDate: '2026-04-05',
     });
     expect(node?.node.current).toBe(screen.getByRole('button', { name: 'Alice' }));
+  });
+
+  // A guest housed for only part of their stay gets one bar per gap. Keyed on
+  // the person alone, both bars registered under one id and dragging either
+  // picked up whichever dnd-kit had kept.
+  it('registers one draggable per gap for a partially housed guest', () => {
+    renderInDnd(
+      <>
+        <DraggableGuest person={mockPerson} startDate="2026-04-01" endDate="2026-04-03" bar />
+        <DraggableGuest person={mockPerson} startDate="2026-04-06" endDate="2026-04-08" bar />
+      </>,
+    );
+
+    const nodes = [...snapshot().draggableNodes.values()];
+    expect(nodes).toHaveLength(2);
+    expect(nodes.map((n) => (n?.data.current as { startDate: string }).startDate)).toEqual([
+      '2026-04-01',
+      '2026-04-06',
+    ]);
   });
 
   it('starts a drag on a pointer press', () => {

@@ -69,12 +69,23 @@ vi.mock('@/features/rooms/components/DraggableGuest', () => ({
     person,
     startDate,
     endDate,
+    bar,
+    style,
   }: {
     person: Person;
     startDate: string;
     endDate: string;
+    bar?: boolean;
+    style?: { left?: string | number; width?: string | number; top?: string | number };
   }) => (
-    <span data-testid="draggable-guest" data-start={startDate} data-end={endDate}>
+    <span
+      data-testid="draggable-guest"
+      data-start={startDate}
+      data-end={endDate}
+      data-bar={bar ? 'true' : 'false'}
+      data-left={String(style?.left ?? '')}
+      data-top={String(style?.top ?? '')}
+    >
       {person.name}
     </span>
   ),
@@ -259,7 +270,7 @@ describe('RoomOccupancyTimeline', () => {
     expect(bar).toHaveAttribute('data-width', String(6 * DAY_WIDTH_PX - 4));
   });
 
-  it('renders unassigned guests with "needs room" text', () => {
+  it('renders unassigned guests in a row marked as needing a room', () => {
     render(
       <RoomOccupancyTimeline
         {...defaultProps}
@@ -270,8 +281,92 @@ describe('RoomOccupancyTimeline', () => {
         }]}
       />,
     );
+
     expect(screen.getByTestId('draggable-guest')).toBeInTheDocument();
-    expect(screen.getByText('rooms.needsRoom')).toBeInTheDocument();
+    // The row carries the "no bed yet" meaning, so the guest itself does not
+    // have to be drawn as an absence.
+    expect(
+      screen.getByRole('listitem', { name: 'rooms.needsRoom' }),
+    ).toBeInTheDocument();
+  });
+
+  // Was an empty dashed outline with no name in it, while the guest's name sat
+  // back in the label column. It reads as the same pill an assigned guest gets
+  // now — same colour, same name, same place on the day axis.
+  it('draws an unassigned guest as a named pill on the day axis', () => {
+    render(
+      <RoomOccupancyTimeline
+        {...defaultProps}
+        unassignedGuests={[{
+          person: mockPerson,
+          startDate: '2026-07-03',
+          endDate: '2026-07-07',
+        }]}
+      />,
+    );
+
+    const pill = screen.getByTestId('draggable-guest');
+    expect(pill).toHaveAttribute('data-bar', 'true');
+    expect(pill).toHaveTextContent('Alice');
+    // Positioned rather than inline, so it lands on its own nights.
+    expect(pill.getAttribute('data-left')).not.toBe('');
+  });
+
+  it('stacks overlapping unassigned guests into separate lanes', () => {
+    const other: Person = {
+      ...mockPerson,
+      id: 'p2' as Person['id'],
+      name: 'Bob',
+    };
+
+    render(
+      <RoomOccupancyTimeline
+        {...defaultProps}
+        persons={[mockPerson, other]}
+        unassignedGuests={[
+          { person: mockPerson, startDate: '2026-07-03', endDate: '2026-07-07' },
+          { person: other, startDate: '2026-07-04', endDate: '2026-07-08' },
+        ]}
+      />,
+    );
+
+    const tops = screen
+      .getAllByTestId('draggable-guest')
+      .map((pill) => pill.getAttribute('data-top'));
+
+    // Two overlapping guests must not be drawn over one another.
+    expect(new Set(tops).size).toBe(2);
+  });
+
+  // The 140px label column truncated the sentence to "a besoin d'u…", which is
+  // a caption nobody can finish. The pills carry the names, so the column shows
+  // the warning and nothing else — with the sentence still reachable.
+  it('labels the unassigned row with an icon rather than truncated text', () => {
+    render(
+      <RoomOccupancyTimeline
+        {...defaultProps}
+        unassignedGuests={[{
+          person: mockPerson,
+          startDate: '2026-07-03',
+          endDate: '2026-07-07',
+        }]}
+      />,
+    );
+
+    // Present for assistive tech and on hover, but not drawn as a caption.
+    expect(screen.getByText('rooms.needsRoom')).toHaveClass('sr-only');
+    expect(
+      screen.getByRole('listitem', { name: 'rooms.needsRoom' }),
+    ).toBeInTheDocument();
+  });
+
+  it('renders no unassigned row when everyone has a bed', () => {
+    render(<RoomOccupancyTimeline {...defaultProps} />);
+
+    expect(screen.queryByTestId('draggable-guest')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('listitem', { name: 'rooms.needsRoom' }),
+    ).not.toBeInTheDocument();
   });
 
   it('hands the unassigned guest’s own window to the drag payload', () => {
@@ -290,6 +385,74 @@ describe('RoomOccupancyTimeline', () => {
     const guest = screen.getByTestId('draggable-guest');
     expect(guest).toHaveAttribute('data-start', '2026-07-03');
     expect(guest).toHaveAttribute('data-end', '2026-07-07');
+  });
+
+  // The row means "the part of this stay with no bed yet", and the pill has to
+  // mean the same thing. It was drawn across the guest's *whole* window instead,
+  // so a guest housed for part of their stay claimed the nights they already had
+  // a room for — and dragging that pill would book the whole window again on top
+  // of the existing assignment. Invisible while guests are all-or-nothing housed;
+  // the moment a stay is split across rooms it is what you see.
+  describe('partially housed guests', () => {
+    it('draws the pill over the uncovered nights, not the whole stay', () => {
+      render(
+        <RoomOccupancyTimeline
+          {...defaultProps}
+          unassignedGuests={[{
+            person: mockPerson,
+            startDate: '2026-07-01',
+            endDate: '2026-07-10',
+            // Housed for the rest; only these two nights still need a bed.
+            unassignedDates: ['2026-07-03', '2026-07-04'],
+          }]}
+        />,
+      );
+
+      const pill = screen.getByTestId('draggable-guest');
+      // Check-out model: two nights from the 3rd means checking out on the 5th.
+      expect(pill).toHaveAttribute('data-start', '2026-07-03');
+      expect(pill).toHaveAttribute('data-end', '2026-07-05');
+    });
+
+    it('gives each run of uncovered nights its own pill', () => {
+      render(
+        <RoomOccupancyTimeline
+          {...defaultProps}
+          unassignedGuests={[{
+            person: mockPerson,
+            startDate: '2026-07-01',
+            endDate: '2026-07-10',
+            // A bed on the 4th, 5th and 6th; two separate gaps around it.
+            unassignedDates: ['2026-07-02', '2026-07-03', '2026-07-07'],
+          }]}
+        />,
+      );
+
+      const pills = screen.getAllByTestId('draggable-guest');
+      expect(pills).toHaveLength(2);
+      expect(pills[0]).toHaveAttribute('data-start', '2026-07-02');
+      expect(pills[0]).toHaveAttribute('data-end', '2026-07-04');
+      expect(pills[1]).toHaveAttribute('data-start', '2026-07-07');
+      expect(pills[1]).toHaveAttribute('data-end', '2026-07-08');
+    });
+
+    it('still spans the stay for a guest with no bed at all', () => {
+      render(
+        <RoomOccupancyTimeline
+          {...defaultProps}
+          unassignedGuests={[{
+            person: mockPerson,
+            startDate: '2026-07-03',
+            endDate: '2026-07-07',
+            unassignedDates: ['2026-07-03', '2026-07-04', '2026-07-05', '2026-07-06'],
+          }]}
+        />,
+      );
+
+      const pill = screen.getByTestId('draggable-guest');
+      expect(pill).toHaveAttribute('data-start', '2026-07-03');
+      expect(pill).toHaveAttribute('data-end', '2026-07-07');
+    });
   });
 
   it('counts the free beds of an empty room', () => {

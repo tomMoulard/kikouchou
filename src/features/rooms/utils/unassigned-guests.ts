@@ -1,13 +1,14 @@
 /**
  * @fileoverview Which nights a guest still needs a bed for.
  *
- * The one answer behind the auto-assign planner and the "everyone has a room"
- * notice, so the two can never disagree about who is still homeless.
+ * The one answer behind the rooms timeline's "needs room" row, the auto-assign
+ * planner and the "everyone has a room" notice, so those three can never
+ * disagree about who is still homeless.
  *
  * @module features/rooms/utils/unassigned-guests
  */
 
-import { eachDayOfInterval, format, parseISO } from 'date-fns';
+import { addDays, eachDayOfInterval, format, isSameDay, parseISO } from 'date-fns';
 
 import {
   deriveGuestStayDateBounds,
@@ -18,6 +19,17 @@ import type { Person, RoomAssignment, Transport } from '@/types';
 // ============================================================================
 // Types
 // ============================================================================
+
+/**
+ * An unbroken run of nights a guest has no room for, in the check-in /
+ * check-out shape the rest of the app books with.
+ */
+export interface UnassignedStay {
+  /** First night with no room. */
+  readonly startDate: string;
+  /** Check-out: the morning after the run's last night. */
+  readonly endDate: string;
+}
 
 /**
  * A guest's stay window plus the nights inside it with no room.
@@ -156,4 +168,60 @@ export function calculateUnassignedDates(
     endDate: departureDate,
     unassignedDates,
   };
+}
+
+/**
+ * Groups loose uncovered nights into the runs a booking could actually cover.
+ *
+ * {@link calculateUnassignedDates} answers with individual nights, which is
+ * right for counting but wrong for drawing or booking: a guest housed for the
+ * middle of their stay has two separate gaps, and one bar across both would
+ * claim the nights they already have a bed for. Each run becomes its own stay,
+ * so a bar spans only nights that really need a room and dragging it books
+ * exactly those.
+ *
+ * Returned in the check-out convention used everywhere else — a run of nights
+ * `3rd, 4th` is `startDate: 3rd, endDate: 5th` — so the result can be handed
+ * straight to `createAssignment`.
+ *
+ * Nights are de-duplicated and ordered first, and one that will not parse is
+ * skipped rather than breaking the run either side of it.
+ *
+ * @param nights - Local day keys (`yyyy-MM-dd`) with no room, in any order
+ * @returns One entry per unbroken run, earliest first
+ */
+export function groupUnassignedNightsIntoStays(
+  nights: readonly string[],
+): readonly UnassignedStay[] {
+  const parsed = [...new Set(nights)]
+    .sort()
+    .map((night) => ({ night, date: parseISO(night) }))
+    .filter(({ date }) => !isNaN(date.getTime()));
+
+  const stays: UnassignedStay[] = [];
+  let runStart: string | null = null;
+  let runLastNight: Date | null = null;
+
+  const close = (): void => {
+    if (runStart !== null && runLastNight !== null) {
+      stays.push({
+        startDate: runStart,
+        endDate: format(addDays(runLastNight, 1), 'yyyy-MM-dd'),
+      });
+    }
+  };
+
+  for (const { night, date } of parsed) {
+    if (runLastNight !== null && isSameDay(addDays(runLastNight, 1), date)) {
+      runLastNight = date;
+      continue;
+    }
+
+    close();
+    runStart = night;
+    runLastNight = date;
+  }
+  close();
+
+  return stays;
 }

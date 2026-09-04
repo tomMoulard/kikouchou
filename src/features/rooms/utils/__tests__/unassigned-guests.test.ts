@@ -5,7 +5,10 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { calculateUnassignedDates } from '../unassigned-guests';
+import {
+  calculateUnassignedDates,
+  groupUnassignedNightsIntoStays,
+} from '../unassigned-guests';
 import type {
   HexColor,
   ISODateString,
@@ -124,5 +127,59 @@ describe('calculateUnassignedDates', () => {
     );
 
     expect(result).toBeNull();
+  });
+});
+
+describe('groupUnassignedNightsIntoStays', () => {
+  it('turns one run of nights into a check-in / check-out window', () => {
+    // Two nights from the 3rd means checking out on the morning of the 5th.
+    expect(groupUnassignedNightsIntoStays(['2026-09-03', '2026-09-04'])).toEqual([
+      { startDate: '2026-09-03', endDate: '2026-09-05' },
+    ]);
+  });
+
+  it('splits nights either side of a bed into separate runs', () => {
+    // Housed on the 4th, 5th and 6th: two gaps, not one long one. A single bar
+    // across both would claim the nights the guest already has a room for.
+    expect(
+      groupUnassignedNightsIntoStays(['2026-09-02', '2026-09-03', '2026-09-07']),
+    ).toEqual([
+      { startDate: '2026-09-02', endDate: '2026-09-04' },
+      { startDate: '2026-09-07', endDate: '2026-09-08' },
+    ]);
+  });
+
+  it('joins a run that crosses the end of a month', () => {
+    expect(
+      groupUnassignedNightsIntoStays(['2026-09-29', '2026-09-30', '2026-10-01']),
+    ).toEqual([{ startDate: '2026-09-29', endDate: '2026-10-02' }]);
+  });
+
+  it('orders and de-duplicates before grouping', () => {
+    expect(
+      groupUnassignedNightsIntoStays([
+        '2026-09-04',
+        '2026-09-02',
+        '2026-09-03',
+        '2026-09-03',
+      ]),
+    ).toEqual([{ startDate: '2026-09-02', endDate: '2026-09-05' }]);
+  });
+
+  it('reports a single night as a one-night stay', () => {
+    expect(groupUnassignedNightsIntoStays(['2026-09-03'])).toEqual([
+      { startDate: '2026-09-03', endDate: '2026-09-04' },
+    ]);
+  });
+
+  it('returns nothing for no nights', () => {
+    expect(groupUnassignedNightsIntoStays([])).toEqual([]);
+  });
+
+  it('skips a night it cannot read rather than joining across it', () => {
+    // A value this cannot place in time must not silently extend a run.
+    expect(
+      groupUnassignedNightsIntoStays(['2026-09-02', 'not-a-date', '2026-09-03']),
+    ).toEqual([{ startDate: '2026-09-02', endDate: '2026-09-04' }]);
   });
 });
