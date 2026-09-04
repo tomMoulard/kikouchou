@@ -1048,3 +1048,118 @@ describe('TripForm Map Pin', () => {
   });
 });
 
+// ============================================================================
+// Which month a picker opens on, and what a new start date does to the end date
+// ============================================================================
+
+/**
+ * The month heading of the calendar currently on screen.
+ *
+ * Read out of the DOM rather than through a role query because
+ * react-day-picker renders the heading as a plain span, and the assertion is
+ * about *which* month is showing — the one thing a role query cannot express.
+ */
+function openCalendarMonth(): string {
+  const label = document.querySelector('.rdp-caption_label');
+  if (!label) {
+    throw new Error('no calendar is open');
+  }
+  return label.textContent ?? '';
+}
+
+/**
+ * The day buttons of the month on screen, with the neighbouring months'
+ * leading and trailing days excluded — clicking one of those moves the
+ * calendar instead of choosing a date.
+ */
+function daysOfOpenMonth(): readonly HTMLButtonElement[] {
+  return Array.from(
+    document.querySelectorAll<HTMLButtonElement>(
+      '.rdp-day:not(.rdp-outside) button',
+    ),
+  );
+}
+
+/** The "next month" arrow of the calendar on screen. */
+function nextMonthArrow(): HTMLElement {
+  return screen.getByRole('button', { name: /next month/i });
+}
+
+/** Waits for a date picker popover to have rendered its calendar. */
+async function waitForOpenCalendar(): Promise<void> {
+  await waitFor(() => {
+    expect(document.querySelector('.rdp-root')).toBeTruthy();
+  });
+}
+
+describe('TripForm Date Picker Month', () => {
+  it('opens the start date picker on the month already chosen', async () => {
+    const user = userEvent.setup();
+    const trip = createTestTrip({
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-22'),
+    });
+
+    render(<TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: /trips\.startDate/i }));
+    await waitForOpenCalendar();
+
+    // A selected date does not move react-day-picker's month on its own: with
+    // no `defaultMonth` the picker opens on today, so re-opening the dates of
+    // any trip that is not this month means paging back to it by hand.
+    expect(openCalendarMonth()).toBe('July 2024');
+  });
+
+  it('opens the end date picker on the month of the start date', async () => {
+    const user = userEvent.setup();
+
+    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    // Three months out, which is where a holiday actually gets booked — and
+    // far enough that a picker opening on today shows a month whose every day
+    // is disabled.
+    await user.click(screen.getByRole('button', { name: /trips\.startDate/i }));
+    await waitForOpenCalendar();
+    await user.click(nextMonthArrow());
+    await user.click(nextMonthArrow());
+    await user.click(nextMonthArrow());
+    const chosenMonth = openCalendarMonth();
+    await user.click(daysOfOpenMonth()[14]!);
+
+    await user.click(screen.getByRole('button', { name: /trips\.endDate/i }));
+    await waitForOpenCalendar();
+
+    // Every day before the start is disabled, so opening on the current month
+    // leaves the user in front of a grid where nothing can be tapped and the
+    // only way out is the month arrow — three times.
+    expect(openCalendarMonth()).toBe(chosenMonth);
+    expect(daysOfOpenMonth().some((day) => !day.disabled)).toBe(true);
+  });
+
+  it('drops an end date that the newly chosen start date has overtaken', async () => {
+    const user = userEvent.setup();
+    const trip = createTestTrip({
+      startDate: isoDate('2024-07-10'),
+      endDate: isoDate('2024-07-12'),
+    });
+
+    render(<TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    // Move the start a month past the end.
+    await user.click(screen.getByRole('button', { name: /trips\.startDate/i }));
+    await waitForOpenCalendar();
+    await user.click(nextMonthArrow());
+    await user.click(daysOfOpenMonth()[14]!);
+
+    // The end date the form is holding is now before the start — a range the
+    // end picker itself refuses to produce, since it disables everything
+    // before the start. Keeping it only to report an error leaves the form in
+    // a state no sequence of taps could reach; dropping it puts the user one
+    // tap from a valid range instead.
+    const endButton = screen.getByRole('button', { name: /trips\.endDate/i });
+    expect(endButton).not.toHaveTextContent(/2024/);
+    expect(screen.queryByText('validation.endDateBeforeStart')).toBeNull();
+  });
+});
+

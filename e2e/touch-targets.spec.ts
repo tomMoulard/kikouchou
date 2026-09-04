@@ -356,6 +356,41 @@ test.describe('Touch targets on mobile', () => {
     }
   });
 
+  test("the date picker's month arrows are at least 44px square", async ({ page }) => {
+    await clearIndexedDB(page);
+    await page.goto('/trips/new');
+    await waitForRoute(page);
+
+    // The name field is autofocused, and blurring it while empty inserts a
+    // "required" message that pushes the date buttons down between pointerdown
+    // and pointerup. Filling it first keeps this test about arrow geometry.
+    await page.locator('#trip-name').fill('Touch Target Trip');
+    await page.locator('#trip-start-date').click();
+
+    // A different set of arrows from the ones above: these come from
+    // react-day-picker, not from `Button`, so they carry no `data-size` to
+    // match on. `rdp-nav` is the library's own class name — stable, and unlike
+    // the buttons' `aria-label` not something a translation can change.
+    const arrows = page.locator('[data-slot="popover-content"] .rdp-nav button');
+    await expect(arrows.first()).toBeVisible();
+
+    // They matter more than most: with a start date a few months out, every
+    // day the end picker opens on is disabled, and these arrows are the only
+    // control on the popover that does anything at all.
+    const count = await arrows.count();
+    expect(count, 'no month arrows rendered').toBe(2);
+
+    for (let index = 0; index < count; index += 1) {
+      const box = await boxOf(page, arrows.nth(index));
+      expect(box.width, `arrow ${index} is ${box.width}px wide`).toBeGreaterThanOrEqual(
+        MEASURED_FLOOR_PX,
+      );
+      expect(box.height, `arrow ${index} is ${box.height}px tall`).toBeGreaterThanOrEqual(
+        MEASURED_FLOOR_PX,
+      );
+    }
+  });
+
   test('every option of a select is at least 44px tall', async ({ page }) => {
     // Stock shadcn's `SelectItem` is `py-1.5 text-sm` and nothing else — 6 +
     // 20 + 6 = 32px — and not one of the sixteen call sites in this app
@@ -417,5 +452,26 @@ test.describe('Desktop density is unchanged', () => {
         `option ${index} is ${box.height}px tall — the mobile floor leaked past \`md\``,
       ).toBeLessThan(MIN_TOUCH_TARGET_PX);
     }
+  });
+
+  test('the date picker stays compact past the md breakpoint', async ({ page }) => {
+    await clearIndexedDB(page);
+    await page.goto('/trips/new');
+    await waitForRoute(page);
+
+    await page.locator('#trip-name').fill('Touch Target Trip');
+    await page.locator('#trip-start-date').click();
+
+    // The mobile floor here is a `max-md:` override of `--cell-size`, which
+    // drives the caption height, the arrows and the day columns all at once.
+    // Written without the `max-` it would widen the popover on every desktop.
+    const arrowBox = await boxOf(
+      page,
+      page.locator('[data-slot="popover-content"] .rdp-nav button').first(),
+    );
+    expect(
+      arrowBox.height,
+      'the mobile cell size leaked past `md` and inflated the date picker',
+    ).toBeLessThan(MIN_TOUCH_TARGET_PX);
   });
 });
