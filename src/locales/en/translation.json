@@ -266,7 +266,6 @@
     "deleteSuccess": "Guest removed successfully",
     "empty": "No guests yet",
     "emptyDescription": "Add the friends joining this trip — they'll pick rooms and add their travel details",
-    "cardNoTransportDetail": "No travel details yet",
     "badgeInteractive": "Select {{name}}"
   },
   "assignments": {

@@ -329,18 +329,7 @@ const PersonCard = memo(function PersonCard({
               );
             })()}
           </div>
-        ) : (
-          <>
-            {(stayRangeLabel || roomsDisplay) && (
-              <p className="text-sm text-muted-foreground italic">
-                {t('persons.cardNoTransportDetail')}
-              </p>
-            )}
-            {!stayRangeLabel && !roomsDisplay && !trimmedNotes && (
-              <p className="text-sm text-muted-foreground italic">{t('transports.empty')}</p>
-            )}
-          </>
-        )}
+        ) : null}
 
         {trimmedNotes && (
           <div
