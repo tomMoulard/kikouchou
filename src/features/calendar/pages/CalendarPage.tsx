@@ -620,9 +620,18 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         arrivals,
         departures,
         assignments,
+        tripWindow: { startDate: currentTrip?.startDate, endDate: currentTrip?.endDate },
         dayKeys: visibleDateKeys,
       }),
-    [assignments, arrivals, departures, persons, visibleDateKeys],
+    [
+      assignments,
+      arrivals,
+      currentTrip?.endDate,
+      currentTrip?.startDate,
+      departures,
+      persons,
+      visibleDateKeys,
+    ],
   );
 
   // Multi-day activities repeat across every day they cover.

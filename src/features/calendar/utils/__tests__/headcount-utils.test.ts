@@ -81,6 +81,12 @@ function makeTransport(args: {
 
 const day = (value: string): ISODateString => value as ISODateString;
 
+/** The trip a guest with no dates of their own is assumed to be there for. */
+const TRIP_WINDOW = { startDate: day('2024-07-15'), endDate: day('2024-07-20') };
+
+/** A trip with no dates of its own: nothing for an undated guest to fall back on. */
+const NO_TRIP_DATES = { startDate: undefined, endDate: undefined };
+
 // ============================================================================
 // buildDailyHeadcounts
 // ============================================================================
@@ -107,6 +113,7 @@ describe('buildDailyHeadcounts', () => {
       arrivals: [],
       departures: [],
       assignments: [],
+      tripWindow: TRIP_WINDOW,
       dayKeys: [day('2024-07-16')],
     });
 
@@ -125,6 +132,7 @@ describe('buildDailyHeadcounts', () => {
       arrivals: [],
       departures: [],
       assignments: [],
+      tripWindow: TRIP_WINDOW,
       dayKeys: [day('2024-07-15'), day('2024-07-16')],
     });
 
@@ -145,6 +153,7 @@ describe('buildDailyHeadcounts', () => {
       arrivals: [],
       departures: [],
       assignments: [],
+      tripWindow: TRIP_WINDOW,
       dayKeys: [day('2024-07-16'), day('2024-07-17')],
     });
 
@@ -152,12 +161,19 @@ describe('buildDailyHeadcounts', () => {
     expect(counts.has(day('2024-07-17'))).toBe(false);
   });
 
+  // The guest's own dates stop before this night, so the bed is the only thing
+  // that can put them on it.
   it('counts guests whose presence comes from a room assignment only', () => {
-    const person = makePerson({ id: 'p-1', headcount: 2 });
+    const person = makePerson({
+      id: 'p-1',
+      headcount: 2,
+      stayStartDate: day('2024-07-14'),
+      stayEndDate: day('2024-07-15'),
+    });
     const assignment = makeAssignment({
       id: 'a-1',
       personId: 'p-1',
-      startDate: '2024-07-15',
+      startDate: '2024-07-16',
       endDate: '2024-07-18',
     });
 
@@ -166,6 +182,7 @@ describe('buildDailyHeadcounts', () => {
       arrivals: [],
       departures: [],
       assignments: [assignment],
+      tripWindow: TRIP_WINDOW,
       dayKeys: [day('2024-07-16')],
     });
 
@@ -194,6 +211,7 @@ describe('buildDailyHeadcounts', () => {
         }),
       ],
       assignments: [],
+      tripWindow: TRIP_WINDOW,
       dayKeys: [day('2024-07-16')],
     });
 
@@ -219,6 +237,7 @@ describe('buildDailyHeadcounts', () => {
       arrivals: [],
       departures: [],
       assignments: [assignment],
+      tripWindow: TRIP_WINDOW,
       dayKeys: [day('2024-07-16')],
     });
 
@@ -237,6 +256,7 @@ describe('buildDailyHeadcounts', () => {
       arrivals: [],
       departures: [],
       assignments: [],
+      tripWindow: TRIP_WINDOW,
       dayKeys: [day('2024-07-14'), day('2024-07-15'), day('2024-07-20')],
     });
 
@@ -258,10 +278,33 @@ describe('buildDailyHeadcounts', () => {
       arrivals: [],
       departures: [],
       assignments: [],
+      tripWindow: TRIP_WINDOW,
       dayKeys: [day('2024-07-15')],
     });
 
     expect(counts.get(day('2024-07-15'))).toEqual({ guests: 1, people: 1 });
+  });
+
+  // A guest the host added and left blank is on site for the trip: counting
+  // them as nobody made the calendar's nightly total disagree with the guest
+  // list the host had just filled in.
+  it('counts a guest with no dates of their own for the trip nights', () => {
+    const blank = makePerson({ id: 'p-1', name: 'Julie', headcount: 2 });
+
+    const counts = buildDailyHeadcounts({
+      persons: [blank],
+      arrivals: [],
+      departures: [],
+      assignments: [],
+      tripWindow: TRIP_WINDOW,
+      dayKeys: [day('2024-07-14'), day('2024-07-15'), day('2024-07-19'), day('2024-07-20')],
+    });
+
+    expect(counts.has(day('2024-07-14'))).toBe(false);
+    expect(counts.get(day('2024-07-15'))).toEqual({ guests: 1, people: 2 });
+    expect(counts.get(day('2024-07-19'))).toEqual({ guests: 1, people: 2 });
+    // The trip's last day is the check-out, so it is not a night on site.
+    expect(counts.has(day('2024-07-20'))).toBe(false);
   });
 
   it('returns an empty map when there are no guests or no days', () => {
@@ -271,6 +314,7 @@ describe('buildDailyHeadcounts', () => {
         arrivals: [],
         departures: [],
         assignments: [],
+        tripWindow: TRIP_WINDOW,
         dayKeys: [day('2024-07-15')],
       }).size,
     ).toBe(0);
@@ -281,6 +325,7 @@ describe('buildDailyHeadcounts', () => {
         arrivals: [],
         departures: [],
         assignments: [],
+        tripWindow: TRIP_WINDOW,
         dayKeys: [],
       }).size,
     ).toBe(0);
@@ -292,22 +337,41 @@ describe('buildDailyHeadcounts', () => {
 // ============================================================================
 
 describe('isGuestOnSiteOnDate', () => {
-  it('is false for a guest with no stay window, transports, or assignment', () => {
+  it('is false when neither the guest nor the trip has any dates', () => {
     expect(
       isGuestOnSiteOnDate({
         person: makePerson({ id: 'p-1' }),
         arrivals: [],
         departures: [],
         assignments: [],
+        tripWindow: NO_TRIP_DATES,
         dateKey: day('2024-07-16'),
       }),
     ).toBe(false);
   });
 
-  it('ignores assignments belonging to other guests', () => {
+  it('is true for a guest with no dates on a night the trip covers', () => {
     expect(
       isGuestOnSiteOnDate({
         person: makePerson({ id: 'p-1' }),
+        arrivals: [],
+        departures: [],
+        assignments: [],
+        tripWindow: TRIP_WINDOW,
+        dateKey: day('2024-07-16'),
+      }),
+    ).toBe(true);
+  });
+
+  it('ignores assignments belonging to other guests', () => {
+    expect(
+      isGuestOnSiteOnDate({
+        // Dated, so the trip fallback is not what answers here.
+        person: makePerson({
+          id: 'p-1',
+          stayStartDate: day('2024-07-14'),
+          stayEndDate: day('2024-07-15'),
+        }),
         arrivals: [],
         departures: [],
         assignments: [
@@ -318,6 +382,7 @@ describe('isGuestOnSiteOnDate', () => {
             endDate: '2024-07-18',
           }),
         ],
+        tripWindow: TRIP_WINDOW,
         dateKey: day('2024-07-16'),
       }),
     ).toBe(false);
@@ -339,12 +404,18 @@ describe('sidebar list and calendar headcount agree', () => {
       stayStartDate: day('2024-07-15'),
       stayEndDate: day('2024-07-18'),
     });
-    const roomOnly = makePerson({ id: 'p-room-only', name: 'Zoe' });
+    // Zoe's own dates end before this night, so only her bed puts her on it.
+    const roomOnly = makePerson({
+      id: 'p-room-only',
+      name: 'Zoe',
+      stayStartDate: day('2024-07-14'),
+      stayEndDate: day('2024-07-15'),
+    });
     const assignments = [
       makeAssignment({
         id: 'a-1',
         personId: 'p-room-only',
-        startDate: '2024-07-15',
+        startDate: '2024-07-16',
         endDate: '2024-07-18',
       }),
     ];
@@ -355,6 +426,7 @@ describe('sidebar list and calendar headcount agree', () => {
       arrivals: [],
       departures: [],
       assignments,
+      tripWindow: TRIP_WINDOW,
       dateKey,
     });
     const counts = buildDailyHeadcounts({
@@ -362,6 +434,7 @@ describe('sidebar list and calendar headcount agree', () => {
       arrivals: [],
       departures: [],
       assignments,
+      tripWindow: TRIP_WINDOW,
       dayKeys: [dateKey],
     });
 
@@ -386,6 +459,7 @@ describe('sidebar list and calendar headcount agree', () => {
       arrivals: [],
       departures: [],
       assignments,
+      tripWindow: TRIP_WINDOW,
       dateKey,
     });
     const counts = buildDailyHeadcounts({
@@ -393,6 +467,7 @@ describe('sidebar list and calendar headcount agree', () => {
       arrivals: [],
       departures: [],
       assignments,
+      tripWindow: TRIP_WINDOW,
       dayKeys: [dateKey],
     });
 

@@ -129,6 +129,10 @@ function clipAssignmentToPersonStayAndTripGrid(
   let ln = toLocalISODateString(assignmentLastNight);
 
   if (person) {
+    // The guest's *stated* dates only: the trip-wide default a dateless guest
+    // gets elsewhere is a guess, and a guess must not trim a booking the host
+    // typed in — it used to pull an assignment reaching past the trip's end
+    // back to the last trip night.
     const { arrival, departure } = deriveGuestStayDateBounds(person, arrivals, departures);
     if (arrival && departure && arrival < departure) {
       const depParsed = parseLocalDayKey(departure);

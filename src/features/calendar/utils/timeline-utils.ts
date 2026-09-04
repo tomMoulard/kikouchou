@@ -7,7 +7,7 @@
 import { subDays } from 'date-fns';
 
 import { toLocalISODateString } from '@/lib/db/utils';
-import { deriveGuestStayDateBounds } from '@/features/persons/utils/guest-presence';
+import { resolveGuestStayWindow } from '@/features/persons/utils/guest-presence';
 import { dedupeContainedTimelineSpans } from '@/lib/utils/dedupe-timeline-spans';
 import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
 import {
@@ -210,10 +210,11 @@ export function buildCalendarTimelineModel(args: {
     // Presence range: explicit stay dates take precedence over transports,
     // falling back to earliest arrival / latest departure. Shared with the rest
     // of the app so the timeline never disagrees about when a guest is here.
-    const { arrival: stayStartKey, departure: stayEndKey } = deriveGuestStayDateBounds(
+    const { arrival: stayStartKey, departure: stayEndKey } = resolveGuestStayWindow(
       person,
       arrivals,
       departures,
+      { startDate: trip.startDate, endDate: trip.endDate },
     );
 
     const staySpan = (() => {

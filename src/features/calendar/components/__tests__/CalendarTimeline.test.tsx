@@ -116,8 +116,8 @@ describe('CalendarTimeline', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument();
   });
 
-  it('shows empty state when no assignments, arrivals, or departures', () => {
-    render(<CalendarTimeline {...defaultProps} />);
+  it('shows empty state when there are no guests, assignments, arrivals or departures', () => {
+    render(<CalendarTimeline {...defaultProps} persons={[]} />);
     expect(screen.getByText('calendar.noAssignments')).toBeInTheDocument();
     // The same EmptyState the month view uses, so switching views does not
     // change how "nothing here yet" is presented. This file's `t` mock returns
@@ -126,6 +126,15 @@ describe('CalendarTimeline', () => {
     const status = screen.getByRole('status');
     expect(status).toHaveAttribute('aria-live', 'polite');
     expect(status).toHaveTextContent('Nothing scheduled yet');
+  });
+
+  // A guest with no dates of their own is taken to be there for the whole trip,
+  // so their row is drawn and the timeline is not empty — it used to say
+  // "nothing scheduled" over a guest list the host had just filled in.
+  it('does not show empty state for a guest with no dates of their own', () => {
+    render(<CalendarTimeline {...defaultProps} />);
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.queryByText('calendar.noAssignments')).not.toBeInTheDocument();
   });
 
   it('does not show empty state when assignments exist', () => {

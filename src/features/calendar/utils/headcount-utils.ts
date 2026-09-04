@@ -8,7 +8,10 @@
  * @module features/calendar/utils/headcount-utils
  */
 
-import { isGuestOnSiteOnDate } from '@/features/persons/utils/guest-presence';
+import {
+  isGuestOnSiteOnDate,
+  type TripStayWindow,
+} from '@/features/persons/utils/guest-presence';
 import { getPersonHeadcount } from '@/types';
 import type { ISODateString, Person, RoomAssignment, Transport } from '@/types';
 
@@ -46,7 +49,9 @@ export { isGuestOnSiteOnDate };
  * @example
  * ```typescript
  * // Tom (headcount 1) and "Alice+Auré" (headcount 2) both staying tonight
- * const counts = buildDailyHeadcounts({ persons, arrivals, departures, assignments, dayKeys });
+ * const counts = buildDailyHeadcounts({
+ *   persons, arrivals, departures, assignments, tripWindow, dayKeys,
+ * });
  * counts.get(todayKey); // { guests: 2, people: 3 }
  * ```
  */
@@ -55,9 +60,11 @@ export function buildDailyHeadcounts(args: {
   readonly arrivals: readonly Transport[];
   readonly departures: readonly Transport[];
   readonly assignments: readonly RoomAssignment[];
+  /** The trip's dates, standing in for guests who have none of their own. */
+  readonly tripWindow: TripStayWindow;
   readonly dayKeys: readonly ISODateString[];
 }): ReadonlyMap<ISODateString, DailyHeadcount> {
-  const { persons, arrivals, departures, assignments, dayKeys } = args;
+  const { persons, arrivals, departures, assignments, tripWindow, dayKeys } = args;
 
   const map = new Map<ISODateString, DailyHeadcount>();
   if (persons.length === 0 || dayKeys.length === 0) {
@@ -69,7 +76,16 @@ export function buildDailyHeadcounts(args: {
     let people = 0;
 
     for (const person of persons) {
-      if (!isGuestOnSiteOnDate({ person, arrivals, departures, assignments, dateKey })) {
+      if (
+        !isGuestOnSiteOnDate({
+          person,
+          arrivals,
+          departures,
+          assignments,
+          tripWindow,
+          dateKey,
+        })
+      ) {
         continue;
       }
       guests += 1;

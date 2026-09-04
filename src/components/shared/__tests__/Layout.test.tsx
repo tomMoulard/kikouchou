@@ -599,10 +599,11 @@ describe('Layout', () => {
     // Regression: this list used a stay-window-only definition of presence
     // while the calendar counted rooms too, so a guest with a bed and no stay
     // dates was counted on the calendar and missing from the list beside it.
-    it('lists a guest whose only trace is a room assignment', () => {
+    it('lists a guest whose only trace tonight is a room assignment', () => {
       mockPersons.mockReturnValue([
         guest('Dated', { start: todayKey, end: tomorrowKey }),
-        guest('RoomOnly'),
+        // Their stated stay ended this morning; the bed is what keeps them here.
+        guest('RoomOnly', { start: yesterdayKey, end: todayKey }),
       ]);
       mockAssignments.mockReturnValue([
         {
@@ -622,8 +623,23 @@ describe('Layout', () => {
       expect(within(list).getByText('RoomOnly')).toBeInTheDocument();
     });
 
-    it('leaves out a guest whose room ends before tonight', () => {
-      mockPersons.mockReturnValue([guest('CheckedOut')]);
+    // A guest the host added and left blank is here for the trip: leaving them
+    // out made this list disagree with the guest list the host had just filled
+    // in, and with the rooms page beside it.
+    it('lists a guest with no stay dates, transports or room', () => {
+      mockPersons.mockReturnValue([guest('Blank')]);
+      mockAssignments.mockReturnValue([]);
+
+      renderLayout();
+
+      const list = screen.getByRole('list', { name: 'nav.guestsOfTheDay' });
+      expect(within(list).getByText('Blank')).toBeInTheDocument();
+    });
+
+    it('leaves out a guest whose stay and room both ended before tonight', () => {
+      // Dated: a guest who filled nothing in is taken to be here for the whole
+      // trip, so only stated dates can put them in the past.
+      mockPersons.mockReturnValue([guest('CheckedOut', { start: yesterdayKey, end: todayKey })]);
       mockAssignments.mockReturnValue([
         {
           id: 'ra-2' as RoomAssignment['id'],

@@ -33,6 +33,24 @@ import type {
 // ============================================================================
 
 /**
+ * The trip's own dates, used as the stay window of a guest who has none.
+ *
+ * Required wherever it appears rather than optional: an absent window means
+ * “this guest is nowhere”, which is the behaviour this type exists to remove,
+ * and a default would let a new call site pick it up again in silence.
+ */
+export interface TripStayWindow {
+  /**
+   * First day of the trip — the check-in an undated guest is assumed to make.
+   * `undefined` only while the trip itself is unknown (still loading, or dateless),
+   * which leaves the guest with no stay window exactly as before.
+   */
+  readonly startDate: ISODateString | undefined;
+  /** Last day of the trip — the check-out an undated guest is assumed to make. */
+  readonly endDate: ISODateString | undefined;
+}
+
+/**
  * Everything needed to decide whether one guest sleeps on one calendar night.
  *
  * `assignments` is required rather than optional on purpose: an optional list
@@ -48,6 +66,8 @@ export interface GuestPresenceQuery {
   readonly departures: readonly Transport[];
   /** Room assignments for the whole trip (filtered internally). */
   readonly assignments: readonly RoomAssignment[];
+  /** The trip's dates, standing in for a guest who has none of their own. */
+  readonly tripWindow: TripStayWindow;
   /** The night in question. */
   readonly dateKey: ISODateString;
 }
@@ -57,8 +77,9 @@ export interface GuestPresenceQuery {
 // ============================================================================
 
 /**
- * Resolves arrival and departure calendar dates for a person.
- * Prefers explicit `stayStartDate` / `stayEndDate`; otherwise earliest arrival / latest departure transport day.
+ * What the guest's *own* records say about their stay: explicit
+ * `stayStartDate` / `stayEndDate` first, then earliest arrival / latest
+ * departure transport day, and `null` for a bound nothing accounts for.
  *
  * Stay dates are already local day keys — `PersonForm` writes them from a date
  * picker. Transports are not: they are stored as UTC instants
@@ -71,6 +92,10 @@ export interface GuestPresenceQuery {
  * Transports whose datetime will not parse are skipped: a bound derived from an
  * unreadable instant is worse than no bound at all, because it silently wins the
  * min/max comparison.
+ *
+ * Reach for this only where a *stated* stay is the question — clipping a room
+ * booking the host typed in, for instance, which a guess must never shorten.
+ * To ask where a guest sleeps, use {@link resolveGuestStayWindow}.
  */
 export function deriveGuestStayDateBounds(
   person: Person,
@@ -104,6 +129,37 @@ export function deriveGuestStayDateBounds(
   return { arrival: arrivalDate, departure: departureDate };
 }
 
+/**
+ * The guest's stay window as the app should read it: their own records, with
+ * the trip's dates standing in for whatever they never filled in.
+ *
+ * Each bound falls back on its own, because the interesting case is the
+ * half-known stay: a guest with a flight in and no flight out is here from the
+ * day they land until the trip ends, and answering `null` erased them from the
+ * timeline, the room maths and “guests tonight” alike. A guest with nothing
+ * filled in is therefore taken to be there for the whole trip — the host added
+ * them to *this* trip, so the trip is the best-supported guess, and it is the
+ * trip whose guest list already shows them.
+ *
+ * The trip's last day is the check-out, matching what a host types when they do
+ * fill the dates in, so the last night covered is the one before it.
+ *
+ * A trip with blank dates offers no fallback and the bound stays `null`.
+ */
+export function resolveGuestStayWindow(
+  person: Person,
+  arrivals: readonly Transport[],
+  departures: readonly Transport[],
+  tripWindow: TripStayWindow,
+): { readonly arrival: ISODateString | null; readonly departure: ISODateString | null } {
+  const { arrival, departure } = deriveGuestStayDateBounds(person, arrivals, departures);
+
+  return {
+    arrival: arrival ?? (tripWindow.startDate || null),
+    departure: departure ?? (tripWindow.endDate || null),
+  };
+}
+
 // ============================================================================
 // Presence
 // ============================================================================
@@ -118,9 +174,10 @@ function isWithinStayWindow(
   person: Person,
   arrivals: readonly Transport[],
   departures: readonly Transport[],
+  tripWindow: TripStayWindow,
   dateKey: ISODateString,
 ): boolean {
-  const { arrival, departure } = deriveGuestStayDateBounds(person, arrivals, departures);
+  const { arrival, departure } = resolveGuestStayWindow(person, arrivals, departures, tripWindow);
   if (!arrival || !departure || arrival >= departure) {
     return false;
   }
@@ -143,14 +200,15 @@ function isWithinStayWindow(
  *   arrivals: [],
  *   departures: [],
  *   assignments: [{ personId: person.id, startDate: '2026-04-10', endDate: '2026-04-12' }],
+ *   tripWindow: { startDate: '2026-04-10', endDate: '2026-04-20' },
  *   dateKey: '2026-04-10',
  * }); // true
  * ```
  */
 export function isGuestOnSiteOnDate(args: GuestPresenceQuery): boolean {
-  const { person, arrivals, departures, assignments, dateKey } = args;
+  const { person, arrivals, departures, assignments, tripWindow, dateKey } = args;
 
-  if (isWithinStayWindow(person, arrivals, departures, dateKey)) {
+  if (isWithinStayWindow(person, arrivals, departures, tripWindow, dateKey)) {
     return true;
   }
 
@@ -167,11 +225,12 @@ export function listGuestsOnSiteOnDate(args: {
   readonly arrivals: readonly Transport[];
   readonly departures: readonly Transport[];
   readonly assignments: readonly RoomAssignment[];
+  readonly tripWindow: TripStayWindow;
   readonly dateKey: ISODateString;
 }): readonly Person[] {
-  const { persons, arrivals, departures, assignments, dateKey } = args;
+  const { persons, arrivals, departures, assignments, tripWindow, dateKey } = args;
   return persons.filter((person) =>
-    isGuestOnSiteOnDate({ person, arrivals, departures, assignments, dateKey }),
+    isGuestOnSiteOnDate({ person, arrivals, departures, assignments, tripWindow, dateKey }),
   );
 }
 
@@ -194,10 +253,19 @@ export function buildGuestIdsByTripDateMap(args: {
   // `buildDayColumns` owns the day axis: it rejects unparseable or inverted
   // bounds and hands back keys in the same local convention the callers ask
   // with, so this module never names a date converter of its own.
+  const tripWindow: TripStayWindow = { startDate: tripStartDate, endDate: tripEndDate };
+
   for (const key of toDayKeys(buildDayColumns(tripStartDate, tripEndDate))) {
     const ids = persons
       .filter((person) =>
-        isGuestOnSiteOnDate({ person, arrivals, departures, assignments, dateKey: key }),
+        isGuestOnSiteOnDate({
+          person,
+          arrivals,
+          departures,
+          assignments,
+          tripWindow,
+          dateKey: key,
+        }),
       )
       .map((p) => p.id);
     map.set(key, ids);
