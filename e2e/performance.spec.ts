@@ -13,6 +13,7 @@
 import { test, expect, type Page, type CDPSession } from '@playwright/test';
 import { clearIndexedDB } from './support/storage';
 import { fixtureDate, fixtureMonthEnd } from './support/fixture-dates';
+import { waitForRoute } from './support/routes';
 
 // ============================================================================
 // Test Configuration & Constants
@@ -226,20 +227,24 @@ async function getMemoryUsage(
 // ============================================================================
 
 /**
- * Waits for loading state to finish.
+ * Waits for the lazy route to replace the suspense fallback, and fails if it
+ * never does.
+ *
+ * This was a `page.waitForFunction` over `document.body.textContent` whose
+ * timeout was swallowed by a `.catch` commented "Timeout is ok" — and it is
+ * called from inside `measureDuration`, three times over. So a route that never
+ * finished loading
+ * contributed a silent extra 10 s to a number then asserted
+ * `toBeLessThan(1500)`: the test failed, but it failed saying the render was
+ * slow when what actually happened was that the page never rendered at all.
+ *
+ * Delegates to the suite's own helper, which asserts rather than swallows and
+ * looks at the `role="status"` fallback rather than at every word on the page —
+ * "loading" appears in ordinary copy, and matching the whole body meant an
+ * unrelated string could hold this open for the full timeout.
  */
 async function waitForLoading(page: Page): Promise<void> {
-  await page
-    .waitForFunction(
-      () => {
-        const body = document.body.textContent ?? '';
-        return !body.toLowerCase().includes('loading');
-      },
-      { timeout: 10000 },
-    )
-    .catch(() => {
-      // Timeout is ok - loading might have already finished
-    });
+  await waitForRoute(page);
 }
 
 // ============================================================================
