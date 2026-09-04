@@ -39,8 +39,16 @@ interface TransportIconProps {
  * // Basic usage
  * <TransportIcon mode="train" />
  *
- * // With custom styling
- * <TransportIcon mode="plane" className="size-5 text-blue-500" />
+ * // With custom styling. Colour comes from a theme token or `statusVariants`,
+ * // never a palette shade — this example used to say `text-blue-500`, which
+ * // contradicted AGENTS.md § Styling and was copy-paste bait.
+ * <TransportIcon mode="plane" className="size-5 text-muted-foreground" />
+ *
+ * // Tinted by what it means, the way the transport list and map do it
+ * <TransportIcon
+ *   mode="plane"
+ *   className={cn('size-5', statusVariants({ tone: 'arrival', emphasis: 'text' }))}
+ * />
  * ```
  */
 const TransportIcon = memo(function TransportIcon({
