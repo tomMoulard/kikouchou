@@ -348,6 +348,10 @@ describe('ActivityListPage', () => {
     renderPage();
 
     expect(screen.getByText('activities.title')).toBeInTheDocument();
-    expect(within(document.body).getByRole('alert')).toBeInTheDocument();
+    // Naming the failure, not just counting an alert: an empty error region
+    // would satisfy `getByRole('alert')` on its own
+    expect(within(document.body).getByRole('alert')).toHaveTextContent(
+      'Agenda load failed',
+    );
   });
 });

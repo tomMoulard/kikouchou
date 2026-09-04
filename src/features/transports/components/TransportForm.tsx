@@ -16,7 +16,6 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { format, parseISO } from 'date-fns';
 import { useFormSubmission } from '@/hooks';
 
 import { Button } from '@/components/ui/button';
@@ -33,6 +32,10 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { LocationPicker, type Coordinates } from '@/components/shared/LocationPicker';
+import {
+  formatDatetimeLocal,
+  toISODatetime,
+} from '@/features/transports/utils/datetime-input';
 import type {
   Person,
   PersonId,
@@ -150,40 +153,6 @@ function getInitialFormState(
     needsPickup: transport?.needsPickup ?? false,
     notes: transport?.notes ?? '',
   };
-}
-
-/**
- * Converts ISO datetime string to datetime-local input format.
- *
- * @param isoDatetime - ISO datetime string
- * @returns datetime-local format (YYYY-MM-DDTHH:mm)
- */
-function formatDatetimeLocal(isoDatetime: string): string {
-  try {
-    const date = parseISO(isoDatetime);
-    if (isNaN(date.getTime())) {return '';}
-    return format(date, "yyyy-MM-dd'T'HH:mm");
-  } catch {
-    return '';
-  }
-}
-
-/**
- * Converts datetime-local input format to ISO datetime string.
- *
- * @param localDatetime - datetime-local format (YYYY-MM-DDTHH:mm)
- * @returns ISO datetime string
- */
-function toISODatetime(localDatetime: string): string {
-  if (!localDatetime) {return '';}
-  try {
-    // Datetime-local gives us local time, convert to ISO
-    const date = new Date(localDatetime);
-    if (isNaN(date.getTime())) {return '';}
-    return date.toISOString();
-  } catch {
-    return '';
-  }
 }
 
 /**

@@ -1,11 +1,55 @@
 /**
  * @fileoverview Tests for TransportListPage.
+ *
+ * Every fixture date here is **derived from the moment the test runs**, never
+ * written out. The page splits transports into an upcoming list and a
+ * collapsed "past" accordion, so a hardcoded date is a fuse: this file used to
+ * pin its transports at 2027 and its trip at 2026-07, and on the day the wall
+ * clock passed them the upcoming assertions would start hunting for rows that
+ * render but are hidden inside the accordion. `daysFromNow` keeps the
+ * upcoming/past split meaningful forever, and in every timezone.
+ *
  * @module features/transports/pages/__tests__/TransportListPage.test
  */
 
+import { format } from 'date-fns';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@/test/utils';
 import type { Person, Transport, Trip } from '@/types';
+
+// ============================================================================
+// Fixture dates
+// ============================================================================
+
+/** Milliseconds in a day. */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * A transport datetime `days` from now, at a fixed local wall clock.
+ *
+ * Offset-less, matching what `TransportForm`'s `datetime-local` input produces
+ * and what the page's `parseISO` reads back as local time.
+ *
+ * @param days - Days ahead (negative for the past)
+ * @param hours - Local hour of day
+ * @param minutes - Local minute
+ * @returns An offset-less ISO datetime string
+ */
+function daysFromNow(days: number, hours: number, minutes = 0): string {
+  const date = new Date(Date.now() + days * DAY_MS);
+  date.setHours(hours, minutes, 0, 0);
+  return format(date, "yyyy-MM-dd'T'HH:mm:ss");
+}
+
+/**
+ * A trip day `days` from now.
+ *
+ * @param days - Days ahead (negative for the past)
+ * @returns A `yyyy-MM-dd` local day
+ */
+function dayFromNow(days: number): string {
+  return format(new Date(Date.now() + days * DAY_MS), 'yyyy-MM-dd');
+}
 
 // ============================================================================
 // Mocks
@@ -19,8 +63,8 @@ const mockTrip: Trip = {
   shareId: 'share-1' as Trip['shareId'],
   name: 'Test Trip',
   location: 'Paris',
-  startDate: '2026-07-01' as Trip['startDate'],
-  endDate: '2026-07-10' as Trip['endDate'],
+  startDate: dayFromNow(7) as Trip['startDate'],
+  endDate: dayFromNow(17) as Trip['endDate'],
   description: '',
   createdAt: Date.now(),
   updatedAt: Date.now(),
@@ -38,7 +82,7 @@ const mockArrival: Transport = {
   tripId: 'trip-1' as Transport['tripId'],
   personId: 'person-1' as Transport['personId'],
   type: 'arrival',
-  datetime: '2027-07-15T14:30:00' as Transport['datetime'],
+  datetime: daysFromNow(7, 14, 30) as Transport['datetime'],
   location: 'Paris CDG',
   needsPickup: false,
   transportMode: 'plane',
@@ -194,7 +238,12 @@ describe('TransportListPage', () => {
       deleteTransport: vi.fn(),
     } as unknown as ReturnType<typeof useTransportContext>);
     render(<TransportListPage />, { withProviders: false });
-    expect(screen.getByText('transports.title')).toBeInTheDocument();
+
+    // The error state replaces the list; asserting only the page title left
+    // the failure itself unobserved, and the list unobserved too
+    expect(screen.getByText('DB Error')).toBeInTheDocument();
+    expect(screen.queryByText('transports.empty')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('transport-dialog')).not.toBeInTheDocument();
   });
 
   it('renders empty state when no transports', () => {
@@ -230,7 +279,7 @@ describe('TransportListPage', () => {
       tripId: 'trip-1' as Transport['tripId'],
       personId: 'person-1' as Transport['personId'],
       type: 'departure',
-      datetime: '2027-07-20T10:00:00' as Transport['datetime'],
+      datetime: daysFromNow(12, 10, 0) as Transport['datetime'],
       location: 'Paris Orly',
       needsPickup: false,
       transportMode: 'plane',
@@ -271,7 +320,11 @@ describe('TransportListPage', () => {
       deleteTransport: vi.fn().mockResolvedValue(undefined),
     } as unknown as ReturnType<typeof useTransportContext>);
     render(<TransportListPage />, { withProviders: false });
-    expect(screen.getByText('Alice')).toBeInTheDocument();
+
+    // The indicator this test is named for. `getByText('Alice')` was true of
+    // every card on this page, pickup or not.
+    expect(screen.getByText('transports.needsPickup')).toBeInTheDocument();
+    expect(screen.queryByText(/transports\.driver/)).not.toBeInTheDocument();
   });
 
   it('renders transport with driver when pickup has driver', () => {
@@ -306,7 +359,12 @@ describe('TransportListPage', () => {
       deleteTransport: vi.fn().mockResolvedValue(undefined),
     } as unknown as ReturnType<typeof useTransportContext>);
     render(<TransportListPage />, { withProviders: false });
-    expect(screen.getByText('Alice')).toBeInTheDocument();
+
+    // Once somebody is driving, the card names them in a resolved-pickup badge
+    // and stops asking for a driver — the whole difference between this test
+    // and the one above it, which the shared `getByText('Alice')` could not see
+    expect(screen.getByText('transports.driver: Bob')).toBeInTheDocument();
+    expect(screen.queryByText('transports.needsPickup')).not.toBeInTheDocument();
   });
 
   it('renders transport with transport number', () => {
@@ -369,7 +427,12 @@ describe('TransportListPage', () => {
       deleteTransport: vi.fn().mockResolvedValue(undefined),
     } as unknown as ReturnType<typeof useTransportContext>);
     render(<TransportListPage />, { withProviders: false });
+
+    // A transport whose person has been deleted still has to appear — it is a
+    // real journey — labelled as unknown rather than blank
     expect(screen.getByText('Paris CDG')).toBeInTheDocument();
+    expect(screen.getByText('common.unknown')).toBeInTheDocument();
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
   });
 
   it('opens dropdown menu on transport card', async () => {
@@ -400,7 +463,7 @@ describe('TransportListPage', () => {
       tripId: 'trip-1' as Transport['tripId'],
       personId: 'person-1' as Transport['personId'],
       type: 'departure',
-      datetime: '2027-07-20T10:00:00' as Transport['datetime'],
+      datetime: daysFromNow(12, 10, 0) as Transport['datetime'],
       location: 'Paris Orly',
       needsPickup: false,
       transportMode: 'plane',
@@ -554,7 +617,7 @@ describe('TransportListPage', () => {
     const pastTransport: Transport = {
       ...mockArrival,
       id: 'transport-past' as Transport['id'],
-      datetime: '2020-01-01T10:00:00' as Transport['datetime'],
+      datetime: daysFromNow(-30, 10, 0) as Transport['datetime'],
       location: 'Old Airport',
     };
     vi.mocked(useTransportContext).mockReturnValue({
@@ -567,9 +630,15 @@ describe('TransportListPage', () => {
       deleteTransport: vi.fn().mockResolvedValue(undefined),
     } as unknown as ReturnType<typeof useTransportContext>);
     render(<TransportListPage />, { withProviders: false });
-    // Past section toggle should be present
-    const pastToggle = screen.getByText(/transports\.pastTransports/);
-    expect(pastToggle).toBeInTheDocument();
+
+    // The upcoming one is listed; the past one is behind the collapsed section
+    expect(screen.getByText('Paris CDG')).toBeInTheDocument();
+    expect(screen.queryByText('Old Airport')).not.toBeInTheDocument();
+    // The toggle states how many are hidden, and reports itself as collapsed
+    expect(screen.getByText(/transports\.pastTransports \(1\)/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /transports\.pastTransports/ }),
+    ).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('expands past transports section when toggled', async () => {
@@ -578,7 +647,7 @@ describe('TransportListPage', () => {
     const pastTransport: Transport = {
       ...mockArrival,
       id: 'transport-past' as Transport['id'],
-      datetime: '2020-01-01T10:00:00' as Transport['datetime'],
+      datetime: daysFromNow(-30, 10, 0) as Transport['datetime'],
       location: 'Old Airport',
     };
     vi.mocked(useTransportContext).mockReturnValue({
@@ -591,11 +660,17 @@ describe('TransportListPage', () => {
       deleteTransport: vi.fn().mockResolvedValue(undefined),
     } as unknown as ReturnType<typeof useTransportContext>);
     render(<TransportListPage />, { withProviders: false });
-    // Click the past section toggle
-    const pastToggle = screen.getByText(/transports\.pastTransports/);
+    expect(screen.queryByText('Old Airport')).not.toBeInTheDocument();
+
+    const pastToggle = screen.getByRole('button', {
+      name: /transports\.pastTransports/,
+    });
     await user.click(pastToggle);
-    // Past transport should now be visible
+
     expect(screen.getByText('Old Airport')).toBeInTheDocument();
+    expect(pastToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(pastToggle).toHaveAttribute('aria-controls', 'past-transports-section');
+    expect(document.getElementById('past-transports-section')).toBeInTheDocument();
   });
 
   it('renders transport with bus mode', () => {

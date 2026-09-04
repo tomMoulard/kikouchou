@@ -125,8 +125,14 @@ describe('ActivityForm', () => {
     const data = submittedData(onSubmit);
     expect(data.title).toBe('Plant fair');
     expect(data.allDay).toBe(false);
-    expect(new Date(data.startDatetime).getHours()).toBe(9);
-    expect(new Date(data.endDatetime!).getHours()).toBe(12);
+    // The stored value is the *UTC instant* of the wall clock that was typed,
+    // not the offset-less string. Activities are ordered as plain strings by
+    // the `[tripId+startDatetime]` index, so a naive `2026-07-16T09:00:00`
+    // stored next to a `…Z` value silently breaks the agenda's ordering — and
+    // `getHours() === 9` holds for either of them.
+    expect(data.startDatetime).toBe(new Date(2026, 6, 16, 9, 0).toISOString());
+    expect(data.endDatetime).toBe(new Date(2026, 6, 16, 12, 0).toISOString());
+    expect(data.startDatetime.endsWith('Z')).toBe(true);
   });
 
   it('rejects an end before the start', async () => {
@@ -159,12 +165,13 @@ describe('ActivityForm', () => {
     const data = submittedData(onSubmit);
     expect(data.allDay).toBe(true);
 
-    const start = new Date(data.startDatetime);
-    const end = new Date(data.endDatetime!);
-    expect(start.getHours()).toBe(0);
-    expect(start.getDate()).toBe(16);
-    expect(end.getHours()).toBe(23);
-    expect(end.getDate()).toBe(18);
+    // A whole-day activity is stored as a real instant range snapped to the
+    // *local* day boundaries — down to the last millisecond, so that "is it
+    // over?" is answered by an instant comparison and not a date-only path.
+    // Reading back only the hour and the day number let the 23:59:59.999 end
+    // drift to any minute of the last hour.
+    expect(data.startDatetime).toBe(new Date(2026, 6, 16, 0, 0, 0, 0).toISOString());
+    expect(data.endDatetime).toBe(new Date(2026, 6, 18, 23, 59, 59, 999).toISOString());
   });
 
   it('prefills the start day from defaultDate', () => {
