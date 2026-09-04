@@ -925,6 +925,16 @@
     "installSuccess": "App installed successfully!",
     "installFailed": "Installation failed. Please try again.",
     "installPromptRegion": "App installation prompt",
+    "manualInstall": {
+      "title": "Add Kikouchou to your device",
+      "ios": "Tap the Share button, then \"Add to Home Screen\", then \"Add\".",
+      "firefoxAndroid": "Open Firefox's ⋮ menu and tap \"Install\" — older versions call it \"Add app to Home Screen\".",
+      "firefoxWindows": "Click \"Add tab to taskbar\" in the address bar (Firefox 142 and later). The app gets its own window, toolbar included.",
+      "firefoxLinux": "Set browser.taskbarTabs.enabled to true in about:config, then click \"Add tab to taskbar\" in the address bar.",
+      "firefoxMac": "Firefox on macOS cannot install web apps yet. Kikouchou works fully in a tab — or install it from Safari or Chrome.",
+      "generic": "Look for \"Install\", \"Add to Dock\" or \"Add to Home Screen\" in your browser's menu.",
+      "gotIt": "Got it"
+    },
     "offline": "You are offline",
     "backOnline": "Back online",
     "savedLocally": "Saved on this device",

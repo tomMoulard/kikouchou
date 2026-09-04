@@ -28,6 +28,58 @@ function dispatchBeforeInstallPrompt(
   return event;
 }
 
+/**
+ * Points `window.location` at `url` without a reload — a visitor arriving on
+ * the landing page's install link, as far as this hook can tell.
+ */
+function visit(url: string): void {
+  window.history.replaceState(null, '', url);
+}
+
+/**
+ * Replaces the two navigator properties the manual-steps branch reads.
+ *
+ * `Navigator.prototype` owns both getters, so an own property shadows them for
+ * the test and `deleteProperty` in the teardown puts the real ones back —
+ * assigning a "default" user agent instead would leave every later test in the
+ * file running on a fake browser.
+ */
+function stubBrowser(userAgent: string, maxTouchPoints = 0): void {
+  Object.defineProperty(navigator, 'userAgent', {
+    value: userAgent,
+    configurable: true,
+  });
+  Object.defineProperty(navigator, 'maxTouchPoints', {
+    value: maxTouchPoints,
+    configurable: true,
+  });
+}
+
+/**
+ * User agents copied from the browsers whose install route differs. The Firefox
+ * ones differ only in their platform token, which is the whole point: it is the
+ * only thing that separates "Add tab to taskbar", "Add tab to taskbar behind a
+ * pref" and "there is no install here".
+ */
+const USER_AGENTS = {
+  iphone:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+  ipad:
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+  firefoxAndroid:
+    'Mozilla/5.0 (Android 14; Mobile; rv:142.0) Gecko/142.0 Firefox/142.0',
+  firefoxWindows:
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
+  firefoxLinux:
+    'Mozilla/5.0 (X11; Linux x86_64; rv:142.0) Gecko/20100101 Firefox/142.0',
+  firefoxMac:
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.5; rv:142.0) Gecko/20100101 Firefox/142.0',
+  firefoxIos:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/127.0 Mobile/15E148 Safari/605.1.15',
+  chromeAndroid:
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36',
+} as const;
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -53,6 +105,11 @@ describe('useInstallPrompt', () => {
 
   afterEach(() => {
     window.matchMedia = originalMatchMedia;
+    // `?install=1` in the address bar is read by every later mount in this
+    // file, so a test that puts it there has to take it back out.
+    visit('/');
+    Reflect.deleteProperty(navigator, 'userAgent');
+    Reflect.deleteProperty(navigator, 'maxTouchPoints');
   });
 
   it('returns canInstall: false initially (no prompt event)', () => {
@@ -394,6 +451,205 @@ describe('useInstallPrompt', () => {
 
       expect(result.current.isInstalled).toBe(true);
       expect(result.current.canInstall).toBe(false);
+    });
+  });
+
+  /**
+   * The landing page's "Install on your phone" CTA links to
+   * `https://app.kikouchou.app/?install=1`.
+   *
+   * That parameter is the visitor having already said yes, so it outranks the
+   * heuristics the banner otherwise applies — a dismissal last week, the
+   * pre-show delay — and it is spent on arrival rather than remembered: a
+   * reload, a bookmark or a link someone forwards must not keep asking.
+   */
+  describe('an explicit install request (?install=1)', () => {
+    it('reports no request on an ordinary visit', () => {
+      visit('/trips');
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.installIntent).toBe(false);
+    });
+
+    it('reports the request when the parameter is there', () => {
+      visit('/?install=1');
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.installIntent).toBe(true);
+    });
+
+    it('reports no request for any other value', () => {
+      visit('/?install=0');
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.installIntent).toBe(false);
+      // Still cleared, though: it is this app's parameter either way, and
+      // leaving it in the address bar serves nothing.
+      expect(window.location.search).toBe('');
+    });
+
+    it('strips the parameter, keeping the rest of the query and the hash', () => {
+      visit('/join/abc?install=1&view=card#k=secret');
+
+      renderHook(() => useInstallPrompt());
+
+      expect(window.location.pathname).toBe('/join/abc');
+      expect(window.location.search).toBe('?view=card');
+      /*
+        A share link carries the trip's encryption key in its fragment. Rebuild
+        the URL from `pathname` and `search` alone and the invitation becomes
+        permanently unopenable — the same class of bug as the skip link that
+        overwrote that key.
+      */
+      expect(window.location.hash).toBe('#k=secret');
+    });
+
+    it('spends the request rather than storing it', () => {
+      visit('/?install=1');
+
+      const first = renderHook(() => useInstallPrompt());
+      expect(first.result.current.installIntent).toBe(true);
+      first.unmount();
+
+      // Nothing was written anywhere, and the URL is clean, so the next visit
+      // is an ordinary one under the normal heuristics.
+      const second = renderHook(() => useInstallPrompt());
+
+      expect(second.result.current.installIntent).toBe(false);
+      expect(window.location.search).toBe('');
+    });
+
+    it('leaves an ordinary URL untouched', () => {
+      visit('/trips?view=card');
+      const replaceState = vi.spyOn(window.history, 'replaceState');
+
+      renderHook(() => useInstallPrompt());
+
+      expect(replaceState).not.toHaveBeenCalled();
+      replaceState.mockRestore();
+    });
+
+    it('keeps the history entry react-router put there', () => {
+      window.history.replaceState(
+        { usr: null, key: 'abc123', idx: 3 },
+        '',
+        '/?install=1',
+      );
+
+      renderHook(() => useInstallPrompt());
+
+      // React Router keeps its own key and index in `history.state` and reads
+      // them back on `popstate`. Replacing the entry with a null state would
+      // break the Back button, not the parameter.
+      expect(window.history.state).toEqual({
+        usr: null,
+        key: 'abc123',
+        idx: 3,
+      });
+      expect(window.location.search).toBe('');
+    });
+
+    it('still reports an installed app as installed', () => {
+      visit('/?install=1');
+      window.matchMedia = vi.fn().mockReturnValue({
+        matches: true, // standalone: the app is open as an app
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      });
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.installIntent).toBe(true);
+      expect(result.current.isInstalled).toBe(true);
+      expect(result.current.canInstall).toBe(false);
+    });
+  });
+
+  /**
+   * `beforeinstallprompt` is Chromium's alone. Everywhere else `canInstall`
+   * stays false for good, so an install request has nothing to fire and the
+   * only thing left to offer is the browser's own route — which is a different
+   * sequence of taps in each of these, and absent in one of them.
+   */
+  describe('manualInstallPlatform', () => {
+    it('sends iPhone Safari through the share sheet', () => {
+      stubBrowser(USER_AGENTS.iphone);
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.manualInstallPlatform).toBe('ios');
+    });
+
+    it('sends iPadOS Safari, which claims to be a Mac, through the share sheet', () => {
+      // iPadOS 13+ sends a desktop Safari user agent. The touch points are all
+      // that is left to tell an iPad from a Mac.
+      stubBrowser(USER_AGENTS.ipad, 5);
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.manualInstallPlatform).toBe('ios');
+    });
+
+    it('does not read a Mac as an iPad', () => {
+      stubBrowser(USER_AGENTS.ipad, 0);
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.manualInstallPlatform).toBe('generic');
+    });
+
+    it('sends Firefox on iOS through the share sheet, not the Firefox menu', () => {
+      // Every engine on iOS is WebKit, so the platform decides before the
+      // browser does. Checking Firefox first would print a menu item that is
+      // not there.
+      stubBrowser(USER_AGENTS.firefoxIos);
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.manualInstallPlatform).toBe('ios');
+    });
+
+    it('sends Firefox on Android to its own menu', () => {
+      stubBrowser(USER_AGENTS.firefoxAndroid, 5);
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.manualInstallPlatform).toBe('firefoxAndroid');
+    });
+
+    it('sends Firefox on Windows to the taskbar tab', () => {
+      stubBrowser(USER_AGENTS.firefoxWindows);
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.manualInstallPlatform).toBe('firefoxWindows');
+    });
+
+    it('sends Firefox on Linux to the taskbar tab behind its pref', () => {
+      stubBrowser(USER_AGENTS.firefoxLinux);
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.manualInstallPlatform).toBe('firefoxLinux');
+    });
+
+    it('tells Firefox on macOS there is nothing to install', () => {
+      stubBrowser(USER_AGENTS.firefoxMac);
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.manualInstallPlatform).toBe('firefoxMac');
+    });
+
+    it('falls back to the generic menu on Chromium', () => {
+      stubBrowser(USER_AGENTS.chromeAndroid, 5);
+
+      const { result } = renderHook(() => useInstallPrompt());
+
+      expect(result.current.manualInstallPlatform).toBe('generic');
     });
   });
 

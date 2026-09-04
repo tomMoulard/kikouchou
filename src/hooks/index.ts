@@ -11,6 +11,7 @@ export { useOnlineStatus, type UseOnlineStatusResult } from './useOnlineStatus';
 export {
   useInstallPrompt,
   type UseInstallPromptResult,
+  type ManualInstallPlatform,
 } from './useInstallPrompt';
 
 // Form submission

@@ -1,10 +1,14 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@/test/utils';
 
+import type { ManualInstallPlatform } from '@/hooks/useInstallPrompt';
+
 const mockCanInstall = vi.fn(() => false);
 const mockInstall = vi.fn().mockResolvedValue(true);
 const mockIsInstalling = vi.fn(() => false);
 const mockIsInstalled = vi.fn(() => false);
+const mockInstallIntent = vi.fn(() => false);
+const mockManualInstallPlatform = vi.fn((): ManualInstallPlatform => 'generic');
 
 vi.mock('@/hooks/useInstallPrompt', () => ({
   useInstallPrompt: () => ({
@@ -12,6 +16,8 @@ vi.mock('@/hooks/useInstallPrompt', () => ({
     install: mockInstall,
     isInstalling: mockIsInstalling(),
     isInstalled: mockIsInstalled(),
+    installIntent: mockInstallIntent(),
+    manualInstallPlatform: mockManualInstallPlatform(),
   }),
 }));
 
@@ -21,22 +27,66 @@ vi.mock('sonner', () => ({
 
 import { InstallPrompt } from '../InstallPrompt';
 
+/**
+ * The key the component reads on init and writes on dismiss.
+ */
+const DISMISSAL_KEY = 'kikouchou-install-dismissed';
+
+/**
+ * Gives this test file a working `localStorage`, empty, for one test.
+ *
+ * jsdom ships one, but Node's own experimental `localStorage` global shadows it
+ * and reads back `undefined` unless the process was started with
+ * `--localstorage-file` — so `typeof localStorage` is `undefined` for the whole
+ * suite. Every access in the app sits inside a `try/catch` for Safari's private
+ * mode, which swallows the `TypeError` and answers "not dismissed": the 7-day
+ * window does not exist in these tests, and a spy on `Storage.prototype` cannot
+ * put it back, because nothing ever reaches a `Storage` instance to spy on.
+ *
+ * Seeding this store is therefore the only way to assert either half of a
+ * dismissal — that it silences the banner, and that an explicit install request
+ * overrides it.
+ */
+function installMemoryStorage(): void {
+  const store = new Map<string, string>();
+
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, String(value));
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      clear: () => {
+        store.clear();
+      },
+      key: (index: number) => [...store.keys()][index] ?? null,
+      get length() {
+        return store.size;
+      },
+    } satisfies Storage,
+  });
+}
+
 describe('InstallPrompt', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    // Spy on localStorage to prevent state leaking between tests.
-    // The component reads 'kikouchou-install-dismissed' on init and writes on dismiss.
-    vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
+    installMemoryStorage();
     mockCanInstall.mockReturnValue(false);
     mockInstall.mockResolvedValue(true);
     mockIsInstalling.mockReturnValue(false);
     mockIsInstalled.mockReturnValue(false);
+    mockInstallIntent.mockReturnValue(false);
+    mockManualInstallPlatform.mockReturnValue('generic');
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    Reflect.deleteProperty(globalThis, 'localStorage');
   });
 
   it('returns null when canInstall is false', () => {
@@ -140,31 +190,21 @@ describe('InstallPrompt', () => {
   });
 
   it('shows prompt when dismissed timestamp is NaN (invalid localStorage)', async () => {
-    // Spy on localStorage.getItem to return a non-numeric value
-    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
-      if (key === 'kikouchou-install-dismissed') return 'invalid-value';
-      return null;
-    });
+    localStorage.setItem(DISMISSAL_KEY, 'invalid-value');
     mockCanInstall.mockReturnValue(true);
     render(<InstallPrompt />, { withProviders: false });
     await act(async () => { vi.advanceTimersByTime(1100); });
     // isDismissedRecently() returns false for NaN, so prompt should show
     expect(screen.getByRole('region')).toBeInTheDocument();
-    getItemSpy.mockRestore();
   });
 
   it('shows prompt when dismissal timestamp is expired', async () => {
-    // Spy on localStorage.getItem to return an expired timestamp
     const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
-    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key: string) => {
-      if (key === 'kikouchou-install-dismissed') return eightDaysAgo.toString();
-      return null;
-    });
+    localStorage.setItem(DISMISSAL_KEY, eightDaysAgo.toString());
     mockCanInstall.mockReturnValue(true);
     render(<InstallPrompt />, { withProviders: false });
     await act(async () => { vi.advanceTimersByTime(1100); });
     expect(screen.getByRole('region')).toBeInTheDocument();
-    getItemSpy.mockRestore();
   });
 
   /**
@@ -211,6 +251,146 @@ describe('InstallPrompt', () => {
       // has to opt back in — without this the Install button is decorative.
       const card = screen.getByRole('region').firstElementChild;
       expect(card?.className).toMatch(/pointer-events-auto/);
+    });
+  });
+
+  /**
+   * An explicit install request.
+   *
+   * The landing page's "Install on your phone" CTA links to `/?install=1`, and
+   * a visitor who clicks it has already said yes. Two things then answer with
+   * nothing at all: a dismissal from last week, which is a 7-day silence this
+   * card applies on its own, and a browser that never fires
+   * `beforeinstallprompt` — every one that is not Chromium, so both iPhones and
+   * Firefox. Those are the two halves of the reported bug.
+   */
+  describe('an explicit install request', () => {
+    /**
+     * Dismissed a moment ago: inside the 7-day window by any measure.
+     */
+    function dismissedToday(): void {
+      localStorage.setItem(DISMISSAL_KEY, Date.now().toString());
+    }
+
+    it('stays silent after a dismissal this week when nothing was requested', async () => {
+      dismissedToday();
+      mockCanInstall.mockReturnValue(true);
+
+      render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+
+      // The control for the test below: the 7-day window is still a window.
+      expect(screen.queryByRole('region')).not.toBeInTheDocument();
+    });
+
+    it('shows the banner despite a dismissal this week', async () => {
+      dismissedToday();
+      mockCanInstall.mockReturnValue(true);
+      mockInstallIntent.mockReturnValue(true);
+
+      render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+
+      expect(screen.getByRole('region')).toBeInTheDocument();
+    });
+
+    it('shows the banner without the pre-show delay', () => {
+      mockCanInstall.mockReturnValue(true);
+      mockInstallIntent.mockReturnValue(true);
+
+      render(<InstallPrompt />, { withProviders: false });
+
+      // No timer advanced. The 1s delay exists to keep the banner from
+      // flashing past on a page load nobody asked it to appear on; a visitor
+      // who just tapped "Install on your phone" is watching for it.
+      expect(screen.getByRole('region')).toBeInTheDocument();
+    });
+
+    it('shows the browser own steps when no beforeinstallprompt was captured', () => {
+      mockCanInstall.mockReturnValue(false);
+      mockInstallIntent.mockReturnValue(true);
+      mockManualInstallPlatform.mockReturnValue('ios');
+
+      render(<InstallPrompt />, { withProviders: false });
+
+      expect(screen.getByRole('region')).toBeInTheDocument();
+      expect(screen.getByText('pwa.manualInstall.ios')).toBeInTheDocument();
+    });
+
+    it('offers no install button in the manual card', () => {
+      mockCanInstall.mockReturnValue(false);
+      mockInstallIntent.mockReturnValue(true);
+      mockManualInstallPlatform.mockReturnValue('ios');
+
+      render(<InstallPrompt />, { withProviders: false });
+
+      // There is no captured event to fire, so a button that reads "Install
+      // app" would do nothing but report a failure.
+      expect(screen.queryByText('pwa.install')).not.toBeInTheDocument();
+      expect(screen.getByText('pwa.manualInstall.title')).toBeInTheDocument();
+    });
+
+    it('names the steps of the browser it was told about', () => {
+      mockCanInstall.mockReturnValue(false);
+      mockInstallIntent.mockReturnValue(true);
+      mockManualInstallPlatform.mockReturnValue('firefoxWindows');
+
+      render(<InstallPrompt />, { withProviders: false });
+
+      expect(
+        screen.getByText('pwa.manualInstall.firefoxWindows'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText('pwa.manualInstall.ios'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('prefers the native prompt over the steps once the event arrives', () => {
+      mockCanInstall.mockReturnValue(true);
+      mockInstallIntent.mockReturnValue(true);
+      mockManualInstallPlatform.mockReturnValue('generic');
+
+      render(<InstallPrompt />, { withProviders: false });
+
+      // One tap beats a list of instructions whenever the browser offers one.
+      expect(
+        screen.queryByText('pwa.manualInstall.generic'),
+      ).not.toBeInTheDocument();
+      expect(screen.getAllByText('pwa.install').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('can be dismissed like the banner', async () => {
+      mockCanInstall.mockReturnValue(false);
+      mockInstallIntent.mockReturnValue(true);
+      mockManualInstallPlatform.mockReturnValue('ios');
+
+      render(<InstallPrompt />, { withProviders: false });
+      const gotIt = screen.getByText('pwa.manualInstall.gotIt');
+      await act(async () => { gotIt.click(); });
+      await act(async () => { vi.advanceTimersByTime(400); });
+
+      expect(screen.queryByRole('region')).not.toBeInTheDocument();
+    });
+
+    it('renders nothing at all when the app is already installed', async () => {
+      const { toast } = await import('sonner');
+      mockCanInstall.mockReturnValue(false);
+      mockIsInstalled.mockReturnValue(true);
+      mockInstallIntent.mockReturnValue(true);
+      mockManualInstallPlatform.mockReturnValue('ios');
+
+      const { container } = render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+
+      // Nothing is left to ask for, so neither the steps…
+      expect(container.innerHTML).toBe('');
+      /*
+        …nor the success toast, which belongs to an install that happened here.
+        `isInstalled` is true from the first render whenever the app is *opened*
+        as an app — `matchMedia('(display-mode: standalone)')` — so firing on
+        that alone congratulated the visitor on every single launch.
+      */
+      expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
     });
   });
 });
