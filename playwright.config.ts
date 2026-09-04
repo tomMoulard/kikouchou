@@ -23,6 +23,22 @@ import { defineConfig, devices } from '@playwright/test';
  * there. Expect small rendering and timing differences from the pinned build;
  * treat a failure that only appears under one of them as information about the
  * environment, not a verdict on the code.
+ *
+ * That escape hatch existed because `playwright install` used to hang forever on
+ * a current Node, and the reason is worth pinning down so nobody reintroduces it.
+ * Node 26.1.0 changed something in streams that deadlocks the `extract-zip`
+ * yauzl extractor Playwright bundles: the download finishes fine, then
+ * extraction stops dead partway through the first entry big enough to hit
+ * backpressure — for chromium v1208 that was `Localizable.strings`, frozen at
+ * 225,666 of 346,939 bytes with the process idle and no error, ever. Measured,
+ * not assumed: system `unzip` did the same archive in 2.2 s, Node 25.7/26.0
+ * extracted it, and every Node from 26.1.0 up hung at the identical byte.
+ *
+ * Playwright fixed their side in 1.60.0, so the dependency floor below is load
+ * bearing on any machine running Node >= 26.1: 1.58.2 and 1.59.1 hang, 1.60.0
+ * and up install in ~11 s. Do not pin this back under 1.60 for stability — CI
+ * would not notice, because it runs Node 20, and the breakage would land only on
+ * developer machines.
  */
 const channel = ((): 'chrome' | 'msedge' | undefined => {
   const requested = process.env.PW_CHANNEL;
