@@ -166,13 +166,43 @@ const settingsRoute: RouteObject = {
       </Suspense>
     </ErrorBoundary>
   ),
-},
+};
+
+/**
+ * Everything that hangs directly off one trip rather than off a named
+ * sub-page: the calendar (including the bare `/trips/:tripId`, which its index
+ * route redirects to `calendar`) and the P2P sync page.
+ *
+ * This route object is the **single** owner of `trips/:tripId`. There used to
+ * be three claimants — `calendarRoutes` registered `trips/:tripId/calendar`
+ * *and* `trips/:tripId` as flat siblings, and this file added a third for
+ * `sharingSyncRoutes`. Two of them rendered their own separate copy of the
+ * calendar, so crossing between the bare path and `/calendar` remounted the
+ * page and `?view=` applied to only one of them.
+ *
+ * Deliberately no `element`: a parent that has one must render an `<Outlet />`
+ * or it swallows every child, which is how the share wizard stayed invisible
+ * for months. With none, React Router renders the matched child directly.
+ */
+const tripScopedRoutes: RouteObject = {
+  path: 'trips/:tripId',
+  children: [
+    // Calendar: index redirect + `calendar`
+    ...calendarRoutes,
+
+    // P2P sync (QR export/import): `sync`
+    ...sharingSyncRoutes,
+  ],
+};
 
 /**
  * Main application routes wrapped with Layout.
  * All these routes have the navigation chrome (header, sidebar, bottom nav).
+ *
+ * Exported so route tests can mount the real table rather than a hand-built
+ * approximation of it.
  */
- appRoutes: RouteObject = {
+export const appRoutes: RouteObject = {
   path: '/',
   element: <LayoutWrapper />,
   errorElement: <ErrorPage />,
@@ -186,8 +216,8 @@ const settingsRoute: RouteObject = {
     // Trip management routes
     ...tripRoutes,
 
-    // Calendar routes (trip-scoped)
-    ...calendarRoutes,
+    // Calendar + P2P sync, both owned by a single `trips/:tripId` parent
+    tripScopedRoutes,
 
     // Room management routes (trip-scoped)
     ...roomRoutes,
@@ -205,12 +235,6 @@ const settingsRoute: RouteObject = {
     // Trip + global analytics
     ...analyticsRoutes,
 
-    // P2P sync routes (QR export/import within trips)
-    {
-      path: 'trips/:tripId',
-      children: sharingSyncRoutes,
-    },
-
     // Settings route
     settingsRoute,
 
@@ -223,13 +247,13 @@ const settingsRoute: RouteObject = {
       element: <ErrorPage />,
     },
   ],
-},
+};
 
 /**
  * Public sharing routes - NOT wrapped with Layout.
  * These routes are accessed via shared links and should not show navigation.
  */
- publicRoutes: RouteObject = {
+const publicRoutes: RouteObject = {
   // Spread the full sharing route object so that wizard child routes
   // (identity, room, transport, summary) are registered in the router.
   // Previously only `element` was copied, which silently dropped the
@@ -239,8 +263,12 @@ const settingsRoute: RouteObject = {
 };
 
 /**
- * Main application router.
- * Combines public routes (sharing) and authenticated routes (main app).
+ * The application's complete route table.
+ *
+ * Exported so that route tests can mount the real thing with
+ * `createMemoryRouter` instead of hand-building a tree that only resembles it —
+ * a hand-built tree cannot catch a route registered twice, a parent missing its
+ * `<Outlet />`, or a child nested under the wrong path.
  *
  * Route Structure:
  * - `/join/:token` - Invite link: redeem, download the trip, pick who you are
@@ -249,8 +277,9 @@ const settingsRoute: RouteObject = {
  *   - `/trips` - Trip list
  *   - `/trips/new` - Create trip
  *   - `/trips/:tripId/edit` - Edit trip
- *   - `/trips/:tripId` - Trip calendar (default view)
+ *   - `/trips/:tripId` - Redirects to the calendar, keeping `?view=`
  *   - `/trips/:tripId/calendar` - Trip calendar
+ *   - `/trips/:tripId/sync` - P2P sync (QR export/import)
  *   - `/trips/:tripId/rooms` - Room management
  *   - `/trips/:tripId/persons` - Person management
  *   - `/trips/:tripId/transports` - Transport management
@@ -258,6 +287,22 @@ const settingsRoute: RouteObject = {
  *   - `/trips/:tripId/analytics` - Trip analytics
  *   - `/analytics` - Analytics across all trips
  *   - `/settings` - App settings
+ */
+export const routes: RouteObject[] = [
+  // Public routes (outside Layout)
+  publicRoutes,
+
+  // Invite links: /join/:token. Outside Layout — somebody arriving from a
+  // message has no trip selected and no navigation to use yet.
+  ...joinRoutes.map((route) => ({ ...route, errorElement: <ErrorPage /> })),
+
+  // Main application routes (with Layout)
+  appRoutes,
+];
+
+/**
+ * Main application router.
+ * Combines public routes (sharing) and authenticated routes (main app).
  *
  * @example
  * ```tsx
@@ -270,23 +315,10 @@ const settingsRoute: RouteObject = {
  * }
  * ```
  */
-export const router = createBrowserRouter(
-  [
-    // Public routes (outside Layout)
-    publicRoutes,
-
-    // Invite links: /join/:token. Outside Layout — somebody arriving from a
-    // message has no trip selected and no navigation to use yet.
-    ...joinRoutes.map((route) => ({ ...route, errorElement: <ErrorPage /> })),
-
-    // Main application routes (with Layout)
-    appRoutes,
-  ],
-  {
-    // Use Vite's BASE_URL for GitHub Pages deployment
-    basename: import.meta.env.BASE_URL,
-  },
-);
+export const router = createBrowserRouter(routes, {
+  // Use Vite's BASE_URL for GitHub Pages deployment
+  basename: import.meta.env.BASE_URL,
+});
 
 // ============================================================================
 // Type Exports
