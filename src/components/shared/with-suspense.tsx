@@ -28,8 +28,9 @@ import { LoadingState } from '@/components/shared/LoadingState';
  * ```tsx
  * const CalendarPage = lazy(() => import('./pages/CalendarPage'));
  *
+ * // Children of the `trips/:tripId` parent in `src/router.tsx`.
  * export const calendarRoutes: RouteObject[] = [
- *   { path: 'trips/:tripId/calendar', element: withSuspense(CalendarPage) },
+ *   { path: 'calendar', element: withSuspense(CalendarPage) },
  * ];
  * ```
  */
