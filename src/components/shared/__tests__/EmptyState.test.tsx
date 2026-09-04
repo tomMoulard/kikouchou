@@ -296,40 +296,39 @@ describe('EmptyState Accessibility', () => {
 // ============================================================================
 
 describe('EmptyState Different Icons', () => {
-  it('renders Users icon', () => {
-    const { container } = render(
-      <EmptyState
-        icon={Users}
-        title="No users"
-        description="Add users"
-      />
+  // All three of these used to assert the same thing — "an svg exists" — so
+  // the component could have hardcoded one icon and ignored the prop. Lucide
+  // stamps each glyph with its own `lucide-*` class, which is what tells them
+  // apart.
+  it('renders the icon it was handed, not a fixed one', () => {
+    const { container, rerender } = render(
+      <EmptyState icon={Users} title="No users" description="Add users" />
     );
 
-    expect(container.querySelector('svg')).toBeInTheDocument();
+    expect(container.querySelector('svg')).toHaveClass('lucide-users');
+
+    rerender(
+      <EmptyState icon={Package} title="No packages" description="Add packages" />
+    );
+    expect(container.querySelector('svg')).toHaveClass('lucide-package');
+
+    rerender(
+      <EmptyState icon={Search} title="No results" description="Try again" />
+    );
+    expect(container.querySelector('svg')).toHaveClass('lucide-search');
   });
 
-  it('renders Package icon', () => {
-    const { container } = render(
-      <EmptyState
-        icon={Package}
-        title="No packages"
-        description="Add packages"
-      />
-    );
+  it('sizes every icon the same, whichever one is passed', () => {
+    // Rendered across all three so a component that special-cased one glyph —
+    // `Icon === Search ? 'size-12' : 'size-10'` — cannot pass.
+    for (const icon of [Users, Package, Search]) {
+      const { container, unmount } = render(
+        <EmptyState icon={icon} title="No results" description="Try again" />
+      );
 
-    expect(container.querySelector('svg')).toBeInTheDocument();
-  });
-
-  it('renders Search icon', () => {
-    const { container } = render(
-      <EmptyState
-        icon={Search}
-        title="No results"
-        description="Try different search"
-      />
-    );
-
-    expect(container.querySelector('svg')).toBeInTheDocument();
+      expect(container.querySelector('svg')).toHaveClass('size-12');
+      unmount();
+    }
   });
 });
 

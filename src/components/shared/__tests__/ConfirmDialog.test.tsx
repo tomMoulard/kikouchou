@@ -7,6 +7,7 @@
  * @module components/shared/__tests__/ConfirmDialog.test
  */
 import { describe, it, expect, vi } from 'vitest';
+import type { Mock } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -17,46 +18,51 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 // ============================================================================
 
 /**
- * One `userEvent` instance per describe, not one per test.
+ * One `userEvent` instance per test, but without the macrotask between events.
  *
- * `userEvent.setup()` was being called in all 13 interactive tests here, each
- * time re-attaching to the same jsdom `document` and re-stubbing the clipboard.
- * The default `delay: 0` is the more expensive half: user-event awaits a
- * macrotask between every synthetic event, so a single `click` — pointerover,
- * pointerenter, pointermove, pointerdown, mousedown, focus, pointerup, mouseup,
- * click — costs ten trips through the event loop, against Radix's portalled
- * alertdialog. `delay: null` fires them back to back; nothing in this component
- * depends on wall-clock spacing between the events of one click, only on React
- * having flushed, which user-event's `act` wrapper still guarantees.
+ * The default `delay: 0` makes user-event await a macrotask between every
+ * synthetic event, so a single `click` — pointerover, pointerenter, pointermove,
+ * pointerdown, mousedown, focus, pointerup, mouseup, click — costs ten trips
+ * through the event loop, against Radix's portalled alertdialog. `delay: null`
+ * fires them back to back; nothing in this component depends on wall-clock
+ * spacing between the events of one click, only on React having flushed, which
+ * user-event's `act` wrapper still guarantees.
  *
  * That mattered because this file was one of the five repeatedly reported as
  * "flaky" — it was not flaky, it was slow, and slow is what a 10s `testTimeout`
- * turns into a failure when the machine is loaded.
+ * turns into a failure when the machine is loaded. The other half of that fix
+ * is {@link pendingConfirm}, which takes the wall clock out of the assertions.
  */
 function setupUser(): ReturnType<typeof userEvent.setup> {
   return userEvent.setup({ delay: null });
 }
 
 /**
- * An `onConfirm` result that never settles, for asserting on the loading state.
+ * A confirm handler whose promise the test finishes by hand.
  *
- * Six tests here used a timed `delay(...)` and then asserted *during* that
- * window. That makes each assertion a race between a wall-clock timer and
- * however long jsdom takes to dispatch the events — fine on an idle laptop, and
- * a real failure on a busy one, which is how this file earned its reputation
- * for flakiness. `prevents double-click during loading` was the sharpest: once
- * 50ms elapsed between the two clicks the dialog had already closed, so the
- * second click genuinely did call `onConfirm` again, and the test was right to
- * fail.
- *
- * A promise that never settles removes time from the assertion entirely: the
- * dialog is loading until the test ends, so "while loading" means exactly that.
- * Two tests further down already used `new Promise(() => {})` for this; this is
- * the same idea with a name. Nothing needs to resolve it — the component is
- * unmounted by the global `cleanup()` in `afterEach`.
+ * The suite used to hand `onConfirm` a `setTimeout(…, 100)` and then assert
+ * "during loading" against the wall clock. On a loaded machine the 100 ms
+ * elapsed before the assertion ran, so the loading tests failed intermittently
+ * — and, worse, a passing run proved only that the assertion won a race.
+ * Nothing here resolves until {@link PendingConfirm.finish} is called.
  */
-function neverSettles(): Promise<void> {
-  return new Promise<void>(() => {});
+interface PendingConfirm {
+  /** The mock to pass as `onConfirm`. */
+  readonly onConfirm: Mock<() => Promise<void>>;
+  /** Resolves the in-flight confirm. */
+  readonly finish: () => void;
+}
+
+function pendingConfirm(): PendingConfirm {
+  let release: () => void = () => undefined;
+  const onConfirm = vi.fn<() => Promise<void>>(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      })
+  );
+
+  return { onConfirm, finish: () => { release(); } };
 }
 
 // ============================================================================
@@ -165,9 +171,8 @@ describe('ConfirmDialog Basic Rendering', () => {
 // ============================================================================
 
 describe('ConfirmDialog Confirm Action', () => {
-  const user = setupUser();
-
   it('calls onConfirm when confirm button clicked', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn();
 
@@ -188,6 +193,7 @@ describe('ConfirmDialog Confirm Action', () => {
   });
 
   it('closes dialog on successful confirm', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockResolvedValue(undefined);
 
@@ -210,6 +216,7 @@ describe('ConfirmDialog Confirm Action', () => {
   });
 
   it('stays open on confirm error for retry', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockRejectedValue(new Error('Failed'));
 
@@ -241,9 +248,8 @@ describe('ConfirmDialog Confirm Action', () => {
 // ============================================================================
 
 describe('ConfirmDialog Cancel Action', () => {
-  const user = setupUser();
-
   it('calls onOpenChange(false) when cancel clicked', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn();
 
@@ -264,6 +270,7 @@ describe('ConfirmDialog Cancel Action', () => {
   });
 
   it('does not call onConfirm when cancelled', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn();
 
@@ -289,11 +296,10 @@ describe('ConfirmDialog Cancel Action', () => {
 // ============================================================================
 
 describe('ConfirmDialog Loading State', () => {
-  const user = setupUser();
-
   it('shows loading spinner during async confirm', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(neverSettles);
+    const { onConfirm, finish } = pendingConfirm();
 
     render(
       <ConfirmDialog
@@ -309,13 +315,22 @@ describe('ConfirmDialog Loading State', () => {
     await user.click(screen.getByRole('button', { name: 'Confirm' }));
 
     // Loading spinner should be visible (uses motion-safe:animate-spin for NFR12 compliance)
-    const spinner = document.querySelector('.motion-safe\\:animate-spin');
-    expect(spinner).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.querySelector('.motion-safe\\:animate-spin')).toBeInTheDocument();
+    });
+
+    // …and gone again once the work finishes, which is what makes its earlier
+    // presence mean something rather than being a snapshot of a slow machine.
+    finish();
+    await waitFor(() => {
+      expect(document.querySelector('.motion-safe\\:animate-spin')).not.toBeInTheDocument();
+    });
   });
 
   it('disables buttons during loading', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(neverSettles);
+    const { onConfirm } = pendingConfirm();
 
     render(
       <ConfirmDialog
@@ -339,8 +354,9 @@ describe('ConfirmDialog Loading State', () => {
   });
 
   it('prevents close during loading', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(neverSettles);
+    const { onConfirm } = pendingConfirm();
 
     render(
       <ConfirmDialog
@@ -354,20 +370,27 @@ describe('ConfirmDialog Loading State', () => {
       />
     );
 
-    // Start loading
+    // Start loading, and wait until it has actually begun.
     await user.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    });
 
     // Try to cancel during loading
     const cancelButton = screen.getByRole('button', { name: 'Cancel' });
     await user.click(cancelButton);
 
     // Should not have called onOpenChange with false (cancel blocked during loading)
+    // No `getByRole('alertdialog')` check here: `open` is hard-coded true and
+    // the mock never feeds a new value back, so the dialog stays mounted
+    // whatever the component does. `onOpenChange` is the only real signal.
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
   it('prevents double-click during loading', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(neverSettles);
+    const { onConfirm } = pendingConfirm();
 
     render(
       <ConfirmDialog
@@ -392,7 +415,9 @@ describe('ConfirmDialog Loading State', () => {
 
   it('resets loading state when dialog closes externally', async () => {
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(neverSettles);
+    // Never settles, so the loading state cannot clear on its own and the
+    // reset effect is the only thing that can lift it.
+    const onConfirm = vi.fn().mockImplementation(() => new Promise<void>(() => {}));
 
     const { rerender } = render(
       <ConfirmDialog
@@ -404,6 +429,14 @@ describe('ConfirmDialog Loading State', () => {
         confirmLabel="Confirm"
       />
     );
+
+    // Actually enter the loading state first. Without this the button was
+    // never disabled to begin with, so the assertion below held with the
+    // reset effect deleted outright.
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled();
+    });
 
     // Close dialog externally
     rerender(
@@ -431,6 +464,7 @@ describe('ConfirmDialog Loading State', () => {
 
     // Confirm button should not be disabled (loading was reset)
     expect(screen.getByRole('button', { name: 'Confirm' })).not.toBeDisabled();
+    expect(document.querySelector('.motion-safe\\:animate-spin')).not.toBeInTheDocument();
   });
 });
 
@@ -455,7 +489,9 @@ describe('ConfirmDialog Variants', () => {
     );
 
     const confirmButton = screen.getByRole('button', { name: 'Confirm' });
-    // Default variant should not have destructive class
+    // Both halves: the absence check alone also passes for a button that
+    // rendered with no variant classes at all.
+    expect(confirmButton).toHaveClass('bg-primary');
     expect(confirmButton).not.toHaveClass('bg-destructive');
   });
 
@@ -478,6 +514,7 @@ describe('ConfirmDialog Variants', () => {
     const confirmButton = screen.getByRole('button', { name: 'Delete' });
     // Destructive variant should have destructive styling
     expect(confirmButton).toHaveClass('bg-destructive');
+    expect(confirmButton).not.toHaveClass('bg-primary');
   });
 });
 
@@ -486,8 +523,6 @@ describe('ConfirmDialog Variants', () => {
 // ============================================================================
 
 describe('ConfirmDialog Accessibility', () => {
-  const user = setupUser();
-
   it('has role="alertdialog", not the ordinary dialog role', () => {
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn();
@@ -549,7 +584,7 @@ describe('ConfirmDialog Accessibility', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
   });
 
-  it('has accessible title', () => {
+  it('references the rendered title and description by id', () => {
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn();
 
@@ -558,35 +593,29 @@ describe('ConfirmDialog Accessibility', () => {
         open={true}
         onOpenChange={onOpenChange}
         title="Confirm Action"
-        description="Are you sure?"
-        onConfirm={onConfirm}
-      />
-    );
-
-    // DialogTitle should be present
-    expect(screen.getByText('Confirm Action')).toBeInTheDocument();
-  });
-
-  it('has accessible description', () => {
-    const onOpenChange = vi.fn();
-    const onConfirm = vi.fn();
-
-    render(
-      <ConfirmDialog
-        open={true}
-        onOpenChange={onOpenChange}
-        title="Test"
         description="This action is permanent"
         onConfirm={onConfirm}
       />
     );
 
-    expect(screen.getByText('This action is permanent')).toBeInTheDocument();
+    // `getByText(...)` alone said only that the strings reached the DOM
+    // somewhere. What matters is that they are the *referenced* nodes: a title
+    // rendered outside `AlertDialogTitle` still displays, and still leaves the
+    // dialog unnamed for a screen reader.
+    const dialog = screen.getByRole('alertdialog'),
+     titleEl = screen.getByText('Confirm Action'),
+     descriptionEl = screen.getByText('This action is permanent');
+
+    expect(titleEl.id).not.toBe('');
+    expect(descriptionEl.id).not.toBe('');
+    expect(dialog).toHaveAttribute('aria-labelledby', titleEl.id);
+    expect(dialog).toHaveAttribute('aria-describedby', descriptionEl.id);
   });
 
   it('loading spinner has aria-hidden', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
-    const onConfirm = vi.fn().mockImplementation(neverSettles);
+    const { onConfirm } = pendingConfirm();
 
     render(
       <ConfirmDialog
@@ -601,8 +630,11 @@ describe('ConfirmDialog Accessibility', () => {
 
     await user.click(screen.getByRole('button', { name: 'Confirm' }));
 
-    const spinner = document.querySelector('.motion-safe\\:animate-spin');
-    expect(spinner).toHaveAttribute('aria-hidden', 'true');
+    await waitFor(() => {
+      expect(
+        document.querySelector('.motion-safe\\:animate-spin')
+      ).toHaveAttribute('aria-hidden', 'true');
+    });
   });
 });
 
@@ -611,9 +643,8 @@ describe('ConfirmDialog Accessibility', () => {
 // ============================================================================
 
 describe('ConfirmDialog Sync vs Async', () => {
-  const user = setupUser();
-
   it('handles synchronous onConfirm', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn(); // Sync function
 
@@ -637,6 +668,7 @@ describe('ConfirmDialog Sync vs Async', () => {
   });
 
   it('handles async onConfirm that resolves', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockResolvedValue(undefined);
 
@@ -659,6 +691,7 @@ describe('ConfirmDialog Sync vs Async', () => {
   });
 
   it('handles async onConfirm that rejects', async () => {
+    const user = setupUser();
     const onOpenChange = vi.fn();
     const onConfirm = vi.fn().mockRejectedValue(new Error('Error'));
 
@@ -685,7 +718,7 @@ describe('ConfirmDialog Sync vs Async', () => {
   });
 
   it('guards handleConfirm when isLoading is true (fireEvent bypasses disabled)', async () => {
-    const onConfirm = vi.fn().mockImplementation(neverSettles);
+    const onConfirm = vi.fn().mockImplementation(() => new Promise(() => {})); // never resolves
     const onOpenChange = vi.fn();
 
     render(
@@ -717,7 +750,7 @@ describe('ConfirmDialog Sync vs Async', () => {
   });
 
   it('guards handleOpenChange when isLoading is true (cancel during loading)', async () => {
-    const onConfirm = vi.fn().mockImplementation(neverSettles);
+    const onConfirm = vi.fn().mockImplementation(() => new Promise(() => {})); // never resolves
     const onOpenChange = vi.fn();
 
     render(
