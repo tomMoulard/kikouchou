@@ -46,6 +46,82 @@ const LONDON_COORDINATES = {
   lon: -0.1278,
 } as const;
 
+/**
+ * The trip list, scoped so the sidebar's own lists cannot answer for it.
+ */
+function tripCard(page: Page, name: string) {
+  return page
+    .getByRole('list', { name: /my trips/i })
+    .getByRole('listitem')
+    .filter({ hasText: name });
+}
+
+/**
+ * Console errors and uncaught exceptions, collected from *before* whatever
+ * navigation is about to happen.
+ *
+ * Order is the whole point. Two tests here used to attach their listener after
+ * `goto` + `waitForLoadState` and then assert the collection was empty — so
+ * every error emitted while the page loaded, the ones they are named for, fired
+ * before anything was listening and the assertion held by construction.
+ */
+interface CollectedErrors {
+  /** `console.error(...)` calls. */
+  readonly console: string[];
+  /** Uncaught exceptions and unhandled rejections. */
+  readonly uncaught: string[];
+}
+
+/**
+ * Failures that say nothing about the app: a stubbed tile answers with an empty
+ * body on purpose, and the favicon is not part of any contract here.
+ */
+const IGNORABLE_CONSOLE_ERROR =
+  /Failed to load resource|net::ERR_|tile\.openstreetmap\.org|basemaps\.cartocdn\.com|favicon/i;
+
+/**
+ * Presses Enter the way a browser does, including the `keypress` a real key
+ * press produces.
+ *
+ * `page.keyboard.press('Enter')` emits only `keydown` and `keyup` — measured,
+ * by listening on the element — and Leaflet activates a marker's popup from
+ * `keypress` (`Map._onKeyPress`, keyCode 13). So the built-in press cannot
+ * drive the production path at all, and a test using it would report the
+ * feature broken when it is not. CDP's `char` event is the missing half.
+ */
+async function pressEnterWithKeypress(page: Page): Promise<void> {
+  const key = {
+    key: 'Enter',
+    code: 'Enter',
+    windowsVirtualKeyCode: 13,
+    nativeVirtualKeyCode: 13,
+    text: '\r',
+    unmodifiedText: '\r',
+  } as const;
+
+  const client = await page.context().newCDPSession(page);
+  try {
+    await client.send('Input.dispatchKeyEvent', { type: 'keyDown', ...key });
+    await client.send('Input.dispatchKeyEvent', { type: 'char', ...key });
+    await client.send('Input.dispatchKeyEvent', { type: 'keyUp', ...key });
+  } finally {
+    await client.detach();
+  }
+}
+
+function collectErrors(page: Page): CollectedErrors {
+  const collected: CollectedErrors = { console: [], uncaught: [] };
+  page.on('console', (message) => {
+    if (message.type() === 'error' && !IGNORABLE_CONSOLE_ERROR.test(message.text())) {
+      collected.console.push(message.text());
+    }
+  });
+  page.on('pageerror', (error) => {
+    collected.uncaught.push(error.message);
+  });
+  return collected;
+}
+
 // ============================================================================
 // Test Suite: Trip Location Map
 // ============================================================================
