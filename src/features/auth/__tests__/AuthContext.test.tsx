@@ -129,8 +129,21 @@ function withoutBackend(): void {
 
 const SESSION = {
   access_token: 'token',
-  user: { id: 'user-1', email: 'someone@example.test', user_metadata: {} },
+  user: {
+    id: 'user-1',
+    email: 'someone@example.test',
+    user_metadata: {},
+    // Both are on every real `User`, and both cross into the person profile:
+    // `provider` says how this account gets in, `created_at` is the day it
+    // started existing — which is also how a registration is told apart from
+    // the thousandth sign-in.
+    app_metadata: { provider: 'google' },
+    created_at: '2026-01-02T03:04:05.000Z',
+  },
 };
+
+/** What `identify()` writes once and never overwrites, for the fixture above. */
+const SET_ONCE = { signed_up_at: '2026-01-02T03:04:05.000Z' };
 
 /** The same session with different provider metadata, for the identify tests. */
 function sessionWithMetadata(metadata: Record<string, unknown>): typeof SESSION {
@@ -276,10 +289,15 @@ describe('AuthProvider — state', () => {
     // row it *is* — which is how a project came to hold 20 people for 3 accounts
     // with no way to tell which was which.
     await waitFor(() => {
-      expect(mockIdentify).toHaveBeenCalledWith('user-1', {
-        supabase_user_id: 'user-1',
-        email: 'someone@example.test',
-      });
+      expect(mockIdentify).toHaveBeenCalledWith(
+        'user-1',
+        {
+          supabase_user_id: 'user-1',
+          email: 'someone@example.test',
+          auth_provider: 'google',
+        },
+        SET_ONCE,
+      );
     });
     expect(mockRegister).toHaveBeenCalledWith({ signed_in: true });
   });
@@ -294,11 +312,16 @@ describe('AuthProvider — state', () => {
     client.emit('SIGNED_IN', sessionWithMetadata({ full_name: 'Ada Lovelace' }));
 
     await waitFor(() => {
-      expect(mockIdentify).toHaveBeenCalledWith('user-1', {
-        supabase_user_id: 'user-1',
-        email: 'someone@example.test',
-        name: 'Ada Lovelace',
-      });
+      expect(mockIdentify).toHaveBeenCalledWith(
+        'user-1',
+        {
+          supabase_user_id: 'user-1',
+          email: 'someone@example.test',
+          name: 'Ada Lovelace',
+          auth_provider: 'google',
+        },
+        SET_ONCE,
+      );
     });
   });
 
@@ -314,11 +337,16 @@ describe('AuthProvider — state', () => {
     client.emit('SIGNED_IN', sessionWithMetadata({ name: 'Ada' }));
 
     await waitFor(() => {
-      expect(mockIdentify).toHaveBeenCalledWith('user-1', {
-        supabase_user_id: 'user-1',
-        email: 'someone@example.test',
-        name: 'Ada',
-      });
+      expect(mockIdentify).toHaveBeenCalledWith(
+        'user-1',
+        {
+          supabase_user_id: 'user-1',
+          email: 'someone@example.test',
+          name: 'Ada',
+          auth_provider: 'google',
+        },
+        SET_ONCE,
+      );
     });
   });
 
@@ -338,13 +366,11 @@ describe('AuthProvider — state', () => {
     });
 
     await waitFor(() => {
-      expect(mockIdentify).toHaveBeenCalledWith('user-1', {
-        supabase_user_id: 'user-1',
-      });
+      expect(mockIdentify).toHaveBeenCalledWith('user-1', { supabase_user_id: 'user-1' }, {});
     });
   });
 
-  it('sends nothing about the account beyond its id, email and name', async () => {
+  it('sends nothing about the account beyond the four allowed properties', async () => {
     const client = makeFakeClient();
     withBackend(client);
 
@@ -352,8 +378,8 @@ describe('AuthProvider — state', () => {
     await waitForSubscription(client);
 
     // Supabase puts the whole provider payload in `user_metadata`. Only the
-    // three fields that identify the account may cross into analytics; the rest
-    // — avatar URLs, provider ids, phone numbers — must not.
+    // fields that identify the account may cross into analytics; the rest —
+    // avatar URLs, provider ids, phone numbers — must not.
     client.emit(
       'SIGNED_IN',
       sessionWithMetadata({
@@ -368,7 +394,35 @@ describe('AuthProvider — state', () => {
       expect(mockIdentify).toHaveBeenCalled();
     });
     const properties = mockIdentify.mock.calls.at(-1)?.[1] as Record<string, unknown>;
-    expect(Object.keys(properties).sort()).toEqual(['email', 'name', 'supabase_user_id']);
+    expect(Object.keys(properties).sort()).toEqual([
+      'auth_provider',
+      'email',
+      'name',
+      'supabase_user_id',
+    ]);
+  });
+
+  it('writes the signup date once, so a later sign-in cannot move it', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    client.emit('SIGNED_IN', SESSION);
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalled();
+    });
+    // The third argument is posthog-js's `$set_once` bucket, and `created_at`
+    // belongs in it: it is fixed for the life of the account, and it is what
+    // separates the sign-in that *was* a registration from the thousandth one.
+    // Sent as a plain property it would be rewritten on every sign-in — and on
+    // the merge with the anonymous person, where set-once is what stops the
+    // pre-account half of the profile clobbering the account's own dates.
+    expect(mockIdentify.mock.calls.at(-1)?.[2]).toEqual({
+      signed_up_at: '2026-01-02T03:04:05.000Z',
+    });
   });
 
   it('does not re-identify on a token refresh', async () => {

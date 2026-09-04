@@ -237,15 +237,23 @@ function toDisplayName(user: User): string | undefined {
 /**
  * What PostHog is told about the person it just identified.
  *
- * Without this an identified person shows up as a bare UUID with no way to line
+ * That person already exists — `lib/posthog` runs `person_profiles: 'always'`,
+ * so the visitor has been a person since their first pageview and `identify()`
+ * merges that person into the account rather than opening a new one. This is
+ * the data the account adds on top of what the anonymous half already knows.
+ *
+ * Without it an identified person shows up as a bare UUID with no way to line
  * it up against the `auth.users` row it *is* — which is how a project ended up
  * holding 20 people for 3 accounts with nobody able to tell which was which.
- * `email` and `name` are also what PostHog's own person display falls back to.
+ * `email` and `name` are also what PostHog's own person display falls back to,
+ * and `auth_provider` is what answers "how does this person get in" when
+ * somebody writes in unable to.
  *
  * Deliberately nothing else. The rule for this app is counts and enum values,
  * not user content, and an account's own identity is the one thing `identify()`
- * is for. Absent fields are omitted rather than sent as `undefined`, so a person
- * profile is never overwritten with a blank.
+ * is for — `auth_provider` is an enum (`google`, `email`, `solana`), not the
+ * provider payload around it. Absent fields are omitted rather than sent as
+ * `undefined`, so a person profile is never overwritten with a blank.
  */
 function toPersonProperties(user: User): Record<string, string> {
   const properties: Record<string, string> = { supabase_user_id: user.id };
@@ -257,6 +265,39 @@ function toPersonProperties(user: User): Record<string, string> {
   const name = toDisplayName(user);
   if (name !== undefined) {
     properties['name'] = name;
+  }
+
+  // `app_metadata` is provider-shaped and typed as an open record, like
+  // `user_metadata` above, so the value is guarded rather than trusted.
+  const provider: unknown = user.app_metadata?.['provider'];
+  if (typeof provider === 'string' && provider !== '') {
+    properties['auth_provider'] = provider;
+  }
+
+  return properties;
+}
+
+/**
+ * What is written the first time and never again.
+ *
+ * `identify()`'s third argument is posthog-js's `$set_once` bucket, and the
+ * account's creation date is exactly what it is for: it cannot change, so
+ * rewriting it on each of a person's thousand sign-ins buys nothing — and it is
+ * the property that tells the sign-in which *was* a registration apart from all
+ * the ones after it, so a cohort by signup week is a person breakdown rather
+ * than a search for somebody's first event.
+ *
+ * Set-once also decides the merge. The anonymous person this call is folding
+ * into the account has its own dates; sending the account's as plain properties
+ * would let whichever side wrote last win.
+ */
+function toPersonPropertiesSetOnce(user: User): Record<string, string> {
+  const properties: Record<string, string> = {};
+
+  // Required by the `User` type, absent from a hand-built test double and from
+  // whatever GoTrue returns next. Guarded for the same reason as the rest.
+  if (typeof user.created_at === 'string' && user.created_at !== '') {
+    properties['signed_up_at'] = user.created_at;
   }
 
   return properties;
@@ -358,8 +399,14 @@ export function AuthProvider({
           // where re-identifying the same id is pointless churn.
           if (identifiedRef.current !== nextUser.id) {
             // The properties are what make the person recognisable: an id on
-            // its own is a UUID nobody can match to an account.
-            posthog?.identify(nextUser.id, toPersonProperties(nextUser));
+            // its own is a UUID nobody can match to an account. This does not
+            // create the person — the visitor has been one since their first
+            // pageview — it merges that one into the account and enriches it.
+            posthog?.identify(
+              nextUser.id,
+              toPersonProperties(nextUser),
+              toPersonPropertiesSetOnce(nextUser),
+            );
             identifiedRef.current = nextUser.id;
           }
           return;

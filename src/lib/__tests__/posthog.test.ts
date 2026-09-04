@@ -139,20 +139,24 @@ describe('lib/posthog', () => {
     vi.unstubAllGlobals();
   });
 
-  it('leaves anonymous visitors profile-less and disables the test-user hostname', async () => {
+  it('makes a person of a visitor before they have an account', async () => {
     withCredentials();
     vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
 
     await importPosthog();
 
     const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
-    // Most of this app works signed out; a persisted person per visitor would
-    // swamp the handful of real accounts.
-    expect(options['person_profiles']).toBe('identified_only');
+    // The whole point of the setting. Under posthog-js's `'identified_only'`
+    // default an anonymous event carries `$process_person_profile: false`, and
+    // PostHog never folds those events into the person `identify()` creates
+    // later — so somebody who read a shared trip for a week before signing up
+    // arrives as a person whose history starts at the sign-up.
+    expect(options['person_profiles']).toBe('always');
     // `defaults: '2026-05-30'` sets this to /^(localhost|127\.0\.0\.1)$/, and a
-    // match routes through `setPersonProperties()` — which forces a person
-    // profile and overrides `identified_only` above. That is the mechanism
-    // behind the 19 phantom people; `null` is how the library disables it.
+    // match routes through `setPersonProperties()`, which tags the person as an
+    // internal user. That is the mechanism behind the 19 phantom people, and
+    // `'always'` above does not make it harmless: it decides *what kind* of
+    // person a dev-server load creates, not whether it creates one.
     expect(options['internal_or_test_user_hostname']).toBeNull();
   });
 

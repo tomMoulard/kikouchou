@@ -8,7 +8,11 @@
  * to be true for that: Vite loads `.env.local` for a Playwright web server, the
  * config blanked `VITE_SUPABASE_*` but not `VITE_POSTHOG_*`, and posthog-js's
  * dated defaults treat a loopback hostname as an internal user — a path that
- * forces a person profile regardless of `person_profiles: 'identified_only'`.
+ * forced a person profile regardless of the `person_profiles` setting.
+ *
+ * `person_profiles` is now `'always'`, so a leak from this suite would not need
+ * that third condition at all: one request is one person. The assertion below
+ * is unchanged because it never depended on any of them.
  *
  * Each of those is fixed. This spec asserts the outcome instead of any one of
  * them, so the guarantee survives whichever gets undone next.
