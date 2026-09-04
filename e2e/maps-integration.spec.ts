@@ -557,12 +557,20 @@ test.describe('Transport Map Legend', () => {
    * Colour is never the only carrier of meaning here: the two rows are also
    * labelled, and each pin carries the person, the direction and the place in
    * its tooltip and popup.
+   *
+   * Scoped to the legend rather than the page, or deleting both labels would
+   * still pass on any other element that says "arrivals" — the transport list's
+   * own counters do. And matched in both languages, because `DEFAULT_LANGUAGE`
+   * is `fr` and detection reads the browser: an English-only regex asserts the
+   * developer's locale, not the app's behaviour.
    */
   test('the legend labels its swatches in words', async ({ page }) => {
     await openMapInTheme(page, tripId, 'light');
 
-    await expect(page.getByText(/arrival/i).first()).toBeVisible();
-    await expect(page.getByText(/departure/i).first()).toBeVisible();
+    const legend = page.getByTestId('map-legend');
+    await expect(legend).toBeVisible();
+    await expect(legend).toContainText(/arrivals|arriv[ée]es/i);
+    await expect(legend).toContainText(/departures|d[ée]parts/i);
   });
 });
 
