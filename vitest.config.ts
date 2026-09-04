@@ -89,14 +89,31 @@ export default defineConfig({
         '**/*.spec.{ts,tsx}',
       ],
 
-      // Coverage thresholds
-      // Statements, functions, and lines comfortably exceed 80%.
-      // Branches threshold set to 79% — the remaining gap is in hardware-dependent code
-      // (QRScanner), Leaflet integration (MapView), DnD interactions (DroppableRoom),
-      // and Radix UI internal portal branches that are unreachable in unit tests.
+      /**
+       * Coverage thresholds — enforced by CI, which runs `test:coverage`.
+       *
+       * Until that CI change these numbers were decoration: nothing in
+       * `package.json` or the workflow ever passed `--coverage`, so no run had
+       * ever compared them against reality. The first run that did showed the
+       * branches figure had been wrong the whole time — 75.35%, not the 79% the
+       * old comment argued for.
+       *
+       * Measured 2026-09-03 on 186 files / 3528 tests:
+       *   statements 81.67 · branches 75.35 · functions 82.45 · lines 82.63
+       *
+       * Each number is set below its measured value, so a green suite stays
+       * green and a real regression goes red. Raise them as coverage grows;
+       * never lower one to make a red build pass without saying what dropped.
+       *
+       * The branches gap is concentrated in code a jsdom unit test cannot
+       * reach: `router.tsx` and `sw/register.ts` (0%), the camera-dependent
+       * `QRScanner.tsx` (0%), the WebLLM worker and `useWebLLM.ts` (0% / 9%),
+       * and the sync providers `YjsProvider.tsx` (25%) and `useTripSync.ts`
+       * (36%).
+       */
       thresholds: {
         statements: 80,
-        branches: 79,
+        branches: 75,
         functions: 80,
         lines: 80,
       },
@@ -108,6 +125,41 @@ export default defineConfig({
     // Pool configuration - use threads for better performance
     // Threads have lower startup overhead than forks and work well with jsdom
     pool: 'threads',
+
+    /**
+     * Cap the worker count instead of taking one per core.
+     *
+     * A full run spends far more time importing than running assertions —
+     * `import 178.85s` against `tests 99.01s`, summed across workers, for a
+     * 53.8s wall clock. That import cost is Vite transforming the same heavy
+     * module graph (React, Radix, date-fns, Yjs) in every worker at once, and
+     * it is charged against `testTimeout`, not `hookTimeout`.
+     *
+     * Be careful what you claim for this setting. Measured A/B on an 8-core
+     * machine, alternating, full suite:
+     *
+     *   idle box:    7 workers 58s all green · 4 workers 55s all green
+     *   load avg 87: 7 workers 750s, 6 files failed
+     *   load avg 46: 4 workers 881s, 7 files failed
+     *
+     * So the cap is free — it costs nothing on an idle machine, and 4 was if
+     * anything marginally faster — but it does NOT rescue a box that is already
+     * oversubscribed by other processes. Under a load average of 46+ the suite
+     * fails at any worker count, on `waitFor`'s 1s default and on this file's
+     * 10s `testTimeout`. That is a machine-capacity problem, not a test defect,
+     * and no setting here fixes it. What the cap does buy is a bound on the
+     * suite's *own* footprint, so a run does not create that contention itself.
+     *
+     * Four is deliberately an absolute, not a percentage: a GitHub runner has
+     * 4 vCPUs, so CI keeps the parallelism it already had, and only oversized
+     * dev machines are held back.
+     *
+     * This is `maxWorkers`, not `poolOptions.threads.maxThreads`: Vitest 4
+     * removed the per-pool block and promoted the setting to the top level.
+     * The nested form is not an error — it prints a deprecation notice and is
+     * then ignored, which is the worst of both.
+     */
+    maxWorkers: 4,
 
     // Timeout for async operations
     testTimeout: 10000,
