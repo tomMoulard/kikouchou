@@ -2,6 +2,9 @@
 
 > A PWA application to help you organize your vacation house rooms and arrivals/departures.
 
+**Live**: <https://app.kikouchou.app> — deployed to GitHub Pages by
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) on every push to `main`.
+
 **Pitch**: You're on vacation with friends and renting a house together. Kikoushou helps you assign rooms and never forget to pick up or drop off your friends at the train station.
 
 ## Features (MVP)

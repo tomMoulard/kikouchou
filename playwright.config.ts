@@ -262,10 +262,6 @@ export default defineConfig({
        * Production build for the `production` project: a real service worker and
        * real precached chunks, which is the only configuration where the
        * offline-first claims mean anything.
-       *
-       * GITHUB_ACTIONS is cleared for the same reason as the dev server below —
-       * vite.config.ts would otherwise set base to '/' and every
-       * navigation would 404.
        */
       command: `bun run build && bun x vite preview --host 127.0.0.1 --port ${PREVIEW_PORT} --strictPort`,
       url: PREVIEW_URL,
@@ -279,8 +275,6 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 180 * 1000,
       env: {
-        GITHUB_ACTIONS: '',
-
         /**
          * Same blanking as the dev server below, and it matters more here
          * because this command runs `bun run build`: whatever `.env.local`
@@ -312,12 +306,6 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
       env: {
-        // vite.config.ts sets base='/' when GITHUB_ACTIONS is set,
-        // but baseURL and every page.goto('/...') here assume '/'. The plugin
-        // spawns this command with the full ambient env, so CI's own
-        // GITHUB_ACTIONS=true would 404 every non-root navigation. Clear it.
-        GITHUB_ACTIONS: '',
-
         /**
          * Blanked deliberately, and this is a safety measure rather than tidiness.
          *
@@ -354,7 +342,6 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
       env: {
-        GITHUB_ACTIONS: '',
         VITE_SUPABASE_URL: 'http://stub.invalid',
         VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_e2e_stub',
         // A backend is configured here, analytics still is not: this project
