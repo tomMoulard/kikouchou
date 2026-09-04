@@ -25,6 +25,8 @@ import {
   getActivityStartDayKey,
 } from '@/features/activities/utils/activity-utils';
 
+import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
+
 import { useToday } from '@/hooks/useToday';
 
 import { useActivityContext } from '@/contexts/ActivityContext';
@@ -270,6 +272,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
   const { assignments } = useAssignmentContext();
   const { transports } = useTransportContext();
   const { activities } = useActivityContext();
+  const { groups: guestGroups } = useGuestGroups();
   const { today } = useToday();
   const { i18n } = useTranslation();
 
@@ -375,6 +378,24 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       parts.push('', '## Guests', 'No guests added yet.');
     }
 
+    // Guest groups — global, not part of the trip. Listed so the assistant can
+    // both answer "who is in the family?" and target a group with
+    // importGuestGroup. Members are named because the action takes member ids,
+    // and a group is a handful of people rather than a list worth truncating.
+    if (guestGroups.length > 0) {
+      parts.push('', '## Guest groups (saved rosters, any trip)');
+      for (const group of guestGroups) {
+        const members = group.members
+          .map((member) => `"${toPromptText(member.name)}" (id: ${member.id})`)
+          .join(', ');
+        parts.push(
+          `- "${toPromptText(group.name)}" (id: ${group.id}): ${members || 'nobody yet'}`,
+        );
+      }
+    } else {
+      parts.push('', '## Guest groups', 'No saved groups yet.');
+    }
+
     // Room assignments
     if (assignments.length > 0) {
       parts.push('', '## Room Assignments');
@@ -435,6 +456,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     assignments,
     transports,
     activities,
+    guestGroups,
     todayIso,
     languageName,
   ]);

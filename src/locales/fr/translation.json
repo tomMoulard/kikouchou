@@ -813,6 +813,7 @@
     "selectTripNotFound": "Ce voyage est introuvable.",
     "activityNotFound": "Cette activité est introuvable.",
     "guestNotFound": "Cette personne est introuvable.",
+    "guestGroupNotFound": "Aucun groupe enregistré avec cet identifiant",
     "roomNotFound": "Cette chambre est introuvable.",
     "invalidActivity": "Ces informations d'activité sont invalides, rien n'a été enregistré.",
     "tripSwitched": "Passage à {{name}}",
@@ -845,6 +846,8 @@
         "description": "description"
       },
       "addGuest": "Invité ajouté : {{name}}",
+      "importGuestGroup_one": "{{count}} participant ajouté depuis {{name}}",
+      "importGuestGroup_other": "{{count}} participants ajoutés depuis {{name}}",
       "removeGuest": "Invité retiré : {{name}}",
       "addRoom": "Chambre ajoutée : {{name}} ({{capacity}} pers. max)",
       "removeRoom": "Chambre supprimée : {{name}}",
