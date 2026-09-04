@@ -56,8 +56,15 @@ export default defineConfig({
       VITE_POSTHOG_HOST: '',
     },
 
-    // Test file patterns
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    /**
+     * Test file patterns.
+     *
+     * `scripts/` is here for one file: the `config push` guard, whose whole job
+     * is to read `supabase/config.toml` correctly. It ships as plain `.js`
+     * because `scripts/` is run by `node` with no build step, so the pattern has
+     * to admit that extension — `src/` stays TypeScript-only either way.
+     */
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'scripts/**/*.{test,spec}.js'],
 
     // Exclude patterns
     exclude: [
