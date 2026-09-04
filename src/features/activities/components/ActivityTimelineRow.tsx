@@ -166,23 +166,31 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
   return (
     <div className="flex border-t border-muted">
       <div
-        className="sticky left-0 z-10 flex items-center gap-2 border-r border-muted bg-background px-3"
+        className={cn(
+          'sticky left-0 z-10 flex items-center gap-2 border-r border-muted bg-background',
+          viewport.labelsCollapsed ? 'justify-center px-1' : 'px-3',
+        )}
         style={{
           width: viewport.labelColumnWidth,
           minWidth: viewport.labelColumnWidth,
           height: rowHeight,
         }}
+        title={categoryLabel}
       >
         <ActivityCategoryIcon
           category={model.category}
           style={{ color: categoryColor }}
         />
-        <span className="truncate text-sm font-medium" title={categoryLabel}>
-          {categoryLabel}
-        </span>
-        <span className="shrink-0 rounded-full bg-muted px-1.5 text-xs font-medium tabular-nums text-muted-foreground">
-          {model.items.length}
-        </span>
+        {!viewport.labelsCollapsed && (
+          <>
+            <span className="truncate text-sm font-medium" title={categoryLabel}>
+              {categoryLabel}
+            </span>
+            <span className="shrink-0 rounded-full bg-muted px-1.5 text-xs font-medium tabular-nums text-muted-foreground">
+              {model.items.length}
+            </span>
+          </>
+        )}
       </div>
 
       <div

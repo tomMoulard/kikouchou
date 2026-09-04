@@ -48,6 +48,14 @@ describe('DraggableGuest', () => {
 
       expect(screen.getByTestId('person-badge')).toHaveTextContent('Marc');
     });
+
+    it('renders only a colour dot when compact', () => {
+      render(
+        <DraggableGuest person={person} startDate="2026-07-01" endDate="2026-07-05" compact />,
+      );
+
+      expect(screen.queryByTestId('person-badge')).not.toBeInTheDocument();
+    });
   });
 
   describe('bar mode', () => {

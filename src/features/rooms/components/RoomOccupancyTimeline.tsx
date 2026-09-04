@@ -191,7 +191,14 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
       todayKey={todayKey}
     >
       {(viewport) => {
-        const { canvasWidth, dayGridTemplateColumns, dayWidthPx, useFractionalColumns } = viewport;
+        const {
+          canvasWidth,
+          dayGridTemplateColumns,
+          dayWidthPx,
+          useFractionalColumns,
+          labelColumnWidth,
+          labelsCollapsed,
+        } = viewport;
 
         return (
           <>
@@ -204,11 +211,12 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                 >
                   <div
                     className={cn(
-                      'sticky left-0 z-10 min-w-0 bg-background border-r border-muted px-3 flex items-center',
+                      'sticky left-0 z-10 min-w-0 bg-background border-r border-muted flex items-center',
+                      labelsCollapsed ? 'justify-center px-1' : 'px-3',
                     )}
                     style={{
-                      width: ROOM_COL_PX_COMPACT,
-                      minWidth: ROOM_COL_PX_COMPACT,
+                      width: labelColumnWidth,
+                      minWidth: labelColumnWidth,
                       height: unassignedLaneCount * TIMELINE_LANE_HEIGHT_PX,
                     }}
                     title={t('rooms.needsRoom', 'needs room')}
@@ -316,14 +324,16 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                   >
                     <div
                       className={cn(
-                        'sticky left-0 z-10 bg-background border-r border-muted px-3 flex',
-                        hasSpotsNote
-                          ? 'flex-col items-stretch justify-center gap-0.5 py-1'
-                          : 'items-center',
+                        'sticky left-0 z-10 bg-background border-r border-muted flex',
+                        labelsCollapsed
+                          ? 'items-center justify-center px-1'
+                          : hasSpotsNote
+                            ? 'flex-col items-stretch justify-center gap-0.5 px-3 py-1'
+                            : 'items-center px-3',
                       )}
                       style={{
-                        width: ROOM_COL_PX_COMPACT,
-                        minWidth: ROOM_COL_PX_COMPACT,
+                        width: labelColumnWidth,
+                        minWidth: labelColumnWidth,
                         height: rowHeight,
                       }}
                       title={`${row.room.name} — ${t('rooms.beds', { count: row.room.capacity })}`}
@@ -333,7 +343,9 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                           className="size-3.5 shrink-0 text-muted-foreground"
                           aria-hidden="true"
                         />
-                        <span className="truncate text-sm font-medium">{row.room.name}</span>
+                        {!labelsCollapsed && (
+                          <span className="truncate text-sm font-medium">{row.room.name}</span>
+                        )}
                         {occupancy.isOverCapacity && (
                           <span
                             className="inline-flex shrink-0 text-destructive"
@@ -345,7 +357,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                           </span>
                         )}
                       </div>
-                      {hasSpotsNote && (
+                      {!labelsCollapsed && hasSpotsNote && (
                         <span className="text-xs text-muted-foreground leading-tight truncate">
                           {t('rooms.spotsOpen', { count: spotsOpen })}
                         </span>

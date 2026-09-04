@@ -61,6 +61,7 @@ const defaultViewport: TripTimelineViewportContext = {
   dayWidthPx: 100,
   useFractionalColumns: false,
   labelColumnWidth: 140,
+  labelsCollapsed: false,
   laneHeightPx: 32,
   todayColumnIndex: undefined,
   dayGridTemplateColumns: undefined,

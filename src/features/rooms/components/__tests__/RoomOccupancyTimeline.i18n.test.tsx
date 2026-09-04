@@ -59,6 +59,8 @@ vi.mock('@/components/shared/TripTimelineFrame', () => ({
         useFractionalColumns: false,
         todayColumnIndex: -1,
         laneHeightPx: 36,
+        labelColumnWidth: 140,
+        labelsCollapsed: false,
       })}
     </div>
   ),
