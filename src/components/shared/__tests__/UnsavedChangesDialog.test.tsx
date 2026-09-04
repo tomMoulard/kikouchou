@@ -66,6 +66,46 @@ describe('UnsavedChangesDialog', () => {
     expect(onLeave).not.toHaveBeenCalled();
   });
 
+  it('treats Escape as staying, not as silently leaving', async () => {
+    const onLeave = vi.fn();
+    const onStay = vi.fn();
+
+    const { user } = render(
+      <UnsavedChangesDialog open={true} onStay={onStay} onLeave={onLeave} />,
+      { withProviders: false }
+    );
+
+    await user.keyboard('{Escape}');
+
+    // Dismissing the warning is not consent to discard the work; the safe
+    // reading of "go away" is that the navigation is cancelled.
+    expect(onStay).toHaveBeenCalledTimes(1);
+    expect(onLeave).not.toHaveBeenCalled();
+  });
+
+  it('answers a second prompt correctly after the first was left', async () => {
+    const onLeave = vi.fn();
+    const onStay = vi.fn();
+
+    const { user } = render(
+      <UnsavedChangesDialog open={true} onStay={onStay} onLeave={onLeave} />,
+      { withProviders: false }
+    );
+
+    // Leaving raises the `isLeavingRef` flag that suppresses the `onStay` the
+    // auto-close would otherwise fire. If the flag were never lowered again,
+    // every later cancel would be swallowed and the block would never reset —
+    // the user would be stuck unable to say "stay".
+    await user.click(screen.getByRole('button', { name: 'unsaved.leave' }));
+    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(onStay).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'unsaved.stay' }));
+
+    expect(onStay).toHaveBeenCalledTimes(1);
+    expect(onLeave).toHaveBeenCalledTimes(1);
+  });
+
   it('does not call onStay or onLeave when dialog opens', () => {
     const onLeave = vi.fn();
     const onStay = vi.fn();
