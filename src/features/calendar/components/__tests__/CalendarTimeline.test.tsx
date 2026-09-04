@@ -162,4 +162,25 @@ describe('CalendarTimeline', () => {
     render(<CalendarTimeline {...defaultProps} />);
     expect(screen.getByRole('list', { name: 'Timeline rows' })).toBeInTheDocument();
   });
+
+  // Regression: the empty state used to render inside the frame's scrolling
+  // canvas, which is as wide as the trip is long (~1450px for 32 days). Its
+  // `mx-auto` centred it on that canvas rather than on the screen, so on a
+  // phone the message — and, once they existed, both buttons — sat hundreds of
+  // pixels off to the right and could not be reached without scrolling.
+  it('renders the empty state outside the horizontally scrolling canvas', () => {
+    render(
+      <CalendarTimeline
+        {...defaultProps}
+        persons={[]}
+      />
+    );
+
+    // The frame's scroll container is the element carrying the collapse flag.
+    const scroller = document.querySelector('[data-labels-collapsed]');
+    expect(scroller).not.toBeNull();
+
+    const emptyState = screen.getByRole('status');
+    expect(scroller!.contains(emptyState)).toBe(false);
+  });
 });
