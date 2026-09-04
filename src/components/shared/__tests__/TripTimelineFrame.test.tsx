@@ -62,6 +62,20 @@ describe('TripTimelineFrame', () => {
     expect(screen.getByRole('region', { name: 'Test timeline' })).toBeInTheDocument();
   });
 
+  it('scrolls days sideways without capping the row height', () => {
+    // A vertical cap here nests a second scrollbar inside the page's, and the
+    // rows — the thing being counted — are what gets cut off.
+    const { container } = render(
+      <TripTimelineFrame {...defaultProps}>
+        {() => <div>content</div>}
+      </TripTimelineFrame>
+    );
+
+    const scrollSurface = container.querySelector('[tabindex="0"]');
+    expect(scrollSurface).toHaveClass('overflow-x-auto');
+    expect(scrollSurface?.className).not.toMatch(/overflow-y-auto|max-h-/);
+  });
+
   it('renders left header content', () => {
     render(
       <TripTimelineFrame {...defaultProps}>

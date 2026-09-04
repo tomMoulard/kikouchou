@@ -193,12 +193,17 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
         fires on the narrow viewport where the timeline actually does overflow.
         The `role="region"` and its label live on the parent, so this element
         stays a plain scroll surface.
+
+        Days scroll sideways; rows do not. A `max-h-[70vh]` here put a second,
+        nested scrollbar on a timeline of three rows — the rows are what the
+        reader is counting, so the frame grows to fit them all and the page
+        takes the scrolling.
       */}
       <div
         ref={scrollRef}
         // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Deliberate, and the comment above says why: axe's `scrollable-region-focusable` requires an overflowing scroll container to be reachable by keyboard, which is the one case where a non-interactive element must be tabbable.
         tabIndex={0}
-        className={cn('w-full min-w-0 max-h-[70vh]', 'overflow-x-auto overflow-y-auto')}
+        className={cn('w-full min-w-0', 'overflow-x-auto')}
       >
         <div style={{ width: labelColumnWidth + canvasWidth }}>
           <div className="sticky top-0 z-20 flex border-b border-muted bg-background">
