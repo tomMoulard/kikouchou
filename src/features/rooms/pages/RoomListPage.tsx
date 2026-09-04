@@ -10,7 +10,7 @@
  * - Add room action (FAB on mobile, header button on desktop)
  * - Empty state for trips with no rooms
  * - Edit/Delete actions via RoomCard dropdown menu
- * - Drag-and-drop room assignments from unassigned guests
+ * - Drag-and-drop room assignments (timeline unassigned rows)
  *
  * @module features/rooms/pages/RoomListPage
  * @see TripListPage.tsx for reference implementation pattern
