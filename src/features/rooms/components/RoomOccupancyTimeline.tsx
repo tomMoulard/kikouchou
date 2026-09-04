@@ -295,9 +295,14 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                   0,
                   Math.min(row.room.capacity - row.laneCount, spotsOpen),
                 );
-                const hasOccupancyNote = spotsOpen > 0 || occupancy.isOverCapacity;
-                const rowAriaLabel =
-                  spotsOpen > 0
+                // Over capacity is a warning, not a caption: as a second line
+                // it was truncated to "This room may be ove…", which says
+                // nothing. It reads as an icon beside the name, with the full
+                // sentence on hover and for screen readers.
+                const hasSpotsNote = spotsOpen > 0;
+                const rowAriaLabel = occupancy.isOverCapacity
+                  ? `${row.room.name}. ${t('rooms.capacityWarning')}`
+                  : spotsOpen > 0
                     ? `${row.room.name}. ${t('rooms.spotsOpen', { count: spotsOpen })}`
                     : row.room.name;
                 const RoomGlyph = getRoomIconComponent(row.room.icon);
@@ -312,7 +317,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                     <div
                       className={cn(
                         'sticky left-0 z-10 bg-background border-r border-muted px-3 flex',
-                        hasOccupancyNote
+                        hasSpotsNote
                           ? 'flex-col items-stretch justify-center gap-0.5 py-1'
                           : 'items-center',
                       )}
@@ -329,12 +334,20 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                           aria-hidden="true"
                         />
                         <span className="truncate text-sm font-medium">{row.room.name}</span>
+                        {occupancy.isOverCapacity && (
+                          <span
+                            className="inline-flex shrink-0 text-destructive"
+                            title={t('rooms.capacityWarning')}
+                            data-testid={`room-capacity-warning-${row.room.id}`}
+                          >
+                            <TriangleAlert className="size-3.5" aria-hidden="true" />
+                            <span className="sr-only">{t('rooms.capacityWarning')}</span>
+                          </span>
+                        )}
                       </div>
-                      {hasOccupancyNote && (
+                      {hasSpotsNote && (
                         <span className="text-xs text-muted-foreground leading-tight truncate">
-                          {spotsOpen > 0
-                            ? t('rooms.spotsOpen', { count: spotsOpen })
-                            : t('rooms.capacityWarning')}
+                          {t('rooms.spotsOpen', { count: spotsOpen })}
                         </span>
                       )}
                     </div>

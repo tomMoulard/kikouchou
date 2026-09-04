@@ -514,6 +514,69 @@ describe('RoomOccupancyTimeline', () => {
     expect(screen.queryByText(/rooms\.spotsOpen/)).not.toBeInTheDocument();
   });
 
+  // As a caption under the room name the warning was truncated to "This room
+  // may be ove…", which tells the reader nothing. It is an icon beside the
+  // name now, carrying the whole sentence on hover and for screen readers.
+  it('shows the over-capacity warning as an icon carrying the full sentence', () => {
+    const secondGuest: Person = {
+      ...mockPerson,
+      id: 'p2' as Person['id'],
+      name: 'Bob',
+      headcount: 3,
+    };
+    const secondAssignment: RoomAssignment = {
+      ...mockAssignment,
+      id: 'a2' as RoomAssignment['id'],
+      personId: secondGuest.id,
+    };
+
+    render(
+      <RoomOccupancyTimeline
+        {...defaultProps}
+        persons={[mockPerson, secondGuest]}
+        assignments={[mockAssignment, secondAssignment]}
+      />,
+    );
+
+    const warning = screen.getByTestId('room-capacity-warning-room-1');
+    // Hover shows it in full rather than clipping it to the label column.
+    expect(warning).toHaveAttribute('title', 'rooms.capacityWarning');
+    // And it is not the clipped caption any more.
+    expect(screen.getByText('rooms.capacityWarning')).toHaveClass('sr-only');
+  });
+
+  it('announces the over-capacity warning on the row, not just on hover', () => {
+    const secondGuest: Person = {
+      ...mockPerson,
+      id: 'p2' as Person['id'],
+      name: 'Bob',
+      headcount: 3,
+    };
+    const secondAssignment: RoomAssignment = {
+      ...mockAssignment,
+      id: 'a2' as RoomAssignment['id'],
+      personId: secondGuest.id,
+    };
+
+    render(
+      <RoomOccupancyTimeline
+        {...defaultProps}
+        persons={[mockPerson, secondGuest]}
+        assignments={[mockAssignment, secondAssignment]}
+      />,
+    );
+
+    expect(
+      screen.getByRole('listitem', { name: 'Main Bedroom. rooms.capacityWarning' }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows no capacity icon for a room that is within capacity', () => {
+    render(<RoomOccupancyTimeline {...defaultProps} />);
+
+    expect(screen.queryByTestId('room-capacity-warning-room-1')).not.toBeInTheDocument();
+  });
+
   it('announces the room and its free beds on the row', () => {
     render(<RoomOccupancyTimeline {...defaultProps} />);
 
