@@ -477,7 +477,17 @@ async function createBulkAssignments(
 // ============================================================================
 
 test.describe('Performance Tests', () => {
-  // Use only Chromium for performance tests (CDP is Chrome-specific)
+  /**
+   * CDP is Chrome-only, so this suite needs a Chromium *engine*. Every project
+   * in `playwright.config.ts` is Chromium-based, so this guard skips nothing
+   * today — it is the safety net for the day a WebKit or Firefox project is
+   * added, and nothing more.
+   *
+   * It is emphatically **not** a way to single out a project: `browserName` is
+   * the engine, so `chromium`, `Mobile Chrome`, `production` and `sync` all
+   * report `'chromium'` and are indistinguishable here. Discriminating between
+   * projects needs `testInfo.project.name` — see the touch test below.
+   */
   test.skip(({ browserName }) => browserName !== 'chromium', 'Performance tests require Chromium');
 
   // Clear data before each test
@@ -913,7 +923,13 @@ test.describe('Performance Tests', () => {
 // ============================================================================
 
 test.describe('Mobile Performance', () => {
-  // Use only Chromium
+  /**
+   * Same engine guard, same caveat as `Performance Tests` above: this cannot
+   * express "only the mobile project", because `browserName` is `'chromium'`
+   * for the Pixel 5 project too. `beforeEach` forces a 375x812 viewport so the
+   * suite is meaningful on the desktop project as well; the one test that needs
+   * a real touchscreen gates itself on `testInfo.project.name`.
+   */
   test.skip(({ browserName }) => browserName !== 'chromium', 'Mobile tests require Chromium');
 
   test.beforeEach(async ({ page }) => {
@@ -966,10 +982,21 @@ test.describe('Mobile Performance', () => {
     }
   });
 
-  test('touch interactions are responsive', async ({ page, browserName }) => {
-    // Skip this test for browsers without touch support
-    // Only Mobile Chrome has hasTouch enabled by default
-    test.skip(browserName === 'chromium', 'Touch not supported in desktop Chromium');
+  test('touch interactions are responsive', async ({ page }, testInfo) => {
+    /**
+     * `hasTouch` comes from the device profile, which is a property of the
+     * *project*, not of the engine — only `Mobile Chrome` (Pixel 5) has it, and
+     * `page.tap()` throws without it.
+     *
+     * This used to read `browserName === 'chromium'`, which is true in every
+     * project this repo defines, so the test skipped on all of them and had
+     * never once executed. `testInfo.project.name` is the discriminator that
+     * actually works — same as `maps-integration.spec.ts`.
+     */
+    test.skip(
+      testInfo.project.name !== 'Mobile Chrome',
+      'Touch is only emulated in the Mobile Chrome (Pixel 5) project.',
+    );
 
     // Create trip
     const tripId = await createTestTrip(page);
@@ -987,15 +1014,61 @@ test.describe('Mobile Performance', () => {
     const firstRoom = page.locator('[role="listitem"]').first();
     await expect(firstRoom).toBeVisible();
 
-    const tapTime = await measureDuration(async () => {
-      await firstRoom.tap();
-      await page.waitForTimeout(100);
+    /**
+     * The clock runs inside the page, and that is the whole point.
+     *
+     * The obvious version of this test — a Node-side stopwatch around
+     * `tap()` — measures a CDP round trip and Playwright's actionability
+     * polling, with the application's own work a rounding error inside it.
+     * Measured on this page, on one build, with nothing changing between
+     * runs: the wall-clock cost of the identical tap ranged from 60 ms to
+     * 742 ms, while the page painted its response to every one of those taps
+     * in 1.3 ms to 16.4 ms. A 300 ms budget over the first number is a test of
+     * the harness that happens to be red about half the time; it is not a
+     * statement about the product, and no change to the product could fix it.
+     *
+     * So: from the `touchstart` the tap delivers, to the first frame painted
+     * after it. That is what "responsive" means to a thumb, and it is a number
+     * the application actually controls — it goes up exactly when the main
+     * thread is too busy to paint, which is the failure worth catching.
+     */
+    await page.evaluate(() => {
+      const probe = window as unknown as { __touchToPaintMs?: number };
+      probe.__touchToPaintMs = undefined;
+      document.addEventListener(
+        'touchstart',
+        () => {
+          const touchedAt = performance.now();
+          requestAnimationFrame(() => {
+            probe.__touchToPaintMs = performance.now() - touchedAt;
+          });
+        },
+        { capture: true, once: true },
+      );
     });
 
-    console.log('=== Touch Interaction Performance ===');
-    console.log(`Tap response time: ${tapTime.toFixed(2)}ms`);
+    const roundTripTime = await measureDuration(async () => {
+      await firstRoom.tap();
+    });
 
-    // Touch interactions should feel instant
-    expect(tapTime).toBeLessThan(300);
+    // The frame lands a frame *after* the tap, which can be after the line
+    // above returns — so wait for the number rather than racing it. This is
+    // also what fails, loudly, if the tap never reached the page at all.
+    await page.waitForFunction(
+      () => (window as unknown as { __touchToPaintMs?: number }).__touchToPaintMs !== undefined,
+      { timeout: 5000 },
+    );
+    const touchToPaint = await page.evaluate(
+      () => (window as unknown as { __touchToPaintMs: number }).__touchToPaintMs,
+    );
+
+    console.log('=== Touch Interaction Performance ===');
+    console.log(`Touch to next painted frame: ${touchToPaint.toFixed(2)}ms`);
+    console.log(`(Playwright round trip, harness cost, not asserted: ${roundTripTime.toFixed(2)}ms)`);
+
+    // Touch interactions should feel instant: inside the 100ms window a tap is
+    // perceived as immediate, with the observed 16ms worst case leaving plenty
+    // of room for a slower machine.
+    expect(touchToPaint).toBeLessThan(100);
   });
 });
