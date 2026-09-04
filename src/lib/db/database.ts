@@ -11,6 +11,7 @@ import Dexie, { type Table } from 'dexie';
 import type {
   Activity,
   AppSettings,
+  GuestGroup,
   Person,
   Room,
   RoomAssignment,
@@ -19,7 +20,7 @@ import type {
 } from '@/types';
 
 /** Current database schema version */
-export const DB_VERSION = 8;
+export const DB_VERSION = 9;
 
 // ============================================================================
 // Yjs Persistence Types
@@ -204,6 +205,17 @@ export class KikouchouDatabase extends Dexie {
 
   /** Cached server roster. See {@link TripMemberRow}. */
   tripMembers!: Table<TripMemberRow, [string, string]>;
+
+  /**
+   * Guest groups - reusable rosters imported into trips.
+   * Primary key: id (GuestGroupId)
+   * Indexes: name (list order), remoteGroupId (reconciling a pull)
+   *
+   * The one entity table that is **not** trip-scoped, so it deliberately has no
+   * `tripId` index and takes no part in `deleteTrip`'s cascade: deleting a trip
+   * must not delete the group its guests came from.
+   */
+  guestGroups!: Table<GuestGroup, string>;
 
   /**
    * @param name - Database name. Defaults to the real one; a test passes its own
@@ -466,6 +478,37 @@ export class KikouchouDatabase extends Dexie {
           );
         }
       });
+
+    /**
+     * Schema Version 9 - Guest groups
+     *
+     * Added:
+     * - guestGroups: reusable rosters that live beside trips rather than inside
+     *   one, so a family is typed once and imported into each new trip
+     *   - `name` for the alphabetical list the page renders
+     *   - `remoteGroupId` for reconciling a pull against what this device
+     *     already uploaded
+     *
+     * No data migration: the table starts empty, and nothing that existed
+     * before refers to it. Note the absence of a `tripId` index — it is
+     * intentional and the reason this table is not in `deleteTrip`'s cascade.
+     */
+    this.version(9).stores({
+      trips: 'id, &shareId, remoteTripId, startDate, createdAt',
+      rooms: 'id, [tripId+order]',
+      persons: 'id, tripId, [tripId+name]',
+      roomAssignments:
+        'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+      transports: 'id, personId, driverId, [tripId+datetime], [tripId+personId], [tripId+type]',
+      activities:
+        'id, tripId, organizerId, *participantIds, [tripId+startDatetime], [tripId+category]',
+      settings: 'id',
+      guestGroups: 'id, name, remoteGroupId',
+      yjsUpdates: '++id, tripId',
+      yjsOutbox: '++id, tripId',
+      syncCursors: 'tripId',
+      tripMembers: '[tripId+userId], tripId, userId',
+    });
 
     // An idle tab holding an older schema version blocks a newer tab's upgrade
     // transaction indefinitely. Without these two handlers the newer tab's

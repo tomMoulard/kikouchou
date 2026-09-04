@@ -10,7 +10,11 @@
  * @module lib/db/sanitize
  */
 
-import { MAX_ACTIVITY_PARTICIPANTS, normalizePersonHeadcount } from '@/types';
+import {
+  MAX_ACTIVITY_PARTICIPANTS,
+  MAX_GUEST_GROUP_MEMBERS,
+  normalizePersonHeadcount,
+} from '@/types';
 
 // ============================================================================
 // Constants - Maximum Lengths
@@ -66,6 +70,8 @@ export const MAX_LENGTHS = {
   activityLocation: 200,
   /** Activity notes (booking links, price, what to bring) */
   activityNotes: 1000,
+  /** Guest group name (e.g., "Family") */
+  guestGroupName: 100,
 } as const;
 
 // ============================================================================
@@ -171,6 +177,37 @@ export function sanitizePersonData<
     phone: sanitizeOptionalText(data.phone, MAX_LENGTHS.personPhone),
     headcount:
       data.headcount === undefined ? undefined : normalizePersonHeadcount(data.headcount),
+  };
+}
+
+/**
+ * Sanitizes guest group form data: the group's own name, and every member
+ * through the same rules a guest's own fields go through.
+ *
+ * A member's name and notes reuse `personName` / `personNotes` deliberately —
+ * a member becomes a {@link Person} on import, so anything this function lets
+ * through has to be something `sanitizePersonData` would also have accepted, or
+ * the import would silently clip a field the group page showed in full.
+ *
+ * The member list itself is bounded to {@link MAX_GUEST_GROUP_MEMBERS}: the
+ * whole group travels as one record, and a remote write is not obliged to be
+ * reasonable about its length.
+ *
+ * @param data - Guest group form data to sanitize
+ * @returns Sanitized guest group form data
+ */
+export function sanitizeGuestGroupData<
+  T extends {
+    name: string;
+    members: { name: string; notes?: string; headcount?: number }[];
+  },
+>(data: T): T {
+  return {
+    ...data,
+    name: sanitizeText(data.name, MAX_LENGTHS.guestGroupName),
+    members: data.members
+      .slice(0, MAX_GUEST_GROUP_MEMBERS)
+      .map((member) => sanitizePersonData(member)),
   };
 }
 

@@ -41,6 +41,12 @@ export type ActivityId = Brand<'ActivityId'>;
 /** Type-safe Share identifier (shorter nanoid for sharing URLs) */
 export type ShareId = Brand<'ShareId'>;
 
+/** Type-safe GuestGroup identifier (nanoid generated) */
+export type GuestGroupId = Brand<'GuestGroupId'>;
+
+/** Type-safe GuestGroupMember identifier (nanoid generated) */
+export type GuestGroupMemberId = Brand<'GuestGroupMemberId'>;
+
 // ============================================================================
 // Primitive Utility Types
 // ============================================================================
@@ -760,6 +766,115 @@ export interface Activity extends Identifiable, TripScoped {
 }
 
 /**
+ * One person inside a {@link GuestGroup}.
+ *
+ * @description A member is a *template* for a guest, not a guest. Importing a
+ * group copies the member's fields onto a brand-new {@link Person} scoped to the
+ * trip; nothing links the two afterwards, so editing either one leaves the other
+ * alone.
+ *
+ * Members are embedded in their group rather than given a table of their own:
+ * nothing references a member id, and a member is only ever read as part of its
+ * group.
+ *
+ * @see {@link GuestGroup} - Parent entity
+ * @see {@link Person} - What a member becomes once imported
+ *
+ * @example
+ * ```typescript
+ * const member: GuestGroupMember = {
+ *   id: 'member123' as GuestGroupMemberId,
+ *   name: 'Tom + Léa',
+ *   color: '#ef4444' as HexColor,
+ *   headcount: 2,
+ * };
+ * ```
+ */
+export interface GuestGroupMember extends Identifiable {
+  /** Unique member identifier */
+  readonly id: GuestGroupMemberId;
+
+  /**
+   * Display name, copied onto the guest on import.
+   * @example "Tom + Léa"
+   */
+  name: string;
+
+  /**
+   * Hex colour the imported guest starts with.
+   * @example "#ef4444"
+   */
+  color: HexColor;
+
+  /**
+   * Number of real people this member stands for — a couple tracked under one
+   * name is `2`. Carried onto the imported guest's own `headcount`.
+   *
+   * Defaults to 1 when unset. Read it through {@link getPersonHeadcount}, which
+   * takes anything carrying an optional headcount.
+   *
+   * @example 2
+   */
+  headcount?: number;
+
+  /**
+   * Free-text notes that travel with the person between trips: allergies,
+   * diet, accessibility. Copied onto the imported guest.
+   */
+  notes?: string;
+}
+
+/**
+ * A reusable roster of people that lives beside trips rather than inside one.
+ *
+ * @description Groups answer the "same family, every summer" case: build
+ * "Family" once, then import whoever is coming into each new trip instead of
+ * retyping them. A group is **global** — it belongs to the device (and, once
+ * signed in, to the account) rather than to a trip, which is why it is the only
+ * entity here that is neither {@link TripScoped} nor part of the trip document.
+ *
+ * Importing is a one-off copy: see {@link GuestGroupMember}.
+ *
+ * @see {@link GuestGroupMember} - The people in the group
+ *
+ * @example
+ * ```typescript
+ * const group: GuestGroup = {
+ *   id: 'group123' as GuestGroupId,
+ *   name: 'Family',
+ *   members: [tomAndLea, alice, camille],
+ *   createdAt: 1720000000000,
+ *   updatedAt: 1720000000000,
+ * };
+ * ```
+ */
+export interface GuestGroup extends Identifiable, WithTimestamps {
+  /** Unique group identifier */
+  readonly id: GuestGroupId;
+
+  /**
+   * Display name for the group.
+   * @example "Family"
+   */
+  name: string;
+
+  /**
+   * The people in the group, in the order the user arranged them.
+   * Bounded by {@link MAX_GUEST_GROUP_MEMBERS}.
+   */
+  members: GuestGroupMember[];
+
+  /**
+   * Server `guest_groups.id`, present once this device has uploaded the group.
+   *
+   * Load-bearing for deletion: a pull prunes a local group **only** when it
+   * carries this and the server no longer lists it. A group that has never been
+   * pushed is not evidence that anything was deleted, so it is never pruned.
+   */
+  remoteGroupId?: string;
+}
+
+/**
  * Application settings stored as a singleton record.
  *
  * @description Stores user preferences and application state.
@@ -869,6 +984,36 @@ export interface PersonFormData {
 }
 
 /**
+ * Data required to create or update a {@link GuestGroupMember}.
+ * Excludes the auto-generated id.
+ *
+ * @see {@link GuestGroupMember}
+ */
+export interface GuestGroupMemberFormData {
+  /** Display name of the member */
+  name: string;
+  /** Hex colour the imported guest starts with */
+  color: HexColor;
+  /** Number of real people this member stands for (defaults to 1) */
+  headcount?: number;
+  /** Optional notes (allergies, diet, etc.) */
+  notes?: string;
+}
+
+/**
+ * Data required to create or update a {@link GuestGroup}.
+ * Excludes auto-generated fields (id, timestamps, remoteGroupId).
+ *
+ * @see {@link GuestGroup}
+ */
+export interface GuestGroupFormData {
+  /** Display name of the group */
+  name: string;
+  /** The people in the group, in display order */
+  members: GuestGroupMemberFormData[];
+}
+
+/**
  * Data required to create or update a RoomAssignment.
  * Excludes auto-generated fields (id, tripId).
  *
@@ -970,7 +1115,7 @@ export type TripEntity = Room | Person | RoomAssignment | Transport | Activity;
 /**
  * Union of all entity types in the application.
  */
-export type AnyEntity = Trip | TripEntity | AppSettings;
+export type AnyEntity = Trip | TripEntity | GuestGroup | AppSettings;
 
 /**
  * Extracts the ID type from an entity type.
@@ -1095,6 +1240,16 @@ export function getPersonHeadcount(person: { readonly headcount?: number }): num
  * Beyond that the cap is meaningless and treated as "unlimited".
  */
 export const MAX_ACTIVITY_PARTICIPANTS = 999;
+
+/**
+ * Largest number of members a single {@link GuestGroup} may hold.
+ *
+ * A group is a family or a circle of friends, not a mailing list, and the whole
+ * record travels as one row — local, and as one `jsonb` column on the server.
+ * Bounding it here is what stops a group grown by a remote write from becoming
+ * a row nothing can render.
+ */
+export const MAX_GUEST_GROUP_MEMBERS = 50;
 
 /**
  * Default application settings.

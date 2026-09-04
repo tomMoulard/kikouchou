@@ -34,6 +34,12 @@ export {
   type RedeemInviteResult,
   type TripInvite,
 } from './invites';
+export { syncGuestGroups, type GuestGroupSyncResult } from './guest-groups';
+export {
+  GuestGroupSync,
+  useGuestGroupSync,
+  type GuestGroupSyncContextValue,
+} from './GuestGroupSync';
 export {
   claimParticipant,
   fetchClaimedParticipants,

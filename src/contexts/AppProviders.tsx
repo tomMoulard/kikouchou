@@ -15,6 +15,7 @@ import { TransportProvider } from '@/contexts/TransportContext';
 import { ActivityProvider } from '@/contexts/ActivityContext';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import { AccountTripSync } from '@/lib/sync/AccountTripSync';
+import { GuestGroupSync } from '@/lib/sync/GuestGroupSync';
 import { YjsTripSync } from '@/lib/yjs/YjsTripSync';
 
 // ============================================================================
@@ -43,6 +44,11 @@ interface AppProvidersProps {
  * 0b. AccountTripSync - Not a provider and not in the chain. Renders nothing;
  *    it reconciles this device's trips with the signed-in account's, so the
  *    same trips show up on the phone and the laptop.
+ * 0c. GuestGroupSync - Reconciles the account's guest groups. Above the trip
+ *    providers because groups are global: they outlive the selected trip and
+ *    are read on `/groups` where no trip is selected at all. Renders nothing
+ *    and does nothing without a session. Unlike AccountTripSync it wraps rather
+ *    than sits beside, because it publishes the context `useGuestGroups` reads.
  * 1. TripProvider - Manages current trip selection and trip list
  * 2. RoomProvider - Manages rooms for the current trip (depends on TripProvider)
  * 3. PersonProvider - Manages persons for the current trip (depends on TripProvider)
@@ -108,19 +114,29 @@ export function AppProviders({ children }: AppProvidersProps): ReactElement {
       */}
       <AccountTripSync />
 
-      <TripProvider>
-        <RoomProvider>
-          <PersonProvider>
-            <AssignmentProvider>
-              <TransportProvider>
-                <ActivityProvider>
-                  <YjsTripSync>{children}</YjsTripSync>
-                </ActivityProvider>
-              </TransportProvider>
-            </AssignmentProvider>
-          </PersonProvider>
-        </RoomProvider>
-      </TripProvider>
+      {/*
+        A wrapper rather than a sibling, unlike `AccountTripSync` directly above,
+        and for one reason: this one *publishes* a context. `useGuestGroups`
+        reads `syncNow` from it to push a group the moment it is created, and a
+        sibling could not hand that down — every write would then wait for the
+        next sign-in or reconnection to leave the device. It still renders
+        nothing and still reads no trip context.
+      */}
+      <GuestGroupSync>
+        <TripProvider>
+          <RoomProvider>
+            <PersonProvider>
+              <AssignmentProvider>
+                <TransportProvider>
+                  <ActivityProvider>
+                    <YjsTripSync>{children}</YjsTripSync>
+                  </ActivityProvider>
+                </TransportProvider>
+              </AssignmentProvider>
+            </PersonProvider>
+          </RoomProvider>
+        </TripProvider>
+      </GuestGroupSync>
     </AuthProvider>
   );
 }

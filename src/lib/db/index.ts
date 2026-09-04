@@ -30,6 +30,8 @@ export {
   createRoomAssignmentId,
   createTransportId,
   createActivityId,
+  createGuestGroupId,
+  createGuestGroupMemberId,
   createShareId,
   generateId,
   // Timestamp utilities
@@ -153,6 +155,19 @@ export {
   deleteActivityWithOwnershipCheck,
 } from './repositories/activity-repository';
 
+// Guest group repository (global — not trip-scoped)
+export {
+  createGuestGroup,
+  getAllGuestGroups,
+  getGuestGroupById,
+  updateGuestGroup,
+  deleteGuestGroup,
+  // Trip integration
+  importGuestGroupMembers,
+  createGuestGroupFromPersons,
+} from './repositories/guest-group-repository';
+export type { ImportGuestGroupResult } from './repositories/guest-group-repository';
+
 // Settings repository
 export {
   getSettings,
@@ -173,6 +188,7 @@ export {
   sanitizeTripData,
   sanitizeRoomData,
   sanitizePersonData,
+  sanitizeGuestGroupData,
   sanitizeTransportData,
   sanitizeActivityData,
   normalizeMaxParticipants,
