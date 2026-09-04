@@ -12,7 +12,11 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { clearIndexedDB } from './support/storage';
-import { waitForActivatedServiceWorker } from './support/service-worker';
+import {
+  waitForActivatedServiceWorker,
+  waitForPrecachedAppShell,
+} from './support/service-worker';
+import { waitForRoute } from './support/routes';
 import { stubExternalMapServices } from './support/external-services';
 
 // ============================================================================
@@ -148,6 +152,43 @@ async function isUrlCached(page: Page, urlPattern: string): Promise<boolean> {
 
     return false;
   }, urlPattern);
+}
+
+/**
+ * The URLs workbox was told to precache, read back out of the built worker.
+ *
+ * `precacheAndRoute([...])` is where `self.__WB_MANIFEST` ends up after the
+ * build substitutes it, so this is the build's own list of what must be
+ * available offline — not a number written down in a test and left to rot. The
+ * keys are unquoted (`{url:"index.html",revision:"..."}`), which is why this is
+ * a regex over the source rather than a `JSON.parse`.
+ *
+ * @param serviceWorkerSource - The text of the built `sw.js`
+ * @returns Every precached URL, relative to the app's base
+ */
+function parsePrecacheManifest(serviceWorkerSource: string): string[] {
+  return [...serviceWorkerSource.matchAll(/\{url:"([^"]+)",revision:/g)].map(
+    (match) => match[1] ?? '',
+  );
+}
+
+/**
+ * Every URL currently held in any cache, reduced to its pathname.
+ *
+ * Revisioned precache entries are stored with a `__WB_REVISION__` query
+ * parameter, so comparing full URLs against the manifest would never match.
+ *
+ * @param page - Playwright page object
+ * @returns The set of cached pathnames
+ */
+async function getCachedPathnames(page: Page): Promise<Set<string>> {
+  const { cacheEntries } = await getCacheInfo(page);
+
+  return new Set(
+    Object.values(cacheEntries)
+      .flat()
+      .map((url) => new URL(url).pathname),
+  );
 }
 
 /**
@@ -299,6 +340,16 @@ test.describe('Service Worker Registration', () => {
 // Test Suite: Offline Capability
 // ============================================================================
 
+/**
+ * `expect(page.locator('body')).toBeVisible()` appeared five times in this
+ * suite and asserted nothing anywhere: `<body>` exists and is visible on
+ * Chrome's own `ERR_INTERNET_DISCONNECTED` interstitial, on a blank SPA shell
+ * whose scripts all 404'd, and on a crashed error boundary. Each of those is
+ * exactly the failure these tests were written to catch.
+ *
+ * Every offline assertion below names something the app itself renders, so a
+ * page that boots but cannot reach its route fails.
+ */
 test.describe('Offline Capability', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate and wait for SW to be fully active
@@ -308,15 +359,17 @@ test.describe('Offline Capability', () => {
     // Ensure service worker is activated
     await waitForActivatedServiceWorker(page);
 
-    // Give time for precaching to complete
-    await page.waitForTimeout(2000);
+    // Precaching finished, rather than "two seconds have passed". `index.html`
+    // in a cache is what makes the offline reload below possible at all, and a
+    // fixed sleep is a race against a ~2.5 MB precache on a cold machine.
+    await waitForPrecachedAppShell(page);
   });
 
   test('app shell loads when offline', async ({ page, context }) => {
     // Verify we're online and the app works
     await page.goto('/trips');
     await page.waitForLoadState('load');
-    await expect(page.locator('body')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'My trips', level: 1 })).toBeVisible();
 
     // Go offline
     await context.setOffline(true);
@@ -324,23 +377,22 @@ test.describe('Offline Capability', () => {
     // Reload the page
     await page.reload({ waitUntil: 'domcontentloaded' });
 
-    // The app shell should still render from cache
-    // Check for main app container or navigation
-    await expect(page.locator('body')).toBeVisible();
+    /**
+     * The route rendered, from cache, with the network off.
+     *
+     * Three separate things have to have worked for this heading to exist: the
+     * worker answered the navigation from the precached `index.html`, the app's
+     * entry bundle came out of the precache, and the lazily-imported `/trips`
+     * chunk did too. The old `body.length > 100` check needed none of them —
+     * an error boundary's apology is over a hundred characters, and so is
+     * Chrome's offline interstitial.
+     */
+    await waitForRoute(page);
+    await expect(page.getByRole('heading', { name: 'My trips', level: 1 })).toBeVisible();
 
-    // Check for the main app content (not an error page)
-    // The app should show either the trip list or empty state
-    const hasContent = await page.evaluate(() => {
-      const body = document.body.textContent ?? '';
-      // Should NOT show a network error page
-      const isErrorPage =
-        body.includes('ERR_INTERNET_DISCONNECTED') ||
-        body.includes('No internet') ||
-        body.includes('DNS_PROBE');
-      return !isErrorPage && body.length > 100;
-    });
-
-    expect(hasContent).toBe(true);
+    // And the shell around it, not just the route: the bottom navigation is
+    // rendered by `Layout`, so this fails if the app mounted a bare fallback.
+    await expect(page.getByRole('navigation').first()).toBeAttached();
 
     // Restore online status
     await context.setOffline(false);
@@ -350,21 +402,24 @@ test.describe('Offline Capability', () => {
     // Visit multiple pages to cache them
     await page.goto('/trips');
     await page.waitForLoadState('load');
+    await waitForRoute(page);
     await page.goto('/settings');
     await page.waitForLoadState('load');
-
-    // Wait for caching
-    await page.waitForTimeout(1000);
+    await waitForRoute(page);
 
     // Go offline
     await context.setOffline(true);
 
-    // Navigate between cached pages
+    // Navigate between cached pages. Each assertion names that page's own
+    // heading, so serving the right document with the wrong route — or the
+    // shell with no route at all — fails.
     await page.goto('/trips');
-    await expect(page.locator('body')).toBeVisible();
+    await waitForRoute(page);
+    await expect(page.getByRole('heading', { name: 'My trips', level: 1 })).toBeVisible();
 
     await page.goto('/settings');
-    await expect(page.locator('body')).toBeVisible();
+    await waitForRoute(page);
+    await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible();
 
     // Restore online
     await context.setOffline(false);
@@ -386,8 +441,8 @@ test.describe('Offline Capability', () => {
     // Verify trip is visible (use first() to handle multiple matches)
     await expect(page.getByText('PWA Test Trip').first()).toBeVisible();
 
-    // Wait for SW to cache everything
-    await page.waitForTimeout(2000);
+    // The app shell is in the precache, rather than "two seconds have passed".
+    await waitForPrecachedAppShell(page);
 
     // Go offline
     await context.setOffline(true);
@@ -402,8 +457,24 @@ test.describe('Offline Capability', () => {
     // Navigate to the trip's calendar (should work from cache)
     await page.goto(`/trips/${tripId}/calendar`);
 
-    // Page should load from cache
-    await expect(page.locator('body')).toBeVisible();
+    /**
+     * The calendar route itself came out of the cache.
+     *
+     * This is the assertion the test was named for and the one it did not
+     * make: `expect(page.locator('body')).toBeVisible()` passes on a blank
+     * document. The calendar is one of the heaviest lazy chunks in the app, so
+     * if the precache does not hold it, this is where that shows up.
+     *
+     * The trip name is the second half, and it is not decoration.
+     * `CalendarPage` renders the same `Calendar` heading in its loading, error
+     * and no-trip branches; only the loaded branch puts `currentTrip.name`
+     * underneath it. Asserting the heading alone would pass on the error state.
+     */
+    await waitForRoute(page);
+    await expect(
+      page.getByRole('heading', { name: 'Calendar', level: 1 }),
+    ).toBeVisible();
+    await expect(page.getByText('PWA Test Trip').first()).toBeVisible();
 
     // Restore online
     await context.setOffline(false);
@@ -416,21 +487,31 @@ test.describe('Offline Capability', () => {
     // Go offline before visiting a new route
     await context.setOffline(true);
 
-    // Try to navigate to a route that might not be precached
-    // The behavior depends on the workbox configuration
+    // A URL that was never visited, for a trip that does not exist. The
+    // `navigateFallback` NavigationRoute has to answer it from the precached
+    // `index.html`, and the app has to boot and route on it.
     await page.goto('/trips/nonexistent-trip-id/calendar');
 
-    // Either the app shows a fallback or the SW serves a cached response
-    // We just verify no browser network error is shown
-    const pageContent = await page.content();
-    const isNetworkError =
-      pageContent.includes('ERR_INTERNET_DISCONNECTED') ||
-      pageContent.includes('DNS_PROBE') ||
-      pageContent.includes('net::');
-
-    // With proper SW setup, we should not see raw network errors
-    // The app should handle this gracefully
-    expect(isNetworkError).toBe(false);
+    /**
+     * The app rendered its own answer, not the browser's.
+     *
+     * String-sniffing `page.content()` for `net::` was the wrong instrument
+     * twice over. Chrome's error interstitial lives in a different document,
+     * so those strings would not have been in `page.content()` even when the
+     * navigation did fail — and when a `goto` genuinely cannot be served,
+     * Playwright throws before the assertion is ever reached. The check could
+     * not distinguish success from either failure mode.
+     *
+     * What actually separates "the service worker served the shell" from "the
+     * navigation died" is whether the app is on screen: React mounted, the
+     * router resolved this path, and `CalendarPage` reached its no-trip branch
+     * for an id that matches nothing.
+     */
+    await waitForRoute(page);
+    await expect(
+      page.getByRole('heading', { name: 'Calendar', level: 1 }),
+    ).toBeVisible();
+    await expect(page.getByRole('navigation').first()).toBeAttached();
 
     // Restore online
     await context.setOffline(false);
@@ -533,6 +614,11 @@ test.describe('Manifest Validation', () => {
     const response = await page.request.get('/manifest.webmanifest');
     const manifest = await response.json();
 
+    // A `for` loop over an empty array asserts nothing. An icons list that
+    // vanished is precisely the regression that makes an app uninstallable, and
+    // it would have walked straight through this test.
+    expect(manifest.icons.length).toBeGreaterThan(0);
+
     // Verify each icon URL is accessible
     for (const icon of manifest.icons) {
       const iconUrl = icon.src.startsWith('http')
@@ -540,7 +626,15 @@ test.describe('Manifest Validation', () => {
         : new URL(icon.src, baseURL).href;
 
       const iconResponse = await page.request.get(iconUrl);
-      expect(iconResponse.ok()).toBe(true);
+      expect(iconResponse.ok(), `${iconUrl} should be served`).toBe(true);
+
+      // 200 is not enough on its own: `vite preview` answers an unknown path
+      // with the SPA `index.html`, so a renamed icon returns a perfectly OK
+      // HTML document and passes an `ok()`-only check.
+      expect(
+        iconResponse.headers()['content-type'],
+        `${iconUrl} should be served as an image`,
+      ).toContain('image/');
     }
   });
 });
@@ -550,27 +644,47 @@ test.describe('Manifest Validation', () => {
 // ============================================================================
 
 test.describe('App Updates', () => {
-  test('VitePWA is configured for auto-update', async ({ page }) => {
+  test('the built worker implements the autoUpdate contract', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
 
     await waitForActivatedServiceWorker(page);
 
-    // With autoUpdate, VitePWA checks for updates automatically
-    // We can verify the SW is registered with the correct update behavior
-    const updateInfo = await page.evaluate(async () => {
-      const registration = await navigator.serviceWorker.ready;
+    /**
+     * `registerType: 'autoUpdate'` is two calls in the generated worker, and
+     * both have to be there.
+     *
+     * `skipWaiting()` stops a new build from sitting in `waiting` until every
+     * tab on the origin has closed — which, for an installed PWA, can be
+     * never. `clientsClaim()` is what lets the worker take over pages that
+     * were already open, and it is the event `virtual:pwa-register` reloads
+     * on. Switch `vite.config.ts` to `registerType: 'prompt'` and both
+     * disappear from `sw.js` while every other test in this file still passes.
+     *
+     * Read out of the served worker rather than off disk: what the browser
+     * fetched is the artefact under test.
+     */
+    const workerSource = await (await page.request.get('/sw.js')).text();
 
-      return {
-        hasActive: !!registration.active,
-        hasWaiting: !!registration.waiting,
-        hasInstalling: !!registration.installing,
-        updateViaCache: registration.updateViaCache,
-      };
-    });
+    expect(workerSource).toContain('skipWaiting');
+    expect(workerSource).toContain('clientsClaim');
 
-    expect(updateInfo).not.toBeNull();
-    expect(updateInfo?.hasActive).toBe(true);
+    /**
+     * And `clientsClaim()` observably worked: this page loaded *before* the
+     * worker existed, and is nonetheless controlled by it.
+     *
+     * Without `clientsClaim` a freshly installed worker controls nothing until
+     * the next navigation, so `controller` stays null for the whole of this
+     * page's life — the load that installed the worker gets none of its
+     * benefit. That is the difference between the app being offline-capable
+     * now and being offline-capable next time.
+     */
+    await expect
+      .poll(
+        () => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL ?? null),
+        { timeout: SW_READY_TIMEOUT },
+      )
+      .toMatch(/sw\.js$/);
   });
 
   test('service worker can check for updates', async ({ page }) => {
@@ -584,13 +698,22 @@ test.describe('App Updates', () => {
     const updateResult = await page.evaluate(async () => {
       try {
         const registrations = await navigator.serviceWorker.getRegistrations();
-        const registration = registrations[0];
-        if (!registration) return { success: false, error: 'No registration' };
+        // The activated one, not `registrations[0]`: an unregistered-but-not-yet
+        // collected registration can still be in this list, and calling
+        // `update()` on it rejects. Same trap as 'service worker has correct
+        // scope' above.
+        const registration = registrations.find((candidate) => candidate.active);
+        if (!registration) return { success: false, error: 'No active registration' };
         await registration.update();
         return {
           success: true,
+          // The check found nothing new — there is nothing new to find, the
+          // preview server is serving the same build. A worker stuck in
+          // `installing` or parked in `waiting` after an update check against
+          // an unchanged origin means `skipWaiting` is not doing its job.
           hasWaiting: !!registration.waiting,
           hasInstalling: !!registration.installing,
+          stillActive: registration.active?.state ?? null,
         };
       } catch (error) {
         return {
@@ -600,42 +723,109 @@ test.describe('App Updates', () => {
       }
     });
 
-    expect(updateResult.success).toBe(true);
+    expect(updateResult.success, updateResult.error).toBe(true);
+    expect(updateResult.hasWaiting).toBe(false);
+    expect(updateResult.stillActive).toBe('activated');
   });
 
-  test('controllerchange event fires on SW update', async ({ page }) => {
+  /**
+   * The test that used to sit here was called "controllerchange event fires on
+   * SW update" and never fired one. It asserted that
+   * `'controller' in navigator.serviceWorker` — a property of Chromium, true on
+   * a page with no service worker at all — and that adding and removing an
+   * event listener did not throw, which is true of every EventTarget in the
+   * platform. No update was triggered and no event was observed, so nothing
+   * about this app could have failed it.
+   *
+   * What it was reaching for is asserted for real above: `clientsClaim()` is in
+   * the built worker, and `navigator.serviceWorker.controller` proves it ran.
+   */
+  test('a new build reloads the session it finds already running', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('load');
+    await waitForActivatedServiceWorker(page);
 
-    // Set up a listener for controllerchange
-    // This is triggered when a new SW takes control
-    const hasControllerChangeSupport = await page.evaluate(() => {
-      return 'serviceWorker' in navigator && 'controller' in navigator.serviceWorker;
+    await expect
+      .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null), {
+        timeout: SW_READY_TIMEOUT,
+      })
+      .toBe(true);
+
+    /**
+     * A marker that only survives as long as this document does.
+     *
+     * The whole point of `autoUpdate` is that the running page does not stay on
+     * the build it booted with, so the observable is a reload — and a reload is
+     * exactly what a value hung off `window` cannot survive.
+     */
+    await page.evaluate(() => {
+      (window as unknown as Record<string, string>).__unit7Session = 'pre-update';
     });
 
-    expect(hasControllerChangeSupport).toBe(true);
-
-    // Verify the event listener can be attached
-    const canListenForChanges = await page.evaluate(() => {
-      return new Promise<boolean>((resolve) => {
-        if (!('serviceWorker' in navigator)) {
-          resolve(false);
-          return;
-        }
-
-        // Just verify we can add the listener
-        try {
-          const handler = () => {};
-          navigator.serviceWorker.addEventListener('controllerchange', handler);
-          navigator.serviceWorker.removeEventListener('controllerchange', handler);
-          resolve(true);
-        } catch {
-          resolve(false);
-        }
+    /**
+     * Register a worker at a URL the current registration does not have.
+     *
+     * A plain re-register of `/sw.js` does nothing observable, which is how the
+     * first draft of this test failed: `unregister()` on a registration that
+     * still controls a client only sets its uninstalling flag, and the
+     * subsequent `register()` finds the same scope with a byte-identical script
+     * URL and resolves with the resurrected registration. No worker installs,
+     * no `controllerchange` fires. A distinct script URL in the same scope is
+     * what makes the browser fetch, install and activate a genuinely new
+     * worker — the same path a deploy takes.
+     *
+     * Not awaited, and wrapped: `lib/pwa/register` reloads the page the moment
+     * the new worker activates, so this call site can be torn down mid-flight.
+     * That reload is the assertion, not an accident.
+     */
+    await page
+      .evaluate(() => {
+        void navigator.serviceWorker.register('/sw.js?unit7-new-build=1');
+      })
+      .catch(() => {
+        // The document went away before the call returned. That is the
+        // behaviour under test; the poll below is what decides the verdict.
       });
-    });
 
-    expect(canListenForChanges).toBe(true);
+    /**
+     * The session reloaded onto the new worker.
+     *
+     * This is the half of `registerType: 'autoUpdate'` that
+     * `src/lib/pwa/register.ts` exists to supply, and the half its fileoverview
+     * records as a production bug when it was missing: "`skipWaiting` and
+     * `clientsClaim` mean the *next* navigation gets the new build; nothing
+     * reloads a session that never navigates". Delete the `registerSW` call
+     * there — or set `injectRegister` back to its default, which injects a bare
+     * `navigator.serviceWorker.register` and nothing else — and the marker
+     * below is still sitting on `window` when this times out.
+     *
+     * `'navigating'` keeps a destroyed execution context from being read as a
+     * pass: only a document that ran fresh JavaScript reports `'gone'`.
+     */
+    await expect
+      .poll(
+        async () => {
+          try {
+            return await page.evaluate(
+              () =>
+                (window as unknown as Record<string, string | undefined>)
+                  .__unit7Session ?? 'gone',
+            );
+          } catch {
+            return 'navigating';
+          }
+        },
+        { timeout: SW_READY_TIMEOUT },
+      )
+      .toBe('gone');
+
+    // And what it reloaded onto is this app's worker, in control.
+    await expect
+      .poll(
+        () => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL ?? null),
+        { timeout: SW_READY_TIMEOUT },
+      )
+      .toContain('sw.js');
   });
 });
 
@@ -651,8 +841,10 @@ test.describe('Precaching', () => {
     // Wait for SW and precaching to complete
     await waitForActivatedServiceWorker(page);
 
-    // Additional wait for precaching
-    await page.waitForTimeout(3000);
+    // Precaching finished, rather than "three seconds have passed". Every test
+    // in this suite reads the cache exactly once, so a fixed sleep that came up
+    // short would report a half-filled precache as the final state.
+    await waitForPrecachedAppShell(page);
   });
 
   test('workbox cache is created', async ({ page }) => {
@@ -672,27 +864,25 @@ test.describe('Precaching', () => {
     expect(hasWorkboxCache).toBe(true);
   });
 
-  test('HTML files are precached', async ({ page }) => {
-    const cacheInfo = await getCacheInfo(page);
+  test('the navigation fallback document is precached', async ({ page }) => {
+    /**
+     * `index.html`, by name.
+     *
+     * The previous version of this test accepted any cached URL matching
+     * `endsWith('.html') || endsWith('/') || includes('index')`, and only the
+     * third clause ever fired — on `assets/index-<hash>.js`. Revisioned
+     * precache entries are stored with a `?__WB_REVISION__=` query, so the
+     * cached app shell does not end in `.html` and never satisfied the first
+     * two. The test asserting that HTML is precached was passing because a
+     * JavaScript chunk happens to be called "index".
+     *
+     * This one entry is what the `navigateFallback` route serves for every
+     * offline navigation, so if it is missing the whole offline story is
+     * missing with it.
+     */
+    const cached = await getCachedPathnames(page);
 
-    // Find entries that look like HTML or the root path
-    let hasHtmlCached = false;
-
-    for (const entries of Object.values(cacheInfo.cacheEntries)) {
-      for (const url of entries) {
-        if (
-          url.endsWith('.html') ||
-          url.endsWith('/') ||
-          url.includes('index')
-        ) {
-          hasHtmlCached = true;
-          break;
-        }
-      }
-      if (hasHtmlCached) break;
-    }
-
-    expect(hasHtmlCached).toBe(true);
+    expect([...cached]).toContain('/index.html');
   });
 
   test('JavaScript bundles are precached', async ({ page }) => {
@@ -725,44 +915,71 @@ test.describe('Precaching', () => {
     expect(cachedTypes.css).toBe(true);
   });
 
-  test('precache manifest contains expected number of entries', async ({ page }) => {
-    const cacheInfo = await getCacheInfo(page);
+  test('every entry in the build manifest is actually precached', async ({ page }) => {
+    /**
+     * The build's own list, compared against what the browser holds.
+     *
+     * `expect(totalEntries).toBeGreaterThanOrEqual(3)` was the old assertion,
+     * and three is a number no plausible regression can go below: an app that
+     * precached its HTML, one chunk and nothing else — no router, no route
+     * chunks, no CSS — passed it, and so does one whose `globPatterns` silently
+     * stopped matching `assets/`. Nothing in the suite would have noticed.
+     *
+     * `precacheAndRoute([...])` in the served worker is where
+     * `self.__WB_MANIFEST` ends up, so this compares the shipped precache
+     * manifest — 87 entries at the time of writing, and never a number written
+     * down here — against the cache's actual contents. Drop an entry from the
+     * install and this names it.
+     */
+    const workerSource = await (await page.request.get('/sw.js')).text();
+    const manifest = parsePrecacheManifest(workerSource);
 
-    // Count total cached entries
-    const totalEntries = Object.values(cacheInfo.cacheEntries).reduce(
-      (sum, entries) => sum + entries.length,
-      0,
-    );
+    // A worker whose manifest failed to parse would make the loop below vacuous
+    // in exactly the way this test exists to stop.
+    expect(manifest.length).toBeGreaterThan(20);
+    expect(manifest).toContain('index.html');
 
-    // A typical Vite + React app should have several cached assets
-    // At minimum: index.html, main JS bundle, CSS, possibly vendor chunks
-    expect(totalEntries).toBeGreaterThanOrEqual(3);
+    /**
+     * Polled rather than read once: `waitForPrecachedAppShell` proves the
+     * install started, not that all ~2.5 MB of it landed.
+     */
+    await expect
+      .poll(
+        async () => {
+          const cached = await getCachedPathnames(page);
+          return manifest.filter((url) => !cached.has(`/${url}`));
+        },
+        { timeout: SW_READY_TIMEOUT },
+      )
+      .toEqual([]);
   });
 
-  test('cache storage quota is reasonable', async ({ page }) => {
+  test('cache storage reports the precache it just wrote', async ({ page }) => {
+    /**
+     * Unconditional.
+     *
+     * This assertion used to live inside `if (storageInfo) { … }`, so a
+     * `navigator.storage.estimate` that went missing turned the test into a
+     * no-op that still reported green — the one outcome an availability check
+     * must not produce. Chromium has had the API since 2016; if it is gone,
+     * that is a finding, not a reason to skip.
+     */
     const storageInfo = await page.evaluate(async () => {
       if (!('storage' in navigator) || !('estimate' in navigator.storage)) {
         return null;
       }
 
       const estimate = await navigator.storage.estimate();
-      return {
-        usage: estimate.usage ?? 0,
-        quota: estimate.quota ?? 0,
-        usagePercentage:
-          estimate.quota && estimate.quota > 0
-            ? ((estimate.usage ?? 0) / estimate.quota) * 100
-            : 0,
-      };
+      return { usage: estimate.usage ?? 0, quota: estimate.quota ?? 0 };
     });
 
-    if (storageInfo) {
-      // Cache usage should be reasonable (less than 10% of quota for a typical PWA)
-      expect(storageInfo.usagePercentage).toBeLessThan(10);
+    expect(storageInfo, 'navigator.storage.estimate() should exist').not.toBeNull();
 
-      // Usage should be positive if we have cached content
-      expect(storageInfo.usage).toBeGreaterThan(0);
-    }
+    // The precache is ~2.5 MB, so "something was written" is a floor this can
+    // sit well above without becoming brittle: 100 KB is under any single
+    // vendor chunk the app ships.
+    expect(storageInfo?.usage ?? 0).toBeGreaterThan(100_000);
+    expect(storageInfo?.quota ?? 0).toBeGreaterThan(storageInfo?.usage ?? 0);
   });
 });
 
@@ -787,7 +1004,7 @@ test.describe('PWA Installation Readiness', () => {
         hasServiceWorker: 'serviceWorker' in navigator,
         isSecureContext: window.isSecureContext,
         hasManifestLink: !!document.querySelector('link[rel="manifest"]'),
-        hasFetchHandler: false,
+        hasActiveWorker: false,
         swRegistered: false,
       };
 
@@ -795,20 +1012,28 @@ test.describe('PWA Installation Readiness', () => {
         const registrations = await navigator.serviceWorker.getRegistrations();
         checks.swRegistered = registrations.length > 0;
 
-        // Check if SW is active (has fetch handler)
-        if (registrations[0]?.active) {
-          checks.hasFetchHandler = true;
-        }
+        // `.some()`, not `registrations[0]`: an unregistered-but-not-yet
+        // collected registration can still be in this list, in any position.
+        checks.hasActiveWorker = registrations.some(
+          (registration) => registration.active !== null,
+        );
       }
 
       return checks;
     });
 
     expect(installabilityChecks.hasServiceWorker).toBe(true);
-    // Note: isSecureContext might be false on localhost without HTTPS
-    // but Chrome allows PWA installation on localhost for development
     expect(installabilityChecks.hasManifestLink).toBe(true);
     expect(installabilityChecks.swRegistered).toBe(true);
+
+    // Collected but never asserted, which made it decoration. `127.0.0.1` is a
+    // secure context by the same rule that makes `localhost` one, so this is
+    // true here — and it is the criterion that stops the whole install prompt
+    // if the app is ever served over plain HTTP from a real host.
+    expect(installabilityChecks.isSecureContext).toBe(true);
+
+    // The same: gathered as `hasFetchHandler` and then dropped on the floor.
+    expect(installabilityChecks.hasActiveWorker).toBe(true);
   });
 
   test('manifest link is present in document head', async ({ page }) => {

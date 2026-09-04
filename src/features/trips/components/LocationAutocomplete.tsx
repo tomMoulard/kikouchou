@@ -36,7 +36,7 @@ import {
 import {
   Popover,
   PopoverContent,
-  PopoverTrigger,
+  PopoverAnchor,
 } from '@/components/ui/popover';
 import { LocationMapConfirm } from '@/components/shared/LocationMapConfirm';
 import { cn } from '@/lib/utils';
@@ -395,7 +395,27 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
   return (
     <div className="space-y-2">
       <Popover open={isOpen} onOpenChange={handleOpenChange}>
-        <PopoverTrigger asChild>
+        {/*
+          `PopoverAnchor`, not a trigger.
+
+          `PopoverTrigger asChild` merges a button's semantics onto whatever it
+          wraps, and what it wrapped here is a plain `<div>`. The rendered
+          markup was `<div class="relative" type="button" aria-haspopup="dialog"
+          aria-expanded="false" aria-controls="...">`, which axe reports as
+          `aria-allowed-attr` (critical): a div with no role may carry none of
+          those. It also contradicted the control inside it — the `Input` is the
+          combobox, announcing `aria-haspopup="listbox"` with its own
+          `aria-expanded` — so a screen reader was told about a dialog popup
+          that does not exist, wrapping a listbox that does.
+
+          Nothing here ever wanted trigger behaviour: the list opens from typing
+          (`isOpen` is derived from the suggestions), never from clicking the
+          box. `PopoverAnchor` is the primitive for that. It adds no semantics
+          at all, and it is still what Radix measures for
+          `--radix-popover-trigger-width`, so the dropdown keeps matching the
+          input's width.
+        */}
+        <PopoverAnchor asChild>
           <div className="relative">
             <Input
               ref={inputRef}
@@ -419,7 +439,7 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
               />
             )}
           </div>
-        </PopoverTrigger>
+        </PopoverAnchor>
         <PopoverContent
           className="w-[--radix-popover-trigger-width] p-0"
           align="start"
