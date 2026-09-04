@@ -47,6 +47,23 @@ declare global {
 }
 
 /**
+ * The route a browser leaves for installing a web app when it never fires
+ * `beforeinstallprompt` — which is every browser that is not Chromium.
+ *
+ * One member per set of instructions rather than one per browser: every engine
+ * on iOS installs through the same share sheet, and Firefox's three desktop
+ * platforms are three genuinely different answers, one of which is "you
+ * cannot".
+ */
+export type ManualInstallPlatform =
+  | 'ios'
+  | 'firefoxAndroid'
+  | 'firefoxWindows'
+  | 'firefoxLinux'
+  | 'firefoxMac'
+  | 'generic';
+
+/**
  * Return type for the useInstallPrompt hook.
  */
 export interface UseInstallPromptResult {
@@ -66,6 +83,23 @@ export interface UseInstallPromptResult {
   readonly isInstalling: boolean;
 
   /**
+   * Whether this visit carries an explicit install request — the `?install=1`
+   * the landing page's "Install on your phone" CTA links to.
+   *
+   * True means the visitor has already said yes, so the UI may skip the
+   * heuristics it applies to an unsolicited offer. It is deliberately not
+   * persisted: the parameter is spent on arrival, and the next visit without
+   * one is an ordinary visit.
+   */
+  readonly installIntent: boolean;
+
+  /**
+   * Which hand-written steps to show when there is no captured prompt to fire.
+   * Fixed for the life of the page.
+   */
+  readonly manualInstallPlatform: ManualInstallPlatform;
+
+  /**
    * Triggers the native install prompt.
    * @returns Promise resolving to true if installed, false if dismissed or failed
    */
@@ -79,7 +113,14 @@ export interface UseInstallPromptResult {
 /**
  * Media query for detecting standalone display mode (installed PWA).
  */
-const STANDALONE_MEDIA_QUERY = '(display-mode: standalone)';
+const STANDALONE_MEDIA_QUERY = '(display-mode: standalone)',
+
+/**
+ * Query parameter carrying an install request from the landing page, and the
+ * one value that counts as one: `https://app.kikouchou.app/?install=1`.
+ */
+ INSTALL_PARAM = 'install',
+ INSTALL_PARAM_VALUE = '1';
 
 // ============================================================================
 // Helper Functions
@@ -106,6 +147,91 @@ function isRunningStandalone(): boolean {
   }
 
   return false;
+}
+
+/**
+ * Reads the install request off the current URL.
+ *
+ * Called once per mount, before {@link spendInstallRequest} takes the parameter
+ * back out — anything that reads `location.search` afterwards sees a clean URL,
+ * which is the point.
+ *
+ * @returns True if this visit asked for the install UI
+ */
+function readInstallRequest(): boolean {
+  if (typeof window === 'undefined') {return false;}
+
+  return (
+    new URLSearchParams(window.location.search).get(INSTALL_PARAM) ===
+    INSTALL_PARAM_VALUE
+  );
+}
+
+/**
+ * Takes the install parameter out of the address bar.
+ *
+ * A request is for one arrival. Left in place it survives a reload, a bookmark
+ * and a link the visitor forwards to somebody else, and each of those would
+ * bypass the dismissal window again.
+ *
+ * Two details are load-bearing. The hash is carried across because a share link
+ * keeps the trip's encryption key there, and the existing `history.state` is
+ * passed back because React Router keeps its own entry key and index in it and
+ * reads them on `popstate`; replacing the entry with a null state breaks the
+ * Back button. Any value of the parameter is removed, not only the one that
+ * counts as a request — it is this app's parameter either way.
+ */
+function spendInstallRequest(): void {
+  if (typeof window === 'undefined') {return;}
+
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has(INSTALL_PARAM)) {return;}
+
+  url.searchParams.delete(INSTALL_PARAM);
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
+/**
+ * Works out which hand-written install route this browser leaves.
+ *
+ * Feature detection wherever there is a feature to detect, user agent only
+ * where there is not — and here there is not: Firefox exposes nothing that says
+ * "I can pin a tab to the taskbar" (`InstallTrigger` was removed in 128), and
+ * iPadOS deliberately claims to be a Mac.
+ *
+ * @returns The platform whose steps apply
+ */
+function detectManualInstallPlatform(): ManualInstallPlatform {
+  if (typeof navigator === 'undefined') {return 'generic';}
+
+  const ua = navigator.userAgent,
+
+  // iPadOS 13+ sends a desktop Safari user agent. The touch points are what is
+  // left to tell an iPad from a Mac.
+   isIOS =
+    /iPad|iPhone|iPod/.test(ua) ||
+    (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+
+  // Every engine on iOS is WebKit, so the platform decides before the browser
+  // does: Chrome and Firefox there install through the same share sheet, and
+  // neither has the menu item their desktop builds do.
+  if (isIOS) {return 'ios';}
+
+  if (/Firefox\//.test(ua)) {
+    if (/Android/.test(ua)) {return 'firefoxAndroid';}
+    // Taskbar tabs ship on Windows (142+), sit behind
+    // `browser.taskbarTabs.enabled` on Linux, and do not exist on macOS — so
+    // that last one is told the truth rather than given a step to hunt for.
+    if (/Windows/.test(ua)) {return 'firefoxWindows';}
+    if (/Macintosh|Mac OS X/.test(ua)) {return 'firefoxMac';}
+    if (/X11|Linux/.test(ua)) {return 'firefoxLinux';}
+  }
+
+  return 'generic';
 }
 
 /**
@@ -144,6 +270,8 @@ async function checkInstalledRelatedApps(): Promise<boolean> {
  * - Captures the beforeinstallprompt event from the window
  * - Detects if the app is already installed
  * - Provides an install function that triggers the native prompt
+ * - Reads and then spends an `?install=1` request from the landing page
+ * - Names the browser's own install route for when there is no prompt to fire
  * - Properly cleans up event listeners on unmount
  * - Uses isMountedRef pattern for async safety
  *
@@ -188,6 +316,24 @@ export function useInstallPrompt(): UseInstallPromptResult {
    */
    [isInstalling, setIsInstalling] = useState(false),
 
+  /**
+   * Whether this visit carries an install request.
+   *
+   * Read on the first render rather than in the effect that spends it, because
+   * by the time any effect has run the parameter is gone from the URL — and
+   * read into state rather than recomputed, so the answer cannot change under
+   * the components rendering from it.
+   */
+   [installIntent] = useState<boolean>(readInstallRequest),
+
+  /**
+   * The browser's own install route, for when no prompt is ever captured.
+   * Constant for the life of the page: the user agent does not change.
+   */
+   [manualInstallPlatform] = useState<ManualInstallPlatform>(
+    detectManualInstallPlatform,
+   ),
+
   // ============================================================================
   // Refs
   // ============================================================================
@@ -219,6 +365,17 @@ export function useInstallPrompt(): UseInstallPromptResult {
     return () => {
       isMountedRef.current = false;
     };
+  }, []);
+
+  /**
+   * Spend the install request by taking the parameter out of the URL.
+   *
+   * Separate from the listener effect below, and unconditional: the parameter
+   * is removed whatever its value, while only `installIntent` above decides
+   * whether it asked for anything.
+   */
+  useEffect(() => {
+    spendInstallRequest();
   }, []);
 
   /**
@@ -362,6 +519,8 @@ export function useInstallPrompt(): UseInstallPromptResult {
     canInstall,
     isInstalled,
     isInstalling,
+    installIntent,
+    manualInstallPlatform,
     install,
   };
 }

@@ -925,6 +925,16 @@
     "installSuccess": "Application installée avec succès !",
     "installFailed": "L'installation a échoué. Veuillez réessayer.",
     "installPromptRegion": "Invite d'installation de l'application",
+    "manualInstall": {
+      "title": "Ajoutez Kikouchou à votre appareil",
+      "ios": "Touchez le bouton Partager, puis « Sur l'écran d'accueil », puis « Ajouter ».",
+      "firefoxAndroid": "Ouvrez le menu ⋮ de Firefox et touchez « Installer » — les anciennes versions l'appellent « Ajouter l'application à l'écran d'accueil ».",
+      "firefoxWindows": "Cliquez sur « Ajouter l'onglet à la barre des tâches » dans la barre d'adresse (Firefox 142 et versions ultérieures). L'application obtient sa propre fenêtre, barre d'outils comprise.",
+      "firefoxLinux": "Passez browser.taskbarTabs.enabled à true dans about:config, puis cliquez sur « Ajouter l'onglet à la barre des tâches » dans la barre d'adresse.",
+      "firefoxMac": "Firefox sur macOS ne sait pas encore installer les applications web. Kikouchou fonctionne parfaitement dans un onglet — ou installez-le depuis Safari ou Chrome.",
+      "generic": "Cherchez « Installer », « Ajouter au Dock » ou « Sur l'écran d'accueil » dans le menu de votre navigateur.",
+      "gotIt": "J'ai compris"
+    },
     "offline": "Vous êtes hors ligne",
     "backOnline": "Connexion rétablie",
     "savedLocally": "Enregistré sur cet appareil",

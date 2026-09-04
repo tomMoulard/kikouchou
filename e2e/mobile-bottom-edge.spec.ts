@@ -18,6 +18,10 @@
 
 import { test, expect, type Locator, type Page } from '@playwright/test';
 
+import {
+  INSTALL_REGION_LABEL,
+  fakeBeforeInstallPrompt,
+} from './support/install-prompt';
 import { waitForRoute } from './support/routes';
 import { seedPerson, seedTransport, seedTrip } from './support/seed';
 
@@ -55,8 +59,7 @@ function fixtureDate(dayOfMonth: number): string {
  * on the machine. Every name matched here therefore carries both.
  */
 const MOBILE_NAV_LABEL = /mobile navigation|navigation mobile/i,
-  MORE_BUTTON_LABEL = /^(more|plus)$/i,
-  INSTALL_REGION_LABEL = /installation/i;
+  MORE_BUTTON_LABEL = /^(more|plus)$/i;
 
 // ============================================================================
 // Locators
@@ -310,9 +313,7 @@ test.describe('mobile bottom edge', () => {
 
     // `useInstallPrompt` only listens; no browser fires `beforeinstallprompt`
     // under automation, so the test fires it.
-    await page.evaluate(() => {
-      window.dispatchEvent(new Event('beforeinstallprompt', { cancelable: true }));
-    });
+    await fakeBeforeInstallPrompt(page);
 
     const prompt = page.getByRole('region', { name: INSTALL_REGION_LABEL });
     await expect(prompt).toBeVisible({ timeout: 15_000 });

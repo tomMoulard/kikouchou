@@ -24,7 +24,10 @@ import {
   CardDescription,
   CardTitle,
 } from '@/components/ui/card';
-import { useInstallPrompt } from '@/hooks/useInstallPrompt';
+import {
+  type ManualInstallPlatform,
+  useInstallPrompt,
+} from '@/hooks/useInstallPrompt';
 import posthog from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 
@@ -40,7 +43,51 @@ const STORAGE_KEY = 'kikouchou-install-dismissed',
 /**
  * Duration in milliseconds to hide the prompt after dismissal (7 days).
  */
- DISMISSAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+ DISMISSAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000,
+
+/**
+ * The steps for each browser that never fires `beforeinstallprompt`, with the
+ * English each key holds so a missing translation still reads as instructions.
+ *
+ * A table of literal keys rather than a `pwa.manualInstall.${platform}`
+ * template: the scan in `lib/i18n/__tests__/translationKeys.test.ts` resolves
+ * literals only, and a key it cannot see is a key that can go missing from `fr`
+ * without anything failing.
+ */
+ MANUAL_INSTALL_STEPS: Record<
+  ManualInstallPlatform,
+  { readonly key: string; readonly fallback: string }
+> = {
+  ios: {
+    key: 'pwa.manualInstall.ios',
+    fallback: 'Tap the Share button, then "Add to Home Screen", then "Add".',
+  },
+  firefoxAndroid: {
+    key: 'pwa.manualInstall.firefoxAndroid',
+    fallback:
+      'Open Firefox\'s ⋮ menu and tap "Install" — older versions call it "Add app to Home Screen".',
+  },
+  firefoxWindows: {
+    key: 'pwa.manualInstall.firefoxWindows',
+    fallback:
+      'Click "Add tab to taskbar" in the address bar (Firefox 142 and later). The app gets its own window, toolbar included.',
+  },
+  firefoxLinux: {
+    key: 'pwa.manualInstall.firefoxLinux',
+    fallback:
+      'Set browser.taskbarTabs.enabled to true in about:config, then click "Add tab to taskbar" in the address bar.',
+  },
+  firefoxMac: {
+    key: 'pwa.manualInstall.firefoxMac',
+    fallback:
+      'Firefox on macOS cannot install web apps yet. Kikouchou works fully in a tab — or install it from Safari or Chrome.',
+  },
+  generic: {
+    key: 'pwa.manualInstall.generic',
+    fallback:
+      'Look for "Install", "Add to Dock" or "Add to Home Screen" in your browser\'s menu.',
+  },
+};
 
 // ============================================================================
 // Type Definitions
@@ -101,6 +148,8 @@ function storeDismissal(): void {
  * - Displays a fixed banner at the bottom of the screen
  * - Only renders when installation is available
  * - Respects user dismissal for 7 days via localStorage
+ * - Answers an explicit `?install=1` request at once, dismissal and delay aside
+ * - Falls back to the browser's own steps where there is no prompt to fire
  * - Shows success feedback after installation
  * - Fully accessible with ARIA attributes
  * - Mobile-responsive design
@@ -125,7 +174,14 @@ export const InstallPrompt = memo(function InstallPrompt({
   className,
 }: InstallPromptProps): ReactElement | null {
   const { t } = useTranslation(),
-   { canInstall, install, isInstalling, isInstalled } = useInstallPrompt(),
+   {
+    canInstall,
+    install,
+    isInstalling,
+    isInstalled,
+    installIntent,
+    manualInstallPlatform,
+   } = useInstallPrompt(),
 
   // ============================================================================
   // State
@@ -133,15 +189,24 @@ export const InstallPrompt = memo(function InstallPrompt({
 
   /**
    * Whether the prompt has been dismissed by the user.
+   *
+   * The 7-day window is an answer to an offer nobody asked for. A visitor who
+   * has just tapped "Install on your phone" on the landing page did ask, so the
+   * window does not apply to them — and nothing is written to make that
+   * decision stick past this visit.
    */
-   [isDismissed, setIsDismissed] = useState<boolean>(() =>
-    isDismissedRecently(),
+   [isDismissed, setIsDismissed] = useState<boolean>(
+    () => !installIntent && isDismissedRecently(),
   ),
 
   /**
    * Whether the prompt is visible (for enter/exit animations).
+   *
+   * Starts visible on an explicit request: the delay below is there to stop the
+   * card flashing past on a page load, and the one visitor who is watching for
+   * it is the one who asked.
    */
-   [isVisible, setIsVisible] = useState(false),
+   [isVisible, setIsVisible] = useState<boolean>(() => installIntent),
 
   // ============================================================================
   // Refs
@@ -150,7 +215,17 @@ export const InstallPrompt = memo(function InstallPrompt({
   /**
    * Ref for the dismiss animation timer to ensure proper cleanup.
    */
-   dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null),
+
+  /**
+   * Whether the app was already installed on the first render.
+   *
+   * `isInstalled` is true from the very first render whenever the app is
+   * *opened* as an app — that is what `(display-mode: standalone)` means — so
+   * the success toast below cannot key off its value alone without
+   * congratulating the visitor on every single launch.
+   */
+   wasInstalledOnMountRef = useRef<boolean>(isInstalled);
 
   // ============================================================================
   // Effects
@@ -170,6 +245,11 @@ export const InstallPrompt = memo(function InstallPrompt({
    * Derive visibility state based on conditions rather than setting state synchronously.
    */
   useEffect(() => {
+    // An explicit request skips this entirely: `isVisible` already starts true,
+    // and running the effect would only queue a redundant timer whose cleanup
+    // hides a card the visitor asked to see.
+    if (installIntent) {return undefined;}
+
     if (canInstall && !isDismissed) {
       // Small delay before showing to avoid flash on page load
       const timer = setTimeout(() => {
@@ -183,13 +263,13 @@ export const InstallPrompt = memo(function InstallPrompt({
     }
     // When conditions change (not canInstall or isDismissed), hide via timeout cleanup
     return undefined;
-  }, [canInstall, isDismissed]);
+  }, [canInstall, isDismissed, installIntent]);
 
   /**
    * Show success toast when app is installed.
    */
   useEffect(() => {
-    if (isInstalled && !isDismissed) {
+    if (isInstalled && !wasInstalledOnMountRef.current && !isDismissed) {
       // Deliberately a raw toast: installing the app is not a data write, so
       // the offline-aware "Saved on this device" wording does not apply.
       toast.success(t('pwa.installSuccess', 'App installed successfully!'));
@@ -235,14 +315,33 @@ export const InstallPrompt = memo(function InstallPrompt({
   }, []);
 
   // ============================================================================
+  // Derived Values
+  // ============================================================================
+
+  /**
+   * Whether to show the browser's own steps instead of an Install button.
+   *
+   * `beforeinstallprompt` is Chromium's alone, so on an iPhone or in Firefox
+   * `canInstall` never becomes true and there is nothing to fire — which is
+   * exactly the case where a visitor who tapped "Install on your phone" got
+   * nothing at all. The steps stand in for the button there, and only there:
+   * one tap beats a list of instructions wherever the browser offers one, and
+   * an app that is already installed needs neither.
+   */
+  const showManualSteps = installIntent && !canInstall && !isInstalled,
+
+   manualSteps = MANUAL_INSTALL_STEPS[manualInstallPlatform];
+
+  // ============================================================================
   // Render
   // ============================================================================
 
   // Don't render if:
-  // - Can't install (no prompt available or already installed)
+  // - Can't install (no prompt available or already installed) and there is no
+  //   request to answer with steps
   // - User has dismissed recently
   // - Not yet visible (initial delay)
-  if (!canInstall || isDismissed || !isVisible) {
+  if ((!canInstall && !showManualSteps) || isDismissed || !isVisible) {
     return null;
   }
 
@@ -287,36 +386,59 @@ export const InstallPrompt = memo(function InstallPrompt({
             {/* Content */}
             <div className="flex-1 min-w-0">
               <CardTitle className="text-base font-semibold">
-                {t('pwa.install', 'Install app')}
+                {showManualSteps
+                  ? t('pwa.manualInstall.title', 'Add Kikouchou to your device')
+                  : t('pwa.install', 'Install app')}
               </CardTitle>
               <CardDescription className="mt-1 text-sm">
-                {t(
-                  'pwa.installDescription',
-                  'Install Kikouchou on your device for quick access',
-                )}
+                {showManualSteps
+                  ? t(manualSteps.key, manualSteps.fallback)
+                  : t(
+                      'pwa.installDescription',
+                      'Install Kikouchou on your device for quick access',
+                    )}
               </CardDescription>
 
               {/* Action Buttons */}
               <div className="mt-3 flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={handleInstall}
-                  disabled={isInstalling}
-                  className="flex-1 sm:flex-none h-11 md:h-8"
-                >
-                  {isInstalling
-                    ? t('common.loading', 'Loading...')
-                    : t('pwa.install', 'Install app')}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleDismiss}
-                  disabled={isInstalling}
-                  className="h-11 md:h-8"
-                >
-                  {t('pwa.notNow', 'Not now')}
-                </Button>
+                {showManualSteps ? (
+                  /*
+                    No Install button here: there is no captured event to fire,
+                    so a button reading "Install app" would do nothing but
+                    report a failure. Acknowledging the steps is the only
+                    action left.
+                  */
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleDismiss}
+                    className="flex-1 sm:flex-none h-11 md:h-8"
+                  >
+                    {t('pwa.manualInstall.gotIt', 'Got it')}
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={handleInstall}
+                      disabled={isInstalling}
+                      className="flex-1 sm:flex-none h-11 md:h-8"
+                    >
+                      {isInstalling
+                        ? t('common.loading', 'Loading...')
+                        : t('pwa.install', 'Install app')}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleDismiss}
+                      disabled={isInstalling}
+                      className="h-11 md:h-8"
+                    >
+                      {t('pwa.notNow', 'Not now')}
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
 
