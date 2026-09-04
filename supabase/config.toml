@@ -308,6 +308,8 @@ max_frequency = "5s"
 enabled = false
 account_sid = ""
 message_service_sid = ""
+# DO NOT commit your Twilio auth token to git. Use environment variable substitution instead:
+auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
 
 # Multi-factor-authentication is available to Supabase Pro plan.
 [auth.mfa]
@@ -338,6 +340,8 @@ max_frequency = "5s"
 [auth.external.apple]
 enabled = false
 client_id = ""
+# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
 # Overrides the default auth callback URL derived from auth.external_url.
 redirect_uri = ""
 # Overrides the default auth provider URL. Used to support self-hosted gitlab, single-tenant Azure,
@@ -350,6 +354,9 @@ email_optional = false
 
 [auth.external.google]
 enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
 redirect_uri = ""
 url = ""
 # Required for local sign-in with Google: the local stack cannot verify the nonce.
@@ -362,6 +369,9 @@ email_optional = false
 # keep `supabase start` behaving like production, not to drive the UI.
 [auth.external.spotify]
 enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_SPOTIFY_CLIENT_ID)"
+# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+secret = "env(SUPABASE_AUTH_EXTERNAL_SPOTIFY_SECRET)"
 redirect_uri = ""
 url = ""
 email_optional = false
