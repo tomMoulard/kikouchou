@@ -4,6 +4,35 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * NON-STOCK addition — keep it if `shadcn add select` is ever re-run.
+ *
+ * Stock `SelectItem` is `py-1.5 text-sm` with no height of its own: 6px of
+ * padding either side of a 20px line box is a 32px row. That is under WCAG
+ * 2.5.5's 44px and clears 2.5.8's 24px only by grace, and it applied
+ * everywhere — all sixteen call sites across eight surfaces take the default,
+ * including `TransportEntryStepPage`, the guest-onboarding wizard a guest
+ * fills in on their phone from a share link.
+ *
+ * `min-h` rather than more padding, so the row stays vertically centred and
+ * desktop stays byte-for-byte stock.
+ *
+ * `max-md:` and not `min-h-11 md:min-h-0`, for the reason `button.variants.ts`
+ * documents at length: a variant-prefixed utility survives tailwind-merge
+ * alongside whatever unprefixed class a call site passes, which makes this a
+ * hard floor rather than a default. The `md:` form is the trap — an unprefixed
+ * override at the call site cancels the base but not the `md:` half, which
+ * then re-applies past the breakpoint and inflates a desktop layout the author
+ * thought they controlled. A row that genuinely must be shorter on a phone has
+ * to say `max-md:min-h-*`, which is loud enough to catch in review.
+ *
+ * Deliberately identical to the constants in `dropdown-menu.tsx` and
+ * `command.tsx`, and deliberately duplicated rather than shared: `shadcn add`
+ * rewrites one of these files at a time, and a shared import would make that
+ * regeneration break the other three instead of just losing itself here.
+ */
+const TOUCH_TARGET_MIN_HEIGHT = "max-md:min-h-11"
+
 function Select({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
@@ -108,6 +137,8 @@ function SelectItem({
       data-slot="select-item"
       className={cn(
         "focus:bg-accent focus:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        // NON-STOCK — see TOUCH_TARGET_MIN_HEIGHT at the top of this file.
+        TOUCH_TARGET_MIN_HEIGHT,
         className
       )}
       {...props}
