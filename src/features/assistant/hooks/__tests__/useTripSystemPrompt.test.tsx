@@ -249,6 +249,36 @@ describe('useTripSystemPrompt', () => {
     expect(prompt).toContain('notes: Vegetarian');
   });
 
+  it('includes a guest phone number so "who do I call" is answerable', async () => {
+    const { tripId } = await seedTrip();
+    await createPerson(tripId, {
+      name: 'Mary',
+      color: hexColor('#22c55e'),
+      phone: '+33 6 12 34 56 78',
+    });
+
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('"Mary"');
+    });
+
+    expect(result.current.prompt.systemPrompt).toContain('phone: +33 6 12 34 56 78');
+  });
+
+  it('omits the phone segment for a guest without one', async () => {
+    const { tripId } = await seedTrip();
+    await createPerson(tripId, { name: 'Mary', color: hexColor('#22c55e') });
+
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('"Mary"');
+    });
+
+    expect(result.current.prompt.systemPrompt).not.toContain('phone:');
+  });
+
   /**
    * The floor — the prompt for a trip holding almost nothing — is paid on every
    * turn before any trip data, and prefill memory on the browser models is

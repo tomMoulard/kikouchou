@@ -181,8 +181,8 @@ function formatActivityLine(
 }
 
 /**
- * Builds the guest line, including headcount and notes so the assistant can
- * answer catering and accessibility questions.
+ * Builds the guest line, including headcount, phone and notes so the assistant
+ * can answer catering, accessibility and "who do I call" questions.
  */
 function formatGuestLine(person: Person): string {
   // A guest with no dates of their own is here for the whole trip, the way the
@@ -194,11 +194,12 @@ function formatGuestLine(person: Person): string {
       : ' (stay: whole trip)';
   const headcount = getPersonHeadcount(person);
   const headcountLabel = headcount > 1 ? ` — counts as ${headcount} people` : '';
+  const phone = person.phone ? ` — phone: ${toPromptText(person.phone)}` : '';
   const notes = person.notes
     ? ` — notes: ${toPromptText(person.notes)}`
     : '';
 
-  return `- "${toPromptText(person.name)}" (id: ${person.id})${stay}${headcountLabel}${notes}`;
+  return `- "${toPromptText(person.name)}" (id: ${person.id})${stay}${headcountLabel}${phone}${notes}`;
 }
 
 // ============================================================================
