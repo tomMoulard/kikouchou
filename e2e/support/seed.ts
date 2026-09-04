@@ -54,12 +54,17 @@ export interface SeededTrip {
  * @param options - The trip to write
  * @returns The new trip's id and share id
  *
+ * Dates come from `./fixture-dates`, never from a literal month. A seeded trip
+ * whose dates have passed is rendered as a past trip — collapsed accordions,
+ * greyed cards — and the assertions then hunt for rows that are real, rendered
+ * and hidden.
+ *
  * @example
  * ```ts
  * const { tripId } = await seedTrip(page, {
  *   name: 'Paris',
- *   startDate: '2026-06-01',
- *   endDate: '2026-06-10',
+ *   startDate: fixtureDate(1),
+ *   endDate: fixtureDate(10),
  *   coordinates: { lat: 48.8566, lon: 2.3522 },
  * });
  * ```
