@@ -16,6 +16,7 @@ import {
   createTripId,
   updateTimestamp,
 } from '@/lib/db/utils';
+import { planTripDateShiftAssignmentUpdates } from '@/features/trips/utils/trip-date-shift';
 import type { Trip, TripFormData, TripId } from '@/types';
 
 /** Maximum retry attempts for ID collision recovery */
@@ -183,15 +184,49 @@ export async function updateTrip(
     }).description;
   }
 
-  // Use update() return value to check existence atomically (avoids TOCTOU race)
-  const updatedCount = await db.trips.update(id, {
-    ...sanitizedData,
-    ...updateTimestamp(),
-  });
+  await db.transaction('rw', [db.trips, db.roomAssignments], async () => {
+    // Read before writing so the *old* dates are still available: a booking
+    // that spanned exactly the old trip was a whole-trip booking, and that is
+    // knowable only here. See `planTripDateShiftAssignmentUpdates`.
+    const previous = await db.trips.get(id);
 
-  if (updatedCount === 0) {
-    throw new Error(`Trip with id "${id}" not found`);
-  }
+    // Use update() return value to check existence atomically (avoids TOCTOU race)
+    const updatedCount = await db.trips.update(id, {
+      ...sanitizedData,
+      ...updateTimestamp(),
+    });
+
+    if (updatedCount === 0) {
+      throw new Error(`Trip with id "${id}" not found`);
+    }
+
+    if (!previous) {
+      return;
+    }
+
+    const nextStartDate = sanitizedData.startDate ?? previous.startDate;
+    const nextEndDate = sanitizedData.endDate ?? previous.endDate;
+    if (nextStartDate === previous.startDate && nextEndDate === previous.endDate) {
+      return;
+    }
+
+    const assignments = await db.roomAssignments.where('tripId').equals(id).toArray();
+    const shifts = planTripDateShiftAssignmentUpdates({
+      previous: { startDate: previous.startDate, endDate: previous.endDate },
+      next: { startDate: nextStartDate, endDate: nextEndDate },
+      assignments,
+    });
+
+    await Promise.all(
+      shifts.map((shift) =>
+        db.roomAssignments.update(shift.id, {
+          startDate: shift.startDate,
+          endDate: shift.endDate,
+          ...updateTimestamp(),
+        }),
+      ),
+    );
+  });
 }
 
 /**
