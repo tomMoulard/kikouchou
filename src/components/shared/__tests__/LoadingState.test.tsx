@@ -11,6 +11,15 @@ import { LoadingState } from '@/components/shared/LoadingState';
 // Tests
 // ============================================================================
 
+/**
+ * The visible label span, picked by what marks it out rather than by DOM
+ * position: `getAllByText(...)[1]` also matches the sr-only span, so reordering
+ * the two would redden these tests for the wrong reason.
+ */
+function visibleLabel(container: HTMLElement): Element | null {
+  return container.querySelector('span[aria-hidden="true"]');
+}
+
 describe('LoadingState', () => {
   // ------------------------------------------------------------------
   // Inline variant (default)
@@ -79,16 +88,31 @@ describe('LoadingState', () => {
   // Size variants
   // ------------------------------------------------------------------
   describe('sizes', () => {
-    it('renders with small size', () => {
-      const { container } = render(<LoadingState size="sm" />, { withProviders: false });
-      const svg = container.querySelector('svg');
-      expect(svg).toBeInTheDocument();
+    // These two used to share one assertion — "an svg exists" — which held
+    // whatever `size` was passed, and would still hold with the prop deleted.
+    it('renders a 16px spinner at size="sm"', () => {
+      const { container } = render(<LoadingState size="sm" showLabel />, {
+        withProviders: false,
+      });
+
+      expect(container.querySelector('svg')).toHaveClass('size-4');
+      expect(visibleLabel(container)).toHaveClass('text-xs');
     });
 
-    it('renders with large size', () => {
-      const { container } = render(<LoadingState size="lg" />, { withProviders: false });
-      const svg = container.querySelector('svg');
-      expect(svg).toBeInTheDocument();
+    it('renders a 24px spinner by default', () => {
+      const { container } = render(<LoadingState showLabel />, { withProviders: false });
+
+      expect(container.querySelector('svg')).toHaveClass('size-6');
+      expect(visibleLabel(container)).toHaveClass('text-sm');
+    });
+
+    it('renders a 32px spinner at size="lg"', () => {
+      const { container } = render(<LoadingState size="lg" showLabel />, {
+        withProviders: false,
+      });
+
+      expect(container.querySelector('svg')).toHaveClass('size-8');
+      expect(visibleLabel(container)).toHaveClass('text-base');
     });
   });
 

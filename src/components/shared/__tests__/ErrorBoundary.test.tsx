@@ -182,9 +182,16 @@ describe('ErrorBoundary', () => {
         { withProviders: false }
       );
 
-      // The error boundary should render with i18n keys (from mock)
+      // "an alert exists" was already asserted three tests up and said nothing
+      // about translation. `safeTranslate` returns its *fallback* whenever `t`
+      // misbehaves, so the only way to see that the real `t` ran is to find
+      // the keys — the fallbacks are the English strings.
+      expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(
+        'errors.generic'
+      );
       const alert = screen.getByRole('alert');
-      expect(alert).toBeInTheDocument();
+      expect(alert).toHaveTextContent('errors.loadingFailed');
+      expect(screen.getByRole('button')).toHaveTextContent('common.retry');
     });
   });
 });
