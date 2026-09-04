@@ -11,6 +11,7 @@ import type { Locale } from 'date-fns/locale';
 
 import { toLocalISODateString } from '@/lib/db/utils';
 import { formatFullDate } from '@/lib/utils/date-format';
+import { localDayKeyOfInstant } from '@/lib/utils/trip-days';
 import type { Activity, ISODateString, ISODateTimeString } from '@/types';
 
 // ============================================================================
@@ -108,8 +109,7 @@ export function getActivityEndInstant(activity: Activity): string {
 export function getActivityStartDayKey(
   activity: Activity,
 ): ISODateString | undefined {
-  const date = parseISO(activity.startDatetime);
-  return isValid(date) ? toLocalISODateString(date) : undefined;
+  return localDayKeyOfInstant(activity.startDatetime) ?? undefined;
 }
 
 /**
@@ -122,11 +122,10 @@ export function getActivityStartDayKey(
 export function getActivityEndDayKey(
   activity: Activity,
 ): ISODateString | undefined {
-  const date = parseISO(getActivityEndInstant(activity));
-  if (!isValid(date)) {
-    return getActivityStartDayKey(activity);
-  }
-  return toLocalISODateString(date);
+  return (
+    localDayKeyOfInstant(getActivityEndInstant(activity)) ??
+    getActivityStartDayKey(activity)
+  );
 }
 
 /**
