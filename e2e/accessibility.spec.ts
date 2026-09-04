@@ -20,6 +20,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { clearIndexedDB } from './support/storage';
+import { waitForRoute } from './support/routes';
 import { seedPerson, seedRoom, seedTrip } from './support/seed';
 
 // ============================================================================
@@ -306,57 +307,22 @@ async function expectDarkThemeApplied(page: Page): Promise<void> {
 }
 
 /**
- * Runs axe's `color-contrast` rule against the current page.
- *
- * `ACCEPTABLE_VIOLATIONS.rules` disables `color-contrast` globally, for a
- * documented light-mode reason: the calendar's `text-muted-foreground/80` day
- * labels measure 4.24:1 at 10px against white, just under the 4.5:1 floor.
- * That exclusion is not this unit's to lift — but inheriting it here would
- * leave the dark-mode tests unable to fail on the one defect class that is
- * *specific* to a theme, which is most of the point of testing a theme.
- *
- * Measured before enabling: with the dark tokens applied, `/trips`,
- * `/settings`, the calendar, rooms, guests and transports report zero
- * contrast violations. The dark palette is comfortably the better of the two
- * here, so this is a gate the app passes today and a real guard against the
- * next raw-colour utility that lands without a `dark:` counterpart.
- *
- * @param page - Playwright page object
- * @returns Contrast violations only
- */
-async function analyzeContrast(
-  page: Page,
-): Promise<import('axe-core').Result[]> {
-  const results = await new AxeBuilder({ page })
-    .withRules(['color-contrast'])
-    .analyze();
-
-  return results.violations;
-}
-
-/**
  * Waits for the lazily-loaded route to replace its "Loading…" fallback.
  *
  * This used to swallow its own timeout with `.catch(() => {})`, which meant a
  * page that never finished loading was scanned anyway — and a suspense
  * fallback has no violations, so every one of these tests passed by finding
- * nothing at all. It is a real `expect` now, so the test fails instead.
+ * nothing at all.
  *
- * Same assertion as `waitForRoute` in `e2e/support/routes.ts`, with a longer
- * stated timeout.
- * Measured: the calendar and rooms chunks are the two heaviest routes, and
- * against a cold dev server serving several of these tests in parallel they
- * were still on the fallback at 15s. That is a property of the dev server, not
- * of the page, so the wait is widened here rather than in the shared helper —
- * and widened, not deleted, because a wait that cannot fail is what this
- * function was sent to stop being.
+ * It was then re-implemented here, character for character, as a fork of
+ * `waitForRoute` in `e2e/support/routes.ts`. That is now the one copy, and
+ * 30 s is its default, so this is an alias kept only because thirteen call
+ * sites read better with it.
  *
  * @param page - Playwright page object
  */
 async function waitForLoading(page: Page): Promise<void> {
-  await expect(page.getByRole('status').filter({ hasText: /loading/i })).toHaveCount(0, {
-    timeout: 30_000,
-  });
+  await waitForRoute(page);
 }
 
 /**
@@ -625,6 +591,11 @@ test.describe('Dialog Focus Management', () => {
     const focusableInDialog = dialog.locator(focusableSelector);
     const focusableCount = await focusableInDialog.count();
 
+    // A dialog with nothing focusable in it would make the loop below assert
+    // two presses against a trap that has nothing to trap, which is not the
+    // same test at all.
+    expect(focusableCount).toBeGreaterThan(0);
+
     // Tab through more times than there are elements to verify wrapping
     for (let i = 0; i < focusableCount + 2; i++) {
       await page.keyboard.press('Tab');
@@ -650,8 +621,15 @@ test.describe('Dialog Focus Management', () => {
   // Test: Confirm dialog has proper focus management
   // --------------------------------------------------------------------------
   test('confirm dialog has proper focus management', async ({ page }) => {
+    // Seeded so that "cancel" has something to fail to destroy. The button this
+    // test opens wipes every trip on the device; without a trip in the database
+    // the last assertion cannot tell a cancelled dialog from a confirmed one.
+    await page.goto('/');
+    await setupTripWithData(page);
+
     await page.goto('/settings');
     await page.waitForLoadState('load');
+    await waitForLoading(page);
 
     // Click the "Clear All Data" button to open confirm dialog
     const clearDataButton = page.getByRole('button', { name: /clear.*data/i });
@@ -663,17 +641,29 @@ test.describe('Dialog Focus Management', () => {
     const dialog = page.getByRole('alertdialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // Focus should be inside the dialog — on the cancel button, which is where
-    // Radix puts it so that the destructive choice is never the default one.
-    const activeElement = await page.evaluate(() =>
-      Boolean(document.activeElement?.closest('[role="alertdialog"]')),
-    );
-    expect(activeElement).toBe(true);
+    // Focus lands on Cancel specifically, not merely "somewhere inside".
+    //
+    // That is the contract `ConfirmDialog` states in prose — "AlertDialogCancel
+    // is what Radix focuses when the dialog opens, so it has to wrap the real
+    // button rather than sit beside it" — and it is the whole safety property
+    // of a destructive confirmation: the key a user is already holding down
+    // must not be able to answer "yes". Asserting only that focus is inside the
+    // alert dialog passes just as happily with focus parked on "Clear".
+    const cancelButton = dialog.getByRole('button', { name: /cancel|annuler/i });
+    await expect(cancelButton).toBeFocused();
 
     // Cancel the dialog
-    const cancelButton = dialog.getByRole('button', { name: /cancel|annuler/i });
     await cancelButton.click();
     await expect(dialog).toBeHidden({ timeout: 5000 });
+
+    // And cancelling really cancelled. `ConfirmDialog` routes the Cancel button
+    // through `handleOpenChange` rather than a second `onClick`, so "the dialog
+    // closed" and "the destructive callback did not run" are two different
+    // facts — a wiring mistake closes the dialog *and* clears the database, and
+    // every assertion above would still pass.
+    await page.goto('/trips');
+    await waitForLoading(page);
+    await expect(page.getByText(TEST_DATA.trip.name).first()).toBeVisible();
   });
 });
 
@@ -769,33 +759,43 @@ test.describe('Form Label Associations', () => {
     await page.goto('/trips/new');
     await page.waitForLoadState('load');
 
-    // Run a11y analysis focused on form labels
-    const violations = await analyzeA11y(page);
-
-    // Filter for label-related violations
-    const labelViolations = violations.filter(
-      (v) => v.id.includes('label') || v.id.includes('form')
-    );
-
-    if (labelViolations.length > 0) {
-      console.log('Trip form label violations:\n', formatViolations(labelViolations));
-    }
-
-    expect(labelViolations).toEqual([]);
-
-    // Verify specific form fields have labels
+    /**
+     * The route has to have arrived before axe runs.
+     *
+     * `/trips/new` is a lazy chunk like every other route, and `load` fires
+     * while `main` still holds the suspense fallback. This test scanned that
+     * fallback: a spinner has no form controls, so it has no label violations,
+     * and the assertion below reported a clean form without one ever having
+     * rendered. Every sibling test in this file already waited; this one was
+     * missed because its second half — a retrying `expect` on `#trip-name` —
+     * made the omission invisible.
+     */
+    await waitForLoading(page);
     const nameInput = page.locator('#trip-name');
     await expect(nameInput).toBeVisible();
 
-    // Check that the input has an associated label (via aria-labelledby, aria-label, or label element)
-    const hasLabel = await nameInput.evaluate((el) => {
-      const ariaLabelledBy = el.getAttribute('aria-labelledby');
-      const ariaLabel = el.getAttribute('aria-label');
-      const id = el.getAttribute('id');
-      const label = id ? document.querySelector(`label[for="${id}"]`) : null;
-      return !!(ariaLabelledBy || ariaLabel || label);
-    });
-    expect(hasLabel).toBe(true);
+    // Run a11y analysis. The whole result, not a label-shaped slice of it: this
+    // page is the only unscanned route left in the file, and filtering to
+    // `v.id.includes('label')` threw away every other violation on it.
+    const violations = await analyzeA11y(page);
+
+    if (violations.length > 0) {
+      console.log('Trip form violations:\n', formatViolations(violations));
+    }
+
+    expect(violations).toEqual([]);
+
+    /**
+     * And the name field is named, by the browser's own computation.
+     *
+     * The hand-rolled version of this check asked whether any of
+     * `aria-labelledby`, `aria-label` or `label[for]` was *present*. All three
+     * can be present and empty — `aria-labelledby` pointing at a removed node
+     * is the common one — and the check passed on all of them. Playwright's
+     * `toHaveAccessibleName` runs the real algorithm, so a dangling reference
+     * fails it.
+     */
+    await expect(nameInput).toHaveAccessibleName(/\S/);
   });
 });
 
@@ -843,9 +843,11 @@ test.describe('Keyboard Navigation', () => {
 
     expect(isTripCardFocused).toBe(true);
 
-    // Verify the element is focusable
-    const isFocusable = await tripCard.evaluate((el) => el.tabIndex >= 0);
-    expect(isFocusable).toBe(true);
+    // The loop above matched on the active element's *text*, which the card's
+    // own children also carry. Pin it to the card itself, so a Tab that landed
+    // on something nested inside it cannot satisfy the test — and so the Enter
+    // press below is provably being sent to the control it claims to activate.
+    await expect(tripCard).toBeFocused();
 
     // Press Enter to activate
     await page.keyboard.press('Enter');
@@ -856,8 +858,22 @@ test.describe('Keyboard Navigation', () => {
 
   // --------------------------------------------------------------------------
   // Test: Navigation is keyboard accessible
+  //
+  // The claim under test is `Layout.tsx`'s, verbatim: "Disabled, not removed:
+  // no `tabIndex={-1}` and no `pointer-events-none`. A control taken out of the
+  // tab order is a control a keyboard or screen-reader user never learns
+  // exists."
+  //
+  // The previous version of this test could not observe that. It read
+  // `el.tabIndex >= 0 || el.tagName === 'A'` on a locator built from
+  // `nav.locator('a')` — every element it matched was an anchor, so the right
+  // operand was true by construction and the left one never mattered.
+  // `tabindex="-1"` on every link in the bar passed it. The accessible-name
+  // half had the same shape: it re-implemented name computation as
+  // `aria-label || textContent`, which is non-empty for any link with a visible
+  // text span whatever the accessibility tree actually exposes.
   // --------------------------------------------------------------------------
-  test('navigation links are keyboard accessible', async ({ page }) => {
+  test('every mobile navigation control stays in the tab order', async ({ page }) => {
     // Use mobile viewport
     await page.setViewportSize({ width: 375, height: 812 });
 
@@ -872,29 +888,40 @@ test.describe('Keyboard Navigation', () => {
     const nav = page.locator('nav[aria-label="Mobile navigation"]');
     await expect(nav).toBeVisible();
 
-    // Get all navigation links
-    const navItems = nav.locator('a');
-    const count = await navItems.count();
+    const navLinks = nav.getByRole('link');
+    const linkCount = await navLinks.count();
+    expect(linkCount).toBeGreaterThan(0);
 
-    expect(count).toBeGreaterThan(0);
+    for (let index = 0; index < linkCount; index++) {
+      const link = navLinks.nth(index);
 
-    // Each nav item should be focusable (links are focusable by default)
-    for (let i = 0; i < count; i++) {
-      const item = navItems.nth(i);
-      const isFocusable = await item.evaluate((el) => {
-        // Links are focusable unless tabindex=-1
-        return el.tabIndex >= 0 || el.tagName === 'A';
-      });
-      expect(isFocusable).toBe(true);
+      // The real accessible name, computed by the browser rather than guessed
+      // from two attributes. `/\S/` is "at least one non-whitespace character",
+      // which an icon-only link with no label fails.
+      await expect(link).toHaveAccessibleName(/\S/);
+
+      // No `|| tagName === 'A'`. This is the whole assertion.
+      const tabIndex = await link.evaluate((el) => el.tabIndex);
+      expect(tabIndex, `nav link ${index} must stay in the tab order`)
+        .toBeGreaterThanOrEqual(0);
     }
 
-    // Verify nav links have accessible names
-    for (let i = 0; i < count; i++) {
-      const item = navItems.nth(i);
-      const accessibleName = await item.evaluate((el) => {
-        return el.getAttribute('aria-label') || el.textContent?.trim() || '';
-      });
-      expect(accessibleName.length).toBeGreaterThan(0);
+    // And the property `tabIndex` is only a proxy for: pressing Tab really does
+    // walk the whole bar, links and the "More" button alike, in DOM order.
+    // A single `tabIndex={-1}` anywhere in it breaks this loop at that control.
+    const navControls = nav.locator('a, button');
+    const controlCount = await navControls.count();
+    expect(controlCount).toBeGreaterThan(linkCount);
+
+    await navControls.first().focus();
+    await expect(navControls.first()).toBeFocused();
+
+    for (let index = 1; index < controlCount; index++) {
+      await page.keyboard.press('Tab');
+      await expect(
+        navControls.nth(index),
+        `Tab from control ${index - 1} should reach control ${index}`,
+      ).toBeFocused();
     }
   });
 });
@@ -903,6 +930,23 @@ test.describe('Keyboard Navigation', () => {
 // Test Suite: Dark Mode Accessibility
 // ============================================================================
 
+/**
+ * Contrast is not scanned separately here.
+ *
+ * These three tests used to run axe twice: once through {@link analyzeA11y} and
+ * again through an `analyzeContrast` helper that built its own `AxeBuilder`
+ * with `.withRules(['color-contrast'])`. That helper existed because
+ * `color-contrast` was in {@link ACCEPTABLE_VIOLATIONS} and therefore off
+ * everywhere else — and its docstring still said so long after the rule was
+ * re-enabled. With that list empty, `analyzeA11y` already runs `color-contrast`
+ * on every page in this file, so the second scan asserted a strict subset of
+ * the first at the cost of a full extra axe pass per test.
+ *
+ * What the dark-mode tests are actually for survives unchanged: no other test
+ * in the repo renders these pages with the `.dark` token block applied, so a
+ * raw colour utility shipped without a `dark:` counterpart is caught here and
+ * nowhere else.
+ */
 test.describe('Dark Mode Accessibility', () => {
   // --------------------------------------------------------------------------
   // Test 10: Light and dark mode are accessible
@@ -928,14 +972,6 @@ test.describe('Dark Mode Accessibility', () => {
     }
 
     expect(violations).toEqual([]);
-
-    const contrast = await analyzeContrast(page);
-
-    if (contrast.length > 0) {
-      console.log('Trip list (dark mode) contrast:\n', formatViolations(contrast));
-    }
-
-    expect(contrast).toEqual([]);
   });
 
   test('settings page in dark mode has no a11y violations', async ({ page }) => {
@@ -953,14 +989,6 @@ test.describe('Dark Mode Accessibility', () => {
     }
 
     expect(violations).toEqual([]);
-
-    const contrast = await analyzeContrast(page);
-
-    if (contrast.length > 0) {
-      console.log('Settings (dark mode) contrast:\n', formatViolations(contrast));
-    }
-
-    expect(contrast).toEqual([]);
   });
 
   test('calendar page in dark mode has no a11y violations', async ({ page }) => {
@@ -981,14 +1009,6 @@ test.describe('Dark Mode Accessibility', () => {
     }
 
     expect(violations).toEqual([]);
-
-    const contrast = await analyzeContrast(page);
-
-    if (contrast.length > 0) {
-      console.log('Calendar (dark mode) contrast:\n', formatViolations(contrast));
-    }
-
-    expect(contrast).toEqual([]);
   });
 });
 
