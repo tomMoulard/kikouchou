@@ -1005,6 +1005,9 @@
     "downloadFailed": "Échec du téléchargement",
     "tilesCount_one": "{{count}} tuile",
     "tilesCount_other": "{{count}} tuiles",
-    "cacheSize": "Taille du cache : {{size}}"
+    "cacheSize": "Taille du cache : {{size}}",
+    "openInMaps": "Ouvrir dans Plans",
+    "copyAddress": "Copier l’adresse",
+    "addressCopied": "Adresse copiée"
   }
 }

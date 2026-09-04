@@ -7,7 +7,7 @@
 
 import { type KeyboardEvent, memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Expand, MapPin, X } from 'lucide-react';
+import { Check, Copy, ExternalLink, Expand, MapPin, X } from 'lucide-react';
 
 import {
   Dialog,
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { MapView, type MapMarkerData } from '@/components/shared';
+import { buildMapsUrl } from '@/lib/utils/maps-link';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -77,6 +78,7 @@ export const TripLocationMap = memo(function TripLocationMap({
 }: TripLocationMapProps): React.ReactElement {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
+  const [hasCopied, setHasCopied] = useState(false);
 
   // Create marker data for the trip location
   const marker: MapMarkerData = {
@@ -101,6 +103,42 @@ export const TripLocationMap = memo(function TripLocationMap({
   const handleClose = useCallback(() => {
     setIsExpanded(false);
   }, []);
+
+  /**
+   * Hands the coordinate to the viewer's own map application.
+   *
+   * Opened in a new tab with `noopener` — this is a link out of the app, and on
+   * a phone the handoff to the native app leaves the tab behind.
+   */
+  const handleOpenInMaps = useCallback(() => {
+    window.open(buildMapsUrl(coordinates, location), '_blank', 'noopener,noreferrer');
+  }, [coordinates, location]);
+
+  /**
+   * Copies the location name so it can be pasted into a message or a taxi app.
+   *
+   * Falls back to the `execCommand` route when the async clipboard is
+   * unavailable, which is the case over plain http and in some in-app browsers.
+   */
+  const handleCopyAddress = useCallback(async () => {
+    const markCopied = (): void => {
+      setHasCopied(true);
+      setTimeout(() => setHasCopied(false), 2000);
+    };
+
+    try {
+      await navigator.clipboard.writeText(location);
+      markCopied();
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = location;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      markCopied();
+    }
+  }, [location]);
 
   /**
    * Handles keyboard activation on the preview.
@@ -192,8 +230,26 @@ export const TripLocationMap = memo(function TripLocationMap({
             />
           </div>
 
-          {/* Close Button in Footer */}
-          <div className="p-4 pt-2 flex justify-end border-t">
+          {/* Footer: what you actually came here to do, then Close */}
+          <div className="flex flex-wrap justify-end gap-2 border-t p-4 pt-2">
+            <Button
+              variant="outline"
+              onClick={handleCopyAddress}
+              className="mr-auto"
+            >
+              {hasCopied ? (
+                <Check className="mr-2 size-4" aria-hidden="true" />
+              ) : (
+                <Copy className="mr-2 size-4" aria-hidden="true" />
+              )}
+              {hasCopied
+                ? t('map.addressCopied', 'Address copied')
+                : t('map.copyAddress', 'Copy address')}
+            </Button>
+            <Button onClick={handleOpenInMaps}>
+              <ExternalLink className="mr-2 size-4" aria-hidden="true" />
+              {t('map.openInMaps', 'Open in Maps')}
+            </Button>
             <Button variant="outline" onClick={handleClose}>
               <X className="mr-2 size-4" aria-hidden="true" />
               {t('common.close')}
