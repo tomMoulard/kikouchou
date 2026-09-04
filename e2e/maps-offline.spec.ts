@@ -111,7 +111,19 @@ test.describe('Offline Map Tiles', () => {
     try {
       await page.reload({ waitUntil: 'domcontentloaded' });
 
-      await expect(page.locator('body')).toBeVisible();
+      // The route itself, served out of the precache. `expect(body).toBeVisible()`
+      // was the only assertion here and it is true of every page ever served,
+      // including Chromium's own network error page — which is precisely what
+      // this test exists to rule out.
+      //
+      // The trip has no transports, so the map page's empty state is the
+      // correct offline render.
+      await expect(
+        page.getByRole('heading', { name: /no locations on the map yet/i }),
+      ).toBeVisible({ timeout: 20_000 });
+      await expect(
+        page.locator('main header').first().getByRole('heading', { level: 1 }),
+      ).toHaveText(/map view/i);
 
       const pageContent = await page.content();
       expect(pageContent).not.toContain('ERR_INTERNET_DISCONNECTED');
@@ -142,6 +154,13 @@ test.describe('Offline Map Tiles', () => {
     try {
       await page.goto(`/trips/${tripId}/transports/map`);
       await page.waitForLoadState('domcontentloaded');
+
+      // Not merely the absence of an error string: the page has to have
+      // rendered. Asserting only what is *not* in `page.content()` passes on a
+      // blank document too.
+      await expect(
+        page.getByRole('heading', { name: /no locations on the map yet/i }),
+      ).toBeVisible({ timeout: 20_000 });
 
       const pageContent = await page.content();
       expect(pageContent).not.toContain('ERR_INTERNET_DISCONNECTED');
