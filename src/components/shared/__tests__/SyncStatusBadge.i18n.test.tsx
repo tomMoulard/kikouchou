@@ -3,17 +3,21 @@
  * catalogues rather than through anybody's mock.
  *
  * The sibling `SyncStatusBadge.test.tsx` covers the *precedence* between the
- * head count and the sync state, and it asserts the inline `defaultValue_one` /
- * `defaultValue_other` fallbacks through a local `t` double. Both are worth
- * keeping. Neither touches `src/locales`: the local double reproduces plural
- * selection over the component's own inline defaults, so the shipped
- * `nav.syncOnlineCount_one` could vanish from both bundles and it would stay
- * green — while a real user read "1 people online".
+ * head count and the sync state, and it asserts the component's inline
+ * `defaultValue_one` / `defaultValue_other` through a local `t` double. Both
+ * files are worth keeping; they have different subjects. That one never reads
+ * `src/locales`, so the shipped strings could be wrong at every count and it
+ * would stay green.
  *
- * This file closes that gap. It is also the only place the French forms are
- * exercised: the suite-wide mock hardcodes `language: 'en'`, so French is
- * unreachable everywhere else, and French is the app's fallback language — the
- * one every user gets for a key `en` happens to be missing.
+ * Worth being precise about what this file can and cannot catch, because the
+ * component's inline defaults repeat the English catalogue word for word: with
+ * a key deleted from *both* bundles, the English assertions below still pass on
+ * the default. The **French** assertions are the ones that can only come from
+ * the catalogue — and French is the app's fallback language, the one every user
+ * gets for a key `en` happens to be missing. They also exercise the only
+ * language the suite-wide mock, which hardcodes `language: 'en'`, cannot reach.
+ * What both languages catch is a *wrong* shipped string, which is the shape a
+ * real translation regression takes and which no static check can see.
  *
  * @module components/shared/__tests__/SyncStatusBadge.i18n.test
  */
@@ -64,8 +68,8 @@ describe('SyncStatusBadge counted strings', () => {
 
     await renderWithRealI18n(<SyncStatusBadge />, { withProviders: false });
 
-    // The suite-wide mock strips `count` before interpolating, so no test in
-    // this repo other than this one can tell the two forms apart.
+    // The suite-wide mock strips `count` before interpolating, so no component
+    // test other than this one can tell the two forms apart.
     expect(screen.getByText('1 change not sent yet')).toBeInTheDocument();
   });
 
@@ -135,13 +139,17 @@ describe('SyncStatusBadge counted strings', () => {
     expect(screen.getByRole('button', { name: 'Réessayer' })).toBeInTheDocument();
   });
 
-  it('leaks no nav.sync key into the rendered badge', async () => {
-    withState({ status: 'synced', pendingCount: 0, onlineCount: 4 });
+  it('never reaches the singular head-count form, which is dead in the bundle', async () => {
+    withState({ status: 'synced', pendingCount: 0, onlineCount: 1 });
 
-    const { container } = await renderWithRealI18n(<SyncStatusBadge />, {
-      withProviders: false,
-    });
+    await renderWithRealI18n(<SyncStatusBadge />, { withProviders: false });
 
-    expect(container.innerHTML).not.toContain('nav.sync');
+    // The component routes every count of 1 or fewer to `nav.syncOnlineJustYou`,
+    // so `nav.syncOnlineCount_one` and the matching `defaultValue_one` are
+    // unreachable from any screen. Pinned rather than left implicit: the guard
+    // is a design decision, and if it ever moves, the singular form starts
+    // shipping and wants a test of its own.
+    expect(screen.getByText('Just you right now')).toBeInTheDocument();
+    expect(screen.queryByText(/1 person online/)).not.toBeInTheDocument();
   });
 });

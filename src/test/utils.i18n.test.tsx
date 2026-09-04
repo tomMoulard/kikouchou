@@ -105,14 +105,29 @@ describe('renderWithRealI18n', () => {
 });
 
 describe('createRealI18n', () => {
-  it('falls back to French, the language the app ships as its fallback', async () => {
+  it('falls back to French rather than to the key', async () => {
     const i18n = await createRealI18n('en');
 
-    // A key missing from `en` is not a raw key on screen — it is a French
-    // string on an English screen. Pinned here because the helper hardcodes the
-    // fallback; `src/lib/i18n/__tests__/index.test.ts` pins the app's own
-    // `DEFAULT_LANGUAGE` to the same value.
-    expect(i18n.options.fallbackLng).toEqual(['fr']);
+    // Key parity is enforced, so no shipped key is French-only; this probe adds
+    // one. Asserted through `t` rather than by reading `options.fallbackLng`
+    // back — the config would still read 'fr' if resolution stopped honouring
+    // it, and a config-shaped assertion is the thing this whole file argues
+    // against. Adding a key is the one safe mutation of the shared instance: it
+    // changes no existing resolution, and nothing else asks for this one.
+    i18n.addResource('fr', 'translation', 'testOnly.fallbackProbe', 'Repli');
+
+    expect(i18n.t('testOnly.fallbackProbe')).toBe('Repli');
+  });
+
+  it('agrees with the language the app declares as its fallback', async () => {
+    const real = await vi.importActual<typeof import('@/lib/i18n')>('@/lib/i18n');
+    const i18n = await createRealI18n('en');
+
+    // `src/lib/i18n/__tests__/index.test.ts` looks like it pins this — it has
+    // an `exports DEFAULT_LANGUAGE as fr` test — but it reads the module
+    // through the setup.ts mock, so it asserts the mock's copy and passes even
+    // if the app's fallback changes. `importActual` reads the shipped module.
+    expect(i18n.options.fallbackLng).toEqual([real.DEFAULT_LANGUAGE]);
   });
 
   it('reuses one instance per language', async () => {

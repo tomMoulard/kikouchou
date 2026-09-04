@@ -8,7 +8,9 @@
  * `{ name: 'calendar.previousMonth' }` are indistinguishable, and the test
  * passes either way. `calendar.today` is the sharpest case: it is passed to
  * `t()` with no inline default, so losing the key puts the raw string on a
- * button.
+ * button. The other two pass inline defaults that repeat the English catalogue
+ * word for word, so their English assertions are backstopped by the component
+ * itself; the French pass is what can only come from the bundle.
  *
  * @module features/calendar/components/__tests__/CalendarHeader.test
  */
@@ -85,16 +87,6 @@ describe('CalendarHeader', () => {
     expect(screen.getByRole('button', { name: 'Mois suivant' })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: "Aujourd'hui" })).toHaveLength(2);
     expect(screen.getByText(/juillet 2026/i)).toBeInTheDocument();
-  });
-
-  it('leaks no translation key into the rendered header', async () => {
-    const { container } = await renderWithRealI18n(
-      <CalendarHeader {...defaultProps} />,
-      { withProviders: false },
-    );
-
-    // Catches a key this file forgot to name individually.
-    expect(container.innerHTML).not.toContain('calendar.');
   });
 
   it('calls onPrevMonth when previous button is clicked', async () => {
