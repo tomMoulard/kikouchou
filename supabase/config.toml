@@ -465,3 +465,65 @@ enabled = true
 # declarative_schema_path = "./schemas"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# Everything above configures the *local* stack: `site_url` and `[auth.webauthn]`
+# name `localhost:5173` because that is where `supabase start` serves from. The
+# hosted project needs different values for those same keys, and
+# `supabase config push` sends this file to whichever project is linked — so
+# without the block below a push would set the production Site URL to
+# `http://localhost:5173`.
+#
+# The drift this pins down was real. Long after `chore: move to
+# app.kikouchou.app`, the hosted project still read:
+#
+#   site_url        https://tommoulard.github.io/kikoushou/
+#   uri_allow_list  http://localhost:5173/**,
+#                   https://tommoulard.github.io/kikoushou/**,
+#                   https://kikoushou.app/**   <- a host that never existed
+#   webauthn_rp_id  tommoulard.github.io
+#
+# and both halves of Auth broke in a way that looks like anything but a
+# misconfiguration from the client:
+#
+#   * a `redirect_to` that is not on the allow-list is not an error — GoTrue
+#     substitutes Site URL and carries on — so signing in at
+#     `app.kikouchou.app` landed on `tommoulard.github.io/kikoushou/`, where a
+#     service worker left from the old deploy still answered navigations out of
+#     a precached build whose router basename was `/kikoushou/`, hence the
+#     `/kikoushou/trips` nobody had linked to in months;
+#   * `rp_id` is the host a browser checks a passkey against, and it is set
+#     here rather than derived, so every ceremony failed with `The RP ID
+#     "tommoulard.github.io" is invalid for this domain`.
+#
+# `localhost` stays on the deployed allow-list because `.env.local` points the
+# dev server at this hosted project rather than at a local one. A passkey cannot
+# be shared that way: `rp_id` is a single host, and a browser only signs a
+# ceremony whose origin that host is a suffix of.
+#
+# Pushing needs the provider credentials in the environment first — `client_id`
+# and `secret` under `[auth.external.*]` are `env(...)` references resolved from
+# wherever the command runs, so a bare `supabase config push` would hand Google
+# and Spotify empty strings. The narrow alternative is the Management API, which
+# takes these four fields on their own:
+#
+#   PATCH https://api.supabase.com/v1/projects/<ref>/config/auth
+#   {"site_url": …, "uri_allow_list": …,          # comma-joined, not an array
+#    "webauthn_rp_id": …, "webauthn_rp_origins": …}
+#
+# The dashboard only reaches the first two, under Authentication → URL
+# Configuration. Nothing there exposes `webauthn_rp_id`, which is why it sat on
+# the old host for so long after the domain move.
+[remotes.production]
+project_id = "vlgpfeupdnoiabjdjdon"
+
+[remotes.production.auth]
+site_url = "https://app.kikouchou.app/"
+additional_redirect_urls = [
+  "http://localhost:5173/**",
+  "https://app.kikouchou.app/**",
+]
+
+[remotes.production.auth.webauthn]
+rp_display_name = "Kikoushou"
+rp_id = "app.kikouchou.app"
+rp_origins = ["https://app.kikouchou.app"]
