@@ -34,10 +34,18 @@ describe('MapOfflineIndicator', () => {
     });
   });
 
-  it('returns null when online and not showing cached mode', () => {
-    const { container } = render(<MapOfflineIndicator />);
-    expect(container.firstChild).toBeNull();
-  });
+  it.each([undefined, false])(
+    'renders nothing when online, with showCachedMode=%s',
+    (showCachedMode) => {
+      // One test, two inputs. There used to be two identically-asserting tests
+      // here under different names; naming the input is what makes the pair
+      // mean something.
+      const { container } = render(
+        <MapOfflineIndicator showCachedMode={showCachedMode} />,
+      );
+      expect(container.firstChild).toBeNull();
+    },
+  );
 
   it('renders offline indicator when not online', () => {
     mockUseOnlineStatus.mockReturnValue({
@@ -124,15 +132,5 @@ describe('MapOfflineIndicator', () => {
     render(<MapOfflineIndicator className="my-custom-class" />);
     const el = screen.getByRole('status');
     expect(el.className).toContain('my-custom-class');
-  });
-
-  it('renders null when online without cached mode and no recent change', () => {
-    mockUseOnlineStatus.mockReturnValue({
-      isOnline: true,
-      hasRecentlyChanged: false,
-    });
-
-    const { container } = render(<MapOfflineIndicator showCachedMode={false} />);
-    expect(container.firstChild).toBeNull();
   });
 });
