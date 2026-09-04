@@ -79,12 +79,15 @@ describe('TransportForm', () => {
     expect(screen.getByText('transports.mode')).toBeInTheDocument();
   });
 
-  it('renders needs pickup switch', () => {
+  it('does not ask about pickup separately from the driver', () => {
+    // Picking a driver is what says this person is being collected, so the
+    // form asked the same question twice. `needsPickup` is inferred now.
     render(
       <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { withProviders: false },
     );
-    expect(screen.getByText('transports.needsPickup')).toBeInTheDocument();
+    expect(screen.queryByText('transports.needsPickup')).not.toBeInTheDocument();
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
   });
 
   it('calls onCancel when cancel button is clicked', async () => {
@@ -239,13 +242,34 @@ describe('TransportForm', () => {
     expect(notesField).toHaveValue('Bringing luggage');
   });
 
-  it('renders pickup switch in off state by default', () => {
+  it('submits needsPickup false when no driver is chosen', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const transport = {
+      id: 't1' as import('@/types').Transport['id'],
+      tripId: 't1' as import('@/types').Transport['tripId'],
+      personId: 'p1' as import('@/types').Transport['personId'],
+      type: 'arrival' as const,
+      datetime: '2027-07-15T14:00:00.000Z' as import('@/types').Transport['datetime'],
+      location: 'CDG Airport',
+      needsPickup: false,
+    };
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        transport={transport}
+        persons={mockPersons}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
-    const switchEl = screen.getByRole('switch');
-    expect(switchEl).toHaveAttribute('aria-checked', 'false');
+
+    await user.click(screen.getByText('common.save'));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ driverId: undefined, needsPickup: false }),
+    );
   });
 
   it('renders driver select section', () => {
@@ -269,7 +293,12 @@ describe('TransportForm', () => {
     // Instead, test error display via the existing mock shape
   });
 
-  it('edit mode shows pickup switch in on state when transport has needsPickup', () => {
+  it('re-derives needsPickup on save, even for a record that had it set', async () => {
+    // Consequence of inferring it: a stored `needsPickup` with nobody driving
+    // is not represented in the form any more, so saving clears it.
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
     const transport = {
       id: 't1' as import('@/types').Transport['id'],
       tripId: 't1' as import('@/types').Transport['tripId'],
@@ -283,13 +312,19 @@ describe('TransportForm', () => {
       <TransportForm
         transport={transport}
         persons={mockPersons}
-        onSubmit={vi.fn()}
+        onSubmit={onSubmit}
         onCancel={vi.fn()}
       />,
       { withProviders: false },
     );
-    const switchEl = screen.getByRole('switch');
-    expect(switchEl).toHaveAttribute('aria-checked', 'true');
+
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+
+    await user.click(screen.getByText('common.save'));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ needsPickup: false }),
+    );
   });
 
   it('edit mode shows transport number from existing transport', () => {
@@ -411,17 +446,36 @@ describe('TransportForm', () => {
     expect(screen.getAllByRole('alert')).toHaveLength(2);
   });
 
-  it('toggles needs pickup switch', async () => {
+  it('infers needsPickup from the chosen driver', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const transport = {
+      id: 't1' as import('@/types').Transport['id'],
+      tripId: 't1' as import('@/types').Transport['tripId'],
+      personId: 'p1' as import('@/types').Transport['personId'],
+      type: 'arrival' as const,
+      datetime: '2027-07-15T14:00:00.000Z' as import('@/types').Transport['datetime'],
+      location: 'CDG Airport',
+      driverId: 'p2' as import('@/types').Transport['personId'],
+      needsPickup: false,
+    };
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        transport={transport}
+        persons={mockPersons}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
-    const switchEl = screen.getByRole('switch');
-    expect(switchEl).toHaveAttribute('aria-checked', 'false');
-    await user.click(switchEl);
-    expect(switchEl).toHaveAttribute('aria-checked', 'true');
+
+    await user.click(screen.getByText('common.save'));
+
+    // Bob is driving, so this is a pickup — without the switch ever being asked.
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ driverId: 'p2', needsPickup: true }),
+    );
   });
 
   it('shows no other persons message when only one person exists', () => {

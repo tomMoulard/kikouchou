@@ -29,7 +29,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { LocationPicker, type Coordinates } from '@/components/shared/LocationPicker';
 import {
@@ -91,7 +90,6 @@ interface FormState {
   transportMode: TransportMode | '';
   transportNumber: string;
   driverId: PersonId | '';
-  needsPickup: boolean;
   notes: string;
 }
 
@@ -150,7 +148,6 @@ function getInitialFormState(
     transportMode: transport?.transportMode ?? '',
     transportNumber: transport?.transportNumber ?? '',
     driverId: transport?.driverId ?? '',
-    needsPickup: transport?.needsPickup ?? false,
     notes: transport?.notes ?? '',
   };
 }
@@ -253,7 +250,6 @@ const TransportForm = memo(function TransportForm({
       formState.transportMode !== initialFormState.transportMode ||
       formState.transportNumber !== initialFormState.transportNumber ||
       formState.driverId !== initialFormState.driverId ||
-      formState.needsPickup !== initialFormState.needsPickup ||
       formState.notes !== initialFormState.notes ||
       formState.coordinates?.lat !== initialFormState.coordinates?.lat ||
       formState.coordinates?.lon !== initialFormState.coordinates?.lon ||
@@ -495,13 +491,6 @@ const TransportForm = memo(function TransportForm({
   }, []);
 
   /**
-   * Handles needs pickup switch change.
-   */
-  const handleNeedsPickupChange = useCallback((checked: boolean) => {
-    setFormState((prev) => ({ ...prev, needsPickup: checked }));
-  }, []);
-
-  /**
    * Handles notes textarea change.
    */
   const handleNotesChange = useCallback(
@@ -541,7 +530,10 @@ const TransportForm = memo(function TransportForm({
         transportMode: formState.transportMode || undefined,
         transportNumber: formState.transportNumber.trim() || undefined,
         driverId: formState.driverId || undefined,
-        needsPickup: formState.needsPickup,
+        // Inferred from the driver rather than asked for separately: picking
+        // someone to drive is what says this person is being collected, and the
+        // form asked the same question twice.
+        needsPickup: formState.driverId !== '',
         notes: formState.notes.trim() || undefined,
       };
 
@@ -791,26 +783,6 @@ const TransportForm = memo(function TransportForm({
             {t('transports.noOtherPersons', { defaultValue: 'No other persons available' })}
           </p>
         )}
-      </div>
-
-      {/* Needs Pickup Switch */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="space-y-0.5">
-          <Label htmlFor="transport-needs-pickup" className="cursor-pointer">
-            {t('transports.needsPickup')}
-          </Label>
-          <p className="text-sm text-muted-foreground">
-            {t('transports.needsPickupDescription', {
-              defaultValue: 'Mark if someone needs to pick up or drop off this person',
-            })}
-          </p>
-        </div>
-        <Switch
-          id="transport-needs-pickup"
-          checked={formState.needsPickup}
-          onCheckedChange={handleNeedsPickupChange}
-          disabled={isSubmitting}
-        />
       </div>
 
       {/* Notes Field */}
