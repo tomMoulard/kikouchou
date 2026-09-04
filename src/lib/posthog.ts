@@ -268,6 +268,8 @@ export function resetAnalyticsIdentity(): void {
 export type UsageAction =
   | 'activity_saved'
   | 'assistant_prompt_sent'
+  | 'guest_group_imported'
+  | 'guest_group_saved'
   | 'person_saved'
   | 'room_saved'
   | 'transport_saved'

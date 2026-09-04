@@ -8,6 +8,7 @@
 import {
   type ChangeEvent,
   type FormEvent,
+  type ReactNode,
   memo,
   useCallback,
   useEffect,
@@ -110,6 +111,14 @@ interface TripFormProps {
    * data out so the page can act on it once the trip exists.
    */
   readonly onGuestsChange?: (guestNames: readonly string[]) => void;
+  /**
+   * Extra controls rendered directly under the guest list.
+   *
+   * Exists for the create page's guest-group picker: it belongs beside the
+   * guests it adds and above "Save" to be part of the same decision, but it is
+   * not a trip field and has no business inside this component's state.
+   */
+  readonly children?: ReactNode;
 }
 
 /**
@@ -239,6 +248,7 @@ const TripForm = memo(function TripForm({
   onImportSourceChange,
   currentUserName,
   onGuestsChange,
+  children,
 }: TripFormProps) {
   const { t, i18n } = useTranslation();
   const locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
@@ -1005,6 +1015,14 @@ const TripForm = memo(function TripForm({
             <Plus className="size-4" aria-hidden="true" />
             {t('trips.addGuest', 'Add guest')}
           </Button>
+
+          {/*
+            The guest-group picker, when a caller supplies one. Inside the
+            fieldset because it adds guests too — typing one and importing a
+            saved family are two ways to answer the same question, and splitting
+            them across the form would make the second look unrelated.
+          */}
+          {children}
         </fieldset>
       )}
 
