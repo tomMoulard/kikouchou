@@ -136,34 +136,62 @@ export async function materialiseJoinedTrip(
   remoteTripId: string,
 ): Promise<JoinTripResult> {
   try {
-    // Resolve locally rather than trusting anything in the payload — the same
-    // rule the CRDT bridge follows.
-    const existing = await db.trips
-      .where('remoteTripId')
-      .equals(remoteTripId)
-      .first();
-    if (existing) {
-      return { status: 'already-local', tripId: existing.id };
+    // The cheap answer first, outside any transaction: opening an invite twice,
+    // or downloading a trip the sweep already brought in, must not cost a round
+    // trip to fetch a preview that is about to be thrown away.
+    const known = await db.trips.where('remoteTripId').equals(remoteTripId).first();
+    if (known) {
+      return { status: 'already-local', tripId: known.id };
     }
 
     const preview = sanitisePreview(await fetchRemoteTripPreview(client, remoteTripId));
     const now = Date.now() as UnixTimestamp;
 
-    const trip: Trip = {
-      id: nanoid() as TripId,
-      name: preview.name,
-      startDate: toISODateStringFromString(preview.startDate),
-      endDate: toISODateStringFromString(preview.endDate),
-      // A local share id, never one adopted from the server: it is a unique
-      // Dexie index, and a colliding value aborts the whole write transaction.
-      shareId: nanoid(10) as ShareId,
-      createdAt: now,
-      updatedAt: now,
-      remoteTripId,
-    };
+    // The look-up and the write are one transaction, not two statements.
+    //
+    // The check above is a fast path, not the guard: it answers from a moment
+    // that has already passed by the time the preview lands. The one below is
+    // the authoritative one, and it is repeated deliberately.
+    //
+    // "Is it here already? No — add it" is a check-then-act, and it is now
+    // reached without a user driving it: the account sweep materialises every
+    // trip at once, in every open tab, the moment somebody signs in. Two tabs
+    // interleaved between the read and the write would each see nothing and
+    // each add a row, leaving one server trip showing twice in the list, with
+    // two documents and two cursors behind it.
+    //
+    // IndexedDB serialises readwrite transactions over the same store across
+    // connections, so this is a real lock between tabs and not merely a tidier
+    // way to write the same race. The network fetch above stays outside it —
+    // holding a Dexie transaction open across a round trip would block every
+    // other writer for as long as the server takes.
+    return await db.transaction('rw', db.trips, async (): Promise<JoinTripResult> => {
+      // Resolve locally rather than trusting anything in the payload — the same
+      // rule the CRDT bridge follows.
+      const existing = await db.trips
+        .where('remoteTripId')
+        .equals(remoteTripId)
+        .first();
+      if (existing) {
+        return { status: 'already-local', tripId: existing.id };
+      }
 
-    await db.trips.add(trip);
-    return { status: 'joined', tripId: trip.id };
+      const trip: Trip = {
+        id: nanoid() as TripId,
+        name: preview.name,
+        startDate: toISODateStringFromString(preview.startDate),
+        endDate: toISODateStringFromString(preview.endDate),
+        // A local share id, never one adopted from the server: it is a unique
+        // Dexie index, and a colliding value aborts the whole write transaction.
+        shareId: nanoid(10) as ShareId,
+        createdAt: now,
+        updatedAt: now,
+        remoteTripId,
+      };
+
+      await db.trips.add(trip);
+      return { status: 'joined', tripId: trip.id };
+    });
   } catch (error: unknown) {
     return {
       status: 'error',

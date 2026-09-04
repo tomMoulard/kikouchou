@@ -141,6 +141,30 @@ describe('materialiseJoinedTrip', () => {
     expect(await db.trips.where('remoteTripId').equals(REMOTE_TRIP_ID).count()).toBe(1);
   });
 
+  it('creates one trip, not two, when two callers race for the same one', async () => {
+    // Check-then-act, and no longer driven by a person: signing in sweeps the
+    // whole account onto the device, in every open tab at once. Two passes
+    // interleaved between the look-up and the write would each see nothing and
+    // each add a row — one server trip, two local copies, two documents behind
+    // them. The pair runs inside one Dexie transaction so the second waits.
+    const client = clientWithTrip({
+      name: 'Brittany',
+      start_date: '2026-07-15',
+      end_date: '2026-07-22',
+    });
+
+    const [first, second] = await Promise.all([
+      materialiseJoinedTrip(client, REMOTE_TRIP_ID),
+      materialiseJoinedTrip(client, REMOTE_TRIP_ID),
+    ]);
+
+    expect(await db.trips.where('remoteTripId').equals(REMOTE_TRIP_ID).count()).toBe(1);
+    // Both callers get a usable trip id, and it is the same one.
+    expect((first as { tripId: TripId }).tripId).toBe(
+      (second as { tripId: TripId }).tripId,
+    );
+  });
+
   it('finds a trip already linked by an earlier session', async () => {
     const now = Date.now() as UnixTimestamp;
     await db.trips.add({
@@ -215,7 +239,13 @@ describe('materialiseJoinedTrip', () => {
     ['just after local midnight', 0, 30],
     ['just before local midnight', 23, 30],
   ])('derives today locally when the clock reads %s', async (_label, hour, minute) => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // The clock only. Vitest's default set also fakes `queueMicrotask`, and
+    // `materialiseJoinedTrip` now does its look-up and its write inside one
+    // Dexie transaction — whose zone tracking assumes its continuation runs in
+    // the same microtask tick. Faking that queue defers the continuation to the
+    // fake clock, and Dexie aborts with "Transaction committed too early". This
+    // test is about which day it is, so `Date` is all it ever needed.
+    vi.useFakeTimers({ toFake: ['Date'] });
     try {
       vi.setSystemTime(new Date(2026, 6, 15, hour, minute));
 
