@@ -11,6 +11,7 @@ import { z } from 'zod';
 import {
   ACTIVITY_CATEGORIES,
   MAX_ACTIVITY_PARTICIPANTS,
+  MAX_GUEST_GROUP_MEMBERS,
   MAX_PERSON_HEADCOUNT,
   MIN_PERSON_HEADCOUNT,
 } from '@/types';
@@ -393,6 +394,58 @@ export const ActivityFormDataSchema = z
     },
   );
 
+/**
+ * Guest group member schema.
+ *
+ * Deliberately the same bounds as {@link PersonFormDataSchema} on the fields
+ * they share: a member becomes a `Person` on import, so anything accepted here
+ * must survive that write unchanged.
+ *
+ * Validates:
+ * - name: required, 1-100 characters
+ * - color: required, valid hex color
+ * - headcount: optional, whole number between 1 and 99
+ * - notes: optional, max 2000 characters
+ */
+export const GuestGroupMemberFormDataSchema = z.object({
+  name: z
+    .string()
+    .min(1, 'Name is required')
+    .max(100, 'Name must be 100 characters or less'),
+  color: hexColorSchema,
+  headcount: z
+    .number()
+    .int('Headcount must be a whole number')
+    .min(MIN_PERSON_HEADCOUNT, `Headcount must be at least ${MIN_PERSON_HEADCOUNT}`)
+    .max(MAX_PERSON_HEADCOUNT, `Headcount must be ${MAX_PERSON_HEADCOUNT} or less`)
+    .optional(),
+  notes: z
+    .string()
+    .max(2000, 'Notes must be 2000 characters or less')
+    .optional(),
+});
+
+/**
+ * Guest group form data schema.
+ *
+ * Validates:
+ * - name: required, 1-100 characters
+ * - members: required array (may be empty — a group is named before it is
+ *   filled), each a valid member, at most MAX_GUEST_GROUP_MEMBERS of them
+ */
+export const GuestGroupFormDataSchema = z.object({
+  name: z
+    .string()
+    .min(1, 'Name is required')
+    .max(100, 'Name must be 100 characters or less'),
+  members: z
+    .array(GuestGroupMemberFormDataSchema)
+    .max(
+      MAX_GUEST_GROUP_MEMBERS,
+      `A group holds at most ${MAX_GUEST_GROUP_MEMBERS} members`,
+    ),
+});
+
 // ============================================================================
 // Type Exports
 // ============================================================================
@@ -409,3 +462,7 @@ export type RoomAssignmentFormDataInput = z.input<
 >;
 export type TransportFormDataInput = z.input<typeof TransportFormDataSchema>;
 export type ActivityFormDataInput = z.input<typeof ActivityFormDataSchema>;
+export type GuestGroupFormDataInput = z.input<typeof GuestGroupFormDataSchema>;
+export type GuestGroupMemberFormDataInput = z.input<
+  typeof GuestGroupMemberFormDataSchema
+>;

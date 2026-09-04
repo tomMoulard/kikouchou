@@ -11,6 +11,8 @@
 import { nanoid } from 'nanoid';
 import type {
   ActivityId,
+  GuestGroupId,
+  GuestGroupMemberId,
   HexColor,
   ISODateString,
   ISODateTimeString,
@@ -80,6 +82,31 @@ export const createTransportId = (): TransportId => nanoid() as TransportId;
  * ```
  */
 export const createActivityId = (): ActivityId => nanoid() as ActivityId;
+
+/**
+ * Creates a new GuestGroup ID.
+ *
+ * @returns A branded GuestGroupId
+ *
+ * @example
+ * ```typescript
+ * const groupId = createGuestGroupId();
+ * ```
+ */
+export const createGuestGroupId = (): GuestGroupId => nanoid() as GuestGroupId;
+
+/**
+ * Creates a new GuestGroupMember ID.
+ *
+ * @returns A branded GuestGroupMemberId
+ *
+ * @example
+ * ```typescript
+ * const memberId = createGuestGroupMemberId();
+ * ```
+ */
+export const createGuestGroupMemberId = (): GuestGroupMemberId =>
+  nanoid() as GuestGroupMemberId;
 
 /**
  * Creates a new unique Share ID for trip sharing URLs.
