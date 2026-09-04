@@ -197,7 +197,6 @@ const TripListPage = memo(function TripListPage() {
     setShareDialogOpen(open);
   }, []);
 
-
   const headerAction = useMemo(
     () => (
       <div className="flex items-center gap-2">
@@ -206,10 +205,10 @@ const TripListPage = memo(function TripListPage() {
           variant="outline"
           onClick={openImportQr}
           aria-label={t('trips.importFromQrAria')}
-          className="shrink-0"
+          className="hidden sm:flex shrink-0"
         >
-          <QrCode className="size-4 sm:mr-2" aria-hidden="true" />
-          <span className="hidden sm:inline">{t('trips.importFromQr')}</span>
+          <QrCode className="size-4 mr-2" aria-hidden="true" />
+          {t('trips.importFromQr')}
         </Button>
         <Button onClick={handleCreateClick} className="hidden sm:flex">
           <Plus className="size-4 mr-2" aria-hidden="true" />
@@ -218,6 +217,27 @@ const TripListPage = memo(function TripListPage() {
       </div>
     ),
     [handleCreateClick, openImportQr, t],
+  );
+
+  const importQrFab = useMemo(
+    () => (
+      <Button
+        type="button"
+        onClick={openImportQr}
+        size="lg"
+        variant="secondary"
+        className={cn(
+          'fixed bottom-fab-safe right-4 z-10',
+          'size-14 rounded-full shadow-lg',
+          'sm:hidden',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        )}
+        aria-label={t('trips.importFromQrAria')}
+      >
+        <QrCode className="size-6" aria-hidden="true" />
+      </Button>
+    ),
+    [openImportQr, t],
   );
 
   /**
@@ -236,11 +256,12 @@ const TripListPage = memo(function TripListPage() {
   if (isLoading) {
     return (
       <>
-        <div className="flex flex-col">
+        <div className="flex flex-col pb-second-fab">
           <PageHeader title={t('trips.title')} action={headerAction} />
           <div className="flex items-center justify-center py-20">
             <LoadingState variant="inline" size="lg" />
           </div>
+          {importQrFab}
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
       </>
@@ -254,11 +275,12 @@ const TripListPage = memo(function TripListPage() {
   if (error) {
     return (
       <>
-        <div className="flex flex-col">
+        <div className="flex flex-col pb-second-fab">
           <PageHeader title={t('trips.title')} action={headerAction} />
           <div className="py-8">
             <ErrorDisplay error={error} onRetry={handleRetry} />
           </div>
+          {importQrFab}
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
       </>
@@ -272,7 +294,7 @@ const TripListPage = memo(function TripListPage() {
   if (trips.length === 0) {
     return (
       <>
-        <div className="flex flex-col">
+        <div className="flex flex-col pb-second-fab">
           <PageHeader title={t('trips.title')} action={headerAction} />
           <div className="flex items-center justify-center py-16 sm:py-24">
             <EmptyState
@@ -289,6 +311,7 @@ const TripListPage = memo(function TripListPage() {
               a laptop leaves this device with no local trips at all, and without
               this the laptop offers no way into the trip. */}
           <RemoteTripsSection localTripCount={0} />
+          {importQrFab}
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
       </>
@@ -358,22 +381,7 @@ const TripListPage = memo(function TripListPage() {
 
         <RemoteTripsSection localTripCount={trips.length} />
 
-        {/* Floating actions — mobile */}
-        <Button
-          type="button"
-          onClick={openImportQr}
-          size="lg"
-          variant="secondary"
-          className={cn(
-            'fixed bottom-fab-safe right-4 z-10',
-            'size-14 rounded-full shadow-lg',
-            'sm:hidden',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-          )}
-          aria-label={t('trips.importFromQrAria')}
-        >
-          <QrCode className="size-6" aria-hidden="true" />
-        </Button>
+        {importQrFab}
         <Button
           onClick={handleCreateClick}
           size="lg"
