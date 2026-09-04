@@ -291,9 +291,10 @@ describe('Layout', () => {
       const mobileNav = getMobileNav();
       expect(mobileNav).toBeInTheDocument();
 
-      // Get all nav links in mobile nav (3 primary items: Calendar, Rooms, Transports)
+      // Get all nav links in mobile nav
+      // (4 primary items: Calendar, Rooms, Guests, Transports)
       const navLinks = within(mobileNav as HTMLElement).getAllByRole('link');
-      expect(navLinks).toHaveLength(3);
+      expect(navLinks).toHaveLength(4);
 
       // "More" button should be present
       const moreButton = within(mobileNav as HTMLElement).getByText('nav.more');
@@ -302,6 +303,17 @@ describe('Layout', () => {
       // Trip-specific links should be disabled (aria-disabled)
       const calendarLink = within(mobileNav as HTMLElement).getByText('nav.calendar').closest('a');
       expect(calendarLink).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    // Guests sat behind "More" and took two taps, which is a lot for one of the
+    // pages people open most. It has a slot in the bar now.
+    it('puts Guests in the mobile bar rather than the "More" sheet', () => {
+      renderLayout();
+
+      const mobileNav = getMobileNav();
+      expect(
+        within(mobileNav as HTMLElement).getByText('nav.persons'),
+      ).toBeInTheDocument();
     });
   });
 
@@ -534,8 +546,9 @@ describe('Layout', () => {
         .getAllByRole('link')
         .filter((link) => link.getAttribute('aria-disabled') === 'true');
 
-      // Should have 3 disabled links (Calendar, Rooms, Transports) — primary mobile items
-      expect(disabledLinks).toHaveLength(3);
+      // Should have 4 disabled links (Calendar, Rooms, Guests, Transports) —
+      // the primary mobile items, all of which need a trip.
+      expect(disabledLinks).toHaveLength(4);
     });
 
     it('collapse button carries the same name in its tooltip and its label', async () => {
@@ -732,12 +745,12 @@ describe('Layout', () => {
         within(getMobileNav() as HTMLElement).getByRole('button', { name: 'nav.more' }),
       );
 
-      const personsItem = await screen.findByRole('button', { name: /nav\.persons/ });
-      expect(personsItem).toHaveAttribute('aria-disabled', 'true');
+      const activitiesItem = await screen.findByRole('button', { name: /nav\.activities/ });
+      expect(activitiesItem).toHaveAttribute('aria-disabled', 'true');
       // A natively `disabled` button leaves the tab order entirely.
-      expect(personsItem).not.toBeDisabled();
+      expect(activitiesItem).not.toBeDisabled();
 
-      const hintId = personsItem.getAttribute('aria-describedby');
+      const hintId = activitiesItem.getAttribute('aria-describedby');
       expect(hintId).toBeTruthy();
       expect(document.getElementById(hintId as string)).toHaveTextContent(
         'nav.requiresTrip',
@@ -751,7 +764,7 @@ describe('Layout', () => {
       await user.click(
         within(getMobileNav() as HTMLElement).getByRole('button', { name: 'nav.more' }),
       );
-      await screen.findByRole('button', { name: /nav\.persons/ });
+      await screen.findByRole('button', { name: /nav\.activities/ });
 
       // Radix's focus scope skips natively `disabled` nodes but not
       // `aria-disabled` ones, so swapping the attribute moved the sheet's

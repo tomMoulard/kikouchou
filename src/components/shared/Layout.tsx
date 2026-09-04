@@ -138,18 +138,21 @@ const ASSISTANT_NAV_ITEM: NavItem = {
 
 /**
  * Trip sections kept out of the mobile bottom bar, in the order they appear
- * inside the "More" sheet. The bar holds 3 trip items + "More".
+ * inside the "More" sheet. The bar holds 4 trip items + "More".
+ *
+ * Guests used to be in here, which put one of the pages people open most often
+ * two taps away behind "More". Five slots is the ceiling — the bar splits the
+ * width evenly, and a sixth makes the labels wrap on a small phone.
  */
 const MOBILE_SECONDARY_TRIP_PATHS: readonly string[] = [
-  'persons',
   'activities',
   'analytics',
 ];
 
 /**
- * Primary mobile bottom nav items (max 4 for UX: 3 trip items + "More").
- * Calendar, Rooms, Transports are directly accessible.
- * Persons, Activities, Analytics, Trips, Settings are inside the "More" sheet.
+ * Primary mobile bottom nav items (max 5 for UX: 4 trip items + "More").
+ * Calendar, Rooms, Guests and Transports are directly accessible.
+ * Activities, Analytics, Trips, Settings are inside the "More" sheet.
  * Derived from canonical arrays to avoid duplication.
  */
 const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] = TRIP_NAV_ITEMS.filter(
