@@ -610,6 +610,22 @@ test.describe('Manifest Validation', () => {
     expect(manifest.display).toBe('standalone');
   });
 
+  test('manifest declares a stable app id', async ({ page }) => {
+    const response = await page.request.get('/manifest.webmanifest');
+    const manifest = await response.json();
+
+    /**
+     * With no `id`, the app's computed identity *is* its `start_url`. That
+     * makes the identity a function of `vite.config.ts`'s `base`: change it and
+     * every already-installed copy points at an app that, as far as the browser
+     * is concerned, no longer exists — the next install adds a second icon
+     * instead of updating the first. Declaring it pins the identity to one
+     * string, which is also what a cross-origin `navigator.install()` call from
+     * the landing page would have to name.
+     */
+    expect(manifest.id).toBe('/');
+  });
+
   test('manifest icons are accessible', async ({ page, baseURL }) => {
     const response = await page.request.get('/manifest.webmanifest');
     const manifest = await response.json();
