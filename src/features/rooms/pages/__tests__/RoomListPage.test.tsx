@@ -429,19 +429,27 @@ describe('RoomListPage', () => {
   });
 
   // ===========================================================================
-  // Unassigned guests section
+  // Auto-assign button (shown when guests are unassigned and model is cached)
   // ===========================================================================
 
-  it('renders unassigned guests section when persons have stay dates but no assignments', () => {
+  it('does not show the unassigned guests warning card', () => {
     render(<RoomListPage />, { withProviders: false });
-    // Alice has stayStartDate/stayEndDate but no assignments
-    // Text includes count suffix e.g. "rooms.unassignedGuests (1)"
-    expect(screen.getByText(/rooms\.unassignedGuests/)).toBeInTheDocument();
-    expect(screen.getByTestId('draggable-guest')).toBeInTheDocument();
-    expect(screen.getByText('rooms.dragHint')).toBeInTheDocument();
+    expect(screen.queryByText(/rooms\.unassignedGuests/)).not.toBeInTheDocument();
+    expect(screen.queryByText('rooms.dragHint')).not.toBeInTheDocument();
   });
 
-  it('renders unassigned guests derived from transports when no stay dates', () => {
+  it('shows optimize button when unassigned guests exist and assistant model is cached', async () => {
+    mockAssistantModelCacheAvailable();
+    render(<RoomListPage />, { withProviders: false });
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'rooms.autoAssignButton' }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('derives unassigned guests from transports when no stay dates (optimize button)', async () => {
+    mockAssistantModelCacheAvailable();
     vi.mocked(usePersonContext).mockReturnValue({
       persons: [mockPerson2],
       isLoading: false,
@@ -454,10 +462,13 @@ describe('RoomListPage', () => {
       isLoading: false,
       error: null,
     } as unknown as ReturnType<typeof useTransportContext>);
-    // Card view so unassigned section can render
     currentSearchParams = new URLSearchParams('view=card');
     render(<RoomListPage />, { withProviders: false });
-    expect(screen.getByText(/rooms\.unassignedGuests/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'rooms.autoAssignButton' }),
+      ).toBeInTheDocument();
+    });
   });
 
   it('keeps one continuous auto-assignment across DST fallback nights', async () => {
@@ -509,7 +520,8 @@ describe('RoomListPage', () => {
     }
   });
 
-  it('does not render unassigned section when all guests are assigned', () => {
+  it('does not show optimize button when all guests are assigned', async () => {
+    mockAssistantModelCacheAvailable();
     vi.mocked(useAssignmentContext).mockReturnValue({
       assignments: [mockAssignment],
       isLoading: false,
@@ -519,10 +531,15 @@ describe('RoomListPage', () => {
       updateAssignment: mockUpdateAssignment,
     } as unknown as ReturnType<typeof useAssignmentContext>);
     render(<RoomListPage />, { withProviders: false });
-    expect(screen.queryByText(/rooms\.unassignedGuests/)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: 'rooms.autoAssignButton' }),
+      ).not.toBeInTheDocument();
+    });
   });
 
-  it('does not render unassigned section when no persons', () => {
+  it('does not show optimize button when no persons', async () => {
+    mockAssistantModelCacheAvailable();
     vi.mocked(usePersonContext).mockReturnValue({
       persons: [],
       isLoading: false,
@@ -537,7 +554,11 @@ describe('RoomListPage', () => {
       deleteRoom: mockDeleteRoom,
     } as unknown as ReturnType<typeof useRoomContext>);
     render(<RoomListPage />, { withProviders: false });
-    expect(screen.queryByText(/rooms\.unassignedGuests/)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: 'rooms.autoAssignButton' }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   // ===========================================================================
@@ -731,7 +752,7 @@ describe('RoomListPage', () => {
     expect(screen.getByText('rooms.filterDates')).toBeInTheDocument();
   });
 
-  it('renders unassigned guests section when some persons lack assignments', () => {
+  it('renders rooms when some persons lack assignments', () => {
     vi.mocked(usePersonContext).mockReturnValue({
       persons: [mockPerson, mockPerson2],
       isLoading: false,
@@ -752,9 +773,8 @@ describe('RoomListPage', () => {
     } as unknown as ReturnType<typeof useAssignmentContext>);
     currentSearchParams = new URLSearchParams('view=card');
     render(<RoomListPage />, { withProviders: false });
-    // Bob (person-2) should show as unassigned if he has stay dates
-    // person-2 doesn't have stayStartDate/stayEndDate so may not show
     expect(screen.getByText('Master Bedroom')).toBeInTheDocument();
+    expect(screen.queryByText(/rooms\.unassignedGuests/)).not.toBeInTheDocument();
   });
 
   it('renders with trip that has no dates', () => {
@@ -818,7 +838,8 @@ describe('RoomListPage', () => {
     expect(screen.getByText('rooms.title')).toBeInTheDocument();
   });
 
-  it('shows unassigned guests with stay dates in card view', () => {
+  it('shows optimize button for unassigned guests with stay dates in card view', async () => {
+    mockAssistantModelCacheAvailable();
     const personWithDates: Person = {
       id: 'person-3' as Person['id'],
       tripId: 'trip-1' as Person['tripId'],
@@ -843,8 +864,12 @@ describe('RoomListPage', () => {
     } as unknown as ReturnType<typeof useAssignmentContext>);
     currentSearchParams = new URLSearchParams('view=card');
     render(<RoomListPage />, { withProviders: false });
-    // Diana should show as an unassigned guest
-    expect(screen.getByText('Diana')).toBeInTheDocument();
+    expect(screen.queryByText(/rooms\.unassignedGuests/)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'rooms.autoAssignButton' }),
+      ).toBeInTheDocument();
+    });
   });
 
   it('renders transport context with arrivals and departures', () => {

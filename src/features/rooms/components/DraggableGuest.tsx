@@ -5,7 +5,7 @@
  * @module features/rooms/components/DraggableGuest
  */
 
-import { type ReactElement, memo } from 'react';
+import { type CSSProperties, type ReactElement, memo } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 
@@ -41,6 +41,19 @@ export interface DraggableGuestProps {
   readonly endDate: string;
   /** Size variant for the badge */
   readonly size?: 'sm' | 'default';
+  /**
+   * Render as a positioned bar spanning the guest's nights, the way an assigned
+   * guest's pill is drawn, rather than as a badge sized to the name.
+   *
+   * The rooms timeline uses this for the "needs a room" row: same shape, same
+   * name, same place on the day axis as a housed guest's pill, so the two can
+   * be read against each other — but drawn as an outline rather than a filled
+   * block, because this guest has no bed and the bar is a request, not a
+   * booking.
+   */
+  readonly bar?: boolean;
+  /** Positioning for {@link DraggableGuestProps.bar}; merged with the drag transform. */
+  readonly style?: CSSProperties;
   /** Additional CSS classes */
   readonly className?: string;
   /** Whether drag is disabled */
@@ -68,10 +81,24 @@ export interface DraggableGuestProps {
  * ```
  */
 const DraggableGuest = memo(function DraggableGuest(props: DraggableGuestProps): ReactElement {
-  const { person, startDate, endDate, size = 'sm', className, disabled = false } = props;
+  const {
+    person,
+    startDate,
+    endDate,
+    size = 'sm',
+    bar = false,
+    style: positionStyle,
+    className,
+    disabled = false,
+  } = props;
 
-  // Create unique ID for this draggable
-  const draggableId = `guest-${person.id}`;
+  // Create unique ID for this draggable.
+  //
+  // The stay is part of it, not decoration: a guest housed for only part of
+  // their stay gets one bar per gap, and dnd-kit needs each to be its own
+  // draggable or dragging one would pick up the other. Used nowhere but the
+  // hook, so the shape is free to carry it.
+  const draggableId = `guest-${person.id}-${startDate}-${endDate}`;
 
   // Set up dnd-kit draggable
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -85,11 +112,51 @@ const DraggableGuest = memo(function DraggableGuest(props: DraggableGuestProps):
   });
 
   // Apply transform style for drag movement
-  const style = transform
-    ? {
-        transform: CSS.Translate.toString(transform),
-      }
-    : undefined;
+  const style: CSSProperties | undefined =
+    transform || positionStyle
+      ? {
+          ...positionStyle,
+          ...(transform ? { transform: CSS.Translate.toString(transform) } : {}),
+        }
+      : undefined;
+
+  if (bar) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={{
+          ...style,
+          // Dashed outline in the guest's own colour over a wash of it, rather
+          // than the solid block a booked room gets. Keeps the colour identity
+          // and the name legible while reading as provisional at a glance.
+          //
+          // The fill is mostly transparent, so the rendered background is the
+          // page behind it and a contrast colour computed from `person.color`
+          // would be wrong in both themes. `text-foreground` is already right
+          // in each.
+          borderColor: person.color,
+          backgroundColor: `${person.color}26`,
+        }}
+        {...listeners}
+        {...attributes}
+        className={cn(
+          'absolute flex items-center rounded-md px-2 text-xs touch-none select-none',
+          'border-2 border-dashed text-foreground',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          'transition-opacity hover:opacity-90',
+          isDragging && 'opacity-60 cursor-grabbing z-50',
+          !isDragging && !disabled && 'cursor-grab active:cursor-grabbing',
+          disabled && 'cursor-not-allowed opacity-50',
+          className,
+        )}
+        title={person.name}
+        aria-label={person.name}
+        data-unhoused="true"
+      >
+        <span className="truncate">{person.name}</span>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -108,6 +175,8 @@ const DraggableGuest = memo(function DraggableGuest(props: DraggableGuestProps):
         disabled && 'cursor-not-allowed opacity-50',
         className,
       )}
+      title={person.name}
+      aria-label={person.name}
     >
       <PersonBadge person={person} size={size} />
     </div>
