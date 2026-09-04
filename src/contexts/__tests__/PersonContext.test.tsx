@@ -17,6 +17,7 @@ import type { ReactNode } from 'react';
 
 import { TripProvider, useTripContext } from '@/contexts/TripContext';
 import { PersonProvider, usePersonContext } from '@/contexts/PersonContext';
+import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import type { PersonId, TripId, Person, HexColor } from '@/types';
@@ -372,6 +373,128 @@ describe('PersonContext', () => {
 
       const found = result.current.getPersonById('unknown' as PersonId);
       expect(found).toBeUndefined();
+    });
+  });
+
+  /**
+   * Persons carry no `updatedAt`, so the comparator is the only thing between a
+   * change and the UI: a field it forgets is a field that never re-renders.
+   * `headcount` was in fact missing, and it is the field every derived total
+   * (meals, groceries) is computed from — editing it left those on the old
+   * number until some other field happened to change too.
+   */
+  describe('comparator covers every mutable field', () => {
+    const mutations: readonly {
+      readonly field: string;
+      readonly patch: Partial<Person>;
+      readonly read: (person: Person | undefined) => unknown;
+      readonly expected: unknown;
+    }[] = [
+      {
+        field: 'name',
+        patch: { name: 'Renamed' },
+        read: (person) => person?.name,
+        expected: 'Renamed',
+      },
+      {
+        field: 'color',
+        patch: { color: hexColor('#22c55e') },
+        read: (person) => person?.color,
+        expected: '#22c55e',
+      },
+      {
+        field: 'stayStartDate',
+        patch: { stayStartDate: isoDate('2024-07-16') },
+        read: (person) => person?.stayStartDate,
+        expected: '2024-07-16',
+      },
+      {
+        field: 'stayEndDate',
+        patch: { stayEndDate: isoDate('2024-07-28') },
+        read: (person) => person?.stayEndDate,
+        expected: '2024-07-28',
+      },
+      {
+        field: 'notes',
+        patch: { notes: 'Gluten free' },
+        read: (person) => person?.notes,
+        expected: 'Gluten free',
+      },
+      {
+        field: 'headcount',
+        patch: { headcount: 2 },
+        read: (person) => person?.headcount,
+        expected: 2,
+      },
+    ];
+
+    for (const { field, patch, read, expected } of mutations) {
+      it(`propagates a change to ${field}`, async () => {
+        const tripId = await createTestTripData();
+        const person = await createTestPerson(tripId, 'Original');
+
+        const { result } = renderHook(() => useCombinedContexts(), {
+          wrapper: AllContextsWrapper,
+        });
+
+        await waitFor(() => {
+          expect(result.current.trip.isLoading).toBe(false);
+        });
+
+        await act(async () => {
+          await result.current.trip.setCurrentTrip(tripId);
+        });
+
+        await waitFor(() => {
+          expect(result.current.person.persons).toHaveLength(1);
+        });
+
+        // `waitFor` below already polls, so the sleep buys nothing — but the
+        // write does need act(), or the live query's setState lands loose.
+        await act(async () => {
+          await db.persons.update(person.id, patch);
+        });
+
+        await waitFor(() => {
+          const updated = result.current.person.persons.find(
+            (p) => p.id === person.id,
+          );
+          expect(read(updated)).toEqual(expected);
+        });
+      });
+    }
+
+    it('propagates a headcount change made through the context', async () => {
+      const tripId = await createTestTripData();
+      const person = await createTestPerson(tripId, 'Alice+Auré');
+
+      const { result } = renderHook(() => useCombinedContexts(), {
+        wrapper: AllContextsWrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.trip.isLoading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.trip.setCurrentTrip(tripId);
+      });
+
+      await waitFor(() => {
+        expect(result.current.person.persons).toHaveLength(1);
+      });
+
+      await act(async () => {
+        await result.current.person.updatePerson(person.id, { headcount: 2 });
+      });
+      await waitForLiveQuery();
+
+      await waitFor(() => {
+        const updated = result.current.person.persons.find(
+          (p) => p.id === person.id,
+        );
+        expect(updated?.headcount).toBe(2);
+      });
     });
   });
 

@@ -23,7 +23,11 @@ import {
   sortTransportsByInstant,
 } from '@/features/transports/utils/pickup-utils';
 import { useTripContext } from '@/contexts/TripContext';
-import { areArraysEqual, wrapAndSetError } from '@/contexts/utils';
+import {
+  areArraysEqual,
+  areCoordinatesEqual,
+  wrapAndSetError,
+} from '@/contexts/utils';
 import { db } from '@/lib/db/database';
 import {
   createTransport as repositoryCreateTransport,
@@ -167,7 +171,14 @@ const compareTransports = (a: Transport, b: Transport): boolean =>
   a.location === b.location &&
   a.transportMode === b.transportMode &&
   a.transportNumber === b.transportNumber &&
-  a.notes === b.notes;
+  a.notes === b.notes &&
+  // The three map fields, listed because the comparator must cover every
+  // mutable field. Without them, moving a pin or naming a starting point left
+  // `transports` holding the old place: the map kept drawing the old marker and
+  // the old route until some unrelated field happened to change too.
+  a.startLocation === b.startLocation &&
+  areCoordinatesEqual(a.coordinates, b.coordinates) &&
+  areCoordinatesEqual(a.startCoordinates, b.startCoordinates);
 
 /**
  * Compares two transport arrays for equality based on IDs and all mutable properties.
