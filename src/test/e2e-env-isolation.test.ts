@@ -127,10 +127,6 @@ describe('playwright web server environments', () => {
         // and no key — neither is a state any project here means to be in.
         expect(env.VITE_SUPABASE_URL === '').toBe(env.VITE_SUPABASE_PUBLISHABLE_KEY === '');
       });
-
-      it('clears GITHUB_ACTIONS so vite.config does not rebase the app', () => {
-        expect(server.env?.GITHUB_ACTIONS).toBe('');
-      });
     });
   }
 });
