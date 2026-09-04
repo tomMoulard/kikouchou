@@ -28,8 +28,11 @@ interface ImportMetaEnv {
    *
    * The one auth setting that cannot be discovered from the project.
    * `GET /auth/v1/settings` lists every OAuth provider plus email and phone but
-   * says nothing about web3, so this is how the app is told. Unset means no
-   * wallet button. See `features/auth/web3`.
+   * says nothing about web3, so this is how the app is told.
+   *
+   * **Unset means both**, matching the project. A set value replaces that list
+   * rather than adding to it, so an empty value is how a deployment without web3
+   * turns wallet sign-in off. See `features/auth/web3`.
    */
   readonly VITE_SUPABASE_WEB3_CHAINS?: string;
 
