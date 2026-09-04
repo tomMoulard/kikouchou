@@ -262,8 +262,14 @@ describe('trip-scoped routes', () => {
       const patterns = collectLeafPatterns(routes),
         duplicates = patterns.filter((p, i) => patterns.indexOf(p) !== i);
 
-      // `/trips/:tripId` was claimed three times over. Listing the offenders
-      // rather than asserting a bare count makes the failure readable.
+      // Scope, honestly: this catches two leaves resolving to the *same*
+      // pattern. It did NOT catch the bug this file was written for — the
+      // pre-fix table's three claimants produced three distinct leaves
+      // (`/trips/:tripId`, `/trips/:tripId/calendar`, `/trips/:tripId/sync`),
+      // and this assertion passes on it. Restoring the flat shape in place and
+      // re-running proves that. The guards that go red on it are the sibling
+      // test below and the redirect assertions in the next describe block.
+      // This one is here for the next duplicate, not for the last one.
       expect(duplicates).toEqual([]);
     });
 
@@ -271,6 +277,8 @@ describe('trip-scoped routes', () => {
       const children = appRoutes.children ?? [],
         tripScoped = children.filter((route) => route.path === 'trips/:tripId');
 
+      // This is the assertion that goes red on the actual pre-fix table: it
+      // had two `trips/:tripId` siblings, the calendar's and the sync parent's.
       expect(tripScoped).toHaveLength(1);
       // The calendar must not also be a flat sibling of that parent.
       expect(children.some((route) => route.path?.startsWith('trips/:tripId/calendar'))).toBe(false);
