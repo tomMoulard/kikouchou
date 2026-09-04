@@ -347,6 +347,7 @@
     "upcomingPickups": "Upcoming pickups",
     "pastTransports": "Past transports",
     "mapView": "Map view",
+    "tripLocation": "Accommodation",
     "listView": "List view",
     "noLocations": "No locations on the map yet",
     "noLocationsDescription": "Add a location to transport entries and they'll show up here",

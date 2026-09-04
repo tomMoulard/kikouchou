@@ -581,4 +581,54 @@ describe('TransportMapPage', () => {
     expect(popup).toHaveTextContent('14:30');
     expect(screen.getByTestId('person-badge')).toHaveTextContent('Alice');
   });
+
+  // Where everyone is heading. A map of stations with no "home" on it does not
+  // answer the question the page is opened to answer.
+  describe('trip location pin', () => {
+    const tripWithCoordinates: Trip = {
+      ...mockTrip,
+      coordinates: { lat: 48.8566, lon: 2.3522 },
+    };
+
+    it('pins the trip location when the trip has coordinates', () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: tripWithCoordinates,
+        isLoading: false,
+        error: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        trips: [tripWithCoordinates],
+        checkConnection: vi.fn(),
+      });
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      // It leads the marker list, so the transports keep their own ordering.
+      expect(screen.getByTestId('marker-popup-0')).toHaveAttribute('data-label', 'Paris');
+      expect(screen.getByTestId('map-legend-swatch-trip')).toBeInTheDocument();
+    });
+
+    it('leaves the map alone when the trip has no coordinates', () => {
+      render(<TransportMapPage />, { withProviders: false });
+
+      expect(screen.getByTestId('marker-popup-0')).not.toHaveAttribute('data-label', 'Paris');
+      expect(screen.queryByTestId('map-legend-swatch-trip')).not.toBeInTheDocument();
+    });
+
+    it('does not count the trip pin as a mapped transport', () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: tripWithCoordinates,
+        isLoading: false,
+        error: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        trips: [tripWithCoordinates],
+        checkConnection: vi.fn(),
+      });
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      // The legend counts transports, not pins — one arrival has coordinates.
+      expect(screen.getByTestId('map-legend')).toHaveTextContent('transports.mappedCount');
+      expect(screen.getByTestId('map-view')).toHaveAttribute('data-markers', '2');
+    });
+  });
 });
