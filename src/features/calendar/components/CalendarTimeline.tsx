@@ -198,8 +198,8 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
           inside the viewport. An `mx-auto` empty state in there centres on the
           canvas, not on the screen, so on a phone it sat several hundred
           pixels off to the right and simply could not be seen. Out here it
-          centres on the page, which is where a "nothing here yet" message
-          belongs anyway.
+          centres on the page, which is where a "nothing here yet" message and
+          its two buttons belong anyway.
 
           Same EmptyState, copy and icon as the month view's, so switching
           views does not change how "nothing here yet" is presented. */}
@@ -207,6 +207,22 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
         icon={CalendarIcon}
         title={t('calendar.noAssignmentsTitle', 'Nothing scheduled yet')}
         description={t('calendar.noAssignments')}
+        action={
+          props.onAddGuests
+            ? {
+                label: t('calendar.addGuests', 'Add guests'),
+                onClick: props.onAddGuests,
+              }
+            : undefined
+        }
+        secondaryAction={
+          props.onAddRooms
+            ? {
+                label: t('calendar.addRooms', 'Add rooms'),
+                onClick: props.onAddRooms,
+              }
+            : undefined
+        }
       />
     </>
   );

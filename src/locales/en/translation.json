@@ -464,6 +464,8 @@
     "week": "Week",
     "noAssignments": "Nothing scheduled for this period — rooms and transports will appear here",
     "noAssignmentsTitle": "Nothing scheduled yet",
+    "addGuests": "Add guests",
+    "addRooms": "Add rooms",
     "previousMonth": "Previous month",
     "nextMonth": "Next month",
     "monthView": "Month view calendar",

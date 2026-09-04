@@ -255,4 +255,11 @@ export interface CalendarTimelineProps {
   ) => void;
   readonly onTransportClick?: (transport: CalendarTransport) => void;
   readonly onActivityClick?: (activity: Activity) => void;
+  /**
+   * Sends the user off to create guests, from the "nothing scheduled" empty
+   * state. Omitted, the empty state keeps its text-only form.
+   */
+  readonly onAddGuests?: () => void;
+  /** Same, for rooms. */
+  readonly onAddRooms?: () => void;
 }

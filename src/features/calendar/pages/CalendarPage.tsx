@@ -26,7 +26,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useOfflineAwareToast } from '@/hooks';
@@ -143,6 +143,7 @@ const EMPTY_CALENDAR_ACTIVITIES: readonly CalendarActivity[] = [];
 const CalendarPage = memo(function CalendarPage(): ReactElement {
   const { t, i18n } = useTranslation();
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { successToast } = useOfflineAwareToast();
 
@@ -201,6 +202,17 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     },
     [setSearchParams],
   );
+
+  // An empty calendar is usually an empty *trip* — there is nothing to schedule
+  // until it has guests and rooms. Both list pages open their create dialog on
+  // `?new=1`, so these land on the form rather than on another empty list.
+  const handleAddGuests = useCallback(() => {
+    navigate(`/trips/${tripIdFromUrl}/persons?new=1`);
+  }, [navigate, tripIdFromUrl]);
+
+  const handleAddRooms = useCallback(() => {
+    navigate(`/trips/${tripIdFromUrl}/rooms?new=1`);
+  }, [navigate, tripIdFromUrl]);
 
   // The frame's own day-axis builder, so the width decision counts exactly the
   // columns the timeline will draw.
@@ -1179,6 +1191,8 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           onAssignmentClick={handleEventClick}
           onTransportClick={handleTransportClick}
           onActivityClick={handleActivityClick}
+          onAddGuests={handleAddGuests}
+          onAddRooms={handleAddRooms}
         />
       )}
 
@@ -1191,6 +1205,14 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           icon={CalendarIcon}
           title={t('calendar.noAssignmentsTitle', 'Nothing scheduled yet')}
           description={t('calendar.noAssignments')}
+          action={{
+            label: t('calendar.addGuests', 'Add guests'),
+            onClick: handleAddGuests,
+          }}
+          secondaryAction={{
+            label: t('calendar.addRooms', 'Add rooms'),
+            onClick: handleAddRooms,
+          }}
         />
       )}
 
