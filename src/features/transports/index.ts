@@ -52,4 +52,4 @@ export {
 // Routes
 // ============================================================================
 
-export { transportRoutes, TransportListRoute } from './routes';
+export { transportRoutes } from './routes';

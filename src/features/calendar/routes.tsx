@@ -14,7 +14,7 @@
  *     path: '/',
  *     element: <Layout />,
  *     children: [
- *       ...calendarRoutes,
+ *       { path: 'trips/:tripId', children: [...calendarRoutes] },
  *       // other routes...
  *     ],
  *   },
@@ -22,8 +22,8 @@
  * ```
  */
 
-import { lazy } from 'react';
-import type { RouteObject } from 'react-router-dom';
+import { type ReactElement, lazy } from 'react';
+import { Navigate, type RouteObject, useLocation } from 'react-router-dom';
 
 import { withSuspense } from '@/components/shared/with-suspense';
 
@@ -42,15 +42,55 @@ const CalendarPage = lazy(() =>
 );
 
 // ============================================================================
+// Index Redirect
+// ============================================================================
+
+/**
+ * Sends the bare `/trips/:tripId` on to `/trips/:tripId/calendar`.
+ *
+ * The bare path used to render its *own* copy of the calendar next to the
+ * `calendar` one. `withSuspense` builds a fresh element per call, so the two
+ * were referentially distinct routes: moving between them remounted the page
+ * and reset `currentMonth`, the selected event and the open dialog. Worse,
+ * `?view=` lives in the URL, so the chosen view was scoped to whichever of the
+ * two paths you happened to be on and silently fell back to `timeline` on the
+ * other.
+ *
+ * Redirecting instead of rendering leaves exactly one URL the calendar lives
+ * at, which is what makes those two bugs unrepresentable rather than fixed.
+ *
+ * The query string and hash are carried across on purpose: a bookmark of
+ * `/trips/:tripId?view=card` is precisely the case this route exists for, and
+ * dropping the search would land it on the timeline — the same silent fallback,
+ * just moved. `replace` keeps the bare path out of the history stack so Back
+ * does not bounce off it.
+ *
+ * Nothing in the app links the bare path (`Layout` and every `navigate()` call
+ * site append `/calendar`), so this is reached only from a bookmark, a typed
+ * URL or an external link.
+ */
+function CalendarIndexRedirect(): ReactElement {
+  const { search, hash } = useLocation();
+
+  return <Navigate to={{ pathname: 'calendar', search, hash }} replace />;
+}
+
+// ============================================================================
 // Route Configuration
 // ============================================================================
 
 /**
  * Route configuration for the calendar feature.
- * These routes are designed to be spread into a parent route's children array.
  *
- * Routes:
- * - `/trips/:tripId/calendar` - Calendar page for a trip (default view)
+ * These are **children of a `trips/:tripId` parent**, not top-level routes —
+ * see `appRoutes` in `src/router.tsx`, where the same parent also carries
+ * `sharingSyncRoutes`. That parent is the single owner of `trips/:tripId`;
+ * registering a second route object for the same path is what this file used
+ * to do, and is what the tests in `__tests__/routes.test.tsx` guard against.
+ *
+ * Routes (relative to `trips/:tripId`):
+ * - index — redirects to `calendar`, preserving `?view=`
+ * - `calendar` — the trip calendar
  *
  * @example
  * ```tsx
@@ -59,19 +99,18 @@ const CalendarPage = lazy(() =>
  *   {
  *     path: '/',
  *     element: <Layout />,
- *     children: [...calendarRoutes],
+ *     children: [{ path: 'trips/:tripId', children: [...calendarRoutes] }],
  *   },
  * ]);
  * ```
  */
 export const calendarRoutes: RouteObject[] = [
   {
-    path: 'trips/:tripId/calendar',
-    element: withSuspense(CalendarPage),
+    index: true,
+    element: <CalendarIndexRedirect />,
   },
-  // Also register as the default view when navigating to a trip
   {
-    path: 'trips/:tripId',
+    path: 'calendar',
     element: withSuspense(CalendarPage),
   },
 ];

@@ -66,11 +66,3 @@ export const transportRoutes: RouteObject[] = [
     element: withSuspense(TransportMapPage),
   },
 ];
-
-/**
- * Standalone route for use in nested route configurations.
- */
-export const TransportListRoute = {
-  path: 'trips/:tripId/transports',
-  element: withSuspense(TransportListPage),
-} satisfies RouteObject;
