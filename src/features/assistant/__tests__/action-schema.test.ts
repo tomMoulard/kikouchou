@@ -87,6 +87,25 @@ describe('action-schema', () => {
     });
   });
 
+  describe('validateAction — addGuest', () => {
+    it('accepts a guest with a phone number', () => {
+      const result = validateAction({
+        action: 'addGuest',
+        data: { name: 'Mary', phone: '+33 6 12 34 56 78' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.data.phone).toBe('+33 6 12 34 56 78');
+    });
+
+    it('accepts a guest without one — the field is optional', () => {
+      const result = validateAction({ action: 'addGuest', data: { name: 'Mary' } });
+
+      expect(result).not.toBeNull();
+      expect(result?.data.phone).toBeUndefined();
+    });
+  });
+
   describe('validateAction — string[] fields', () => {
     it('keeps a JSON array of ids as-is', () => {
       const result = validateAction({

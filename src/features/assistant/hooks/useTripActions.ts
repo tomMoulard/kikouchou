@@ -411,6 +411,7 @@ export function useTripActions(): UseTripActionsReturn {
                 ...(d.headcount !== undefined && {
                   headcount: d.headcount as number,
                 }),
+                ...(d.phone !== undefined && { phone: d.phone as string }),
                 ...(d.notes !== undefined && { notes: d.notes as string }),
               });
               guestIdCache.delete(tid);

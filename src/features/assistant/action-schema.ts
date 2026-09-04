@@ -178,6 +178,12 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
           'How many real people this entry stands for (a couple is 2). Defaults to 1',
         example: 2,
       },
+      phone: {
+        type: 'string',
+        required: false,
+        description: 'Phone number, as given',
+        example: '+33 6 12 34 56 78',
+      },
       notes: {
         type: 'string',
         required: false,
