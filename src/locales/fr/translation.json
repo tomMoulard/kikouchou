@@ -464,6 +464,8 @@
     "week": "Semaine",
     "noAssignments": "Rien de prévu pour cette période — les chambres et transports apparaîtront ici",
     "noAssignmentsTitle": "Rien de prévu pour l’instant",
+    "addGuests": "Ajouter des invités",
+    "addRooms": "Ajouter des chambres",
     "previousMonth": "Mois précédent",
     "nextMonth": "Mois suivant",
     "monthView": "Calendrier mensuel",

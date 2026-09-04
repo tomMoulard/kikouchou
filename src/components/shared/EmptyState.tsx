@@ -45,6 +45,17 @@ interface EmptyStateProps {
   readonly description: string;
   /** Optional action button configuration */
   readonly action?: EmptyStateAction;
+  /**
+   * Optional second call to action, rendered beside {@link EmptyStateProps.action}
+   * as an outline button.
+   *
+   * For empty states where two different next steps are equally reasonable —
+   * the calendar has nothing on it until the trip has both guests and rooms,
+   * and neither one is the obvious first stop. Requires `action`: a lone
+   * secondary button would render the less prominent of the two styles with
+   * nothing to be secondary to.
+   */
+  readonly secondaryAction?: EmptyStateAction;
   /** Optional additional CSS classes for the container */
   readonly className?: string;
   /**
@@ -109,6 +120,7 @@ const EmptyState = memo(function EmptyState({
   title,
   description,
   action,
+  secondaryAction,
   className,
   headingLevel = 2,
 }: EmptyStateProps): React.ReactElement {
@@ -147,10 +159,15 @@ const EmptyState = memo(function EmptyState({
         {description}
       </p>
 
-      {/* Action button */}
+      {/* Action buttons */}
       {action && (
-        <div className="mt-6">
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
           <Button onClick={action.onClick}>{action.label}</Button>
+          {secondaryAction && (
+            <Button variant="outline" onClick={secondaryAction.onClick}>
+              {secondaryAction.label}
+            </Button>
+          )}
         </div>
       )}
     </section>

@@ -136,6 +136,60 @@ describe('EmptyState Action Button', () => {
 
     expect(screen.getByText('Create New')).toBeInTheDocument();
   });
+
+  it('renders a secondary action beside the primary one', async () => {
+    const user = userEvent.setup();
+    const onPrimary = vi.fn();
+    const onSecondary = vi.fn();
+
+    render(
+      <EmptyState
+        title="Empty"
+        description="Nothing here"
+        action={{ label: 'Add guests', onClick: onPrimary }}
+        secondaryAction={{ label: 'Add rooms', onClick: onSecondary }}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add rooms' }));
+
+    expect(onSecondary).toHaveBeenCalledTimes(1);
+    expect(onPrimary).not.toHaveBeenCalled();
+  });
+
+  it('renders the secondary action as the less prominent of the two', () => {
+    render(
+      <EmptyState
+        title="Empty"
+        description="Nothing here"
+        action={{ label: 'Add guests', onClick: vi.fn() }}
+        secondaryAction={{ label: 'Add rooms', onClick: vi.fn() }}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Add guests' })).toHaveAttribute(
+      'data-variant',
+      'default',
+    );
+    expect(screen.getByRole('button', { name: 'Add rooms' })).toHaveAttribute(
+      'data-variant',
+      'outline',
+    );
+  });
+
+  it('drops a secondary action that has no primary action to sit beside', () => {
+    // The pair is styled as primary + outline; a lone outline button would read
+    // as the weaker of two options with the other one missing.
+    render(
+      <EmptyState
+        title="Empty"
+        description="Nothing here"
+        secondaryAction={{ label: 'Add rooms', onClick: vi.fn() }}
+      />
+    );
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
 });
 
 // ============================================================================

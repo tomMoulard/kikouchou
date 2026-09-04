@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { CalendarTimeline } from '../CalendarTimeline';
 import type {
   Activity,
@@ -163,6 +164,29 @@ describe('CalendarTimeline', () => {
     expect(screen.getByRole('list', { name: 'Timeline rows' })).toBeInTheDocument();
   });
 
+  // An empty calendar is usually an empty trip, so the empty state offers the
+  // two things that have to exist before anything can be scheduled.
+  it('offers to add guests and rooms from the empty state', async () => {
+    const user = userEvent.setup();
+    const onAddGuests = vi.fn();
+    const onAddRooms = vi.fn();
+
+    render(
+      <CalendarTimeline
+        {...defaultProps}
+        persons={[]}
+        onAddGuests={onAddGuests}
+        onAddRooms={onAddRooms}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Add guests' }));
+    await user.click(screen.getByRole('button', { name: 'Add rooms' }));
+
+    expect(onAddGuests).toHaveBeenCalledTimes(1);
+    expect(onAddRooms).toHaveBeenCalledTimes(1);
+  });
+
   // Regression: the empty state used to render inside the frame's scrolling
   // canvas, which is as wide as the trip is long (~1450px for 32 days). Its
   // `mx-auto` centred it on that canvas rather than on the screen, so on a
@@ -173,6 +197,8 @@ describe('CalendarTimeline', () => {
       <CalendarTimeline
         {...defaultProps}
         persons={[]}
+        onAddGuests={vi.fn()}
+        onAddRooms={vi.fn()}
       />
     );
 
@@ -182,5 +208,30 @@ describe('CalendarTimeline', () => {
 
     const emptyState = screen.getByRole('status');
     expect(scroller!.contains(emptyState)).toBe(false);
+
+    // Both actions live with it, so they travel out of the canvas too.
+    for (const name of ['Add guests', 'Add rooms']) {
+      const button = screen.getByRole('button', { name });
+      expect(scroller!.contains(button)).toBe(false);
+    }
+  });
+
+  it('keeps the empty state text-only when no handlers are given', () => {
+    render(<CalendarTimeline {...defaultProps} persons={[]} />);
+    expect(screen.getByText('Nothing scheduled yet')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add guests' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add rooms' })).not.toBeInTheDocument();
+  });
+
+  it('does not offer the empty-state actions once the timeline has content', () => {
+    render(
+      <CalendarTimeline
+        {...defaultProps}
+        assignments={[makeAssignment('p1')]}
+        onAddGuests={vi.fn()}
+        onAddRooms={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Add guests' })).not.toBeInTheDocument();
   });
 });

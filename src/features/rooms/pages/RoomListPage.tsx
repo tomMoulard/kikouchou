@@ -391,8 +391,12 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   // Date range filter for capacity calculation
    [selectedDateRange, setSelectedDateRange] = useState<PickerDateRange | undefined>(undefined),
 
-  // Dialog state for create/edit room
-   [isDialogOpen, setIsDialogOpen] = useState(false),
+  // Dialog state for create/edit room.
+  //
+  // `?new=1` opens it on the first render rather than through an effect — it is
+  // how the calendar's empty state sends people here to add their first room,
+  // and a mount-then-open would flash the empty list first.
+   [isDialogOpen, setIsDialogOpen] = useState(() => searchParams.get('new') !== null),
    [editingRoomId, setEditingRoomId] = useState<RoomId | undefined>(undefined),
 
   // Track which room is expanded to show assignments
@@ -493,6 +497,24 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       },
     }),
   );
+
+  // Drop `?new=1` once it has done its job, so closing the dialog and reloading
+  // — or coming back through history — does not pop it open again. `view` rides
+  // along untouched.
+  useEffect(() => {
+    if (searchParams.get('new') === null) {
+      return;
+    }
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('new');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {

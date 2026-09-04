@@ -25,7 +25,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { type Locale, format, parseISO } from 'date-fns';
@@ -379,6 +379,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   const { t, i18n } = useTranslation(),
    navigate = useNavigate(),
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
+   [searchParams, setSearchParams] = useSearchParams(),
    { successToast } = useOfflineAwareToast(),
 
   // Context hooks
@@ -392,8 +393,12 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
    isNavigatingRef = useRef(false),
    [isNavigating] = useState(false),
 
-  // Dialog state for create/edit person
-   [isDialogOpen, setIsDialogOpen] = useState(false),
+  // Dialog state for create/edit person.
+  //
+  // `?new=1` opens it on the first render rather than through an effect — it is
+  // how the calendar's empty state sends people here to add their first guest,
+  // and a mount-then-open would flash the empty list first.
+   [isDialogOpen, setIsDialogOpen] = useState(() => searchParams.get('new') !== null),
    [editingPersonId, setEditingPersonId] = useState<PersonId | undefined>(undefined),
    [deletingPersonId, setDeletingPersonId] = useState<PersonId | undefined>(undefined),
 
@@ -403,6 +408,23 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
 
   // Get date locale based on current language
    dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+
+  // Drop `?new=1` once it has done its job, so closing the dialog and reloading
+  // — or coming back through history — does not pop it open again.
+  useEffect(() => {
+    if (searchParams.get('new') === null) {
+      return;
+    }
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('new');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
