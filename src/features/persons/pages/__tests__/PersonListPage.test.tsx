@@ -399,6 +399,55 @@ describe('PersonListPage', () => {
     expect(screen.queryByText('transports.empty')).not.toBeInTheDocument();
   });
 
+  it('offers a guest phone number as a dialable link', () => {
+    // The point of syncing the number: whoever is doing the station run can
+    // call from the card rather than copying digits out of it.
+    vi.mocked(usePersonContext).mockReturnValue({
+      persons: [{ ...mockPerson, phone: '+33 6 12 34 56 78' }],
+      isLoading: false,
+      error: null,
+      getPersonById: vi.fn(() => mockPerson),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: mockDeletePerson,
+    } as ReturnType<typeof usePersonContext>);
+    render(<PersonListPage />, { withProviders: false });
+
+    const link = screen.getByRole('link', { name: /\+33 6 12 34 56 78/ });
+    // Spaces are stripped from the href alone; the label keeps them readable.
+    expect(link).toHaveAttribute('href', 'tel:+33612345678');
+    expect(link).toHaveTextContent('+33 6 12 34 56 78');
+  });
+
+  it('renders no phone link for a guest without a number', () => {
+    render(<PersonListPage />, { withProviders: false });
+
+    // Filtered rather than queried bare: the page also carries a back link.
+    const telLinks = screen
+      .queryAllByRole('link')
+      .filter((link) => link.getAttribute('href')?.startsWith('tel:'));
+    expect(telLinks).toHaveLength(0);
+  });
+
+  it('does not open the edit dialog when the phone link is tapped', async () => {
+    // The whole card opens the editor; without stopPropagation the number is
+    // impossible to dial.
+    vi.mocked(usePersonContext).mockReturnValue({
+      persons: [{ ...mockPerson, phone: '0612345678' }],
+      isLoading: false,
+      error: null,
+      getPersonById: vi.fn(() => mockPerson),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: mockDeletePerson,
+    } as ReturnType<typeof usePersonContext>);
+    const { user } = render(<PersonListPage />, { withProviders: false });
+
+    await user.click(screen.getByRole('link', { name: /0612345678/ }));
+
+    expect(screen.queryByTestId('person-dialog')).not.toBeInTheDocument();
+  });
+
   it('renders room names on person card when person has assignments', () => {
     vi.mocked(useRoomContext).mockReturnValue({
       rooms: [mockRoom],
