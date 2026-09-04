@@ -130,7 +130,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
 
   const handleActivityClick = props.onActivityClick;
 
-  return (
+  const frame = (
     <TripTimelineFrame
       ariaLabel={t('calendar.timeline.ariaLabel', 'Timeline calendar')}
       labelColumnWidth={CALENDAR_TIMELINE_LABEL_COLUMN_WIDTH_PX}
@@ -181,18 +181,34 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
             </>
           )}
 
-          {/* Same EmptyState, copy and icon as the month view's, so switching
-              views does not change how "nothing here yet" is presented. */}
-          {showEmptyState && (
-            <EmptyState
-              icon={CalendarIcon}
-              title={t('calendar.noAssignmentsTitle', 'Nothing scheduled yet')}
-              description={t('calendar.noAssignments')}
-            />
-          )}
         </>
       )}
     </TripTimelineFrame>
+  );
+
+  if (!showEmptyState) {
+    return frame;
+  }
+
+  return (
+    <>
+      {frame}
+      {/* Outside the frame on purpose. The frame's canvas is as wide as the
+          trip is long — 32 days is ~1450px — and it scrolls horizontally
+          inside the viewport. An `mx-auto` empty state in there centres on the
+          canvas, not on the screen, so on a phone it sat several hundred
+          pixels off to the right and simply could not be seen. Out here it
+          centres on the page, which is where a "nothing here yet" message
+          belongs anyway.
+
+          Same EmptyState, copy and icon as the month view's, so switching
+          views does not change how "nothing here yet" is presented. */}
+      <EmptyState
+        icon={CalendarIcon}
+        title={t('calendar.noAssignmentsTitle', 'Nothing scheduled yet')}
+        description={t('calendar.noAssignments')}
+      />
+    </>
   );
 });
 
