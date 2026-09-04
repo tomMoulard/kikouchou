@@ -75,9 +75,18 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
         arrivals: props.arrivals,
         departures: props.departures,
         assignments: props.assignments,
+        tripWindow: { startDate: props.trip.startDate, endDate: props.trip.endDate },
         dayKeys: model.dayKeys,
       }),
-    [model.dayKeys, props.arrivals, props.assignments, props.departures, props.persons],
+    [
+      model.dayKeys,
+      props.arrivals,
+      props.assignments,
+      props.departures,
+      props.persons,
+      props.trip.endDate,
+      props.trip.startDate,
+    ],
   );
 
   const renderDayHeadcount = useCallback(

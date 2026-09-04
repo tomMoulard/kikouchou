@@ -515,9 +515,19 @@ const TripInfoSection = memo(function TripInfoSection({
       arrivals,
       departures,
       assignments,
+      tripWindow: { startDate: trip.startDate, endDate: trip.endDate },
       dateKey: todayKey,
     });
-  }, [arrivals, assignments, departures, persons, todayKey, todayWithinTrip]);
+  }, [
+    arrivals,
+    assignments,
+    departures,
+    persons,
+    todayKey,
+    todayWithinTrip,
+    trip.endDate,
+    trip.startDate,
+  ]);
 
   const isGuestsLoading = isPersonsLoading || isTransportsLoading || isAssignmentsLoading;
 

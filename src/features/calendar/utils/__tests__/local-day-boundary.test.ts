@@ -122,6 +122,7 @@ describe('calendar day boundary', () => {
       arrivals: [LATE_ARRIVAL],
       departures: [LATE_DEPARTURE],
       assignments: [],
+      tripWindow: { startDate: TRIP.startDate, endDate: TRIP.endDate },
       dayKeys: DAY_KEYS,
     });
 

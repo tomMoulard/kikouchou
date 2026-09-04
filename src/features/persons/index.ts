@@ -40,8 +40,9 @@ export {
   deriveGuestStayDateBounds,
   isGuestOnSiteOnDate,
   listGuestsOnSiteOnDate,
+  resolveGuestStayWindow,
 } from './utils/guest-presence';
-export type { GuestPresenceQuery } from './utils/guest-presence';
+export type { GuestPresenceQuery, TripStayWindow } from './utils/guest-presence';
 
 // ============================================================================
 // Route Configuration

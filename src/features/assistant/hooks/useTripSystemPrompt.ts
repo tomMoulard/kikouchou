@@ -185,10 +185,13 @@ function formatActivityLine(
  * answer catering and accessibility questions.
  */
 function formatGuestLine(person: Person): string {
+  // A guest with no dates of their own is here for the whole trip, the way the
+  // rest of the app reads them — saying nothing let the model answer that it
+  // did not know when they were around.
   const stay =
     person.stayStartDate && person.stayEndDate
       ? ` (stay: ${person.stayStartDate} to ${person.stayEndDate})`
-      : '';
+      : ' (stay: whole trip)';
   const headcount = getPersonHeadcount(person);
   const headcountLabel = headcount > 1 ? ` — counts as ${headcount} people` : '';
   const notes = person.notes
