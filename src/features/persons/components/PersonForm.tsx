@@ -17,7 +17,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown } from 'lucide-react';
+import { BookUser, ChevronDown } from 'lucide-react';
 import { useFormSubmission } from '@/hooks';
 
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,8 @@ import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePi
 import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { parseISO, format } from 'date-fns';
+import { isContactPickerSupported, pickContact } from '@/lib/contacts';
+import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toHexColor, toISODateStringFromString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
 import {
@@ -173,6 +175,10 @@ const PersonForm = memo(function PersonForm({
     return undefined;
   });
   const [notes, setNotes] = useState(person?.notes ?? '');
+  const [phone, setPhone] = useState(person?.phone ?? '');
+  // Set when an import fails for a reason worth naming. A dismissed picker is
+  // not one of them, so the common outcome stays silent.
+  const [contactError, setContactError] = useState<string | undefined>(undefined);
   // Headcount is kept as a string so the field can be cleared while typing;
   // it is normalized on blur and on submit.
   const [headcount, setHeadcount] = useState(() =>
@@ -184,12 +190,19 @@ const PersonForm = memo(function PersonForm({
     () => getPersonHeadcount(person ?? {}) > MIN_PERSON_HEADCOUNT,
   );
 
+  // Whether this browser can open the OS contact picker at all. Read once on
+  // mount rather than per render: it cannot change while the form is open, and
+  // on the browsers that lack it (every one on iOS, and every desktop) the
+  // button below is simply never rendered.
+  const [canImportContacts] = useState(isContactPickerSupported);
+
   const [initialSnapshot, setInitialSnapshot] = useState<{
     readonly name: string;
     readonly color: string;
     readonly stayStartDate: string;
     readonly stayEndDate: string;
     readonly notes: string;
+    readonly phone: string;
     readonly headcount: number;
   } | null>(null);
 
@@ -208,10 +221,11 @@ const PersonForm = memo(function PersonForm({
         currentStayStart !== initialSnapshot.stayStartDate ||
         currentStayEnd !== initialSnapshot.stayEndDate ||
         notes !== initialSnapshot.notes ||
+        phone !== initialSnapshot.phone ||
         currentHeadcount !== initialSnapshot.headcount
       );
     },
-    [color, currentHeadcount, currentStayEnd, currentStayStart, name, notes, initialSnapshot],
+    [color, currentHeadcount, currentStayEnd, currentStayStart, name, notes, phone, initialSnapshot],
   );
 
   // Notify parent of dirty state changes
@@ -249,6 +263,10 @@ const PersonForm = memo(function PersonForm({
     const nextNotes = person?.notes ?? '';
     setNotes(nextNotes);
 
+    const nextPhone = person?.phone ?? '';
+    setPhone(nextPhone);
+    setContactError(undefined);
+
     const nextHeadcount = getPersonHeadcount(person ?? {});
     setHeadcount(String(nextHeadcount));
     setIsExtraOpen(nextHeadcount > MIN_PERSON_HEADCOUNT);
@@ -259,6 +277,7 @@ const PersonForm = memo(function PersonForm({
       stayStartDate: person?.stayStartDate ?? '',
       stayEndDate: person?.stayEndDate ?? '',
       notes: nextNotes,
+      phone: nextPhone,
       headcount: nextHeadcount,
     });
 
@@ -347,6 +366,53 @@ const PersonForm = memo(function PersonForm({
     setNotes(e.target.value);
   }, []);
 
+  const handlePhoneChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setPhone(e.target.value);
+  }, []);
+
+  /**
+   * Opens the device address book and fills in whatever the chosen contact has.
+   *
+   * Only the fields the contact actually carries are written, so importing a
+   * number-less contact does not wipe a name the user already typed. A
+   * dismissed picker leaves the form exactly as it was.
+   */
+  const handleImportFromContacts = useCallback(async () => {
+    setContactError(undefined);
+
+    const outcome = await pickContact();
+
+    switch (outcome.status) {
+      case 'picked': {
+        const { contact } = outcome;
+        if (contact.name !== undefined) {
+          setName(contact.name);
+          setErrors((prev) => (prev.name ? { ...prev, name: undefined } : prev));
+        }
+        if (contact.phone !== undefined) {
+          setPhone(contact.phone);
+        }
+        if (contact.name === undefined && contact.phone === undefined) {
+          setContactError(
+            t('persons.contactEmpty', 'That contact has no name or phone number.'),
+          );
+        }
+        return;
+      }
+      case 'cancelled':
+        return;
+      case 'unsupported':
+        setContactError(
+          t('persons.contactUnsupported', 'This browser cannot open your contacts.'),
+        );
+        return;
+      default:
+        setContactError(
+          t('persons.contactFailed', 'Could not read your contacts. Enter the details by hand.'),
+        );
+    }
+  }, [t]);
+
   /**
    * Handles headcount input change. Keeps the raw string so the field can be
    * emptied while typing; normalization happens on blur and on submit.
@@ -398,19 +464,21 @@ const PersonForm = memo(function PersonForm({
 
       try {
         const trimmedNotes = notes.trim();
+        const trimmedPhone = phone.trim();
         await doSubmit({
           name: name.trim(),
           color: toHexColor(color),
           stayStartDate: formattedStartDate ? toISODateStringFromString(formattedStartDate) : undefined,
           stayEndDate: formattedEndDate ? toISODateStringFromString(formattedEndDate) : undefined,
           notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
+          phone: trimmedPhone.length > 0 ? trimmedPhone : undefined,
           headcount: parseHeadcountInput(headcount),
         });
       } catch {
         // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, doSubmit, name, color, stayDates, notes, headcount],
+    [validateForm, doSubmit, name, color, stayDates, notes, phone, headcount],
   );
 
   // ============================================================================
@@ -419,6 +487,35 @@ const PersonForm = memo(function PersonForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+      {/* Import from the device address book. Rendered only where the browser
+          has the Contact Picker API — Chromium on Android, in practice. */}
+      {canImportContacts && (
+        <div className="space-y-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleImportFromContacts}
+            disabled={isSubmitting}
+            className="w-full sm:w-auto"
+          >
+            <BookUser className="size-4" aria-hidden="true" />
+            {t('persons.importFromContacts', 'Fill in from contacts')}
+          </Button>
+          {contactError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {contactError}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {t(
+                'persons.importFromContactsHint',
+                'Your browser picks the contact — the app only sees the one you choose.',
+              )}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Name Field */}
       <div className="space-y-2">
         <Label htmlFor="person-name">
@@ -447,6 +544,32 @@ const PersonForm = memo(function PersonForm({
             {errors.name}
           </p>
         )}
+      </div>
+
+      {/* Phone Field (Optional) */}
+      <div className="space-y-2">
+        <Label htmlFor="person-phone">
+          {t('persons.phone', 'Phone')}{' '}
+          <span className="text-muted-foreground text-xs">({t('common.optional', 'optional')})</span>
+        </Label>
+        <Input
+          id="person-phone"
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          maxLength={MAX_LENGTHS.personPhone}
+          value={phone}
+          onChange={handlePhoneChange}
+          placeholder={t('persons.phonePlaceholder', '+33 6 12 34 56 78')}
+          aria-describedby="person-phone-hint"
+          disabled={isSubmitting}
+        />
+        <p id="person-phone-hint" className="text-xs text-muted-foreground">
+          {t(
+            'persons.phoneHint',
+            'Everyone you share the trip with can see this number — handy for the station pickup.',
+          )}
+        </p>
       </div>
 
       {/* Color Field */}
