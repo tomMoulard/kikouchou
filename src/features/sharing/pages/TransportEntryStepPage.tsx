@@ -45,9 +45,9 @@ import {
   getTransportsByPersonId,
   getTripByShareId,
 } from '@/lib/db';
+import { toCanonicalDatetime } from '@/lib/db/transport-datetime';
 import { cn } from '@/lib/utils';
 import type {
-  ISODateTimeString,
   PersonId,
   ShareId,
   Transport,
@@ -102,20 +102,6 @@ const TRANSPORT_MODES: readonly TransportMode[] = [
   'bus',
   'other',
 ] as const;
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Validates that a datetime string is non-empty and parses to a valid Date.
- *
- * @param value - The datetime string from the input
- * @returns True if the value is a valid datetime
- */
-function isValidDatetime(value: string): boolean {
-  return value.trim() !== '' && !isNaN(new Date(value).getTime());
-}
 
 
 // ============================================================================
@@ -311,15 +297,19 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
   const handleSubmit = useCallback(async (): Promise<void> => {
     if (isSubmittingRef.current || !trip || !guestPersonId) return;
 
-    // Inline validation
-    const newErrors: FormErrors = {};
-    if (!isValidDatetime(datetime)) {
+    // Inline validation. The datetime-local input yields a local wall clock
+    // with no offset ("2026-09-03T14:30"); normalising here is what stops that
+    // string reaching storage, where it would sort and bucket as characters
+    // rather than as an instant.
+    const instant = toCanonicalDatetime(datetime),
+      newErrors: FormErrors = {};
+    if (instant === undefined) {
       newErrors.datetime = t('sharing.transportDatetimeRequired', 'Date and time is required');
     }
     if (!location.trim()) {
       newErrors.location = t('sharing.transportLocationRequired', 'Location is required');
     }
-    if (Object.keys(newErrors).length > 0) {
+    if (instant === undefined || Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
@@ -332,7 +322,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
       const formData: TransportFormData = {
         personId: guestPersonId,
         type: transportType,
-        datetime: datetime as ISODateTimeString,
+        datetime: instant,
         location: location.trim(),
         transportMode: transportMode || undefined,
         transportNumber: transportNumber.trim() || undefined,
