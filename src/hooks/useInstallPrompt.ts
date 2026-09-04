@@ -7,6 +7,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import posthog from '@/lib/posthog';
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -348,7 +350,16 @@ export function useInstallPrompt(): UseInstallPromptResult {
    * Ref to track installing state for the guard check.
    * Using a ref avoids stale closure issues in the install callback.
    */
-   isInstallingRef = useRef(false);
+   isInstallingRef = useRef(false),
+
+  /**
+   * Whether this page ever fired the native prompt from the app's own button.
+   *
+   * A ref because the `appinstalled` listener below reads it, and that listener
+   * is registered once: state would be a value from the first render, and the
+   * whole question is what happened after it.
+   */
+   hasPromptedRef = useRef(false);
 
   // ============================================================================
   // Effects
@@ -404,6 +415,30 @@ export function useInstallPrompt(): UseInstallPromptResult {
      * Fired when the PWA is successfully installed.
      */
     function handleAppInstalled(): void {
+      /*
+        The one signal that sees every install.
+
+        This capture used to sit on the Install button's own success, which only
+        ever fires for Chromium's native prompt — an install through the
+        browser's own menu, or through the share sheet the manual steps
+        describe, was invisible to it. `appinstalled` is fired by the browser
+        however the app got installed, so the button's involvement is now a
+        property of this event rather than the thing that triggers it.
+
+        One capture per install rests on this hook having one consumer:
+        `InstallPrompt`, which `App` mounts once. A second consumer would
+        register a second listener and count the install twice — deduplicate
+        here before adding one.
+      */
+      posthog?.capture('pwa_install_completed', {
+        // Whether the app's own Install button produced this, as against
+        // something in the browser's UI that we never see.
+        via_prompt: hasPromptedRef.current,
+        // Whether this visit arrived on the landing page's install link, which
+        // is what makes that CTA measurable at all.
+        from_install_link: installIntent,
+      });
+
       if (isMountedRef.current) {
         setIsInstalled(true);
         setDeferredPrompt(null);
@@ -444,7 +479,10 @@ export function useInstallPrompt(): UseInstallPromptResult {
       window.removeEventListener('appinstalled', handleAppInstalled);
       mediaQuery.removeEventListener('change', handleDisplayModeChange);
     };
-  }, []);
+    // `installIntent` never changes after the first render, so this listed
+    // dependency cannot re-register the listeners; it is here because the
+    // `appinstalled` capture above reads it.
+  }, [installIntent]);
 
   // ============================================================================
   // Derived Values
@@ -478,6 +516,7 @@ export function useInstallPrompt(): UseInstallPromptResult {
     }
 
     isInstallingRef.current = true;
+    hasPromptedRef.current = true;
     setIsInstalling(true);
 
     try {

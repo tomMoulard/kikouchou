@@ -28,7 +28,6 @@ import {
   type ManualInstallPlatform,
   useInstallPrompt,
 } from '@/hooks/useInstallPrompt';
-import posthog from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -292,9 +291,13 @@ export const InstallPrompt = memo(function InstallPrompt({
    */
   const handleInstall = useCallback(async (): Promise<void> => {
     const success = await install();
-    if (success) {
-      posthog?.capture('pwa_install_completed');
-    }
+
+    // Nothing is captured here. `useInstallPrompt` reports the install on the
+    // browser's `appinstalled` event instead — the only signal that also sees
+    // an install done from the browser's own menu or a share sheet — and it
+    // carries `via_prompt` for the ones this button produced. Capturing in
+    // both places counted the same install twice.
+
     // Success toast is handled in the effect when isInstalled becomes true
     // Show error feedback if installation failed and app is not installed
     if (!success && !isInstalled) {
