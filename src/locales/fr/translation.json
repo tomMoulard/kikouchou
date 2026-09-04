@@ -266,7 +266,6 @@
     "deleteSuccess": "Participant supprimé avec succès",
     "empty": "Aucun participant pour l'instant",
     "emptyDescription": "Ajoutez les amis qui participent — ils choisiront leur chambre et ajouteront leurs trajets",
-    "cardNoTransportDetail": "Pas encore de trajet renseigné",
     "badgeInteractive": "Sélectionner {{name}}"
   },
   "assignments": {

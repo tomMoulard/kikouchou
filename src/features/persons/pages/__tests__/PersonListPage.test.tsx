@@ -367,13 +367,16 @@ describe('PersonListPage', () => {
     expect(screen.getByText(/2 Jul.*8 Jul/)).toBeInTheDocument();
   });
 
-  it('renders no transport text when person has no transports but has stay dates', () => {
+  it('says nothing about missing travel when the card already shows stay dates', () => {
     render(<PersonListPage />, { withProviders: false });
-    // Alice has stay dates but no transports
-    expect(screen.getByText('persons.cardNoTransportDetail')).toBeInTheDocument();
+    // Alice has stay dates but no transports: the card shows what it has.
+    expect(screen.queryByText('transports.empty')).not.toBeInTheDocument();
   });
 
-  it('renders empty transport text when person has no transports and no stay info', () => {
+  it('says nothing about missing travel on an otherwise bare card either', () => {
+    // Bob has no transports, no stay dates, no room and no notes. The card used
+    // to fill that space with "No travel plans yet", which tells the reader
+    // nothing they cannot see: an empty card is already empty.
     vi.mocked(usePersonContext).mockReturnValue({
       persons: [mockPerson2],
       isLoading: false,
@@ -384,7 +387,7 @@ describe('PersonListPage', () => {
       deletePerson: mockDeletePerson,
     } as ReturnType<typeof usePersonContext>);
     render(<PersonListPage />, { withProviders: false });
-    expect(screen.getByText('transports.empty')).toBeInTheDocument();
+    expect(screen.queryByText('transports.empty')).not.toBeInTheDocument();
   });
 
   it('renders room names on person card when person has assignments', () => {
