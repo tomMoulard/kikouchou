@@ -217,6 +217,32 @@ if (typeof URL.revokeObjectURL === 'undefined') {
 // ============================================================================
 
 /**
+ * The language the suite renders in.
+ *
+ * `en` is what the real detector picks here: jsdom reports `navigator.language`
+ * as `en-US`, nothing has written `i18nextLng` to localStorage, and the app
+ * detects `localStorage → navigator`. So the mocks below agree with the app
+ * rather than inventing a third answer.
+ *
+ * This is *not* `DEFAULT_LANGUAGE`. That constant is the **fallback** — the
+ * language a user gets for a key the active bundle is missing, which is French.
+ * The two used to sit side by side as bare literals (`language: 'en'` next to
+ * `DEFAULT_LANGUAGE: 'fr'`) and read as a contradiction; they are answers to
+ * different questions, and both are right. Naming them separately is the fix:
+ * the active language now has one definition that all three mocks share, so it
+ * cannot drift, and the fallback keeps mirroring the real module's export.
+ *
+ * Nothing in this file can exercise the fallback, because `t` returns the key —
+ * a missing translation and a present one are indistinguishable. Tests that
+ * need the real resolution path (plural selection, French wording, accessible
+ * names) opt in with `renderWithRealI18n` from `@/test/utils`.
+ */
+const { TEST_LANGUAGE, FALLBACK_LANGUAGE } = vi.hoisted(() => ({
+  TEST_LANGUAGE: 'en' as const,
+  FALLBACK_LANGUAGE: 'fr' as const,
+}));
+
+/**
  * Mock react-i18next to return translation keys directly.
  * This simplifies testing by avoiding async i18n loading.
  */
@@ -237,7 +263,7 @@ vi.mock('react-i18next', () => ({
       return key;
     },
     i18n: {
-      language: 'en',
+      language: TEST_LANGUAGE,
       changeLanguage: vi.fn().mockResolvedValue(undefined),
       exists: vi.fn().mockReturnValue(true),
     },
@@ -262,7 +288,7 @@ vi.mock('i18next', () => ({
     init: vi.fn().mockResolvedValue(undefined),
     t: (key: string) => key,
     changeLanguage: vi.fn().mockResolvedValue(undefined),
-    language: 'en',
+    language: TEST_LANGUAGE,
   },
 }));
 
@@ -273,15 +299,21 @@ vi.mock('@/lib/i18n', () => ({
   default: {
     t: (key: string) => key,
     changeLanguage: vi.fn().mockResolvedValue(undefined),
-    language: 'en',
+    language: TEST_LANGUAGE,
   },
   i18nReady: Promise.resolve(),
   changeLanguage: vi.fn().mockResolvedValue(undefined),
-  getCurrentLanguage: vi.fn().mockReturnValue('en'),
+  // The *active* language, and so the same value the two mocks above report.
+  getCurrentLanguage: vi.fn().mockReturnValue(TEST_LANGUAGE),
   isLanguageSupported: vi.fn().mockReturnValue(true),
   isI18nInitialized: vi.fn().mockReturnValue(true),
+  // The set the app supports, which is not derived from either constant above:
+  // it happens to contain both, and building it out of them would collapse to
+  // ['fr', 'fr'] the moment someone runs the suite in French.
   SUPPORTED_LANGUAGES: ['en', 'fr'],
-  DEFAULT_LANGUAGE: 'fr',
+  // The *fallback*, mirroring the real module's export. Not the active
+  // language: see the note above TEST_LANGUAGE.
+  DEFAULT_LANGUAGE: FALLBACK_LANGUAGE,
   LANGUAGE_STORAGE_KEY: 'i18nextLng',
 }));
 
