@@ -7,6 +7,8 @@
 import { describe, it, expect } from 'vitest';
 
 import {
+  resolveLabelCollapse,
+  TIMELINE_LABEL_COLLAPSE_MARGIN_PX,
   computeTimelineViewportLayout,
   computeRoomTimelineViewportLayout,
   computeDayGridTemplateColumns,
@@ -191,3 +193,121 @@ describe('computeTimelineScrollLeftToCenterDay', () => {
     ).toBe(expected);
   });
 });
+
+describe('resolveLabelCollapse', () => {
+  const WIDTHS = { expandedLabelWidth: 200, collapsedLabelWidth: 40 } as const;
+  const DELTA = WIDTHS.expandedLabelWidth - WIDTHS.collapsedLabelWidth;
+
+  it('does not collapse before there is enough scroll to pay for the width it removes', () => {
+    // The old rule collapsed past 8px while owing 160px of compensation, so the
+    // grid jumped the whole delta with nothing to take it from.
+    const decision = resolveLabelCollapse({
+      scrollLeft: 9,
+      isCollapsed: false,
+      ...WIDTHS,
+    });
+
+    expect(decision.collapsed).toBe(false);
+    expect(decision.changed).toBe(false);
+  });
+
+  it('collapses once past the delta and compensates it exactly', () => {
+    const scrollLeft = DELTA + TIMELINE_LABEL_COLLAPSE_MARGIN_PX + 1;
+    const decision = resolveLabelCollapse({ scrollLeft, isCollapsed: false, ...WIDTHS });
+
+    expect(decision.collapsed).toBe(true);
+    // Exactly the width removed, so the day under the pointer does not move.
+    expect(decision.nextScrollLeft).toBe(scrollLeft - DELTA);
+  });
+
+  // The jitter itself: collapsing must not leave the scroll position somewhere
+  // that immediately expands again, and vice versa.
+  it('settles after collapsing instead of bouncing back', () => {
+    const first = resolveLabelCollapse({
+      scrollLeft: DELTA + TIMELINE_LABEL_COLLAPSE_MARGIN_PX + 1,
+      isCollapsed: false,
+      ...WIDTHS,
+    });
+    expect(first.collapsed).toBe(true);
+
+    // Feed the compensated offset straight back in, as the scroll event does.
+    const second = resolveLabelCollapse({
+      scrollLeft: first.nextScrollLeft!,
+      isCollapsed: true,
+      ...WIDTHS,
+    });
+
+    expect(second.collapsed).toBe(true);
+    expect(second.changed).toBe(false);
+  });
+
+  it('leaves a margin of scroll between collapsing and expanding again', () => {
+    const collapse = resolveLabelCollapse({
+      scrollLeft: DELTA + TIMELINE_LABEL_COLLAPSE_MARGIN_PX + 1,
+      isCollapsed: false,
+      ...WIDTHS,
+    });
+
+    // Still collapsed part-way back — the two thresholds do not touch.
+    expect(
+      resolveLabelCollapse({
+        scrollLeft: collapse.nextScrollLeft! - 1,
+        isCollapsed: true,
+        ...WIDTHS,
+      }).collapsed,
+    ).toBe(true);
+  });
+
+  it('expands only once scrolled fully back to the start', () => {
+    expect(
+      resolveLabelCollapse({ scrollLeft: 1, isCollapsed: true, ...WIDTHS }).collapsed,
+    ).toBe(true);
+
+    const expanded = resolveLabelCollapse({ scrollLeft: 0, isCollapsed: true, ...WIDTHS });
+    expect(expanded.collapsed).toBe(false);
+    expect(expanded.nextScrollLeft).toBeNull();
+  });
+
+  it('settles after expanding instead of bouncing back', () => {
+    const expanded = resolveLabelCollapse({ scrollLeft: 0, isCollapsed: true, ...WIDTHS });
+    expect(expanded.collapsed).toBe(false);
+
+    expect(
+      resolveLabelCollapse({ scrollLeft: 0, isCollapsed: false, ...WIDTHS }).changed,
+    ).toBe(false);
+  });
+
+  // The rooms timeline uses a 140px column, so the delta differs from the
+  // calendar's. The thresholds have to follow the widths, not a constant.
+  it('scales both thresholds to the column widths it is given', () => {
+    const rooms = { expandedLabelWidth: 140, collapsedLabelWidth: 40 } as const;
+    const roomsDelta = 100;
+
+    expect(
+      resolveLabelCollapse({ scrollLeft: 130, isCollapsed: false, ...rooms }).collapsed,
+    ).toBe(false);
+
+    const collapsed = resolveLabelCollapse({
+      scrollLeft: roomsDelta + TIMELINE_LABEL_COLLAPSE_MARGIN_PX + 1,
+      isCollapsed: false,
+      ...rooms,
+    });
+    expect(collapsed.collapsed).toBe(true);
+    expect(collapsed.nextScrollLeft).toBe(41);
+  });
+
+  it('never collapses a column that would not get any narrower', () => {
+    const decision = resolveLabelCollapse({
+      scrollLeft: 5000,
+      isCollapsed: false,
+      expandedLabelWidth: 40,
+      collapsedLabelWidth: 40,
+    });
+
+    expect(decision.collapsed).toBe(false);
+  });
+});
+
+// ============================================================================
+// Page width
+// ============================================================================

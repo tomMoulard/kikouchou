@@ -292,27 +292,42 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
       <div
         className={cn(
           'sticky left-0 z-10 flex items-center gap-2 bg-background',
-          'border-r border-muted px-3',
+          'border-r border-muted',
+          viewport.labelsCollapsed ? 'justify-center px-1' : 'px-3',
         )}
-        style={{ width: viewport.labelColumnWidth, minWidth: viewport.labelColumnWidth, height: rowHeight }}
+        style={{
+          width: viewport.labelColumnWidth,
+          minWidth: viewport.labelColumnWidth,
+          height: rowHeight,
+        }}
+        title={personLabel}
       >
         <span
           className="size-2 rounded-full shrink-0"
           style={{ backgroundColor: model.person.color }}
           aria-hidden="true"
         />
-        <span className="text-sm font-medium truncate" title={personLabel}>
-          {personLabel}
-        </span>
-        {personHeadcount > 1 && (
-          <span
-            className="shrink-0 rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground tabular-nums"
-            title={t('calendar.timeline.guestHeadcount', 'Counts as {{count}} people', {
-              count: personHeadcount,
-            })}
-          >
-            ×{personHeadcount}
-          </span>
+        {/*
+          Names hide once the day axis is scrolled so the sticky column can
+          shrink to the colour dots and free width for the trip days. The row
+          `aria-label` below still carries the guest's name for assistive tech.
+        */}
+        {!viewport.labelsCollapsed && (
+          <>
+            <span className="text-sm font-medium truncate" title={personLabel}>
+              {personLabel}
+            </span>
+            {personHeadcount > 1 && (
+              <span
+                className="shrink-0 rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground tabular-nums"
+                title={t('calendar.timeline.guestHeadcount', 'Counts as {{count}} people', {
+                  count: personHeadcount,
+                })}
+              >
+                ×{personHeadcount}
+              </span>
+            )}
+          </>
         )}
       </div>
 

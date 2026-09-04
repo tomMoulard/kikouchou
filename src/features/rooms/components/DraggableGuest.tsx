@@ -42,6 +42,11 @@ export interface DraggableGuestProps {
   /** Size variant for the badge */
   readonly size?: 'sm' | 'default';
   /**
+   * When true, show only the guest's colour — used by the rooms timeline once
+   * the sticky label column has collapsed to free width for the day axis.
+   */
+  readonly compact?: boolean;
+  /**
    * Render as a positioned bar spanning the guest's nights, the way an assigned
    * guest's pill is drawn, rather than as a badge sized to the name.
    *
@@ -86,6 +91,7 @@ const DraggableGuest = memo(function DraggableGuest(props: DraggableGuestProps):
     startDate,
     endDate,
     size = 'sm',
+    compact = false,
     bar = false,
     style: positionStyle,
     className,
@@ -178,7 +184,15 @@ const DraggableGuest = memo(function DraggableGuest(props: DraggableGuestProps):
       title={person.name}
       aria-label={person.name}
     >
-      <PersonBadge person={person} size={size} />
+      {compact ? (
+        <span
+          className="size-3 rounded-full shrink-0"
+          style={{ backgroundColor: person.color }}
+          aria-hidden="true"
+        />
+      ) : (
+        <PersonBadge person={person} size={size} />
+      )}
     </div>
   );
 });

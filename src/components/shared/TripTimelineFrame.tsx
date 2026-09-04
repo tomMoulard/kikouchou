@@ -24,8 +24,20 @@ import {
   computeDayGridTemplateColumns,
   computeTimelineScrollLeftToCenterDay,
   computeTimelineViewportLayout,
+  resolveLabelCollapse,
 } from '@/lib/utils/timeline-viewport-layout';
 import type { ISODateString } from '@/types';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Sticky label width once the user has scrolled the day axis — wide enough for
+ * a colour dot (or room/category glyph), not a name. Shrinking here is what
+ * frees horizontal space for the trip days.
+ */
+export const TIMELINE_COLLAPSED_LABEL_COLUMN_WIDTH_PX = 40;
 
 // ============================================================================
 // Types
@@ -33,6 +45,11 @@ import type { ISODateString } from '@/types';
 
 export interface TripTimelineViewportContext {
   readonly labelColumnWidth: number;
+  /**
+   * True after the day axis has been scrolled: row labels should keep only the
+   * colour/glyph and hide the name, matching the narrower sticky column.
+   */
+  readonly labelsCollapsed: boolean;
   readonly canvasWidth: number;
   readonly dayCount: number;
   readonly dayWidthPx: number;
@@ -81,6 +98,19 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
 }: TripTimelineFrameProps): ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
+  // Once the day axis is scrolled, the sticky column sheds names so the days
+  // reclaim the width. Expand only when scroll is fully back at the start —
+  // collapsing at a small threshold and expanding at zero avoids oscillating
+  // when the width change itself nudges `scrollLeft`.
+  const [labelsCollapsed, setLabelsCollapsed] = useState(false);
+  // Mirrors `labelsCollapsed` for the scroll handler, which runs between
+  // renders and must not act on a stale value. `syncCollapsedFromScroll` owns
+  // the writes; assigning it on every render would undo one mid-transition.
+  const labelsCollapsedRef = useRef(false);
+
+  const effectiveLabelColumnWidth = labelsCollapsed
+    ? TIMELINE_COLLAPSED_LABEL_COLUMN_WIDTH_PX
+    : labelColumnWidth;
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -102,16 +132,52 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
     };
   }, []);
 
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) {
+      return;
+    }
+
+    const syncCollapsedFromScroll = (): void => {
+      const decision = resolveLabelCollapse({
+        scrollLeft: el.scrollLeft,
+        isCollapsed: labelsCollapsedRef.current,
+        expandedLabelWidth: labelColumnWidth,
+        collapsedLabelWidth: TIMELINE_COLLAPSED_LABEL_COLUMN_WIDTH_PX,
+      });
+
+      if (!decision.changed) {
+        return;
+      }
+
+      // Written before the state update so the scroll event this triggers sees
+      // the new state and stops, rather than reading a stale `false` and
+      // deciding all over again.
+      labelsCollapsedRef.current = decision.collapsed;
+
+      if (decision.nextScrollLeft !== null) {
+        el.scrollLeft = decision.nextScrollLeft;
+      }
+      setLabelsCollapsed(decision.collapsed);
+    };
+
+    el.addEventListener('scroll', syncCollapsedFromScroll, { passive: true });
+    syncCollapsedFromScroll();
+    return () => {
+      el.removeEventListener('scroll', syncCollapsedFromScroll);
+    };
+  }, [labelColumnWidth]);
+
   const dayCount = days.length;
 
   const { dayWidthPx, canvasWidth, useFractionalColumns } = useMemo(
     () =>
       computeTimelineViewportLayout({
         viewportWidth,
-        labelColumnWidth,
+        labelColumnWidth: effectiveLabelColumnWidth,
         dayCount,
       }),
-    [viewportWidth, labelColumnWidth, dayCount],
+    [viewportWidth, effectiveLabelColumnWidth, dayCount],
   );
 
   const dayGridTemplateColumns = useMemo(
@@ -136,7 +202,8 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
 
   const viewport = useMemo(
     (): TripTimelineViewportContext => ({
-      labelColumnWidth,
+      labelColumnWidth: effectiveLabelColumnWidth,
+      labelsCollapsed,
       canvasWidth,
       dayCount,
       dayWidthPx,
@@ -147,7 +214,8 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
       todayColumnIndex,
     }),
     [
-      labelColumnWidth,
+      effectiveLabelColumnWidth,
+      labelsCollapsed,
       canvasWidth,
       dayCount,
       dayWidthPx,
@@ -157,6 +225,16 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
       todayColumnIndex,
     ],
   );
+
+  // What the last auto-centre was for. Collapsing the label column changes
+  // `effectiveLabelColumnWidth`, and through it `canvasWidth` and `cellWidthPx`
+  // — so without this the centre-on-today below re-ran on every collapse and
+  // every expand, and that closed a loop: scrolling back to the start expanded
+  // the column, the expand re-centred on today, the jump past the collapse
+  // point collapsed it again, and the collapse re-centred once more. Centring
+  // belongs to the trip and the viewport, not to a column the reader just
+  // toggled by scrolling.
+  const centredForRef = useRef<string | null>(null);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -168,16 +246,23 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
     ) {
       return;
     }
+
+    const centreFor = `${todayColumnIndex}|${dayCount}|${viewportWidth}`;
+    if (centredForRef.current === centreFor) {
+      return;
+    }
+    centredForRef.current = centreFor;
+
     el.scrollLeft = computeTimelineScrollLeftToCenterDay({
       scrollContainerClientWidth: el.clientWidth,
       scrollContainerScrollWidth: el.scrollWidth,
-      labelColumnWidth,
+      labelColumnWidth: effectiveLabelColumnWidth,
       columnIndex: todayColumnIndex,
       cellWidthPx,
     });
   }, [
     todayColumnIndex,
-    labelColumnWidth,
+    effectiveLabelColumnWidth,
     cellWidthPx,
     dayCount,
     viewportWidth,
@@ -204,14 +289,26 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
         // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Deliberate, and the comment above says why: axe's `scrollable-region-focusable` requires an overflowing scroll container to be reachable by keyboard, which is the one case where a non-interactive element must be tabbable.
         tabIndex={0}
         className={cn('w-full min-w-0', 'overflow-x-auto')}
+        data-labels-collapsed={labelsCollapsed ? 'true' : 'false'}
       >
-        <div style={{ width: labelColumnWidth + canvasWidth }}>
+        <div style={{ width: effectiveLabelColumnWidth + canvasWidth }}>
           <div className="sticky top-0 z-20 flex border-b border-muted bg-background">
             <div
-              className="sticky left-0 z-30 border-r border-muted bg-background px-3 py-2"
-              style={{ width: labelColumnWidth, minWidth: labelColumnWidth }}
+              className={cn(
+                'sticky left-0 z-30 border-r border-muted bg-background py-2',
+                labelsCollapsed ? 'px-1' : 'px-3',
+              )}
+              style={{
+                width: effectiveLabelColumnWidth,
+                minWidth: effectiveLabelColumnWidth,
+              }}
             >
-              {leftHeader}
+              {/*
+                The title is decorative once collapsed — each row still names
+                the guest for assistive tech. Hiding it is what lets the colour
+                dots claim the narrow column without competing text.
+              */}
+              <div className={cn(labelsCollapsed && 'sr-only')}>{leftHeader}</div>
             </div>
 
             <div className="relative min-w-0 overflow-hidden" style={{ width: canvasWidth }}>
