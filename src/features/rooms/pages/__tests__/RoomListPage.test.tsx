@@ -684,10 +684,14 @@ describe('RoomListPage', () => {
   });
 
   // ===========================================================================
-  // Person without dates returns no unassigned info
+  // Person without dates needs a room for the whole trip
   // ===========================================================================
 
-  it('does not show person as unassigned when they have no dates or transports', () => {
+  // Regression: a guest who filled in neither stay dates nor travel needed a
+  // room on no night at all, so they never reached this list and the page
+  // offered no way to give them a bed — one of three guests, silently absent.
+  it('treats a person with no dates or transports as needing a room for the trip', async () => {
+    mockAssistantModelCacheAvailable();
     const personNoDates: Person = {
       id: 'person-no-dates' as Person['id'],
       tripId: 'trip-1' as Person['tripId'],
@@ -700,8 +704,20 @@ describe('RoomListPage', () => {
       error: null,
       getPersonById: vi.fn(() => personNoDates),
     } as unknown as ReturnType<typeof usePersonContext>);
+    vi.mocked(useAssignmentContext).mockReturnValue({
+      assignments: [],
+      isLoading: false,
+      error: null,
+      getAssignmentsByRoom: vi.fn(() => []),
+      createAssignment: mockCreateAssignment,
+      updateAssignment: mockUpdateAssignment,
+    } as unknown as ReturnType<typeof useAssignmentContext>);
+
     render(<RoomListPage />, { withProviders: false });
-    expect(screen.queryByText(/rooms\.unassignedGuests/)).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'rooms.autoAssignButton' })).toBeInTheDocument();
+    });
   });
 
   // ===========================================================================
