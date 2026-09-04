@@ -309,6 +309,71 @@ describe('getTripByShareId', () => {
 // ============================================================================
 
 describe('updateTrip', () => {
+  // Reported from the app: create a guest with no dates, give them a room, then
+  // edit the trip's dates. The booking was made across the whole trip — that is
+  // what an undated guest's stay is taken to be — but it is stored as two fixed
+  // dates, so it went stale and the guest showed up in their room *and* in the
+  // "needs room" row, with their bar starting partway along the timeline.
+  it('carries a whole-trip booking across when the trip dates move', async () => {
+    const trip = await createTrip(
+      createValidTripData({ startDate: isoDate('2024-07-15'), endDate: isoDate('2024-07-22') }),
+    );
+    const room = await createRoom(trip.id, { name: 'Room 1', capacity: 2 });
+    const person = await createPerson(trip.id, { name: 'Tom', color: hexColor('#6366f1') });
+    const booking = await createAssignment(trip.id, {
+      roomId: room.id,
+      personId: person.id,
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-22'),
+    });
+
+    await updateTrip(trip.id, { startDate: isoDate('2024-07-10') });
+
+    const moved = await db.roomAssignments.get(booking.id);
+    expect(moved?.startDate).toBe('2024-07-10');
+    expect(moved?.endDate).toBe('2024-07-22');
+  });
+
+  it('leaves a booking made for part of the trip where it is', async () => {
+    const trip = await createTrip(
+      createValidTripData({ startDate: isoDate('2024-07-15'), endDate: isoDate('2024-07-22') }),
+    );
+    const room = await createRoom(trip.id, { name: 'Room 1', capacity: 2 });
+    const person = await createPerson(trip.id, { name: 'Marc', color: hexColor('#14b8a6') });
+    const booking = await createAssignment(trip.id, {
+      roomId: room.id,
+      personId: person.id,
+      startDate: isoDate('2024-07-17'),
+      endDate: isoDate('2024-07-19'),
+    });
+
+    await updateTrip(trip.id, { startDate: isoDate('2024-07-10') });
+
+    const untouched = await db.roomAssignments.get(booking.id);
+    expect(untouched?.startDate).toBe('2024-07-17');
+    expect(untouched?.endDate).toBe('2024-07-19');
+  });
+
+  it('does not touch bookings when the dates are not part of the edit', async () => {
+    const trip = await createTrip(
+      createValidTripData({ startDate: isoDate('2024-07-15'), endDate: isoDate('2024-07-22') }),
+    );
+    const room = await createRoom(trip.id, { name: 'Room 1', capacity: 2 });
+    const person = await createPerson(trip.id, { name: 'Tom', color: hexColor('#6366f1') });
+    const booking = await createAssignment(trip.id, {
+      roomId: room.id,
+      personId: person.id,
+      startDate: isoDate('2024-07-15'),
+      endDate: isoDate('2024-07-22'),
+    });
+
+    await updateTrip(trip.id, { name: 'Renamed' });
+
+    const untouched = await db.roomAssignments.get(booking.id);
+    expect(untouched?.startDate).toBe('2024-07-15');
+    expect(untouched?.endDate).toBe('2024-07-22');
+  });
+
   it('updates trip fields', async () => {
     const trip = await createTrip(createValidTripData({ name: 'Original Name' }));
 
