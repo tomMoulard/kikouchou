@@ -9,7 +9,7 @@ export const badgeVariants = cva(
         secondary:
           "bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
         destructive:
-          // eslint-disable-next-line kikoushou/no-raw-palette-class -- shadcn ships `text-white` here: the label sits on the destructive fill in both themes, so it must not follow `--foreground`.
+          // eslint-disable-next-line kikouchou/no-raw-palette-class -- shadcn ships `text-white` here: the label sits on the destructive fill in both themes, so it must not follow `--foreground`.
           "bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
           "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",

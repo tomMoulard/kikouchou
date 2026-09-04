@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for Kikoushou E2E tests.
+ * Playwright configuration for Kikouchou E2E tests.
  * @see https://playwright.dev/docs/test-configuration
  */
 

@@ -1,5 +1,5 @@
 /**
- * Zod validation schemas for Kikoushou form data.
+ * Zod validation schemas for Kikouchou form data.
  *
  * These schemas provide runtime validation that matches the TypeScript types
  * defined in @/types. Use these for validating form submissions and API responses.

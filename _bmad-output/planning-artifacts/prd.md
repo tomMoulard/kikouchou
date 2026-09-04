@@ -31,7 +31,7 @@ date: 2026-02-06
 author: tom
 ---
 
-# Product Requirements Document - Kikoushou
+# Product Requirements Document - Kikouchou
 
 **Author:** tom
 **Date:** 2026-02-06
@@ -39,9 +39,9 @@ author: tom
 
 ## Executive Summary
 
-**Kikoushou** is a Progressive Web App that helps groups of friends organize vacation house stays. It solves a specific coordination problem: when friends rent a house together, one person (the organizer) becomes the bottleneck for questions about rooms, arrival times, and pickups.
+**Kikouchou** is a Progressive Web App that helps groups of friends organize vacation house stays. It solves a specific coordination problem: when friends rent a house together, one person (the organizer) becomes the bottleneck for questions about rooms, arrival times, and pickups.
 
-**Core differentiator:** Kikoushou is collaborative, not hierarchical. The organizer creates the scaffolding (trip, rooms, participants); everyone with the shared link has equal editing power. Guests self-assign rooms, enter their own transport details, and volunteer for pickups. No accounts, no login, no permissions - the social context is the access control.
+**Core differentiator:** Kikouchou is collaborative, not hierarchical. The organizer creates the scaffolding (trip, rooms, participants); everyone with the shared link has equal editing power. Guests self-assign rooms, enter their own transport details, and volunteer for pickups. No accounts, no login, no permissions - the social context is the access control.
 
 **Target users:** Groups of 5-15 friends renting vacation houses together. Primary persona is the organizer who sets up the trip; secondary personas are guests who self-serve and drivers who volunteer for pickups.
 
@@ -201,7 +201,7 @@ author: tom
 | **Self-organizing groups** | "Someone must be in charge" | Eliminates coordinator bottleneck |
 | **Offline-first by necessity** | "Apps need internet" | Works where it's needed most |
 
-**Innovation philosophy:** Kikoushou innovates by subtraction, not addition. Each innovation removes something other tools add by default, and the removal IS the feature.
+**Innovation philosophy:** Kikouchou innovates by subtraction, not addition. Each innovation removes something other tools add by default, and the removal IS the feature.
 
 ### Innovation Validation
 

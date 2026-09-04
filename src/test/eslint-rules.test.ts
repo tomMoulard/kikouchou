@@ -10,14 +10,14 @@
  * @module test/eslint-rules.test
  */
 
-/* eslint-disable kikoushou/no-raw-palette-class -- This file is the rule's own
+/* eslint-disable kikouchou/no-raw-palette-class -- This file is the rule's own
    fixtures: every palette shade below is there to be rejected, and a test that
    could not name the thing it rejects would not be testing anything. */
 
 import { RuleTester } from 'eslint';
 import { describe, expect, it } from 'vitest';
 
-import kikoushou from '../../eslint-rules/index.js';
+import kikouchou from '../../eslint-rules/index.js';
 import { RAW_PALETTE, matchRawPalette } from '../../eslint-rules/raw-palette.js';
 
 // ============================================================================
@@ -110,8 +110,8 @@ describe('raw-palette', () => {
 // `RuleTester.run` declares its own `describe`/`it` per case, so it has to be
 // called at suite level rather than from inside a test.
 ruleTester.run(
-  'kikoushou/no-raw-palette-class',
-  kikoushou.rules['no-raw-palette-class'],
+  'kikouchou/no-raw-palette-class',
+  kikouchou.rules['no-raw-palette-class'],
   {
     valid: [
       // Theme tokens, which is the whole point.
@@ -167,8 +167,8 @@ ruleTester.run(
 );
 
 ruleTester.run(
-  'kikoushou/require-disable-description',
-  kikoushou.rules['require-disable-description'],
+  'kikouchou/require-disable-description',
+  kikouchou.rules['require-disable-description'],
   {
     valid: [
       {

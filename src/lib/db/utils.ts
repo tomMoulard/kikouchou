@@ -1,5 +1,5 @@
 /**
- * Database utility functions for the Kikoushou PWA
+ * Database utility functions for the Kikouchou PWA
  *
  * Provides type-safe ID generation, timestamp utilities, and validation helpers.
  * All ID generation functions return properly branded types, encapsulating

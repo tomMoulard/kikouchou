@@ -103,12 +103,12 @@ describe('TransportIcon presentation', () => {
 
   it('applies additional className', () => {
     const { container } = render(
-      // eslint-disable-next-line kikoushou/no-raw-palette-class -- An arbitrary caller class, asserted below to reach the <svg>. Its job is to be recognisable in the output, not to style anything.
+      // eslint-disable-next-line kikouchou/no-raw-palette-class -- An arbitrary caller class, asserted below to reach the <svg>. Its job is to be recognisable in the output, not to style anything.
       <TransportIcon mode="car" className="size-8 text-red-500" />,
       { withProviders: false },
     );
     const svg = container.querySelector('svg');
-    // eslint-disable-next-line kikoushou/no-raw-palette-class -- The other half of the fixture above.
+    // eslint-disable-next-line kikouchou/no-raw-palette-class -- The other half of the fixture above.
     expect(svg?.className.baseVal ?? svg?.getAttribute('class') ?? '').toContain('text-red-500');
   });
 

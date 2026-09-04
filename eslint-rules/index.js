@@ -70,7 +70,7 @@ const noRawPaletteClass = {
     schema: [],
     messages: {
       rawPalette:
-        '{{classes}} is a raw Tailwind palette shade. Use a theme token (bg-background, text-muted-foreground) or statusVariants — see AGENTS.md § Styling. If the literal colour is the requirement rather than a theme choice, keep it and say why: // eslint-disable-next-line kikoushou/no-raw-palette-class -- <reason>',
+        '{{classes}} is a raw Tailwind palette shade. Use a theme token (bg-background, text-muted-foreground) or statusVariants — see AGENTS.md § Styling. If the literal colour is the requirement rather than a theme choice, keep it and say why: // eslint-disable-next-line kikouchou/no-raw-palette-class -- <reason>',
     },
   },
   create(context) {
@@ -172,7 +172,7 @@ const requireDisableDescription = {
 
 /** @type {import('eslint').ESLint.Plugin} */
 const plugin = {
-  meta: { name: 'kikoushou', version: '1.0.0' },
+  meta: { name: 'kikouchou', version: '1.0.0' },
   rules: {
     'no-raw-palette-class': noRawPaletteClass,
     'require-disable-description': requireDisableDescription,

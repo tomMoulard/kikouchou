@@ -178,7 +178,7 @@ describe('a blank process variable beats .env.local', () => {
   };
 
   it('overrides the file value, and would read it without the override', () => {
-    const envDir = mkdtempSync(join(tmpdir(), 'kikoushou-env-precedence-'));
+    const envDir = mkdtempSync(join(tmpdir(), 'kikouchou-env-precedence-'));
 
     try {
       writeFileSync(join(envDir, '.env.local'), `${PROBE}=${FROM_FILE}\n`);

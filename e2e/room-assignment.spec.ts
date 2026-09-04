@@ -1,6 +1,6 @@
 /**
  * @fileoverview E2E Tests for Room Assignment Flow
- * Tests the complete workflow of managing rooms, persons, and assignments in the Kikoushou PWA.
+ * Tests the complete workflow of managing rooms, persons, and assignments in the Kikouchou PWA.
  *
  * Test scenarios covered:
  * 1. Adding a room to a trip

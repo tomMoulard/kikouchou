@@ -27,7 +27,7 @@ author: tom
 
 ### Project Vision
 
-Kikoushou is a Progressive Web App that eliminates the coordination bottleneck in vacation house sharing. When groups of 5-15 friends rent a house together, one person (the organizer) typically becomes the "human FAQ" - fielding questions about rooms, arrival times, and pickups. Kikoushou replaces that bottleneck with a self-service, shareable tool.
+Kikouchou is a Progressive Web App that eliminates the coordination bottleneck in vacation house sharing. When groups of 5-15 friends rent a house together, one person (the organizer) typically becomes the "human FAQ" - fielding questions about rooms, arrival times, and pickups. Kikouchou replaces that bottleneck with a self-service, shareable tool.
 
 The product innovates by subtraction: zero accounts, zero authentication, zero server. Anyone with a shared link has full access. Social context (friend groups) is the access control. The app is offline-first, working at rural vacation houses with intermittent connectivity.
 

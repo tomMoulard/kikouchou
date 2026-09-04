@@ -78,7 +78,7 @@ Front-end web application (PWA) - client-side only SPA with offline-first archit
 
 ### Starter Options Considered
 
-**Not applicable - brownfield project.** Kikoushou is an existing, MVP-complete codebase. The technology stack has been established through 19 development phases and is production-deployed. This section documents the existing stack rather than evaluating new starters.
+**Not applicable - brownfield project.** Kikouchou is an existing, MVP-complete codebase. The technology stack has been established through 19 development phases and is production-deployed. This section documents the existing stack rather than evaluating new starters.
 
 ### Existing Stack: Vite + React + TypeScript PWA
 

@@ -3,7 +3,7 @@
  *
  * Two things need this pattern and they must never drift apart:
  *
- * 1. `kikoushou/no-raw-palette-class` (see `./index.js`), which rejects the
+ * 1. `kikouchou/no-raw-palette-class` (see `./index.js`), which rejects the
  *    class at lint time wherever it is written.
  * 2. `src/components/ui/__tests__/status.variants.test.ts`, which asserts that
  *    `statusVariants` — the thing you are supposed to use instead — never

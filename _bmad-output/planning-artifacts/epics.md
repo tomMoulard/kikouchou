@@ -12,11 +12,11 @@ inputDocuments:
   - README.md
 ---
 
-# Kikoushou - Epic Breakdown
+# Kikouchou - Epic Breakdown
 
 ## Overview
 
-This document provides the complete epic and story breakdown for Kikoushou, decomposing the requirements from the PRD, UX Design, and Architecture requirements into implementable stories.
+This document provides the complete epic and story breakdown for Kikouchou, decomposing the requirements from the PRD, UX Design, and Architecture requirements into implementable stories.
 
 ## Requirements Inventory
 

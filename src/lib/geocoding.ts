@@ -278,7 +278,7 @@ export async function searchPlaces(
       headers: {
         Accept: 'application/json',
         // Nominatim's usage policy asks for an identifying User-Agent.
-        'User-Agent': 'Kikoushou/1.0 (https://github.com/tomMoulard/kikouchou)',
+        'User-Agent': 'Kikouchou/1.0 (https://github.com/tomMoulard/kikouchou)',
       },
     });
 

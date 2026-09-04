@@ -6,7 +6,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
-import kikoushou from './eslint-rules/index.js'
+import kikouchou from './eslint-rules/index.js'
 
 export default defineConfig([
   globalIgnores(['.worktrees', 
@@ -33,7 +33,7 @@ export default defineConfig([
       // only on the pages the scan happened to visit.
       jsxA11y.flatConfigs.recommended,
     ],
-    plugins: { kikoushou },
+    plugins: { kikouchou },
     linterOptions: {
       // A disable comment that no longer suppresses anything is a claim about
       // the code that has quietly stopped being true. Loud, not silent.
@@ -52,10 +52,10 @@ export default defineConfig([
 
       // Theme tokens over raw colours (AGENTS.md § Styling). A cleanup pass had
       // to convert 456 palette utilities by hand; this is what stops the 457th.
-      'kikoushou/no-raw-palette-class': 'error',
+      'kikouchou/no-raw-palette-class': 'error',
       // ...and what keeps every exemption above honest: the rule below is the
       // reason an inline disable is preferable to a path exclusion here.
-      'kikoushou/require-disable-description': 'error',
+      'kikouchou/require-disable-description': 'error',
 
       // Beyond jsx-a11y's `recommended`, three rules that map onto AGENTS.md's
       // own checklist and cost nothing today — each was measured at zero
@@ -129,7 +129,7 @@ export default defineConfig([
   {
     files: ['eslint-rules/**/*.js', 'eslint.config.js', 'scripts/**/*.js'],
     extends: [js.configs.recommended],
-    plugins: { kikoushou },
+    plugins: { kikouchou },
     linterOptions: {
       reportUnusedDisableDirectives: 'error',
     },
@@ -139,8 +139,8 @@ export default defineConfig([
       globals: globals.node,
     },
     rules: {
-      'kikoushou/no-raw-palette-class': 'error',
-      'kikoushou/require-disable-description': 'error',
+      'kikouchou/no-raw-palette-class': 'error',
+      'kikouchou/require-disable-description': 'error',
     },
   },
   // Disable React Compiler rules for context files that use intentional patterns

@@ -1,5 +1,5 @@
 /**
- * @fileoverview Internationalization (i18n) configuration for Kikoushou PWA.
+ * @fileoverview Internationalization (i18n) configuration for Kikouchou PWA.
  * Sets up react-i18next with automatic language detection and French as the default language.
  *
  * @module lib/i18n

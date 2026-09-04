@@ -1,5 +1,5 @@
 /**
- * @fileoverview E2E Accessibility Tests for Kikoushou PWA.
+ * @fileoverview E2E Accessibility Tests for Kikouchou PWA.
  * Uses Playwright and @axe-core/playwright to verify WCAG 2.1 compliance.
  *
  * Test cases covered:

@@ -1,7 +1,7 @@
 ---
 stepsCompleted: [1, 2]
 inputDocuments: []
-session_topic: 'Feature ideas and UX enhancements for Kikoushou vacation planning webapp'
+session_topic: 'Feature ideas and UX enhancements for Kikouchou vacation planning webapp'
 session_goals: 'Generate actionable feature ideas and UX improvement solutions'
 selected_approach: 'ai-recommended'
 techniques_used: ['Role Playing', 'SCAMPER Method', 'Cross-Pollination']
@@ -16,13 +16,13 @@ context_file: ''
 
 ## Session Overview
 
-**Topic:** Feature ideas and UX enhancements for Kikoushou vacation planning webapp
+**Topic:** Feature ideas and UX enhancements for Kikouchou vacation planning webapp
 
 **Goals:** Generate actionable feature ideas and UX improvement solutions
 
 ### Context Summary
 
-**Kikoushou** is a PWA that helps groups of friends organize vacation house sharing:
+**Kikouchou** is a PWA that helps groups of friends organize vacation house sharing:
 
 **Current Features:**
 - Trip Management (create/edit trips with date ranges)

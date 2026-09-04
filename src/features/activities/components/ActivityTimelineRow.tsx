@@ -135,11 +135,11 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
                 className={cn(
                   'flex h-[18px] shrink-0 items-center justify-center rounded-full px-1',
                   'text-[9px] font-semibold leading-none tabular-nums',
-                  /* eslint-disable kikoushou/no-raw-palette-class -- The pill sits on the activity's own colour, and `textColor` is the contrast decision made against it at runtime; a theme token knows nothing about that background. */
+                  /* eslint-disable kikouchou/no-raw-palette-class -- The pill sits on the activity's own colour, and `textColor` is the contrast decision made against it at runtime; a theme token knows nothing about that background. */
                   textColor === 'white'
                     ? 'bg-white/25 text-white'
                     : 'bg-black/12 text-black/80',
-                  /* eslint-enable kikoushou/no-raw-palette-class */
+                  /* eslint-enable kikouchou/no-raw-palette-class */
                 )}
                 aria-hidden="true"
               >
