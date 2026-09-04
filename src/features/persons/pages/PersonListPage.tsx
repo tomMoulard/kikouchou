@@ -29,7 +29,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { type Locale, format, parseISO } from 'date-fns';
-import { ArrowDownRight, ArrowUpRight, Plus, Trash2, Users } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Phone, Plus, Trash2, Users } from 'lucide-react';
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useTripContext } from '@/contexts/TripContext';
@@ -162,6 +162,11 @@ const PersonCard = memo(function PersonCard({
     [isDisabled, onDelete, person.id],
   ),
 
+  // Keeps a tap on the phone link from also opening the edit dialog behind it.
+   stopCardClick = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
+    event.stopPropagation();
+  }, []),
+
   // Build aria-label for screen readers
    ariaLabel = useMemo(() => {
     const parts = [person.name];
@@ -179,6 +184,10 @@ const PersonCard = memo(function PersonCard({
       const { full } = formatTransportDatetimeParts(transportSummary.departure.datetime, dateLocale, 'dayAndTime');
       parts.push(`${t('transports.departure')}: ${full}`);
     }
+    const rawPhone = person.phone?.trim();
+    if (rawPhone) {
+      parts.push(`${t('persons.phone', 'Phone')}: ${rawPhone}`);
+    }
     const rawNotes = person.notes?.trim();
     if (rawNotes) {
       const excerpt = rawNotes.length > 160 ? `${rawNotes.slice(0, 160)}…` : rawNotes;
@@ -192,7 +201,8 @@ const PersonCard = memo(function PersonCard({
   }, [dateLocale, person, roomsDisplay, stayRangeLabel, transportSummary.departure, transportSummary.arrival, t]),
 
    hasTransportInfo = transportSummary.arrival || transportSummary.departure,
-   trimmedNotes = person.notes?.trim() ?? '';
+   trimmedNotes = person.notes?.trim() ?? '',
+   trimmedPhone = person.phone?.trim() ?? '';
 
   // A guest entry can stand for several people (e.g. a couple under one name).
   const personHeadcount = getPersonHeadcount(person);
@@ -331,11 +341,36 @@ const PersonCard = memo(function PersonCard({
           </div>
         ) : null}
 
+        {trimmedPhone && (
+          <div
+            className={cn(
+              'text-sm',
+              (stayRangeLabel || roomsDisplay || hasTransportInfo) &&
+                'mt-2 border-t border-muted/60 pt-2',
+            )}
+          >
+            <a
+              href={`tel:${trimmedPhone.replace(/\s+/gu, '')}`}
+              // The whole card opens the editor, so a tap meant for the number
+              // has to stop there or dialling is impossible.
+              onClick={stopCardClick}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-sm text-muted-foreground',
+                'hover:text-foreground hover:underline',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              )}
+            >
+              <Phone className="size-3.5 shrink-0" aria-hidden="true" />
+              <span className="truncate tabular-nums">{trimmedPhone}</span>
+            </a>
+          </div>
+        )}
+
         {trimmedNotes && (
           <div
             className={cn(
               'text-sm text-muted-foreground',
-              (stayRangeLabel || roomsDisplay || hasTransportInfo) &&
+              (stayRangeLabel || roomsDisplay || hasTransportInfo || trimmedPhone) &&
                 'mt-2 border-t border-muted/60 pt-2',
             )}
           >
