@@ -228,7 +228,12 @@ const RoomIconPicker = memo(function RoomIconPicker({
       <div
         role="radiogroup"
         aria-labelledby={`${pickerId}-label`}
-        className="grid grid-cols-4 sm:grid-cols-6 gap-2"
+        // Three columns on a phone, not four. At four the tile is narrower than
+        // "Double bed" renders at `text-xs`, and every multi-word label came
+        // out as "Do…" — an icon grid whose labels are all elided is just an
+        // icon grid. The labels wrap instead of truncating, so the widest one
+        // sets the row height rather than getting cut.
+        className="grid grid-cols-3 gap-2 sm:grid-cols-6"
       >
         {ICON_ORDER.map((iconKey) => {
           const config = ROOM_ICONS[iconKey];
@@ -252,7 +257,7 @@ const RoomIconPicker = memo(function RoomIconPicker({
               onClick={() => handleIconClick(iconKey)}
               onKeyDown={(e) => handleKeyDown(e, iconKey)}
               className={cn(
-                'flex flex-col items-center justify-center gap-1 p-3 rounded-lg border-2 transition-all',
+                'flex min-h-20 flex-col items-center justify-center gap-1 p-2 rounded-lg border-2 transition-all',
                 'hover:bg-accent hover:border-accent-foreground/20',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                 isSelected
@@ -268,7 +273,7 @@ const RoomIconPicker = memo(function RoomIconPicker({
                 )}
                 aria-hidden="true"
               />
-              <span className="text-xs truncate max-w-full">{label}</span>
+              <span className="text-xs text-center leading-tight">{label}</span>
             </button>
           );
         })}
