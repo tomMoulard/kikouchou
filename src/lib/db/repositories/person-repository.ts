@@ -151,6 +151,9 @@ export async function updatePerson(
   if (sanitizedData.notes !== undefined) {
     sanitizedData.notes = sanitizeOptionalText(sanitizedData.notes, MAX_LENGTHS.personNotes);
   }
+  if (sanitizedData.phone !== undefined) {
+    sanitizedData.phone = sanitizeOptionalText(sanitizedData.phone, MAX_LENGTHS.personPhone);
+  }
   if (sanitizedData.headcount !== undefined) {
     sanitizedData.headcount = normalizePersonHeadcount(sanitizedData.headcount);
   }
@@ -298,6 +301,9 @@ export async function updatePersonWithOwnershipCheck(
     }
     if (patch.notes !== undefined) {
       patch.notes = sanitizeOptionalText(patch.notes, MAX_LENGTHS.personNotes);
+    }
+    if (patch.phone !== undefined) {
+      patch.phone = sanitizeOptionalText(patch.phone, MAX_LENGTHS.personPhone);
     }
     if (patch.headcount !== undefined) {
       patch.headcount = normalizePersonHeadcount(patch.headcount);

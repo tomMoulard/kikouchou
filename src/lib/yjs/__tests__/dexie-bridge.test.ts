@@ -21,7 +21,7 @@ import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { syncDocToDexie } from '@/lib/yjs/dexie-bridge';
-import { DOC_SCHEMA_VERSION } from '@/lib/yjs/doc-model';
+import { DOC_SCHEMA_VERSION, upsertDocEntity } from '@/lib/yjs/doc-model';
 import { isoDate } from '@/test/utils';
 import type { Person, TripId } from '@/types';
 
@@ -320,6 +320,57 @@ describe('buildTripRecord — remote field validation', () => {
     expect((await db.trips.get(trip.id))?.location).toHaveLength(
       MAX_LENGTHS.tripLocation,
     );
+  });
+
+  it('bounds a guest phone a peer never bounded', async () => {
+    const trip = await makeTrip();
+    const doc = makeDoc({});
+    upsertDocEntity(doc, 'guests', {
+      id: 'guest-1',
+      name: 'Mary',
+      color: '#3b82f6',
+      phone: '9'.repeat(50_000),
+    });
+
+    await syncDocToDexie(doc, trip.id);
+
+    // Every local writer caps this at MAX_LENGTHS.personPhone, so a longer one
+    // came from a member whose client did not — and the guest card renders it.
+    const stored = await db.persons.get('guest-1' as Person['id']);
+    expect(stored?.phone).toHaveLength(MAX_LENGTHS.personPhone);
+  });
+
+  it('drops a whitespace-only guest phone rather than storing a blank', async () => {
+    const trip = await makeTrip();
+    const doc = makeDoc({});
+    upsertDocEntity(doc, 'guests', {
+      id: 'guest-2',
+      name: 'Mary',
+      color: '#3b82f6',
+      phone: '   ',
+    });
+
+    await syncDocToDexie(doc, trip.id);
+
+    // A blank string would render an empty `tel:` link on the guest card.
+    const stored = await db.persons.get('guest-2' as Person['id']);
+    expect(stored?.phone).toBeUndefined();
+  });
+
+  it('keeps an ordinary guest phone untouched', async () => {
+    const trip = await makeTrip();
+    const doc = makeDoc({});
+    upsertDocEntity(doc, 'guests', {
+      id: 'guest-3',
+      name: 'Mary',
+      color: '#3b82f6',
+      phone: '+33 6 12 34 56 78',
+    });
+
+    await syncDocToDexie(doc, trip.id);
+
+    const stored = await db.persons.get('guest-3' as Person['id']);
+    expect(stored?.phone).toBe('+33 6 12 34 56 78');
   });
 
   it('ignores a description that is not a string', async () => {

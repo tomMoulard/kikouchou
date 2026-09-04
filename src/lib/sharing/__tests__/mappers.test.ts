@@ -110,6 +110,33 @@ describe('Person mappers', () => {
     expect(result.notes).toBe('Vegan, no nuts');
   });
 
+  it('round-trips a guest phone number', () => {
+    const person: Person = { ...testPerson, phone: '+33 6 12 34 56 78' };
+    const proto = personToProto(person);
+    const result = protoToPerson(proto);
+    expect(result.phone).toBe('+33 6 12 34 56 78');
+  });
+
+  it('leaves phone unset for a guest without one', () => {
+    const proto = personToProto(testPerson);
+    const result = protoToPerson(proto);
+    expect(result.phone).toBeUndefined();
+  });
+
+  it('bounds a phone that arrives oversized from a scanned changeset', () => {
+    // A changeset is read off someone else's screen and passes no form, so the
+    // mapper is the last place to clip it before it reaches Dexie.
+    const proto = personToProto({ ...testPerson, phone: '9'.repeat(200) });
+    const result = protoToPerson(proto);
+    expect(result.phone).toBe('9'.repeat(32));
+  });
+
+  it('drops a whitespace-only phone rather than storing a blank', () => {
+    const proto = personToProto({ ...testPerson, phone: '   ' });
+    const result = protoToPerson(proto);
+    expect(result.phone).toBeUndefined();
+  });
+
   it('round-trips a multi-person guest headcount', () => {
     const person: Person = { ...testPerson, name: 'Alice+Auré', headcount: 2 };
     const proto = personToProto(person);

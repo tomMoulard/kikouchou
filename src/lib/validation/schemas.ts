@@ -225,6 +225,7 @@ export const RoomFormDataSchema = z.object({
  * - stayStartDate: optional, valid ISO date
  * - stayEndDate: optional, valid ISO date
  * - If both stay dates provided, stayEndDate must be >= stayStartDate
+ * - phone: optional, max 32 characters
  * - headcount: optional, whole number between 1 and 99
  */
 export const PersonFormDataSchema = z
@@ -236,6 +237,13 @@ export const PersonFormDataSchema = z
     color: hexColorSchema,
     stayStartDate: isoDateStringSchema.optional(),
     stayEndDate: isoDateStringSchema.optional(),
+    // Length is the only constraint. A pattern would reject valid numbers long
+    // before it caught an invalid one — extensions, national prefixes and the
+    // "(0)" French numbers carry are all legitimate and all differently shaped.
+    phone: z
+      .string()
+      .max(32, 'Phone number must be 32 characters or less')
+      .optional(),
     headcount: z
       .number()
       .int('Headcount must be a whole number')

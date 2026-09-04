@@ -462,6 +462,22 @@ export interface Person extends Identifiable, TripScoped {
   notes?: string;
 
   /**
+   * Optional phone number, so the others on the trip can reach this guest —
+   * the one picking them up at the station most of all.
+   *
+   * Stored exactly as it was typed or as the address book held it, never
+   * reformatted: numbers arrive in a dozen national conventions and rewriting
+   * them is how a working number stops working. It is a contact string, not a
+   * key — nothing matches or dials on it automatically.
+   *
+   * It syncs with the rest of the trip, so every member of the trip can read
+   * it. Only enter a number the person is happy to share with the group.
+   *
+   * @example "+33 6 12 34 56 78"
+   */
+  phone?: string;
+
+  /**
    * Number of real people this participant stands for.
    *
    * A guest entry is often a couple or a family tracked under one name
@@ -846,6 +862,8 @@ export interface PersonFormData {
   stayEndDate?: ISODateString;
   /** Optional notes (allergies, diet, etc.) */
   notes?: string;
+  /** Optional phone number, shared with everyone on the trip */
+  phone?: string;
   /** Number of real people this guest stands for (defaults to 1) */
   headcount?: number;
 }

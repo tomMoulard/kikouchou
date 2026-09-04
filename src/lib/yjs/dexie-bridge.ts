@@ -197,6 +197,29 @@ function readCollection(doc: Y.Doc, name: SharedCollectionName): SharedRecord[] 
   return readDocCollection(doc, name);
 }
 
+/**
+ * Projects one guest out of the document, bounding what the server carried.
+ *
+ * The document holds other members' writes, so a guest's `phone` arrives from
+ * outside this device and has passed no form. Bounding it here — the module's
+ * trust boundary — keeps an unbounded string out of Dexie and out of the card
+ * that renders it.
+ */
+function buildGuestRecord(guest: SharedRecord, tripId: TripId): Person {
+  const person = { ...guest, tripId } as Person;
+
+  if (person.phone !== undefined) {
+    const boundedPhone = sanitizeOptionalText(person.phone, MAX_LENGTHS.personPhone);
+    if (boundedPhone === undefined) {
+      delete person.phone;
+    } else {
+      person.phone = boundedPhone;
+    }
+  }
+
+  return person;
+}
+
 async function replaceTripScopedRows<T extends { id: string; tripId: TripId }>(
   currentRows: readonly T[],
   nextRows: readonly T[],
@@ -388,8 +411,8 @@ export async function syncDocToDexie(
           .between([tripId, ''], [tripId, '\uffff'])
           .toArray();
 
-        const nextGuests = readCollection(doc, 'guests').map(
-          (guest) => ({ ...guest, tripId } as Person),
+        const nextGuests = readCollection(doc, 'guests').map((guest) =>
+          buildGuestRecord(guest, tripId),
         );
         const nextRooms = readCollection(doc, 'rooms').map(
           (room) => ({ ...room, tripId } as Room),
