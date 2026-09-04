@@ -142,6 +142,40 @@ async function waitForNameOnServer(stub: SupabaseStub, name: string): Promise<vo
 }
 
 /**
+ * Renames a trip through the edit form.
+ *
+ * Navigated to directly rather than through the card's overflow menu, which the
+ * trip list does not render — it passes `onShare` and nothing else. The local
+ * `TripId` travels to the server as `local_id`, so the stub's own row is where
+ * the route parameter comes from, which also means the test cannot rename a
+ * different trip than the one it is about to make assertions on.
+ */
+async function renameTrip(page: Page, localTripId: string, to: string): Promise<void> {
+  await page.goto(`/trips/${localTripId}/edit`);
+  const name = page.getByLabel(/trip name/i);
+  await expect(name).toBeVisible({ timeout: 20_000 });
+  await name.fill(to);
+  await page.getByRole('button', { name: /save/i }).click();
+  await expect(page.getByText(to).first()).toBeVisible({ timeout: 20_000 });
+}
+
+/** How many rows the outbox is holding for delivery, read from IndexedDB. */
+async function outboxDepth(page: Page): Promise<number> {
+  return page.evaluate(async () => {
+    const request = indexedDB.open('kikoushou');
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    return await new Promise<number>((resolve) => {
+      const count = database.transaction('yjsOutbox').objectStore('yjsOutbox').count();
+      count.onsuccess = () => resolve(count.result);
+      count.onerror = () => resolve(0);
+    });
+  });
+}
+
+/**
  * Contexts opened by the current test, closed whatever the outcome.
  *
  * Closing only on the happy path meant a failing test leaked two contexts into
@@ -255,17 +289,19 @@ test.describe('sharing a trip', () => {
     await page.goto('/');
     await createTrip(page, 'Corsica');
 
-    // Scoped to Brittany's own card. `.first()` would be whichever card the list
-    // happens to order first, and sharing Corsica instead would make the
-    // assertion below meaningless rather than failing honestly.
+    // Scoped to Brittany's own card, and asserted to be exactly one: `.first()`
+    // would be whichever card the list happens to order first, and sharing
+    // Corsica instead would make the assertion below meaningless rather than
+    // failing honestly.
+    //
+    // The list item, not the button. The card's activation target is now a real
+    // button overlaying the card, sibling to the share button rather than parent
+    // of it — the fix for `nested-interactive` — so `getByRole('button')` here
+    // resolves to that overlay, which contains nothing to click.
     await page.goto('/');
-    const brittanyCard = page
-      .getByRole('button')
-      .filter({ hasText: 'Brittany' })
-      .first();
-    await brittanyCard
-      .getByRole('button', { name: /share trip/i })
-      .click();
+    const brittanyCard = page.getByRole('listitem').filter({ hasText: 'Brittany' });
+    await expect(brittanyCard).toHaveCount(1);
+    await brittanyCard.getByRole('button', { name: /share trip/i }).click();
     await expect(page.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
 
     // Whichever of the two was shared, its contents have to reach the server:
@@ -367,17 +403,29 @@ test.describe('joining a trip', () => {
 
     await guestPage.getByRole('button', { name: /alice/i }).click();
 
-    // Claimed on the server, not merely in the UI.
+    // Claimed on the server, not merely in the UI — and in two steps, because
+    // one is not enough to say *whose* claim it was.
+    //
+    // First: a claim landed on somebody's roster row.
     await expect
-      .poll(
-        () =>
-          stub.members.find((m) => m.user_id === GUEST.id)?.person_id ?? null,
-        { timeout: 20_000 },
-      )
-      .not.toBeNull();
+      .poll(() => stub.members.filter((m) => m.person_id !== null).length, {
+        timeout: 20_000,
+      })
+      .toBeGreaterThan(0);
+
+    // Then: it landed on this account's row and on no other. `members claim
+    // their own identity` is `using (user_id = auth.uid())`, so the subject of
+    // the write is the bearer token, never the `?user_id=eq.` the client sent —
+    // which the stub used to take at its word, obligingly writing a claim onto
+    // another account's row when asked to. Asserting only that the guest's own
+    // row is set cannot see that: it fails either way once the client names the
+    // wrong account. This is the assertion that tells the two apart.
+    expect(
+      stub.members.filter((m) => m.user_id !== GUEST.id && m.person_id !== null),
+    ).toHaveLength(0);
+    expect(stub.members.find((m) => m.user_id === GUEST.id)?.person_id).toBeTruthy();
 
     await expect(guestPage).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
-
   });
 
   test('lets an invitee into a trip that has no participants', async ({ browser }) => {
@@ -638,13 +686,43 @@ test.describe('two devices on one trip', () => {
     await expect(ownerPage.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
     await ownerPage.keyboard.press('Escape');
 
-    const before = stub.counts.updateInserts;
+    const landed = stub.counts.updateInserts;
+    const offered = stub.counts.updateAttempts;
 
     // The server goes away. The app must keep taking edits.
     stub.offline = true;
     await addGuest(ownerPage, 'Offline Dave');
-    await ownerPage.waitForTimeout(2_000);
-    expect(stub.counts.updateInserts).toBe(before);
+
+    // Taken and kept. An offline-first app adding a guest with no server is
+    // adding a guest, not failing.
+    await expect(ownerPage.getByText('Offline Dave').first()).toBeVisible({
+      timeout: 15_000,
+    });
+
+    // Offered, which is the half `stub.offline` alone can never show: the route
+    // is aborted before any handler runs, so `updateInserts` cannot move
+    // whatever the client does, and asserting it stayed put asserts the stub.
+    // `updateAttempts` is counted on the way in, so this fails for a client that
+    // queued nothing — the outcome the old assertion could not distinguish.
+    await expect
+      .poll(() => stub.counts.updateAttempts, { timeout: 20_000, intervals: [250] })
+      .toBeGreaterThan(offered);
+
+    // Held, not dropped: the edit is still in the queue, in the browser.
+    expect(await outboxDepth(ownerPage)).toBeGreaterThan(0);
+
+    // And nothing landed, because nothing could.
+    expect(stub.counts.updateInserts).toBe(landed);
+
+    // Measured, not asserted, and recorded because the number is a surprise: in
+    // the six seconds after the edit the client makes *no* further push attempt
+    // at all — not a bounded one. Neither `BACKOFF_MS` set to 1 ms nor
+    // `noteFailure` calling `syncNow()` directly changes it, so the queued edit
+    // waits for an external trigger (the `online` event below, or tab focus)
+    // rather than for the retry schedule. A bound on retry storms is therefore
+    // unexercisable from here today: any number it asserted would pass at zero.
+    // Worth a look on its own — a device that never regains `online` holds the
+    // edit indefinitely — but it is not this test's claim to make.
 
     // And send them when it comes back, with no user action.
     stub.offline = false;
@@ -654,7 +732,185 @@ test.describe('two devices on one trip', () => {
 
     await expect
       .poll(() => stub.counts.updateInserts, { timeout: 60_000, intervals: [2_000] })
-      .toBeGreaterThan(before);
+      .toBeGreaterThan(landed);
 
+    // Drained rather than merely overtaken: rows the server took are
+    // acknowledged, so a reconnect does not leave the queue growing forever.
+    await expect
+      .poll(() => outboxDepth(ownerPage), { timeout: 30_000, intervals: [1_000] })
+      .toBe(0);
+  });
+});
+
+// ============================================================================
+// The denormalised preview
+// ============================================================================
+
+/**
+ * The `trips` row's name and dates — a cache, and the only thing a device has
+ * for a trip it is a member of but has never downloaded.
+ *
+ * None of this was testable until the stub stopped answering `200 []` to every
+ * `PATCH trips`. That answer told the client a write it had never made had
+ * succeeded, which is precisely the bug it was hiding: `owners update their
+ * trips` narrows the UPDATE to rows this account owns, so on a guest's device it
+ * matched nothing — and an UPDATE matching nothing succeeds, with no error and
+ * no rows.
+ */
+test.describe('the trip preview on the server', () => {
+  test("follows the owner's rename", async ({ page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await page.goto('/');
+    await createTrip(page, TRIP.name);
+    await openShareDialog(page);
+    await expect(page.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
+    await page.keyboard.press('Escape');
+
+    const row = stub.trips[0];
+    expect(row?.name).toBe(TRIP.name);
+
+    await renameTrip(page, row!.local_id, 'Renamed Brittany');
+
+    // The row itself, not the absence of an error. Another device's trip list
+    // renders this before it has hydrated anything, so a preview left behind is
+    // a wrong name on somebody else's screen for as long as they never open it.
+    await expect
+      .poll(() => stub.trips[0]?.name, { timeout: 30_000, intervals: [500] })
+      .toBe('Renamed Brittany');
+  });
+
+  test('is republished when the row has drifted from the trip', async ({ page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await page.goto('/');
+    await createTrip(page, TRIP.name);
+    await openShareDialog(page);
+    await expect(page.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
+    await page.keyboard.press('Escape');
+
+    // The row now says something the trip does not — a rename this device made
+    // while the write was refused, a restore from an older backup. The preview
+    // is allowed to lag; it is not allowed to lag for good.
+    stub.trips[0]!.name = 'A name this trip has not had for months';
+
+    // Re-shared without reloading, deliberately. A reload would remount
+    // `SupabaseTripSync`, whose own effect republishes the preview on mount, and
+    // this test would then pass with `ensureRemoteTrip`'s reconciliation removed
+    // entirely. Sharing is the moment the preview is about to become somebody
+    // else's only source, so it is where it has to be put right.
+    await page.getByRole('button', { name: /share trip/i }).first().click();
+    await expect(page.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
+
+    await expect
+      .poll(() => stub.trips[0]?.name, { timeout: 30_000, intervals: [500] })
+      .toBe(TRIP.name);
+  });
+
+  test("says so out loud when a guest's device cannot maintain it", async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+    const ownerPage = await newDevice(browser, stub, OWNER);
+
+    await ownerPage.goto('/');
+    await createTrip(ownerPage, TRIP.name);
+    await addGuest(ownerPage, 'Alice');
+
+    await openShareDialog(ownerPage);
+    const inviteUrl = await ownerPage
+      .getByTestId('share-url')
+      .textContent({ timeout: 20_000 });
+    const token = (inviteUrl ?? '').split('/join/')[1] ?? '';
+    await waitForNameOnServer(stub, 'Alice');
+
+    const guestPage = await newDevice(browser, stub, GUEST);
+
+    // Collected before the join, because the preview write happens as soon as
+    // the guest's device settles on the trip.
+    const notApplied: string[] = [];
+    guestPage.on('console', (message) => {
+      if (message.text().includes('trip preview')) {
+        notApplied.push(message.text());
+      }
+    });
+
+    await guestPage.goto(`/join/${token}`);
+    await expect(guestPage.getByRole('button', { name: /alice/i })).toBeVisible({
+      timeout: 30_000,
+    });
+    await guestPage.getByRole('button', { name: /alice/i }).click();
+    await expect(guestPage).toHaveURL(/\/trips\/([^/]+)\/calendar/, { timeout: 20_000 });
+    const guestTripId = (/\/trips\/([^/]+)\//.exec(guestPage.url()) ?? [])[1] ?? '';
+    expect(guestTripId).not.toBe('');
+
+    // The owner stops here, so nothing else can republish the preview and make
+    // the assertion below true for the wrong reason.
+    await ownerPage.close();
+
+    await renameTrip(guestPage, guestTripId, 'Renamed By A Guest');
+
+    // The rename is a real edit and converges through the document like any
+    // other — being unable to write the preview is not being unable to edit.
+    await waitForNameOnServer(stub, 'Renamed By A Guest');
+
+    // But the preview row is untouched: `owners update their trips` matches
+    // nothing here, and matching nothing is not an error.
+    expect(stub.trips[0]?.name).toBe(TRIP.name);
+
+    // And the device did not take that silence for success. This is the whole
+    // finding: with the stub answering `200 []` the client saw the same bytes it
+    // sees on a write that worked, so there was nothing to notice and nothing to
+    // report — and every guest device stopped maintaining the preview from the
+    // day the feature shipped.
+    await expect
+      .poll(() => notApplied.filter((line) => line.includes('was not updated')).length, {
+        timeout: 30_000,
+        intervals: [500],
+      })
+      .toBeGreaterThan(0);
+  });
+
+  test('is re-created, not written into the void, when the trip is deleted on the server', async ({
+    page,
+  }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await page.goto('/');
+    await createTrip(page, TRIP.name);
+    await addGuest(page, 'Alice');
+    await openShareDialog(page);
+    await expect(page.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
+    await waitForNameOnServer(stub, 'Alice');
+    await page.keyboard.press('Escape');
+
+    const deadId = stub.trips[0]!.id;
+
+    // Deleted from the dashboard, a project reset, a restore from a backup taken
+    // before the trip existed. The roster cascades with the row, so this account
+    // is no longer a member and `members append to the trip log` now refuses its
+    // writes outright — reported from the share dialog as a permissions error,
+    // which is what made this read as a permissions bug rather than a gone trip.
+    stub.deleteTrip(deadId);
+
+    await openShareDialog(page);
+    await expect(page.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
+
+    // A new row, not the dead pointer the device was still holding.
+    await expect
+      .poll(() => stub.trips[0]?.id, { timeout: 30_000, intervals: [500] })
+      .not.toBe(deadId);
+    expect(stub.trips[0]?.name).toBe(TRIP.name);
+
+    // And the document reaches it. Without the re-creation every write is a 403
+    // against a trip this account is not on, forever, with the share dialog
+    // handing out a link to nothing.
+    await waitForNameOnServer(stub, 'Alice');
   });
 });
