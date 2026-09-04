@@ -19,14 +19,39 @@
  */
 
 /**
- * Tailwind utility prefixes that can take a colour.
+ * Every Tailwind utility prefix that can take a colour.
  *
- * `to`/`from`/`via` are gradient stops, `divide` is the between-children
- * border — all of them spell a colour the same way, so all of them can smuggle
- * one in.
+ * The list has to be exhaustive or the rule is worse than useless — it reads
+ * like a guarantee and quietly permits whatever it forgot. `shadow-black/15`
+ * shipped in `CalendarTimelineRow` under an earlier, shorter version of this
+ * list, which is exactly the failure mode.
+ *
+ * `to`/`from`/`via` are gradient stops; `divide` is the between-children
+ * border; `border` and `divide` take a side (`border-t-red-500`); `ring` and
+ * `shadow` each have an `inset-` and an `-offset` spelling. All of them write
+ * the colour the same way, so all of them can smuggle one in.
  */
-const COLOUR_PREFIXES =
-  'bg|text|border|ring|from|to|via|fill|stroke|divide';
+const COLOUR_PREFIXES = [
+  'bg',
+  'text',
+  'text-shadow',
+  'border(?:-[trblxyse])?',
+  'divide(?:-[xy])?',
+  'ring(?:-offset)?',
+  'inset-ring',
+  'shadow',
+  'inset-shadow',
+  'outline',
+  'fill',
+  'stroke',
+  'accent',
+  'caret',
+  'decoration',
+  'placeholder',
+  'from',
+  'via',
+  'to',
+].join('|');
 
 /**
  * Tailwind's default palette, plus the two achromatic literals.
@@ -42,8 +67,17 @@ const PALETTE_SHADES =
  *
  * The numeric suffix is optional so that `bg-white` and `text-black/80` match
  * alongside `bg-amber-100`.
+ *
+ * The boundaries are `(?<![\w-])` / `(?![\w-])` rather than `\b`, because a
+ * Tailwind class is delimited by whitespace or a variant colon, never by a
+ * hyphen. `\b` treats a hyphen as a boundary and so reads `'navigate-to-blue-
+ * page'` as the gradient stop `to-blue`, turning every route segment, i18n key
+ * and test id containing `-to-<colour>-` into a lint error whose only escape is
+ * a disable comment claiming a colour justification that does not exist. These
+ * boundaries still admit `dark:hover:bg-white/10`, where the neighbours are `:`
+ * and `/`.
  */
-export const RAW_PALETTE_PATTERN = `\\b(?:${COLOUR_PREFIXES})-(?:${PALETTE_SHADES})(?:-\\d{2,3})?\\b`;
+const RAW_PALETTE_PATTERN = `(?<![\\w-])(?:${COLOUR_PREFIXES})-(?:${PALETTE_SHADES})(?:-\\d{2,3})?(?![\\w-])`;
 
 /**
  * Any Tailwind palette shade — what the theme tokens exist to keep out.

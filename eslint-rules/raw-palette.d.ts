@@ -8,9 +8,6 @@
  * @module eslint-rules/raw-palette
  */
 
-/** Source text of the palette pattern, without flags. */
-export declare const RAW_PALETTE_PATTERN: string;
-
 /** Any Tailwind palette shade — what the theme tokens exist to keep out. */
 export declare const RAW_PALETTE: RegExp;
 

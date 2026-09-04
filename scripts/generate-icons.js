@@ -51,7 +51,7 @@ async function main() {
   let sharp;
   try {
     sharp = (await import('sharp')).default;
-  } catch (error) {
+  } catch {
     console.error('❌ Error: "sharp" package is not installed.');
     console.error('   Please install it first:');
     console.error('   npm install --save-dev sharp');
