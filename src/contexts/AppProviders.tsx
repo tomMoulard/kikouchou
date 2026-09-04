@@ -14,6 +14,7 @@ import { AssignmentProvider } from '@/contexts/AssignmentContext';
 import { TransportProvider } from '@/contexts/TransportContext';
 import { ActivityProvider } from '@/contexts/ActivityContext';
 import { AuthProvider } from '@/features/auth/AuthContext';
+import { AccountTripSync } from '@/lib/sync/AccountTripSync';
 import { YjsTripSync } from '@/lib/yjs/YjsTripSync';
 
 // ============================================================================
@@ -39,6 +40,9 @@ interface AppProvidersProps {
  * 0. AuthProvider - Session state. Outermost because it is not trip-scoped and
  *    must resolve whether or not a trip exists. It never gates rendering: a
  *    trip is created and edited with no account and no network.
+ * 0b. AccountTripSync - Not a provider and not in the chain. Renders nothing;
+ *    it reconciles this device's trips with the signed-in account's, so the
+ *    same trips show up on the phone and the laptop.
  * 1. TripProvider - Manages current trip selection and trip list
  * 2. RoomProvider - Manages rooms for the current trip (depends on TripProvider)
  * 3. PersonProvider - Manages persons for the current trip (depends on TripProvider)
@@ -96,6 +100,14 @@ interface AppProvidersProps {
 export function AppProviders({ children }: AppProvidersProps): ReactElement {
   return (
     <AuthProvider>
+      {/*
+        A sibling, not a wrapper. It renders nothing and reads no trip context —
+        it only needs the session — so putting it beside the tree rather than
+        around it keeps it out of the remount story `App.tsx` describes, and
+        makes it obvious that nothing below depends on it having finished.
+      */}
+      <AccountTripSync />
+
       <TripProvider>
         <RoomProvider>
           <PersonProvider>

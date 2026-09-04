@@ -654,7 +654,8 @@ src/
 │   ├── map/         # Leaflet helpers
 │   ├── posthog.ts   # Analytics client (undefined without env config)
 │   ├── supabase/    # Client, generated database.types.ts, auth callback
-│   ├── sync/        # Server sync: provider, cursors, outbox, invites, join
+│   ├── sync/        # Server sync: provider, cursors, outbox, invites, join,
+│   │                #   account sweep (every trip, both ways, on sign-in)
 │   ├── utils/       # Shared utilities
 │   ├── validation/  # Zod schemas
 │   └── yjs/         # CRDT doc model and the Dexie bridge

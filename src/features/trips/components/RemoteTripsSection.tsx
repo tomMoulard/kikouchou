@@ -7,8 +7,13 @@
  * no way in at all. That is why it renders inside the empty state as well as
  * below a populated list.
  *
- * Downloading is explicit rather than automatic. Someone with a dozen trips on a
- * metered connection should choose which ones land on this device.
+ * Since signing in sweeps the whole account onto the device — see
+ * `lib/sync/AccountTripSync` — this list is usually empty, and empty is what it
+ * should be: it renders nothing at all when there is nothing left over. What it
+ * still covers is everything the sweep could not do. A trip whose download
+ * failed, one that appeared on the server while this device was offline and has
+ * not reconnected, one added by another member between sweeps. Those need a way
+ * in that does not involve relaunching the app, and this is it.
  *
  * The names here are the server's denormalised preview, not the document: this
  * device has no document for these trips yet, which is the whole reason the
