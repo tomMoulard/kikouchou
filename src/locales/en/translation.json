@@ -1005,6 +1005,9 @@
     "downloadFailed": "Download failed",
     "tilesCount_one": "{{count}} tile",
     "tilesCount_other": "{{count}} tiles",
-    "cacheSize": "Cache size: {{size}}"
+    "cacheSize": "Cache size: {{size}}",
+    "openInMaps": "Open in Maps",
+    "copyAddress": "Copy address",
+    "addressCopied": "Address copied"
   }
 }
