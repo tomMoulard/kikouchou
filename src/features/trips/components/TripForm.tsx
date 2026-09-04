@@ -46,8 +46,14 @@ import type { Trip, TripFormData, TripId } from '@/types';
 // Constants
 // ============================================================================
 
-/** Maximum character limit for trip description */
-const DESCRIPTION_MAX_LENGTH = 1000;
+/**
+ * Maximum characters for a trip description — the repository's own limit, for
+ * the same reason the name below takes its limit from there rather than
+ * restating it. Until the sanitiser bounded this field the two were independent
+ * by necessity; now that it does, a second literal here would be a ceiling the
+ * counter could show while the save applied a different one.
+ */
+const DESCRIPTION_MAX_LENGTH = MAX_LENGTHS.tripDescription;
 
 /**
  * Maximum characters for a trip name — the repository's own limit, not a

@@ -23,6 +23,9 @@ describe('MAX_LENGTHS constants', () => {
   it('has expected trip field limits', () => {
     expect(MAX_LENGTHS.tripName).toBe(100);
     expect(MAX_LENGTHS.tripLocation).toBe(200);
+    // Matches the textarea's own `maxLength`, so bounding the field on save
+    // cannot silently shorten a description the form already accepted.
+    expect(MAX_LENGTHS.tripDescription).toBe(1000);
   });
 
   it('has expected room field limits', () => {
@@ -44,6 +47,7 @@ describe('MAX_LENGTHS constants', () => {
     const expectedKeys = [
       'tripName',
       'tripLocation',
+      'tripDescription',
       'roomName',
       'roomDescription',
       'personName',
@@ -286,6 +290,55 @@ describe('sanitizeTripData', () => {
     expect(result.name).toBe('Trip');
     expect(result.location).toBe('Place');
     expect(result.extraField).toBe(42);
+  });
+
+  it('sanitizes description field', () => {
+    const result = sanitizeTripData({
+      name: 'Trip',
+      description: '  Bring hiking boots  ',
+      startDate: '2024-07-01',
+      endDate: '2024-07-15',
+    });
+    expect(result.description).toBe('Bring hiking boots');
+  });
+
+  /**
+   * The only thing bounding this used to be `maxLength={1000}` on the textarea.
+   * That clips typing and pasting alike, but it binds one textarea rather than
+   * the field: the assistant's trip actions, a changeset/QR import and the CRDT
+   * bridge all write a description without going near the form. The field
+   * travels through the shared document, so an unbounded one is a payload every
+   * peer downloads, not just a long string on one device.
+   */
+  it('truncates a description no form could have submitted', () => {
+    const pasted = 'A'.repeat(10_000);
+    const result = sanitizeTripData({
+      name: 'Trip',
+      description: pasted,
+      startDate: '2024-07-01',
+      endDate: '2024-07-15',
+    });
+    expect(result.description).toBe('A'.repeat(MAX_LENGTHS.tripDescription));
+  });
+
+  it('converts empty description to undefined', () => {
+    const result = sanitizeTripData({
+      name: 'Trip',
+      description: '   ',
+      startDate: '2024-07-01',
+      endDate: '2024-07-15',
+    });
+    expect(result.description).toBeUndefined();
+  });
+
+  it('preserves undefined description', () => {
+    const result = sanitizeTripData({
+      name: 'Trip',
+      description: undefined,
+      startDate: '2024-07-01',
+      endDate: '2024-07-15',
+    });
+    expect(result.description).toBeUndefined();
   });
 });
 
