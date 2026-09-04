@@ -207,6 +207,86 @@ function cardMenuTrigger(page: Page): Locator {
   return page.locator('button[data-size="icon"][aria-haspopup="menu"]').first();
 }
 
+/**
+ * Opens the language select on `/settings` and returns its option rows.
+ *
+ * The cheapest honest surface for `SelectItem`: no seeding, one navigation,
+ * and a call site that passes no `className` at all — which is every one of
+ * the sixteen `SelectItem` call sites in the app.
+ *
+ * Located by `data-slot`, not by the trigger's `aria-label`: the label is
+ * translated and this suite runs in whatever locale the browser reports.
+ */
+async function settingsLanguageOptions(page: Page): Promise<Locator> {
+  await clearIndexedDB(page);
+  await page.goto('/settings');
+  await waitForRoute(page);
+
+  const trigger = page.locator('[data-slot="select-trigger"]').first();
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+
+  const options = page.getByRole('option');
+  await expect(options.first()).toBeVisible();
+
+  return options;
+}
+
+/**
+ * Opens the transport edit dialog on the seeded card and returns the option
+ * rows of its guest select.
+ *
+ * `TransportForm` is where six of the sixteen `SelectItem` call sites live,
+ * and unlike `/settings` its select opens inside a dialog — a portal within a
+ * portal. Worth measuring separately: a floor that the dialog's own layout
+ * cancelled would still pass on the settings page.
+ */
+async function transportFormGuestOptions(page: Page): Promise<Locator> {
+  await gotoTransportList(page);
+
+  await cardMenuTrigger(page).click();
+  // The first row of that menu is Edit; matched by position rather than by its
+  // translated label, for the same reason as the trigger above.
+  await page.getByRole('menuitem').first().click();
+
+  // The id `TransportForm` puts on the guest select's trigger. Stable, unique
+  // in the dialog, and not a string a translator can change.
+  const trigger = page.locator('#transport-person');
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+
+  const options = page.getByRole('option');
+  await expect(options.first()).toBeVisible();
+
+  return options;
+}
+
+/**
+ * Asserts every one of a set of rows clears the touch floor.
+ *
+ * @param page - Playwright page object
+ * @param rows - The rows to measure
+ * @param label - What the rows are, for the failure message
+ */
+async function expectEveryRowClearsTheFloor(
+  page: Page,
+  rows: Locator,
+  label: string,
+): Promise<void> {
+  const count = await rows.count();
+  // Without this a locator that matched nothing would loop zero times and the
+  // test would pass having measured nothing at all.
+  expect(count, `no ${label} rendered`).toBeGreaterThan(0);
+
+  for (let index = 0; index < count; index += 1) {
+    const box = await boxOf(page, rows.nth(index));
+    expect(
+      box.height,
+      `${label} ${index} is ${box.height}px tall`,
+    ).toBeGreaterThanOrEqual(MEASURED_FLOOR_PX);
+  }
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -275,6 +355,26 @@ test.describe('Touch targets on mobile', () => {
       );
     }
   });
+
+  test('every option of a select is at least 44px tall', async ({ page }) => {
+    // Stock shadcn's `SelectItem` is `py-1.5 text-sm` and nothing else — 6 +
+    // 20 + 6 = 32px — and not one of the sixteen call sites in this app
+    // overrides it, so before the floor moved into the primitive every picker
+    // in the app was a 32px row. This is the plainest of them.
+    await expectEveryRowClearsTheFloor(
+      page,
+      await settingsLanguageOptions(page),
+      'language option',
+    );
+  });
+
+  test('a select inside a dialog is at least 44px per option too', async ({ page }) => {
+    await expectEveryRowClearsTheFloor(
+      page,
+      await transportFormGuestOptions(page),
+      'guest option',
+    );
+  });
 });
 
 test.describe('Desktop density is unchanged', () => {
@@ -297,5 +397,25 @@ test.describe('Desktop density is unchanged', () => {
       itemBox.height,
       'the mobile floor leaked past `md` and inflated the menu',
     ).toBeLessThan(MIN_TOUCH_TARGET_PX);
+  });
+
+  test('select options stay compact past the md breakpoint', async ({ page }) => {
+    const options = await settingsLanguageOptions(page);
+
+    const count = await options.count();
+    expect(count, 'no language options rendered').toBeGreaterThan(0);
+
+    for (let index = 0; index < count; index += 1) {
+      const box = await boxOf(page, options.nth(index));
+      // The whole reason the floor is written `max-md:` rather than
+      // `min-h-11 md:min-h-0`. Written the obvious way, an unprefixed class at
+      // a call site would cancel the base and leave the `md:` half applying on
+      // its own, and every select in the app would grow a third taller on
+      // desktop. This assertion is what would catch that.
+      expect(
+        box.height,
+        `option ${index} is ${box.height}px tall — the mobile floor leaked past \`md\``,
+      ).toBeLessThan(MIN_TOUCH_TARGET_PX);
+    }
   });
 });
