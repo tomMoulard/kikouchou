@@ -110,7 +110,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
           toast.error(
             t(
               'trips.importQrSnapshotRequired',
-              'This export is missing trip details. Export again from Settings → Sync on the source device, then scan the new QR.',
+              'This export is missing trip details. Share the trip again from the trips page on the source device, then scan the new QR.',
             ),
           );
           return;
@@ -119,7 +119,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
         toast.error(
           t(
             'trips.importQrMergeFailed',
-            'Could not import this trip data. Try again or use Settings → Sync inside an open trip.',
+            'Could not import this trip data. Try again or use Share on the trips page.',
           ),
         );
       } finally {
