@@ -412,6 +412,29 @@ describe('MapMarker custom colour', () => {
     expect(html).toContain('bg-success');
   });
 
+  /**
+   * `type` is typed, but it lands in an HTML string, and a `MapMarkerData` is
+   * routinely assembled from a persisted row that a sync or an import wrote.
+   * The cast is what such a row looks like once it reaches this module.
+   */
+  it.each([
+    '" onmouseover="alert(1)',
+    '"><img src=x onerror=alert(1)>',
+    'ferry',
+  ])('falls back to the default type for an unknown %s', (type) => {
+    const html = renderedIconHtml(
+      createTestMarker({ type: type as MapMarkerData['type'] }),
+    );
+
+    expect(html).toContain('data-marker-type="default"');
+    expect(html).not.toContain(type);
+    expect(html).not.toContain('onerror');
+    expect(html).not.toContain('undefined');
+    // A pin with a fill and a glyph, not an unpainted circle.
+    expect(html).toContain('bg-muted-foreground');
+    expect(html).toContain('<path');
+  });
+
   it('falls back to the type classes when no colour is given', () => {
     const html = renderedIconHtml(createTestMarker({ type: 'pickup', color: undefined }));
 

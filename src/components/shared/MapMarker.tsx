@@ -131,6 +131,24 @@ const MARKER_BASE_CLASSES =
   'rounded-full border-2 border-background shadow-md transition-colors';
 
 /**
+ * Narrows a marker type to one this module knows, at *runtime*.
+ *
+ * TypeScript already says `type` is a `MapMarkerType`, so this looks redundant
+ * — and it would be, if the value did not end up inside an HTML string. A
+ * `MapMarkerData` is routinely assembled from a persisted row, and a row is
+ * only as trustworthy as whatever wrote it; a synced or imported trip is not
+ * this module's own data. An unknown value would otherwise interpolate straight
+ * into the `data-marker-type` attribute, and index the class and icon tables to
+ * `undefined` besides, giving an unpainted pin with no glyph.
+ *
+ * The same reasoning as `sanitizeColor` above, applied to the other value that
+ * reaches the markup.
+ */
+function resolveMarkerType(type: MapMarkerType): MapMarkerType {
+  return Object.hasOwn(MARKER_TYPE_CLASSES, type) ? type : 'default';
+}
+
+/**
  * Creates a Leaflet DivIcon with custom styling.
  *
  * `divIcon` takes an HTML *string*, so this is the one place in the app that
@@ -140,9 +158,10 @@ const MARKER_BASE_CLASSES =
  * (AGENTS.md, "the inline-style carve-out", exception 1).
  */
 function createMarkerIcon(
-  type: MapMarkerType = 'default',
+  requestedType: MapMarkerType = 'default',
   color?: string
 ): ReturnType<typeof divIcon> {
+  const type = resolveMarkerType(requestedType);
   const customColor = sanitizeColor(color);
   const svgIcon = MARKER_TYPE_ICONS[type];
 
