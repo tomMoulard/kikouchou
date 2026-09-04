@@ -195,6 +195,10 @@ describe('computeTimelineScrollLeftToCenterDay', () => {
   });
 });
 
+// ============================================================================
+// Label collapse
+// ============================================================================
+
 describe('resolveLabelCollapse', () => {
   const WIDTHS = { expandedLabelWidth: 200, collapsedLabelWidth: 40 } as const;
   const DELTA = WIDTHS.expandedLabelWidth - WIDTHS.collapsedLabelWidth;
