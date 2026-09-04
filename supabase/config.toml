@@ -500,11 +500,22 @@ enabled = true
 # be shared that way: `rp_id` is a single host, and a browser only signs a
 # ceremony whose origin that host is a suffix of.
 #
-# Pushing needs the provider credentials in the environment first — `client_id`
-# and `secret` under `[auth.external.*]` are `env(...)` references resolved from
-# wherever the command runs, so a bare `supabase config push` would hand Google
-# and Spotify empty strings. The narrow alternative is the Management API, which
-# takes these four fields on their own:
+# Push with `bun run db:config-push`, never with a bare `supabase config push`.
+# `client_id` and `secret` under `[auth.external.*]` are `env(...)` references
+# resolved from wherever the command runs, and an unresolved one is neither
+# skipped nor blanked: the CLI sends the literal text
+# `env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)` as the client ID, overwriting
+# the credential in the project — the only place it exists.
+#
+# This warning used to stop at "would hand Google and Spotify empty strings",
+# and on 2026-09-04 a bare push proved both halves of that wrong: not empty, but
+# the reference verbatim, and it took Google *and* Spotify down together with
+# `401 invalid_client` while `/auth/v1/settings` kept advertising both as
+# enabled. `scripts/supabase-config-push.js` now refuses that push and names the
+# variables; it reads them from `.env.local` too, so they survive a new shell.
+#
+# The narrow alternative is the Management API, which takes these four fields on
+# their own and touches no provider credential:
 #
 #   PATCH https://api.supabase.com/v1/projects/<ref>/config/auth
 #   {"site_url": …, "uri_allow_list": …,          # comma-joined, not an array
