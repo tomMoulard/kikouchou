@@ -44,6 +44,16 @@ describe('PageHeader', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
   });
 
+  it('renders titleAccessory on the same line as the title', () => {
+    render(
+      <PageHeader
+        title="My trips"
+        titleAccessory={<span>List Map</span>}
+      />,
+    );
+    expect(screen.getByText('List Map')).toBeInTheDocument();
+  });
+
   it('does not render action wrapper when action is omitted', () => {
     const { container } = render(<PageHeader title="Page" />);
     // The action wrapper has class "shrink-0"

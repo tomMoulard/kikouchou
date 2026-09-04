@@ -1108,6 +1108,17 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         <PageHeader
           title={t('rooms.title')}
           backLink={`/trips/${tripIdFromUrl}/calendar`}
+          titleAccessory={
+            <ViewSwitcher
+              value={currentView}
+              onValueChange={handleViewChange}
+              ariaLabel={t('rooms.view.ariaLabel', 'Rooms view')}
+              options={[
+                { value: 'card', label: t('rooms.view.cards', 'Cards') },
+                { value: 'timeline', label: t('rooms.view.timeline', 'Timeline') },
+              ]}
+            />
+          }
           action={
             <>
               {persons.length > 0 &&
@@ -1131,17 +1142,6 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             </>
           }
         />
-
-      <ViewSwitcher
-        className="mb-4"
-        value={currentView}
-        onValueChange={handleViewChange}
-        ariaLabel={t('rooms.view.ariaLabel', 'Rooms view')}
-        options={[
-          { value: 'card', label: t('rooms.view.cards', 'Cards') },
-          { value: 'timeline', label: t('rooms.view.timeline', 'Timeline') },
-        ]}
-      />
 
       {/* Date range filter for room availability (cards view only) */}
       {currentView === 'card' && rooms.length > 0 && currentTrip && (

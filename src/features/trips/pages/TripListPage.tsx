@@ -311,17 +311,20 @@ const TripListPage = memo(function TripListPage() {
         remote-trips list, the actual last thing on the page, under both FABs.
       */}
       <div className="flex flex-col pb-second-fab">
-        <PageHeader title={t('trips.title')} action={headerAction} />
-
-        <ViewSwitcher
-          className="mb-4"
-          value={currentView}
-          onValueChange={handleViewChange}
-          ariaLabel={t('trips.view.ariaLabel')}
-          options={[
-            { value: 'list', label: t('trips.view.list') },
-            { value: 'map', label: t('trips.view.map') },
-          ]}
+        <PageHeader
+          title={t('trips.title')}
+          action={headerAction}
+          titleAccessory={
+            <ViewSwitcher
+              value={currentView}
+              onValueChange={handleViewChange}
+              ariaLabel={t('trips.view.ariaLabel')}
+              options={[
+                { value: 'list', label: t('trips.view.list') },
+                { value: 'map', label: t('trips.view.map') },
+              ]}
+            />
+          }
         />
 
         {currentView === 'map' ? (
