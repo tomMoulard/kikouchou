@@ -50,6 +50,8 @@ interface ImportMetaEnv {
    *
    * Off by default because a key on `localhost` created 19 anonymous people in
    * a project with three real accounts. See `lib/posthog` for the mechanism.
+   * Now that `person_profiles` is `'always'`, every load with this on is a
+   * person in the real project — set it for one session and unset it again.
    */
   readonly VITE_POSTHOG_ALLOW_LOCALHOST?: string;
 

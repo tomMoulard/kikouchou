@@ -454,11 +454,17 @@ every unit test.
 - **That module must never throw.** `main.tsx` imports it at module scope, and so
   transitively does every component test, so a throw blanks the app and fails
   test collection rather than merely losing an event.
-- **Anonymous visitors never become a Person.** `person_profiles` is
-  `'identified_only'`, and most of this app works signed out, so a persisted
-  person per visitor would swamp the handful of real accounts. Trip guests are
-  domain records rather than identities and are never passed to `identify()`.
-  Only a signed-in Supabase account is.
+- **A visitor is a Person from their first pageview.** `person_profiles` is
+  `'always'`. Under posthog-js's `'identified_only'` default — which this ran
+  until it was changed deliberately — an anonymous event carries
+  `$process_person_profile: false` and PostHog never folds it into the person a
+  later `identify()` creates, so somebody who read a shared trip for a week and
+  then signed up arrived with a history starting at the sign-up. Most of this
+  app works signed out, so that was the majority of the story. The price, paid
+  knowingly: a signed-out visitor is a person row, and every signed-out event is
+  billed at PostHog's identified rate. Trip guests are still domain records
+  rather than identities and are never passed to `identify()`; only a signed-in
+  Supabase account is.
 - **Send counts and enum values, not user content.** One capture breaks this
   deliberately — `assistant_prompt_sent` carries the prompt text, because what
   people ask is the only way to tell whether the assistant answers it. A prompt
@@ -470,16 +476,25 @@ every unit test.
   `vi.mock('@/lib/posthog', () => ({ default: { capture: … } }))`. Find the call
   by event name, not by position: `calls.at(-1)` broke the moment a second event
   started firing after the one under test.
-- **Identity follows the Supabase session.** `AuthContext` calls
-  `identify(user.id, { supabase_user_id, email, name })` on sign-in and `reset()`
-  on sign-out. Both fire on the *transition* only: that handler also runs on
-  every token refresh, and `reset()` mints a fresh anonymous id, so calling it on
-  each cold load would give a signed-out visitor a new identity every time and
-  inflate unique users. The sign-out `reset()` is what stops the next person on a
-  shared browser inheriting the last one's identity. The properties are not
-  decoration: identified with the id alone, a person is a bare UUID that nobody
-  can line up against its `auth.users` row. Absent fields are omitted rather than
-  sent blank — `identify()` merges, so a blank overwrites a good value.
+- **Identity follows the Supabase session, and enriches rather than creates.**
+  `AuthContext` calls
+  `identify(user.id, { supabase_user_id, email, name, auth_provider }, { signed_up_at })`
+  on sign-in and `reset()` on sign-out. The person already exists — see
+  `person_profiles` above — so `identify()` merges the anonymous person into the
+  account and adds what only the account knows. Both calls fire on the
+  *transition* only: that handler also runs on every token refresh, and
+  `reset()` mints a fresh anonymous id, so calling it on each cold load would
+  give a signed-out visitor a new identity every time and inflate unique users.
+  The sign-out `reset()` is what stops the next person on a shared browser
+  inheriting the last one's identity — and, now that every visitor is a person,
+  what makes the next one their own person rather than an extra session on the
+  last one's. The properties are not decoration: identified with the id alone, a
+  person is a bare UUID that nobody can line up against its `auth.users` row.
+  `signed_up_at` goes in the third argument, posthog-js's `$set_once` bucket,
+  because the account's creation date cannot change and is what separates the
+  sign-in that was a registration from the thousandth one. Absent fields are
+  omitted rather than sent blank — `identify()` merges, so a blank overwrites a
+  good value.
 - **Sign out through `resetAnalyticsIdentity()`, never `posthog.reset()`.**
   `reset()` calls `persistence.clear()` internally, which drops *every* persisted
   property — super properties included — so a bare `reset()` leaves the rest of
@@ -491,7 +506,9 @@ every unit test.
   that.** They exist because the project once held 20 people against 3 Supabase
   accounts: 19 were anonymous ids and every one of their events came from
   `localhost:3000`, `localhost:5173` or the e2e servers. Do not remove any of
-  them for being redundant — the redundancy is the point.
+  them for being redundant — the redundancy is the point, and `person_profiles:
+  'always'` raised the stakes: a development load that reaches PostHog now adds
+  a person, not merely an event.
   1. `lib/posthog` refuses to `init()` when `window.location.hostname` looks
      like a development host — loopback, but also the RFC 1918 and link-local
      ranges, `.local` and `.localhost`, because `vite --host` serves a phone on
@@ -502,8 +519,10 @@ every unit test.
   2. `internal_or_test_user_hostname: null`. `defaults: '2026-05-30'` otherwise
      sets it to `/^(localhost|127\.0\.0\.1)$/`, and a match calls
      `setInternalOrTestUser()` → `setPersonProperties()`, which is one of the
-     library calls that **force `$process_person_profile = true` and override
-     `identified_only`**. That is the actual mechanism behind the 19.
+     library calls that **force `$process_person_profile = true`**. Under the
+     old `identified_only` that override was the whole mechanism behind the 19.
+     It survives `'always'` for a smaller reason: it still stamps a person as an
+     internal user off a hostname, a property nothing here can unset in bulk.
   3. `playwright.config.ts` (all three `webServer` env blocks) and
      `vitest.config.ts` blank `VITE_POSTHOG_KEY`/`VITE_POSTHOG_HOST` next to the
      Supabase pair — Vite loads `.env.local` for those servers too — and

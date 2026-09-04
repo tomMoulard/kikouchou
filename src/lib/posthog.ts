@@ -12,17 +12,21 @@
  * by every component test, so a throw here blanks the app and fails test
  * collection rather than just losing events.
  *
- * Events are tied to the Supabase account once somebody signs in:
- * `AuthContext` calls `identify()` with `user.id` and the account's email and
- * display name, so a person's events line up across their devices *and* the
- * PostHog person can be matched to the `auth.users` row it belongs to. `reset()`
- * fires on sign-out so the next person on a shared browser does not inherit that
- * identity. Before a sign-in, and in a build with no backend, captures stay
- * anonymous.
+ * A visitor becomes a PostHog person on their first event, before any account
+ * exists — see `person_profiles` below for why that is worth its cost. Signing
+ * in does not start a second person: `AuthContext` calls `identify()` with the
+ * Supabase `user.id`, and PostHog merges the anonymous person into the account,
+ * so everything the person did before signing up stays on the same timeline.
+ * The properties passed alongside — email, display name, how they sign in, when
+ * the account was created — are what make that person something other than a
+ * UUID nobody can match to its `auth.users` row. `reset()` fires on sign-out so
+ * the next person on a shared browser does not inherit that identity; they get
+ * a fresh anonymous id, and therefore a fresh anonymous person.
  *
- * That is a change from how this started. It said captures were anonymous "by
- * design" because "the app has no accounts", which stopped being true when
- * Supabase auth landed.
+ * That is two changes from how this started. It first said captures were
+ * anonymous "by design" because "the app has no accounts", which stopped being
+ * true when Supabase auth landed; and it then created a person only at
+ * `identify()`, which threw away everything a visitor did before signing up.
  *
  * Trip guests remain domain records rather than identities — nothing about a
  * guest is ever passed to `identify()`. Only the signed-in account is.
@@ -31,7 +35,9 @@
  * held 20 persons against three real Supabase accounts; 19 of them were
  * anonymous ids minted on `localhost:3000`, `localhost:5173` and the e2e
  * servers, and not one came from production. See the constants for the
- * mechanism behind each guard.
+ * mechanism behind each guard. They matter more now than when they were
+ * written: with a person per visitor, a dev server that reaches PostHog does
+ * not merely add events, it adds people.
  *
  * @module lib/posthog
  */
@@ -145,24 +151,49 @@ if (!posthogKey || !posthogHost) {
     defaults: '2026-05-30',
 
     /**
-     * Anonymous visitors must not become Person rows.
+     * A person exists from the first pageview, with no account behind it.
      *
-     * This is posthog-js's own default, restated because the app depends on it:
-     * most of Kikouchou works signed out, so a persisted person per visitor
-     * would swamp the handful of real accounts. Only `identify()` — from
-     * `AuthContext`, with a Supabase user id — creates one.
+     * The alternative is posthog-js's own `'identified_only'` default, which
+     * this ran until it became clear what it costs. An event captured under it
+     * carries `$process_person_profile: false`, and PostHog does not fold those
+     * events into the person a later `identify()` creates — so the visitor who
+     * opened a shared trip, came back for a week and then signed up arrives as
+     * a person whose history begins at the sign-up, with the part that explains
+     * *why* they signed up missing. Most of this app works signed out, which
+     * makes that the majority of what there is to learn.
+     *
+     * With `'always'` the anonymous distinct id owns a person from the first
+     * event, and `identify()` merges it into the account rather than opening a
+     * second one. The `$initial_*` properties posthog-js writes from the first
+     * landing — referrer, UTM, entry path — survive that merge, so acquisition
+     * is answerable about people who eventually became accounts.
+     *
+     * What it costs, weighed and accepted: a signed-out visitor is now a person
+     * row rather than nothing, and every signed-out event is billed at
+     * PostHog's identified rate rather than its anonymous one. The development
+     * guards above are what keep that honest — each one of them now suppresses
+     * a person that would otherwise be created, where before it suppressed only
+     * an event.
      */
-    person_profiles: 'identified_only',
+    person_profiles: 'always',
 
     /**
      * Disabled, and this is the single line that caused the 19 phantom people.
      *
      * `defaults: '2026-05-30'` turns this on as `/^(localhost|127\.0\.0\.1)$/`.
      * On a match posthog-js calls `setInternalOrTestUser()`, which goes through
-     * `setPersonProperties()` — and that is one of the calls that force
-     * `$process_person_profile = true`, overriding `identified_only` above. So
-     * every dev-server load and every fresh Playwright browser context minted a
-     * persisted anonymous Person. `null` is the documented way to switch it off
+     * `setPersonProperties()` — one of the calls that force
+     * `$process_person_profile = true`. Back when `person_profiles` was
+     * `'identified_only'` that override *was* the bug: it minted a persisted
+     * anonymous person on every dev-server load and every fresh Playwright
+     * browser context.
+     *
+     * `'always'` does not retire this line, it only changes what it is for.
+     * Forcing a profile is no longer an override of anything, but the call
+     * still stamps the person as an internal user from a hostname — a property
+     * this project has no use for and no way to unset in bulk. Whether a
+     * development load reaches PostHog at all is decided above, by
+     * `isDevelopmentHost()`; `null` is the documented way to switch this off
      * while keeping the rest of the dated defaults.
      */
     internal_or_test_user_hostname: null,
