@@ -1082,17 +1082,17 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       <PageHeader
         title={t('calendar.title')}
         description={currentTrip.name}
-      />
-
-      <ViewSwitcher
-        className="mb-4"
-        value={currentView}
-        onValueChange={handleViewChange}
-        ariaLabel={t('calendar.view.ariaLabel', 'Calendar view')}
-        options={[
-          { value: 'card', label: t('calendar.view.month', 'Month') },
-          { value: 'timeline', label: t('calendar.view.timeline', 'Timeline') },
-        ]}
+        titleAccessory={
+          <ViewSwitcher
+            value={currentView}
+            onValueChange={handleViewChange}
+            ariaLabel={t('calendar.view.ariaLabel', 'Calendar view')}
+            options={[
+              { value: 'card', label: t('calendar.view.month', 'Month') },
+              { value: 'timeline', label: t('calendar.view.timeline', 'Timeline') },
+            ]}
+          />
+        }
       />
 
       {/* Calendar navigation header */}

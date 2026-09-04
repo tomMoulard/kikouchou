@@ -1,6 +1,6 @@
 /**
  * @fileoverview Consistent page header component with title, description,
- * optional action slot, and optional back navigation.
+ * optional title accessory, action slot, and optional back navigation.
  *
  * @module components/shared/PageHeader
  */
@@ -26,6 +26,8 @@ interface PageHeaderProps {
   readonly description?: string;
   /** Optional action slot for buttons or other interactive elements */
   readonly action?: React.ReactNode;
+  /** Optional control rendered on the same line as the title (e.g. a view switcher) */
+  readonly titleAccessory?: React.ReactNode;
   /** Optional URL for back navigation link */
   readonly backLink?: string;
   /** Additional CSS classes for the header container */
@@ -91,6 +93,7 @@ const PageHeader = memo(({
   title,
   description,
   action,
+  titleAccessory,
   backLink,
   className,
 }: PageHeaderProps): React.ReactElement => {
@@ -120,9 +123,12 @@ const PageHeader = memo(({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         {/* Title and description */}
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-            {title}
-          </h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+              {title}
+            </h1>
+            {titleAccessory}
+          </div>
           {description && (
             <p className="text-sm text-muted-foreground md:text-base max-w-2xl text-pretty">
               {description}
