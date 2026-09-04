@@ -148,7 +148,7 @@ if (!posthogKey || !posthogHost) {
      * Anonymous visitors must not become Person rows.
      *
      * This is posthog-js's own default, restated because the app depends on it:
-     * most of Kikoushou works signed out, so a persisted person per visitor
+     * most of Kikouchou works signed out, so a persisted person per visitor
      * would swamp the handful of real accounts. Only `identify()` — from
      * `AuthContext`, with a Supabase user id — creates one.
      */

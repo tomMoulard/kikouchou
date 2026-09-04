@@ -139,8 +139,8 @@ export default defineConfig({
       injectRegister: null,
       includeAssets: ['icons/*.svg', 'favicon.svg'],
       manifest: {
-        name: 'Kikoushou',
-        short_name: 'Kikoushou',
+        name: 'Kikouchou',
+        short_name: 'Kikouchou',
         description: 'Organize your vacation house rooms and arrivals',
         theme_color: '#0f172a',
         background_color: '#ffffff',

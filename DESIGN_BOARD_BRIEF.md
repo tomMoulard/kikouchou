@@ -1,11 +1,11 @@
-# Kikoushou — factual UI and feature brief
+# Kikouchou — factual UI and feature brief
 
 **Do not invent features that are not listed here.**
 This app has **no login/account system**, **no payment flow**, **no social feed**, and **no admin dashboard** in the current router.
 
 ## 1. Product purpose
 
-Kikoushou is a **vacation-house trip organizer**.
+Kikouchou is a **vacation-house trip organizer**.
 It helps a group of friends organize:
 
 - one or more **trips**
@@ -75,7 +75,7 @@ The app revolves around 5 main entities:
 All main in-app pages share the same shell:
 
 - **sticky top header**
-  - left: app name “Kikoushou”
+  - left: app name “Kikouchou”
   - right: current trip name, truncated if too long
   - on mobile, the header can also show collaboration presence if multiple peers are online
 

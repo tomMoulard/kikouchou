@@ -682,7 +682,7 @@ describe('MapMarker colour sanitisation', () => {
       expect(html).not.toContain('bg-success');
       // The glyph stays white: nothing about an arbitrary user hex tells us
       // whether the theme's foreground would be readable on it.
-      // eslint-disable-next-line kikoushou/no-raw-palette-class -- Asserting the carve-out in MapMarker.tsx, not styling anything.
+      // eslint-disable-next-line kikouchou/no-raw-palette-class -- Asserting the carve-out in MapMarker.tsx, not styling anything.
       expect(html).toContain('text-white');
     },
   );

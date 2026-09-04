@@ -1,4 +1,4 @@
-# Kikoushou — Agent Coding Guidelines
+# Kikouchou — Agent Coding Guidelines
 
 **Stack:** React 19 + TypeScript (strict) · Vite · Bun · Tailwind CSS v4 · shadcn/ui · Dexie.js (IndexedDB) · React Router v7 · i18next · Vitest + Playwright
 

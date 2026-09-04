@@ -16,7 +16,7 @@
 import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { KikoushouDatabase } from '@/lib/db/database';
+import { KikouchouDatabase } from '@/lib/db/database';
 
 // ============================================================================
 // Helpers
@@ -46,8 +46,8 @@ function openV7(): Dexie {
 }
 
 /** Reopens the same database at the current schema, running the upgrade. */
-async function upgradeToCurrent(): Promise<KikoushouDatabase> {
-  const upgraded = new KikoushouDatabase(DB_NAME);
+async function upgradeToCurrent(): Promise<KikouchouDatabase> {
+  const upgraded = new KikouchouDatabase(DB_NAME);
   await upgraded.open();
   return upgraded;
 }

@@ -1,5 +1,5 @@
 /**
- * @fileoverview E2E tests for PWA functionality in Kikoushou.
+ * @fileoverview E2E tests for PWA functionality in Kikouchou.
  * Tests service worker registration, offline capability, manifest validation,
  * app updates, and precaching behavior.
  *
@@ -602,8 +602,8 @@ test.describe('Manifest Validation', () => {
     const manifest = await response.json();
 
     // Verify against the VitePWA config
-    expect(manifest.name).toBe('Kikoushou');
-    expect(manifest.short_name).toBe('Kikoushou');
+    expect(manifest.name).toBe('Kikouchou');
+    expect(manifest.short_name).toBe('Kikouchou');
     expect(manifest.description).toBe('Organize your vacation house rooms and arrivals');
     expect(manifest.theme_color).toBe('#0f172a');
     expect(manifest.background_color).toBe('#ffffff');

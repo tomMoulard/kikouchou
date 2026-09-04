@@ -386,7 +386,7 @@ describe('Compound Index Verification', () => {
  *
  * ## Schema Reference
  *
- * Current compound indexes in Kikoushou:
+ * Current compound indexes in Kikouchou:
  * - rooms: [tripId+order]
  * - roomAssignments: [tripId+startDate], [tripId+personId], [tripId+roomId]
  * - transports: [tripId+datetime], [tripId+personId], [tripId+type]

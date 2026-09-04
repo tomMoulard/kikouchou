@@ -169,7 +169,7 @@ function createMarkerIcon(
   // it must not follow the theme either — `--foreground` would turn white on a
   // pale pin in light mode. This is the "text laid over a user-chosen colour"
   // case AGENTS.md carves out for `text-white`.
-  // eslint-disable-next-line kikoushou/no-raw-palette-class -- The glyph sits on an arbitrary user hex, so the literal colour is the requirement: no theme token can know whether it would be readable on that background.
+  // eslint-disable-next-line kikouchou/no-raw-palette-class -- The glyph sits on an arbitrary user hex, so the literal colour is the requirement: no theme token can know whether it would be readable on that background.
   const colorClasses = customColor ? 'text-white' : MARKER_TYPE_CLASSES[type];
   const colorStyle = customColor
     ? ` style="background-color:${customColor}"`

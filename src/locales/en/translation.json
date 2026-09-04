@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Kikoushou",
+    "name": "Kikouchou",
     "tagline": "Organize your vacation with friends"
   },
   "common": {
@@ -903,7 +903,7 @@
   },
   "pwa": {
     "install": "Install app",
-    "installDescription": "Install Kikoushou on your device for quick access",
+    "installDescription": "Install Kikouchou on your device for quick access",
     "notNow": "Not now",
     "installSuccess": "App installed successfully!",
     "installFailed": "Installation failed. Please try again.",

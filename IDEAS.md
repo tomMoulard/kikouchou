@@ -1,6 +1,6 @@
 Une application avec pwa pour gérer les chambres et arrivés/départs d'une maison de vacances.
 
-Pitch: Vous êtes en vacances avec plusieurs copains et vous louez une maison. Kikoushou vous permet d'attribuer les chambres et de ne pas oublier d'aller chercher ou amener vos amis à la gare.
+Pitch: Vous êtes en vacances avec plusieurs copains et vous louez une maison. Kikouchou vous permet d'attribuer les chambres et de ne pas oublier d'aller chercher ou amener vos amis à la gare.
 
 Idées d'ajout:
 - notification quand il fait partir récupéré / amener qq1 a la gare

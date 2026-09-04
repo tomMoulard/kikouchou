@@ -1,5 +1,5 @@
 /**
- * @fileoverview E2E tests for Maps Integration in Kikoushou PWA.
+ * @fileoverview E2E tests for Maps Integration in Kikouchou PWA.
  * Tests the map functionality including:
  * - Trip location map preview and expansion
  * - Transport map view with markers

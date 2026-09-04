@@ -292,7 +292,7 @@ export const InstallPrompt = memo(function InstallPrompt({
               <CardDescription className="mt-1 text-sm">
                 {t(
                   'pwa.installDescription',
-                  'Install Kikoushou on your device for quick access',
+                  'Install Kikouchou on your device for quick access',
                 )}
               </CardDescription>
 

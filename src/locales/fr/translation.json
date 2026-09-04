@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Kikoushou",
+    "name": "Kikouchou",
     "tagline": "Organisez vos vacances entre amis"
   },
   "common": {
@@ -903,7 +903,7 @@
   },
   "pwa": {
     "install": "Installer l'application",
-    "installDescription": "Installez Kikoushou sur votre appareil pour un accès rapide",
+    "installDescription": "Installez Kikouchou sur votre appareil pour un accès rapide",
     "notNow": "Pas maintenant",
     "installSuccess": "Application installée avec succès !",
     "installFailed": "L'installation a échoué. Veuillez réessayer.",

@@ -1,5 +1,5 @@
 /**
- * @fileoverview E2E Performance Tests for Kikoushou PWA.
+ * @fileoverview E2E Performance Tests for Kikouchou PWA.
  * Uses Playwright's built-in performance APIs and CDP to measure:
  * - Initial page load performance
  * - Calendar rendering with many assignments

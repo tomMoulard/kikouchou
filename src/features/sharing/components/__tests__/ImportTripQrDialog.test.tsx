@@ -515,7 +515,7 @@ describe('ImportTripQrDialog', () => {
 
       // A second payload, for a *different* route, is dropped rather than acted
       // on: nothing may run while an import holds the dialog.
-      await scan('https://kikoushou.app/join/aBcDeFgHiJkL3456');
+      await scan('https://kikouchou.app/join/aBcDeFgHiJkL3456');
       await scan(encodeChangeset(makeChangeset()));
 
       expect(mockNavigate).not.toHaveBeenCalled();
@@ -554,7 +554,7 @@ describe('ImportTripQrDialog', () => {
     it('accepts a new code after the dialog has been dismissed', async () => {
       const { user } = renderDialog();
 
-      await scan('https://kikoushou.app/join/aBcDeFgHiJkL3456');
+      await scan('https://kikouchou.app/join/aBcDeFgHiJkL3456');
       expect(mockNavigate).toHaveBeenCalledTimes(1);
 
       // A second scan is refused: this one is already handled.

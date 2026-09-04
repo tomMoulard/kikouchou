@@ -1,5 +1,5 @@
 /**
- * @fileoverview Main router configuration for the Kikoushou application.
+ * @fileoverview Main router configuration for the Kikouchou application.
  * Configures all routes with lazy loading, error boundaries, and proper Layout wrapping.
  *
  * @module router

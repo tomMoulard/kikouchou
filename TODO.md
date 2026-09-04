@@ -1,4 +1,4 @@
-# Kikoushou - Project TODO
+# Kikouchou - Project TODO
 
 > A PWA application to manage vacation house room assignments and arrivals/departures tracking.
 
@@ -33,7 +33,7 @@
 
 ## Project Overview
 
-**Kikoushou** helps groups of friends organize their vacation stays by:
+**Kikouchou** helps groups of friends organize their vacation stays by:
 - Visualizing who sleeps where and when via a calendar
 - Managing room assignments to minimize room changes
 - Tracking arrivals/departures with transport details
@@ -438,8 +438,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/*.png'],
       manifest: {
-        name: 'Kikoushou',
-        short_name: 'Kikoushou',
+        name: 'Kikouchou',
+        short_name: 'Kikouchou',
         description: 'Organize your vacation house rooms and arrivals',
         theme_color: '#0f172a',
         background_color: '#ffffff',
@@ -566,7 +566,7 @@ export interface RoomAssignmentFormData {
 import Dexie, { type Table } from 'dexie';
 import type { Trip, Room, Person, RoomAssignment, Transport, AppSettings } from '@/types';
 
-export class KikoushouDatabase extends Dexie {
+export class KikouchouDatabase extends Dexie {
   trips!: Table<Trip, string>;
   rooms!: Table<Room, string>;
   persons!: Table<Person, string>;
@@ -588,7 +588,7 @@ export class KikoushouDatabase extends Dexie {
   }
 }
 
-export const db = new KikoushouDatabase();
+export const db = new KikouchouDatabase();
 ```
 
 **Acceptance Criteria**:
@@ -598,7 +598,7 @@ export const db = new KikoushouDatabase();
 **Status**: COMPLETED (2026-01-24)
 
 **Notes**:
-- Created `src/lib/db/database.ts` with KikoushouDatabase class extending Dexie
+- Created `src/lib/db/database.ts` with KikouchouDatabase class extending Dexie
 - Implemented optimized indexing strategy based on compound indexes
 - Added unique constraint on shareId (`&shareId`) for trip sharing feature
 - Removed redundant single-column indexes covered by compound indexes (~40% write performance improvement)
@@ -889,7 +889,7 @@ export * from './repositories/settings-repository';
 **Notes**:
 - Comprehensive barrel export with all database functionality
 - Exports grouped by category: database, utils, repositories
-- Type export for KikoushouDatabase class
+- Type export for KikouchouDatabase class
 - All 6 repositories fully exported with 50+ functions
 
 ---
@@ -1207,7 +1207,7 @@ export default i18n;
 ```json
 {
   "app": {
-    "name": "Kikoushou",
+    "name": "Kikouchou",
     "tagline": "Organisez vos vacances entre amis"
   },
   "common": {
@@ -1355,7 +1355,7 @@ export default i18n;
   },
   "pwa": {
     "install": "Installer l'application",
-    "installDescription": "Installez Kikoushou sur votre appareil pour un accès rapide"
+    "installDescription": "Installez Kikouchou sur votre appareil pour un accès rapide"
   }
 }
 ```
@@ -7022,7 +7022,7 @@ catch (error) {
 
 **Fix**: Update User-Agent:
 ```typescript
-'User-Agent': 'Kikoushou/1.0 (https://github.com/tomMoulard/kikouchou)',
+'User-Agent': 'Kikouchou/1.0 (https://github.com/tomMoulard/kikouchou)',
 ```
 
 **Acceptance Criteria**:
@@ -7032,7 +7032,7 @@ catch (error) {
 **Status**: COMPLETED (2026-02-03)
 
 **Notes**:
-- Updated User-Agent header to `Kikoushou/1.0 (https://github.com/tomMoulard/kikouchou)` in LocationPicker.tsx
+- Updated User-Agent header to `Kikouchou/1.0 (https://github.com/tomMoulard/kikouchou)` in LocationPicker.tsx
 - Compliant with Nominatim usage policy requirements
 
 ---

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Trip List Page - Displays all trips with options to select, create, edit.
- * Main entry point for trip management in the Kikoushou PWA.
+ * Main entry point for trip management in the Kikouchou PWA.
  *
  * @module features/trips/pages/TripListPage
  */

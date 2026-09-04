@@ -1,6 +1,6 @@
-# Kikoushou Coding Conventions
+# Kikouchou Coding Conventions
 
-This document outlines the coding conventions and patterns used in the Kikoushou project, a PWA for vacation house room assignment and arrivals/departures tracking.
+This document outlines the coding conventions and patterns used in the Kikouchou project, a PWA for vacation house room assignment and arrivals/departures tracking.
 
 ---
 
@@ -587,7 +587,7 @@ Translation files are JSON in `src/locales/{lang}/translation.json`:
 ```json
 {
   "app": {
-    "name": "Kikoushou",
+    "name": "Kikouchou",
     "tagline": "Organize your vacation with friends"
   },
   "common": {

@@ -1,5 +1,5 @@
 /**
- * Kikoushou PWA - Dexie Database Schema
+ * Kikouchou PWA - Dexie Database Schema
  *
  * This module defines the IndexedDB database schema using Dexie.js v4.
  * The database stores all trip-related data locally for offline-first operation.
@@ -110,7 +110,7 @@ export interface TripMemberRow {
 }
 
 /**
- * Kikoushou IndexedDB database class.
+ * Kikouchou IndexedDB database class.
  *
  * Provides typed access to all application data tables with optimized
  * indexes for common query patterns.
@@ -139,7 +139,7 @@ export interface TripMemberRow {
  * - Added compound indexes for efficient trip-scoped queries
  * - Added shareId index on trips for sharing feature
  */
-export class KikoushouDatabase extends Dexie {
+export class KikouchouDatabase extends Dexie {
   /**
    * Trips table - stores vacation/holiday events.
    * Primary key: id (TripId)
@@ -479,7 +479,7 @@ export class KikoushouDatabase extends Dexie {
 
     this.on('blocked', () => {
       console.warn(
-        '[db] upgrade blocked by another open tab — close other Kikoushou tabs',
+        '[db] upgrade blocked by another open tab — close other Kikouchou tabs',
       );
     });
   }
@@ -502,4 +502,4 @@ export class KikoushouDatabase extends Dexie {
  * const trips = useLiveQuery(() => db.trips.toArray());
  * ```
  */
-export const db = new KikoushouDatabase();
+export const db = new KikouchouDatabase();

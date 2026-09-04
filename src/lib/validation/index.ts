@@ -1,5 +1,5 @@
 /**
- * Validation utilities for Kikoushou form data.
+ * Validation utilities for Kikouchou form data.
  *
  * Provides type-safe validation functions that return either validated data
  * or structured error information. Uses Zod schemas for runtime validation.

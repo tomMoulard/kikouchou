@@ -169,7 +169,7 @@ const AboutSection = memo(function AboutSection(): ReactElement {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">{t('app.name', 'Kikoushou')}</span>
+          <span className="text-sm text-muted-foreground">{t('app.name', 'Kikouchou')}</span>
           <span className="text-sm font-medium">{t('app.tagline', 'Organize your vacation with friends')}</span>
         </div>
         <Separator />

@@ -45,7 +45,7 @@ const ICON_SIZES = [
 const FAVICON_SIZES = [16, 32, 48];
 
 async function main() {
-  console.log('🎨 Kikoushou PWA Icon Generator\n');
+  console.log('🎨 Kikouchou PWA Icon Generator\n');
   
   // Check if sharp is available
   let sharp;

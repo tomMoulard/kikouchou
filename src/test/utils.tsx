@@ -1,5 +1,5 @@
 /**
- * @fileoverview Test utilities for the Kikoushou application.
+ * @fileoverview Test utilities for the Kikouchou application.
  * Provides custom render functions, helpers, and re-exports testing library utilities.
  *
  * @module test/utils

@@ -125,7 +125,7 @@ export function extractShareIdFromScannedPayload(raw: string): string | null {
     // Fall through to bare code
   }
 
-  // Kikoushou share IDs are 10-character nanoids (URL-safe alphabet).
+  // Kikouchou share IDs are 10-character nanoids (URL-safe alphabet).
   if (/^[A-Za-z0-9_-]{10}$/.test(trimmed)) {
     return trimmed;
   }

@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 // Tests
 // ============================================================================
 
-/* eslint-disable kikoushou/no-raw-palette-class -- Fixtures for tailwind-merge's conflict resolution, not styling: the whole point of `cn('text-red-500', 'text-blue-500')` is which of two classes in the same conflict group survives, and a semantic token would obscure that. */
+/* eslint-disable kikouchou/no-raw-palette-class -- Fixtures for tailwind-merge's conflict resolution, not styling: the whole point of `cn('text-red-500', 'text-blue-500')` is which of two classes in the same conflict group survives, and a semantic token would obscure that. */
 describe('cn', () => {
   it('returns empty string for no arguments', () => {
     expect(cn()).toBe('');
@@ -58,4 +58,4 @@ describe('cn', () => {
     expect(result).toBe('md:text-base text-lg');
   });
 });
-/* eslint-enable kikoushou/no-raw-palette-class */
+/* eslint-enable kikouchou/no-raw-palette-class */

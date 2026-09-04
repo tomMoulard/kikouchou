@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/status.variants';
 import type { TransportType } from '@/types';
 
-// The same regex the `kikoushou/no-raw-palette-class` ESLint rule matches on.
+// The same regex the `kikouchou/no-raw-palette-class` ESLint rule matches on.
 // Imported rather than restated: if this test and the lint rule disagreed about
 // what a palette shade is, whichever ran second would be the one that mattered.
 import { RAW_PALETTE } from '../../../../eslint-rules/raw-palette.js';

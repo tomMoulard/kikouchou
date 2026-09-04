@@ -279,7 +279,7 @@ const ColorPicker = memo(({
             {/* Checkmark icon for selected state */}
             {isSelected && (
               <Check
-                // eslint-disable-next-line kikoushou/no-raw-palette-class -- The tick sits on a user-chosen swatch colour, so neither `--foreground` nor `--background` applies; white plus the drop shadow is legible on every swatch.
+                // eslint-disable-next-line kikouchou/no-raw-palette-class -- The tick sits on a user-chosen swatch colour, so neither `--foreground` nor `--background` applies; white plus the drop shadow is legible on every swatch.
                 className="size-5 mx-auto text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]"
                 aria-hidden="true"
                 strokeWidth={3}

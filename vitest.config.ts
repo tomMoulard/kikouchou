@@ -1,5 +1,5 @@
 /**
- * @fileoverview Vitest configuration for the Kikoushou test suite.
+ * @fileoverview Vitest configuration for the Kikouchou test suite.
  * Provides test environment setup, coverage configuration, and path alias resolution.
  *
  * @module vitest.config

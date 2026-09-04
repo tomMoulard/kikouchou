@@ -1,5 +1,5 @@
 // ============================================================================
-// Kikoushou PWA - Type Definitions
+// Kikouchou PWA - Type Definitions
 // A vacation house room assignment and arrivals/departures tracking application
 // ============================================================================
 
@@ -263,7 +263,7 @@ export interface WithTimestamps {
 /**
  * A vacation or holiday event that groups rooms, persons, and logistics.
  *
- * @description The Trip is the root entity in Kikoushou. All other entities
+ * @description The Trip is the root entity in Kikouchou. All other entities
  * (rooms, persons, assignments, transports) belong to a specific trip.
  *
  * @example

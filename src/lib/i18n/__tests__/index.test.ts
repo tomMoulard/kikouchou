@@ -316,7 +316,7 @@ describe('i18n Namespace Structure', () => {
 describe('Translation Quality', () => {
   it('app name is the same in both languages', () => {
     expect(enTranslations.app.name).toBe(frTranslations.app.name);
-    expect(enTranslations.app.name).toBe('Kikoushou');
+    expect(enTranslations.app.name).toBe('Kikouchou');
   });
 
   it('language names are in their native form', () => {

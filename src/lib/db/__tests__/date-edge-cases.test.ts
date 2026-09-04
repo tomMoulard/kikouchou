@@ -1,5 +1,5 @@
 /**
- * @fileoverview Comprehensive date edge case tests for Kikoushou.
+ * @fileoverview Comprehensive date edge case tests for Kikouchou.
  *
  * Tests date handling robustness across:
  * - Timezone boundary dates

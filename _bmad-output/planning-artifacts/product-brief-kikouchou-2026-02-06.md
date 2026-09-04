@@ -12,7 +12,7 @@ author: tom
 
 ## Executive Summary
 
-**Kikoushou** is a focused PWA that solves vacation house coordination for groups of friends with rotating attendance. While generic trip planners handle multi-destination itineraries and expense apps track money, kikouchou answers the simple but critical questions: *Who sleeps where? Who arrives when? Who needs a pickup?*
+**Kikouchou** is a focused PWA that solves vacation house coordination for groups of friends with rotating attendance. While generic trip planners handle multi-destination itineraries and expense apps track money, kikouchou answers the simple but critical questions: *Who sleeps where? Who arrives when? Who needs a pickup?*
 
 Built for the trip organizer drowning in mental load and the guests who just want clarity, kikouchou provides a visual, shareable, offline-first solution that works even at rural vacation houses with spotty wifi. One link or QR code gives everyone the information they need.
 
@@ -46,7 +46,7 @@ The gap: No tool focuses specifically on **one house, rotating guests, room logi
 
 ### Proposed Solution
 
-Kikoushou provides:
+Kikouchou provides:
 
 1. **Calendar View** - Visual timeline showing who's at the house and when
 2. **Room Management** - Clear assignments with capacity tracking, no double-bookings

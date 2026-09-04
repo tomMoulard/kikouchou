@@ -236,7 +236,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
 
     if (!currentTrip) {
       return [
-        'You are a helpful trip planning assistant for the Kikoushou app.',
+        'You are a helpful trip planning assistant for the Kikouchou app.',
         todayLine,
         trips.length > 0
           ? 'No trip is currently selected, but other trips exist — see below.'
@@ -253,7 +253,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     // whole prompt is re-tokenised every turn and prefill memory grows with it,
     // so duplicated instructions are paid for on every single answer.
     const parts: string[] = [
-      'You are a helpful trip planning assistant for the Kikoushou app.',
+      'You are a helpful trip planning assistant for the Kikouchou app.',
       'The current trip is below — its guests, rooms, room assignments, transports and shared activity agenda. Answer from that data directly; never say you lack access to it.',
       todayLine,
       '',

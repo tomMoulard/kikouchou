@@ -1,5 +1,5 @@
 /**
- * @fileoverview E2E tests for Trip Lifecycle in Kikoushou PWA.
+ * @fileoverview E2E tests for Trip Lifecycle in Kikouchou PWA.
  * Tests the complete CRUD operations for trips including:
  * - Creating trips from empty state
  * - Editing existing trips
