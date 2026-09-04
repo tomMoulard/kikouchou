@@ -23,7 +23,13 @@ import { CalendarTimelineRow } from './CalendarTimelineRow';
 // Constants
 // ============================================================================
 
-const TIMELINE_LABEL_COL_PX = 200;
+/**
+ * Width of the sticky guest-name column.
+ *
+ * Exported because the page's own width decision has to count the same number
+ * of pixels this frame reserves — see `timelineNeedsFullPageWidth`.
+ */
+export const CALENDAR_TIMELINE_LABEL_COLUMN_WIDTH_PX = 200;
 
 // ============================================================================
 // Component
@@ -127,7 +133,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
   return (
     <TripTimelineFrame
       ariaLabel={t('calendar.timeline.ariaLabel', 'Timeline calendar')}
-      labelColumnWidth={TIMELINE_LABEL_COL_PX}
+      labelColumnWidth={CALENDAR_TIMELINE_LABEL_COLUMN_WIDTH_PX}
       leftHeader={<span className="text-sm font-medium">{t('calendar.timeline.persons', 'Guests')}</span>}
       days={model.tripDays}
       dayKeys={model.dayKeys}

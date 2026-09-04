@@ -188,6 +188,9 @@ vi.mock('@/features/rooms/components/QuickAssignmentDialog', () => ({
 
 vi.mock('@/features/rooms/components/RoomOccupancyTimeline', () => ({
   RoomOccupancyTimeline: () => <div data-testid="room-occupancy-timeline" />,
+  // The page reserves the same width the frame does when deciding whether the
+  // reading-width cap still fits, so the stub has to carry it too.
+  ROOM_TIMELINE_LABEL_COLUMN_WIDTH_PX: 140,
 }));
 
 vi.mock('@/features/rooms/components/DraggableGuest', () => ({
@@ -412,6 +415,68 @@ describe('RoomListPage', () => {
     currentSearchParams = new URLSearchParams('view=timeline');
     render(<RoomListPage />, { withProviders: false });
     expect(screen.getByTestId('room-occupancy-timeline')).toBeInTheDocument();
+  });
+
+  // The page is normally capped so text does not run to the edges of a wide
+  // monitor. Once the trip is too long to show at once, that cap is spending
+  // width the day axis needs and the reader pays for it in scrolling.
+  describe('timeline page width', () => {
+    const pageOf = (): HTMLElement =>
+      document.querySelector('div.py-6') as HTMLElement;
+
+    it('keeps the reading-width cap for a trip that fits', () => {
+      // Jul 1–10 is ten columns: 440px of days plus a 140px label column.
+      currentSearchParams = new URLSearchParams('view=timeline');
+      render(<RoomListPage />, { withProviders: false });
+
+      expect(pageOf()).toHaveClass('container', 'max-w-7xl');
+    });
+
+    it('gives the timeline the whole page when the trip cannot fit', () => {
+      const longTrip: Trip = {
+        ...mockTrip,
+        startDate: '2026-07-01' as Trip['startDate'],
+        endDate: '2026-09-30' as Trip['endDate'],
+      };
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: longTrip,
+        isLoading: false,
+        error: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        trips: [longTrip],
+        checkConnection: vi.fn(),
+      });
+
+      currentSearchParams = new URLSearchParams('view=timeline');
+      render(<RoomListPage />, { withProviders: false });
+
+      // `container` goes too: on a wide monitor it caps at 1536px, which is
+      // still not the whole page.
+      expect(pageOf()).not.toHaveClass('max-w-7xl');
+      expect(pageOf()).not.toHaveClass('container');
+      expect(pageOf()).toHaveClass('w-full');
+    });
+
+    it('keeps the cap in card view however long the trip is', () => {
+      const longTrip: Trip = {
+        ...mockTrip,
+        endDate: '2026-09-30' as Trip['endDate'],
+      };
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: longTrip,
+        isLoading: false,
+        error: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        trips: [longTrip],
+        checkConnection: vi.fn(),
+      });
+
+      currentSearchParams = new URLSearchParams('view=card');
+      render(<RoomListPage />, { withProviders: false });
+
+      // Cards are a reading layout; only the day axis needs the extra width.
+      expect(pageOf()).toHaveClass('container', 'max-w-4xl');
+    });
   });
 
   it('renders card view when search param is view=cards (back-compat)', () => {

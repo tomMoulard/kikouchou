@@ -31,7 +31,13 @@ import {
 // Constants
 // ============================================================================
 
-const ROOM_COL_PX_COMPACT = 140;
+/**
+ * Width of the sticky room-name column.
+ *
+ * Exported because the page's own width decision has to count the same number
+ * of pixels this frame reserves — see `timelineNeedsFullPageWidth`.
+ */
+export const ROOM_TIMELINE_LABEL_COLUMN_WIDTH_PX = 140;
 
 function buildUnassignedSegments(
   unassignedGuests: RoomOccupancyTimelineProps['unassignedGuests'],
@@ -183,7 +189,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
   return (
     <TripTimelineFrame
       ariaLabel={t('rooms.timeline.ariaLabel', 'Room occupancy timeline')}
-      labelColumnWidth={ROOM_COL_PX_COMPACT}
+      labelColumnWidth={ROOM_TIMELINE_LABEL_COLUMN_WIDTH_PX}
       leftHeader={<span className="text-sm font-medium">{t('rooms.title')}</span>}
       days={model.days}
       dayKeys={model.dayKeys}

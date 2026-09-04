@@ -64,7 +64,10 @@ import { RoomAssignmentSection } from '@/features/rooms/components/RoomAssignmen
 import type { DraggableGuestData } from '@/features/rooms/components/DraggableGuest';
 import { DroppableRoom, type DroppableRoomData } from '@/features/rooms/components/DroppableRoom';
 import { QuickAssignmentDialog } from '@/features/rooms/components/QuickAssignmentDialog';
-import { RoomOccupancyTimeline } from '@/features/rooms/components/RoomOccupancyTimeline';
+import {
+  RoomOccupancyTimeline,
+  ROOM_TIMELINE_LABEL_COLUMN_WIDTH_PX,
+} from '@/features/rooms/components/RoomOccupancyTimeline';
 import { type DateRange as PickerDateRange, DateRangePicker } from '@/components/shared/DateRangePicker';
 import {
   calculatePeakOccupancy,
@@ -74,6 +77,8 @@ import {
   type HeadcountResolver,
 } from '@/features/rooms/utils/capacity-utils';
 import { calculateUnassignedDates } from '@/features/rooms/utils/unassigned-guests';
+import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
+import { buildDayColumns } from '@/lib/utils/trip-days';
 import { getPersonHeadcount } from '@/types';
 import type {
   ISODateString,
@@ -586,6 +591,16 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     return result;
   }, [persons, arrivals, departures, assignments, currentTrip?.startDate, currentTrip?.endDate]),
 
+  // The frame's own day-axis builder, so the width decision counts exactly the
+  // columns the timeline will draw.
+   timelineDayCount = useMemo(
+    () =>
+      currentTrip?.startDate && currentTrip?.endDate
+        ? buildDayColumns(currentTrip.startDate, currentTrip.endDate).length
+        : 0,
+    [currentTrip?.startDate, currentTrip?.endDate],
+  ),
+
   // Notify once when all guests become assigned
   hasNotifiedAllAssignedRef = useRef(false),
 
@@ -1053,8 +1068,19 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     >
       <div
         className={cn(
-          'container py-6 md:py-8',
-          currentView === 'timeline' ? 'max-w-7xl' : 'max-w-4xl',
+          'py-6 md:py-8',
+          currentView !== 'timeline'
+            ? 'container max-w-4xl'
+            : // A trip too long to show at once should not also be paying for a
+              // reading-width cap — that width is the day axis's to use. Even
+              // `container` caps at 1536px, so it goes too: here it contributes
+              // only that cap, no padding and no centring, which `main` owns.
+              timelineNeedsFullPageWidth({
+                  dayCount: timelineDayCount,
+                  labelColumnWidth: ROOM_TIMELINE_LABEL_COLUMN_WIDTH_PX,
+                })
+              ? 'w-full'
+              : 'container max-w-7xl',
         )}
       >
         <PageHeader

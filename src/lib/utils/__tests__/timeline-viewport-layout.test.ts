@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 
 import {
+  timelineNeedsFullPageWidth,
   resolveLabelCollapse,
   TIMELINE_LABEL_COLLAPSE_MARGIN_PX,
   computeTimelineViewportLayout,
@@ -311,3 +312,49 @@ describe('resolveLabelCollapse', () => {
 // ============================================================================
 // Page width
 // ============================================================================
+
+describe('timelineNeedsFullPageWidth', () => {
+  const LABEL = 140;
+
+  it('keeps the reading-width cap while the whole trip fits inside it', () => {
+    // 20 days at 44px plus the label column is 1020px — room to spare.
+    expect(
+      timelineNeedsFullPageWidth({ dayCount: 20, labelColumnWidth: LABEL }),
+    ).toBe(false);
+  });
+
+  it('gives up the cap once the trip cannot be shown at once', () => {
+    // 52 days is what a seven-week trip looks like: 2428px of day axis.
+    expect(
+      timelineNeedsFullPageWidth({ dayCount: 52, labelColumnWidth: LABEL }),
+    ).toBe(true);
+  });
+
+  it('switches exactly where the day axis stops fitting', () => {
+    const cappedWidth = 1000;
+    // 860px of days + 140px label = 1000px, the last width that fits.
+    expect(
+      timelineNeedsFullPageWidth({ dayCount: 19, labelColumnWidth: 164, cappedWidth }),
+    ).toBe(false);
+    expect(
+      timelineNeedsFullPageWidth({ dayCount: 20, labelColumnWidth: 164, cappedWidth }),
+    ).toBe(true);
+  });
+
+  it('counts the sticky label column against the available width', () => {
+    const dayCount = 25;
+    expect(
+      timelineNeedsFullPageWidth({ dayCount, labelColumnWidth: 140, cappedWidth: 1280 }),
+    ).toBe(false);
+    // Same trip, a wider label column, and now the days no longer fit.
+    expect(
+      timelineNeedsFullPageWidth({ dayCount, labelColumnWidth: 200, cappedWidth: 1280 }),
+    ).toBe(true);
+  });
+
+  it('does not widen the page for a trip with no days', () => {
+    expect(
+      timelineNeedsFullPageWidth({ dayCount: 0, labelColumnWidth: LABEL }),
+    ).toBe(false);
+  });
+});
