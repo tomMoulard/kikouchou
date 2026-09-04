@@ -411,12 +411,18 @@ async function discardAssignmentDialog(page: Page): Promise<void> {
 
 /**
  * Navigates to the rooms page for a given trip.
+ *
+ * Defaults to `?view=card` for the same reason as the calendar: the rooms page
+ * defaults to the timeline view, which renders no room cards — so the
+ * `[role="listitem"]` a caller clicks to expand a room does not exist there.
+ * Pass `'timeline'` for the drag-and-drop flow, which lives only there.
  */
-async function navigateToRooms(page: Page, tripId: string): Promise<void> {
-  // `?view=card` for the same reason as the calendar: the rooms page defaults
-  // to the timeline view, which renders no room cards — so the
-  // `[role="listitem"]` a caller clicks to expand a room does not exist there.
-  await page.goto(`/trips/${tripId}/rooms?view=card`);
+async function navigateToRooms(
+  page: Page,
+  tripId: string,
+  view: 'card' | 'timeline' = 'card',
+): Promise<void> {
+  await page.goto(`/trips/${tripId}/rooms?view=${view}`);
   await page.waitForLoadState('load');
   // Wait for loading to complete
   await page.waitForFunction(() => {
@@ -978,7 +984,13 @@ test.describe('Room Assignment Flow', () => {
   // --------------------------------------------------------------------------
   // Test 7: Drag and drop assignment
   // --------------------------------------------------------------------------
-  test('drag and drop opens quick assignment dialog', async ({ page }) => {
+  //
+  // A drop in the timeline books the room there and then — no confirmation
+  // step, because the bar the guest was dragged from already states the nights
+  // and the room row states the room, so a dialog would only ask the reader to
+  // re-read what they just did. (The cards view keeps its dialog for "Claim
+  // this room", which starts with neither of those decided.)
+  test('dragging a guest onto a room in the timeline books it', async ({ page }) => {
     tripId = await createTestTrip(page);
 
     /**
@@ -986,14 +998,10 @@ test.describe('Room Assignment Flow', () => {
      * halves of that sentence are load-bearing.
      *
      * *What* is seeded: a room, a guest, and the guest's arrival **and**
-     * departure transports. The transports are not decoration. `RoomListPage`
-     * derives a guest's stay window through `deriveGuestStayDateBounds`, which
-     * needs either explicit stay dates or both ends of the journey; with
-     * neither, `calculateUnassignedDates` returns null, the unassigned-guests
-     * card never renders, and the only draggable guest in the page does not
-     * exist. That is precisely why this test skipped on every run it ever had:
-     * it created a room and a person and no transport, while its own skip
-     * message named the transport it was missing.
+     * departure transports. The transports pin the guest's stay to four
+     * nights inside the trip; without them they would be read as here for the
+     * whole trip, which is still draggable but makes the bar span the entire
+     * day axis and the assertion below say less about where it sits.
      *
      * *When*: before `navigateToRooms`, because these rows go straight into
      * IndexedDB. Once a trip is current, `YjsTripSync` mounts a document for
@@ -1019,13 +1027,15 @@ test.describe('Room Assignment Flow', () => {
       datetime: `${TEST_DATA.assignment.endDate}T18:00:00Z`,
     });
 
-    // Navigate to rooms page where drag and drop is available
-    await navigateToRooms(page, tripId);
+    // The timeline view: the "needs room" row is the only place a guest with
+    // no bed is draggable from. The warning card that used to carry them in
+    // card view is gone — the row says the same thing on the day axis.
+    await navigateToRooms(page, tripId, 'timeline');
 
-    // The unassigned-guests card — "N guests without a room" / "N invités sans
-    // chambre" — which exists only because of the transports seeded above.
-    const unassignedSection = page.getByText(/without a room|sans chambre/i);
-    await expect(unassignedSection).toBeVisible();
+    const needsRoomRow = page
+      .getByRole('listitem')
+      .filter({ has: page.locator('[data-unhoused="true"]') });
+    await expect(needsRoomRow).toBeVisible();
 
     /**
      * dnd-kit's `useDraggable` spreads `role="button"` and
@@ -1033,12 +1043,14 @@ test.describe('Room Assignment Flow', () => {
      * There is no `data-draggable` attribute anywhere in the application —
      * the locator this test used to carry could never have matched anything.
      */
-    const draggableGuest = page
+    // The guest's own bar inside that row, named — the treatment it replaced
+    // was an empty dashed outline with the name back in the label column.
+    const draggableGuest = needsRoomRow
       .locator('[aria-roledescription="draggable"]')
       .filter({ hasText: TEST_DATA.person.name });
     await expect(draggableGuest).toBeVisible();
 
-    // Find the droppable room
+    // Find the droppable room — its own row on the same day axis
     const droppableRoom = page.locator('[role="listitem"]').filter({
       hasText: TEST_DATA.room.name
     });
@@ -1047,19 +1059,24 @@ test.describe('Room Assignment Flow', () => {
     // Perform drag and drop
     await dragOnto(page, draggableGuest, droppableRoom);
 
-    // Wait for quick assignment dialog to open
-    const quickAssignDialog = page.getByRole('dialog');
-    await expect(quickAssignDialog).toBeVisible({ timeout: 5000 });
+    // The guest is now a pill in the room's own row, over the nights they were
+    // dragged for — and no longer in the "needs room" row, which is the whole
+    // point of the two rows reading against each other.
+    await expect(
+      droppableRoom.getByRole('button', { name: new RegExp(TEST_DATA.person.name) }),
+    ).toBeVisible({ timeout: 5000 });
+    await expect(needsRoomRow).toBeHidden();
 
-    // Verify dialog shows the correct person and room
-    await expect(quickAssignDialog.getByText(TEST_DATA.person.name)).toBeVisible();
-    await expect(quickAssignDialog.getByText(TEST_DATA.room.name)).toBeVisible();
-
-    // Close the dialog without saving
-    const cancelButton = quickAssignDialog.getByRole('button', { name: /cancel|annuler/i });
-    await cancelButton.click();
-
-    await expect(quickAssignDialog).toBeHidden({ timeout: 5000 });
+    // And it is a real booking, not just a redraw. The dates are the bar's own
+    // — the guest's seeded nights, booked as dragged rather than widened to
+    // the trip. (The helper projects roomId, not personId.)
+    expect(await getTripAssignmentsFromDB(page, tripId)).toEqual([
+      {
+        roomId: expect.stringContaining('room-') as unknown as string,
+        startDate: TEST_DATA.assignment.startDate,
+        endDate: TEST_DATA.assignment.endDate,
+      },
+    ]);
   });
 });
 
