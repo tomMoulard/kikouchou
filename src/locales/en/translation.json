@@ -813,6 +813,7 @@
     "selectTripNotFound": "That trip was not found.",
     "activityNotFound": "That activity was not found.",
     "guestNotFound": "That guest was not found.",
+    "guestGroupNotFound": "No saved group with that id",
     "roomNotFound": "That room was not found.",
     "invalidActivity": "Those activity details are invalid, nothing was saved.",
     "tripSwitched": "Switched to {{name}}",
@@ -845,6 +846,8 @@
         "description": "description"
       },
       "addGuest": "Added guest: {{name}}",
+      "importGuestGroup_one": "Added {{count}} guest from {{name}}",
+      "importGuestGroup_other": "Added {{count}} guests from {{name}}",
       "removeGuest": "Removed guest: {{name}}",
       "addRoom": "Added room: {{name}} ({{capacity}} guests max)",
       "removeRoom": "Removed room: {{name}}",

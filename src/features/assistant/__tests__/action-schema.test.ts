@@ -240,6 +240,73 @@ describe('action-schema prompt budget', () => {
       }
     }
   });
+
+  it('spells out each enum once, however many actions share it', () => {
+    const lines = generateActionPrompt(),
+      // `category` belongs to both addActivity and updateActivity. Printing all
+      // ten values twice cost 100 characters of the budget above for a list the
+      // model had just read.
+      categoryLines = lines.filter((line) => line.trim().startsWith('category:'));
+
+    expect(categoryLines).toHaveLength(1);
+    expect(categoryLines[0]).toContain('horticulture');
+  });
+});
+
+// ============================================================================
+// Guest groups
+// ============================================================================
+
+describe('action-schema — importGuestGroup', () => {
+  it('is offered to the LLM', () => {
+    const prompt = generateActionPrompt().join('\n');
+
+    expect(ACTION_SCHEMAS.map((schema) => schema.action)).toContain(
+      'importGuestGroup',
+    );
+    expect(prompt).toContain('importGuestGroup');
+  });
+
+  it('accepts a group id on its own — that means everybody', () => {
+    const result = validateAction({
+      action: 'importGuestGroup',
+      data: { groupId: 'group-1' },
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.data.groupId).toBe('group-1');
+    expect(result?.data.memberIds).toBeUndefined();
+  });
+
+  it('keeps a JSON array of member ids', () => {
+    const result = validateAction({
+      action: 'importGuestGroup',
+      data: { groupId: 'group-1', memberIds: ['m1', 'm2'] },
+    });
+
+    expect(result?.data.memberIds).toEqual(['m1', 'm2']);
+  });
+
+  it('coerces the comma-separated list small models emit', () => {
+    const result = validateAction({
+      action: 'importGuestGroup',
+      data: { groupId: 'group-1', memberIds: 'm1, m2' },
+    });
+
+    expect(result?.data.memberIds).toEqual(['m1', 'm2']);
+  });
+
+  it('rejects an import with no group id', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const result = validateAction({
+      action: 'importGuestGroup',
+      data: { memberIds: ['m1'] },
+    });
+
+    expect(result).toBeNull();
+    warn.mockRestore();
+  });
 });
 
 // ============================================================================

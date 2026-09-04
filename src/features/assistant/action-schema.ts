@@ -193,6 +193,24 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
     },
   },
   {
+    action: 'importGuestGroup',
+    label: 'Copy people from a saved group into this trip as guests',
+    fields: {
+      groupId: {
+        type: 'string',
+        required: true,
+        description: 'Group id (from Guest groups)',
+        example: '<group id>',
+      },
+      memberIds: {
+        type: 'string[]',
+        required: false,
+        description: 'Which member ids to copy. Omit for everybody',
+        example: ['<member id>'],
+      },
+    },
+  },
+  {
     action: 'removeGuest',
     label: 'Remove a guest by ID',
     fields: {
@@ -636,6 +654,9 @@ export function generateActionPrompt(): string[] {
     'Actions — the example shows the required fields:',
   ];
 
+  /** Enum lines already spelled out, so no value list is printed twice. */
+  const emittedEnums = new Set<string>();
+
   for (const def of ACTION_SCHEMAS) {
     lines.push(`${def.action} — ${def.label}`);
     lines.push(`  ${buildExample(def)}`);
@@ -657,8 +678,20 @@ export function generateActionPrompt(): string[] {
     }
 
     for (const [key, field] of Object.entries(def.fields)) {
-      if (field.enum) {
-        lines.push(`  ${key}: ${field.enum.join(' | ')}`);
+      if (!field.enum) {
+        continue;
+      }
+
+      // Each distinct enum is spelled out once. `category` is shared by
+      // addActivity and updateActivity, and printing all ten values twice cost
+      // 100 characters of a budget measured in memory the model has to
+      // allocate — the "say it once" rule in AGENTS.md, applied to generated
+      // text rather than hand-written text. Keyed on the rendered line, so two
+      // fields that genuinely differ still both appear.
+      const line = `  ${key}: ${field.enum.join(' | ')}`;
+      if (!emittedEnums.has(line)) {
+        emittedEnums.add(line);
+        lines.push(line);
       }
     }
   }

@@ -16,6 +16,7 @@ import { AppProviders } from '@/contexts/AppProviders';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { createActivity } from '@/lib/db/repositories/activity-repository';
+import { createGuestGroup } from '@/lib/db/repositories/guest-group-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import { createRoom } from '@/lib/db/repositories/room-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
@@ -637,5 +638,143 @@ describe('useTripActions — trip map pin', () => {
     const updated = await db.trips.get(trip.id);
     expect(updated?.name).toBe('Renamed Trip');
     expect(updated?.coordinates).toEqual({ lat: 48.3904, lon: -4.4861 });
+  });
+});
+
+// ============================================================================
+// Guest groups
+// ============================================================================
+
+describe('useTripActions — guest groups', () => {
+  /** A group with a couple, a solo guest and somebody carrying notes. */
+  async function seedFamilyGroup() {
+    return createGuestGroup({
+      name: 'Family',
+      members: [
+        { name: 'Tom + Léa', color: hexColor('#ef4444'), headcount: 2 },
+        { name: 'Bob', color: hexColor('#3b82f6') },
+        { name: 'Camille', color: hexColor('#22c55e'), notes: 'Peanut allergy' },
+      ],
+    });
+  }
+
+  it('imports the whole group when no members are named', async () => {
+    const { tripId } = await seedTrip();
+    const group = await seedFamilyGroup();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'importGuestGroup', data: { groupId: group.id } }),
+    );
+
+    expect(outcome.count).toBe(1);
+
+    // Alice is already on the trip from seedTrip(), so three more arrive.
+    const guests = await db.persons.where('tripId').equals(tripId).toArray();
+    expect(guests.map((guest) => guest.name).sort()).toEqual([
+      'Alice',
+      'Bob',
+      'Camille',
+      'Tom + Léa',
+    ]);
+  });
+
+  it('imports only the members the model named', async () => {
+    const { tripId } = await seedTrip();
+    const group = await seedFamilyGroup();
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'importGuestGroup',
+        data: { groupId: group.id, memberIds: [group.members[2]!.id] },
+      }),
+    );
+
+    const guests = await db.persons.where('tripId').equals(tripId).toArray();
+    expect(guests.map((guest) => guest.name).sort()).toEqual(['Alice', 'Camille']);
+  });
+
+  it('carries headcount and notes onto the imported guests', async () => {
+    const { tripId } = await seedTrip();
+    const group = await seedFamilyGroup();
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'importGuestGroup', data: { groupId: group.id } }),
+    );
+
+    const guests = await db.persons.where('tripId').equals(tripId).toArray();
+    expect(guests.find((guest) => guest.name === 'Tom + Léa')?.headcount).toBe(2);
+    expect(guests.find((guest) => guest.name === 'Camille')?.notes).toBe(
+      'Peanut allergy',
+    );
+  });
+
+  it('does nothing for a group id that does not exist', async () => {
+    const { tripId } = await seedTrip();
+    await seedFamilyGroup();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'importGuestGroup', data: { groupId: 'nope' } }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await db.persons.where('tripId').equals(tripId).count()).toBe(1);
+  });
+
+  it('imports what it can when a named member has since been removed', async () => {
+    const { tripId } = await seedTrip();
+    const group = await seedFamilyGroup();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'importGuestGroup',
+        data: { groupId: group.id, memberIds: [group.members[0]!.id, 'gone'] },
+      }),
+    );
+
+    // A stale id is not a reason to import nobody.
+    expect(outcome.count).toBe(1);
+    const guests = await db.persons.where('tripId').equals(tripId).toArray();
+    expect(guests.map((guest) => guest.name).sort()).toEqual(['Alice', 'Tom + Léa']);
+  });
+
+  it('leaves the group untouched — an import is a copy', async () => {
+    const { tripId } = await seedTrip();
+    const group = await seedFamilyGroup();
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'importGuestGroup', data: { groupId: group.id } }),
+    );
+
+    const stored = await db.guestGroups.get(group.id);
+    expect(stored?.members).toHaveLength(3);
+  });
+
+  it('refuses to import with no trip selected', async () => {
+    const group = await seedFamilyGroup();
+    const { result } = renderHook(() => useCombined(), { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(result.current.trip.isLoading).toBe(false);
+    });
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'importGuestGroup', data: { groupId: group.id } }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await db.persons.count()).toBe(0);
   });
 });

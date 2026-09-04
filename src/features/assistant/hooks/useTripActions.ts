@@ -34,9 +34,11 @@ import {
   deleteTransportWithOwnershipCheck,
   getActivityById,
   getAssignmentById,
+  getGuestGroupById,
   getPersonById,
   getPersonsByTripId,
   getRoomById,
+  importGuestGroupMembers,
   getTransportById,
   getTripById,
   setActivityParticipation,
@@ -51,6 +53,8 @@ import {
   type ActivityCategory,
   type ActivityFormData,
   type ActivityId,
+  type GuestGroupId,
+  type GuestGroupMemberId,
   type ISODateString,
   type ISODateTimeString,
   type PersonId,
@@ -421,6 +425,58 @@ export function useTripActions(): UseTripActionsReturn {
                 t('assistant.actionDetails.addGuest', {
                   name: d.name as string,
                   defaultValue: 'Added guest: {{name}}',
+                }),
+              );
+              break;
+            }
+
+            case 'importGuestGroup': {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+
+              const d = action.data as Record<string, unknown>;
+              const groupId = d.groupId as GuestGroupId;
+              const group = await getGuestGroupById(groupId);
+
+              // The model picks the id out of the prompt, so a wrong one is a
+              // misread rather than a rare race — worth saying plainly instead
+              // of letting the repository throw a message written for a
+              // developer.
+              if (!group) {
+                toast.error(
+                  t('assistant.guestGroupNotFound', {
+                    defaultValue: 'No saved group with that id',
+                  }),
+                );
+                break;
+              }
+
+              // A model that flattens the array, or names a member that has
+              // since been removed, gets the members it did name — the
+              // repository reports the rest rather than failing the import.
+              const requested = Array.isArray(d.memberIds)
+                ? (d.memberIds.filter(
+                    (id): id is string => typeof id === 'string',
+                  ) as GuestGroupMemberId[])
+                : undefined;
+
+              const { persons: imported } = await importGuestGroupMembers(
+                tid,
+                groupId,
+                requested,
+              );
+
+              guestIdCache.delete(tid);
+              successToast(t('persons.createSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.importGuestGroup', {
+                  count: imported.length,
+                  name: group.name,
+                  defaultValue: 'Added {{count}} guests from {{name}}',
                 }),
               );
               break;
