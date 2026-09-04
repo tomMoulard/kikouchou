@@ -145,6 +145,15 @@ export default defineConfig({
         theme_color: '#0f172a',
         background_color: '#ffffff',
         display: 'standalone',
+        // The app's identity, and the one manifest field a browser is not
+        // allowed to guess twice. With no `id`, the computed identity falls
+        // back to `start_url` — so it moves the day `base` moves, and every
+        // installed copy of the app becomes a *different* app: a second icon
+        // rather than an update of the first. Pinned to `base` so it stays the
+        // same string `start_url` resolves against ('/' today, a subpath if
+        // that constant ever changes back), which is also the stable id a
+        // cross-origin `navigator.install()` from the landing page has to name.
+        id: base,
         start_url: base,
         icons: [
           {
