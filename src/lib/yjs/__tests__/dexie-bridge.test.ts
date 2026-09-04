@@ -19,6 +19,7 @@ import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
+import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { syncDocToDexie } from '@/lib/yjs/dexie-bridge';
 import { DOC_SCHEMA_VERSION } from '@/lib/yjs/doc-model';
 import { isoDate } from '@/test/utils';
@@ -243,5 +244,89 @@ describe('syncDocToDexie — trust boundary', () => {
     await expect(
       syncDocToDexie(doc, 'some-trip' as TripId),
     ).resolves.toBeNull();
+  });
+});
+
+// ============================================================================
+// Field-level trust boundary
+// ============================================================================
+
+/**
+ * `meta` is peer-controlled and typed `unknown`, so every field read out of it
+ * is remote input. These pin the ways the trip record used to take a peer at
+ * its word.
+ */
+describe('buildTripRecord — remote field validation', () => {
+  const makeTrip = () =>
+    createTrip({
+      name: 'Brittany',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+
+  it('ignores a name that is not a string', async () => {
+    const trip = await makeTrip();
+
+    // `db.trips.name` is typed `string` everywhere downstream. A number stored
+    // here reached `previewName()`, which called `.trim()` on it and took the
+    // share dialog down with a TypeError.
+    await syncDocToDexie(makeDoc({ name: 42 }), trip.id);
+
+    const stored = await db.trips.get(trip.id);
+    expect(typeof stored?.name).toBe('string');
+    expect(stored?.name).toBe('Brittany');
+  });
+
+  it('ignores an empty name rather than blanking the trip', async () => {
+    const trip = await makeTrip();
+
+    // `??` only catches null and undefined, so '' was stored verbatim and every
+    // screen rendered the trip as a nameless card.
+    await syncDocToDexie(makeDoc({ name: '   ' }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.name).toBe('Brittany');
+  });
+
+  it('keeps a name the server allows but the local form does not', async () => {
+    const trip = await makeTrip();
+    const serverLengthName = 'n'.repeat(150);
+
+    // Between the client's 100 and the server's 200: legitimate, not hostile.
+    // Clipping it here would push the shortened name back into the document and
+    // rename the trip for the owner who chose it.
+    await syncDocToDexie(makeDoc({ name: serverLengthName }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.name).toBe(serverLengthName);
+  });
+
+  it('bounds a description a peer never bounded', async () => {
+    const trip = await makeTrip();
+
+    // Every local writer caps this at MAX_LENGTHS.tripDescription, so a longer
+    // one came from a peer that did not — and `populateDocFromDexie` would push
+    // it straight back out for every other device to download.
+    await syncDocToDexie(makeDoc({ description: 'D'.repeat(50_000) }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.description).toHaveLength(
+      MAX_LENGTHS.tripDescription,
+    );
+  });
+
+  it('bounds a location a peer never bounded', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ location: 'L'.repeat(50_000) }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.location).toHaveLength(
+      MAX_LENGTHS.tripLocation,
+    );
+  });
+
+  it('ignores a description that is not a string', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ description: { nope: true } }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.description).toBeUndefined();
   });
 });
