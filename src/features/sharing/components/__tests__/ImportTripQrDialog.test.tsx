@@ -487,6 +487,9 @@ describe('ImportTripQrDialog', () => {
       });
       expect(mockToastError).not.toHaveBeenCalledWith('trips.importQrSnapshotRequired');
       expect(mockNavigate).not.toHaveBeenCalled();
+      // The spy exists to keep the expected failure out of the test output; it
+      // is asserted so it is not merely a silencer.
+      expect(consoleError).toHaveBeenCalled();
     });
   });
 
