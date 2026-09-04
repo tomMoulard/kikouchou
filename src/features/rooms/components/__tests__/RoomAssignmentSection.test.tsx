@@ -3,12 +3,25 @@
  * @module features/rooms/components/__tests__/RoomAssignmentSection.test
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RoomAssignmentSection } from '../RoomAssignmentSection';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import type { Person, PersonId, Room, RoomAssignment, RoomId, Trip, Transport } from '@/types';
+
+/**
+ * An ISO instant for a wall-clock time on a given day, built from local parts.
+ *
+ * Transport fixtures must not be written as literal `Z` timestamps: the app
+ * turns a transport into an assignment date with `toLocalISODateString`, so
+ * `'2026-07-02T10:00:00.000Z'` becomes July 1st for every viewer west of
+ * Greenwich and the fixture then encodes the machine's UTC offset.
+ */
+function instantOn(day: string, hour: number): string {
+  const [year, month, date] = day.split('-').map(Number) as [number, number, number];
+  return new Date(year, month - 1, date, hour, 0, 0, 0).toISOString();
+}
 
 // ============================================================================
 // Mock Data
@@ -122,12 +135,23 @@ vi.mock('@/contexts/TransportContext', () => ({
   }),
 }));
 
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
+/**
+ * A **stable** translation double.
+ *
+ * The suite-wide mock in `src/test/setup.ts` returns a fresh `t` on every call,
+ * and the form dialog lists `t` in the dependency array of the effect that runs
+ * the conflict check. A new identity each render re-arms that effect forever,
+ * `isCheckingConflict` never settles, and the submit button can never be
+ * clicked. Real i18next hands back a stable `t`, so this double is the faithful
+ * one — and it is what lets the tests below actually submit the form.
+ */
+vi.mock('react-i18next', () => {
+  const value = {
     t: (key: string) => key,
     i18n: { language: 'en' },
-  }),
-}));
+  };
+  return { useTranslation: () => value };
+});
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -151,6 +175,15 @@ vi.mock('@/hooks', () => ({
 // ============================================================================
 
 describe('RoomAssignmentSection', () => {
+  beforeAll(() => {
+    // Radix Select and Popover reach for pointer-capture and scroll APIs jsdom
+    // does not implement; without them the guest selector cannot be opened.
+    Element.prototype.scrollIntoView = vi.fn();
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetAssignmentsByRoom.mockReturnValue([]);
@@ -186,6 +219,9 @@ describe('RoomAssignmentSection', () => {
       <RoomAssignmentSection roomId={'room-1' as RoomId} />,
     );
     expect(screen.getByText('Alice')).toBeInTheDocument();
+    // The dates are half the row, and the check-out day is shown as stored —
+    // the list must not quietly render `endDate - 1` as the last night.
+    expect(screen.getByText('2 - 8 Jul 2026')).toBeInTheDocument();
   });
 
   it('flags a guest booked into two rooms on the same night', () => {
@@ -402,6 +438,26 @@ describe('RoomAssignmentSection', () => {
   it('handles form submission for creating assignment', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
+    mockGetTransportsByPerson.mockReturnValue([
+      {
+        id: 'tr1',
+        tripId: 'trip-1',
+        personId: 'p1',
+        type: 'arrival',
+        datetime: instantOn('2026-07-02', 10),
+        location: 'Airport',
+        needsPickup: false,
+      } as Transport,
+      {
+        id: 'tr2',
+        tripId: 'trip-1',
+        personId: 'p1',
+        type: 'departure',
+        datetime: instantOn('2026-07-08', 6),
+        location: 'Airport',
+        needsPickup: false,
+      } as Transport,
+    ]);
 
     render(
       <RoomAssignmentSection
@@ -410,13 +466,30 @@ describe('RoomAssignmentSection', () => {
       />,
     );
 
-    // Open add dialog
     await user.click(screen.getByLabelText('assignments.assign'));
-
-    // Verify dialog opens with correct description
     expect(screen.getByText('assignments.assignDescription')).toBeInTheDocument();
-    // Verify the person label is shown
-    expect(screen.getByText('assignments.person')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('combobox', { name: 'assignments.person' }));
+    await user.click(await screen.findByRole('option', { name: /Alice/ }));
+
+    const submit = screen.getByRole('button', { name: 'common.add' });
+    await waitFor(() => {
+      expect(submit).toBeEnabled();
+    });
+    await user.click(submit);
+
+    // The point of the dialog is the row it writes, so that is what is asserted.
+    await waitFor(() => {
+      expect(mockCreateAssignment).toHaveBeenCalledWith({
+        roomId: 'room-1',
+        personId: 'p1',
+        startDate: '2026-07-02',
+        endDate: '2026-07-08',
+      });
+    });
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalled();
+    });
   });
 
   it('opens edit dialog and shows edit-mode title', async () => {
@@ -455,16 +528,15 @@ describe('RoomAssignmentSection', () => {
     });
   });
 
-  it('renders transport dates autofill hint in create mode', async () => {
+  it('swaps the period hint for the autofill notice once dates are borrowed', async () => {
     const user = userEvent.setup();
-    // Set up transport data for autofill
     mockGetTransportsByPerson.mockReturnValue([
       {
         id: 'tr1',
         tripId: 'trip-1',
         personId: 'p1',
         type: 'arrival',
-        datetime: '2026-07-02T10:00:00.000Z',
+        datetime: instantOn('2026-07-02', 10),
         location: 'Airport',
         needsPickup: false,
       } as Transport,
@@ -473,7 +545,7 @@ describe('RoomAssignmentSection', () => {
         tripId: 'trip-1',
         personId: 'p1',
         type: 'departure',
-        datetime: '2026-07-08T10:00:00.000Z',
+        datetime: instantOn('2026-07-08', 10),
         location: 'Airport',
         needsPickup: false,
       } as Transport,
@@ -483,15 +555,22 @@ describe('RoomAssignmentSection', () => {
       <RoomAssignmentSection roomId={'room-1' as RoomId} />,
     );
 
-    // Open add dialog
     await user.click(screen.getByLabelText('assignments.assign'));
-
-    // The hint about period should be visible
+    // Before a guest is chosen there is nothing to borrow dates from.
     expect(screen.getByText('assignments.periodHint')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('combobox', { name: 'assignments.person' }));
+    await user.click(await screen.findByRole('option', { name: /Alice/ }));
+
+    // Choosing the guest is what pulls the transport window into the picker.
+    expect(await screen.findByText('assignments.autofilledFromTransport')).toBeInTheDocument();
+    expect(screen.queryByText('assignments.periodHint')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'assignments.period' })).toHaveTextContent(
+      /Jul 2, 2026\s*→\s*Jul 8, 2026/,
+    );
   });
 
-  it('renders french date locale when language is fr', () => {
-    // This test ensures the assignment list renders with date formatting
+  it('renders the stored date range on the assignment row', () => {
     mockGetAssignmentsByRoom.mockReturnValue([mockAssignment]);
     mockGetPersonById.mockImplementation((id: string) =>
       mockPersons.find((p) => p.id === id),
@@ -499,8 +578,8 @@ describe('RoomAssignmentSection', () => {
     render(
       <RoomAssignmentSection roomId={'room-1' as RoomId} />,
     );
-    // Verify the assignment item is displayed with Alice
     expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getByText('2 - 8 Jul 2026')).toBeInTheDocument();
   });
 
   it('does not show count badge when no assignments', () => {
@@ -550,7 +629,7 @@ describe('RoomAssignmentSection', () => {
     expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
-  it('renders same-day assignment date format', () => {
+  it('collapses a same-day assignment to a single date', () => {
     const sameDayAssignment: RoomAssignment = {
       ...mockAssignment,
       startDate: '2026-07-05' as RoomAssignment['startDate'],
@@ -561,6 +640,8 @@ describe('RoomAssignmentSection', () => {
       <RoomAssignmentSection roomId={'room-1' as RoomId} />,
     );
     expect(screen.getByText('Alice')).toBeInTheDocument();
+    // A day-use booking reads as one date, not "5 - 5 Jul 2026".
+    expect(screen.getByText('5 Jul 2026')).toBeInTheDocument();
   });
 
   it('offers redirect to rooms page when conflict is detected', async () => {
