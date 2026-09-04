@@ -743,6 +743,116 @@ test.describe('two devices on one trip', () => {
 });
 
 // ============================================================================
+// One account, several devices
+// ============================================================================
+
+/**
+ * The promise an account makes that a share link does not: sign in on the phone
+ * and on the laptop, and the trips are the same on both.
+ *
+ * Everything above this point needs somebody to press *Share* and somebody else
+ * to open a link. That is the right shape for handing a trip to a friend, and
+ * the wrong shape for your own second device — which is what people assume
+ * signing in is for. `lib/sync/AccountTripSync` is the sweep that closes it, and
+ * these are the orders it has to work in: signed in before the trip existed,
+ * signed in afterwards, and signed in again on a device it has already swept.
+ *
+ * Deliberately no invite anywhere in this block. A test that shared the trip
+ * would pass with the sweep deleted.
+ */
+test.describe('one account, two devices', () => {
+  test('a trip made on one device turns up on the other, with its contents', async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+
+    // The phone: signed in, makes a trip, never opens the share dialog.
+    const phone = await newDevice(browser, stub, OWNER);
+    await phone.goto('/');
+    await createTrip(phone, TRIP.name);
+    await addGuest(phone, 'Alice');
+    await waitForNameOnServer(stub, 'Alice');
+
+    // The laptop: same account, nothing local, no link to follow.
+    const laptop = await newDevice(browser, stub, OWNER);
+    await laptop.goto('/');
+
+    await expect(laptop.getByText(TRIP.name).first()).toBeVisible({ timeout: 30_000 });
+
+    // The row alone would satisfy the assertion above while leaving the trip
+    // empty — a name and two dates from the preview, and nothing behind them.
+    // The guest is what proves the document came too.
+    //
+    // Opened through the card's overlay button rather than its text: the card
+    // lays a full-bleed button over everything it renders, so a click on the
+    // name is intercepted by it and retries until the test times out.
+    await laptop
+      .getByRole('button', { name: new RegExp(TRIP.name, 'i') })
+      .first()
+      .click();
+    await expect(laptop).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+    await laptop.getByRole('link', { name: /guests/i }).first().click();
+    await expect(laptop.getByText('Alice').first()).toBeVisible({ timeout: 30_000 });
+  });
+
+  test('a trip that predates the account goes up when its owner signs in', async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+
+    // The order the app is actually used in: trips first, an account later. The
+    // trip is created with no session at all, which is the local-only mode the
+    // whole app is built around.
+    const phone = await newDevice(browser, stub);
+    await phone.goto('/');
+    await createTrip(phone, TRIP.name);
+    expect(stub.trips).toHaveLength(0);
+
+    // Signing in. The stub writes the session as an init script, so the reload
+    // is what a redirect back from the provider would have been.
+    await stub.signIn(phone, OWNER);
+    await phone.reload();
+
+    await expect
+      .poll(() => stub.trips.length, { timeout: 30_000, intervals: [250] })
+      .toBe(1);
+
+    const laptop = await newDevice(browser, stub, OWNER);
+    await laptop.goto('/');
+    await expect(laptop.getByText(TRIP.name).first()).toBeVisible({ timeout: 30_000 });
+  });
+
+  test('signing in does not fork a trip that is already on the server', async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+
+    const phone = await newDevice(browser, stub, OWNER);
+    await phone.goto('/');
+    await createTrip(phone, TRIP.name);
+    await expect
+      .poll(() => stub.trips.length, { timeout: 30_000, intervals: [250] })
+      .toBe(1);
+
+    // Relaunching sweeps again, and the sweep must recognise its own work. The
+    // failure this guards is a second row per launch — `unique (owner_id,
+    // local_id)` refuses it on the server, but a sweep that kept trying would
+    // spend a request per trip per launch discovering that.
+    const inserts = stub.counts.tripInserts;
+    await phone.reload();
+    await expect(phone.getByText(TRIP.name).first()).toBeVisible({ timeout: 20_000 });
+
+    // A fixed wait, which is right for once: the assertion is that something
+    // never happens, and there is no event to poll for the absence of an insert.
+    // The trip list rendering above already proves the app has booted and the
+    // sweep has had its chance.
+    await phone.waitForTimeout(2_000);
+    expect(stub.trips).toHaveLength(1);
+    expect(stub.counts.tripInserts).toBe(inserts);
+  });
+});
+
+// ============================================================================
 // The denormalised preview
 // ============================================================================
 

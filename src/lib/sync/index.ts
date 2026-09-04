@@ -14,6 +14,8 @@ export {
   recordServerState,
   type SyncCursor,
 } from './cursors';
+export { AccountTripSync } from './AccountTripSync';
+export { syncAccountTrips, type AccountSyncResult } from './account-sync';
 export {
   ensureRemoteTrip,
   listRemoteTripsMissingLocally,

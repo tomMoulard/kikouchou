@@ -329,7 +329,7 @@ These are testable rules, not aspirations.
 3. **Every mutation path is local-first.** A repository write goes to Dexie and the Y.Doc, never to the network synchronously. The network is a background flush.
 4. **The outbox is durable and idempotent.** A local update is written to `yjsOutbox` in the same transaction that persists it to `yjsUpdates`. The flush loop deletes a row only after the server accepts it. Yjs idempotency makes a duplicate send a no-op.
 5. **Reconnect is automatic.** Trigger a flush + pull on the `online` event (`useOnlineStatus` already exists), on Realtime resubscribe, and on tab focus, with exponential backoff and jitter.
-6. **Exactly two operations may require network**, both one-time and both explicit: *share a trip* (needs an account and an invite row) and *join a trip* (needs invite redemption). Everything else works offline forever.
+6. **Exactly three operations may require network**, all one-time and all explicit: *share a trip* (needs an account and an invite row), *join a trip* (needs invite redemption), and *sign in* — which sweeps the account (§15). Everything else works offline forever. Signing in was always going to be the third, since Phase 6 specifies the migration as running "on first share or first sign-in"; what matters is that all three are things the user asked for, and that none of them is on the launch path of a device with no account.
 7. **The service worker must never cache the Supabase origin.** Add a `NetworkOnly` runtime-caching rule for `*.supabase.co`. A cached auth or data response is a correctness bug, not a performance win.
 7b. **`supabase-js` must not be on the cold-launch critical path.** It is 218 kB (58 kB gzipped), and `AuthProvider` mounts eagerly, so a static import taxes every launch — including the majority that never sign in. Import it dynamically and let the client arrive a tick after mount; that is free precisely because rule 2 means nothing waits on the session. Check after any change to the auth graph: the chunk must be absent from `index.html` and from its `modulepreload` list.
 8. **Sync state is visible.** The user must be able to tell *Local only* / *Syncing* / *Synced* / *N changes pending* apart. `P2PSyncPresence` becomes a real sync badge instead of a peer counter.
@@ -822,3 +822,105 @@ Every suite now has execution behind it:
 | Playwright `sharing.spec.ts` | 5 |
 
 Run pgTAP with `bunx supabase start` then `bunx supabase test db`.
+
+---
+
+## 15. The account sweep: signing in as the third network moment
+
+Everything above gets a trip from one person to another. Nothing above gets a
+trip from a person to *themselves* on a second device, and that is what an
+account is assumed to be for: sign in on the phone and on the laptop, see the
+same trips.
+
+The gap was narrow and total. A trip reached the server only through the share
+dialog, and a trip reached a device only through the *Download* button in
+`RemoteTripsSection`. Both are the right shape for handing a trip to a friend.
+Neither fires when there is no friend — so a signed-in user with a trip on their
+phone and a signed-in laptop saw nothing on the laptop, and had no action
+available that would have changed it short of sending themselves an invite link.
+
+Phase 6 specified the fix and it was never built: *"run lazily on first share or
+first sign-in, never as a big-bang"*. `lib/sync/account-sync.ts` is the sign-in
+half, and `lib/sync/AccountTripSync.tsx` decides when it runs.
+
+### What it does
+
+Up, then down, sequentially, for the signed-in account:
+
+- every local trip with no `remoteTripId` gets one via `ensureRemoteTrip`, then
+  its document via `uploadTripDocument` — the same two calls sharing makes;
+- every trip in `listRemoteTripsMissingLocally` is materialised, which is the
+  same call the *Download* button makes.
+
+Nothing new on the server, no new migration, no new RLS. The sweep is a
+composition of four functions that already existed and were already tested; what
+it adds is that nobody has to press anything.
+
+### The three refusals, which are the whole design
+
+Making this automatic changes the risk profile of code that used to run once,
+attended, on one trip. Three things that were safe under those conditions are not
+safe under these:
+
+1. **It never re-creates a server row.** `ensureRemoteTrip` treats a row it
+   cannot read as deleted and makes a fresh one — correct at share time, when
+   the owner is watching and the alternative is a share that fails. Unattended it
+   is a data fork: a device with a second account signed in cannot see the first
+   account's rows, and "repairing" them would hand duplicates to the wrong owner.
+   So the sweep skips any trip that already has a `remoteTripId`, and sharing
+   remains the only place reconciliation happens.
+2. **It never uploads a document it did not link.** A joined trip that has not
+   been opened on this device holds a placeholder Dexie row — the preview, or
+   `trips.untitled` — and no document. Pushing that as CRDT state would write the
+   placeholder over the owner's real name for every member. Only a trip whose row
+   this sweep created is uploaded, and for that trip this device is by definition
+   the only source that has ever existed.
+3. **It is additive.** Absent from the server means local-only; absent locally
+   means fetch. Neither means delete, and signing out changes nothing on the
+   device.
+
+### Concurrency, which is new here
+
+`materialiseJoinedTrip` was a check-then-act — look the trip up by
+`remoteTripId`, add it if absent — and that was fine while a person had to click
+*Download*. The sweep runs it for every trip, in every open tab, the moment a
+session appears. Two tabs interleaved between the read and the write each see
+nothing and each add a row: one server trip, two local copies, two documents.
+
+The pair now runs inside one `db.transaction('rw', db.trips, …)`. IndexedDB
+serialises readwrite transactions over a store across connections, so that is a
+real lock between tabs rather than a tidier spelling of the same race. The
+network fetch stays outside it — holding a Dexie transaction open across a round
+trip would block every other writer for as long as the server takes.
+
+Within a tab, `AccountTripSync` chains sweeps rather than flagging one as busy: a
+flag drops the work it refuses, so a trip created while a sweep ran would be
+skipped and never re-queued.
+
+One knock-on for tests: Dexie's transaction zone assumes its continuation runs in
+the same microtask tick, and vitest's default `useFakeTimers` fakes
+`queueMicrotask`, which defers it to the fake clock. The transaction then aborts
+with *"Transaction committed too early"*. Tests that only need a fake clock must
+say so — `vi.useFakeTimers({ toFake: ['Date'] })`.
+
+### What it deliberately leaves alone
+
+- **`RemoteTripsSection` stays.** It is empty in the steady state, which is
+  right, and it is the only way in for what the sweep could not do: a download
+  that failed, a trip that appeared while this device was offline, a trip another
+  member added between sweeps.
+- **Sync is still mounted for the open trip only.** A trip that arrives on the
+  laptop shows its preview name and dates and fills in when opened. Mounting a
+  provider per trip is the trade Phase 4 already refused, and nothing here
+  changes it.
+
+### The trade-off worth stating out loud
+
+A local trip on a device now belongs to whoever signs in on that device. On a
+shared or borrowed computer that means one person's local trips are uploaded to
+another person's account. Nothing is lost — the trips stay on the device and keep
+working — but they are copied somewhere their author did not choose. The device
+has no notion of a trip's author to check against, so there is no cheap guard to
+add: closing it properly means either recording the account a trip was created
+under, or asking at sign-in which trips to bring. Both are worth doing before
+this is offered to people who share a machine.
