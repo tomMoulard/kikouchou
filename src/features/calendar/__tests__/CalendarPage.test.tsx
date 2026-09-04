@@ -5,6 +5,7 @@
  * @module features/calendar/__tests__/CalendarPage.test
  */
 
+import { act } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
@@ -557,9 +558,21 @@ describe('CalendarPage', () => {
   it('renders multi-day assignment events in card view', async () => {
     const { user } = renderCalendarPage();
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
-    // The assignment label should be rendered (possibly multiple segments)
-    const labels = screen.getAllByText('Alice - Blue Room');
-    expect(labels.length).toBeGreaterThan(0);
+
+    // 2026-04-02 → 2026-04-08 is a check-out date, so the last night is the
+    // 7th: six pills, one per night slept. Every pill carries the label as its
+    // `title`; only three print it, because a segment in the middle of a week
+    // renders a non-breaking space so the span reads as one continuous bar.
+    const pills = screen.getAllByTitle('Alice - Blue Room');
+    expect(pills).toHaveLength(6);
+    expect(screen.getAllByText('Alice - Blue Room')).toHaveLength(3);
+
+    // The control for the fallback test below: a usable colour is painted
+    // verbatim, and the text colour is the contrast decision for *that* colour
+    // (#3b82f6 sits above the WCAG threshold, so black).
+    for (const pill of pills) {
+      expect(pill).toHaveStyle({ backgroundColor: 'rgb(59, 130, 246)', color: 'rgb(0, 0, 0)' });
+    }
   });
 
   it('renders assignment with unknown person when person not found', async () => {
@@ -576,10 +589,16 @@ describe('CalendarPage', () => {
     expect(pills.length).toBeGreaterThan(0);
   });
 
-  it('renders assignment with short color fallback', async () => {
+  it('paints an assignment grey when the person colour is too short to be a colour', async () => {
+    // `#ab` is not a colour any browser can paint — CSS would drop the
+    // declaration and the pill would inherit the day cell's background,
+    // rendering an unreadable label. The page substitutes #6b7280 instead.
+    // Asserting the label is on screen (which the previous version of this test
+    // did, byte for byte the same as the multi-day test above) cannot see any
+    // of that.
     const shortColorPerson: Person = {
       ...mockPerson,
-      color: '#ab' as Person['color'], // Too short, fallback to gray
+      color: '#ab' as Person['color'],
     };
     mockUsePersonContext.mockReturnValue({
       persons: [shortColorPerson],
@@ -589,8 +608,39 @@ describe('CalendarPage', () => {
     });
     const { user } = renderCalendarPage();
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
-    const labels = screen.getAllByText('Alice - Blue Room');
-    expect(labels.length).toBeGreaterThan(0);
+
+    const pills = screen.getAllByTitle('Alice - Blue Room');
+    expect(pills).toHaveLength(6);
+    for (const pill of pills) {
+      // #6b7280, and the white text its luminance calls for — not the black
+      // the person's own (blue) colour would have got.
+      expect(pill).toHaveStyle({
+        backgroundColor: 'rgb(107, 114, 128)',
+        color: 'rgb(255, 255, 255)',
+      });
+    }
+  });
+
+  it('keeps a three-digit shorthand colour, which is a colour', async () => {
+    // The guard is `length >= 4`, and `#abc` is exactly four characters. Pinning
+    // the passing side of the boundary is what stops the fallback from being
+    // widened until it swallows every legitimate shorthand.
+    const shorthandPerson: Person = {
+      ...mockPerson,
+      color: '#abc' as Person['color'],
+    };
+    mockUsePersonContext.mockReturnValue({
+      persons: [shorthandPerson],
+      getPersonById: vi.fn((id: string) => (id === mockPerson.id ? shorthandPerson : undefined)),
+      isLoading: false,
+      error: null,
+    });
+    const { user } = renderCalendarPage();
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
+    expect(screen.getAllByTitle('Alice - Blue Room')[0]).toHaveStyle({
+      backgroundColor: 'rgb(170, 187, 204)',
+    });
   });
 
   it('skips assignments outside visible calendar range', async () => {
@@ -677,11 +727,19 @@ describe('CalendarPage', () => {
     });
     const { user } = renderCalendarPage();
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
-    // Transport indicators should be rendered
-    expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
+
+    // The offset-less datetime is a wall clock, so it reads 10:00 in every
+    // timezone the suite may run in.
+    const indicator = screen.getByTitle('10:00 Alice - Paris CDG');
+    expect(indicator).toHaveTextContent('↑');
+    expect(indicator).toHaveTextContent('Paris CDG');
+    expect(indicator.closest('[role="gridcell"]')).toHaveAttribute(
+      'aria-describedby',
+      '2026-04-08-summary',
+    );
   });
 
-  it('renders transport with short color fallback', async () => {
+  it('paints a transport dot grey when the person colour is too short to be a colour', async () => {
     const shortColorPerson: Person = {
       ...mockPerson,
       color: '#a' as Person['color'],
@@ -694,8 +752,22 @@ describe('CalendarPage', () => {
     });
     const { user } = renderCalendarPage();
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
-    // Should still render without error
-    expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
+
+    // The person dot is `aria-hidden`, so it has to be reached through the
+    // indicator that owns it rather than by role.
+    const indicator = screen.getByTitle('14:00 Alice - Paris CDG');
+    const dot = indicator.querySelector('span.rounded-full');
+    expect(dot).not.toBeNull();
+    expect(dot).toHaveStyle({ backgroundColor: 'rgb(107, 114, 128)' });
+  });
+
+  it('paints a transport dot in the person colour when it is usable', async () => {
+    const { user } = renderCalendarPage();
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
+    const dot = screen.getByTitle('14:00 Alice - Paris CDG').querySelector('span.rounded-full');
+    expect(dot).not.toBeNull();
+    expect(dot).toHaveStyle({ backgroundColor: 'rgb(59, 130, 246)' });
   });
 
   // ============================================================================
@@ -733,33 +805,66 @@ describe('CalendarPage', () => {
   // Keyboard navigation tests
   // ============================================================================
 
-  it('supports keyboard navigation with arrow keys in card view', async () => {
+  it('moves focus one cell per arrow key, and to the row ends on Home/End', async () => {
+    // The previous version of this test pressed all six keys and then asserted
+    // only that the grid was still on screen — deleting `handleDayKeyDown`
+    // wholesale passed it. Focus is the entire observable effect, so focus is
+    // what has to be asserted.
     const { user } = renderCalendarPage();
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
 
-    // Find a gridcell and focus it
-    const gridcells = screen.getAllByRole('gridcell');
-    expect(gridcells.length).toBeGreaterThan(0);
+    const cells = screen.getAllByRole('gridcell');
+    // April 2026 in a Monday-first grid: Mon 30 Mar → Sun 3 May, five rows.
+    expect(cells).toHaveLength(35);
 
-    // Focus a cell and use keyboard
-    const firstCell = gridcells[0]!;
-    firstCell.focus();
+    await act(async () => {
+      cells[0]!.focus();
+    });
+    expect(cells[0]).toHaveFocus();
 
-    // ArrowRight
     await user.keyboard('{ArrowRight}');
-    // ArrowDown
-    await user.keyboard('{ArrowDown}');
-    // ArrowLeft
-    await user.keyboard('{ArrowLeft}');
-    // ArrowUp
-    await user.keyboard('{ArrowUp}');
-    // Home
-    await user.keyboard('{Home}');
-    // End
-    await user.keyboard('{End}');
+    expect(cells[1]).toHaveFocus();
 
-    // The grid should still be rendered without error
-    expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
+    await user.keyboard('{ArrowDown}');
+    expect(cells[8]).toHaveFocus();
+
+    await user.keyboard('{ArrowUp}');
+    expect(cells[1]).toHaveFocus();
+
+    await user.keyboard('{End}');
+    expect(cells[6]).toHaveFocus();
+
+    await user.keyboard('{Home}');
+    expect(cells[0]).toHaveFocus();
+
+    // Only the focused cell is in the tab order — a roving tabindex, so Tab
+    // leaves the grid rather than walking 35 cells.
+    expect(cells[0]).toHaveAttribute('tabindex', '0');
+    expect(cells.filter((cell) => cell.getAttribute('tabindex') === '0')).toHaveLength(1);
+  });
+
+  it('clamps arrow-key navigation at the first and last cell', async () => {
+    const { user } = renderCalendarPage();
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
+    const cells = screen.getAllByRole('gridcell');
+    const lastCell = cells[cells.length - 1]!;
+
+    await act(async () => {
+      cells[0]!.focus();
+    });
+    await user.keyboard('{ArrowLeft}');
+    expect(cells[0]).toHaveFocus();
+    await user.keyboard('{ArrowUp}');
+    expect(cells[0]).toHaveFocus();
+
+    await act(async () => {
+      lastCell.focus();
+    });
+    await user.keyboard('{ArrowRight}');
+    expect(lastCell).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(lastCell).toHaveFocus();
   });
 
   // ============================================================================
@@ -878,21 +983,27 @@ describe('CalendarPage', () => {
     expect(screen.getByText('calendar.title')).toBeInTheDocument();
   });
 
-  it('ignores non-arrow keyboard events in month view', async () => {
+  it('leaves focus alone for a key the grid does not handle', async () => {
+    // This used to look for a `button` whose text was only digits — the day
+    // number is a `span` inside the gridcell, so the `.find()` missed, the
+    // `if (dayButton)` body never ran, and the test passed having asserted
+    // nothing at all.
     const { user } = renderCalendarPage();
-
-    // Switch to card view for month grid keyboard events
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
 
-    // Press a non-arrow key on a day cell - should not crash
-    const dayButtons = screen.getAllByRole('button');
-    const dayButton = dayButtons.find((btn) => btn.textContent?.match(/^\d+$/));
-    if (dayButton) {
-      dayButton.focus();
-      await user.keyboard('x');
-      // Should not throw or change focused date
-      expect(dayButton).toBeInTheDocument();
+    const cells = screen.getAllByRole('gridcell');
+    const cell = cells[8]!;
+
+    await act(async () => {
+      cell.focus();
+    });
+
+    for (const key of ['x', '{PageDown}', '{Enter}']) {
+      await user.keyboard(key);
+      expect(cell).toHaveFocus();
     }
+
+    expect(cell).toHaveAttribute('tabindex', '0');
   });
 
   it('shows loading when assignments are loading', () => {

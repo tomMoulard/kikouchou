@@ -218,8 +218,19 @@ describe('TripSyncExportPanel', () => {
     const { unmount } = render(<TripSyncExportPanel trip={mockTrip} />, { withProviders: false });
     unmount();
 
+    expect(mockBuildChangeset).toHaveBeenCalled();
     resolveChangeset?.({ tripId: 'trip-1' });
-    // No assertion needed — verifying no crash
+    // Give the resolved continuation a turn. Without this the assertions below
+    // run before the `await` in the effect has resumed and would hold whatever
+    // the guard did.
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+    // "Verifying no crash" was the whole assertion here, and there was none.
+    // Nor is a console spy one: React dropped the "setState on an unmounted
+    // component" warning in v18 and this repo is on 19, so nothing is logged
+    // either way. The abort check is observable in exactly one place — the
+    // export stops before encoding a payload nobody will ever see.
+    expect(mockEncodeChangeset).not.toHaveBeenCalled();
   });
 
   it('skips malformed localStorage entries when searching for guest key', async () => {
