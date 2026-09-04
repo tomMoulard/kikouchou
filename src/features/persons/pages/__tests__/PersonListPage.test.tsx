@@ -150,6 +150,15 @@ vi.mock('@/features/persons/components/PersonDialog', () => ({
 }));
 
 import { PersonListPage } from '../PersonListPage';
+import { useLocation } from 'react-router-dom';
+
+/**
+ * Reports the router's current query string, from inside the same
+ * `MemoryRouter` the page under test is rendered in.
+ */
+function LocationProbe(): React.ReactElement {
+  return <div data-testid="location-search">{useLocation().search}</div>;
+}
 import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useRoomContext } from '@/contexts/RoomContext';
@@ -698,5 +707,52 @@ describe('PersonListPage', () => {
     // Should show earliest arrival
     expect(screen.getByText('Early Airport')).toBeInTheDocument();
     expect(screen.queryByText('Late Airport')).not.toBeInTheDocument();
+  });
+
+  // ===========================================================================
+  // ?new=1 — the hand-off from the calendar's empty state
+  // ===========================================================================
+
+  it('opens the person dialog on first render for ?new=1', () => {
+    // On the *first* render, not through an effect: a mount-then-open flashes
+    // the empty guest list first, which is what the reader came here to leave.
+    render(<PersonListPage />, {
+      withProviders: false,
+      initialEntries: ['/trips/trip-1/persons?new=1'],
+    });
+
+    expect(screen.getByTestId('person-dialog')).toBeInTheDocument();
+  });
+
+  it('drops ?new from the URL once the dialog is open, keeping the rest', async () => {
+    render(
+      <>
+        <PersonListPage />
+        <LocationProbe />
+      </>,
+      {
+        withProviders: false,
+        initialEntries: ['/trips/trip-1/persons?new=1&view=list'],
+      },
+    );
+
+    expect(screen.getByTestId('person-dialog')).toBeInTheDocument();
+
+    // Replaced, not pushed, so the back button cannot walk into a URL that
+    // pops the dialog open again — and the dialog stays open meanwhile.
+    await waitFor(() => {
+      expect(screen.getByTestId('location-search')).toHaveTextContent('?view=list');
+    });
+    expect(screen.getByTestId('location-search')).not.toHaveTextContent('new');
+    expect(screen.getByTestId('person-dialog')).toBeInTheDocument();
+  });
+
+  it('leaves the dialog closed when there is no ?new', () => {
+    render(<PersonListPage />, {
+      withProviders: false,
+      initialEntries: ['/trips/trip-1/persons'],
+    });
+
+    expect(screen.queryByTestId('person-dialog')).not.toBeInTheDocument();
   });
 });

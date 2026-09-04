@@ -692,6 +692,45 @@ describe('RoomListPage', () => {
     expect(screen.getByTestId('room-dialog')).toBeInTheDocument();
   });
 
+  // ===========================================================================
+  // ?new=1 — the hand-off from the calendar's empty state
+  // ===========================================================================
+
+  it('opens the room dialog on first render for ?new=1', () => {
+    // On the *first* render, not through an effect: a mount-then-open flashes
+    // the empty room list first, which is what the reader came here to leave.
+    currentSearchParams = new URLSearchParams('view=card&new=1');
+    render(<RoomListPage />, { withProviders: false });
+
+    expect(screen.getByTestId('room-dialog')).toBeInTheDocument();
+  });
+
+  it('drops ?new once it has opened the dialog, keeping the view', () => {
+    currentSearchParams = new URLSearchParams('view=timeline&new=1');
+    render(<RoomListPage />, { withProviders: false });
+
+    expect(mockSetSearchParams).toHaveBeenCalledWith(expect.any(Function), {
+      replace: true,
+    });
+
+    // Run the updater the page handed the router: `new` goes, `view` rides
+    // along. Replacing rather than pushing is what stops the back button
+    // walking into a URL that pops the dialog open again.
+    const updater = mockSetSearchParams.mock.calls.at(-1)?.[0] as (
+      previous: URLSearchParams,
+    ) => URLSearchParams;
+    const next = updater(new URLSearchParams('view=timeline&new=1'));
+    expect(next.get('new')).toBeNull();
+    expect(next.get('view')).toBe('timeline');
+  });
+
+  it('leaves the dialog closed when there is no ?new', () => {
+    render(<RoomListPage />, { withProviders: false });
+
+    expect(screen.queryByTestId('room-dialog')).not.toBeInTheDocument();
+    expect(mockSetSearchParams).not.toHaveBeenCalled();
+  });
+
   it('switches view when tab is clicked', async () => {
     const { user } = render(<RoomListPage />, { withProviders: false });
     const timelineTab = screen.getByRole('radio', { name: 'rooms.view.timeline' });
