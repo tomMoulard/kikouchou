@@ -627,6 +627,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         arrivals,
         departures,
         assignments,
+        { startDate: currentTrip?.startDate, endDate: currentTrip?.endDate },
       );
       
       if (unassignedInfo) {
@@ -638,7 +639,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     }
     
     return result;
-  }, [persons, arrivals, departures, assignments]),
+  }, [persons, arrivals, departures, assignments, currentTrip?.startDate, currentTrip?.endDate]),
 
   // Notify once when all guests become assigned
   hasNotifiedAllAssignedRef = useRef(false),
