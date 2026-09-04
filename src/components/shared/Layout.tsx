@@ -35,6 +35,7 @@ import {
   Settings,
   Sparkles,
   Users,
+  UsersRound,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -114,6 +115,10 @@ const TRIP_NAV_ITEMS: readonly NavItem[] = [
  */
 const GLOBAL_NAV_ITEMS: readonly NavItem[] = [
   { labelKey: 'trips.title', pathSuffix: '', icon: Luggage, requiresTrip: false },
+  // Guest groups sit here rather than beside "Guests": they belong to the
+  // account, are edited with no trip selected, and outlive every trip they were
+  // imported into.
+  { labelKey: 'guestGroups.title', pathSuffix: 'groups', icon: UsersRound, requiresTrip: false },
 ] as const;
 
 /**

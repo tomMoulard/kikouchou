@@ -29,7 +29,15 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { type Locale, format, parseISO } from 'date-fns';
-import { ArrowDownRight, ArrowUpRight, Phone, Plus, Trash2, Users } from 'lucide-react';
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Phone,
+  Plus,
+  Trash2,
+  Users,
+  UsersRound,
+} from 'lucide-react';
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useTripContext } from '@/contexts/TripContext';
@@ -54,6 +62,13 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { PersonDialog } from '@/features/persons/components/PersonDialog';
+import {
+  GuestGroupImportDialog,
+  SaveGuestsAsGroupDialog,
+  useGuestGroups,
+  type GuestGroupSelection,
+} from '@/features/guest-groups';
+import { captureUsage } from '@/lib/posthog';
 import { getPersonHeadcount } from '@/types';
 import type { Person, PersonId, TransportMode } from '@/types';
 
@@ -426,6 +441,11 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
    [editingPersonId, setEditingPersonId] = useState<PersonId | undefined>(undefined),
    [deletingPersonId, setDeletingPersonId] = useState<PersonId | undefined>(undefined),
 
+  // Guest groups: importing a saved roster, and saving this trip's guests as one.
+   { importMembers } = useGuestGroups(),
+   [isImportGroupOpen, setIsImportGroupOpen] = useState(false),
+   [isSaveGroupOpen, setIsSaveGroupOpen] = useState(false),
+
   // Combined loading state (includes transports to avoid "no transport info" flash)
    isLoading =
     isTripLoading || isRoomsLoading || isAssignmentsLoading || isPersonsLoading || isTransportsLoading,
@@ -590,17 +610,85 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   }, [deletePerson, deletingPersonId, successToast, t]),
 
   // ============================================================================
+  // Guest Groups
+  // ============================================================================
+
+   handleOpenImportGroup = useCallback(() => {
+    setIsImportGroupOpen(true);
+  }, []),
+
+   handleOpenSaveAsGroup = useCallback(() => {
+    setIsSaveGroupOpen(true);
+  }, []),
+
+  /**
+   * Copies the chosen members in as guests.
+   *
+   * Rethrows so the dialog stays open on failure — the selection the user made
+   * is worth more than a clean close.
+   */
+   handleImportGroup = useCallback(
+    async ({ group, memberIds }: GuestGroupSelection) => {
+      if (!currentTrip) {
+        return;
+      }
+
+      try {
+        const result = await importMembers(currentTrip.id, group.id, memberIds);
+
+        successToast(
+          t('guestGroups.importSuccess', '{{count}} guests added', {
+            count: result.persons.length,
+          }),
+        );
+
+        // Somebody edited the group between opening the picker and confirming
+        // it. Nothing is broken, but fewer people arrived than were ticked.
+        if (result.skippedMemberIds.length > 0) {
+          toast.warning(
+            t('guestGroups.importSkipped', '{{count}} people were no longer in the group', {
+              count: result.skippedMemberIds.length,
+            }),
+          );
+        }
+
+        captureUsage('guest_group_imported', {
+          member_count: result.persons.length,
+          skipped_count: result.skippedMemberIds.length,
+          source: 'guest_list',
+        });
+      } catch (error) {
+        console.error('Failed to import guest group:', error);
+        toast.error(t('guestGroups.importFailed', "Could not add the group's guests"));
+        throw error;
+      }
+    },
+    [currentTrip, importMembers, successToast, t],
+  ),
+
+  // ============================================================================
   // Header Action (desktop button)
   // ============================================================================
 
    headerAction = useMemo(
     () => (
-      <Button onClick={handleAddPerson} className="hidden sm:flex">
-        <Plus className="size-4 mr-2" aria-hidden="true" />
-        {t('persons.new')}
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" onClick={handleOpenImportGroup}>
+          <UsersRound className="size-4 mr-2" aria-hidden="true" />
+          {t('guestGroups.importAction', 'Add from a group')}
+        </Button>
+        {persons.length > 0 && (
+          <Button variant="ghost" size="sm" onClick={handleOpenSaveAsGroup}>
+            {t('guestGroups.saveAsGroup', 'Save as a group')}
+          </Button>
+        )}
+        <Button onClick={handleAddPerson} className="hidden sm:flex">
+          <Plus className="size-4 mr-2" aria-hidden="true" />
+          {t('persons.new')}
+        </Button>
+      </div>
     ),
-    [handleAddPerson, t],
+    [handleAddPerson, handleOpenImportGroup, handleOpenSaveAsGroup, persons.length, t],
   );
 
   // ============================================================================
@@ -687,6 +775,13 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
               label: t('persons.new'),
               onClick: handleAddPerson,
             }}
+            // An empty guest list is exactly where a saved group pays off, so
+            // the second way in is offered beside the first rather than hidden
+            // in a header the empty state has drawn attention away from.
+            secondaryAction={{
+              label: t('guestGroups.importAction', 'Add from a group'),
+              onClick: handleOpenImportGroup,
+            }}
           />
         </div>
 
@@ -695,6 +790,12 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
           personId={editingPersonId}
           open={isDialogOpen}
           onOpenChange={handleDialogOpenChange}
+        />
+
+        <GuestGroupImportDialog
+          open={isImportGroupOpen}
+          onOpenChange={setIsImportGroupOpen}
+          onConfirm={handleImportGroup}
         />
       </div>
     );
@@ -759,6 +860,19 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
         personId={editingPersonId}
         open={isDialogOpen}
         onOpenChange={handleDialogOpenChange}
+      />
+
+      <GuestGroupImportDialog
+        open={isImportGroupOpen}
+        onOpenChange={setIsImportGroupOpen}
+        onConfirm={handleImportGroup}
+      />
+
+      <SaveGuestsAsGroupDialog
+        persons={persons}
+        defaultName={currentTrip.name}
+        open={isSaveGroupOpen}
+        onOpenChange={setIsSaveGroupOpen}
       />
 
       <ConfirmDialog

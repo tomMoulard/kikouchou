@@ -28,6 +28,7 @@ import { tripRoutes } from '@/features/trips/routes';
 import { calendarRoutes } from '@/features/calendar/routes';
 import { roomRoutes } from '@/features/rooms/routes';
 import { personRoutes } from '@/features/persons/routes';
+import { guestGroupRoutes } from '@/features/guest-groups/routes';
 import { transportRoutes } from '@/features/transports/routes';
 import { activityRoutes } from '@/features/activities/routes';
 import { joinRoutes, sharingRoutes, sharingSyncRoutes } from '@/features/sharing/routes';
@@ -226,6 +227,9 @@ export const appRoutes: RouteObject = {
     // Person management routes (trip-scoped)
     ...personRoutes,
 
+    // Guest groups (global — reachable with no trip selected)
+    ...guestGroupRoutes,
+
     // Transport management routes
     // Note: transportRoutes uses 'transports' path, need to check if it needs trip scoping
     ...transportRoutes,
@@ -290,6 +294,7 @@ const publicRoutes: RouteObject = {
  *   - `/trips/:tripId/activities` - Shared activity agenda
  *   - `/trips/:tripId/analytics` - Trip analytics
  *   - `/analytics` - Analytics across all trips
+ *   - `/groups` - Reusable guest groups, imported into any trip
  *   - `/settings` - App settings
  *   - `/signin` - Sign in (providers come from the project's own config)
  */

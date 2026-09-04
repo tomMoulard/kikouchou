@@ -9,14 +9,21 @@ import { type ReactElement, memo, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { UsersRound, X } from 'lucide-react';
 import { useOfflineAwareToast, useUnsavedChanges } from '@/hooks';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { TripForm } from '@/features/trips/components/TripForm';
 import { useAuth } from '@/features/auth/AuthContext';
 import { getAccountGuestName } from '@/features/auth/display-name';
+import {
+  GuestGroupImportDialog,
+  useGuestGroups,
+  type GuestGroupSelection,
+} from '@/features/guest-groups';
 import {
   createTrip,
   setCurrentTrip,
@@ -24,7 +31,7 @@ import {
   createPersonWithAutoColor,
 } from '@/lib/db';
 import { captureUsage } from '@/lib/posthog';
-import type { TripFormData, TripId } from '@/types';
+import type { GuestGroupId, TripFormData, TripId } from '@/types';
 
 // ============================================================================
 // Component
@@ -71,6 +78,43 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const { isBlocked, proceed, reset, skipNextBlock } = useUnsavedChanges(isDirty);
   const importSourceRef = useRef<TripId | null>(null);
   const guestNamesRef = useRef<readonly string[]>([]);
+
+  // ============================================================================
+  // Guest Group Selection
+  // ============================================================================
+
+  /*
+    The trip does not exist yet, so the picker cannot write. Selections are
+    parked here and `handleSubmit` replays them once there is a trip to write
+    into — the same shape the room import beside it already uses.
+
+    A list, not one slot: "two families and the neighbours" is an ordinary trip,
+    and a single slot would silently replace the first group the moment a second
+    was picked.
+  */
+  const { importMembers } = useGuestGroups();
+  const [isGroupPickerOpen, setIsGroupPickerOpen] = useState(false);
+  const [pendingGroups, setPendingGroups] = useState<readonly GuestGroupSelection[]>([]);
+
+  const handleOpenGroupPicker = useCallback(() => {
+    setIsGroupPickerOpen(true);
+  }, []);
+
+  /**
+   * Takes what the picker returned as the complete set.
+   *
+   * The picker is seeded with what is already pending, so it edits the queue
+   * rather than appending to it — which is what lets somebody un-tick a person
+   * from a group they added a moment ago instead of removing the whole group
+   * and starting again.
+   */
+  const handleGroupsSelected = useCallback((selections: readonly GuestGroupSelection[]) => {
+    setPendingGroups(selections);
+  }, []);
+
+  const handleClearGroup = useCallback((groupId: GuestGroupId) => {
+    setPendingGroups((prev) => prev.filter((entry) => entry.group.id !== groupId));
+  }, []);
 
   const handleDirtyChange = useCallback((dirty: boolean) => {
     setIsDirty(dirty);
@@ -150,12 +194,42 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
         toast.error(t('trips.guestsCreateFailed', 'Trip created but some guests could not be added'));
       }
 
+      /*
+        And the saved groups the user picked before the trip existed — several
+        of them, because a trip is often two families rather than one.
+
+        One group failing does not abandon the rest: each is a separate
+        transaction, and the trip is already real, so the failure posture
+        matches the room clone and the guest loop above.
+      */
+      let importedGuestCount = 0;
+      let failedGroupCount = 0;
+      for (const selection of pendingGroups) {
+        try {
+          const result = await importMembers(
+            newTrip.id,
+            selection.group.id,
+            selection.memberIds,
+          );
+          importedGuestCount += result.persons.length;
+        } catch (error) {
+          console.error('Failed to import guest group into the new trip:', error);
+          failedGroupCount += 1;
+        }
+      }
+
+      if (failedGroupCount > 0) {
+        toast.error(t('guestGroups.importFailed', "Could not add the group's guests"));
+      }
+
       // Set the new trip as the current trip so CalendarPage can display it
       await setCurrentTrip(newTrip.id);
 
       captureUsage('trip_created', {
         imported_rooms: didImportRooms,
         guest_count: addedGuestCount,
+        imported_guests: importedGuestCount,
+        imported_groups: pendingGroups.length,
       });
 
       // Reset dirty state and skip blocker before navigation.
@@ -175,7 +249,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
       // Navigate to the new trip's calendar
       navigate(`/trips/${newTrip.id}/calendar`);
     },
-    [navigate, skipNextBlock, successToast, t],
+    [importMembers, navigate, pendingGroups, skipNextBlock, successToast, t],
   );
 
   // ============================================================================
@@ -209,9 +283,66 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
             onImportSourceChange={handleImportSourceChange}
             currentUserName={currentUserName}
             onGuestsChange={handleGuestsChange}
-          />
+          >
+            {/*
+              Saved groups queued for this trip. A list rather than a single
+              slot: a trip is often two families, and replacing the first the
+              moment a second is picked is the shape of that bug.
+
+              No label of its own — the form's guest fieldset already carries
+              one, and these rows are guests by another route.
+            */}
+            {pendingGroups.length > 0 && (
+              <ul className="space-y-2">
+                {pendingGroups.map((selection) => (
+                  <li
+                    key={selection.group.id}
+                    className="flex items-center justify-between gap-2 rounded-md border p-3"
+                  >
+                    <span className="text-sm">
+                      {t('guestGroups.importPending', '{{count}} people from {{name}}', {
+                        count: selection.memberIds.length,
+                        name: selection.group.name,
+                      })}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleClearGroup(selection.group.id)}
+                      aria-label={t('guestGroups.importClearNamed', 'Remove {{name}}', {
+                        name: selection.group.name,
+                      })}
+                    >
+                      <X className="size-4" aria-hidden="true" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleOpenGroupPicker}
+            >
+              <UsersRound className="size-4" aria-hidden="true" />
+              {pendingGroups.length > 0
+                ? t('guestGroups.importMore', 'Add another group')
+                : t('guestGroups.importAction', 'Add from a group')}
+            </Button>
+          </TripForm>
         </CardContent>
       </Card>
+
+      <GuestGroupImportDialog
+        open={isGroupPickerOpen}
+        onOpenChange={setIsGroupPickerOpen}
+        onConfirm={handleGroupsSelected}
+        initialSelection={pendingGroups}
+        confirmLabel={t('guestGroups.importSelect', 'Choose people')}
+      />
 
       <UnsavedChangesDialog open={isBlocked} onStay={reset} onLeave={proceed} />
     </div>
