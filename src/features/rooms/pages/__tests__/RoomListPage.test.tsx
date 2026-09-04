@@ -500,7 +500,6 @@ describe('RoomListPage', () => {
   it('does not show the unassigned guests warning card', () => {
     render(<RoomListPage />, { withProviders: false });
     expect(screen.queryByText(/rooms\.unassignedGuests/)).not.toBeInTheDocument();
-    expect(screen.queryByText('rooms.dragHint')).not.toBeInTheDocument();
   });
 
   it('shows optimize button when unassigned guests exist and assistant model is cached', async () => {

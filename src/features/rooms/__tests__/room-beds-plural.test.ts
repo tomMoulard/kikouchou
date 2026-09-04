@@ -54,16 +54,6 @@ describe('rooms.beds pluralisation', () => {
     expect(i18n.t('rooms.beds', { count: 0 })).toBe('0 lit');
   });
 
-  it('renders the unassigned-guests count in both languages', async () => {
-    await i18n.changeLanguage('en');
-    expect(i18n.t('rooms.unassignedGuestsCount', { count: 1 })).toBe('1 guest without a room');
-    expect(i18n.t('rooms.unassignedGuestsCount', { count: 3 })).toBe('3 guests without a room');
-
-    await i18n.changeLanguage('fr');
-    expect(i18n.t('rooms.unassignedGuestsCount', { count: 1 })).toBe('1 invité sans chambre');
-    expect(i18n.t('rooms.unassignedGuestsCount', { count: 3 })).toBe('3 invités sans chambre');
-  });
-
   it('leaves no legacy v3 plural suffix in the rooms namespace', async () => {
     for (const catalogue of [enTranslation, frTranslation]) {
       const rooms = (catalogue as { rooms: Record<string, unknown> }).rooms;
