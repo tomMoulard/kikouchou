@@ -576,10 +576,15 @@ describe('start — joining a trip that already exists', () => {
     const server = new FakeServer();
     const seed = new Y.Doc();
 
-    // 1200 rows forces three pages at PULL_PAGE_SIZE 500.
+    // 1200 rows forces three pages at PULL_PAGE_SIZE 500. Each row carries just
+    // the guest that `addGuest` added — its `Y.transact` emits one update — which
+    // is what an append-only log holds anyway. Re-encoding the whole doc per row
+    // is quadratic, and slow enough under coverage to blow the test timeout.
+    seed.on('update', (update: Uint8Array) => {
+      server.append(update);
+    });
     for (let index = 0; index < 1200; index += 1) {
       addGuest(seed, `p${index}`, `Guest ${index}`);
-      server.append(Y.encodeStateAsUpdate(seed));
     }
 
     const doc = new Y.Doc();
