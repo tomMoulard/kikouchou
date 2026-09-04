@@ -11,6 +11,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
+import { fixtureDate } from './support/fixture-dates';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -18,25 +19,36 @@ import { expect, test, type Page } from '@playwright/test';
 
 /**
  * Test data for creating trips.
+ *
+ * Every date is derived from today. These were pinned to July 2024, which was
+ * not merely stale — it was unreachable. `navigateToMonth` walks the picker one
+ * month at a time from today under a 24-click ceiling, and July 2024 was 26
+ * months behind: the walk ran out of clicks, returned without a word, and
+ * `selectDate` then clicked the 15th of whatever month was on screen. Every
+ * test below that calls `createTrip` was creating a trip with dates it never
+ * asked for, and none of them looked, so the suite stayed green while getting
+ * one month more wrong every month. See `support/fixture-dates`.
  */
 const TEST_TRIP = {
-  name: 'Summer Vacation 2024',
+  name: 'Summer Vacation',
   location: 'Beach House, Cornwall',
-  startDate: '2024-07-15',
-  endDate: '2024-07-22',
+  startDate: fixtureDate(15),
+  endDate: fixtureDate(22),
 } as const;
 
+/** A second trip, a month after the first, so the two are distinguishable. */
 const SECOND_TRIP = {
   name: 'Winter Ski Trip',
   location: 'Alps Chalet',
-  startDate: '2024-12-20',
-  endDate: '2024-12-27',
+  startDate: fixtureDate(20, 3),
+  endDate: fixtureDate(27, 3),
 } as const;
 
+/** The edit widens `TEST_TRIP` at both ends, so both pickers must move. */
 const UPDATED_TRIP = {
-  name: 'Summer Vacation 2024 - Extended',
-  startDate: '2024-07-14',
-  endDate: '2024-07-25',
+  name: 'Summer Vacation - Extended',
+  startDate: fixtureDate(14),
+  endDate: fixtureDate(25),
 } as const;
 
 /**
@@ -72,16 +84,19 @@ async function selectDate(page: Page, dateString: string): Promise<void> {
   // First, navigate to the correct month if needed
   await navigateToMonth(page, targetDate, calendar);
 
-  // The day buttons have text content with the day number
-  // We need to find the button with the correct day that's not "outside" the current month
-  const day = targetDate.getDate();
-
-  // Find the day button within the calendar
-  // Look for buttons that contain exactly the day number
+  // Address the cell by the date it *is*, not by the digits it prints.
+  //
+  // react-day-picker stamps every gridcell with `data-day="yyyy-MM-dd"` and
+  // marks the ones borrowed from the neighbouring months `data-outside`. The
+  // old `button` + `/^15$/` + `.first()` matched on text alone, so it could not
+  // tell the 25th of the month it wanted from the 25th that leads the grid as a
+  // greyed-out day of the previous month — and, worse, it happily clicked a day
+  // of the wrong month entirely when `navigateToMonth` had not arrived. Matching
+  // the ISO date means a failed walk fails here, loudly, on a cell that is not
+  // in the DOM.
   const dayButton = calendar
-    .locator('button')
-    .filter({ hasText: new RegExp(`^${day}$`) })
-    .first();
+    .locator(`td[data-day="${dateString}"]:not([data-outside])`)
+    .locator('button');
 
   await dayButton.click();
 
@@ -98,6 +113,7 @@ async function selectDate(page: Page, dateString: string): Promise<void> {
  * @param page - Playwright page object
  * @param targetDate - Target date to navigate to
  * @param calendar - Locator for the calendar element
+ * @throws Error if the target month is not reached within `maxAttempts` clicks
  */
 async function navigateToMonth(
   page: Page,
@@ -108,9 +124,14 @@ async function navigateToMonth(
   // The caption shows the month name and year
   const maxAttempts = 24; // Safety limit (2 years of navigation)
 
+  // Remembered for the failure message: the point of throwing is to say which
+  // month the walk actually reached, which is the one fact that identifies a
+  // fixture the picker can no longer get to.
+  let captionText: string | null = null;
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     // Check if we're on the right month by looking at the caption
-    const captionText = await calendar.locator('.rdp-month_caption').textContent();
+    captionText = await calendar.locator('.rdp-month_caption').textContent();
 
     if (captionText) {
       const targetMonth = targetDate.toLocaleString('default', { month: 'long' });
@@ -174,6 +195,17 @@ async function navigateToMonth(
     await calendar.locator('button.rdp-button_next').click();
     await page.waitForTimeout(50);
   }
+
+  // Running out of clicks used to be a silent `return`, and that is the whole
+  // bug this file was carrying: the caller then clicked a day of the month the
+  // walk happened to stop on and asserted nothing about the result. Say so.
+  const wanted = `${targetDate.toLocaleString('en', { month: 'long' })} ${targetDate.getFullYear()}`;
+  throw new Error(
+    `navigateToMonth: gave up after ${maxAttempts} clicks — wanted ${wanted}, ` +
+      `calendar is showing ${captionText?.trim() ?? '(no caption)'}. ` +
+      'The picker opens on the current month, so a fixture more than two years ' +
+      'away cannot be reached: derive it from today with support/fixture-dates.',
+  );
 }
 
 /**
@@ -207,6 +239,113 @@ async function createTrip(
 
   // Submit the form
   await page.getByRole('button', { name: /save/i }).click();
+}
+
+/**
+ * Asserts which date one of the trip form's pickers is holding.
+ *
+ * This is the assertion whose absence hid the broken date picker. Every test
+ * here fed `createTrip` a start and an end date and then checked only that the
+ * URL had changed — so a picker that selected a day of the wrong month, or of
+ * the wrong year, produced a trip that passed. Read the date back.
+ *
+ * Read through the calendar rather than the trigger button: the button prints
+ * the date with date-fns `PPP` in the active locale, which would make this
+ * assertion a statement about i18n. react-day-picker marks the chosen gridcell
+ * `data-selected="true"` and stamps every cell with `data-day="yyyy-MM-dd"`.
+ *
+ * The walk to the month is not optional. `getInitialMonth` is
+ * `month || defaultMonth || today` and `TripForm` passes neither, so the picker
+ * opens on the *current* month however far away its own selection is — the
+ * selected cell is simply not in the DOM until you navigate to it. Asserting
+ * that this particular cell is the selected one is the stronger statement
+ * anyway: `mode="single"` has exactly one, so if this is it, that is the date.
+ *
+ * @param page - Playwright page object
+ * @param triggerId - `#trip-start-date` or `#trip-end-date`
+ * @param isoDate - The date the form is expected to hold (YYYY-MM-DD)
+ */
+async function expectSelectedDate(
+  page: Page,
+  triggerId: string,
+  isoDate: string,
+): Promise<void> {
+  await page.locator(triggerId).click();
+
+  const popover = page.locator('[data-radix-popper-content-wrapper]:visible');
+  await popover.waitFor({ state: 'visible' });
+  const calendar = popover.locator('[data-slot="calendar"]');
+
+  await navigateToMonth(page, new Date(isoDate + 'T12:00:00'), calendar);
+
+  await expect(
+    calendar.locator(`td[data-day="${isoDate}"]:not([data-outside])`),
+  ).toHaveAttribute('data-selected', 'true');
+
+  // Leave the form as it was found — the next picker has to open over nothing.
+  await page.keyboard.press('Escape');
+  await popover.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {
+    // Already closed, which is the same outcome.
+  });
+}
+
+/**
+ * The trip id out of a `/trips/:id/calendar` URL, or a failure that says why.
+ *
+ * @param page - Playwright page object, expected to be on a trip calendar
+ * @returns The trip id
+ * @throws Error if the page is not on a trip calendar URL
+ */
+function tripIdFromCalendarUrl(page: Page): string {
+  const tripId = page.url().match(/\/trips\/([^/]+)\/calendar/)?.[1];
+  if (!tripId) {
+    throw new Error(`Expected a trip calendar URL, got ${page.url()}`);
+  }
+  return tripId;
+}
+
+/**
+ * Reads one trip's stored dates straight out of IndexedDB.
+ *
+ * The other half of the missing assertion, and the cheap half: it needs no
+ * navigation, so it can be dropped into a test that is already near its 60 s
+ * budget. It also asserts the value the app *stored* rather than a rendering of
+ * it — `expectSelectedDate` covers the rendering, on a page a test is visiting
+ * anyway.
+ *
+ * @param page - Playwright page object, on a page where the app has booted
+ * @param tripId - The trip to read
+ * @returns Its `startDate` and `endDate`, both `YYYY-MM-DD`
+ */
+async function readTripDates(
+  page: Page,
+  tripId: string,
+): Promise<{ startDate: string; endDate: string }> {
+  return await page.evaluate(
+    async (id) =>
+      new Promise<{ startDate: string; endDate: string }>((resolve, reject) => {
+        const request = indexedDB.open('kikoushou');
+        request.onerror = () => reject(new Error('Failed to open database'));
+        request.onsuccess = () => {
+          const db = request.result;
+          const read = db.transaction('trips', 'readonly').objectStore('trips').get(id);
+          read.onsuccess = () => {
+            db.close();
+            const trip = read.result as { startDate: string; endDate: string } | undefined;
+            if (!trip) {
+              reject(new Error(`No trip ${id} in IndexedDB`));
+              return;
+            }
+            resolve({ startDate: trip.startDate, endDate: trip.endDate });
+          };
+          read.onerror = () => {
+            db.close();
+            reject(new Error(`Failed to read trip ${id}`));
+          };
+        };
+      }),
+    tripId,
+  );
 }
 
 // ============================================================================
@@ -285,6 +424,8 @@ test.describe('Trip Lifecycle', () => {
     // Verify success toast appears
     await expect(page.getByText(/trip created successfully/i)).toBeVisible();
 
+    const tripId = tripIdFromCalendarUrl(page);
+
     // Navigate back to trips list to verify the trip appears
     await page.goto('/trips');
 
@@ -299,6 +440,18 @@ test.describe('Trip Lifecycle', () => {
     await expect(
       page.getByRole('heading', { name: /no trips/i }),
     ).not.toBeVisible();
+
+    // And verify the trip carries the dates the form was given.
+    //
+    // A URL and a name were the whole of this test's evidence, and neither says
+    // anything about the two fields the form spends most of its effort on. The
+    // date picker was selecting days of the wrong month for months on end —
+    // measured at two months wrong today, three next month — without a single
+    // test noticing.
+    expect(await readTripDates(page, tripId)).toEqual({
+      startDate: TEST_TRIP.startDate,
+      endDate: TEST_TRIP.endDate,
+    });
   });
 
   // ============================================================================
@@ -314,9 +467,7 @@ test.describe('Trip Lifecycle', () => {
     await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/);
 
     // Extract the trip ID from the URL for later verification
-    const calendarUrl = page.url();
-    const tripId = calendarUrl.match(/\/trips\/([^/]+)\/calendar/)?.[1];
-    expect(tripId).toBeTruthy();
+    const tripId = tripIdFromCalendarUrl(page);
 
     // Navigate to the edit page
     await page.goto(`/trips/${tripId}/edit`);
@@ -324,8 +475,11 @@ test.describe('Trip Lifecycle', () => {
     // Verify we're on the edit page with the correct title
     await expect(page.getByRole('heading', { name: /edit trip/i })).toBeVisible();
 
-    // Verify the form is pre-filled with existing data
+    // Verify the form is pre-filled with existing data — dates included, which
+    // also fixes the starting point this test's own edit is measured against.
     await expect(page.getByLabel(/trip name/i)).toHaveValue(TEST_TRIP.name);
+    await expectSelectedDate(page, '#trip-start-date', TEST_TRIP.startDate);
+    await expectSelectedDate(page, '#trip-end-date', TEST_TRIP.endDate);
 
     // Clear and update the trip name
     await page.getByLabel(/trip name/i).clear();
@@ -371,6 +525,13 @@ test.describe('Trip Lifecycle', () => {
     // We check that there's only one trip card with either name
     const tripCards = page.getByRole('list', { name: /my trips/i }).getByRole('listitem');
     await expect(tripCards).toHaveCount(1);
+
+    // The name was the only edited field this test looked at. Both dates moved
+    // too — the start back a day, the end forward three — so read them back.
+    expect(await readTripDates(page, tripId)).toEqual({
+      startDate: UPDATED_TRIP.startDate,
+      endDate: UPDATED_TRIP.endDate,
+    });
   });
 
   // ============================================================================

@@ -12,6 +12,7 @@
 
 import { test, expect, type Page, type CDPSession } from '@playwright/test';
 import { clearIndexedDB } from './support/storage';
+import { fixtureDate, fixtureMonthEnd } from './support/fixture-dates';
 
 // ============================================================================
 // Test Configuration & Constants
@@ -48,9 +49,15 @@ const TEST_CONFIG = {
   ROOM_COUNT: 20,
   /** Number of persons to create for person list test */
   PERSON_COUNT: 30,
-  /** Trip dates for testing */
-  TRIP_START: '2026-05-01',
-  TRIP_END: '2026-05-31',
+  /**
+   * Trip dates: the whole of the fixture month, derived from today.
+   *
+   * A whole month is the point — `createBulkAssignments` spreads its 50 stays
+   * across it — and May 2026 stopped being one four months before this comment
+   * was written. See `support/fixture-dates`.
+   */
+  TRIP_START: fixtureDate(1),
+  TRIP_END: fixtureMonthEnd(),
 } as const;
 
 // ============================================================================
