@@ -12,6 +12,7 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { fixtureDate } from './support/fixture-dates';
+import { addTripGuests, fillTripOrganiser, ORGANISER_NAME } from './support/trip-form';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -217,7 +218,13 @@ async function navigateToMonth(
  */
 async function createTrip(
   page: Page,
-  tripData: { name: string; location?: string; startDate: string; endDate: string },
+  tripData: {
+    name: string;
+    location?: string;
+    startDate: string;
+    endDate: string;
+    guests?: readonly string[];
+  },
 ): Promise<void> {
   // Fill in the trip name
   await page.getByLabel(/trip name/i).fill(tripData.name);
@@ -236,6 +243,13 @@ async function createTrip(
   // The end date button has id="trip-end-date"
   await page.locator('#trip-end-date').click();
   await selectDate(page, tripData.endDate);
+
+  // The first guest is the user, and it is required — signed out, as the suite
+  // runs, nothing pre-fills it.
+  await fillTripOrganiser(page);
+  if (tripData.guests) {
+    await addTripGuests(page, tripData.guests);
+  }
 
   // Submit the form
   await page.getByRole('button', { name: /save/i }).click();
@@ -496,6 +510,28 @@ test.describe('Trip Lifecycle', () => {
       startDate: TEST_TRIP.startDate,
       endDate: TEST_TRIP.endDate,
     });
+  });
+
+  // ============================================================================
+  // Test Case 1b: The create form's guest list reaches the Guests page
+  // ============================================================================
+
+  test('creates the guests typed on the create form', async ({ page }) => {
+    await page.goto('/trips/new');
+    await expectTripFormPage(page, /new trip/i);
+
+    await createTrip(page, { ...TEST_TRIP, guests: ['Marie', 'Camille'] });
+    await expectCalendarPage(page, TEST_TRIP.name);
+
+    await page.getByRole('link', { name: /guests/i }).first().click();
+    await page.waitForURL(/\/persons/);
+
+    // The organiser is on the list too. A trip whose own organiser is missing
+    // starts every headcount, room plan and meal total one person short, which
+    // is the whole reason that first row is required.
+    for (const guestName of [ORGANISER_NAME, 'Marie', 'Camille']) {
+      await expect(page.getByText(guestName).first()).toBeVisible();
+    }
   });
 
   // ============================================================================
