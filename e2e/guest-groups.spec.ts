@@ -171,9 +171,10 @@ test.describe('Guest groups', () => {
     await page.goto(`/trips/${tripId}/persons`);
     await waitForRoute(page);
 
-    // First family.
+    // First family. Groups arrive folded, so open the one wanted first.
     await page.getByRole('button', { name: /add from a group/i }).first().click();
     let dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: new RegExp(FAMILY.name) }).click();
     await dialog.getByText('Alice', { exact: true }).click();
     await dialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
     await expect(dialog).toBeHidden();
@@ -182,6 +183,7 @@ test.describe('Guest groups', () => {
     // …and then the neighbours, without losing the first.
     await page.getByRole('button', { name: /add from a group/i }).first().click();
     dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: /Neighbours/ }).click();
     await dialog.getByText('Dana', { exact: true }).click();
     await dialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
     await expect(dialog).toBeHidden();
@@ -202,11 +204,15 @@ test.describe('Guest groups', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 
-    // Both groups are on screen at once, so one pass covers both.
+    // Both groups are on screen at once — folded, so the dialog is a short list
+    // of names rather than everybody in the account.
     await expect(dialog.getByText(FAMILY.name, { exact: true })).toBeVisible();
     await expect(dialog.getByText('Neighbours', { exact: true })).toBeVisible();
+    await expect(dialog.getByRole('checkbox')).toHaveCount(0);
 
+    await dialog.getByRole('button', { name: new RegExp(FAMILY.name) }).click();
     await dialog.getByText('Tom + Léa', { exact: true }).click();
+    await dialog.getByRole('button', { name: /Neighbours/ }).click();
     await dialog.getByText('Dana', { exact: true }).click();
     await dialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
     await expect(dialog).toBeHidden();
@@ -215,6 +221,27 @@ test.describe('Guest groups', () => {
     await expect(page.getByText('Dana', { exact: true })).toBeVisible();
     // Only the two who were ticked.
     await expect(page.getByText('Alice', { exact: true })).toHaveCount(0);
+  });
+
+  test('searches the groups instead of scrolling them', async ({ page }) => {
+    const tripId = await seedThisYearsTrip(page);
+    await createGroup(page, FAMILY.name, FAMILY.members);
+    await createGroup(page, 'Neighbours', ['Dana']);
+
+    await page.goto(`/trips/${tripId}/persons`);
+    await waitForRoute(page);
+
+    await page.getByRole('button', { name: /add from a group/i }).first().click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+
+    // Searching a person's name finds the group holding them, and opens it —
+    // a match on a hidden member would be a worse answer than none.
+    await dialog.getByPlaceholder(/search groups or people/i).fill('dana');
+
+    await expect(dialog.getByText('Neighbours', { exact: true })).toBeVisible();
+    await expect(dialog.getByText(FAMILY.name, { exact: true })).toHaveCount(0);
+    await expect(dialog.getByLabel(/Dana/)).toBeVisible();
   });
 
   /*

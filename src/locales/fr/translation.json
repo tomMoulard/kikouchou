@@ -336,7 +336,12 @@
     "saveAsGroup": "Enregistrer comme groupe",
     "saveAsGroupDescription": "Gardez ces participants pour la prochaine fois. Dates de séjour, chambres et trajets restent sur ce voyage.",
     "importMore": "Ajouter un autre groupe",
-    "importClearNamed": "Retirer {{name}}"
+    "importClearNamed": "Retirer {{name}}",
+    "searchLabel": "Rechercher un groupe",
+    "searchPlaceholder": "Rechercher un groupe ou une personne",
+    "searchEmpty": "Aucun groupe ne correspond à « {{query}} ».",
+    "selectedCount": "{{count}} sélectionnées",
+    "selectedCount_one": "{{count}} sélectionnée"
   },
   "assignments": {
     "title": "Attribution des chambres",

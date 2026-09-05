@@ -1,10 +1,17 @@
 /**
  * @fileoverview Picks people from saved groups to bring into a trip.
  *
- * One flat list, every group on it, ticks across as many as the user likes: a
- * trip is regularly two families and a couple of friends, and a picker that
- * holds one group at a time turns that into three trips through the same
- * dialog — or, worse, silently replaces the first choice with the second.
+ * One list, every group on it, ticks across as many as the user likes: a trip
+ * is regularly two families and a couple of friends, and a picker that holds
+ * one group at a time turns that into three trips through the same dialog — or,
+ * worse, silently replaces the first choice with the second.
+ *
+ * Groups are **folded** and the list is searchable, because the flat version of
+ * that idea does not survive contact with a real account: three families is
+ * thirty checkboxes and a scroll before the user has decided anything, and the
+ * group they wanted is somewhere in the middle of it. Folded, the dialog is a
+ * short list of names; the search narrows it by group *or* member name, so
+ * "which group is Dana in?" is a question it can answer.
  *
  * Everybody is ticked when there is exactly one group, because "the whole
  * family is coming" is then the only reasonable default and un-ticking one
@@ -20,9 +27,17 @@
  * @module features/guest-groups/components/GuestGroupImportDialog
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ChangeEvent,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
-import { Users } from 'lucide-react';
+import { ChevronDown, Search, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -33,11 +48,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
+import { cn } from '@/lib/utils';
 import { getPersonHeadcount } from '@/types';
-import type { GuestGroup, GuestGroupMemberId } from '@/types';
+import type { GuestGroup, GuestGroupId, GuestGroupMemberId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -114,6 +131,10 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
   const [selectedIds, setSelectedIds] = useState<readonly GuestGroupMemberId[]>([]);
   const [isImporting, setIsImporting] = useState(false);
 
+  /** Groups the user has opened. Everything else stays folded. */
+  const [expandedIds, setExpandedIds] = useState<readonly GuestGroupId[]>([]);
+  const [query, setQuery] = useState('');
+
   /**
    * Whether this opening has been initialised.
    *
@@ -137,6 +158,10 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
 
     if (initialSelection && initialSelection.length > 0) {
       setSelectedIds(initialSelection.flatMap((entry) => entry.memberIds));
+      // Open the ones already queued. Folded is the default for a group the
+      // user has not decided about; a group they have is exactly the one they
+      // came back to look at, and "Family — 2 selected" does not say which two.
+      setExpandedIds(initialSelection.map((entry) => entry.group.id));
       return;
     }
 
@@ -152,6 +177,8 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
     }
     isInitialisedRef.current = false;
     setSelectedIds([]);
+    setExpandedIds([]);
+    setQuery('');
     setIsImporting(false);
   }, [open]);
 
@@ -167,6 +194,18 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
     );
   }, []);
 
+  const handleToggleExpanded = useCallback((groupId: GuestGroupId) => {
+    setExpandedIds((prev) =>
+      prev.includes(groupId)
+        ? prev.filter((id) => id !== groupId)
+        : [...prev, groupId],
+    );
+  }, []);
+
+  const handleQueryChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setQuery(event.target.value);
+  }, []);
+
   /** Ticks or clears one group without touching the others. */
   const handleToggleGroup = useCallback((group: GuestGroup) => {
     setSelectedIds((prev) => {
@@ -177,6 +216,49 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
       return isFullySelected ? without : [...without, ...ids];
     });
   }, []);
+
+  /**
+   * The groups the search leaves standing.
+   *
+   * Member names match as well as group names, because "which group is Dana in
+   * again?" is the question a search over folded groups exists to answer — and
+   * a group that matched on a member nobody can see would be a worse answer
+   * than none.
+   */
+  const visibleGroups = useMemo((): readonly GuestGroup[] => {
+    const needle = query.trim().toLowerCase();
+
+    if (needle.length === 0) {
+      return groups;
+    }
+
+    return groups.filter(
+      (group) =>
+        group.name.toLowerCase().includes(needle) ||
+        group.members.some((member) => member.name.toLowerCase().includes(needle)),
+    );
+  }, [groups, query]);
+
+  /**
+   * Whether a group shows its people.
+   *
+   * Folded is the default, which is the whole point: three families is thirty
+   * checkboxes and a scroll before the user has decided anything. Three things
+   * override it, all of them cases where the fold would hide what the user is
+   * looking at:
+   *
+   * - the user opened it;
+   * - a search is running, and this group survived it;
+   * - it is the only group there is, so folding it would leave an empty dialog
+   *   and a click to reach the one thing in it.
+   */
+  const isExpanded = useCallback(
+    (groupId: GuestGroupId): boolean =>
+      expandedIds.includes(groupId) ||
+      query.trim().length > 0 ||
+      groups.length === 1,
+    [expandedIds, groups.length, query],
+  );
 
   /**
    * The ticks, as one entry per group that has any.
@@ -262,16 +344,81 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
           />
         )}
 
-        {groups.map((group) => {
+        {groups.length > 1 && (
+          <div className="space-y-1">
+            <Label htmlFor="guest-group-search" className="sr-only">
+              {t('guestGroups.searchLabel', 'Search groups')}
+            </Label>
+            <div className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                id="guest-group-search"
+                type="search"
+                value={query}
+                onChange={handleQueryChange}
+                placeholder={t('guestGroups.searchPlaceholder', 'Search groups or people')}
+                disabled={isImporting}
+                className="pl-9"
+              />
+            </div>
+          </div>
+        )}
+
+        {groups.length > 0 && visibleGroups.length === 0 && (
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            {t('guestGroups.searchEmpty', 'No group matches “{{query}}”.', {
+              query: query.trim(),
+            })}
+          </p>
+        )}
+
+        {visibleGroups.map((group) => {
           const memberIds = group.members.map((member) => member.id),
             selectedCount = memberIds.filter((id) => selectedIds.includes(id)).length,
             isFullySelected =
-              memberIds.length > 0 && selectedCount === memberIds.length;
+              memberIds.length > 0 && selectedCount === memberIds.length,
+            expanded = isExpanded(group.id),
+            panelId = `import-group-panel-${group.id}`;
 
           return (
             <section key={group.id} className="space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <p className="font-medium">{group.name}</p>
+                {/*
+                  Two sibling controls, not one inside the other: a button
+                  nested in a button is invalid, and screen readers stop
+                  reporting the inner one.
+                */}
+                <button
+                  type="button"
+                  onClick={() => handleToggleExpanded(group.id)}
+                  aria-expanded={expanded}
+                  aria-controls={panelId}
+                  className={cn(
+                    'flex flex-1 items-center gap-2 rounded-md py-1 text-left',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  )}
+                >
+                  <ChevronDown
+                    className={cn(
+                      'size-4 shrink-0 transition-transform',
+                      expanded && 'rotate-180',
+                    )}
+                    aria-hidden="true"
+                  />
+                  <span className="font-medium">{group.name}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {selectedCount > 0
+                      ? t('guestGroups.selectedCount', '{{count}} selected', {
+                          count: selectedCount,
+                        })
+                      : t('guestGroups.memberCount', '{{count}} people', {
+                          count: group.members.length,
+                        })}
+                  </span>
+                </button>
                 <Button
                   type="button"
                   variant="ghost"
@@ -285,7 +432,7 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
                 </Button>
               </div>
 
-              {group.members.length === 0 ? (
+              {!expanded ? null : group.members.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {t(
                     'guestGroups.membersEmpty',
@@ -293,7 +440,7 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
                   )}
                 </p>
               ) : (
-                <ul className="space-y-1">
+                <ul id={panelId} className="space-y-1">
                   {group.members.map((member) => {
                     const inputId = `import-member-${member.id}`,
                       headcount = getPersonHeadcount(member);
