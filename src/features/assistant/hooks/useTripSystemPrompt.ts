@@ -16,6 +16,7 @@
  */
 
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { format, isValid, parseISO } from 'date-fns';
 
@@ -35,8 +36,14 @@ import { useTripContext } from '@/contexts/TripContext';
 
 import { toLocalISODateString } from '@/lib/db/utils';
 import { formatCoordinates, hasValidCoordinates } from '@/lib/geocoding';
+import { DEFAULT_LANGUAGE } from '@/lib/i18n';
 
-import { getPersonHeadcount, type Activity, type Person } from '@/types';
+import {
+  getPersonHeadcount,
+  type Activity,
+  type Language,
+  type Person,
+} from '@/types';
 
 import { generateActionPrompt } from '../action-schema';
 
@@ -61,9 +68,53 @@ export interface UseTripSystemPromptReturn {
 /** Longest free-text value copied into a single prompt line. */
 const MAX_PROMPT_FIELD_LENGTH = 200;
 
+/**
+ * How each supported UI language is named to the model.
+ *
+ * The app runs in French for most users (`DEFAULT_LANGUAGE`) while this prompt
+ * is written in English, and a model answers in the language it was instructed
+ * in unless it is told otherwise — "Salut, que penses-tu de …" came back in
+ * English. Naming the language outright is what a 1–4B model follows; "reply in
+ * the user's language" leaves it to infer one, which is exactly what it got
+ * wrong.
+ */
+const PROMPT_LANGUAGE_NAMES: Record<Language, string> = {
+  en: 'English',
+  fr: 'French',
+};
+
 // ============================================================================
 // Formatting Helpers
 // ============================================================================
+
+/**
+ * The opening lines shared by both prompts — with and without a selected trip.
+ *
+ * They set the register rather than the data. Everything after them is trip
+ * records and a catalogue of sixteen actions, and a small model reading that
+ * much machinery treats *every* message as a job to run: asked an off-topic
+ * question in French, it opened with "Okay, let's tackle this trip planning
+ * request!" and invented a trip, a guest and an id ("I'll assume it's
+ * trip123") that nobody had mentioned. Saying it is a chat partner too, and
+ * that it must not narrate actions, is what keeps a greeting a greeting.
+ *
+ * These say nothing `generateActionPrompt()` already says: the whole prompt is
+ * re-tokenised every turn, so a duplicated rule is paid for on every answer
+ * (AGENTS.md — "Say it once, and say it short").
+ *
+ * @param languageName - Language to answer in, named in English for the model
+ * @returns The opening prompt lines
+ */
+function buildOpeningLines(languageName: string): string[] {
+  return [
+    'You are a helpful trip planning assistant for the Kikouchou app — and an ordinary chat partner for anything else.',
+    `Reply in ${languageName}, unless the user writes in another language.`,
+    'Keep answers short — a sentence or two unless asked for more.',
+    // Where the block goes is `generateActionPrompt()`'s business; this line
+    // only forbids the running commentary that stood in for it.
+    'Do not narrate a plan or restate an action as prose.',
+  ];
+}
 
 /**
  * Makes a user-authored string safe to interpolate into the prompt.
@@ -220,8 +271,20 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
   const { transports } = useTransportContext();
   const { activities } = useActivityContext();
   const { today } = useToday();
+  const { i18n } = useTranslation();
 
   const todayIso = useMemo(() => toLocalISODateString(today), [today]);
+
+  // Read through react-i18next rather than `getCurrentLanguage()` so switching
+  // the app's language rebuilds the prompt instead of leaving the assistant
+  // answering in the previous one. The tag can carry a region ("en-US").
+  const languageName = useMemo((): string => {
+    const base = i18n.language?.split('-')[0] ?? '';
+    return (
+      PROMPT_LANGUAGE_NAMES[base as Language] ??
+      PROMPT_LANGUAGE_NAMES[DEFAULT_LANGUAGE]
+    );
+  }, [i18n.language]);
 
   const systemPrompt = useMemo((): string => {
     const todayLine = `Today's date is ${todayIso}. Resolve any relative date the user mentions ("today", "tonight", "tomorrow", "this weekend") against it.`;
@@ -240,7 +303,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
 
     if (!currentTrip) {
       return [
-        'You are a helpful trip planning assistant for the Kikouchou app.',
+        ...buildOpeningLines(languageName),
         todayLine,
         trips.length > 0
           ? 'No trip is currently selected, but other trips exist — see below.'
@@ -257,7 +320,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     // whole prompt is re-tokenised every turn and prefill memory grows with it,
     // so duplicated instructions are paid for on every single answer.
     const parts: string[] = [
-      'You are a helpful trip planning assistant for the Kikouchou app.',
+      ...buildOpeningLines(languageName),
       'The current trip is below — its guests, rooms, room assignments, transports and shared activity agenda. Answer from that data directly; never say you lack access to it.',
       todayLine,
       '',
@@ -373,6 +436,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     transports,
     activities,
     todayIso,
+    languageName,
   ]);
 
   return {

@@ -619,7 +619,12 @@ export function generateActionPrompt(): string[] {
     '',
     '## Modification Actions',
     'To modify trip data, emit a fenced block tagged EXACTLY ```action (not ```json) holding only valid JSON — no comments, no trailing commas, plain string keys.',
-    'One block per change. To answer a question, use the data above and emit no block at all.',
+    // "Questions, greetings and small talk" rather than the older "to answer a
+    // question": a greeting is neither a change nor a question about the trip,
+    // and with no line covering it the model reached for the catalogue below
+    // and invented a trip to plan. Where the answer comes from is already
+    // stated once, above the trip data.
+    'One block per change. Questions, greetings and small talk get no block at all — answer in words.',
     '',
     // Small models copy the shape they are shown, so the rule "prose first,
     // then the block" is demonstrated rather than only stated.
@@ -660,6 +665,11 @@ export function generateActionPrompt(): string[] {
 
   lines.push(
     '',
+    // The ids above are the only ones that exist. Left unsaid, the model fills
+    // a required field it was never given with a plausible-looking literal —
+    // "I'll assume it's trip123" — and `validateAction` then rejects the block,
+    // so the user sees a confident answer and no change.
+    'Never invent an id, a name or a date the user did not give — ask for it instead.',
     'After createTrip, later actions in the same reply apply to the new trip.',
     'Change who is signed up with joinActivity / leaveActivity, never through updateActivity.',
   );

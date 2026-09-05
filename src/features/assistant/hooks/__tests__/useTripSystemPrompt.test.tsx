@@ -80,6 +80,47 @@ async function renderWithTrip(tripId: TripId) {
 // ============================================================================
 
 describe('useTripSystemPrompt', () => {
+  /**
+   * The suite renders in English (`TEST_LANGUAGE` in `src/test/setup.ts`); the
+   * app itself falls back to French. What matters here is that the prompt names
+   * a language at all — left to infer one from instructions written in English,
+   * the model answered a French question in English.
+   */
+  it('names the language to answer in', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    expect(result.current.prompt.systemPrompt).toContain('Reply in English,');
+  });
+
+  it('casts the assistant as a chat partner and forbids narrating actions', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    expect(result.current.prompt.systemPrompt).toContain(
+      'an ordinary chat partner for anything else',
+    );
+    expect(result.current.prompt.systemPrompt).toContain(
+      'Do not narrate a plan or restate an action as prose',
+    );
+  });
+
+  // The two prompts are built from separate branches, and the first message of
+  // a fresh install is answered by this one.
+  it('opens the same way when no trip is selected', async () => {
+    const { result } = renderHook(() => useCombined(), { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(result.current.trip.isLoading).toBe(false);
+    });
+
+    expect(result.current.prompt.hasTripContext).toBe(false);
+    expect(result.current.prompt.systemPrompt).toContain('Reply in English,');
+    expect(result.current.prompt.systemPrompt).toContain(
+      'an ordinary chat partner for anything else',
+    );
+  });
+
   it('includes the current date so relative dates can be resolved', async () => {
     const { tripId } = await seedTrip();
     const result = await renderWithTrip(tripId);

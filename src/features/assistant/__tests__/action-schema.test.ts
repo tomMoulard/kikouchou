@@ -241,3 +241,30 @@ describe('action-schema prompt budget', () => {
     }
   });
 });
+
+// ============================================================================
+// When Not To Act
+// ============================================================================
+
+/**
+ * The catalogue is the bulk of the prompt, so it pulls the model towards using
+ * it. What stops that is the handful of lines saying when *not* to — without
+ * them, "Salut, que penses-tu des gens qui vibe code ?" was answered with
+ * "Okay, let's tackle this trip planning request!", a trip nobody asked for and
+ * an id the model made up on the spot.
+ */
+describe('action-schema restraint rules', () => {
+  it('says greetings and small talk get no block', () => {
+    const prompt = generateActionPrompt().join('\n');
+
+    expect(prompt).toContain(
+      'Questions, greetings and small talk get no block at all',
+    );
+  });
+
+  it('forbids inventing an id, a name or a date', () => {
+    const prompt = generateActionPrompt().join('\n');
+
+    expect(prompt).toContain('Never invent an id, a name or a date');
+  });
+});
