@@ -11,6 +11,7 @@ export {
   type PasskeyEnrolmentOutcome,
   type SignInOutcome,
 } from './AuthContext';
+export { getAccountDisplayName, getAccountGuestName } from './display-name';
 export { SignInDialog } from './components/SignInDialog';
 export { AccountSection } from './components/AccountSection';
 export { ProviderList } from './components/ProviderList';
