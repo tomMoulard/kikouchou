@@ -12,6 +12,7 @@ import { TIMELINE_LABEL_CELL_STYLE } from '@/components/shared/timeline-label-ce
 import type { TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
 import { getPersonHeadcount } from '@/types';
 import type { HexColor, RoomAssignment, Transport } from '@/types';
+import { guestInitial } from '@/features/persons/utils/guest-initial';
 import { cn } from '@/lib/utils';
 import type { CalendarTransport, CalendarTimelineRowModel, TimelineItemWithLane } from '../types';
 import { formatTime, getContrastTextColor } from '../utils/calendar-utils';
@@ -299,11 +300,25 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         style={{ ...TIMELINE_LABEL_CELL_STYLE, height: rowHeight }}
         title={personLabel}
       >
-        <span
-          className="size-2 rounded-full shrink-0"
-          style={{ backgroundColor: model.person.color }}
-          aria-hidden="true"
-        />
+        {/* Folded, the column is 40px — one letter's worth of space. The dot
+            and the name give way to the guest's initial in their own colour,
+            which carries both the identity and the colour in the room the
+            column has left. The row's `title` and `aria-label` keep the name. */}
+        {viewport.labelsCollapsed ? (
+          <span
+            className="text-sm font-semibold leading-none"
+            style={{ color: model.person.color }}
+            aria-hidden="true"
+          >
+            {guestInitial(model.person.name)}
+          </span>
+        ) : (
+          <span
+            className="size-2 rounded-full shrink-0"
+            style={{ backgroundColor: model.person.color }}
+            aria-hidden="true"
+          />
+        )}
         {/*
           The name stays mounted and truncates as the column folds, rather than
           being swapped out at a threshold — that is what makes the fold read as
@@ -313,9 +328,11 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
           room for the colour dot alone, so the name has already run out. The
           row `aria-label` below carries it for assistive tech throughout.
         */}
-        <span className="min-w-0 truncate text-sm font-medium" title={personLabel}>
-          {personLabel}
-        </span>
+        {!viewport.labelsCollapsed && (
+          <span className="min-w-0 truncate text-sm font-medium" title={personLabel}>
+            {personLabel}
+          </span>
+        )}
         {personHeadcount > 1 && !viewport.labelsCollapsed && (
           <span
             className="shrink-0 rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground tabular-nums"
