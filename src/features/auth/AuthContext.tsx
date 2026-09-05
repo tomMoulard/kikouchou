@@ -190,6 +190,29 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 AuthContext.displayName = 'AuthContext';
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * How close `last_sign_in_at` must sit to `created_at` for the sign-in to *be*
+ * the registration.
+ *
+ * GoTrue writes both when it issues a new account's first session, so on a real
+ * registration they are the same moment give or take the round trip that
+ * created the row. Thirty seconds is far wider than that gap and far narrower
+ * than any second visit, so the only way to land inside it wrongly is to sign
+ * out and back in within half a minute of registering.
+ */
+const REGISTRATION_WINDOW_MS = 30_000;
+
+/**
+ * Prefix of the localStorage key remembering that an account's registration was
+ * already reported. Follows the `kikouchou_` convention of the other stored
+ * keys.
+ */
+const REGISTRATION_STORAGE_PREFIX = 'kikouchou_registered_';
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -303,6 +326,77 @@ function toPersonPropertiesSetOnce(user: User): Record<string, string> {
   return properties;
 }
 
+/**
+ * Whether this sign-in is the one that created the account.
+ *
+ * Supabase fires the same `SIGNED_IN` for a registration and for the thousandth
+ * login, and there is no field that says which — so the two timestamps are
+ * asked instead. Both come from the server, which is why this survives a
+ * browser clock that is wrong, and why it is not a comparison against `now`.
+ *
+ * Every value is guarded: `last_sign_in_at` is optional on `User`, and a
+ * missing or unparseable pair means "no idea", which must read as *not* a
+ * registration. Guessing here would put a fake signup into the funnel on every
+ * sign-in that omitted a field.
+ */
+function isRegistrationSignIn(user: User): boolean {
+  if (typeof user.last_sign_in_at !== 'string' || typeof user.created_at !== 'string') {
+    return false;
+  }
+
+  const created = Date.parse(user.created_at);
+  const signedIn = Date.parse(user.last_sign_in_at);
+  if (Number.isNaN(created) || Number.isNaN(signedIn)) {
+    return false;
+  }
+
+  return signedIn - created < REGISTRATION_WINDOW_MS;
+}
+
+/**
+ * Whether this browser has already reported that account's registration.
+ *
+ * The timestamps alone are not enough, and the failure they leave is the
+ * expensive kind: `last_sign_in_at` only moves on a *new* sign-in, so for
+ * somebody who registers and then simply stays signed in it sits a beat after
+ * `created_at` for as long as the session lives. Every cold load restoring that
+ * session re-runs the check above and passes it, and the signup count becomes a
+ * count of app launches.
+ *
+ * Storage is the right place for the flag because it shares the fate of the
+ * thing it is about: the Supabase session lives in localStorage too, so
+ * clearing site data drops both, the next sign-in is a real one, and
+ * `last_sign_in_at` moves — the timestamps then say "not a registration" on
+ * their own. Read defensively: this suite's jsdom has no `localStorage` at all,
+ * and a private window can throw on access.
+ */
+function hasReportedRegistration(userId: string): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(`${REGISTRATION_STORAGE_PREFIX}${userId}`) !== null;
+  } catch {
+    // No storage: the event may repeat on a later launch, which is a better
+    // failure than throwing inside an auth state change.
+    return false;
+  }
+}
+
+function rememberReportedRegistration(userId: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(`${REGISTRATION_STORAGE_PREFIX}${userId}`, '1');
+  } catch {
+    // Storage full, or refused. Nothing to do: the capture above already
+    // happened and the worst case is a duplicate on the next launch.
+  }
+}
+
 // ============================================================================
 // Provider
 // ============================================================================
@@ -408,6 +502,20 @@ export function AuthProvider({
               toPersonPropertiesSetOnce(nextUser),
             );
             identifiedRef.current = nextUser.id;
+
+            // The signup event, and the only place it can be known. Ordered
+            // after `identify()` so the event lands on the person it belongs
+            // to rather than on the anonymous one being merged away.
+            if (isRegistrationSignIn(nextUser) && !hasReportedRegistration(nextUser.id)) {
+              rememberReportedRegistration(nextUser.id);
+              const provider: unknown = nextUser.app_metadata?.['provider'];
+              posthog?.capture(
+                'account_registered',
+                typeof provider === 'string' && provider !== ''
+                  ? { auth_provider: provider }
+                  : undefined,
+              );
+            }
           }
           return;
         }

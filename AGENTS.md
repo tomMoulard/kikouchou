@@ -539,6 +539,18 @@ every unit test.
   — and a failure carries a `reason`, because "the invite did not work" and "the
   invite was revoked" are the same dead end to the user and different problems to
   fix.
+- **`account_registered` is the signup event, and it needs two guards, not
+  one.** Supabase fires the same `SIGNED_IN` for a registration and for the
+  thousandth login, so `AuthContext` compares `last_sign_in_at` to `created_at`
+  — both server timestamps, so a wrong browser clock cannot break it, which is
+  why it is not a comparison against `now`. That alone is not enough:
+  `last_sign_in_at` only moves on a *new* sign-in, so for somebody who registers
+  and stays signed in it sits a beat after `created_at` for the life of the
+  session, and every cold load would report a fresh signup. A
+  `kikouchou_registered_<user id>` key in localStorage is the second half. It
+  shares the fate of the thing it describes — the Supabase session is in
+  localStorage too, so clearing site data drops both, the next sign-in is real,
+  and the timestamps then say "not a registration" on their own.
 - **An activity event goes through `captureUsage()`, never `posthog?.capture`.**
   PostHog's project setting for active users and stickiness takes a *single*
   event name, and no domain event fits — `activity_saved` misses everybody who
