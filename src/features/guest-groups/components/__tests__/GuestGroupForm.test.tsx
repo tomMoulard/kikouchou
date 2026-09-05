@@ -61,6 +61,63 @@ describe('GuestGroupForm', () => {
     ).toBeInTheDocument();
   });
 
+  it('gives a new row a colour picked at random, as the guest form does', async () => {
+    const user = userEvent.setup(),
+      colors = new Set<string>();
+
+    // Ten fresh forms, one row each: with the palette untouched, a random pick
+    // lands on several different swatches. The first implementation took the
+    // first unused one, so every group ever created started red — which is what
+    // this asserts is no longer true.
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const onSubmit = vi.fn().mockResolvedValue(undefined),
+        view = render(<GuestGroupForm onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+      await user.click(screen.getByRole('button', { name: 'guestGroups.addMember' }));
+      await user.type(
+        screen.getByPlaceholderText('guestGroups.memberNamePlaceholder'),
+        'Alice',
+      );
+      await user.type(screen.getByLabelText(/guestGroups.name/), 'Group');
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+      });
+      colors.add(onSubmit.mock.calls[0]?.[0].members[0].color);
+
+      view.unmount();
+    }
+
+    expect(colors.size).toBeGreaterThan(1);
+  });
+
+  it('does not repeat a colour already used by another row', async () => {
+    const user = userEvent.setup(),
+      onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    render(<GuestGroupForm onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+    await user.type(screen.getByLabelText(/guestGroups.name/), 'Family');
+    for (const name of ['Alice', 'Bob', 'Camille']) {
+      await user.click(screen.getByRole('button', { name: 'guestGroups.addMember' }));
+      const fields = screen.getAllByPlaceholderText('guestGroups.memberNamePlaceholder');
+      await user.type(fields[fields.length - 1]!, name);
+    }
+    await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    // Colour is how guests are told apart everywhere they are drawn, so a
+    // duplicate inside one group is the feature failing quietly.
+    const used = onSubmit.mock.calls[0]?.[0].members.map(
+      (member: { color: string }) => member.color,
+    );
+    expect(new Set(used).size).toBe(3);
+  });
+
   it('submits the name, colour and headcount of each member', async () => {
     const user = userEvent.setup(),
       onSubmit = vi.fn().mockResolvedValue(undefined);
