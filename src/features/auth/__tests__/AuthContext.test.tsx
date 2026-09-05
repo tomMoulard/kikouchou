@@ -32,12 +32,14 @@ import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 const mockIdentify = vi.fn();
 const mockReset = vi.fn();
 const mockRegister = vi.fn();
+const mockCapture = vi.fn();
 vi.mock('@/lib/posthog', () => ({
   // The real module exports `undefined` without env config, which is the case in
   // tests, so nothing here could observe a call without this.
   default: {
     identify: (...args: unknown[]) => mockIdentify(...args),
     register: (...args: unknown[]) => mockRegister(...args),
+    capture: (...args: unknown[]) => mockCapture(...args),
   },
   // Not `posthog.reset()`: the real helper also puts back the super properties
   // that `reset()` wipes. Mocking the named export is what keeps this test
@@ -145,6 +147,32 @@ const SESSION = {
 /** What `identify()` writes once and never overwrites, for the fixture above. */
 const SET_ONCE = { signed_up_at: '2026-01-02T03:04:05.000Z' };
 
+/**
+ * The sign-in that *is* the registration.
+ *
+ * GoTrue stamps `last_sign_in_at` at the moment it issues the first session, so
+ * on a brand-new account the two timestamps are the same event a beat apart.
+ * Both come from the server, which is why the check does not involve the
+ * browser's clock.
+ */
+const REGISTRATION_SESSION = {
+  access_token: 'token',
+  user: {
+    id: 'user-new',
+    email: 'new@example.test',
+    user_metadata: {},
+    app_metadata: { provider: 'google' },
+    created_at: '2026-01-02T03:04:05.000Z',
+    last_sign_in_at: '2026-01-02T03:04:06.500Z',
+  },
+};
+
+/** The same account, months later, signing in again. */
+const RETURNING_SESSION = {
+  ...REGISTRATION_SESSION,
+  user: { ...REGISTRATION_SESSION.user, last_sign_in_at: '2026-04-11T09:00:00.000Z' },
+};
+
 /** The same session with different provider metadata, for the identify tests. */
 function sessionWithMetadata(metadata: Record<string, unknown>): typeof SESSION {
   return { ...SESSION, user: { ...SESSION.user, user_metadata: metadata } };
@@ -161,7 +189,38 @@ async function waitForSubscription(client: FakeClient): Promise<void> {
   });
 }
 
+/**
+ * Installs an in-memory `localStorage`, the way `chat-storage.test` does.
+ *
+ * This environment has none at all — `typeof window.localStorage` is
+ * `'undefined'` under the suite's jsdom, not merely empty — so the registration
+ * guard has nothing to write to and every test would look like a first
+ * registration. A fresh store per test is also what keeps them independent: the
+ * guard is deliberately durable, so one test recording an account would
+ * otherwise silence the event for every test after it.
+ */
+function installMemoryLocalStorage(): void {
+  const store = new Map<string, string>();
+
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string): string | null => store.get(key) ?? null,
+      setItem: (key: string, value: string): void => {
+        store.set(key, value);
+      },
+      removeItem: (key: string): void => {
+        store.delete(key);
+      },
+      clear: (): void => {
+        store.clear();
+      },
+    },
+  });
+}
+
 beforeEach(() => {
+  installMemoryLocalStorage();
   mockedGetClient.mockReset();
   mockedIsConfigured.mockReset();
   mockedCapturedCode.mockReset();
@@ -171,6 +230,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  Reflect.deleteProperty(globalThis, 'localStorage');
   vi.unstubAllEnvs();
 });
 
@@ -423,6 +483,89 @@ describe('AuthProvider — state', () => {
     expect(mockIdentify.mock.calls.at(-1)?.[2]).toEqual({
       signed_up_at: '2026-01-02T03:04:05.000Z',
     });
+  });
+
+  it('captures account_registered when the sign-in is the registration', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    client.emit('SIGNED_IN', REGISTRATION_SESSION);
+
+    // Supabase fires the same `SIGNED_IN` for a registration and for the
+    // thousandth login, so nothing in the event says which this was. The two
+    // server timestamps do: on a new account they are the same moment.
+    await waitFor(() => {
+      expect(mockCapture).toHaveBeenCalledWith('account_registered', {
+        auth_provider: 'google',
+      });
+    });
+  });
+
+  it('does not capture account_registered for a returning sign-in', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    client.emit('SIGNED_IN', RETURNING_SESSION);
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalled();
+    });
+    expect(mockCapture).not.toHaveBeenCalledWith('account_registered', expect.anything());
+  });
+
+  it('captures account_registered once, however often the session is restored', async () => {
+    // The trap this guards. `last_sign_in_at` only moves on a *new* sign-in, so
+    // for somebody who registers and then stays signed in it sits a beat after
+    // `created_at` forever — and every cold load restoring that session would
+    // look like a fresh registration to the timestamps alone.
+    const first = makeFakeClient();
+    withBackend(first);
+    const { unmount } = renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(first);
+    first.emit('SIGNED_IN', REGISTRATION_SESSION);
+    await waitFor(() => {
+      expect(mockCapture).toHaveBeenCalledWith('account_registered', {
+        auth_provider: 'google',
+      });
+    });
+    unmount();
+
+    const second = makeFakeClient();
+    withBackend(second);
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(second);
+    second.emit('INITIAL_SESSION', REGISTRATION_SESSION);
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalledTimes(2);
+    });
+    const registrations = mockCapture.mock.calls.filter(
+      ([event]) => event === 'account_registered',
+    );
+    expect(registrations).toHaveLength(1);
+  });
+
+  it('does not capture account_registered without a last sign-in to compare', async () => {
+    const client = makeFakeClient();
+    withBackend(client);
+
+    renderHook(() => useAuth(), { wrapper });
+    await waitForSubscription(client);
+
+    // `last_sign_in_at` is optional on `User`. No comparison is possible, and
+    // guessing would put a fake registration into the funnel every time.
+    client.emit('SIGNED_IN', SESSION);
+
+    await waitFor(() => {
+      expect(mockIdentify).toHaveBeenCalled();
+    });
+    expect(mockCapture).not.toHaveBeenCalledWith('account_registered', expect.anything());
   });
 
   it('does not re-identify on a token refresh', async () => {
