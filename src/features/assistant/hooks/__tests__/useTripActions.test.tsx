@@ -769,6 +769,48 @@ describe('useTripActions — guest groups', () => {
     expect(stored?.members).toHaveLength(3);
   });
 
+  it('imports two groups from one reply', async () => {
+    const { tripId } = await seedTrip();
+    const family = await seedFamilyGroup();
+    const neighbours = await createGuestGroup({
+      name: 'Neighbours',
+      members: [{ name: 'Dana', color: hexColor('#8b5cf6') }],
+    });
+    const result = await renderWithTrip(tripId);
+
+    // "One block per change" is the contract the action prompt states, so two
+    // families is two blocks rather than a new plural action.
+    const outcome = await run(
+      result.current.actions.executeActions,
+      [
+        'Adding both.',
+        '```action',
+        JSON.stringify({
+          action: 'importGuestGroup',
+          data: { groupId: family.id },
+        }),
+        '```',
+        '```action',
+        JSON.stringify({
+          action: 'importGuestGroup',
+          data: { groupId: neighbours.id },
+        }),
+        '```',
+      ].join('\n'),
+    );
+
+    expect(outcome.count).toBe(2);
+
+    const guests = await db.persons.where('tripId').equals(tripId).toArray();
+    expect(guests.map((guest) => guest.name).sort()).toEqual([
+      'Alice',
+      'Bob',
+      'Camille',
+      'Dana',
+      'Tom + Léa',
+    ]);
+  });
+
   it('refuses to import with no trip selected', async () => {
     const group = await seedFamilyGroup();
     const { result } = renderHook(() => useCombined(), { wrapper: Wrapper });

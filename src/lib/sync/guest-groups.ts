@@ -153,6 +153,7 @@ const MAX_NAME_LENGTH = MAX_LENGTHS.guestGroupName;
 /** A member's own bounds, shared with `sanitizePersonData`. */
 const MAX_MEMBER_NAME_LENGTH = MAX_LENGTHS.personName;
 const MAX_MEMBER_NOTES_LENGTH = MAX_LENGTHS.personNotes;
+const MAX_MEMBER_PHONE_LENGTH = MAX_LENGTHS.personPhone;
 
 /** `#rrggbb`, the only colour shape the app stores. */
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
@@ -200,12 +201,18 @@ function toMember(value: unknown): GuestGroupMember | undefined {
       ? raw.notes.trim().slice(0, MAX_MEMBER_NOTES_LENGTH)
       : undefined;
 
+  const phone =
+    typeof raw.phone === 'string' && raw.phone.trim().length > 0
+      ? raw.phone.trim().slice(0, MAX_MEMBER_PHONE_LENGTH)
+      : undefined;
+
   return {
     id: raw.id as GuestGroupMemberId,
     name: raw.name.trim().slice(0, MAX_MEMBER_NAME_LENGTH),
     color: raw.color as HexColor,
     ...(headcount === undefined ? {} : { headcount }),
     ...(notes === undefined ? {} : { notes }),
+    ...(phone === undefined ? {} : { phone }),
   };
 }
 

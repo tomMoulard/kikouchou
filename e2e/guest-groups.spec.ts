@@ -163,6 +163,75 @@ test.describe('Guest groups', () => {
     await expect(page.getByText(FAMILY.name, { exact: true })).toBeVisible();
   });
 
+  test('adds a second family after the first, from the guest list', async ({ page }) => {
+    const tripId = await seedThisYearsTrip(page);
+    await createGroup(page, FAMILY.name, FAMILY.members);
+    await createGroup(page, 'Neighbours', ['Dana']);
+
+    await page.goto(`/trips/${tripId}/persons`);
+    await waitForRoute(page);
+
+    // First family.
+    await page.getByRole('button', { name: /add from a group/i }).first().click();
+    let dialog = page.getByRole('dialog');
+    await dialog.getByText('Alice', { exact: true }).click();
+    await dialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText('Alice', { exact: true })).toBeVisible();
+
+    // …and then the neighbours, without losing the first.
+    await page.getByRole('button', { name: /add from a group/i }).first().click();
+    dialog = page.getByRole('dialog');
+    await dialog.getByText('Dana', { exact: true }).click();
+    await dialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
+    await expect(dialog).toBeHidden();
+
+    await expect(page.getByText('Alice', { exact: true })).toBeVisible();
+    await expect(page.getByText('Dana', { exact: true })).toBeVisible();
+  });
+
+  test('takes people from two groups in a single pass', async ({ page }) => {
+    const tripId = await seedThisYearsTrip(page);
+    await createGroup(page, FAMILY.name, FAMILY.members);
+    await createGroup(page, 'Neighbours', ['Dana']);
+
+    await page.goto(`/trips/${tripId}/persons`);
+    await waitForRoute(page);
+
+    await page.getByRole('button', { name: /add from a group/i }).first().click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+
+    // Both groups are on screen at once, so one pass covers both.
+    await expect(dialog.getByText(FAMILY.name, { exact: true })).toBeVisible();
+    await expect(dialog.getByText('Neighbours', { exact: true })).toBeVisible();
+
+    await dialog.getByText('Tom + Léa', { exact: true }).click();
+    await dialog.getByText('Dana', { exact: true }).click();
+    await dialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
+    await expect(dialog).toBeHidden();
+
+    await expect(page.getByText('Tom + Léa', { exact: true })).toBeVisible();
+    await expect(page.getByText('Dana', { exact: true })).toBeVisible();
+    // Only the two who were ticked.
+    await expect(page.getByText('Alice', { exact: true })).toHaveCount(0);
+  });
+
+  /*
+    The create-trip queue — two groups parked before the trip exists, the second
+    added without losing the first — is covered by the picker's own tests
+    (`initialSelection` in GuestGroupImportDialog.test.tsx) rather than here.
+
+    Not for lack of trying: on `/trips/new` the first real click on a form
+    control never reaches React. The button takes focus, the handler does not
+    run, and a second click works. It reproduces with groups seeded straight
+    into IndexedDB (no dialog opened beforehand), at any viewport height, after
+    any wait, and with the trip form's own "Add guest" button — while a
+    synthetic `element.click()` works, so the handler is attached. That is a
+    page-level quirk to chase on its own, not something to paper over here with
+    a double click that would hide it from whoever does.
+  */
+
   test('offers the group import from an empty guest list', async ({ page }) => {
     const tripId = await seedThisYearsTrip(page);
     await createGroup(page, FAMILY.name, FAMILY.members);
