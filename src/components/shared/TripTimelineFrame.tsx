@@ -18,13 +18,18 @@ import type { Locale } from 'date-fns';
 import { format } from 'date-fns';
 
 import { cn } from '@/lib/utils';
+import {
+  TIMELINE_LABEL_CELL_STYLE,
+  TIMELINE_LABEL_EXPANDED_VAR,
+  TIMELINE_LABEL_WIDTH_VAR,
+} from './timeline-label-cell';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { TIMELINE_LANE_HEIGHT_PX } from '@/lib/utils/timeline-bar-geometry';
 import {
   computeDayGridTemplateColumns,
   computeTimelineScrollLeftToCenterDay,
   computeTimelineViewportLayout,
-  resolveLabelCollapse,
+  resolveLabelColumnWidth,
 } from '@/lib/utils/timeline-viewport-layout';
 import type { ISODateString } from '@/types';
 
@@ -98,19 +103,10 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
 }: TripTimelineFrameProps): ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
-  // Once the day axis is scrolled, the sticky column sheds names so the days
-  // reclaim the width. Expand only when scroll is fully back at the start —
-  // collapsing at a small threshold and expanding at zero avoids oscillating
-  // when the width change itself nudges `scrollLeft`.
+  // True once the column has folded all the way down to the colours. Only the
+  // padding and the header's own label read it — the width itself is not React
+  // state, see the scroll effect below.
   const [labelsCollapsed, setLabelsCollapsed] = useState(false);
-  // Mirrors `labelsCollapsed` for the scroll handler, which runs between
-  // renders and must not act on a stale value. `syncCollapsedFromScroll` owns
-  // the writes; assigning it on every render would undo one mid-transition.
-  const labelsCollapsedRef = useRef(false);
-
-  const effectiveLabelColumnWidth = labelsCollapsed
-    ? TIMELINE_COLLAPSED_LABEL_COLUMN_WIDTH_PX
-    : labelColumnWidth;
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -132,52 +128,54 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
     };
   }, []);
 
+  // The fold is driven straight into a CSS variable rather than through React.
+  //
+  // It has to update on every scroll frame, and re-rendering a timeline of rows
+  // that often would drop frames on exactly the gesture it is meant to smooth.
+  // Writing one custom property lets the browser resize every sticky cell in
+  // the same style recalculation, with no reconciliation at all. The boolean
+  // below is separate because it flips at most twice across a whole fold.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) {
       return;
     }
 
-    const syncCollapsedFromScroll = (): void => {
-      const decision = resolveLabelCollapse({
+    el.style.setProperty(TIMELINE_LABEL_EXPANDED_VAR, `${labelColumnWidth}px`);
+
+    const syncFoldFromScroll = (): void => {
+      const width = resolveLabelColumnWidth({
         scrollLeft: el.scrollLeft,
-        isCollapsed: labelsCollapsedRef.current,
-        expandedLabelWidth: labelColumnWidth,
-        collapsedLabelWidth: TIMELINE_COLLAPSED_LABEL_COLUMN_WIDTH_PX,
+        expandedWidth: labelColumnWidth,
+        collapsedWidth: TIMELINE_COLLAPSED_LABEL_COLUMN_WIDTH_PX,
       });
 
-      if (!decision.changed) {
-        return;
-      }
-
-      // Written before the state update so the scroll event this triggers sees
-      // the new state and stops, rather than reading a stale `false` and
-      // deciding all over again.
-      labelsCollapsedRef.current = decision.collapsed;
-
-      if (decision.nextScrollLeft !== null) {
-        el.scrollLeft = decision.nextScrollLeft;
-      }
-      setLabelsCollapsed(decision.collapsed);
+      el.style.setProperty(TIMELINE_LABEL_WIDTH_VAR, `${width}px`);
+      setLabelsCollapsed(width <= TIMELINE_COLLAPSED_LABEL_COLUMN_WIDTH_PX);
     };
 
-    el.addEventListener('scroll', syncCollapsedFromScroll, { passive: true });
-    syncCollapsedFromScroll();
+    el.addEventListener('scroll', syncFoldFromScroll, { passive: true });
+    syncFoldFromScroll();
     return () => {
-      el.removeEventListener('scroll', syncCollapsedFromScroll);
+      el.removeEventListener('scroll', syncFoldFromScroll);
     };
   }, [labelColumnWidth]);
 
   const dayCount = days.length;
 
+  // Measured against the column's *open* width, never the folded one. The day
+  // grid must not resize while the column folds, and the column's slot in the
+  // layout stays this wide throughout — it is only the visible part that
+  // narrows, so the days keep their positions and the total scrollable width
+  // never changes underfoot.
   const { dayWidthPx, canvasWidth, useFractionalColumns } = useMemo(
     () =>
       computeTimelineViewportLayout({
         viewportWidth,
-        labelColumnWidth: effectiveLabelColumnWidth,
+        labelColumnWidth,
         dayCount,
       }),
-    [viewportWidth, effectiveLabelColumnWidth, dayCount],
+    [viewportWidth, labelColumnWidth, dayCount],
   );
 
   const dayGridTemplateColumns = useMemo(
@@ -202,7 +200,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
 
   const viewport = useMemo(
     (): TripTimelineViewportContext => ({
-      labelColumnWidth: effectiveLabelColumnWidth,
+      labelColumnWidth,
       labelsCollapsed,
       canvasWidth,
       dayCount,
@@ -214,7 +212,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
       todayColumnIndex,
     }),
     [
-      effectiveLabelColumnWidth,
+      labelColumnWidth,
       labelsCollapsed,
       canvasWidth,
       dayCount,
@@ -256,13 +254,13 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
     el.scrollLeft = computeTimelineScrollLeftToCenterDay({
       scrollContainerClientWidth: el.clientWidth,
       scrollContainerScrollWidth: el.scrollWidth,
-      labelColumnWidth: effectiveLabelColumnWidth,
+      labelColumnWidth,
       columnIndex: todayColumnIndex,
       cellWidthPx,
     });
   }, [
     todayColumnIndex,
-    effectiveLabelColumnWidth,
+    labelColumnWidth,
     cellWidthPx,
     dayCount,
     viewportWidth,
@@ -291,17 +289,14 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
         className={cn('w-full min-w-0', 'overflow-x-auto')}
         data-labels-collapsed={labelsCollapsed ? 'true' : 'false'}
       >
-        <div style={{ width: effectiveLabelColumnWidth + canvasWidth }}>
+        <div style={{ width: labelColumnWidth + canvasWidth }}>
           <div className="sticky top-0 z-20 flex border-b border-muted bg-background">
             <div
               className={cn(
                 'sticky left-0 z-30 border-r border-muted bg-background py-2',
                 labelsCollapsed ? 'px-1' : 'px-3',
               )}
-              style={{
-                width: effectiveLabelColumnWidth,
-                minWidth: effectiveLabelColumnWidth,
-              }}
+              style={TIMELINE_LABEL_CELL_STYLE}
             >
               {/*
                 The title is decorative once collapsed — each row still names

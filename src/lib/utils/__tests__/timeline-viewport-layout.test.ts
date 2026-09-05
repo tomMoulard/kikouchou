@@ -8,8 +8,8 @@ import { describe, it, expect } from 'vitest';
 
 import {
   timelineNeedsFullPageWidth,
-  resolveLabelCollapse,
-  TIMELINE_LABEL_COLLAPSE_MARGIN_PX,
+  resolveLabelColumnWidth,
+  labelColumnFoldDistance,
   computeTimelineViewportLayout,
   computeRoomTimelineViewportLayout,
   computeDayGridTemplateColumns,
@@ -196,124 +196,6 @@ describe('computeTimelineScrollLeftToCenterDay', () => {
 });
 
 // ============================================================================
-// Label collapse
-// ============================================================================
-
-describe('resolveLabelCollapse', () => {
-  const WIDTHS = { expandedLabelWidth: 200, collapsedLabelWidth: 40 } as const;
-  const DELTA = WIDTHS.expandedLabelWidth - WIDTHS.collapsedLabelWidth;
-
-  it('does not collapse before there is enough scroll to pay for the width it removes', () => {
-    // The old rule collapsed past 8px while owing 160px of compensation, so the
-    // grid jumped the whole delta with nothing to take it from.
-    const decision = resolveLabelCollapse({
-      scrollLeft: 9,
-      isCollapsed: false,
-      ...WIDTHS,
-    });
-
-    expect(decision.collapsed).toBe(false);
-    expect(decision.changed).toBe(false);
-  });
-
-  it('collapses once past the delta and compensates it exactly', () => {
-    const scrollLeft = DELTA + TIMELINE_LABEL_COLLAPSE_MARGIN_PX + 1;
-    const decision = resolveLabelCollapse({ scrollLeft, isCollapsed: false, ...WIDTHS });
-
-    expect(decision.collapsed).toBe(true);
-    // Exactly the width removed, so the day under the pointer does not move.
-    expect(decision.nextScrollLeft).toBe(scrollLeft - DELTA);
-  });
-
-  // The jitter itself: collapsing must not leave the scroll position somewhere
-  // that immediately expands again, and vice versa.
-  it('settles after collapsing instead of bouncing back', () => {
-    const first = resolveLabelCollapse({
-      scrollLeft: DELTA + TIMELINE_LABEL_COLLAPSE_MARGIN_PX + 1,
-      isCollapsed: false,
-      ...WIDTHS,
-    });
-    expect(first.collapsed).toBe(true);
-
-    // Feed the compensated offset straight back in, as the scroll event does.
-    const second = resolveLabelCollapse({
-      scrollLeft: first.nextScrollLeft!,
-      isCollapsed: true,
-      ...WIDTHS,
-    });
-
-    expect(second.collapsed).toBe(true);
-    expect(second.changed).toBe(false);
-  });
-
-  it('leaves a margin of scroll between collapsing and expanding again', () => {
-    const collapse = resolveLabelCollapse({
-      scrollLeft: DELTA + TIMELINE_LABEL_COLLAPSE_MARGIN_PX + 1,
-      isCollapsed: false,
-      ...WIDTHS,
-    });
-
-    // Still collapsed part-way back — the two thresholds do not touch.
-    expect(
-      resolveLabelCollapse({
-        scrollLeft: collapse.nextScrollLeft! - 1,
-        isCollapsed: true,
-        ...WIDTHS,
-      }).collapsed,
-    ).toBe(true);
-  });
-
-  it('expands only once scrolled fully back to the start', () => {
-    expect(
-      resolveLabelCollapse({ scrollLeft: 1, isCollapsed: true, ...WIDTHS }).collapsed,
-    ).toBe(true);
-
-    const expanded = resolveLabelCollapse({ scrollLeft: 0, isCollapsed: true, ...WIDTHS });
-    expect(expanded.collapsed).toBe(false);
-    expect(expanded.nextScrollLeft).toBeNull();
-  });
-
-  it('settles after expanding instead of bouncing back', () => {
-    const expanded = resolveLabelCollapse({ scrollLeft: 0, isCollapsed: true, ...WIDTHS });
-    expect(expanded.collapsed).toBe(false);
-
-    expect(
-      resolveLabelCollapse({ scrollLeft: 0, isCollapsed: false, ...WIDTHS }).changed,
-    ).toBe(false);
-  });
-
-  // The rooms timeline uses a 140px column, so the delta differs from the
-  // calendar's. The thresholds have to follow the widths, not a constant.
-  it('scales both thresholds to the column widths it is given', () => {
-    const rooms = { expandedLabelWidth: 140, collapsedLabelWidth: 40 } as const;
-    const roomsDelta = 100;
-
-    expect(
-      resolveLabelCollapse({ scrollLeft: 130, isCollapsed: false, ...rooms }).collapsed,
-    ).toBe(false);
-
-    const collapsed = resolveLabelCollapse({
-      scrollLeft: roomsDelta + TIMELINE_LABEL_COLLAPSE_MARGIN_PX + 1,
-      isCollapsed: false,
-      ...rooms,
-    });
-    expect(collapsed.collapsed).toBe(true);
-    expect(collapsed.nextScrollLeft).toBe(41);
-  });
-
-  it('never collapses a column that would not get any narrower', () => {
-    const decision = resolveLabelCollapse({
-      scrollLeft: 5000,
-      isCollapsed: false,
-      expandedLabelWidth: 40,
-      collapsedLabelWidth: 40,
-    });
-
-    expect(decision.collapsed).toBe(false);
-  });
-});
-
-// ============================================================================
 // Page width
 // ============================================================================
 
@@ -360,5 +242,84 @@ describe('timelineNeedsFullPageWidth', () => {
     expect(
       timelineNeedsFullPageWidth({ dayCount: 0, labelColumnWidth: LABEL }),
     ).toBe(false);
+  });
+});
+
+// ============================================================================
+// Label folding
+// ============================================================================
+
+describe('resolveLabelColumnWidth', () => {
+  const WIDTHS = { expandedWidth: 200, collapsedWidth: 40 } as const;
+
+  it('leaves the column open at the start', () => {
+    expect(resolveLabelColumnWidth({ scrollLeft: 0, ...WIDTHS })).toBe(200);
+  });
+
+  it('sheds exactly the width that has been scrolled', () => {
+    // One pixel of scroll folds one pixel of column, so the first visible day
+    // holds still against the column's edge instead of sliding under it.
+    expect(resolveLabelColumnWidth({ scrollLeft: 1, ...WIDTHS })).toBe(199);
+    expect(resolveLabelColumnWidth({ scrollLeft: 60, ...WIDTHS })).toBe(140);
+    expect(resolveLabelColumnWidth({ scrollLeft: 120, ...WIDTHS })).toBe(80);
+  });
+
+  it('stops at the floor, where only the colours remain', () => {
+    expect(resolveLabelColumnWidth({ scrollLeft: 160, ...WIDTHS })).toBe(40);
+    expect(resolveLabelColumnWidth({ scrollLeft: 400, ...WIDTHS })).toBe(40);
+    expect(resolveLabelColumnWidth({ scrollLeft: 100000, ...WIDTHS })).toBe(40);
+  });
+
+  it('keeps the column open when rubber-banding past the start', () => {
+    // macOS reports a negative offset routinely; the column must not grow.
+    expect(resolveLabelColumnWidth({ scrollLeft: -50, ...WIDTHS })).toBe(200);
+  });
+
+  // The old two-state version had to jump 160px, rewrite `scrollLeft` to
+  // compensate, and keep its thresholds apart so neither flip triggered the
+  // other. A plain function of the offset cannot oscillate.
+  it('gives one width per offset, with no step between neighbours', () => {
+    let previous = resolveLabelColumnWidth({ scrollLeft: 0, ...WIDTHS });
+
+    for (let scrollLeft = 1; scrollLeft <= 240; scrollLeft++) {
+      const width = resolveLabelColumnWidth({ scrollLeft, ...WIDTHS });
+      // Never widens on the way in, never moves more than the scroll did.
+      expect(width).toBeLessThanOrEqual(previous);
+      expect(previous - width).toBeLessThanOrEqual(1);
+      previous = width;
+    }
+
+    expect(previous).toBe(40);
+  });
+
+  it('is stable: the same offset always gives the same width', () => {
+    expect(resolveLabelColumnWidth({ scrollLeft: 73, ...WIDTHS })).toBe(
+      resolveLabelColumnWidth({ scrollLeft: 73, ...WIDTHS }),
+    );
+  });
+
+  it('follows the widths it is given, not a fixed pair', () => {
+    // The rooms column is 140px where the calendar's is 200px.
+    const rooms = { expandedWidth: 140, collapsedWidth: 40 } as const;
+    expect(resolveLabelColumnWidth({ scrollLeft: 60, ...rooms })).toBe(80);
+    expect(resolveLabelColumnWidth({ scrollLeft: 100, ...rooms })).toBe(40);
+  });
+
+  it('never folds a column that would not get narrower', () => {
+    expect(
+      resolveLabelColumnWidth({ scrollLeft: 5000, expandedWidth: 40, collapsedWidth: 40 }),
+    ).toBe(40);
+  });
+});
+
+describe('labelColumnFoldDistance', () => {
+  it('reports the scroll that folds the column completely', () => {
+    expect(labelColumnFoldDistance(200, 40)).toBe(160);
+    expect(labelColumnFoldDistance(140, 40)).toBe(100);
+  });
+
+  it('reports no distance for a column that cannot fold', () => {
+    expect(labelColumnFoldDistance(40, 40)).toBe(0);
+    expect(labelColumnFoldDistance(20, 40)).toBe(0);
   });
 });
