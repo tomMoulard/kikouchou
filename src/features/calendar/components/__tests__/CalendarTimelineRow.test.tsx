@@ -90,6 +90,56 @@ function makeModel(overrides: Partial<CalendarTimelineRowModel> = {}): CalendarT
 // ============================================================================
 
 describe('CalendarTimelineRow', () => {
+  // Folded, the column is 40px — one letter's worth of space. A colour dot plus
+  // a name truncated to "M.." spent that space saying almost nothing; the
+  // initial in the guest's own colour carries both identity and colour.
+  describe('once the label column has folded', () => {
+    const collapsed = { ...defaultViewport, labelsCollapsed: true };
+
+    it('shows the guest initial in their own colour', () => {
+      render(
+        <CalendarTimelineRow
+          model={makeModel()}
+          viewport={collapsed}
+          tripDays={defaultTripDays}
+          dateLocale={enUS}
+          onAssignmentClick={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('A')).toBeInTheDocument();
+    });
+
+    it('drops the colour dot, which the initial now carries', () => {
+      const { container } = render(
+        <CalendarTimelineRow
+          model={makeModel()}
+          viewport={collapsed}
+          tripDays={defaultTripDays}
+          dateLocale={enUS}
+          onAssignmentClick={vi.fn()}
+        />,
+      );
+
+      expect(container.querySelector('.rounded-full.size-2')).toBeNull();
+    });
+
+    it('keeps the full name reachable rather than only the initial', () => {
+      render(
+        <CalendarTimelineRow
+          model={makeModel()}
+          viewport={collapsed}
+          tripDays={defaultTripDays}
+          dateLocale={enUS}
+          onAssignmentClick={vi.fn()}
+        />,
+      );
+
+      // The initial is decorative; the name still has to reach a screen reader.
+      expect(screen.getByTitle('Alice')).toBeInTheDocument();
+    });
+  });
+
   it('renders person name in the label column', () => {
     const model = makeModel();
     render(
