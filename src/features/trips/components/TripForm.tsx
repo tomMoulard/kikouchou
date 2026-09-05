@@ -18,7 +18,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useFormSubmission } from '@/hooks';
 import { format, isBefore, isValid, parseISO, startOfDay } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Plus, X } from 'lucide-react';
+import { nanoid } from 'nanoid';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,6 +67,12 @@ const DESCRIPTION_MAX_LENGTH = MAX_LENGTHS.tripDescription;
  */
 const NAME_MAX_LENGTH = MAX_LENGTHS.tripName;
 
+/**
+ * Maximum characters for a guest name — the person repository's own limit, for
+ * the same reason the two fields above take theirs from there.
+ */
+const GUEST_NAME_MAX_LENGTH = MAX_LENGTHS.personName;
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -84,6 +91,41 @@ interface TripFormProps {
   readonly onDirtyChange?: (isDirty: boolean) => void;
   /** Callback when a previous trip is selected for import (passes source trip ID). */
   readonly onImportSourceChange?: (sourceTripId: TripId | null) => void;
+  /**
+   * Name to pre-fill the first guest — "you" — with, in create mode.
+   *
+   * The page reads it off the signed-in account; signed out there is none, and
+   * the row is the user's to fill in. Passed in rather than read from
+   * `useAuth()` here so this form stays renderable without an `AuthProvider`.
+   */
+  readonly currentUserName?: string;
+  /**
+   * Callback when the create-mode guest list changes, with the trimmed,
+   * non-empty names in list order.
+   *
+   * Guests are not part of {@link TripFormData}: the trip repository spreads
+   * that object straight into the Dexie record, so a field that is not a trip
+   * field would be persisted onto the trip and projected into the CRDT
+   * document. Like `onImportSourceChange`, this reports the extra create-mode
+   * data out so the page can act on it once the trip exists.
+   */
+  readonly onGuestsChange?: (guestNames: readonly string[]) => void;
+}
+
+/**
+ * One row of the create-mode guest list.
+ */
+interface GuestRow {
+  /**
+   * React key, and nothing more.
+   *
+   * Rows are removed from the middle of the list, and keying on the array index
+   * would hand the removed row's DOM node — with the focus and the text
+   * selection inside it — to whichever guest shuffled up into its place.
+   */
+  readonly id: string;
+  /** The raw field value; trimmed only on the way out. */
+  readonly name: string;
 }
 
 /**
@@ -145,6 +187,16 @@ function isSameCoordinates(
   return a.lat === b.lat && a.lon === b.lon;
 }
 
+/**
+ * The guest list a fresh create form starts with: one row, for the user.
+ *
+ * Its name is left blank because the component derives it from the account —
+ * see `resolvedGuests`.
+ */
+function buildInitialGuests(): readonly GuestRow[] {
+  return [{ id: nanoid(), name: '' }];
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -185,9 +237,19 @@ const TripForm = memo(function TripForm({
   onCancel,
   onDirtyChange,
   onImportSourceChange,
+  currentUserName,
+  onGuestsChange,
 }: TripFormProps) {
   const { t, i18n } = useTranslation();
   const locale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+
+  /**
+   * Guests belong to trip *creation* only. An existing trip's guests are owned
+   * by the Guests page, and a second editor for them here would have to
+   * reconcile additions, renames and deletions against records that already
+   * carry colours, stay dates and room assignments.
+   */
+  const isCreateMode = trip === undefined;
 
   // ============================================================================
   // Import State
@@ -226,6 +288,39 @@ const TripForm = memo(function TripForm({
   const [coordinates, setCoordinates] = useState<Coordinates | undefined>(
     initialValues.coordinates,
   );
+  const [guests, setGuests] = useState<readonly GuestRow[]>(buildInitialGuests);
+  const [hasEditedFirstGuest, setHasEditedFirstGuest] = useState(false);
+
+  /*
+    The first row follows the account until the user takes it over.
+
+    `AuthProvider` never gates rendering on the session — it loads supabase-js
+    dynamically and resolves a tick later — so this form reliably mounts with
+    `currentUserName` still undefined and is handed the real one on a later
+    render. Seeding the state at mount would therefore have shown a blank field
+    to every signed-in user.
+
+    Deriving it instead of storing it keeps that a one-liner and removes the
+    guesswork: `hasEditedFirstGuest` records the takeover as the fact it is,
+    rather than inferring it from whether the field still looks like the
+    prefill. Signing out mid-form clears an unedited row, which is right — that
+    name is no longer anybody the app knows about.
+  */
+  const resolvedGuests = useMemo((): readonly GuestRow[] => {
+    if (hasEditedFirstGuest) {return guests;}
+    const [first, ...rest] = guests;
+    if (!first) {return guests;}
+    return [{ ...first, name: currentUserName ?? '' }, ...rest];
+  }, [guests, hasEditedFirstGuest, currentUserName]);
+
+  // A list still holding exactly the prefill is pristine: the account name was
+  // put there by the form, not typed by the user, and it must not on its own
+  // arm the unsaved-changes guard on a form nobody has touched.
+  const isGuestListDirty = useMemo(() => {
+    if (!isCreateMode) {return false;}
+    if (resolvedGuests.length !== 1) {return true;}
+    return (resolvedGuests[0]?.name ?? '') !== (currentUserName ?? '');
+  }, [isCreateMode, resolvedGuests, currentUserName]);
 
   // Compute dirty state: any field differs from initial values. Coordinates
   // count: nudging the map pin is the only edit some trips need, and without
@@ -237,9 +332,31 @@ const TripForm = memo(function TripForm({
       startDate !== initialValues.startDate ||
       endDate !== initialValues.endDate ||
       description !== initialValues.description ||
-      !isSameCoordinates(coordinates, initialValues.coordinates),
-    [name, location, startDate, endDate, description, coordinates, initialValues],
+      !isSameCoordinates(coordinates, initialValues.coordinates) ||
+      isGuestListDirty,
+    [
+      name,
+      location,
+      startDate,
+      endDate,
+      description,
+      coordinates,
+      initialValues,
+      isGuestListDirty,
+    ],
   );
+
+  // What the page will turn into Person records: trimmed, blanks dropped. A row
+  // added with "+" and left empty is an abandoned click, not a nameless guest.
+  const guestNames = useMemo(
+    () => resolvedGuests.map((guest) => guest.name.trim()).filter((guestName) => guestName !== ''),
+    [resolvedGuests],
+  );
+
+  useEffect(() => {
+    if (!isCreateMode) {return;}
+    onGuestsChange?.(guestNames);
+  }, [isCreateMode, guestNames, onGuestsChange]);
 
   // Notify parent of dirty state changes
   useEffect(() => {
@@ -261,12 +378,36 @@ const TripForm = memo(function TripForm({
     setDescription(trip?.description ?? '');
     setCoordinates(trip?.coordinates);
     setImportSource(null);
+    setGuests(buildInitialGuests());
+    setHasEditedFirstGuest(false);
     setErrors({});
   }
 
   // Date picker popover state
   const [isStartDateOpen, setIsStartDateOpen] = useState(false);
   const [isEndDateOpen, setIsEndDateOpen] = useState(false);
+
+  // ============================================================================
+  // Guest List Focus
+  // ============================================================================
+
+  /** Live inputs, by row id, so a row added or removed can be followed. */
+  const guestInputsRef = useRef(new Map<string, HTMLInputElement>());
+  /** The row to focus once the render that adds or removes one has committed. */
+  const pendingGuestFocusRef = useRef<string | null>(null);
+
+  /*
+    Runs after every render, gated on the ref — the row to focus does not exist
+    yet at the moment "+" is clicked, and after a removal the focused element is
+    gone, which drops focus on `<body>` and loses a keyboard user's place in the
+    form entirely.
+  */
+  useEffect(() => {
+    const pendingId = pendingGuestFocusRef.current;
+    if (pendingId === null) {return;}
+    pendingGuestFocusRef.current = null;
+    guestInputsRef.current.get(pendingId)?.focus();
+  });
 
   // Parse dates for Calendar component
   const startDateValue = useMemo(() => parseDate(startDate), [startDate]);
@@ -340,6 +481,9 @@ const TripForm = memo(function TripForm({
     if (endDateError) {
       newErrors.endDate = endDateError;
     }
+
+    // Nothing to validate in the guest list. Every row is optional, the first
+    // one included — see the fieldset's own note.
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -429,6 +573,51 @@ const TripForm = memo(function TripForm({
     setImportSource(null);
     onImportSourceChange?.(null);
   }, [onImportSourceChange]);
+
+  /**
+   * Handles a guest name change, by row id.
+   */
+  const firstGuestId = resolvedGuests[0]?.id;
+  const handleGuestNameChange = useCallback(
+    (id: string, value: string) => {
+      setGuests((prev) =>
+        prev.map((guest) => (guest.id === id ? { ...guest, name: value } : guest)),
+      );
+      if (id === firstGuestId) {
+        // From here the row is the user's, and the account no longer writes to
+        // it — not when it arrives late, and not when it goes away. Clearing
+        // the row therefore sticks, which is how somebody says "not me".
+        setHasEditedFirstGuest(true);
+      }
+    },
+    [firstGuestId],
+  );
+
+  /**
+   * Appends an empty guest row and puts the cursor in it.
+   */
+  const handleAddGuest = useCallback(() => {
+    const id = nanoid();
+    pendingGuestFocusRef.current = id;
+    setGuests((prev) => [...prev, { id, name: '' }]);
+  }, []);
+
+  /**
+   * Removes a guest row, moving focus to the row above it.
+   *
+   * The first row is the user and has no remove control; the index guard is the
+   * invariant rather than a defensive flourish, since a stale id could
+   * otherwise reach here from a click landing mid-render.
+   */
+  const handleRemoveGuest = useCallback(
+    (id: string) => {
+      const index = resolvedGuests.findIndex((guest) => guest.id === id);
+      if (index <= 0) {return;}
+      pendingGuestFocusRef.current = resolvedGuests[index - 1]?.id ?? null;
+      setGuests((prev) => prev.filter((guest) => guest.id !== id));
+    },
+    [resolvedGuests],
+  );
 
   /**
    * Handles description textarea change.
@@ -735,6 +924,89 @@ const TripForm = memo(function TripForm({
           )}
         </div>
       </div>
+
+      {/* Guest List — create mode only (see `isCreateMode`) */}
+      {isCreateMode && (
+        // `disabled` on the fieldset reaches every control inside it, inputs
+        // and buttons alike, so submitting freezes the whole list at once.
+        <fieldset className="space-y-2" disabled={isSubmitting}>
+          <legend className="mb-2 flex items-center text-sm leading-none font-medium">
+            {t('trips.guests', 'Guests')}
+            <span className="text-muted-foreground ml-1 text-xs font-normal">
+              ({t('common.optional', 'optional')})
+            </span>
+          </legend>
+
+          {/*
+            Every row is optional, the first one included.
+
+            It is pre-filled with the account because the organiser is usually
+            going, but they are not always: somebody who hosts — an Airbnb owner
+            planning for their guests — is arranging a trip they are not on.
+            Clearing the row is how they say so, and it stays cleared.
+          */}
+          <p id="trip-guests-hint" className="text-xs text-muted-foreground">
+            {t('trips.guestsHint', 'Who is coming? Clear your own name if you are not going — you can add guests later.')}
+          </p>
+
+          <ul className="space-y-2">
+            {resolvedGuests.map((guest, index) => {
+              const isCurrentUser = index === 0;
+              return (
+                <li key={guest.id} className="flex items-center gap-2">
+                  <Input
+                    ref={(element) => {
+                      const inputs = guestInputsRef.current;
+                      if (element) {
+                        inputs.set(guest.id, element);
+                      } else {
+                        inputs.delete(guest.id);
+                      }
+                    }}
+                    type="text"
+                    value={guest.name}
+                    onChange={(event) => handleGuestNameChange(guest.id, event.target.value)}
+                    placeholder={
+                      isCurrentUser
+                        ? t('trips.guestYouPlaceholder', 'Your name')
+                        : t('trips.guestNamePlaceholder', 'e.g. Marie')
+                    }
+                    maxLength={GUEST_NAME_MAX_LENGTH}
+                    aria-label={
+                      isCurrentUser
+                        ? t('trips.guestYouLabel', 'Your name')
+                        : t('trips.guestNumberLabel', 'Guest {{number}}', { number: index + 1 })
+                    }
+                    aria-describedby="trip-guests-hint"
+                  />
+                  {isCurrentUser ? (
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                      {t('trips.guestYou', 'You')}
+                    </span>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveGuest(guest.id)}
+                      aria-label={t('trips.removeGuest', 'Remove guest {{number}}', {
+                        number: index + 1,
+                      })}
+                    >
+                      <X className="size-4" aria-hidden="true" />
+                    </Button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          <Button type="button" variant="outline" size="sm" onClick={handleAddGuest}>
+            <Plus className="size-4" aria-hidden="true" />
+            {t('trips.addGuest', 'Add guest')}
+          </Button>
+        </fieldset>
+      )}
 
       {/* Submission Error */}
       {submitError && (

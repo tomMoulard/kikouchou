@@ -15,7 +15,14 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { TripForm } from '@/features/trips/components/TripForm';
-import { createTrip, setCurrentTrip, cloneRoomsToTrip } from '@/lib/db';
+import { useAuth } from '@/features/auth/AuthContext';
+import { getAccountGuestName } from '@/features/auth/display-name';
+import {
+  createTrip,
+  setCurrentTrip,
+  cloneRoomsToTrip,
+  createPersonWithAutoColor,
+} from '@/lib/db';
 import { captureUsage } from '@/lib/posthog';
 import type { TripFormData, TripId } from '@/types';
 
@@ -45,6 +52,16 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { successToast } = useOfflineAwareToast();
+  const { user } = useAuth();
+
+  /**
+   * What to pre-fill the first guest — "you" — with.
+   *
+   * `undefined` signed out, and signed out is a first-class way to use this
+   * app, so the row is then simply the user's to fill in. A plain string, so
+   * the form compares it by value across the render where the session resolves.
+   */
+  const currentUserName = getAccountGuestName(user);
 
   // ============================================================================
   // Dirty State & Unsaved Changes Guard
@@ -53,6 +70,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const [isDirty, setIsDirty] = useState(false);
   const { isBlocked, proceed, reset, skipNextBlock } = useUnsavedChanges(isDirty);
   const importSourceRef = useRef<TripId | null>(null);
+  const guestNamesRef = useRef<readonly string[]>([]);
 
   const handleDirtyChange = useCallback((dirty: boolean) => {
     setIsDirty(dirty);
@@ -63,6 +81,17 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
    */
   const handleImportSourceChange = useCallback((sourceTripId: TripId | null) => {
     importSourceRef.current = sourceTripId;
+  }, []);
+
+  /**
+   * Tracks the guest names typed into TripForm's list.
+   *
+   * A ref rather than state, like the import source above: nothing renders off
+   * it, and re-rendering the page on every keystroke in the guest list would
+   * cost the form its own state.
+   */
+  const handleGuestsChange = useCallback((guestNames: readonly string[]) => {
+    guestNamesRef.current = guestNames;
   }, []);
 
   // ============================================================================
@@ -96,10 +125,38 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
         }
       }
 
+      /*
+        Add the guests the form collected, one at a time and in list order.
+
+        Sequential on purpose: `createPersonWithAutoColor` picks its colour from
+        the trip's *current* person count, so a `Promise.all` over the list
+        would read the same count in every call and hand every guest the same
+        colour — on a feature whose entire job is telling guests apart.
+      */
+      const guestNames = guestNamesRef.current;
+      let addedGuestCount = 0;
+      for (const guestName of guestNames) {
+        try {
+          await createPersonWithAutoColor(newTrip.id, guestName);
+          addedGuestCount += 1;
+        } catch (error) {
+          console.error('Failed to add guest to new trip:', error);
+        }
+      }
+
+      // The trip exists either way, so a failed guest is a warning rather than
+      // a rolled-back creation — the same call the room import above makes.
+      if (addedGuestCount < guestNames.length) {
+        toast.error(t('trips.guestsCreateFailed', 'Trip created but some guests could not be added'));
+      }
+
       // Set the new trip as the current trip so CalendarPage can display it
       await setCurrentTrip(newTrip.id);
 
-      captureUsage('trip_created', { imported_rooms: didImportRooms });
+      captureUsage('trip_created', {
+        imported_rooms: didImportRooms,
+        guest_count: addedGuestCount,
+      });
 
       // Reset dirty state and skip blocker before navigation.
       // skipNextBlock() prevents the blocker from firing if setIsDirty(false)
@@ -145,7 +202,14 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
 
       <Card>
         <CardContent className="pt-6">
-          <TripForm onSubmit={handleSubmit} onCancel={handleCancel} onDirtyChange={handleDirtyChange} onImportSourceChange={handleImportSourceChange} />
+          <TripForm
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            onDirtyChange={handleDirtyChange}
+            onImportSourceChange={handleImportSourceChange}
+            currentUserName={currentUserName}
+            onGuestsChange={handleGuestsChange}
+          />
         </CardContent>
       </Card>
 

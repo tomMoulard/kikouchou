@@ -7,7 +7,7 @@
  * @module features/trips/components/__tests__/TripForm.test
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { TripForm } from '@/features/trips/components/TripForm';
@@ -1160,6 +1160,266 @@ describe('TripForm Date Picker Month', () => {
     const endButton = screen.getByRole('button', { name: /trips\.endDate/i });
     expect(endButton).not.toHaveTextContent(/2024/);
     expect(screen.queryByText('validation.endDateBeforeStart')).toBeNull();
+  });
+});
+
+// ============================================================================
+// Guest List
+// ============================================================================
+
+/** The create-mode guest list, addressed through its `<legend>`. */
+function guestList(): HTMLElement {
+  return screen.getByRole('group', { name: /trips\.guests/i });
+}
+
+/** The guest name inputs, in list order. */
+function guestInputs(): readonly HTMLInputElement[] {
+  return within(guestList()).getAllByRole('textbox');
+}
+
+/**
+ * Fills the trip fields a create-mode submit needs, leaving the guest list
+ * alone — the dates have to come from the pickers, since the form offers no
+ * way to type them.
+ */
+async function fillRequiredTripFields(
+  user: ReturnType<typeof userEvent.setup>,
+): Promise<void> {
+  await user.type(screen.getByLabelText(/trips\.name/i), 'Beach Vacation');
+
+  await user.click(screen.getByRole('button', { name: /trips\.startDate/i }));
+  await waitForOpenCalendar();
+  await user.click(daysOfOpenMonth()[9]!);
+
+  await user.click(screen.getByRole('button', { name: /trips\.endDate/i }));
+  await waitForOpenCalendar();
+  await user.click(daysOfOpenMonth()[14]!);
+}
+
+describe('TripForm Guest List', () => {
+  it('starts with a single row, for the user', () => {
+    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(guestInputs()).toHaveLength(1);
+    expect(within(guestList()).getByText('trips.guestYou')).toBeInTheDocument();
+  });
+
+  it('is absent in edit mode', () => {
+    // An existing trip's guests belong to the Guests page; a second editor here
+    // would have to reconcile against records that already carry colours, stay
+    // dates and room assignments.
+    render(<TripForm trip={createTestTrip()} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.queryByRole('group', { name: /trips\.guests/i })).toBeNull();
+  });
+
+  it("pre-fills the first row with the account's name", () => {
+    render(
+      <TripForm onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom Moulard" />,
+    );
+
+    expect(guestInputs()[0]).toHaveValue('Tom Moulard');
+  });
+
+  it('adopts an account name that resolves after mount', () => {
+    // AuthProvider loads supabase-js dynamically and never gates rendering on
+    // the session, so this is the ordinary case rather than a race: the form
+    // mounts signed out and is handed the account a tick later.
+    const { rerender } = render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    expect(guestInputs()[0]).toHaveValue('');
+
+    rerender(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />);
+
+    expect(guestInputs()[0]).toHaveValue('Tom');
+  });
+
+  it('never overwrites a name the user typed', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    await user.type(guestInputs()[0]!, 'Marie');
+    rerender(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />);
+
+    expect(guestInputs()[0]).toHaveValue('Marie');
+  });
+
+  it('adds a row with the add button and puts the cursor in it', async () => {
+    const user = userEvent.setup();
+
+    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
+
+    const inputs = guestInputs();
+    expect(inputs).toHaveLength(2);
+    // Without this a keyboard user is left on the "+" button and has to tab
+    // into the row they just asked for.
+    expect(inputs[1]).toHaveFocus();
+  });
+
+  it('removes an added row and moves focus to the row above', async () => {
+    const user = userEvent.setup();
+
+    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />);
+    await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
+    await user.type(guestInputs()[1]!, 'Marie');
+
+    await user.click(within(guestList()).getByRole('button', { name: /trips\.removeGuest/i }));
+
+    const inputs = guestInputs();
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]).toHaveValue('Tom');
+    // Removing the focused element otherwise drops focus on <body>, losing a
+    // keyboard user's place in the form entirely.
+    expect(inputs[0]).toHaveFocus();
+  });
+
+  it('gives the first row no remove control', async () => {
+    const user = userEvent.setup();
+
+    render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
+
+    // Two rows, one remove button: the user's own row cannot be taken off the
+    // list they are creating.
+    expect(
+      within(guestList()).getAllByRole('button', { name: /trips\.removeGuest/i }),
+    ).toHaveLength(1);
+  });
+
+  it('reports the trimmed names, dropping rows left empty', async () => {
+    const user = userEvent.setup();
+    const onGuestsChange = vi.fn();
+
+    render(
+      <TripForm
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        currentUserName="Tom"
+        onGuestsChange={onGuestsChange}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
+    await user.type(guestInputs()[1]!, '  Marie  ');
+    // A third row added and left blank: an abandoned click, not a nameless guest.
+    await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
+
+    await waitFor(() => {
+      expect(onGuestsChange).toHaveBeenLastCalledWith(['Tom', 'Marie']);
+    });
+  });
+
+  it('reports the account name on its own once the session resolves', () => {
+    const onGuestsChange = vi.fn();
+    const { rerender } = render(
+      <TripForm onSubmit={vi.fn()} onCancel={vi.fn()} onGuestsChange={onGuestsChange} />,
+    );
+
+    expect(onGuestsChange).toHaveBeenLastCalledWith([]);
+
+    rerender(
+      <TripForm
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        currentUserName="Tom"
+        onGuestsChange={onGuestsChange}
+      />,
+    );
+
+    expect(onGuestsChange).toHaveBeenLastCalledWith(['Tom']);
+  });
+
+  it('submits with an empty guest list', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    // Signed out, with nobody named. The guest list is optional in full: a trip
+    // is a fine thing to create before knowing who is coming.
+    render(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
+    await fillRequiredTripFields(user);
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+    expect(within(guestList()).queryByRole('alert')).toBeNull();
+  });
+
+  it('submits guests without the organiser when they clear their own row', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const onGuestsChange = vi.fn();
+
+    // Somebody who hosts rather than travels — an Airbnb owner arranging a trip
+    // for their guests — is not on the trip they are creating.
+    render(
+      <TripForm
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+        currentUserName="Tom"
+        onGuestsChange={onGuestsChange}
+      />,
+    );
+    await fillRequiredTripFields(user);
+    await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
+    await user.type(guestInputs()[1]!, 'Marie');
+    await user.clear(guestInputs()[0]!);
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+    expect(onGuestsChange).toHaveBeenLastCalledWith(['Marie']);
+  });
+
+  it('leaves a cleared first row cleared when the account resolves', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <TripForm onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />,
+    );
+
+    await user.clear(guestInputs()[0]!);
+    // The session resolving again — a token refresh publishes the same user —
+    // must not put the host back on a trip they took themselves off.
+    rerender(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />);
+
+    expect(guestInputs()[0]).toHaveValue('');
+  });
+
+  it('leaves the form pristine when only the account pre-filled the row', () => {
+    const onDirtyChange = vi.fn();
+
+    render(
+      <TripForm
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        currentUserName="Tom"
+        onDirtyChange={onDirtyChange}
+      />,
+    );
+
+    // The account name was put there by the form, not typed by the user, and
+    // must not on its own arm the unsaved-changes guard.
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('marks the form dirty once a guest is added', async () => {
+    const user = userEvent.setup();
+    const onDirtyChange = vi.fn();
+
+    render(
+      <TripForm
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        currentUserName="Tom"
+        onDirtyChange={onDirtyChange}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
+
+    await waitFor(() => {
+      expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+    });
   });
 });
 

@@ -18,6 +18,7 @@ import {
 } from './support/service-worker';
 import { waitForRoute } from './support/routes';
 import { stubExternalMapServices } from './support/external-services';
+import { fillTripOrganiser } from './support/trip-form';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -207,9 +208,20 @@ async function createTestTrip(page: Page): Promise<string> {
   await page.goto('/trips/new');
   await page.waitForLoadState('load');
 
-  // Fill trip form
+  // Fill trip form.
+  //
+  // No location, deliberately. Nothing here asserts one — it was set and never
+  // read — and typing into that field opens a suggestion popper anchored over
+  // the date buttons below it, which then swallows the click on the day cell:
+  // "<span …>Location de matériel, Avenue Vulcain…</span> intercepts pointer
+  // events".
+  //
+  // The Nominatim stub above does not prevent that in *this* project. It is the
+  // production build, so a service worker controls the page, and `page.route`
+  // never sees a request the worker makes — the search goes to the live network
+  // and comes back with real places. Which is also why the failure only shows
+  // up once an earlier test has installed the worker.
   await page.locator('#trip-name').fill('PWA Test Trip');
-  await page.locator('#trip-location').fill('Test Location');
 
   // Set start date
   await page.locator('#trip-start-date').click();
@@ -227,6 +239,8 @@ async function createTestTrip(page: Page): Promise<string> {
   const endCalendar = page.locator('[data-slot="calendar"]').first();
   const endDayButton = endCalendar.locator('button').filter({ hasText: /^20$/ }).first();
   await endDayButton.click();
+
+  await fillTripOrganiser(page);
 
   // Submit form
   await page.getByRole('button', { name: /save|sauvegarder/i }).click();
