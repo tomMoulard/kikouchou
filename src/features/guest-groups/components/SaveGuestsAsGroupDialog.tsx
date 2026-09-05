@@ -9,7 +9,15 @@
  * @module features/guest-groups/components/SaveGuestsAsGroupDialog
  */
 
-import { type ChangeEvent, memo, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  type ChangeEvent,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@/components/ui/button';
@@ -79,19 +87,38 @@ const SaveGuestsAsGroupDialog = memo(function SaveGuestsAsGroupDialog({
   const [error, setError] = useState<string | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Reset on open, as every dialog here does.
+  /**
+   * Whether this opening has been initialised.
+   *
+   * Same hazard as the import picker: `persons` is a new array whenever the
+   * guest list re-publishes, and resetting on that would re-tick guests the
+   * user had just cleared — a co-traveller's edit arriving over sync is enough
+   * to trigger it.
+   */
+  const isInitialisedRef = useRef(false);
+
   useEffect(() => {
-    if (!open) {
+    if (!open || isInitialisedRef.current) {
       return;
     }
+    isInitialisedRef.current = true;
+
     setName(defaultName ?? '');
     // Everybody, capped: the guest list can be longer than a group may hold,
     // and silently dropping the overflow at save time would be worse than
     // showing exactly what is ticked.
     setSelectedIds(persons.slice(0, MAX_GUEST_GROUP_MEMBERS).map((person) => person.id));
+  }, [defaultName, open, persons]);
+
+  // Clear on close, so reopening does not flash the last selection.
+  useEffect(() => {
+    if (open) {
+      return;
+    }
+    isInitialisedRef.current = false;
     setError(undefined);
     setIsSaving(false);
-  }, [defaultName, open, persons]);
+  }, [open]);
 
   const isFull = selectedIds.length >= MAX_GUEST_GROUP_MEMBERS;
 

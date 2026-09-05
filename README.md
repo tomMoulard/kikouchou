@@ -11,6 +11,7 @@
 
 - **Calendar View** - Visualize who sleeps where and when
 - **Room Management** - Manage rooms with capacity and assignments
+- **Guest Groups** - Save a family or a band of friends once, add them to any trip in one go
 - **Transport Tracking** - Track arrivals/departures with detailed transport info
 - **Trip Sharing** - Share trips via links and QR codes
 - **Offline-First** - Works without internet after first load

@@ -20,7 +20,7 @@ import { createGuestGroup } from '@/lib/db/repositories/guest-group-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { toLocalISODateString } from '@/lib/db/utils';
-import { hexColor, isoDate } from '@/test/utils';
+import { hexColor, isoDate, waitForTripDoc } from '@/test/utils';
 import type { ISODateTimeString, PersonId, TripId } from '@/types';
 
 import { useTripSystemPrompt } from '../useTripSystemPrompt';
@@ -72,6 +72,11 @@ async function renderWithTrip(tripId: TripId) {
   await waitFor(() => {
     expect(result.current.prompt.hasTripContext).toBe(true);
   });
+
+  // Not defensive: without it the CRDT bridge can project the freshly opened
+  // document back over Dexie and delete the rows this file just seeded. See
+  // `waitForTripDoc`.
+  await waitForTripDoc(tripId);
 
   return result;
 }

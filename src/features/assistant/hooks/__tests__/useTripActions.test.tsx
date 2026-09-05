@@ -20,7 +20,7 @@ import { createGuestGroup } from '@/lib/db/repositories/guest-group-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import { createRoom } from '@/lib/db/repositories/room-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
-import { hexColor, isoDate } from '@/test/utils';
+import { hexColor, isoDate, waitForTripDoc } from '@/test/utils';
 import type { Activity, ISODateTimeString, PersonId, TripId } from '@/types';
 
 import {
@@ -58,6 +58,12 @@ async function seedTrip(): Promise<{ tripId: TripId; personId: PersonId }> {
   return { tripId: trip.id, personId: person.id };
 }
 
+/**
+ * Selects the trip, then waits for its document to have been seeded from Dexie.
+ *
+ * That second wait is load-bearing rather than defensive — see
+ * {@link waitForTripDoc} for the race it closes.
+ */
 async function renderWithTrip(tripId: TripId) {
   const { result } = renderHook(() => useCombined(), { wrapper: Wrapper });
 
@@ -72,6 +78,8 @@ async function renderWithTrip(tripId: TripId) {
   await waitFor(() => {
     expect(result.current.trip.currentTrip?.id).toBe(tripId);
   });
+
+  await waitForTripDoc(tripId);
 
   return result;
 }

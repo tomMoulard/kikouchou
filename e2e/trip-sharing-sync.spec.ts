@@ -1035,3 +1035,114 @@ test.describe('the trip preview on the server', () => {
     await waitForNameOnServer(stub, 'Alice');
   });
 });
+
+// ============================================================================
+// Guest groups — the account's own rows, not a trip's
+// ============================================================================
+
+/**
+ * Guest groups are the one thing here that syncs per **account** rather than per
+ * trip: no document, no log, no membership — a plain table upserted on
+ * `(owner_id, local_id)` and reconciled last-write-wins.
+ *
+ * The unit suite covers reconciliation against a double. What only a browser can
+ * show is the wiring: that the client actually issues the upsert, sends the
+ * local nanoid as `local_id`, and records the server id it gets back — the three
+ * things a wrong column name or a mistyped filter would break silently, because
+ * the feature keeps working offline either way.
+ */
+test.describe('guest groups on the server', () => {
+  /** Builds a group through the UI. */
+  async function createGroup(page: Page, name: string, member: string): Promise<void> {
+    await page.goto('/groups');
+    await page.getByRole('button', { name: /new group/i }).first().click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await dialog.getByLabel(/group name/i).fill(name);
+    await dialog.getByRole('button', { name: /add a person/i }).click();
+    await dialog.getByPlaceholder(/^name$/i).first().fill(member);
+    await dialog.getByRole('button', { name: /^save$/i }).click();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
+  }
+
+  test('uploads a group the signed-in owner creates', async ({ page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await createGroup(page, 'Family', 'Tom + Léa');
+
+    await expect
+      .poll(() => stub.guestGroups.length, { timeout: 30_000, intervals: [500] })
+      .toBe(1);
+
+    const row = stub.guestGroups[0]!;
+    expect(row.owner_id).toBe(OWNER.id);
+    expect(row.name).toBe('Family');
+    // The client nanoid travels as `local_id`; that is what makes the upsert
+    // idempotent across a retry, a second tab and a reinstall.
+    expect(row.local_id).toMatch(/^.{10,}$/);
+  });
+
+  test('a second device signed into the same account downloads it', async ({
+    browser,
+    page,
+  }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await createGroup(page, 'Family', 'Tom + Léa');
+    await expect
+      .poll(() => stub.guestGroups.length, { timeout: 30_000, intervals: [500] })
+      .toBe(1);
+
+    const second = await newDevice(browser, stub, OWNER);
+    await second.goto('/groups');
+
+    await expect(second.getByText('Family', { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(second.getByText('Tom + Léa', { exact: true })).toBeVisible();
+  });
+
+  test('another account sees nothing of it', async ({ browser, page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+    await stub.signIn(page, OWNER);
+
+    await createGroup(page, 'Family', 'Tom + Léa');
+    await expect
+      .poll(() => stub.guestGroups.length, { timeout: 30_000, intervals: [500] })
+      .toBe(1);
+
+    // A group is private to its owner and has no sharing path at all — the
+    // policy `owners read their guest groups` is the whole access model.
+    const stranger = await newDevice(browser, stub, GUEST);
+    await stranger.goto('/groups');
+
+    await expect(
+      stranger.getByText(/no groups yet/i).first(),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(stranger.getByText('Family', { exact: true })).toHaveCount(0);
+  });
+
+  test('a group created signed out is uploaded on the next sign-in', async ({ page }) => {
+    const stub = new SupabaseStub();
+    await stub.install(page);
+
+    // The whole app works signed out, groups included. Nothing may leave the
+    // device until there is an account to attach it to.
+    await createGroup(page, 'Family', 'Tom + Léa');
+    expect(stub.guestGroups).toHaveLength(0);
+
+    await stub.signIn(page, OWNER);
+    await page.goto('/groups');
+
+    await expect
+      .poll(() => stub.guestGroups.length, { timeout: 30_000, intervals: [500] })
+      .toBe(1);
+    expect(stub.guestGroups[0]?.name).toBe('Family');
+  });
+});

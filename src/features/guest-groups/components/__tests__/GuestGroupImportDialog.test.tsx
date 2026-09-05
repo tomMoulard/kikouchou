@@ -5,10 +5,10 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { render, screen, userEvent, waitFor } from '@/test/utils';
+import { hexColor, render, screen, userEvent, waitFor } from '@/test/utils';
 import { GuestGroupImportDialog } from '@/features/guest-groups/components/GuestGroupImportDialog';
+import { db } from '@/lib/db/database';
 import { createGuestGroup } from '@/lib/db/repositories/guest-group-repository';
-import { hexColor } from '@/test/utils';
 
 // ============================================================================
 // Fixtures
@@ -167,6 +167,39 @@ describe('GuestGroupImportDialog', () => {
     expect(screen.getAllByRole('checkbox')).toHaveLength(3);
 
     logged.mockRestore();
+  });
+
+  it('keeps the selection when the groups table changes underneath it', async () => {
+    const user = userEvent.setup(),
+      onConfirm = vi.fn().mockResolvedValue(undefined),
+      group = await seedFamily();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={onConfirm} />,
+    );
+
+    await screen.findByText('Family');
+    await user.click(screen.getByLabelText(/Camille/));
+
+    // A write to the table re-publishes `groups` with a fresh array identity —
+    // which is what sync does when it records `remoteGroupId`, and what another
+    // tab does on any edit. Re-running the picker's set-up on that used to
+    // re-tick everybody, so the user imported people they had just cleared.
+    await db.guestGroups.update(group.id, { remoteGroupId: 'remote-1' });
+
+    await waitFor(async () => {
+      expect((await db.guestGroups.get(group.id))?.remoteGroupId).toBe('remote-1');
+    });
+
+    await user.click(screen.getByRole('button', { name: /guestGroups.importConfirm/ }));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+    expect(onConfirm.mock.calls[0]?.[0].memberIds).toEqual([
+      group.members[0]!.id,
+      group.members[1]!.id,
+    ]);
   });
 
   it('offers a choice when there are several groups', async () => {
