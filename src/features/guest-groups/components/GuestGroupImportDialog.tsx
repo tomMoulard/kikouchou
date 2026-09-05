@@ -1,14 +1,21 @@
 /**
- * @fileoverview Picks a group and which of its people to bring into a trip.
+ * @fileoverview Picks people from saved groups to bring into a trip.
  *
- * Two steps in one dialog: choose the group, tick the people. Everybody is
- * ticked when a group is opened, because "the whole family is coming" is the
- * common case and un-ticking one person is less work than ticking four.
+ * One flat list, every group on it, ticks across as many as the user likes: a
+ * trip is regularly two families and a couple of friends, and a picker that
+ * holds one group at a time turns that into three trips through the same
+ * dialog — or, worse, silently replaces the first choice with the second.
  *
- * The dialog does not write anything. It hands the selection to `onConfirm`,
- * which is what lets the same component serve a trip that already exists (the
- * guest list imports immediately) and one that does not yet (the create form
- * holds the selection until the trip is saved).
+ * Everybody is ticked when there is exactly one group, because "the whole
+ * family is coming" is then the only reasonable default and un-ticking one
+ * person beats ticking four. With several groups nothing is ticked: pre-ticking
+ * three families so the user can un-tick two of them is not a default, it is a
+ * chore.
+ *
+ * The dialog writes nothing. It hands the selections to `onConfirm`, which is
+ * what lets the same component serve a trip that already exists (the guest list
+ * imports immediately) and one that does not yet (the create form holds the
+ * selections until the trip is saved).
  *
  * @module features/guest-groups/components/GuestGroupImportDialog
  */
@@ -29,15 +36,14 @@ import {
 import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
-import { cn } from '@/lib/utils';
 import { getPersonHeadcount } from '@/types';
-import type { GuestGroup, GuestGroupId, GuestGroupMemberId } from '@/types';
+import type { GuestGroup, GuestGroupMemberId } from '@/types';
 
 // ============================================================================
 // Type Definitions
 // ============================================================================
 
-/** What the user chose. */
+/** One group, and which of its people were ticked. */
 export interface GuestGroupSelection {
   readonly group: GuestGroup;
   readonly memberIds: readonly GuestGroupMemberId[];
@@ -49,12 +55,22 @@ export interface GuestGroupImportDialogProps {
   /** Callback to change the open state */
   readonly onOpenChange: (open: boolean) => void;
   /**
-   * Called with the selection when the user confirms. The dialog closes once
-   * this resolves, so a caller that writes can keep it open on failure by
-   * rejecting.
+   * Called with one entry per group that has at least one person ticked. The
+   * dialog closes once this resolves, so a caller that writes can keep it open
+   * on failure by rejecting.
    */
-  readonly onConfirm: (selection: GuestGroupSelection) => Promise<void> | void;
-  /** Label for the confirm button. Defaults to "Add to trip". */
+  readonly onConfirm: (
+    selections: readonly GuestGroupSelection[],
+  ) => Promise<void> | void;
+  /**
+   * Selections to open with, for a caller that is *editing* a queue rather than
+   * adding to one — the create-trip form, whose groups are not imported yet.
+   *
+   * Without it, reopening the picker to add a second family would show the
+   * first one un-ticked, and confirming would drop it.
+   */
+  readonly initialSelection?: readonly GuestGroupSelection[];
+  /** Label for the confirm button. Defaults to "Add N people". */
   readonly confirmLabel?: string;
 }
 
@@ -73,7 +89,9 @@ export interface GuestGroupImportDialogProps {
  * <GuestGroupImportDialog
  *   open={isOpen}
  *   onOpenChange={setIsOpen}
- *   onConfirm={({ group, memberIds }) => importMembers(tripId, group.id, memberIds)}
+ *   onConfirm={(selections) =>
+ *     Promise.all(selections.map((s) => importMembers(tripId, s.group.id, s.memberIds)))
+ *   }
  * />
  * ```
  */
@@ -81,31 +99,29 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
   open,
   onOpenChange,
   onConfirm,
+  initialSelection,
   confirmLabel,
 }: GuestGroupImportDialogProps) {
   const { t } = useTranslation();
   const { groups, isLoading } = useGuestGroups();
 
-  const [groupId, setGroupId] = useState<GuestGroupId | null>(null);
+  /**
+   * Ticked member ids, flat across every group.
+   *
+   * Flat because member ids are nanoids and therefore unique across groups, so
+   * a per-group map would buy nothing and cost a second lookup at every read.
+   */
   const [selectedIds, setSelectedIds] = useState<readonly GuestGroupMemberId[]>([]);
   const [isImporting, setIsImporting] = useState(false);
-
-  const group = useMemo(
-    () => groups.find((candidate) => candidate.id === groupId),
-    [groupId, groups],
-  );
 
   /**
    * Whether this opening has been initialised.
    *
-   * The reset cannot simply depend on `groups`: that array is a fresh identity
-   * on **every** Dexie emission, and re-running the reset on one throws away the
-   * ticks the user has just made. A sync writing `remoteGroupId` back onto a
-   * group, or an edit in another tab, is enough to do it — and it did, in a
-   * loaded test run, where a de-selected member came back before confirm.
-   *
-   * A ref rather than a state: nothing renders differently for it, and it has to
-   * be readable inside the effect that sets it.
+   * The set-up cannot simply depend on `groups`: that array is a fresh identity
+   * on **every** Dexie emission, and re-running it on one throws away the ticks
+   * the user has just made. A sync writing `remoteGroupId` back onto a group, or
+   * an edit in another tab, is enough to do it — and it did, in a loaded test
+   * run, where a de-selected member came back before confirm.
    */
   const isInitialisedRef = useRef(false);
 
@@ -119,12 +135,15 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
 
     isInitialisedRef.current = true;
 
-    // One group is the common case; skipping straight to its people saves a
-    // click that has no alternative to offer.
+    if (initialSelection && initialSelection.length > 0) {
+      setSelectedIds(initialSelection.flatMap((entry) => entry.memberIds));
+      return;
+    }
+
+    // One group: everybody. Several: nobody — see the module docblock.
     const only = groups.length === 1 ? groups[0] : undefined;
-    setGroupId(only?.id ?? null);
     setSelectedIds(only?.members.map((member) => member.id) ?? []);
-  }, [open, groups]);
+  }, [open, groups, initialSelection]);
 
   // Clear on close, so reopening does not flash the last selection.
   useEffect(() => {
@@ -132,18 +151,13 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
       return;
     }
     isInitialisedRef.current = false;
-    setGroupId(null);
     setSelectedIds([]);
     setIsImporting(false);
   }, [open]);
 
-  const handleSelectGroup = useCallback(
-    (next: GuestGroup) => {
-      setGroupId(next.id);
-      setSelectedIds(next.members.map((member) => member.id));
-    },
-    [],
-  );
+  // ============================================================================
+  // Event Handlers
+  // ============================================================================
 
   const handleToggleMember = useCallback((memberId: GuestGroupMemberId) => {
     setSelectedIds((prev) =>
@@ -153,34 +167,47 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
     );
   }, []);
 
-  const handleToggleAll = useCallback(() => {
-    if (!group) {
-      return;
-    }
-    setSelectedIds((prev) =>
-      prev.length === group.members.length ? [] : group.members.map((member) => member.id),
-    );
-  }, [group]);
+  /** Ticks or clears one group without touching the others. */
+  const handleToggleGroup = useCallback((group: GuestGroup) => {
+    setSelectedIds((prev) => {
+      const ids = group.members.map((member) => member.id),
+        isFullySelected = ids.every((id) => prev.includes(id)),
+        without = prev.filter((id) => !ids.includes(id));
 
-  const handleBack = useCallback(() => {
-    setGroupId(null);
-    setSelectedIds([]);
+      return isFullySelected ? without : [...without, ...ids];
+    });
   }, []);
 
+  /**
+   * The ticks, as one entry per group that has any.
+   *
+   * Member ids come back in the group's own order rather than tick order, so
+   * the guests land in the order the user arranged the group.
+   */
+  const selections = useMemo((): readonly GuestGroupSelection[] => {
+    const result: GuestGroupSelection[] = [];
+
+    for (const group of groups) {
+      const memberIds = group.members
+        .map((member) => member.id)
+        .filter((id) => selectedIds.includes(id));
+
+      if (memberIds.length > 0) {
+        result.push({ group, memberIds });
+      }
+    }
+
+    return result;
+  }, [groups, selectedIds]);
+
   const handleConfirm = useCallback(async () => {
-    if (!group || selectedIds.length === 0 || isImporting) {
+    if (selections.length === 0 || isImporting) {
       return;
     }
 
     setIsImporting(true);
     try {
-      // Send them in the group's own order rather than tick order, so the
-      // guests land in the order the user arranged the group.
-      const ordered = group.members
-        .map((member) => member.id)
-        .filter((id) => selectedIds.includes(id));
-
-      await onConfirm({ group, memberIds: ordered });
+      await onConfirm(selections);
       onOpenChange(false);
     } catch (error) {
       // Caught rather than propagated: `onConfirm` rejecting is how a caller
@@ -191,21 +218,25 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
     } finally {
       setIsImporting(false);
     }
-  }, [group, isImporting, onConfirm, onOpenChange, selectedIds]);
+  }, [isImporting, onConfirm, onOpenChange, selections]);
 
   // ============================================================================
   // Render
   // ============================================================================
 
   /** People, not rows: a member standing for a couple counts twice. */
-  const selectedHeadcount = useMemo(() => {
-    if (!group) {
-      return 0;
-    }
-    return group.members
-      .filter((member) => selectedIds.includes(member.id))
-      .reduce((total, member) => total + getPersonHeadcount(member), 0);
-  }, [group, selectedIds]);
+  const selectedHeadcount = useMemo(
+    () =>
+      selections.reduce(
+        (total, selection) =>
+          total +
+          selection.group.members
+            .filter((member) => selection.memberIds.includes(member.id))
+            .reduce((groupTotal, member) => groupTotal + getPersonHeadcount(member), 0),
+        0,
+      ),
+    [selections],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -213,12 +244,10 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
         <DialogHeader>
           <DialogTitle>{t('guestGroups.importTitle', 'Add from a group')}</DialogTitle>
           <DialogDescription>
-            {group
-              ? t(
-                  'guestGroups.importPickPeople',
-                  'Choose who is coming. They are copied into this trip as guests.',
-                )
-              : t('guestGroups.importPickGroup', 'Choose a group.')}
+            {t(
+              'guestGroups.importPickPeople',
+              'Choose who is coming, from as many groups as you like. They are copied into this trip as guests.',
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -233,91 +262,80 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
           />
         )}
 
-        {!group && groups.length > 0 && (
-          <ul className="space-y-2">
-            {groups.map((candidate) => (
-              <li key={candidate.id}>
-                <button
+        {groups.map((group) => {
+          const memberIds = group.members.map((member) => member.id),
+            selectedCount = memberIds.filter((id) => selectedIds.includes(id)).length,
+            isFullySelected =
+              memberIds.length > 0 && selectedCount === memberIds.length;
+
+          return (
+            <section key={group.id} className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium">{group.name}</p>
+                <Button
                   type="button"
-                  onClick={() => handleSelectGroup(candidate)}
-                  className={cn(
-                    'flex w-full items-center justify-between gap-3 rounded-md border p-3 text-left',
-                    'hover:bg-accent/60 transition-colors',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                  )}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleToggleGroup(group)}
+                  disabled={isImporting || group.members.length === 0}
                 >
-                  <span className="font-medium">{candidate.name}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {t('guestGroups.memberCount', '{{count}} people', {
-                      count: candidate.members.length,
-                    })}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+                  {isFullySelected
+                    ? t('guestGroups.selectNone', 'Clear all')
+                    : t('guestGroups.selectAll', 'Select all')}
+                </Button>
+              </div>
 
-        {group && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-medium">{group.name}</p>
-              <Button type="button" variant="ghost" size="sm" onClick={handleToggleAll}>
-                {selectedIds.length === group.members.length
-                  ? t('guestGroups.selectNone', 'Clear all')
-                  : t('guestGroups.selectAll', 'Select all')}
-              </Button>
-            </div>
+              {group.members.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {t(
+                    'guestGroups.membersEmpty',
+                    'Nobody yet. Add the people you invite together.',
+                  )}
+                </p>
+              ) : (
+                <ul className="space-y-1">
+                  {group.members.map((member) => {
+                    const inputId = `import-member-${member.id}`,
+                      headcount = getPersonHeadcount(member);
 
-            <ul className="space-y-1">
-              {group.members.map((member) => {
-                const inputId = `import-member-${member.id}`,
-                  headcount = getPersonHeadcount(member);
-
-                return (
-                  <li key={member.id}>
-                    <div className="flex items-center gap-3 rounded-md p-2 hover:bg-accent/40">
-                      <Checkbox
-                        id={inputId}
-                        checked={selectedIds.includes(member.id)}
-                        onCheckedChange={() => handleToggleMember(member.id)}
-                        disabled={isImporting}
-                      />
-                      <span
-                        className="size-3 shrink-0 rounded-full border"
-                        style={{ backgroundColor: member.color }}
-                        aria-hidden="true"
-                      />
-                      <Label htmlFor={inputId} className="flex-1 cursor-pointer font-normal">
-                        {member.name}
-                        {headcount > 1 && (
-                          <span className="ml-2 text-xs text-muted-foreground tabular-nums">
-                            {t('persons.headcountBadge', '{{count}} people', {
-                              count: headcount,
-                            })}
-                          </span>
-                        )}
-                      </Label>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-
-            {group.members.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                {t('guestGroups.membersEmpty', 'Nobody yet. Add the people you invite together.')}
-              </p>
-            )}
-          </div>
-        )}
+                    return (
+                      <li key={member.id}>
+                        <div className="flex items-center gap-3 rounded-md p-2 hover:bg-accent/40">
+                          <Checkbox
+                            id={inputId}
+                            checked={selectedIds.includes(member.id)}
+                            onCheckedChange={() => handleToggleMember(member.id)}
+                            disabled={isImporting}
+                          />
+                          <span
+                            className="size-3 shrink-0 rounded-full border"
+                            style={{ backgroundColor: member.color }}
+                            aria-hidden="true"
+                          />
+                          <Label
+                            htmlFor={inputId}
+                            className="flex-1 cursor-pointer font-normal"
+                          >
+                            {member.name}
+                            {headcount > 1 && (
+                              <span className="ml-2 text-xs text-muted-foreground tabular-nums">
+                                {t('persons.headcountBadge', '{{count}} people', {
+                                  count: headcount,
+                                })}
+                              </span>
+                            )}
+                          </Label>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          );
+        })}
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          {group && groups.length > 1 && (
-            <Button type="button" variant="ghost" onClick={handleBack} disabled={isImporting}>
-              {t('guestGroups.chooseAnother', 'Another group')}
-            </Button>
-          )}
           <Button
             type="button"
             variant="outline"
@@ -326,11 +344,11 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
           >
             {t('common.cancel')}
           </Button>
-          {group && (
+          {groups.length > 0 && (
             <Button
               type="button"
               onClick={handleConfirm}
-              disabled={selectedIds.length === 0 || isImporting}
+              disabled={selections.length === 0 || isImporting}
               aria-busy={isImporting}
             >
               {confirmLabel ??

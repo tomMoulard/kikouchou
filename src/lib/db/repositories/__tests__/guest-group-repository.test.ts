@@ -299,6 +299,29 @@ describe('createGuestGroupFromPersons', () => {
     expect(alice).not.toHaveProperty('stayStartDate');
   });
 
+  it('carries a phone number both ways', async () => {
+    const source = await createTestTrip('source'),
+      target = await createTestTrip('target');
+
+    await createPerson(source, {
+      name: 'Alice',
+      color: hexColor('#3b82f6'),
+      phone: '+33 6 12 34 56 78',
+    });
+
+    // A phone number is the most trip-independent thing about a guest and the
+    // most tedious to retype, so losing it on the way through a group would
+    // defeat the point of saving one.
+    const group = await createGuestGroupFromPersons(
+      'Family',
+      await getPersonsByTripId(source),
+    );
+    expect(group.members[0]?.phone).toBe('+33 6 12 34 56 78');
+
+    const { persons } = await importGuestGroupMembers(target, group.id);
+    expect(persons[0]?.phone).toBe('+33 6 12 34 56 78');
+  });
+
   it('round-trips through an import without losing a headcount', async () => {
     const source = await createTestTrip('source'),
       target = await createTestTrip('target');

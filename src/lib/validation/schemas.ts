@@ -406,6 +406,7 @@ export const ActivityFormDataSchema = z
  * - color: required, valid hex color
  * - headcount: optional, whole number between 1 and 99
  * - notes: optional, max 2000 characters
+ * - phone: optional, max 32 characters
  */
 export const GuestGroupMemberFormDataSchema = z.object({
   name: z
@@ -422,6 +423,10 @@ export const GuestGroupMemberFormDataSchema = z.object({
   notes: z
     .string()
     .max(2000, 'Notes must be 2000 characters or less')
+    .optional(),
+  phone: z
+    .string()
+    .max(32, 'Phone number must be 32 characters or less')
     .optional(),
 });
 

@@ -28,6 +28,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
 import { useFormSubmission } from '@/hooks';
+import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toHexColor } from '@/lib/db/utils';
 import {
   MAX_GUEST_GROUP_MEMBERS,
@@ -67,6 +68,7 @@ interface MemberDraft {
   color: string;
   headcount: string;
   notes: string;
+  phone: string;
 }
 
 interface FormErrors {
@@ -100,6 +102,7 @@ function emptyDraft(drafts: readonly MemberDraft[]): MemberDraft {
     color: nextColor(drafts),
     headcount: String(MIN_PERSON_HEADCOUNT),
     notes: '',
+    phone: '',
   };
 }
 
@@ -115,6 +118,7 @@ function toDrafts(group: GuestGroup | undefined): MemberDraft[] {
     color: member.color,
     headcount: String(getPersonHeadcount(member)),
     notes: member.notes ?? '',
+    phone: member.phone ?? '',
   }));
 }
 
@@ -127,6 +131,7 @@ function snapshot(name: string, drafts: readonly MemberDraft[]): string {
       draft.color,
       normalizePersonHeadcount(Number.parseInt(draft.headcount, 10)),
       draft.notes.trim(),
+      draft.phone.trim(),
     ]),
   ]);
 }
@@ -250,13 +255,15 @@ const GuestGroupForm = memo(function GuestGroupForm({
             const headcount = normalizePersonHeadcount(
                 Number.parseInt(draft.headcount, 10),
               ),
-              notes = draft.notes.trim();
+              notes = draft.notes.trim(),
+              phone = draft.phone.trim();
 
             return {
               name: draft.name.trim(),
               color: toHexColor(draft.color),
               ...(headcount > MIN_PERSON_HEADCOUNT ? { headcount } : {}),
               ...(notes.length > 0 ? { notes } : {}),
+              ...(phone.length > 0 ? { phone } : {}),
             };
           }),
         });
@@ -385,6 +392,25 @@ const GuestGroupForm = memo(function GuestGroupForm({
                 disabled={isSubmitting}
                 label={t('persons.color')}
               />
+
+              <div className="space-y-1">
+                <Label htmlFor={`guest-group-phone-${draft.key}`} className="sr-only">
+                  {t('persons.phone', 'Phone')}
+                </Label>
+                <Input
+                  id={`guest-group-phone-${draft.key}`}
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  maxLength={MAX_LENGTHS.personPhone}
+                  value={draft.phone}
+                  onChange={(event) =>
+                    handleMemberChange(draft.key, { phone: event.target.value })
+                  }
+                  placeholder={t('persons.phonePlaceholder', '+33 6 12 34 56 78')}
+                  disabled={isSubmitting}
+                />
+              </div>
 
               <div className="space-y-1">
                 <Label htmlFor={`guest-group-notes-${draft.key}`} className="sr-only">

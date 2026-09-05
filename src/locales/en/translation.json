@@ -319,8 +319,7 @@
     "deleteDescription": "The group \"{{name}}\" is removed from every device on this account. Guests already added to a trip stay where they are.",
     "importTitle": "Add from a group",
     "importAction": "Add from a group",
-    "importPickGroup": "Choose a group.",
-    "importPickPeople": "Choose who is coming. They are copied into this trip as guests.",
+    "importPickPeople": "Choose who is coming, from as many groups as you like. They are copied into this trip as guests.",
     "importConfirm": "Add {{count}} people",
     "importConfirm_one": "Add {{count}} person",
     "importSelect": "Choose people",
@@ -334,9 +333,10 @@
     "importClear": "Remove this group",
     "selectAll": "Select all",
     "selectNone": "Clear all",
-    "chooseAnother": "Another group",
     "saveAsGroup": "Save as a group",
-    "saveAsGroupDescription": "Keep these guests for next time. Stay dates, rooms and transports stay with this trip."
+    "saveAsGroupDescription": "Keep these guests for next time. Stay dates, rooms and transports stay with this trip.",
+    "importMore": "Add another group",
+    "importClearNamed": "Remove {{name}}"
   },
   "assignments": {
     "title": "Room assignments",

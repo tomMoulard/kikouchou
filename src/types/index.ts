@@ -822,6 +822,17 @@ export interface GuestGroupMember extends Identifiable {
    * diet, accessibility. Copied onto the imported guest.
    */
   notes?: string;
+
+  /**
+   * Optional phone number, copied onto the imported guest.
+   *
+   * A phone number is the most trip-independent thing about a person and the
+   * most tedious to retype, so it is exactly what a saved roster is for. Stored
+   * as typed, never reformatted — see {@link Person.phone}.
+   *
+   * @example "+33 6 12 34 56 78"
+   */
+  phone?: string;
 }
 
 /**
@@ -998,6 +1009,8 @@ export interface GuestGroupMemberFormData {
   headcount?: number;
   /** Optional notes (allergies, diet, etc.) */
   notes?: string;
+  /** Optional phone number, copied onto the imported guest */
+  phone?: string;
 }
 
 /**

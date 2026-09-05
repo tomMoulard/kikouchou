@@ -249,6 +249,7 @@ export async function importGuestGroupMembers(
         // for the absent case.
         ...(getPersonHeadcount(member) > 1 ? { headcount: member.headcount } : {}),
         ...(member.notes ? { notes: member.notes } : {}),
+        ...(member.phone ? { phone: member.phone } : {}),
       });
     }
 
@@ -287,6 +288,7 @@ export async function createGuestGroupFromPersons(
       color: person.color,
       ...(getPersonHeadcount(person) > 1 ? { headcount: person.headcount } : {}),
       ...(person.notes ? { notes: person.notes } : {}),
+      ...(person.phone ? { phone: person.phone } : {}),
     })),
   });
 }

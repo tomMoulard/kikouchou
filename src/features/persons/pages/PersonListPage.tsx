@@ -627,38 +627,50 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
    * Rethrows so the dialog stays open on failure — the selection the user made
    * is worth more than a clean close.
    */
-   handleImportGroup = useCallback(
-    async ({ group, memberIds }: GuestGroupSelection) => {
+   handleImportGroups = useCallback(
+    async (selections: readonly GuestGroupSelection[]) => {
       if (!currentTrip) {
         return;
       }
 
       try {
-        const result = await importMembers(currentTrip.id, group.id, memberIds);
+        // Sequential rather than `Promise.all`: each import opens its own
+        // read-write transaction over `persons`, and Dexie serialises them
+        // anyway — running them in order keeps the guests in the order the
+        // user ticked the groups instead of whichever transaction won.
+        let addedCount = 0,
+          skippedCount = 0;
+
+        for (const { group, memberIds } of selections) {
+          const result = await importMembers(currentTrip.id, group.id, memberIds);
+          addedCount += result.persons.length;
+          skippedCount += result.skippedMemberIds.length;
+        }
 
         successToast(
           t('guestGroups.importSuccess', '{{count}} guests added', {
-            count: result.persons.length,
+            count: addedCount,
           }),
         );
 
-        // Somebody edited the group between opening the picker and confirming
-        // it. Nothing is broken, but fewer people arrived than were ticked.
-        if (result.skippedMemberIds.length > 0) {
+        // Somebody edited a group between opening the picker and confirming it.
+        // Nothing is broken, but fewer people arrived than were ticked.
+        if (skippedCount > 0) {
           toast.warning(
             t('guestGroups.importSkipped', '{{count}} people were no longer in the group', {
-              count: result.skippedMemberIds.length,
+              count: skippedCount,
             }),
           );
         }
 
         captureUsage('guest_group_imported', {
-          member_count: result.persons.length,
-          skipped_count: result.skippedMemberIds.length,
+          member_count: addedCount,
+          skipped_count: skippedCount,
+          group_count: selections.length,
           source: 'guest_list',
         });
       } catch (error) {
-        console.error('Failed to import guest group:', error);
+        console.error('Failed to import guest groups:', error);
         toast.error(t('guestGroups.importFailed', "Could not add the group's guests"));
         throw error;
       }
@@ -795,7 +807,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
         <GuestGroupImportDialog
           open={isImportGroupOpen}
           onOpenChange={setIsImportGroupOpen}
-          onConfirm={handleImportGroup}
+          onConfirm={handleImportGroups}
         />
       </div>
     );
@@ -865,7 +877,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
       <GuestGroupImportDialog
         open={isImportGroupOpen}
         onOpenChange={setIsImportGroupOpen}
-        onConfirm={handleImportGroup}
+        onConfirm={handleImportGroups}
       />
 
       <SaveGuestsAsGroupDialog

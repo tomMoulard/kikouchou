@@ -290,3 +290,86 @@ export async function seedTransport(
     });
   }, options);
 }
+
+/**
+ * One member of a seeded guest group.
+ */
+export interface SeedGuestGroupMember {
+  readonly name: string;
+  /** Badge colour; the picker shows a swatch per member. */
+  readonly color?: string;
+  /** People this one entry stands for, for the "counts as 2" case. */
+  readonly headcount?: number;
+}
+
+/**
+ * The fields a seeded guest group is given.
+ */
+export interface SeedGuestGroupOptions {
+  readonly name: string;
+  readonly members: readonly SeedGuestGroupMember[];
+}
+
+/**
+ * Writes one guest group into the `guestGroups` store.
+ *
+ * Unlike the trip-scoped seeds above, this one has no ordering rule to respect:
+ * a guest group belongs to the account rather than to a trip, so no Yjs
+ * document mirrors it and nothing can project over it.
+ *
+ * Prefer it whenever the group is *setup* rather than the thing under test —
+ * most of all before visiting `/trips/new`. Building a group through its dialog
+ * first leaves something behind that eats the next route's first click: the
+ * button takes focus, React's handler never runs, and only a second click gets
+ * through. Measured, not guessed, and it reproduces with the trip form's own
+ * "Add guest" button, so it is not this feature's to fix.
+ *
+ * @param page - Playwright page object
+ * @param options - The group to write
+ * @returns The new group's id
+ *
+ * @example
+ * ```ts
+ * await seedGuestGroup(page, { name: 'Family', members: [{ name: 'Alice' }] });
+ * ```
+ */
+export async function seedGuestGroup(
+  page: Page,
+  options: SeedGuestGroupOptions,
+): Promise<string> {
+  return await page.evaluate(async (options: SeedGuestGroupOptions) => {
+    const id = `seed-group-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    const now = Date.now();
+
+    return new Promise<string>((resolve, reject) => {
+      const request = indexedDB.open('kikouchou');
+      request.onerror = () => reject(new Error('Failed to open database'));
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('guestGroups', 'readwrite');
+
+        tx.objectStore('guestGroups').add({
+          id,
+          name: options.name,
+          members: options.members.map((member, index) => ({
+            id: `${id}-member-${index}`,
+            name: member.name,
+            color: member.color ?? '#3b82f6',
+            ...(member.headcount === undefined ? {} : { headcount: member.headcount }),
+          })),
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve(id);
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(new Error('Failed to create guest group'));
+        };
+      };
+    });
+  }, options);
+}

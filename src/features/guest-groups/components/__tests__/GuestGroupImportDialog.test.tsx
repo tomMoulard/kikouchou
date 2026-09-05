@@ -73,10 +73,12 @@ describe('GuestGroupImportDialog', () => {
       expect(onConfirm).toHaveBeenCalledTimes(1);
     });
 
-    expect(onConfirm).toHaveBeenCalledWith({
-      group: expect.objectContaining({ id: group.id }),
-      memberIds: [group.members[0]!.id, group.members[1]!.id],
-    });
+    expect(onConfirm).toHaveBeenCalledWith([
+      {
+        group: expect.objectContaining({ id: group.id }),
+        memberIds: [group.members[0]!.id, group.members[1]!.id],
+      },
+    ]);
   });
 
   it('sends member ids in the group order, not the order they were ticked', async () => {
@@ -100,7 +102,7 @@ describe('GuestGroupImportDialog', () => {
       expect(onConfirm).toHaveBeenCalledTimes(1);
     });
 
-    expect(onConfirm.mock.calls[0]?.[0].memberIds).toEqual([
+    expect(onConfirm.mock.calls[0]?.[0][0].memberIds).toEqual([
       group.members[0]!.id,
       group.members[2]!.id,
     ]);
@@ -196,28 +198,196 @@ describe('GuestGroupImportDialog', () => {
     await waitFor(() => {
       expect(onConfirm).toHaveBeenCalledTimes(1);
     });
-    expect(onConfirm.mock.calls[0]?.[0].memberIds).toEqual([
+    expect(onConfirm.mock.calls[0]?.[0][0].memberIds).toEqual([
       group.members[0]!.id,
       group.members[1]!.id,
     ]);
   });
 
-  it('offers a choice when there are several groups', async () => {
-    await seedFamily();
-    await createGuestGroup({
+});
+
+// ============================================================================
+// Several groups at once
+// ============================================================================
+
+describe('GuestGroupImportDialog — more than one group', () => {
+  /** A second roster, so "two families and a friend" is expressible. */
+  async function seedSkiCrew() {
+    return createGuestGroup({
       name: 'Ski crew',
-      members: [{ name: 'Bob', color: hexColor('#eab308') }],
+      members: [
+        { name: 'Bob', color: hexColor('#eab308') },
+        { name: 'Dana', color: hexColor('#8b5cf6') },
+      ],
     });
+  }
+
+  it('shows every group at once rather than one at a time', async () => {
+    await seedFamily();
+    await seedSkiCrew();
 
     render(
       <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={vi.fn()} />,
     );
 
-    expect(await screen.findByRole('button', { name: /Family/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Ski crew/ })).toBeInTheDocument();
-    // Nothing is picked yet, so there is nothing to confirm.
+    expect(await screen.findByText('Family')).toBeInTheDocument();
+    expect(screen.getByText('Ski crew')).toBeInTheDocument();
+    // Three from the family, two from the ski crew, on one screen.
+    expect(screen.getAllByRole('checkbox')).toHaveLength(5);
+  });
+
+  it('ticks nobody when there are several groups', async () => {
+    await seedFamily();
+    await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={vi.fn()} />,
+    );
+
+    await screen.findByText('Family');
+
+    // Pre-ticking three families so the user can un-tick two is not a default.
+    for (const box of screen.getAllByRole('checkbox')) {
+      expect(box).not.toBeChecked();
+    }
     expect(
-      screen.queryByRole('button', { name: /guestGroups.importConfirm/ }),
-    ).not.toBeInTheDocument();
+      screen.getByRole('button', { name: /guestGroups.importConfirm/ }),
+    ).toBeDisabled();
+  });
+
+  it('imports people from two groups in one go', async () => {
+    const user = userEvent.setup(),
+      onConfirm = vi.fn().mockResolvedValue(undefined),
+      family = await seedFamily(),
+      ski = await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={onConfirm} />,
+    );
+
+    await screen.findByText('Family');
+
+    await user.click(screen.getByLabelText(/Alice/));
+    await user.click(screen.getByLabelText(/Dana/));
+    await user.click(screen.getByRole('button', { name: /guestGroups.importConfirm/ }));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+
+    const selections = onConfirm.mock.calls[0]?.[0];
+    expect(selections).toHaveLength(2);
+    expect(selections[0]).toMatchObject({
+      group: expect.objectContaining({ id: family.id }),
+      memberIds: [family.members[1]!.id],
+    });
+    expect(selections[1]).toMatchObject({
+      group: expect.objectContaining({ id: ski.id }),
+      memberIds: [ski.members[1]!.id],
+    });
+  });
+
+  it('select-all ticks one group without touching the other', async () => {
+    const user = userEvent.setup(),
+      onConfirm = vi.fn().mockResolvedValue(undefined);
+    await seedFamily();
+    await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={onConfirm} />,
+    );
+
+    await screen.findByText('Family');
+
+    // Both sections carry the same button label under the key-echoing harness;
+    // the first belongs to Family, which sorts before Ski crew.
+    const [selectAllFamily] = screen.getAllByRole('button', {
+      name: 'guestGroups.selectAll',
+    });
+    await user.click(selectAllFamily!);
+    await user.click(screen.getByRole('button', { name: /guestGroups.importConfirm/ }));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+
+    const selections = onConfirm.mock.calls[0]?.[0];
+    expect(selections).toHaveLength(1);
+    expect(selections[0].group.name).toBe('Family');
+    expect(selections[0].memberIds).toHaveLength(3);
+  });
+
+  it('opens with the queue the caller passed already ticked', async () => {
+    const family = await seedFamily();
+    await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog
+        open
+        onOpenChange={vi.fn()}
+        onConfirm={vi.fn()}
+        initialSelection={[
+          { group: family, memberIds: [family.members[0]!.id] },
+        ]}
+      />,
+    );
+
+    await screen.findByText('Family');
+
+    // Reopening to add a second family must not lose the first.
+    expect(screen.getByLabelText(/Tom/)).toBeChecked();
+    expect(screen.getByLabelText(/Alice/)).not.toBeChecked();
+    expect(screen.getByLabelText(/Bob/)).not.toBeChecked();
+  });
+
+  it('adds to the queue it opened with rather than replacing it', async () => {
+    const user = userEvent.setup(),
+      onConfirm = vi.fn().mockResolvedValue(undefined),
+      family = await seedFamily(),
+      ski = await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog
+        open
+        onOpenChange={vi.fn()}
+        onConfirm={onConfirm}
+        initialSelection={[
+          { group: family, memberIds: [family.members[0]!.id] },
+        ]}
+      />,
+    );
+
+    await screen.findByText('Family');
+    await user.click(screen.getByLabelText(/Bob/));
+    await user.click(screen.getByRole('button', { name: /guestGroups.importConfirm/ }));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+
+    const selections = onConfirm.mock.calls[0]?.[0];
+    expect(selections).toHaveLength(2);
+    expect(selections[0].memberIds).toEqual([family.members[0]!.id]);
+    expect(selections[1].memberIds).toEqual([ski.members[0]!.id]);
+  });
+
+  it('counts people across groups, not rows', async () => {
+    const user = userEvent.setup();
+    await seedFamily();
+    await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={vi.fn()} />,
+    );
+
+    await screen.findByText('Family');
+
+    // Tom + Léa stands for two people, Bob for one.
+    await user.click(screen.getByLabelText(/Tom/));
+    await user.click(screen.getByLabelText(/Bob/));
+
+    expect(
+      screen.getByRole('button', { name: /guestGroups.importConfirm/ }),
+    ).toBeEnabled();
   });
 });

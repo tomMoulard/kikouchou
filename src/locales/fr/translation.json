@@ -319,8 +319,7 @@
     "deleteDescription": "Le groupe « {{name}} » est retiré de tous les appareils de ce compte. Les participants déjà ajoutés à un voyage y restent.",
     "importTitle": "Ajouter depuis un groupe",
     "importAction": "Ajouter depuis un groupe",
-    "importPickGroup": "Choisissez un groupe.",
-    "importPickPeople": "Choisissez qui vient. Ces personnes sont copiées dans ce voyage comme participants.",
+    "importPickPeople": "Choisissez qui vient, dans autant de groupes que vous voulez. Ces personnes sont copiées dans ce voyage comme participants.",
     "importConfirm": "Ajouter {{count}} personnes",
     "importConfirm_one": "Ajouter {{count}} personne",
     "importSelect": "Choisir les personnes",
@@ -334,9 +333,10 @@
     "importClear": "Retirer ce groupe",
     "selectAll": "Tout sélectionner",
     "selectNone": "Tout désélectionner",
-    "chooseAnother": "Un autre groupe",
     "saveAsGroup": "Enregistrer comme groupe",
-    "saveAsGroupDescription": "Gardez ces participants pour la prochaine fois. Dates de séjour, chambres et trajets restent sur ce voyage."
+    "saveAsGroupDescription": "Gardez ces participants pour la prochaine fois. Dates de séjour, chambres et trajets restent sur ce voyage.",
+    "importMore": "Ajouter un autre groupe",
+    "importClearNamed": "Retirer {{name}}"
   },
   "assignments": {
     "title": "Attribution des chambres",

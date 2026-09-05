@@ -199,7 +199,12 @@ export function sanitizePersonData<
 export function sanitizeGuestGroupData<
   T extends {
     name: string;
-    members: { name: string; notes?: string; headcount?: number }[];
+    members: {
+      name: string;
+      notes?: string;
+      phone?: string;
+      headcount?: number;
+    }[];
   },
 >(data: T): T {
   return {
