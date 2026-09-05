@@ -222,6 +222,30 @@ describe('RoomOccupancyTimeline', () => {
     expect(screen.getByText('Main Bedroom')).toBeInTheDocument();
   });
 
+  it('calls onEditRoom when the room name is double-clicked', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onEditRoom = vi.fn();
+    render(<RoomOccupancyTimeline {...defaultProps} onEditRoom={onEditRoom} />);
+    await user.dblClick(screen.getByText('Main Bedroom'));
+    expect(onEditRoom).toHaveBeenCalledWith(mockRoom);
+  });
+
+  // Without the callback the names carry no gesture, so the tooltip must not
+  // advertise one.
+  it('only offers the double-click hint when onEditRoom is wired up', () => {
+    const { unmount } = render(<RoomOccupancyTimeline {...defaultProps} />);
+    expect(screen.getByTitle(/Main Bedroom/).getAttribute('title')).not.toContain(
+      'rooms.doubleClickToEdit',
+    );
+    unmount();
+
+    render(<RoomOccupancyTimeline {...defaultProps} onEditRoom={vi.fn()} />);
+    expect(screen.getByTitle(/Main Bedroom/).getAttribute('title')).toContain(
+      'rooms.doubleClickToEdit',
+    );
+  });
+
   it('renders room rows as list items', () => {
     render(<RoomOccupancyTimeline {...defaultProps} />);
     const listItems = screen.getAllByRole('listitem');

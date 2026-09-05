@@ -165,6 +165,75 @@ describe('RoomCard', () => {
     expect(onEdit).toHaveBeenCalledWith(mockRoom);
   });
 
+  it('calls onEdit when the room name is double-clicked', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onEdit = vi.fn();
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onClick={vi.fn()}
+        onEdit={onEdit}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    await user.dblClick(screen.getByText('Main Bedroom'));
+    expect(onEdit).toHaveBeenCalledWith(mockRoom);
+  });
+
+  it('does not call onEdit when the name is double-clicked while disabled', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onEdit = vi.fn();
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onClick={vi.fn()}
+        onEdit={onEdit}
+        onDelete={vi.fn()}
+        isDisabled
+      />,
+      { withProviders: false },
+    );
+    await user.dblClick(screen.getByText('Main Bedroom'));
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  // The name is lifted above the full-card activation button so the double
+  // click can reach it at all. A single click on it must still expand the card,
+  // which it only does by bubbling to the card's own handler.
+  it('still calls onClick for a single click on the room name', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onEdit = vi.fn();
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onClick={onClick}
+        onEdit={onEdit}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByText('Main Bedroom'));
+    expect(onClick).toHaveBeenCalledWith(mockRoom);
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
   it('shows claim button when onClaim is provided and spots available', () => {
     render(
       <RoomCard

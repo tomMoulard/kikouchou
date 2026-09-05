@@ -65,7 +65,7 @@ export interface RoomCardProps {
   readonly isExpanded?: boolean;
   /** Callback when the card body is clicked - toggles expansion */
   readonly onClick?: (room: Room) => void;
-  /** Callback when Edit is selected from the menu */
+  /** Callback when Edit is selected from the menu, or the name is double-clicked */
   readonly onEdit: (room: Room) => void;
   /** Callback when Delete is confirmed. Can be async. */
   readonly onDelete: (room: Room) => void | Promise<void>;
@@ -90,6 +90,7 @@ export interface RoomCardProps {
  * - Displays room name, capacity, description (truncated), and current occupants
  * - Shows real-time occupancy status with color-coded badge
  * - Dropdown menu with Edit and Delete actions
+ * - Double-click on the room name as a shortcut to the same Edit action
  * - Delete confirmation via ConfirmDialog
  * - Full keyboard accessibility (Enter/Space to activate card)
  * - Event propagation control (menu clicks don't trigger card click)
@@ -194,6 +195,20 @@ const RoomCard = memo(function RoomCard({
    handleEditClick = useCallback(() => {
     onEdit(room);
   }, [onEdit, room]),
+
+  /**
+   * Opens the edit dialog on a double click on the room name — the same thing
+   * the menu's Edit item does, two clicks earlier.
+   *
+   * The gesture also fires two ordinary clicks, which bubble to the card and
+   * toggle the expansion twice, so the row is left as it was found. The menu
+   * item stays the keyboard-reachable path: a double click has no keyboard
+   * equivalent, so this can only ever be a shortcut on top of it.
+   */
+   handleNameDoubleClick = useCallback(() => {
+    if (isDisabled) {return;}
+    onEdit(room);
+  }, [isDisabled, onEdit, room]),
 
   /**
    * Opens the delete confirmation dialog.
@@ -304,7 +319,22 @@ const RoomCard = memo(function RoomCard({
         {/* Card Header - Room name and capacity badge */}
         <CardHeader className="pb-2 pr-12">
           <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-lg truncate" title={room.name}>
+            {/*
+              `relative z-20` is what makes the double click reachable at all:
+              the full-card activation button above covers the header at z-10,
+              so without it every pointer event on the name lands on the button
+              instead. Lifting only the name keeps the rest of the card's hit
+              area — and its focus ring — on that button.
+
+              `select-none` because the second click of the gesture would
+              otherwise leave the name highlighted behind the dialog it just
+              opened.
+            */}
+            <CardTitle
+              className="text-lg truncate relative z-20 select-none"
+              title={`${room.name} — ${t('rooms.doubleClickToEdit')}`}
+              onDoubleClick={handleNameDoubleClick}
+            >
               {room.name}
             </CardTitle>
             <Badge variant="outline" className="shrink-0">

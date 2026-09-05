@@ -182,6 +182,7 @@
     "newDescription": "Fill in the details to create a new room.",
     "edit": "Edit room",
     "editDescription": "Modify the room details below.",
+    "doubleClickToEdit": "Double-click to edit",
     "name": "Room name",
     "namePlaceholder": "e.g. Master bedroom",
     "capacity": "Number of beds",

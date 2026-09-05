@@ -1078,6 +1078,58 @@ test.describe('Room Assignment Flow', () => {
       },
     ]);
   });
+
+  // --------------------------------------------------------------------------
+  // Test 8: Double-click a room name to edit it
+  // --------------------------------------------------------------------------
+  //
+  // These two belong in a real browser rather than in jsdom, and the reason is
+  // the whole difficulty of the feature. In the cards view the room name is
+  // covered by the full-card activation button, which is `absolute inset-0
+  // z-10`; jsdom has no layout and no stacking, so a unit test fires the double
+  // click straight at the name and passes whether or not a user could ever
+  // reach it. Playwright's hit-target check is what actually asserts the name
+  // is on top — remove the `z-20` lift and this test fails with the button
+  // named as the interceptor.
+  test('double-clicking a room name in the cards view opens its edit dialog', async ({ page }) => {
+    tripId = await createTestTrip(page);
+    await createRoomViaDB(page, tripId, {
+      name: TEST_DATA.room.name,
+      capacity: parseInt(TEST_DATA.room.capacity, 10),
+      description: TEST_DATA.room.description,
+    });
+    await navigateToRooms(page, tripId, 'card');
+
+    const roomName = page
+      .locator('[data-slot="card-title"]')
+      .filter({ hasText: TEST_DATA.room.name });
+    await expect(roomName).toBeVisible();
+    await roomName.dblclick();
+
+    // The same dialog the menu's Edit item opens, on the same room.
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#room-name')).toHaveValue(TEST_DATA.room.name);
+    await expect(page.locator('#room-capacity')).toHaveValue(TEST_DATA.room.capacity);
+  });
+
+  test('double-clicking a room name in the timeline opens its edit dialog', async ({ page }) => {
+    tripId = await createTestTrip(page);
+    await createRoomViaDB(page, tripId, {
+      name: TEST_DATA.room.name,
+      capacity: parseInt(TEST_DATA.room.capacity, 10),
+      description: TEST_DATA.room.description,
+    });
+    await navigateToRooms(page, tripId, 'timeline');
+
+    // The sticky label column: the only place the timeline prints a room name,
+    // and the only element carrying a title that mentions it.
+    const roomLabel = page.getByTitle(new RegExp(TEST_DATA.room.name));
+    await expect(roomLabel).toBeVisible();
+    await roomLabel.dblclick();
+
+    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#room-name')).toHaveValue(TEST_DATA.room.name);
+  });
 });
 
 // ============================================================================

@@ -126,6 +126,15 @@ export interface RoomOccupancyTimelineProps {
   readonly range: { readonly startDate: ISODateString; readonly endDate: ISODateString };
   /** Local-date key for “today” column highlight (optional). */
   readonly todayKey?: ISODateString;
+  /**
+   * Opens the room's edit dialog, wired to a double click on the room name.
+   *
+   * Omitted, the names carry no interaction at all — which is why the handler
+   * is a prop rather than a route this component builds for itself. It is a
+   * mouse shortcut on top of the cards view's menu item, never the only way to
+   * reach the dialog.
+   */
+  readonly onEditRoom?: (room: Room) => void;
 }
 
 const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
@@ -139,6 +148,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
   dateLocale,
   range,
   todayKey,
+  onEditRoom,
 }: RoomOccupancyTimelineProps): ReactElement {
   const { t } = useTranslation();
 
@@ -319,6 +329,14 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                     ? `${row.room.name}. ${t('rooms.spotsOpen', { count: spotsOpen })}`
                     : row.room.name;
                 const RoomGlyph = getRoomIconComponent(row.room.icon);
+                // The hint only belongs in the tooltip when the gesture is
+                // actually wired up — the timeline renders without `onEditRoom`
+                // in a few places, and promising an editor there is a lie.
+                const labelTitle = [
+                  row.room.name,
+                  t('rooms.beds', { count: row.room.capacity }),
+                  ...(onEditRoom ? [t('rooms.doubleClickToEdit')] : []),
+                ].join(' — ');
 
                 return (
                   <div
@@ -327,6 +345,24 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                     className="flex border-t border-muted"
                     aria-label={rowAriaLabel}
                   >
+                    {/*
+                      Double click on the label opens the room's edit dialog —
+                      the timeline carries no menu of its own, so this saves the
+                      trip through the cards view, where the same action sits in
+                      each card's menu and stays keyboard-reachable.
+
+                      The handler is on the whole label cell rather than the
+                      name span so a row with a "spots open" second line has one
+                      target and not two. `select-none` keeps the second click
+                      from leaving the name highlighted behind the dialog it
+                      just opened.
+
+                      No keyboard pair goes with it, and none is owed: a double
+                      click has no keyboard equivalent, and `dblclick` is not a
+                      handler `jsx-a11y/no-static-element-interactions` counts
+                      as making an element interactive — precisely because it
+                      cannot be the only way to reach an action. Here it is not.
+                    */}
                     <div
                       className={cn(
                         'sticky left-0 z-10 bg-background border-r border-muted flex',
@@ -335,9 +371,11 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                           : hasSpotsNote
                             ? 'flex-col items-stretch justify-center gap-0.5 px-3 py-1'
                             : 'items-center px-3',
+                        onEditRoom && 'cursor-pointer select-none',
                       )}
                       style={{ ...TIMELINE_LABEL_CELL_STYLE, height: rowHeight }}
-                      title={`${row.room.name} — ${t('rooms.beds', { count: row.room.capacity })}`}
+                      title={labelTitle}
+                      onDoubleClick={onEditRoom ? () => onEditRoom(row.room) : undefined}
                     >
                       <div className="flex min-w-0 items-center gap-1.5">
                         <RoomGlyph

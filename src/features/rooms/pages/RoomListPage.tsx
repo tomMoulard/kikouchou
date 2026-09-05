@@ -10,6 +10,7 @@
  * - Add room action (FAB on mobile, header button on desktop)
  * - Empty state for trips with no rooms
  * - Edit/Delete actions via RoomCard dropdown menu
+ * - Double-click a room name (either view) to open its edit dialog
  * - Drag-and-drop room assignments (timeline unassigned rows)
  *
  * @module features/rooms/pages/RoomListPage
@@ -1213,6 +1214,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             endDate: currentTrip.endDate,
           }}
           todayKey={todayStr as ISODateString}
+          onEditRoom={handleRoomEdit}
         />
       )}
 

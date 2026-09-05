@@ -182,6 +182,7 @@
     "newDescription": "Remplissez les informations pour créer une nouvelle chambre.",
     "edit": "Modifier la chambre",
     "editDescription": "Modifiez les informations de la chambre ci-dessous.",
+    "doubleClickToEdit": "Double-cliquez pour modifier",
     "name": "Nom de la chambre",
     "namePlaceholder": "ex. Chambre parentale",
     "capacity": "Nombre de lits",
