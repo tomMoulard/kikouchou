@@ -126,6 +126,23 @@ async function sendPrompt(
   await user.click(screen.getByRole('button', { name: buttonName }));
 }
 
+/**
+ * Gives jsdom — which ships no WebGPU at all — the device verdict a test wants.
+ *
+ * Every test that expects the assistant to be offered needs `true`: without it
+ * the page correctly decides this browser cannot run a model and hides the
+ * download behind an explanation.
+ */
+function stubWebGPU(supported: boolean): void {
+  Object.defineProperty(navigator, 'gpu', {
+    value: {
+      requestAdapter: vi.fn().mockResolvedValue(supported ? {} : null),
+    },
+    configurable: true,
+    writable: true,
+  });
+}
+
 describe('AssistantPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -135,6 +152,7 @@ describe('AssistantPage', () => {
     Element.prototype.releasePointerCapture = vi.fn();
     vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});
+    stubWebGPU(true);
     mockGetSettings.mockResolvedValue({});
     mockUseWebLLM.mockReturnValue({
       status: 'idle',
@@ -149,6 +167,7 @@ describe('AssistantPage', () => {
   });
 
   afterEach(() => {
+    Reflect.deleteProperty(navigator, 'gpu');
     vi.restoreAllMocks();
   });
 
@@ -158,12 +177,104 @@ describe('AssistantPage', () => {
     expect(
       screen.getByRole('combobox', { name: 'assistant.modelLabel' }),
     ).toBeInTheDocument();
+    // `find`, not `get`: the button waits on the WebGPU probe now.
     expect(
-      screen.getByRole('button', { name: 'assistant.loadModel' }),
+      await screen.findByRole('button', { name: 'assistant.loadModel' }),
     ).toBeInTheDocument();
 
     await waitFor(() => {
       expect(mockGetSettings).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('WebGPU device gate', () => {
+    it('offers no download when the device cannot supply a GPU adapter', async () => {
+      // Android Chrome off the driver allowlist: the API is there, the adapter
+      // is not. This is the session that produced "no available backend found".
+      stubWebGPU(false);
+
+      render(<AssistantPage />, { withProviders: false });
+
+      expect(
+        await screen.findByText('assistant.deviceUnsupportedTitle'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'assistant.loadModel' }),
+      ).not.toBeInTheDocument();
+      expect(mockLoadModel).not.toHaveBeenCalled();
+    });
+
+    it('offers no download when the browser has no WebGPU API', async () => {
+      Reflect.deleteProperty(navigator, 'gpu');
+
+      render(<AssistantPage />, { withProviders: false });
+
+      expect(
+        await screen.findByText('assistant.deviceUnsupportedTitle'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'assistant.loadModel' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('does not auto-load cached weights on a device that cannot run them', async () => {
+      // Cached files prove the download once worked, not that a session can be
+      // built now — the same phone on a browser that has since lost WebGPU, or
+      // weights cached before a driver update.
+      stubWebGPU(false);
+      mockUseWebLLM.mockReturnValue({
+        status: 'idle',
+        loadProgress: null,
+        error: null,
+        isCached: true,
+        loadModel: mockLoadModel,
+        generate: mockGenerate,
+        interrupt: mockInterrupt,
+        unload: mockUnload,
+      });
+
+      render(<AssistantPage />, { withProviders: false });
+
+      await screen.findByText('assistant.deviceUnsupportedTitle');
+      expect(mockLoadModel).not.toHaveBeenCalled();
+    });
+
+    it('reports the unsupported device to PostHog exactly once', async () => {
+      stubWebGPU(false);
+
+      render(<AssistantPage />, { withProviders: false });
+
+      await screen.findByText('assistant.deviceUnsupportedTitle');
+
+      await waitFor(() => {
+        const reports = mockCapture.mock.calls.filter(
+          ([event]) => event === 'assistant_device_unsupported',
+        );
+        expect(reports).toHaveLength(1);
+        expect(reports[0]?.[1]).toMatchObject({
+          reason: 'no-adapter',
+          device: 'webgpu',
+        });
+      });
+    });
+
+    it('still auto-loads cached weights when the device is supported', async () => {
+      mockUseWebLLM.mockReturnValue({
+        status: 'idle',
+        loadProgress: null,
+        error: null,
+        isCached: true,
+        loadModel: mockLoadModel,
+        generate: mockGenerate,
+        interrupt: mockInterrupt,
+        unload: mockUnload,
+      });
+
+      render(<AssistantPage />, { withProviders: false });
+
+      await waitFor(() => {
+        expect(mockLoadModel).toHaveBeenCalled();
+      });
     });
   });
 

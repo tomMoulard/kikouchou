@@ -722,6 +722,8 @@
     "modelChangeFailed": "Impossible de changer le modèle de l'assistant. Veuillez réessayer.",
     "loadModel": "Charger le modèle",
     "loadHint": "Le modèle sélectionné sera téléchargé et mis en cache dans votre navigateur avant la première utilisation.",
+    "deviceUnsupportedTitle": "Cet appareil ne peut pas exécuter l'assistant",
+    "deviceUnsupportedDescription": "L'assistant exécute le modèle entièrement sur votre appareil, ce qui nécessite WebGPU — et ce navigateur ne peut pas l'utiliser ici. Ouvrez l'application dans une version récente de Chrome, Edge ou Safari sur ordinateur pour en profiter.",
     "initializingLoader": "Initialisation…",
     "downloadingModelFiles": "Téléchargement des fichiers du modèle…",
     "downloadingFile": "Téléchargement de {{file}} — {{percent}} % pour ce fichier",
