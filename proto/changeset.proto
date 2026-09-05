@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package kikouchou.sharing;
+
+// Top-level changeset message — this is what goes into the QR code.
+// Captures a guest's additions and modifications relative to a baseline snapshot.
+message TripChangeset {
+  uint32 version = 1;           // schema version (currently 1)
+  string trip_id = 2;
+  string share_id = 3;
+  string exported_by = 4;       // PersonId of the guest who exported
+  int64 exported_at = 5;        // unix timestamp ms when exported
+  int64 base_snapshot_at = 6;   // unix timestamp ms of when guest imported the trip
+
+  EntityList added = 7;         // entities the guest created
+  EntityList modified = 8;      // entities the guest modified
+  // Present on full host exports — used to merge/import by trip name on a cold device.
+  TripSnapshot trip_snapshot = 9;
+}
+
+// A collection of entities grouped by type.
+message EntityList {
+  repeated Person persons = 1;
+  repeated RoomAssignment assignments = 2;
+  repeated Transport transports = 3;
+  repeated Room rooms = 4;
+}
+
+// Minimal trip metadata for import when the local trip id differs from the exporter.
+message TripSnapshot {
+  string name = 1;
+  string start_date = 2;   // ISO date YYYY-MM-DD
+  string end_date = 3;     // ISO date YYYY-MM-DD
+  optional string location = 4;
+  optional string description = 5;
+  optional double coord_lat = 6;
+  optional double coord_lon = 7;
+}
+
+// A room in the lodging layout.
+message Room {
+  string id = 1;
+  string trip_id = 2;
+  string name = 3;
+  uint32 capacity = 4;
+  int32 order = 5;
+  optional string description = 6;
+  optional string icon = 7;
+}
+
+// A trip participant.
+message Person {
+  string id = 1;
+  string trip_id = 2;
+  string name = 3;
+  string color = 4;                     // hex color "#rrggbb"
+  optional string stay_start_date = 5;  // ISO date YYYY-MM-DD
+  optional string stay_end_date = 6;    // ISO date YYYY-MM-DD
+  optional string notes = 7;              // allergies, diet, etc.
+  // Real people this entry stands for (e.g. "Alice+Auré" = 2). Absent/0 = 1.
+  optional uint32 headcount = 8;
+  // Contact number, stored as typed. Reaches every member of the trip.
+  optional string phone = 9;
+}
+
+// Links a person to a room for a specific date range.
+message RoomAssignment {
+  string id = 1;
+  string trip_id = 2;
+  string room_id = 3;
+  string person_id = 4;
+  string start_date = 5;   // ISO date YYYY-MM-DD
+  string end_date = 6;     // ISO date YYYY-MM-DD
+}
+
+// An arrival or departure event.
+message Transport {
+  string id = 1;
+  string trip_id = 2;
+  string person_id = 3;
+  TransportType type = 4;
+  string datetime = 5;                     // ISO datetime
+  string location = 6;
+  optional Coordinates coordinates = 7;
+  optional TransportMode transport_mode = 8;
+  optional string transport_number = 9;
+  optional string driver_id = 10;
+  bool needs_pickup = 11;
+  optional string notes = 12;
+  // Optional origin of this leg (e.g. previous station) for map routing.
+  optional string start_location = 13;
+  optional Coordinates start_coordinates = 14;
+}
+
+// GPS coordinates.
+message Coordinates {
+  double lat = 1;
+  double lon = 2;
+}
+
+enum TransportType {
+  TRANSPORT_TYPE_UNSPECIFIED = 0;
+  TRANSPORT_TYPE_ARRIVAL = 1;
+  TRANSPORT_TYPE_DEPARTURE = 2;
+}
+
+enum TransportMode {
+  TRANSPORT_MODE_UNSPECIFIED = 0;
+  TRANSPORT_MODE_TRAIN = 1;
+  TRANSPORT_MODE_PLANE = 2;
+  TRANSPORT_MODE_CAR = 3;
+  TRANSPORT_MODE_BUS = 4;
+  TRANSPORT_MODE_OTHER = 5;
+}

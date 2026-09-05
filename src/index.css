@@ -1,0 +1,392 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  /*
+   * Status palette (DESIGN_BOARD_BRIEF §5 "Status coloring"):
+   * green = arrival / success / online · orange = departure ·
+   * amber = warning / offline reassurance / pickups / guest onboarding ·
+   * red = destructive / errors (the existing `--destructive`).
+   *
+   * Four slots per tone, so a status can be drawn four ways without anyone
+   * reaching for a raw palette shade again:
+   *   `--x`            solid fill (button, dot, progress bar, strong border)
+   *   `--x-foreground` content ON that solid fill
+   *   `--x-surface`    tinted panel background
+   *   `--x-on-surface` content on that tint, and on `--background`/`--card`
+   *   `--x-border`     hairline around the tint
+   * `src/components/ui/status.variants.ts` is the only intended consumer.
+   */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-surface: var(--success-surface);
+  --color-success-on-surface: var(--success-on-surface);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-on-surface: var(--warning-on-surface);
+  --color-warning-border: var(--warning-border);
+  --color-departure: var(--departure);
+  --color-departure-foreground: var(--departure-foreground);
+  --color-departure-surface: var(--departure-surface);
+  --color-departure-on-surface: var(--departure-on-surface);
+  --color-departure-border: var(--departure-border);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-surface: var(--destructive-surface);
+  --color-destructive-on-surface: var(--destructive-on-surface);
+  --color-destructive-border: var(--destructive-border);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0.03 50);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0.03 50);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0.03 50);
+  --primary: oklch(0.25 0.04 185);
+  --primary-foreground: oklch(0.985 0.005 185);
+  --secondary: oklch(0.96 0.015 55);
+  --secondary-foreground: oklch(0.25 0.04 185);
+  --muted: oklch(0.96 0.015 55);
+  --muted-foreground: oklch(0.47 0.03 50);
+  --accent: oklch(0.96 0.02 70);
+  --accent-foreground: oklch(0.25 0.03 50);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0.01 25);
+  --destructive-surface: oklch(0.965 0.02 20);
+  --destructive-on-surface: oklch(0.47 0.2 27);
+  --destructive-border: oklch(0.89 0.06 20);
+  --success: oklch(0.53 0.15 150);
+  --success-foreground: oklch(0.98 0.01 150);
+  --success-surface: oklch(0.965 0.03 155);
+  --success-on-surface: oklch(0.45 0.13 150);
+  --success-border: oklch(0.9 0.07 155);
+  --warning: oklch(0.8 0.16 78);
+  --warning-foreground: oklch(0.28 0.06 60);
+  --warning-surface: oklch(0.975 0.025 90);
+  --warning-on-surface: oklch(0.45 0.11 55);
+  --warning-border: oklch(0.9 0.1 88);
+  --departure: oklch(0.55 0.185 42);
+  --departure-foreground: oklch(0.99 0.01 60);
+  --departure-surface: oklch(0.97 0.025 70);
+  --departure-on-surface: oklch(0.5 0.16 42);
+  --departure-border: oklch(0.89 0.08 65);
+  --border: oklch(0.92 0.02 55);
+  --input: oklch(0.92 0.02 55);
+  --ring: oklch(0.65 0.08 185);
+  --chart-1: oklch(0.65 0.18 25);
+  --chart-2: oklch(0.60 0.12 185);
+  --chart-3: oklch(0.75 0.15 85);
+  --chart-4: oklch(0.65 0.10 145);
+  --chart-5: oklch(0.65 0.12 290);
+  --sidebar: oklch(0.985 0.005 55);
+  --sidebar-foreground: oklch(0.145 0.03 50);
+  --sidebar-primary: oklch(0.25 0.04 185);
+  --sidebar-primary-foreground: oklch(0.985 0.005 185);
+  --sidebar-accent: oklch(0.96 0.02 70);
+  --sidebar-accent-foreground: oklch(0.25 0.03 50);
+  --sidebar-border: oklch(0.92 0.02 55);
+  --sidebar-ring: oklch(0.65 0.08 185);
+}
+
+.dark {
+  --background: oklch(0.15 0.025 50);
+  --foreground: oklch(0.96 0.01 55);
+  --card: oklch(0.22 0.025 50);
+  --card-foreground: oklch(0.96 0.01 55);
+  --popover: oklch(0.22 0.025 50);
+  --popover-foreground: oklch(0.96 0.01 55);
+  --primary: oklch(0.75 0.10 185);
+  --primary-foreground: oklch(0.15 0.03 185);
+  --secondary: oklch(0.28 0.02 50);
+  --secondary-foreground: oklch(0.96 0.01 55);
+  --muted: oklch(0.28 0.02 50);
+  --muted-foreground: oklch(0.72 0.03 55);
+  --accent: oklch(0.28 0.025 70);
+  --accent-foreground: oklch(0.96 0.01 55);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.18 0.04 25);
+  --destructive-surface: oklch(0.28 0.06 22);
+  --destructive-on-surface: oklch(0.83 0.13 22);
+  --destructive-border: oklch(0.42 0.1 22);
+  --success: oklch(0.7 0.16 150);
+  --success-foreground: oklch(0.18 0.04 150);
+  --success-surface: oklch(0.27 0.05 152);
+  --success-on-surface: oklch(0.85 0.14 152);
+  --success-border: oklch(0.4 0.08 150);
+  --warning: oklch(0.82 0.15 80);
+  --warning-foreground: oklch(0.22 0.05 60);
+  --warning-surface: oklch(0.28 0.05 75);
+  --warning-on-surface: oklch(0.87 0.13 85);
+  --warning-border: oklch(0.42 0.08 78);
+  --departure: oklch(0.72 0.17 47);
+  --departure-foreground: oklch(0.18 0.04 47);
+  --departure-surface: oklch(0.28 0.05 55);
+  --departure-on-surface: oklch(0.83 0.13 55);
+  --departure-border: oklch(0.42 0.09 50);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.55 0.06 185);
+  --chart-1: oklch(0.70 0.16 25);
+  --chart-2: oklch(0.70 0.12 185);
+  --chart-3: oklch(0.80 0.15 85);
+  --chart-4: oklch(0.70 0.10 145);
+  --chart-5: oklch(0.70 0.12 290);
+  --sidebar: oklch(0.18 0.025 50);
+  --sidebar-foreground: oklch(0.96 0.01 55);
+  --sidebar-primary: oklch(0.75 0.10 185);
+  --sidebar-primary-foreground: oklch(0.15 0.03 185);
+  --sidebar-accent: oklch(0.28 0.025 70);
+  --sidebar-accent-foreground: oklch(0.96 0.01 55);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.55 0.06 185);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+
+    /*
+     * The horizontal half of the safe area, once and for everybody.
+     *
+     * `viewport-fit=cover` (index.html) also pushes the layout viewport under
+     * the notch in landscape, where `safe-area-inset-left` is ~47px on a
+     * notched iPhone. Putting it on `body` insets the whole in-flow tree —
+     * header, sidebar, `<main>`, every page — in one rule, and costs nothing in
+     * portrait where both insets are 0. Fixed and sticky descendants are
+     * unaffected because their containing block is the viewport, not this box;
+     * the mobile nav bar and the FABs are hidden above `md`/`sm` anyway, which
+     * is every width a phone can be in landscape.
+     */
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+}
+
+/*
+ * ============================================================================
+ * The mobile bottom edge
+ * ============================================================================
+ *
+ * `index.html` asks for `viewport-fit=cover`, so the layout viewport now runs
+ * under the home indicator instead of stopping above it. That is what lets the
+ * app paint edge to edge, and it is also why everything anchored to the bottom
+ * has to be lifted by `env(safe-area-inset-bottom)` from here on — otherwise it
+ * renders under a bar the OS owns and cannot be tapped.
+ *
+ * The stack, measured upwards from the bottom of the *safe* area:
+ *
+ *   0                   the safe-area inset itself (0 on a phone without one)
+ *   0     - 4rem  (64px) the mobile nav bar, `h-16` (Layout.tsx, `md:hidden`)
+ *   5rem  - 8.5rem       the FAB, `size-14` at `bottom-nav-safe` (`sm:hidden`)
+ *   9rem  - 12.5rem      a second FAB, on `/trips` only (`bottom-fab-safe`)
+ *   9rem                 toasts (App.tsx's `mobileOffset`)
+ *   9.5rem               the first pixel a page's own content may occupy
+ *
+ * Every number below is that table. Do not spell one out at a call site: the
+ * whole reason the FAB and the toasts and the install prompt kept landing on
+ * top of each other is that each of them carried its own arithmetic.
+ *
+ * And the check that something new down here clears the stack is a hit test at
+ * the covered element's own centre — `document.elementFromPoint(x, y)` — not a
+ * look at a screenshot. See `e2e/mobile-bottom-edge.spec.ts`.
+ */
+
+/**
+ * Nothing under it but the home indicator.
+ *
+ * For a bar that is *meant* to sit flush with the physical bottom: its
+ * background fills the inset while its content stays above it.
+ */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/**
+ * Clear of the mobile nav bar (4rem) plus a 1rem gutter, plus the inset.
+ *
+ * For overlays that cover the nav bar rather than sitting in front of it — the
+ * "More" sheet — where the bar is visually still there behind the scrim.
+ */
+@utility pb-nav-safe {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/**
+ * `--bottom-stack`: how much room the stack needs at this width, in one place.
+ *
+ * Below `sm` all three layers are up, so it clears the FAB's top edge (8.5rem)
+ * with a 1rem gutter. From `sm` the FAB is `sm:hidden` and only the nav bar is
+ * left; from `md` the nav bar is `md:hidden` too and a page gutter is enough.
+ *
+ * It is a variable rather than three copies of the arithmetic because two
+ * different properties need the same number: `padding-bottom`, for a scroll
+ * container whose last row must stay tappable, and `bottom`, for a fixed
+ * overlay that has to start above the stack instead of reaching down into it.
+ */
+:root {
+  --bottom-stack: calc(9.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (width >= theme(--breakpoint-sm)) {
+  :root {
+    --bottom-stack: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (width >= theme(--breakpoint-md)) {
+  :root {
+    --bottom-stack: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/**
+ * The shared rule: bottom padding for anything whose last row must stay
+ * tappable, at every width.
+ *
+ * One utility rather than `pb-… sm:pb-… md:pb-…` at each call site, deliberately
+ * — four list pages each carried their own version of this sum, and the two
+ * that got it wrong were invisible until someone tried to tap the last card.
+ */
+@utility pb-bottom-stack {
+  padding-bottom: var(--bottom-stack);
+}
+
+/**
+ * The same number as a *position*: the overlay's bottom edge starts where the
+ * stack ends.
+ *
+ * `pb-bottom-stack` would look like it does the same job and does not. Padding
+ * is part of an element's box and hit-tests like the rest of it, so a fixed
+ * overlay at `bottom-0` with 9.5rem of bottom padding still swallows every tap
+ * across the FAB's band — the padding paints nothing and takes the tap anyway.
+ * Measured: `document.elementFromPoint` at the FAB's centre returned the
+ * install prompt's wrapper. Anchoring `bottom` instead gives the element a box
+ * that ends where its content ends.
+ */
+@utility bottom-above-stack {
+  bottom: var(--bottom-stack);
+}
+
+/**
+ * The extra clearance a page owes when it stacks a *second* FAB.
+ *
+ * `pb-bottom-stack` on `<main>` clears one FAB (top edge 8.5rem); `/trips` puts
+ * a QR-import button above the create button, whose top edge is 12.5rem. This
+ * is the 4rem difference, applied inside `<main>` so the two paddings add.
+ */
+@utility pb-second-fab {
+  padding-bottom: 4rem;
+
+  @media (width >= theme(--breakpoint-sm)) {
+    padding-bottom: 0;
+  }
+}
+
+/**
+ * A FAB's own offset: directly above the nav bar and the home indicator.
+ */
+@utility bottom-nav-safe {
+  bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/**
+ * A second FAB's offset: directly above the first one (8.5rem) with a 0.5rem
+ * gap between the two circles.
+ */
+@utility bottom-fab-safe {
+  bottom: calc(9rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Calendar booked dates indicator */
+.rdp-day-booked {
+  position: relative;
+}
+
+.rdp-day-booked::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--destructive);
+  opacity: 0.7;
+}
+
+/* Ensure the dot is visible even when the day is selected */
+.rdp-day-booked[data-range-start=true]::after,
+.rdp-day-booked[data-range-end=true]::after,
+.rdp-day-booked[data-range-middle=true]::after,
+.rdp-day-booked[data-selected-single=true]::after {
+  background-color: var(--primary-foreground);
+  opacity: 0.8;
+}
+
+/*
+ * Keep Leaflet's z-index scale inside the map.
+ *
+ * Leaflet numbers its own layers 200 (tiles) to 1000 (zoom and attribution
+ * controls), and gives the container nothing that makes it a stacking context —
+ * so those numbers were resolved against the page root, where the app's own
+ * scale tops out at the dialog overlay's 50. Every map therefore painted over
+ * every dialog, sheet, popover and the sticky header: opening the share dialog
+ * on `/trips` left the trip cards' map previews sitting on top of it.
+ *
+ * `isolation: isolate` makes the container a stacking context, which contains
+ * 200-1000 without renumbering anything. The map itself then paints as one
+ * positioned box in normal order, under anything the app deliberately raises.
+ * It belongs here rather than on a `className`: it has to hold for every map,
+ * including the ones a future page mounts.
+ */
+.leaflet-container {
+  isolation: isolate;
+}

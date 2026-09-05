@@ -1,0 +1,634 @@
+/**
+ * @fileoverview Tests for TransportMapPage.
+ *
+ * @module features/transports/pages/__tests__/TransportMapPage.test
+ */
+
+import type React from 'react';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { render, screen } from '@/test/utils';
+import type { Person, Transport, Trip } from '@/types';
+
+// ============================================================================
+// Mocks
+// ============================================================================
+
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+    useParams: () => ({ tripId: 'trip-1' }),
+  };
+});
+
+const mockTrip: Trip = {
+  id: 'trip-1' as Trip['id'],
+  shareId: 'share-1' as Trip['shareId'],
+  name: 'Test Trip',
+  location: 'Paris',
+  startDate: '2026-07-01' as Trip['startDate'],
+  endDate: '2026-07-10' as Trip['endDate'],
+  description: '',
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+};
+
+const mockPerson: Person = {
+  id: 'person-1' as Person['id'],
+  tripId: 'trip-1' as Person['tripId'],
+  name: 'Alice',
+  color: '#3b82f6' as Person['color'],
+};
+
+const mockTransportWithCoords: Transport = {
+  id: 'transport-1' as Transport['id'],
+  tripId: 'trip-1' as Transport['tripId'],
+  personId: 'person-1' as Transport['personId'],
+  type: 'arrival',
+  datetime: '2027-07-15T14:30:00',
+  location: 'Paris CDG',
+  needsPickup: false,
+  transportMode: 'plane',
+  coordinates: { lat: 49.0097, lon: 2.5479 },
+};
+
+const mockTransportNoCoords: Transport = {
+  id: 'transport-2' as Transport['id'],
+  tripId: 'trip-1' as Transport['tripId'],
+  personId: 'person-1' as Transport['personId'],
+  type: 'departure',
+  datetime: '2027-07-20T10:00:00',
+  location: 'Paris Orly',
+  needsPickup: false,
+  transportMode: 'plane',
+};
+
+const mockSetCurrentTrip = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('@/contexts/TripContext', () => ({
+  useTripContext: vi.fn(() => ({
+    currentTrip: mockTrip,
+    isLoading: false,
+    error: null,
+    setCurrentTrip: mockSetCurrentTrip,
+    trips: [mockTrip],
+    checkConnection: vi.fn(),
+  })),
+}));
+
+vi.mock('@/contexts/PersonContext', () => ({
+  usePersonContext: vi.fn(() => ({
+    persons: [mockPerson],
+    isLoading: false,
+    error: null,
+    getPersonById: vi.fn((id: string) => (id === 'person-1' ? mockPerson : undefined)),
+  })),
+}));
+
+vi.mock('@/contexts/TransportContext', () => ({
+  useTransportContext: vi.fn(() => ({
+    arrivals: [mockTransportWithCoords],
+    departures: [mockTransportNoCoords],
+    upcomingPickups: [],
+    isLoading: false,
+    error: null,
+    deleteTransport: vi.fn(),
+  })),
+}));
+
+vi.mock('@/hooks', () => ({
+  useOfflineAwareToast: () => ({
+    successToast: vi.fn(),
+    errorToast: vi.fn(),
+  }),
+}));
+
+// Mock MapView to avoid Leaflet in jsdom. It exposes both halves of a marker:
+// the `popupContent` node and the `label` string, which is the marker's
+// accessible name on the real map and was previously unobservable from a test.
+vi.mock('@/components/shared/MapView', () => ({
+  MapView: ({
+    markers,
+  }: {
+    markers: Array<{ popupContent?: React.ReactNode; label?: string }>;
+  }) => (
+    <div data-testid="map-view" data-markers={markers?.length ?? 0}>
+      Map View
+      {markers?.map((m, i) => (
+        <div key={i} data-testid={`marker-popup-${i}`} data-label={m.label}>
+          {m.popupContent}
+        </div>
+      ))}
+    </div>
+  ),
+}));
+
+// Mock DirectionsButton
+vi.mock('@/features/transports/components/DirectionsButton', () => ({
+  DirectionsButton: () => <button data-testid="directions-btn">Directions</button>,
+}));
+
+// Mock PersonBadge
+vi.mock('@/components/shared/PersonBadge', () => ({
+  PersonBadge: ({ person }: { person: { name: string } }) => <span data-testid="person-badge">{person.name}</span>,
+}));
+
+import { TransportMapPage } from '../TransportMapPage';
+import { useTripContext } from '@/contexts/TripContext';
+import { useTransportContext } from '@/contexts/TransportContext';
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+describe('TransportMapPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTripContext).mockReturnValue({
+      currentTrip: mockTrip,
+      isLoading: false,
+      error: null,
+      setCurrentTrip: mockSetCurrentTrip,
+      trips: [mockTrip],
+      checkConnection: vi.fn(),
+    });
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [mockTransportWithCoords],
+      departures: [mockTransportNoCoords],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+  });
+
+  it('renders the page with map when transports have coordinates', () => {
+    render(<TransportMapPage />, { withProviders: false });
+    expect(screen.getByText('transports.mapView')).toBeInTheDocument();
+    expect(screen.getByTestId('map-view')).toBeInTheDocument();
+  });
+
+  it('renders loading state', () => {
+    vi.mocked(useTripContext).mockReturnValue({
+      currentTrip: mockTrip,
+      isLoading: true,
+      error: null,
+      setCurrentTrip: mockSetCurrentTrip,
+      trips: [mockTrip],
+      checkConnection: vi.fn(),
+    });
+    render(<TransportMapPage />, { withProviders: false });
+    expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it('renders error when no trip found', () => {
+    vi.mocked(useTripContext).mockReturnValue({
+      currentTrip: null,
+      isLoading: false,
+      error: null,
+      setCurrentTrip: mockSetCurrentTrip,
+      trips: [],
+      checkConnection: vi.fn(),
+    });
+    render(<TransportMapPage />, { withProviders: false });
+    expect(screen.getByText('errors.tripNotFound')).toBeInTheDocument();
+  });
+
+  it('renders empty state when no transports have coordinates', () => {
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [mockTransportNoCoords], // No coordinates
+      departures: [],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+    render(<TransportMapPage />, { withProviders: false });
+    expect(screen.getByText('transports.noLocations')).toBeInTheDocument();
+  });
+
+  it('renders back to list button', () => {
+    render(<TransportMapPage />, { withProviders: false });
+    const backBtn = screen.getByRole('button', { name: /transports\.backToList/i });
+    expect(backBtn).toBeInTheDocument();
+  });
+
+  it('renders error state when transports have error', () => {
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [],
+      departures: [],
+      upcomingPickups: [],
+      isLoading: false,
+      error: new Error('Transport fetch failed'),
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+    render(<TransportMapPage />, { withProviders: false });
+    expect(screen.getByText('Transport fetch failed')).toBeInTheDocument();
+  });
+
+  it('renders map legend with arrival and departure indicators', () => {
+    render(<TransportMapPage />, { withProviders: false });
+    expect(screen.getByText('transports.arrivals')).toBeInTheDocument();
+    expect(screen.getByText('transports.departures')).toBeInTheDocument();
+    expect(screen.getByText('transports.mappedCount')).toBeInTheDocument();
+  });
+
+  it('renders list view button and navigates on click', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<TransportMapPage />, { withProviders: false });
+
+    const listBtn = screen.getByRole('button', { name: /transports\.listView/i });
+    await user.click(listBtn);
+
+    expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/transports');
+  });
+
+  it('navigates to back to list when mobile back button is clicked', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<TransportMapPage />, { withProviders: false });
+
+    // There are two back to list buttons (header + mobile)
+    const backBtns = screen.getAllByRole('button', { name: /transports\.backToList/i });
+    await user.click(backBtns[backBtns.length - 1]!);
+
+    expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/transports');
+  });
+
+  it('renders departure transport markers', () => {
+    const mockDeparture: Transport = {
+      id: 'transport-dep' as Transport['id'],
+      tripId: 'trip-1' as Transport['tripId'],
+      personId: 'person-1' as Transport['personId'],
+      type: 'departure',
+      datetime: '2027-07-20T10:00:00',
+      location: 'Paris Orly',
+      needsPickup: false,
+      transportMode: 'plane',
+      coordinates: { lat: 48.7233, lon: 2.3795 },
+    };
+
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [],
+      departures: [mockDeparture],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportMapPage />, { withProviders: false });
+    expect(screen.getByTestId('map-view')).toBeInTheDocument();
+    expect(screen.getByTestId('map-view').getAttribute('data-markers')).toBe('1');
+  });
+
+  it('renders transport with needsPickup and no driver', () => {
+    const pickupTransport: Transport = {
+      id: 'transport-pickup' as Transport['id'],
+      tripId: 'trip-1' as Transport['tripId'],
+      personId: 'person-1' as Transport['personId'],
+      type: 'arrival',
+      datetime: '2027-07-15T14:30:00',
+      location: 'Paris CDG',
+      needsPickup: true,
+      transportMode: 'train',
+      transportNumber: 'TGV 6789',
+      coordinates: { lat: 49.0097, lon: 2.5479 },
+    };
+
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [pickupTransport],
+      departures: [],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportMapPage />, { withProviders: false });
+
+    // The branch this test is named for: a pickup with nobody driving it says
+    // so in the popup. `getByTestId('map-view')` said nothing about it.
+    const popup = screen.getByTestId('marker-popup-0');
+    expect(popup).toHaveTextContent('transports.needsPickup');
+    expect(popup).toHaveTextContent('Paris CDG');
+    expect(popup).toHaveTextContent('TGV 6789');
+    expect(popup).toHaveTextContent('transports.modes.train');
+    // Datetime carries no offset, so it reads as this wall clock everywhere
+    expect(popup).toHaveTextContent('Thu 15 Jul');
+    expect(popup).toHaveTextContent('14:30');
+  });
+
+  it('renders map with multiple markers', () => {
+    const transport2: Transport = {
+      id: 'transport-3' as Transport['id'],
+      tripId: 'trip-1' as Transport['tripId'],
+      personId: 'person-1' as Transport['personId'],
+      type: 'departure',
+      datetime: '2027-07-20T10:00:00',
+      location: 'Paris Orly',
+      needsPickup: false,
+      transportMode: 'car',
+      coordinates: { lat: 48.7233, lon: 2.3795 },
+    };
+
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [mockTransportWithCoords],
+      departures: [transport2],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportMapPage />, { withProviders: false });
+    expect(screen.getByTestId('map-view').getAttribute('data-markers')).toBe('2');
+  });
+
+  it('renders unknown person name when person not found', () => {
+    const orphanTransport: Transport = {
+      id: 'transport-orphan' as Transport['id'],
+      tripId: 'trip-1' as Transport['tripId'],
+      personId: 'nonexistent-person' as Transport['personId'],
+      type: 'arrival',
+      datetime: '2027-07-15T14:30:00',
+      location: 'Airport',
+      needsPickup: false,
+      coordinates: { lat: 49.0, lon: 2.5 },
+    };
+
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [orphanTransport],
+      departures: [],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportMapPage />, { withProviders: false });
+
+    // The fallback this test is named for: with no matching person the marker
+    // still has to be findable on the map, named "unknown" rather than blank,
+    // and the popup drops the person badge instead of rendering an empty one.
+    const marker = screen.getByTestId('marker-popup-0');
+    expect(marker).toHaveAttribute('data-label', 'common.unknown - Airport');
+    expect(screen.queryByTestId('person-badge')).not.toBeInTheDocument();
+    expect(marker).toHaveTextContent('Airport');
+  });
+
+  it('renders popup content with arrival type transport', () => {
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [mockTransportWithCoords],
+      departures: [],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportMapPage />, { withProviders: false });
+    const popup = screen.getByTestId('marker-popup-0');
+    expect(popup).toBeInTheDocument();
+    // Popup should show transport location
+    expect(popup.textContent).toContain('Paris CDG');
+    // Should show person name via PersonBadge mock
+    expect(screen.getByTestId('person-badge')).toBeInTheDocument();
+  });
+
+  it('renders popup with departure type and needsPickup indicator', () => {
+    const departurePickup: Transport = {
+      id: 'transport-dep-pickup' as Transport['id'],
+      tripId: 'trip-1' as Transport['tripId'],
+      personId: 'person-1' as Transport['personId'],
+      type: 'departure',
+      datetime: '2027-07-20T10:00:00',
+      location: 'Orly Airport',
+      needsPickup: true,
+      transportMode: 'bus',
+      transportNumber: 'BUS-42',
+      coordinates: { lat: 48.7233, lon: 2.3795 },
+    };
+
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [],
+      departures: [departurePickup],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportMapPage />, { withProviders: false });
+    const popup = screen.getByTestId('marker-popup-0');
+    expect(popup.textContent).toContain('Orly Airport');
+    expect(popup.textContent).toContain('BUS-42');
+    // Should show needs pickup indicator
+    expect(popup.textContent).toContain('transports.needsPickup');
+  });
+
+  it('renders popup with train transport mode', () => {
+    const trainTransport: Transport = {
+      id: 'transport-train' as Transport['id'],
+      tripId: 'trip-1' as Transport['tripId'],
+      personId: 'person-1' as Transport['personId'],
+      type: 'arrival',
+      datetime: '2027-07-15T14:30:00',
+      location: 'Gare du Nord',
+      needsPickup: false,
+      transportMode: 'train',
+      transportNumber: 'TGV 1234',
+      coordinates: { lat: 48.88, lon: 2.35 },
+    };
+
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [trainTransport],
+      departures: [],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportMapPage />, { withProviders: false });
+    const popup = screen.getByTestId('marker-popup-0');
+    expect(popup.textContent).toContain('Gare du Nord');
+    expect(popup.textContent).toContain('TGV 1234');
+  });
+
+  it('renders popup with car transport mode', () => {
+    const carTransport: Transport = {
+      id: 'transport-car' as Transport['id'],
+      tripId: 'trip-1' as Transport['tripId'],
+      personId: 'person-1' as Transport['personId'],
+      type: 'arrival',
+      datetime: '2027-07-15T14:30:00',
+      location: 'Parking Lot A',
+      needsPickup: false,
+      transportMode: 'car',
+      coordinates: { lat: 48.88, lon: 2.35 },
+    };
+
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [carTransport],
+      departures: [],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportMapPage />, { withProviders: false });
+    const popup = screen.getByTestId('marker-popup-0');
+    expect(popup).toHaveTextContent('Parking Lot A');
+    expect(popup).toHaveTextContent('transports.modes.car');
+  });
+
+  it('renders popup with other transport mode', () => {
+    const otherTransport: Transport = {
+      id: 'transport-other' as Transport['id'],
+      tripId: 'trip-1' as Transport['tripId'],
+      personId: 'person-1' as Transport['personId'],
+      type: 'arrival',
+      datetime: '2027-07-15T14:30:00',
+      location: 'Ferry Terminal',
+      needsPickup: false,
+      transportMode: 'other' as Transport['transportMode'],
+      coordinates: { lat: 48.88, lon: 2.35 },
+    };
+
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [otherTransport],
+      departures: [],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportMapPage />, { withProviders: false });
+    const popup = screen.getByTestId('marker-popup-0');
+    expect(popup).toHaveTextContent('Ferry Terminal');
+    expect(popup).toHaveTextContent('transports.modes.other');
+  });
+
+  it('renders popup with invalid datetime gracefully', () => {
+    const invalidDateTransport: Transport = {
+      id: 'transport-bad-date' as Transport['id'],
+      tripId: 'trip-1' as Transport['tripId'],
+      personId: 'person-1' as Transport['personId'],
+      type: 'arrival',
+      datetime: 'not-a-date',
+      location: 'Station X',
+      needsPickup: false,
+      coordinates: { lat: 48.88, lon: 2.35 },
+    };
+
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [invalidDateTransport],
+      departures: [],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportMapPage />, { withProviders: false });
+
+    // A row we cannot place in time still belongs on the map — but the popup
+    // must show *no* date and *no* time rather than "Invalid Date"
+    const popup = screen.getByTestId('marker-popup-0');
+    expect(popup).toHaveTextContent('Station X');
+    expect(popup.textContent).not.toMatch(/invalid/i);
+    expect(popup.textContent).not.toMatch(/nan/i);
+    expect(popup.textContent).not.toMatch(/\d{2}:\d{2}/);
+  });
+
+  it('renders popup with transport that has driver assigned', () => {
+    const assignedTransport: Transport = {
+      id: 'transport-assigned' as Transport['id'],
+      tripId: 'trip-1' as Transport['tripId'],
+      personId: 'person-1' as Transport['personId'],
+      type: 'arrival',
+      datetime: '2027-07-15T14:30:00',
+      location: 'Airport',
+      needsPickup: true,
+      driverId: 'person-1' as Transport['driverId'],
+      coordinates: { lat: 48.88, lon: 2.35 },
+    };
+
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [assignedTransport],
+      departures: [],
+      upcomingPickups: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn(),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportMapPage />, { withProviders: false });
+
+    const popup = screen.getByTestId('marker-popup-0');
+    // A driver is assigned, so the pickup warning is gone…
+    expect(popup.textContent).not.toContain('transports.needsPickup');
+    // …while the rest of the popup still renders. Without this half, deleting
+    // the popup entirely would also satisfy the assertion above.
+    expect(popup).toHaveTextContent('Airport');
+    expect(popup).toHaveTextContent('14:30');
+    expect(screen.getByTestId('person-badge')).toHaveTextContent('Alice');
+  });
+
+  // Where everyone is heading. A map of stations with no "home" on it does not
+  // answer the question the page is opened to answer.
+  describe('trip location pin', () => {
+    const tripWithCoordinates: Trip = {
+      ...mockTrip,
+      coordinates: { lat: 48.8566, lon: 2.3522 },
+    };
+
+    it('pins the trip location when the trip has coordinates', () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: tripWithCoordinates,
+        isLoading: false,
+        error: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        trips: [tripWithCoordinates],
+        checkConnection: vi.fn(),
+      });
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      // It leads the marker list, so the transports keep their own ordering.
+      expect(screen.getByTestId('marker-popup-0')).toHaveAttribute('data-label', 'Paris');
+      expect(screen.getByTestId('map-legend-swatch-trip')).toBeInTheDocument();
+    });
+
+    it('leaves the map alone when the trip has no coordinates', () => {
+      render(<TransportMapPage />, { withProviders: false });
+
+      expect(screen.getByTestId('marker-popup-0')).not.toHaveAttribute('data-label', 'Paris');
+      expect(screen.queryByTestId('map-legend-swatch-trip')).not.toBeInTheDocument();
+    });
+
+    it('does not count the trip pin as a mapped transport', () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: tripWithCoordinates,
+        isLoading: false,
+        error: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        trips: [tripWithCoordinates],
+        checkConnection: vi.fn(),
+      });
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      // The legend counts transports, not pins — one arrival has coordinates.
+      expect(screen.getByTestId('map-legend')).toHaveTextContent('transports.mappedCount');
+      expect(screen.getByTestId('map-view')).toHaveAttribute('data-markers', '2');
+    });
+  });
+});
