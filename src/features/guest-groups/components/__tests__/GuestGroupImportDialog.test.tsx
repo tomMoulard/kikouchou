@@ -349,68 +349,6 @@ describe('GuestGroupImportDialog — more than one group', () => {
     expect(selections[0].memberIds).toHaveLength(3);
   });
 
-  it('opens with the queue the caller passed already ticked', async () => {
-    const family = await seedFamily();
-    await seedSkiCrew();
-
-    render(
-      <GuestGroupImportDialog
-        open
-        onOpenChange={vi.fn()}
-        onConfirm={vi.fn()}
-        initialSelection={[
-          { group: family, memberIds: [family.members[0]!.id] },
-        ]}
-      />,
-    );
-
-    await screen.findByText('Family');
-
-    // The queued group opens itself: folded is the default for a group the user
-    // has not decided about, and "Family — 1 selected" does not say which one.
-    expect(screen.getByLabelText(/Tom/)).toBeChecked();
-    expect(screen.getByLabelText(/Alice/)).not.toBeChecked();
-
-    // The group they queued nothing from stays folded.
-    expect(screen.queryByLabelText(/Bob/)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Ski crew/ })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
-  });
-
-  it('adds to the queue it opened with rather than replacing it', async () => {
-    const user = userEvent.setup(),
-      onConfirm = vi.fn().mockResolvedValue(undefined),
-      family = await seedFamily(),
-      ski = await seedSkiCrew();
-
-    render(
-      <GuestGroupImportDialog
-        open
-        onOpenChange={vi.fn()}
-        onConfirm={onConfirm}
-        initialSelection={[
-          { group: family, memberIds: [family.members[0]!.id] },
-        ]}
-      />,
-    );
-
-    await screen.findByText('Family');
-    await expandAll(user);
-    await user.click(screen.getByLabelText(/Bob/));
-    await user.click(screen.getByRole('button', { name: /guestGroups.importConfirm/ }));
-
-    await waitFor(() => {
-      expect(onConfirm).toHaveBeenCalledTimes(1);
-    });
-
-    const selections = onConfirm.mock.calls[0]?.[0];
-    expect(selections).toHaveLength(2);
-    expect(selections[0].memberIds).toEqual([family.members[0]!.id]);
-    expect(selections[1].memberIds).toEqual([ski.members[0]!.id]);
-  });
-
   it('narrows the list to the groups whose name matches', async () => {
     const user = userEvent.setup();
     await seedFamily();

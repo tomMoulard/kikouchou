@@ -14,7 +14,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { fixtureDate } from './support/fixture-dates';
 import { waitForRoute } from './support/routes';
-import { seedTrip } from './support/seed';
+import { seedGuestGroup, seedTrip } from './support/seed';
 
 // ============================================================================
 // Helpers
@@ -55,6 +55,19 @@ async function createGroup(
 
   await dialog.getByRole('button', { name: /^save$/i }).click();
   await expect(dialog).toBeHidden();
+}
+
+/**
+ * Picks the 15th and 22nd in the trip form, as the sync spec does.
+ *
+ * Days of the month the picker opens on — always the current one — so there is
+ * no fixture date here to go stale.
+ */
+async function fillTripDates(page: Page): Promise<void> {
+  await page.locator('#trip-start-date').click();
+  await page.getByRole('gridcell').filter({ hasText: /^15$/ }).first().click();
+  await page.locator('#trip-end-date').click();
+  await page.getByRole('gridcell').filter({ hasText: /^22$/ }).first().click();
 }
 
 /** A trip whose dates are derived from today, never a literal month. */
@@ -244,10 +257,51 @@ test.describe('Guest groups', () => {
     await expect(dialog.getByLabel(/Dana/)).toBeVisible();
   });
 
+  test('a trip created from a group and typed names keeps both', async ({ page }) => {
+    await seedGuestGroup(page, {
+      name: FAMILY.name,
+      members: [{ name: 'Tom + Léa', headcount: 2 }, { name: 'Alice' }],
+    });
+
+    await page.goto('/trips/new');
+    await waitForRoute(page);
+
+    await page.getByLabel(/trip name/i).fill('Bretagne');
+    await fillTripDates(page);
+
+    // Type one guest, import two — they end up in one list, and one trip.
+    await page.getByRole('button', { name: /^add guest$/i }).click();
+    const rows = page.getByRole('group', { name: /guests/i }).getByRole('textbox');
+    await rows.last().fill('Marie');
+
+    await page.getByRole('button', { name: /add from a group/i }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
+    await expect(dialog).toBeHidden();
+
+    // One list, no separation: the imported people are rows like any other.
+    // Four rows, because signed out the first is the empty "you" row — it is
+    // dropped on save rather than becoming a nameless guest.
+    await expect(rows).toHaveCount(4);
+    await expect(rows.nth(1)).toHaveValue('Marie');
+    await expect(rows.nth(2)).toHaveValue('Tom + Léa');
+    await expect(rows.nth(3)).toHaveValue('Alice');
+
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL(/\/trips\/[\w-]+\/calendar/, { timeout: 20_000 });
+
+    await page.goto(page.url().replace('/calendar', '/persons'));
+    await waitForRoute(page);
+
+    await expect(page.getByText('Marie', { exact: true })).toBeVisible();
+    await expect(page.getByText('Tom + Léa', { exact: true })).toBeVisible();
+    await expect(page.getByText('Alice', { exact: true })).toBeVisible();
+  });
+
   /*
-    The create-trip queue — two groups parked before the trip exists, the second
-    added without losing the first — is covered by the picker's own tests
-    (`initialSelection` in GuestGroupImportDialog.test.tsx) rather than here.
+    One more create-page flow is deliberately absent, with its reasoning below:
+    the picker's own tests cover the merge into the guest list
+    (`TripForm addGuests` in TripForm.test.tsx).
 
     Not for lack of trying: on `/trips/new` the first real click on a form
     control never reaches React. The button takes focus, the handler does not

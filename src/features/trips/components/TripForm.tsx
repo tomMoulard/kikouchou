@@ -9,9 +9,11 @@ import {
   type ChangeEvent,
   type FormEvent,
   type ReactNode,
+  type Ref,
   memo,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -42,7 +44,7 @@ import {
   ImportBadge,
   type TripImportData,
 } from '@/features/trips/components/LocationAutocomplete';
-import type { Trip, TripFormData, TripId } from '@/types';
+import type { HexColor, Trip, TripFormData, TripId } from '@/types';
 
 // ============================================================================
 // Constants
@@ -102,7 +104,7 @@ interface TripFormProps {
   readonly currentUserName?: string;
   /**
    * Callback when the create-mode guest list changes, with the trimmed,
-   * non-empty names in list order.
+   * non-empty guests in list order.
    *
    * Guests are not part of {@link TripFormData}: the trip repository spreads
    * that object straight into the Dexie record, so a field that is not a trip
@@ -110,7 +112,12 @@ interface TripFormProps {
    * document. Like `onImportSourceChange`, this reports the extra create-mode
    * data out so the page can act on it once the trip exists.
    */
-  readonly onGuestsChange?: (guestNames: readonly string[]) => void;
+  readonly onGuestsChange?: (guests: readonly NewTripGuest[]) => void;
+  /**
+   * Handle for pushing guests into the list from outside — see
+   * {@link TripFormHandle}.
+   */
+  readonly ref?: Ref<TripFormHandle>;
   /**
    * Extra controls rendered directly under the guest list.
    *
@@ -119,6 +126,49 @@ interface TripFormProps {
    * not a trip field and has no business inside this component's state.
    */
   readonly children?: ReactNode;
+}
+
+/**
+ * A guest the create form will turn into a `Person`.
+ *
+ * Everything past `name` is optional because a typed row has none of it: the
+ * page assigns a colour from the palette and the rest stays unset. A guest that
+ * arrived from a saved group brings its own, and those fields are the whole
+ * reason a group is worth keeping — retyping four names is tedious, retyping
+ * four phone numbers and a peanut allergy is why people give up.
+ */
+export interface NewTripGuest {
+  readonly name: string;
+  readonly color?: HexColor;
+  readonly headcount?: number;
+  readonly notes?: string;
+  readonly phone?: string;
+}
+
+/**
+ * What the create page can do to the guest list from outside it.
+ *
+ * An imperative handle rather than lifting the list into the page: the "you"
+ * row follows the account through three interacting pieces of state
+ * (`currentUserName`, `hasEditedFirstGuest`, `resolvedGuests`), and moving that
+ * out to give one caller an append would be a large change to buy a small one.
+ * Appending to a list a child owns is what a handle is for.
+ */
+export interface TripFormHandle {
+  /**
+   * Adds guests to the end of the list.
+   *
+   * Anyone already present by `sourceMemberId` is skipped, so importing the
+   * same family twice does not double it. Names are not compared: two people
+   * called Alice are two people.
+   */
+  readonly addGuests: (guests: readonly ImportedTripGuest[]) => void;
+}
+
+/** A guest arriving from a saved group, carrying the member it came from. */
+export interface ImportedTripGuest extends NewTripGuest {
+  /** The group member this came from; the identity an append de-duplicates on. */
+  readonly sourceMemberId: string;
 }
 
 /**
@@ -135,6 +185,14 @@ interface GuestRow {
   readonly id: string;
   /** The raw field value; trimmed only on the way out. */
   readonly name: string;
+  /**
+   * What a saved group brought with this person, when it came from one.
+   *
+   * Deliberately not rendered: a guest is a guest, and marking the imported
+   * ones would split one list into two in the only place the user is trying to
+   * see it as one.
+   */
+  readonly imported?: Omit<ImportedTripGuest, 'name'>;
 }
 
 /**
@@ -248,6 +306,7 @@ const TripForm = memo(function TripForm({
   onImportSourceChange,
   currentUserName,
   onGuestsChange,
+  ref,
   children,
 }: TripFormProps) {
   const { t, i18n } = useTranslation();
@@ -358,15 +417,21 @@ const TripForm = memo(function TripForm({
 
   // What the page will turn into Person records: trimmed, blanks dropped. A row
   // added with "+" and left empty is an abandoned click, not a nameless guest.
-  const guestNames = useMemo(
-    () => resolvedGuests.map((guest) => guest.name.trim()).filter((guestName) => guestName !== ''),
+  //
+  // Whatever a saved group brought rides along — a typed row simply has none of
+  // it, which is what makes one list able to hold both.
+  const guestsToCreate = useMemo(
+    (): readonly NewTripGuest[] =>
+      resolvedGuests
+        .map((guest) => ({ ...guest.imported, name: guest.name.trim() }))
+        .filter((guest) => guest.name !== ''),
     [resolvedGuests],
   );
 
   useEffect(() => {
     if (!isCreateMode) {return;}
-    onGuestsChange?.(guestNames);
-  }, [isCreateMode, guestNames, onGuestsChange]);
+    onGuestsChange?.(guestsToCreate);
+  }, [isCreateMode, guestsToCreate, onGuestsChange]);
 
   // Notify parent of dirty state changes
   useEffect(() => {
@@ -611,6 +676,51 @@ const TripForm = memo(function TripForm({
     pendingGuestFocusRef.current = id;
     setGuests((prev) => [...prev, { id, name: '' }]);
   }, []);
+
+  /**
+   * Appends guests that came from a saved group.
+   *
+   * They land in the same list as the typed ones and look identical there —
+   * which is the point. A group is a shortcut for typing names, not a second
+   * kind of guest, and showing it as one would split the list the user is
+   * trying to read as a whole.
+   *
+   * The blank row a signed-out form starts with is filled rather than left
+   * stranded above the arrivals; anything already imported from the same member
+   * is skipped, so adding the same family twice is a no-op instead of a double.
+   */
+  const addGuests = useCallback((incoming: readonly ImportedTripGuest[]) => {
+    setGuests((prev) => {
+      const present = new Set(
+          prev
+            .map((guest) => guest.imported?.sourceMemberId)
+            .filter((id): id is string => id !== undefined),
+        ),
+        fresh = incoming.filter((guest) => !present.has(guest.sourceMemberId));
+
+      if (fresh.length === 0) {
+        return prev;
+      }
+
+      const rows = fresh.map(({ name, ...imported }) => ({
+        id: nanoid(),
+        name,
+        imported,
+      }));
+
+      // An untouched trailing blank is an empty row the user has not typed in;
+      // leaving it between the typed guests and the imported ones would read as
+      // a gap in the list.
+      const last = prev[prev.length - 1];
+      if (prev.length > 1 && last && last.name.trim() === '' && !last.imported) {
+        return [...prev.slice(0, -1), ...rows];
+      }
+
+      return [...prev, ...rows];
+    });
+  }, []);
+
+  useImperativeHandle(ref, () => ({ addGuests }), [addGuests]);
 
   /**
    * Removes a guest row, moving focus to the row above it.

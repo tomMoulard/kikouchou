@@ -337,6 +337,14 @@ export async function seedGuestGroup(
   page: Page,
   options: SeedGuestGroupOptions,
 ): Promise<string> {
+  // The database is created by the app, so there is nothing to open until a
+  // page has run — and `about:blank` refuses IndexedDB outright. `seedTrip`
+  // navigates for the same reason; the trip-scoped seeds below it do not,
+  // because a trip had to exist before them and that navigation already
+  // happened.
+  await page.goto('/trips');
+  await page.waitForLoadState('load');
+
   return await page.evaluate(async (options: SeedGuestGroupOptions) => {
     const id = `seed-group-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const now = Date.now();

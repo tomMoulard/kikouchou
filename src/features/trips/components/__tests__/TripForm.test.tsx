@@ -7,12 +7,17 @@
  * @module features/trips/components/__tests__/TripForm.test
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { TripForm } from '@/features/trips/components/TripForm';
+import { createRef } from 'react';
+
+import {
+  TripForm,
+  type TripFormHandle,
+} from '@/features/trips/components/TripForm';
 import type { Trip, TripId, ShareId } from '@/types';
-import { isoDate } from '@/test/utils';
+import { hexColor, isoDate } from '@/test/utils';
 
 // ============================================================================
 // Test Data Factories
@@ -1305,7 +1310,10 @@ describe('TripForm Guest List', () => {
     await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
 
     await waitFor(() => {
-      expect(onGuestsChange).toHaveBeenLastCalledWith(['Tom', 'Marie']);
+      expect(onGuestsChange).toHaveBeenLastCalledWith([
+        { name: 'Tom' },
+        { name: 'Marie' },
+      ]);
     });
   });
 
@@ -1326,7 +1334,7 @@ describe('TripForm Guest List', () => {
       />,
     );
 
-    expect(onGuestsChange).toHaveBeenLastCalledWith(['Tom']);
+    expect(onGuestsChange).toHaveBeenLastCalledWith([{ name: 'Tom' }]);
   });
 
   it('submits with an empty guest list', async () => {
@@ -1369,7 +1377,7 @@ describe('TripForm Guest List', () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
     });
-    expect(onGuestsChange).toHaveBeenLastCalledWith(['Marie']);
+    expect(onGuestsChange).toHaveBeenLastCalledWith([{ name: 'Marie' }]);
   });
 
   it('leaves a cleared first row cleared when the account resolves', async () => {
@@ -1420,6 +1428,195 @@ describe('TripForm Guest List', () => {
     await waitFor(() => {
       expect(onDirtyChange).toHaveBeenLastCalledWith(true);
     });
+  });
+});
+
+// ============================================================================
+// Guests arriving from a saved group
+// ============================================================================
+
+describe('TripForm addGuests', () => {
+  /** Two people as the group picker hands them over. */
+  const FAMILY = [
+    {
+      sourceMemberId: 'member-1',
+      name: 'Tom + Léa',
+      color: hexColor('#ef4444'),
+      headcount: 2,
+      phone: '+33 6 12 34 56 78',
+    },
+    { sourceMemberId: 'member-2', name: 'Alice', color: hexColor('#3b82f6') },
+  ];
+
+  it('puts imported guests in the same list as the typed ones', async () => {
+    const user = userEvent.setup();
+    const ref = createRef<TripFormHandle>();
+
+    render(
+      <TripForm
+        ref={ref}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        currentUserName="Tom"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
+    await user.type(guestInputs()[1]!, 'Marie');
+
+    act(() => {
+      ref.current?.addGuests(FAMILY);
+    });
+
+    // One list, four rows: a guest is a guest whichever way it arrived.
+    await waitFor(() => {
+      expect(guestInputs()).toHaveLength(4);
+    });
+    expect(guestInputs().map((field) => field.value)).toEqual([
+      'Tom',
+      'Marie',
+      'Tom + Léa',
+      'Alice',
+    ]);
+  });
+
+  it('reports what the group brought alongside the name', async () => {
+    const onGuestsChange = vi.fn();
+    const ref = createRef<TripFormHandle>();
+
+    render(
+      <TripForm
+        ref={ref}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        currentUserName="Tom"
+        onGuestsChange={onGuestsChange}
+      />,
+    );
+
+    act(() => {
+      ref.current?.addGuests(FAMILY);
+    });
+
+    // The colour, headcount and phone are the reason a group is worth keeping;
+    // a name-only merge would have thrown them away at the door.
+    await waitFor(() => {
+      expect(onGuestsChange).toHaveBeenLastCalledWith([
+        { name: 'Tom' },
+        {
+          sourceMemberId: 'member-1',
+          name: 'Tom + Léa',
+          color: '#ef4444',
+          headcount: 2,
+          phone: '+33 6 12 34 56 78',
+        },
+        { sourceMemberId: 'member-2', name: 'Alice', color: '#3b82f6' },
+      ]);
+    });
+  });
+
+  it('lets an imported guest be edited and removed like any other', async () => {
+    const user = userEvent.setup();
+    const onGuestsChange = vi.fn();
+    const ref = createRef<TripFormHandle>();
+
+    render(
+      <TripForm
+        ref={ref}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        currentUserName="Tom"
+        onGuestsChange={onGuestsChange}
+      />,
+    );
+
+    act(() => {
+      ref.current?.addGuests(FAMILY);
+    });
+    await waitFor(() => {
+      expect(guestInputs()).toHaveLength(3);
+    });
+
+    await user.clear(guestInputs()[1]!);
+    await user.type(guestInputs()[1]!, 'Tom & Léa');
+    await user.click(screen.getAllByRole('button', { name: /trips\.removeGuest/i })[1]!);
+
+    await waitFor(() => {
+      expect(onGuestsChange).toHaveBeenLastCalledWith([
+        { name: 'Tom' },
+        expect.objectContaining({ name: 'Tom & Léa' }),
+      ]);
+    });
+  });
+
+  it('does not add the same person twice', async () => {
+    const ref = createRef<TripFormHandle>();
+
+    render(
+      <TripForm ref={ref} onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />,
+    );
+
+    act(() => {
+      ref.current?.addGuests(FAMILY);
+    });
+    await waitFor(() => {
+      expect(guestInputs()).toHaveLength(3);
+    });
+
+    // Adding the same family again is a no-op, not a double.
+    act(() => {
+      ref.current?.addGuests(FAMILY);
+    });
+    await waitFor(() => {
+      expect(guestInputs()).toHaveLength(3);
+    });
+  });
+
+  it('leaves two people who share a name alone', async () => {
+    const ref = createRef<TripFormHandle>();
+
+    render(
+      <TripForm ref={ref} onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />,
+    );
+
+    act(() => {
+      ref.current?.addGuests([
+        { sourceMemberId: 'member-a', name: 'Alice', color: hexColor('#3b82f6') },
+        { sourceMemberId: 'member-b', name: 'Alice', color: hexColor('#22c55e') },
+      ]);
+    });
+
+    // De-duplication is on the member id, never the name: two Alices are two
+    // people, and dropping one would lose a guest for looking like another.
+    await waitFor(() => {
+      expect(guestInputs()).toHaveLength(3);
+    });
+  });
+
+  it('fills a trailing blank row rather than leaving a gap', async () => {
+    const user = userEvent.setup();
+    const ref = createRef<TripFormHandle>();
+
+    render(
+      <TripForm ref={ref} onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />,
+    );
+
+    // The row an abandoned "+" click leaves behind.
+    await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
+    expect(guestInputs()).toHaveLength(2);
+
+    act(() => {
+      ref.current?.addGuests([FAMILY[1]!]);
+    });
+
+    // Two rows, not three with a hole in the middle.
+    await waitFor(() => {
+      expect(guestInputs()).toHaveLength(2);
+    });
+    expect(guestInputs().map((field) => field.value)).toEqual([
+      'Tom',
+      'Alice',
+    ]);
   });
 });
 
