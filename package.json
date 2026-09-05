@@ -19,7 +19,7 @@
     "test:e2e": "playwright test",
     "test:e2e:chrome": "PW_CHANNEL=chrome playwright test",
     "test:e2e:install": "playwright install chromium",
-    "db:types": "supabase gen types typescript --linked > /tmp/kikouchou-db-types.ts && sed -n '1,/^ \\*\\//p' src/lib/supabase/database.types.ts > /tmp/kikouchou-db-header.ts && printf '\\n' >> /tmp/kikouchou-db-header.ts && cat /tmp/kikouchou-db-header.ts /tmp/kikouchou-db-types.ts > src/lib/supabase/database.types.ts && rm /tmp/kikouchou-db-types.ts /tmp/kikouchou-db-header.ts",
+    "db:types": "node scripts/supabase-gen-types.js",
     "db:config-push": "node scripts/supabase-config-push.js",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed"
