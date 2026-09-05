@@ -12,12 +12,14 @@ const mockCreateTrip = vi.fn().mockResolvedValue({ id: 'new-trip-1' });
 const mockSetCurrentTrip = vi.fn().mockResolvedValue(undefined);
 const mockCloneRoomsToTrip = vi.fn().mockResolvedValue(undefined);
 const mockCreatePersonWithAutoColor = vi.fn().mockResolvedValue(undefined);
+const mockCreatePerson = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@/lib/db', () => ({
   createTrip: (...args: unknown[]) => mockCreateTrip(...args),
   setCurrentTrip: (...args: unknown[]) => mockSetCurrentTrip(...args),
   cloneRoomsToTrip: (...args: unknown[]) => mockCloneRoomsToTrip(...args),
   createPersonWithAutoColor: (...args: unknown[]) => mockCreatePersonWithAutoColor(...args),
+  createPerson: (...args: unknown[]) => mockCreatePerson(...args),
 }));
 
 // The page renders without AppProviders here, and `useAuth` throws outside its
@@ -54,7 +56,9 @@ vi.mock('@/features/trips/components/TripForm', () => ({
     onSubmit: (data: unknown) => Promise<void>;
     onCancel: () => void;
     onImportSourceChange?: (id: string | null) => void;
-    onGuestsChange?: (guestNames: readonly string[]) => void;
+    onGuestsChange?: (
+      guests: readonly { name: string; color?: string }[],
+    ) => void;
     currentUserName?: string;
   }) => {
     lastCurrentUserName(currentUserName);
@@ -64,7 +68,10 @@ vi.mock('@/features/trips/components/TripForm', () => ({
         <button data-testid="cancel-btn" onClick={onCancel}>Cancel</button>
         <button data-testid="import-source-btn" onClick={() => onImportSourceChange?.('source-trip-id')}>Set Import</button>
         <button data-testid="clear-import-btn" onClick={() => onImportSourceChange?.(null)}>Clear Import</button>
-        <button data-testid="guests-btn" onClick={() => onGuestsChange?.(['Tom', 'Marie'])}>Set Guests</button>
+        <button data-testid="guests-btn" onClick={() => onGuestsChange?.([{ name: 'Tom' }, { name: 'Marie' }])}>Set Guests</button>
+        {/* A guest that came from a saved group: it carries a colour, so the
+            page creates it with that colour rather than an assigned one. */}
+        <button data-testid="imported-guests-btn" onClick={() => onGuestsChange?.([{ name: 'Alice', color: '#3b82f6' }])}>Set Imported Guests</button>
       </div>
     );
   },
@@ -156,6 +163,23 @@ describe('TripCreatePage', () => {
       ['new-trip-1', 'Marie'],
     ]);
     expect(mockNavigate).toHaveBeenCalledWith('/trips/new-trip-1/calendar');
+  });
+
+  it('creates a guest from a group with what the group carried', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<TripCreatePage />, { withProviders: false });
+
+    await user.click(screen.getByTestId('imported-guests-btn'));
+    await user.click(screen.getByTestId('submit-btn'));
+
+    // The colour came from the saved group, so it is used as-is rather than
+    // assigned from the palette — the point of saving the group at all.
+    expect(mockCreatePerson).toHaveBeenCalledWith('new-trip-1', {
+      name: 'Alice',
+      color: '#3b82f6',
+    });
+    expect(mockCreatePersonWithAutoColor).not.toHaveBeenCalled();
   });
 
   it('adds no guests when the form reported none', async () => {

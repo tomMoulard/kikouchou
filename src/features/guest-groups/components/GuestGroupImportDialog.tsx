@@ -79,14 +79,6 @@ export interface GuestGroupImportDialogProps {
   readonly onConfirm: (
     selections: readonly GuestGroupSelection[],
   ) => Promise<void> | void;
-  /**
-   * Selections to open with, for a caller that is *editing* a queue rather than
-   * adding to one — the create-trip form, whose groups are not imported yet.
-   *
-   * Without it, reopening the picker to add a second family would show the
-   * first one un-ticked, and confirming would drop it.
-   */
-  readonly initialSelection?: readonly GuestGroupSelection[];
   /** Label for the confirm button. Defaults to "Add N people". */
   readonly confirmLabel?: string;
 }
@@ -116,7 +108,6 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
   open,
   onOpenChange,
   onConfirm,
-  initialSelection,
   confirmLabel,
 }: GuestGroupImportDialogProps) {
   const { t } = useTranslation();
@@ -156,19 +147,10 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
 
     isInitialisedRef.current = true;
 
-    if (initialSelection && initialSelection.length > 0) {
-      setSelectedIds(initialSelection.flatMap((entry) => entry.memberIds));
-      // Open the ones already queued. Folded is the default for a group the
-      // user has not decided about; a group they have is exactly the one they
-      // came back to look at, and "Family — 2 selected" does not say which two.
-      setExpandedIds(initialSelection.map((entry) => entry.group.id));
-      return;
-    }
-
     // One group: everybody. Several: nobody — see the module docblock.
     const only = groups.length === 1 ? groups[0] : undefined;
     setSelectedIds(only?.members.map((member) => member.id) ?? []);
-  }, [open, groups, initialSelection]);
+  }, [open, groups]);
 
   // Clear on close, so reopening does not flash the last selection.
   useEffect(() => {
