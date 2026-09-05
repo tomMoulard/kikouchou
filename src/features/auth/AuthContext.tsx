@@ -56,6 +56,7 @@ import {
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import posthog, { resetAnalyticsIdentity } from '@/lib/posthog';
 
+import { getAccountDisplayName } from './display-name';
 import type { Web3Chain } from './web3';
 
 // ============================================================================
@@ -240,24 +241,6 @@ function toMessage(error: unknown): string {
 }
 
 /**
- * The account's display name, as Google returned it.
- *
- * `user_metadata` is provider-shaped and typed as an open record, so both keys
- * are checked and both are type-guarded: a provider that ever sends a non-string
- * there must not put an object into an analytics property.
- */
-function toDisplayName(user: User): string | undefined {
-  const metadata: Record<string, unknown> = user.user_metadata ?? {};
-  for (const key of ['full_name', 'name'] as const) {
-    const value = metadata[key];
-    if (typeof value === 'string' && value !== '') {
-      return value;
-    }
-  }
-  return undefined;
-}
-
-/**
  * What PostHog is told about the person it just identified.
  *
  * That person already exists — `lib/posthog` runs `person_profiles: 'always'`,
@@ -285,7 +268,7 @@ function toPersonProperties(user: User): Record<string, string> {
     properties['email'] = user.email;
   }
 
-  const name = toDisplayName(user);
+  const name = getAccountDisplayName(user);
   if (name !== undefined) {
     properties['name'] = name;
   }
