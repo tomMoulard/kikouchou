@@ -722,6 +722,8 @@
     "modelChangeFailed": "Could not switch the assistant model. Please try again.",
     "loadModel": "Load Model",
     "loadHint": "The selected model will be downloaded and cached in your browser before first use.",
+    "deviceUnsupportedTitle": "This device cannot run the assistant",
+    "deviceUnsupportedDescription": "The assistant runs the model entirely on your own device, which needs WebGPU — and this browser cannot use it here. Open the app on a recent desktop Chrome, Edge or Safari to use it.",
     "initializingLoader": "Initializing…",
     "downloadingModelFiles": "Downloading model files…",
     "downloadingFile": "Downloading {{file}} — {{percent}}% of this file",

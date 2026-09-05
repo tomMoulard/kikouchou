@@ -70,6 +70,8 @@ import {
 } from '../chat-storage';
 import { useTripActions } from '../hooks/useTripActions';
 import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
+import { useWebGPUSupport } from '../hooks/useWebGPUSupport';
+import type { WebGPUSupport } from '../webgpu';
 import {
   type ChatMessage as LLMChatMessage,
   type LoadProgress,
@@ -291,6 +293,30 @@ function nextMessageId(): string {
 // ============================================================================
 
 /**
+ * Whether this device can run the selected preset at all.
+ *
+ * One prop rather than "does it need WebGPU" plus "does it have WebGPU": the
+ * two can disagree, and the card has no way to notice when they do.
+ */
+type DeviceSupport = 'probing' | 'supported' | 'unsupported';
+
+/**
+ * Folds "does this preset need WebGPU" and "can this device supply it" into the
+ * single verdict the card renders from.
+ *
+ * A preset with no `device` runs on the Transformers.js default (WASM/CPU) and
+ * is never gated — the probe's answer is irrelevant to it.
+ */
+function resolveDeviceSupport(
+  requiresWebGPU: boolean,
+  webgpuSupport: WebGPUSupport | null,
+): DeviceSupport {
+  if (!requiresWebGPU) return 'supported';
+  if (webgpuSupport === null) return 'probing';
+  return webgpuSupport === 'supported' ? 'supported' : 'unsupported';
+}
+
+/**
  * Model loading card shown before the engine is ready.
  */
 const ModelLoadingCard = memo(function ModelLoadingCard({
@@ -298,11 +324,13 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
   status,
   loadProgress,
   error,
+  deviceSupport,
 }: {
   readonly onLoad: () => void;
   readonly status: string;
   readonly loadProgress: LoadProgress | null;
   readonly error: string | null;
+  readonly deviceSupport: DeviceSupport;
 }): ReactElement {
   const { t } = useTranslation();
   const activeFiles = loadProgress?.files.filter((f) => !f.done) ?? [];
@@ -456,20 +484,44 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
             </div>
           )}
 
-          {(status === 'idle' || status === 'error') && (
-            <>
-              <p className="text-xs text-muted-foreground text-center">
-                {t(
-                  'assistant.loadHint',
-                  'The model (~2.5 GB) will be downloaded and cached in your browser. Requires WebGPU support.',
-                )}
-              </p>
-              <Button className="w-full" onClick={onLoad}>
-                <Download className="size-4 mr-2" aria-hidden="true" />
-                {t('assistant.loadModel', 'Load Model')}
-              </Button>
-            </>
-          )}
+          {(status === 'idle' || status === 'error') &&
+            deviceSupport === 'unsupported' && (
+              <div
+                className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 space-y-1"
+                role="alert"
+              >
+                <p className="text-sm font-medium text-destructive">
+                  {t(
+                    'assistant.deviceUnsupportedTitle',
+                    'This device cannot run the assistant',
+                  )}
+                </p>
+                <p className="text-sm text-destructive/90">
+                  {t(
+                    'assistant.deviceUnsupportedDescription',
+                    'The assistant runs the model entirely on your own device, which needs WebGPU — and this browser cannot use it here. Open the app on a recent desktop Chrome, Edge or Safari to use it.',
+                  )}
+                </p>
+              </div>
+            )}
+
+          {/* Nothing while the probe is in flight: offering a download that is
+              about to be withdrawn is worse than a beat of empty card. */}
+          {(status === 'idle' || status === 'error') &&
+            deviceSupport === 'supported' && (
+              <>
+                <p className="text-xs text-muted-foreground text-center">
+                  {t(
+                    'assistant.loadHint',
+                    'The model (~2.5 GB) will be downloaded and cached in your browser. Requires WebGPU support.',
+                  )}
+                </p>
+                <Button className="w-full" onClick={onLoad}>
+                  <Download className="size-4 mr-2" aria-hidden="true" />
+                  {t('assistant.loadModel', 'Load Model')}
+                </Button>
+              </>
+            )}
         </CardContent>
       </Card>
     </div>
@@ -633,6 +685,13 @@ function AssistantPageComponent(): ReactElement {
   const { systemPrompt } = useTripSystemPrompt();
   const { executeActions } = useTripActions();
 
+  // Asked before the assistant offers a 2.5 GB download, not after it fails.
+  const webgpuSupport = useWebGPUSupport();
+  const deviceSupport = resolveDeviceSupport(
+    selectedModel.device === 'webgpu',
+    webgpuSupport,
+  );
+
   const [messages, setMessages] = useState<ChatMessageData[]>(() =>
     loadAssistantChatMessages(),
   );
@@ -725,10 +784,40 @@ function AssistantPageComponent(): ReactElement {
       return;
     }
 
+    // Cached weights say the download once succeeded, not that the session can
+    // be built now — a phone that cached the files on a supported browser would
+    // otherwise auto-load straight into the failure the gate exists to prevent.
+    if (deviceSupport !== 'supported') {
+      return;
+    }
+
     if (isCached === true && status === 'idle') {
       loadModel();
     }
-  }, [isCached, isModelPreferenceReady, status, loadModel]);
+  }, [isCached, isModelPreferenceReady, status, loadModel, deviceSupport]);
+
+  // The gate is where the failure surfaces now, so it is also where it has to
+  // be counted: hiding the button without this would take the one signal that
+  // something is wrong — a load that fails — and replace it with silence.
+  const reportedUnsupportedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (deviceSupport !== 'unsupported' || webgpuSupport === null) {
+      return;
+    }
+
+    // Once per (device verdict, preset), not once per render.
+    const key = `${webgpuSupport}:${selectedModel.modelId}`;
+    if (reportedUnsupportedRef.current === key) {
+      return;
+    }
+    reportedUnsupportedRef.current = key;
+
+    posthog?.capture('assistant_device_unsupported', {
+      reason: webgpuSupport,
+      model_id: selectedModel.modelId,
+      device: selectedModel.device ?? 'default',
+    });
+  }, [deviceSupport, webgpuSupport, selectedModel.modelId, selectedModel.device]);
 
   useEffect(() => {
     void getCachedAssistantModelIds().then(setCachedModelIds);
@@ -1128,6 +1217,7 @@ function AssistantPageComponent(): ReactElement {
               status={status}
               loadProgress={loadProgress}
               error={error}
+              deviceSupport={deviceSupport}
             />
           </div>
         </>
