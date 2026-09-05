@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { TriangleAlert } from 'lucide-react';
 
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
+import { TIMELINE_LABEL_CELL_STYLE } from '@/components/shared/timeline-label-cell';
 import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
 import { cn } from '@/lib/utils';
 import { timelineAssignmentBarStyle, TIMELINE_LANE_HEIGHT_PX } from '@/lib/utils/timeline-bar-geometry';
@@ -202,7 +203,6 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
           dayGridTemplateColumns,
           dayWidthPx,
           useFractionalColumns,
-          labelColumnWidth,
           labelsCollapsed,
         } = viewport;
 
@@ -221,8 +221,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                       labelsCollapsed ? 'justify-center px-1' : 'px-3',
                     )}
                     style={{
-                      width: labelColumnWidth,
-                      minWidth: labelColumnWidth,
+                      ...TIMELINE_LABEL_CELL_STYLE,
                       height: unassignedLaneCount * TIMELINE_LANE_HEIGHT_PX,
                     }}
                     title={t('rooms.needsRoom', 'needs room')}
@@ -337,11 +336,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                             ? 'flex-col items-stretch justify-center gap-0.5 px-3 py-1'
                             : 'items-center px-3',
                       )}
-                      style={{
-                        width: labelColumnWidth,
-                        minWidth: labelColumnWidth,
-                        height: rowHeight,
-                      }}
+                      style={{ ...TIMELINE_LABEL_CELL_STYLE, height: rowHeight }}
                       title={`${row.room.name} — ${t('rooms.beds', { count: row.room.capacity })}`}
                     >
                       <div className="flex min-w-0 items-center gap-1.5">
@@ -349,9 +344,11 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                           className="size-3.5 shrink-0 text-muted-foreground"
                           aria-hidden="true"
                         />
-                        {!labelsCollapsed && (
-                          <span className="truncate text-sm font-medium">{row.room.name}</span>
-                        )}
+                        {/* Truncates with the fold rather than disappearing at
+                            a threshold — see the note in CalendarTimelineRow. */}
+                        <span className="min-w-0 truncate text-sm font-medium">
+                          {row.room.name}
+                        </span>
                         {occupancy.isOverCapacity && (
                           <span
                             className="inline-flex shrink-0 text-destructive"

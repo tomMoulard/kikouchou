@@ -9,6 +9,7 @@ import type { Locale } from 'date-fns/locale';
 import { useTranslation } from 'react-i18next';
 
 import { ActivityCategoryIcon } from '@/components/shared/ActivityCategoryIcon';
+import { TIMELINE_LABEL_CELL_STYLE } from '@/components/shared/timeline-label-cell';
 import type { TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
 import { cn } from '@/lib/utils';
 import { getActivityCategoryColor } from '@/types';
@@ -171,8 +172,7 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
           viewport.labelsCollapsed ? 'justify-center px-1' : 'px-3',
         )}
         style={{
-          width: viewport.labelColumnWidth,
-          minWidth: viewport.labelColumnWidth,
+          ...TIMELINE_LABEL_CELL_STYLE,
           height: rowHeight,
         }}
         title={categoryLabel}
@@ -181,15 +181,15 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
           category={model.category}
           style={{ color: categoryColor }}
         />
+        {/* Truncates with the fold rather than disappearing at a threshold —
+            see the note in CalendarTimelineRow. */}
+        <span className="min-w-0 truncate text-sm font-medium" title={categoryLabel}>
+          {categoryLabel}
+        </span>
         {!viewport.labelsCollapsed && (
-          <>
-            <span className="truncate text-sm font-medium" title={categoryLabel}>
-              {categoryLabel}
-            </span>
-            <span className="shrink-0 rounded-full bg-muted px-1.5 text-xs font-medium tabular-nums text-muted-foreground">
-              {model.items.length}
-            </span>
-          </>
+          <span className="shrink-0 rounded-full bg-muted px-1.5 text-xs font-medium tabular-nums text-muted-foreground">
+            {model.items.length}
+          </span>
         )}
       </div>
 

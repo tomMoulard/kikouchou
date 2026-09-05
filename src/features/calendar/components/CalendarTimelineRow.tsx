@@ -8,6 +8,7 @@ import { type ReactElement, memo, useCallback, useMemo } from 'react';
 import { addDays, format, type Locale } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 
+import { TIMELINE_LABEL_CELL_STYLE } from '@/components/shared/timeline-label-cell';
 import type { TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
 import { getPersonHeadcount } from '@/types';
 import type { HexColor, RoomAssignment, Transport } from '@/types';
@@ -295,11 +296,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
           'border-r border-muted',
           viewport.labelsCollapsed ? 'justify-center px-1' : 'px-3',
         )}
-        style={{
-          width: viewport.labelColumnWidth,
-          minWidth: viewport.labelColumnWidth,
-          height: rowHeight,
-        }}
+        style={{ ...TIMELINE_LABEL_CELL_STYLE, height: rowHeight }}
         title={personLabel}
       >
         <span
@@ -308,26 +305,26 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
           aria-hidden="true"
         />
         {/*
-          Names hide once the day axis is scrolled so the sticky column can
-          shrink to the colour dots and free width for the trip days. The row
-          `aria-label` below still carries the guest's name for assistive tech.
+          The name stays mounted and truncates as the column folds, rather than
+          being swapped out at a threshold — that is what makes the fold read as
+          one continuous movement instead of a switch. `min-w-0` is what lets a
+          flex child shrink below its text: without it the span holds the column
+          open at its natural width and nothing folds. By the floor there is
+          room for the colour dot alone, so the name has already run out. The
+          row `aria-label` below carries it for assistive tech throughout.
         */}
-        {!viewport.labelsCollapsed && (
-          <>
-            <span className="text-sm font-medium truncate" title={personLabel}>
-              {personLabel}
-            </span>
-            {personHeadcount > 1 && (
-              <span
-                className="shrink-0 rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground tabular-nums"
-                title={t('calendar.timeline.guestHeadcount', 'Counts as {{count}} people', {
-                  count: personHeadcount,
-                })}
-              >
-                ×{personHeadcount}
-              </span>
-            )}
-          </>
+        <span className="min-w-0 truncate text-sm font-medium" title={personLabel}>
+          {personLabel}
+        </span>
+        {personHeadcount > 1 && !viewport.labelsCollapsed && (
+          <span
+            className="shrink-0 rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground tabular-nums"
+            title={t('calendar.timeline.guestHeadcount', 'Counts as {{count}} people', {
+              count: personHeadcount,
+            })}
+          >
+            ×{personHeadcount}
+          </span>
         )}
       </div>
 
