@@ -141,23 +141,21 @@ select is(
 
 -- An UPDATE narrowed to no rows by RLS succeeds having changed nothing, so the
 -- assertion is on the rows affected rather than on an exception.
-select is(
-  (with updated as (
-     update public.guest_groups set name = 'Hijacked'
-     where id = 'cccccccc-0000-0000-0000-000000000001'
-     returning 1
-   ) select count(*)::int from updated),
-  0,
+--
+-- `is_empty` rather than counting inside a subquery: a data-modifying statement
+-- has to be the top level of its query, so `select (with updated as (update …))`
+-- is not merely awkward, it does not parse.
+select is_empty(
+  $$update public.guest_groups set name = 'Hijacked'
+    where id = 'cccccccc-0000-0000-0000-000000000001'
+    returning 1$$,
   'a stranger updates no group of somebody else'
 );
 
-select is(
-  (with removed as (
-     delete from public.guest_groups
-     where id = 'cccccccc-0000-0000-0000-000000000001'
-     returning 1
-   ) select count(*)::int from removed),
-  0,
+select is_empty(
+  $$delete from public.guest_groups
+    where id = 'cccccccc-0000-0000-0000-000000000001'
+    returning 1$$,
   'a stranger deletes no group of somebody else'
 );
 
