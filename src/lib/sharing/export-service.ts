@@ -22,6 +22,8 @@ import type {
   Trip,
   TripId,
 } from '@/types';
+import { isGuestPhoneSharingEnabled } from '@/lib/flags';
+import { toSharedGuest } from '@/lib/sharing/guest-privacy';
 import type { AppChangeset, EntityCollection, ImportBaseline } from '@/lib/sharing/types';
 import { getBaselineStorageKey } from '@/lib/sharing/types';
 
@@ -90,10 +92,15 @@ export async function buildChangeset(
   }
 
   // Fetch current state
-  const person = await getPersonById(personId);
-  if (!person) {
+  const stored = await getPersonById(personId);
+  if (!stored) {
     throw new Error(`Person ${personId} not found`);
   }
+
+  // A changeset is the other way a guest record leaves this device — scanned
+  // off this screen onto someone else's phone — so it obeys the same flag the
+  // document writers do.
+  const person = toSharedGuest(stored, { sharePhone: isGuestPhoneSharingEnabled() });
 
   // Get all entities related to this guest
   const [assignments, transports] = await Promise.all([
@@ -143,12 +150,15 @@ export async function buildChangeset(
  * @returns The changeset, or null if there is nothing to export (no people or related data)
  */
 export async function buildHostChangeset(trip: Trip): Promise<AppChangeset | null> {
-  const [persons, assignments, transports, rooms] = await Promise.all([
+  const [stored, assignments, transports, rooms] = await Promise.all([
     getPersonsByTripId(trip.id),
     getAssignmentsByTripId(trip.id),
     getTransportsByTripId(trip.id),
     getRoomsByTripId(trip.id),
   ]);
+
+  const sharePhone = isGuestPhoneSharingEnabled();
+  const persons = stored.map((person) => toSharedGuest(person, { sharePhone }));
 
   const exportedBy: PersonId | undefined =
     persons[0]?.id ?? assignments[0]?.personId ?? transports[0]?.personId;
