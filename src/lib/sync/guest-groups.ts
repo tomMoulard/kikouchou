@@ -32,11 +32,10 @@
  * @module lib/sync/guest-groups
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
-
 import { db } from '@/lib/db/database';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
+import type { Database, Json } from '@/lib/supabase/database.types';
 import {
   MAX_GUEST_GROUP_MEMBERS,
   MAX_PERSON_HEADCOUNT,
@@ -55,59 +54,26 @@ import type {
 // ============================================================================
 
 /**
- * The server row, as this module reads and writes it.
+ * The server row, as `database.types.ts` describes it.
  *
- * Declared here rather than taken from `database.types.ts` because that file is
- * generated from the *linked* project and therefore does not describe a
- * migration nobody has pushed yet. Regenerating it (`bun run db:types`) after
- * the push is what replaces this, and until then a hand-written shape is the
- * honest representation of "deployed schema and repo disagree".
- *
- * A `type` rather than an `interface`, and that is load-bearing rather than
- * stylistic: PostgREST constrains a row to `Record<string, unknown>`, and an
- * interface has no implicit index signature, so it fails that constraint and
- * every query below silently resolves to `never` — `data` typed `never[]`, with
- * the error landing on the property access rather than on the declaration.
+ * Taken from the generated types rather than restated: they are read from the
+ * *linked* project, so this alias breaks the moment the deployed table stops
+ * matching what this module expects — which is exactly when it should.
  */
-type GuestGroupRow = {
-  id: string;
-  local_id: string;
-  owner_id: string;
-  name: string;
-  members: unknown;
-  updated_at: string;
-};
+type GuestGroupRow = Database['public']['Tables']['guest_groups']['Row'];
 
-/** What this module sends. `id` and `created_at` are the server's to assign. */
-type GuestGroupInsert = {
-  local_id: string;
-  owner_id: string;
-  name: string;
-  members: unknown;
-  updated_at: string;
-};
+/** The columns {@link SELECTED_COLUMNS} asks for, and therefore all a read has. */
+type SelectedGuestGroupRow = Pick<
+  GuestGroupRow,
+  'id' | 'local_id' | 'owner_id' | 'name' | 'members' | 'updated_at'
+>;
 
 /**
- * The one table of the schema this module needs, shaped the way
- * `database.types.ts` shapes its own — so the query builder below is fully
- * typed rather than reached through `any`.
+ * What a pull reads. `created_at` is deliberately absent: the local record
+ * keeps its own creation time, so asking for the server's would be a column
+ * fetched on every sync and used by nothing.
  */
-type GuestGroupSchema = {
-  public: {
-    Tables: {
-      guest_groups: {
-        Row: GuestGroupRow;
-        Insert: GuestGroupInsert;
-        Update: Partial<GuestGroupInsert>;
-        Relationships: [];
-      };
-    };
-    Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
-    Enums: { [_ in never]: never };
-    CompositeTypes: { [_ in never]: never };
-  };
-};
+const SELECTED_COLUMNS = 'id, local_id, owner_id, name, members, updated_at';
 
 /** What a sync attempt did, so a caller can report it rather than guess. */
 export type GuestGroupSyncResult =
@@ -128,24 +94,8 @@ export type GuestGroupSyncResult =
 // Constants
 // ============================================================================
 
-/**
- * The `guest_groups` query builder.
- *
- * One cast, in one place, with one reason: `TypedSupabaseClient` is generated
- * from the linked project and does not know a table nobody has pushed yet, so
- * `client.from('guest_groups')` is a compile error until `bun run db:types`
- * runs against a project carrying the migration. Casting to the local
- * {@link GuestGroupSchema} keeps every call below type-checked against the row
- * shape rather than degrading the module to `any`.
- *
- * Delete this helper — not the module — once the generated types catch up.
- *
- * @param client - The account's Supabase client
- * @returns A typed query builder for the table
- */
-function guestGroupsTable(client: TypedSupabaseClient) {
-  return (client as unknown as SupabaseClient<GuestGroupSchema>).from('guest_groups');
-}
+/** The table name, in one place so a typo is one edit rather than two. */
+const TABLE = 'guest_groups';
 
 /** Matches the server's `check (name ~ …)` bound and the local sanitiser. */
 const MAX_NAME_LENGTH = MAX_LENGTHS.guestGroupName;
@@ -222,7 +172,7 @@ function toMember(value: unknown): GuestGroupMember | undefined {
  * @param row - One row from the server
  * @returns The group, or undefined to drop it
  */
-function toGuestGroup(row: GuestGroupRow): GuestGroup | undefined {
+function toGuestGroup(row: SelectedGuestGroupRow): GuestGroup | undefined {
   if (typeof row.local_id !== 'string' || row.local_id.length === 0) {
     return undefined;
   }
@@ -270,8 +220,8 @@ async function pullGuestGroups(
   client: TypedSupabaseClient,
   userId: string,
 ): Promise<{ readonly pulled: number; readonly pruned: number }> {
-  const { data, error } = await guestGroupsTable(client)
-    .select('id, local_id, owner_id, name, members, updated_at')
+  const { data, error } = await client.from(TABLE)
+    .select(SELECTED_COLUMNS)
     .eq('owner_id', userId);
 
   if (error) {
@@ -361,11 +311,15 @@ async function pushGuestGroups(
     local_id: group.id,
     owner_id: userId,
     name: group.name,
-    members: group.members,
+    // Structurally JSON already — strings, numbers and plain objects — but an
+    // interface has no index signature, so it does not satisfy `Json` on its
+    // own. Asserted here, at the one boundary where the record leaves the app,
+    // rather than by loosening the entity everything else is typed against.
+    members: group.members as unknown as Json,
     updated_at: new Date(group.updatedAt).toISOString(),
   }));
 
-  const { data, error } = await guestGroupsTable(client)
+  const { data, error } = await client.from(TABLE)
     .upsert(payload, { onConflict: 'owner_id,local_id' })
     .select('id, local_id');
 

@@ -52,14 +52,20 @@ const GENERATED_MARKER = 'export type Json';
 const DOCBLOCK_END = /^ \*\/$/m;
 
 /**
- * The hand-written header of the current file, including its trailing newline.
+ * The hand-written header of the current file, with the blank line that follows
+ * it.
+ *
+ * The blank line is not decoration: the CLI's output starts straight at
+ * `export type Json`, so joining without it puts the declaration hard against
+ * the comment and every regeneration shows a one-line diff nobody asked for.
+ * The first run of this script did exactly that.
  *
  * @param source - The existing `database.types.ts`
  * @returns The docblock, or an empty string when the file has none
  */
 function readDocblock(source) {
   const match = DOCBLOCK_END.exec(source);
-  return match === null ? '' : `${source.slice(0, match.index + match[0].length)}\n`;
+  return match === null ? '' : `${source.slice(0, match.index + match[0].length)}\n\n`;
 }
 
 const result = spawnSync(
