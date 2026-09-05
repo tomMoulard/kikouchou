@@ -13,7 +13,7 @@
  * @module features/guest-groups/components/GuestGroupImportDialog
  */
 
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Users } from 'lucide-react';
 
@@ -95,18 +95,47 @@ const GuestGroupImportDialog = memo(function GuestGroupImportDialog({
     [groupId, groups],
   );
 
-  // Resetting the picker each time it opens, as every dialog here does.
+  /**
+   * Whether this opening has been initialised.
+   *
+   * The reset cannot simply depend on `groups`: that array is a fresh identity
+   * on **every** Dexie emission, and re-running the reset on one throws away the
+   * ticks the user has just made. A sync writing `remoteGroupId` back onto a
+   * group, or an edit in another tab, is enough to do it — and it did, in a
+   * loaded test run, where a de-selected member came back before confirm.
+   *
+   * A ref rather than a state: nothing renders differently for it, and it has to
+   * be readable inside the effect that sets it.
+   */
+  const isInitialisedRef = useRef(false);
+
+  // Set up each time the picker opens. `groups` stays in the deps so an opening
+  // that beat the first Dexie read still initialises when the rows arrive — but
+  // the ref makes that a one-shot rather than a reset on every emission.
   useEffect(() => {
-    if (!open) {
+    if (!open || isInitialisedRef.current || groups.length === 0) {
       return;
     }
+
+    isInitialisedRef.current = true;
+
     // One group is the common case; skipping straight to its people saves a
     // click that has no alternative to offer.
     const only = groups.length === 1 ? groups[0] : undefined;
     setGroupId(only?.id ?? null);
     setSelectedIds(only?.members.map((member) => member.id) ?? []);
-    setIsImporting(false);
   }, [open, groups]);
+
+  // Clear on close, so reopening does not flash the last selection.
+  useEffect(() => {
+    if (open) {
+      return;
+    }
+    isInitialisedRef.current = false;
+    setGroupId(null);
+    setSelectedIds([]);
+    setIsImporting(false);
+  }, [open]);
 
   const handleSelectGroup = useCallback(
     (next: GuestGroup) => {

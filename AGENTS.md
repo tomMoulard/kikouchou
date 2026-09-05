@@ -283,7 +283,7 @@ compare nested objects such as `coordinates`.
 
 ### A new table joins the cascade and the test reset
 
-Adding a Dexie table means:
+Adding a **trip-scoped** Dexie table means:
 1. add it to `deleteTrip`'s transaction **and** its delete list, or its rows
    outlive the trip forever;
 2. nothing to do in `src/test/setup.ts` — it derives the list from `db.tables`.
@@ -292,6 +292,30 @@ Adding a Dexie table means:
 Also give every trip-scoped table a plain `tripId` index, not only a compound
 one. A row missing the compound's second component is invisible to every trip
 query, including the cascade.
+
+`guestGroups` is the one table this does **not** apply to, and the exception is
+the feature rather than an oversight: a guest group belongs to the account, so
+deleting a trip must not delete the group its guests were imported from. It
+therefore carries no `tripId` index and takes no part in the cascade. Before
+adding a table to `deleteTrip`, decide which of the two it is — a table that
+should have been in the cascade leaks rows forever, and one that should not have
+been silently destroys data the user expected to keep.
+
+### A global entity syncs per account, not through the trip document
+
+The Yjs document is per trip, so nothing that outlives a trip can travel in it.
+`lib/sync/guest-groups.ts` is the other shape: a plain server table, upserted on
+`(owner_id, local_id)`, reconciled last-write-wins on a client-authored
+`updated_at`. Two rules make it safe, and both are load-bearing rather than
+defensive:
+
+- **A pull prunes only a row this device uploaded.** A local group with no
+  `remoteGroupId` is not evidence that anything was deleted — the server has
+  never been told about it — so an empty server answer deletes nothing. Same
+  reasoning as `replaceDocCollection`'s `allowDeletions`, one table further out.
+- **Rows coming back are remote input.** They arrive from Postgres but were
+  *written* by another device, so every field is bounded on the way in and an
+  invalid member is dropped on its own rather than taking its group with it.
 
 ### Reuse the helper; do not fork it
 
@@ -670,7 +694,7 @@ src/
 │   ├── shared/      # Layout, ErrorBoundary, LoadingState, PageHeader
 │   └── pwa/         # InstallPrompt, OfflineIndicator
 ├── contexts/        # React Context providers + hooks
-├── features/        # trips | rooms | persons | transports | activities | calendar | analytics | assistant | sharing | settings
+├── features/        # trips | rooms | persons | guest-groups | transports | activities | calendar | analytics | assistant | sharing | settings
 │   └── {name}/      # pages/ · components/ · routes.tsx · index.ts
 ├── hooks/           # Shared custom hooks
 ├── lib/

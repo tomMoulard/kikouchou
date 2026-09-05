@@ -139,6 +139,44 @@ describe('SaveGuestsAsGroupDialog', () => {
     expect(screen.getByRole('button', { name: 'common.save' })).toBeDisabled();
   });
 
+  it('keeps the selection when the guest list re-publishes', async () => {
+    const user = userEvent.setup();
+
+    const { rerender } = render(
+      <SaveGuestsAsGroupDialog
+        persons={guests}
+        defaultName="Family"
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByLabelText(/Alice/));
+
+    // The guest list publishes a fresh array whenever anything about the trip's
+    // guests changes — a co-traveller's edit arriving over sync, say. Resetting
+    // on that used to re-tick a guest the user had just cleared.
+    rerender(
+      <SaveGuestsAsGroupDialog
+        persons={[...guests]}
+        defaultName="Family"
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText(/Alice/)).not.toBeChecked();
+
+    await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+    await waitFor(async () => {
+      expect(await getAllGuestGroups()).toHaveLength(1);
+    });
+
+    const [group] = await getAllGuestGroups();
+    expect(group?.members.map((member) => member.name)).toEqual(['Tom + Léa']);
+  });
+
   it('closes once the group is stored', async () => {
     const user = userEvent.setup(),
       onOpenChange = vi.fn();

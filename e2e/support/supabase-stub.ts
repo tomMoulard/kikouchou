@@ -108,6 +108,20 @@ interface InviteRow {
   revoked_at: string | null;
 }
 
+/**
+ * `public.guest_groups`. Per account, never per trip — there is no membership
+ * to consult here, which is why every handler below narrows on `owner_id`
+ * alone.
+ */
+interface GuestGroupRow {
+  id: string;
+  local_id: string;
+  owner_id: string;
+  name: string;
+  members: unknown;
+  updated_at: string;
+}
+
 interface UpdateRow {
   id: number;
   trip_id: string;
@@ -162,6 +176,7 @@ export class SupabaseStub {
   invites: InviteRow[] = [];
   updates: UpdateRow[] = [];
   snapshots: SnapshotRow[] = [];
+  guestGroups: GuestGroupRow[] = [];
 
   /** Requests refused, so a test can simulate an outage without going offline. */
   offline = false;
@@ -189,6 +204,7 @@ export class SupabaseStub {
 
   private nextTrip = 1;
   private nextUpdateId = 1;
+  private nextGuestGroup = 1000;
 
   // --------------------------------------------------------------------------
   // Seeding
@@ -417,6 +433,12 @@ export class SupabaseStub {
         return;
       case 'GET trip_doc_snapshots':
         await this.selectSnapshot(route, url);
+        return;
+      case 'GET guest_groups':
+        await this.selectGuestGroups(route, url);
+        return;
+      case 'POST guest_groups':
+        await this.upsertGuestGroups(route);
         return;
       default:
         await this.fail(route, 404, `stub has no handler for ${method} ${rest}`);
@@ -649,6 +671,88 @@ export class SupabaseStub {
       .filter((invite) => tripId === null || invite.trip_id === tripId)
       .map((invite) => this.publicInvite(invite));
     await this.representation(route, rows);
+  }
+
+  // --------------------------------------------------------------------------
+  // Guest groups
+  // --------------------------------------------------------------------------
+
+  /**
+   * `owners read their guest groups`.
+   *
+   * Narrowed on the caller rather than on the `owner_id` the query asks for: a
+   * client passing somebody else's id must read nothing, and a stub that
+   * honoured the parameter would let a broken client look correct here and fail
+   * against the real policy.
+   */
+  private async selectGuestGroups(route: Route, url: URL): Promise<void> {
+    const caller = this.callerId(route);
+    const ownerId = operand(url.searchParams.get('owner_id'));
+
+    const rows = this.guestGroups.filter(
+      (group) =>
+        group.owner_id === caller && (ownerId === null || ownerId === caller),
+    );
+
+    await this.representation(route, rows);
+  }
+
+  /**
+   * `on conflict (owner_id, local_id) do update`, as the client sends it.
+   *
+   * PostgREST expresses an upsert as a POST carrying `Prefer: resolution=…`, so
+   * this handler covers both halves. `owner_id` is pinned to the caller, which
+   * is the `with check (owner_id = auth.uid())` half of the policy — the one
+   * that stops a client writing a group into somebody else's account.
+   */
+  private async upsertGuestGroups(route: Route): Promise<void> {
+    const caller = this.callerId(route);
+
+    // Read the payload directly rather than through `body()`: this is the one
+    // write that legitimately sends *many* rows, and `body()` collapses an array
+    // to its first element — which would silently upload one group of however
+    // many the account holds.
+    const raw = route.request().postData();
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    const rows = Array.isArray(parsed) ? parsed : [parsed];
+
+    const written: GuestGroupRow[] = [];
+
+    for (const entry of rows) {
+      const row = entry as Record<string, unknown>;
+      const localId = String(row.local_id ?? '');
+      const ownerId = String(row.owner_id ?? '');
+
+      if (ownerId !== caller) {
+        await this.rlsViolation(route, 'guest_groups');
+        return;
+      }
+
+      const existing = this.guestGroups.find(
+        (group) => group.owner_id === caller && group.local_id === localId,
+      );
+
+      if (existing) {
+        existing.name = String(row.name ?? existing.name);
+        existing.members = row.members ?? existing.members;
+        existing.updated_at = String(row.updated_at ?? existing.updated_at);
+        written.push(existing);
+        continue;
+      }
+
+      const fresh: GuestGroupRow = {
+        id: uuid(this.nextGuestGroup++),
+        local_id: localId,
+        owner_id: caller,
+        name: String(row.name ?? ''),
+        members: row.members ?? [],
+        updated_at: String(row.updated_at ?? new Date().toISOString()),
+      };
+      this.guestGroups.push(fresh);
+      written.push(fresh);
+    }
+
+    await this.representation(route, written);
   }
 
   private publicInvite(invite: InviteRow) {

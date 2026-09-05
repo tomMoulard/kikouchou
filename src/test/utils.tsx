@@ -21,11 +21,13 @@ import type { ReactElement, ReactNode } from 'react';
 import type { RenderOptions, RenderResult } from '@testing-library/react';
 import type { i18n as I18nInstance, Resource } from 'i18next';
 
-import { render as rtlRender } from '@testing-library/react';
+import { expect } from 'vitest';
+import { render as rtlRender, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
 import { AppProviders } from '@/contexts/AppProviders';
+import { db } from '@/lib/db/database';
 
 // ============================================================================
 // Type Definitions
@@ -537,6 +539,47 @@ export async function waitForDb(ms = 10): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
   // Additional flush for microtasks
   await Promise.resolve();
+}
+
+/**
+ * Waits for a trip's Yjs document to have been seeded from Dexie.
+ *
+ * Call this after making a trip current and **before** writing any trip-scoped
+ * row that the test then asserts on. The reason is a race in the CRDT bridge,
+ * not in the test:
+ *
+ * `populateDocFromDexie` runs fire-and-forget when a trip becomes current, and
+ * its `Y.transact` carries no origin — so `subscribeToUpdates` reads its own
+ * update as remote and calls `syncDocToDexie`, which projects the document back
+ * over Dexie and **deletes every trip-scoped row the document does not hold**.
+ * A row written between populate reading its snapshot and its transaction
+ * landing is therefore deleted, silently.
+ *
+ * Under a single test file the window is invisible. Under `test:coverage` — all
+ * 217 files, instrumented — it opened wide enough to swallow an import of three
+ * guests and, in another run, an activity that a prompt assertion then reported
+ * as missing. Two different tests failed on two runs of the same suite, which is
+ * the shape of a race rather than a broken assertion.
+ *
+ * Waiting for the first persisted update proves populate has run, which closes
+ * the window for everything the test does afterwards. The race itself lives in
+ * `lib/yjs/dexie-bridge`; this helper only keeps it out of unrelated suites.
+ *
+ * @param tripId - The trip whose document should have been seeded
+ *
+ * @example
+ * ```tsx
+ * await act(async () => { await result.current.trip.setCurrentTrip(tripId); });
+ * await waitForTripDoc(tripId);
+ * // now safe to write guests, rooms, activities and assert on them
+ * ```
+ */
+export async function waitForTripDoc(tripId: string): Promise<void> {
+  await waitFor(async () => {
+    expect(await db.yjsUpdates.where('tripId').equals(tripId).count()).toBeGreaterThan(
+      0,
+    );
+  });
 }
 
 /**
