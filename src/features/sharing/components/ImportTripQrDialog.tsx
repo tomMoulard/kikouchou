@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useOfflineAwareToast } from '@/hooks';
-import posthog from '@/lib/posthog';
+import { captureUsage } from '@/lib/posthog';
 import {
   applyMerge,
   computeMerge,
@@ -96,7 +96,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
           conflicts: merge.conflicts.map(c => ({ ...c, resolution: 'accept-guest' as const })),
         };
         await applyMerge(resolved);
-        posthog?.capture('trip_imported', { conflict_count: merge.conflicts.length });
+        captureUsage('trip_imported', { conflict_count: merge.conflicts.length });
         successToast(
           t('trips.importQrMergeSuccess', 'Trip data imported and merged successfully.'),
         );

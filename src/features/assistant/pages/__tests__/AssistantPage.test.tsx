@@ -16,6 +16,13 @@ vi.mock('@/lib/posthog', () => ({
   // which they are in tests — so without this every capture is a no-op and
   // nothing here could observe one.
   default: { capture: (...args: unknown[]) => mockCapture(...args) },
+  // `captureUsage` fires the domain event *and* `app_used` beside it, and the
+  // double is faithful to that: a mock that only forwarded the first would let
+  // a call site lose the activity event without a single test noticing.
+  captureUsage: (action: string, properties?: unknown) => {
+    mockCapture(action, properties);
+    mockCapture('app_used', { action });
+  },
 }));
 
 vi.mock('sonner', () => ({

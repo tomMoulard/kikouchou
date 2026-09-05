@@ -25,7 +25,7 @@ import {
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useRoomContext } from '@/contexts/RoomContext';
 import { RoomForm } from '@/features/rooms/components/RoomForm';
-import posthog from '@/lib/posthog';
+import { captureUsage } from '@/lib/posthog';
 import type { Room, RoomFormData, RoomId } from '@/types';
 
 // ============================================================================
@@ -143,11 +143,11 @@ const RoomDialog = memo(function RoomDialog({
       if (isEditMode && roomId) {
         await updateRoom(roomId, data);
         successToast(t('rooms.updateSuccess', 'Room updated successfully'));
-        posthog?.capture('room_saved', { operation: 'updated', capacity: data.capacity });
+        captureUsage('room_saved', { operation: 'updated', capacity: data.capacity });
       } else {
         await createRoom(data);
         successToast(t('rooms.createSuccess', 'Room created successfully'));
-        posthog?.capture('room_saved', { operation: 'created', capacity: data.capacity });
+        captureUsage('room_saved', { operation: 'created', capacity: data.capacity });
       }
       onOpenChange(false);
     },

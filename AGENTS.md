@@ -539,6 +539,19 @@ every unit test.
   — and a failure carries a `reason`, because "the invite did not work" and "the
   invite was revoked" are the same dead end to the user and different problems to
   fix.
+- **An activity event goes through `captureUsage()`, never `posthog?.capture`.**
+  PostHog's project setting for active users and stickiness takes a *single*
+  event name, and no domain event fits — `activity_saved` misses everybody who
+  only edited rooms, `$pageview` counts anyone who merely landed. So
+  `captureUsage(action, properties)` fires the domain event unchanged and
+  `app_used` beside it, carrying `{ action }`. That is the event the PostHog
+  setting points at. The nine actions that count are the `UsageAction` union in
+  `lib/posthog`, and what is left out is listed there with the reason: sync and
+  connectivity events are machine-driven, `*_failed` and `*_blocked` are
+  attempts that went nowhere, `assistant_answer_received` would double-count its
+  own prompt, `pwa_install_completed` happens once per device. Note `app_used`
+  is deliberately not named after "activity" — in this app an *Activity* is an
+  itinerary item, which is a different thing entirely.
 
 ## Styling
 

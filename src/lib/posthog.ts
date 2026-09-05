@@ -240,4 +240,77 @@ export function resetAnalyticsIdentity(): void {
   posthogClient.register(BASE_SUPER_PROPERTIES);
 }
 
+// ============================================================================
+// Usage
+// ============================================================================
+
+/**
+ * The domain events that mean a person *used* the app.
+ *
+ * A closed union rather than a `string`, because the set is the definition of
+ * activity for this project and a new member should be a decision somebody
+ * makes rather than a typo that silently widens it. Everything absent is absent
+ * on purpose:
+ *
+ * - `account_trip_sync`, `trip_sync_offline`, `trip_sync_recovered` fire from a
+ *   sign-in sweep and from connectivity transitions. A phone flapping between
+ *   cell and wifi in somebody's pocket is not a person doing something.
+ * - `trip_join_failed`, `trip_join_blocked`, `trip_share_blocked`,
+ *   `trip_identity_claim_failed` and `assistant_answer_failed` are attempts that
+ *   went nowhere. Counting them lets a broken invite raise engagement.
+ * - `assistant_answer_received` is the reply to `assistant_prompt_sent`; both
+ *   would count one action twice.
+ * - `trip_identity_claimed` and `trip_identity_skipped` are steps inside the
+ *   join flow that `trip_joined` already counts.
+ * - `pwa_install_completed` happens once per device, ever.
+ * - `trip_deleted` is a deliberate action but it is cleanup, not use.
+ */
+export type UsageAction =
+  | 'activity_saved'
+  | 'assistant_prompt_sent'
+  | 'person_saved'
+  | 'room_saved'
+  | 'transport_saved'
+  | 'trip_created'
+  | 'trip_imported'
+  | 'trip_joined'
+  | 'trip_updated';
+
+/**
+ * The one event that means "a person used this app".
+ *
+ * PostHog's activity setting — what it counts as engagement for active users
+ * and stickiness — takes a **single** event name, and no one domain event fits:
+ * `activity_saved` misses everybody who only edited rooms, `$pageview` counts
+ * anyone who merely landed. So the app emits a dedicated event beside whichever
+ * domain event actually happened, and that name is what the setting points at.
+ *
+ * Note that "activity" in `activity_saved` is the domain object — an itinerary
+ * item — and has nothing to do with this. Hence `app_used` rather than any name
+ * built on the overloaded word.
+ */
+export const USAGE_EVENT = 'app_used';
+
+/**
+ * Captures a domain event and the usage event that shadows it.
+ *
+ * One function rather than two calls at each of thirteen call sites: the second
+ * capture is exactly the kind of thing that gets forgotten when a tenth action
+ * is added, and a silently incomplete activity definition reads as a drop in
+ * active users with nothing to point at.
+ *
+ * The domain event keeps its own properties untouched, so every insight and
+ * funnel already built on it is unaffected. `app_used` carries only which
+ * action it shadowed — the detail stays on the event that has it.
+ *
+ * Safe with no client, like every other call here: analytics is simply off.
+ */
+export function captureUsage(
+  action: UsageAction,
+  properties?: Record<string, unknown>,
+): void {
+  posthogClient?.capture(action, properties);
+  posthogClient?.capture(USAGE_EVENT, { action });
+}
+
 export default posthogClient;
