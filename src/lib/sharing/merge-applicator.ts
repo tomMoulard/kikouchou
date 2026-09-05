@@ -120,7 +120,24 @@ async function upsertRoom(room: Room): Promise<void> {
   await db.rooms.put(room);
 }
 
+/**
+ * Writes an incoming guest, keeping a phone number the changeset could not have
+ * carried.
+ *
+ * `put` replaces the whole row, and a sender whose `guest-phone-sharing` flag is
+ * off redacts the phone on the way out — so an absent one here is silence, not a
+ * deletion, and overwriting with it would drop a number this device holds and
+ * the sender never had standing to clear. The same reasoning, and the same
+ * asymmetry, as the Yjs projection in `lib/yjs/dexie-bridge`.
+ */
 async function upsertPerson(person: Person): Promise<void> {
+  if (person.phone === undefined) {
+    const existing = await db.persons.get(person.id);
+    if (existing?.phone !== undefined) {
+      await db.persons.put({ ...person, phone: existing.phone });
+      return;
+    }
+  }
   await db.persons.put(person);
 }
 

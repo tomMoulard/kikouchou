@@ -16,6 +16,8 @@ import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
 import { MAX_LENGTHS, sanitizeOptionalText } from '@/lib/db/sanitize';
+import { isGuestPhoneSharingEnabled } from '@/lib/flags';
+import { toSharedGuest } from '@/lib/sharing/guest-privacy';
 import i18n from '@/lib/i18n';
 import {
   DOC_SCHEMA_VERSION,
@@ -205,7 +207,11 @@ function readCollection(doc: Y.Doc, name: SharedCollectionName): SharedRecord[] 
  * trust boundary — keeps an unbounded string out of Dexie and out of the card
  * that renders it.
  */
-function buildGuestRecord(guest: SharedRecord, tripId: TripId): Person {
+function buildGuestRecord(
+  guest: SharedRecord,
+  tripId: TripId,
+  options: { readonly localRow?: Person; readonly sharePhone: boolean },
+): Person {
   const person = { ...guest, tripId } as Person;
 
   if (person.phone !== undefined) {
@@ -215,6 +221,22 @@ function buildGuestRecord(guest: SharedRecord, tripId: TripId): Person {
     } else {
       person.phone = boundedPhone;
     }
+  }
+
+  // A document with no phone for this guest means two different things, and
+  // reading it the wrong way costs the user the number they just typed.
+  //
+  // While `guest-phone-sharing` is off this device never publishes a phone, so
+  // the document was never going to carry one and its silence says nothing. The
+  // projection `bulkPut`s whole rows, so taking that silence at face value would
+  // have this device's own sync loop overwrite its local-only number seconds
+  // after the form saved it. Carry the local value forward instead.
+  //
+  // With the flag on the document *is* where this guest's phone lives, so an
+  // absent one is a real deletion — by this device or another member — and must
+  // land.
+  if (person.phone === undefined && !options.sharePhone && options.localRow?.phone !== undefined) {
+    person.phone = options.localRow.phone;
   }
 
   return person;
@@ -411,8 +433,13 @@ export async function syncDocToDexie(
           .between([tripId, ''], [tripId, '\uffff'])
           .toArray();
 
+        const sharePhone = isGuestPhoneSharingEnabled();
+        const localGuestsById = new Map(currentGuests.map((row) => [row.id as string, row]));
         const nextGuests = readCollection(doc, 'guests').map((guest) =>
-          buildGuestRecord(guest, tripId),
+          buildGuestRecord(guest, tripId, {
+            localRow: localGuestsById.get(String(guest.id)),
+            sharePhone,
+          }),
         );
         const nextRooms = readCollection(doc, 'rooms').map(
           (room) => ({ ...room, tripId } as Room),
@@ -520,7 +547,12 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
       DocCollectionName,
       readonly { id: string; tripId: TripId }[],
     ][] = [
-      ['guests', guests],
+      // Redacted on the way out, never on the way into Dexie: the phone stays
+      // in this device's IndexedDB whatever the flag says.
+      [
+        'guests',
+        guests.map((guest) => toSharedGuest(guest, { sharePhone: isGuestPhoneSharingEnabled() })),
+      ],
       ['rooms', rooms],
       ['roomAssignments', assignments],
       ['transport', transport],
@@ -570,10 +602,21 @@ export function syncDexieToDoc(
   items: SharedRecord[],
   { allowDeletions }: ReplaceDocCollectionOptions,
 ): void {
-  const entities = items.filter(
+  const identified = items.filter(
     (item): item is SharedRecord & { id: string } =>
       typeof item.id === 'string' && item.id.length > 0,
   );
+
+  // Applied here rather than at the call site on purpose. This is the narrow
+  // waist every live Dexie change passes through on its way to the document and
+  // therefore to the server, so redacting here is the one edit a future caller
+  // cannot forget to make.
+  const entities =
+    table === 'guests'
+      ? identified.map((guest) =>
+          toSharedGuest(guest, { sharePhone: isGuestPhoneSharingEnabled() }),
+        )
+      : identified;
 
   if (!allowDeletions && entities.length === 0) {
     // Nothing to add and no standing to remove: the whole call is a no-op, and
