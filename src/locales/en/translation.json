@@ -336,7 +336,12 @@
     "saveAsGroup": "Save as a group",
     "saveAsGroupDescription": "Keep these guests for next time. Stay dates, rooms and transports stay with this trip.",
     "importMore": "Add another group",
-    "importClearNamed": "Remove {{name}}"
+    "importClearNamed": "Remove {{name}}",
+    "searchLabel": "Search groups",
+    "searchPlaceholder": "Search groups or people",
+    "searchEmpty": "No group matches “{{query}}”.",
+    "selectedCount": "{{count}} selected",
+    "selectedCount_one": "{{count}} selected"
   },
   "assignments": {
     "title": "Room assignments",

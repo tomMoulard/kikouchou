@@ -211,6 +211,18 @@ describe('GuestGroupImportDialog', () => {
 // ============================================================================
 
 describe('GuestGroupImportDialog — more than one group', () => {
+  /**
+   * Opens every fold.
+   *
+   * Several groups start folded, so a test that reaches straight for a member
+   * checkbox is asserting against a dialog no user ever sees.
+   */
+  async function expandAll(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+    for (const toggle of screen.getAllByRole('button', { expanded: false })) {
+      await user.click(toggle);
+    }
+  }
+
   /** A second roster, so "two families and a friend" is expressible. */
   async function seedSkiCrew() {
     return createGuestGroup({
@@ -222,7 +234,7 @@ describe('GuestGroupImportDialog — more than one group', () => {
     });
   }
 
-  it('shows every group at once rather than one at a time', async () => {
+  it('lists every group, folded, with nobody on screen yet', async () => {
     await seedFamily();
     await seedSkiCrew();
 
@@ -232,11 +244,29 @@ describe('GuestGroupImportDialog — more than one group', () => {
 
     expect(await screen.findByText('Family')).toBeInTheDocument();
     expect(screen.getByText('Ski crew')).toBeInTheDocument();
-    // Three from the family, two from the ski crew, on one screen.
-    expect(screen.getAllByRole('checkbox')).toHaveLength(5);
+    // Five people between them, none of them shown: that is the point of the
+    // fold. Flat, this dialog was a scroll before the user decided anything.
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+  });
+
+  it('shows a group’s people once it is opened, and only that group’s', async () => {
+    const user = userEvent.setup();
+    await seedFamily();
+    await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={vi.fn()} />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: /Family/ }));
+
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3);
+    expect(screen.getByLabelText(/Alice/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Bob/)).not.toBeInTheDocument();
   });
 
   it('ticks nobody when there are several groups', async () => {
+    const user = userEvent.setup();
     await seedFamily();
     await seedSkiCrew();
 
@@ -245,6 +275,7 @@ describe('GuestGroupImportDialog — more than one group', () => {
     );
 
     await screen.findByText('Family');
+    await expandAll(user);
 
     // Pre-ticking three families so the user can un-tick two is not a default.
     for (const box of screen.getAllByRole('checkbox')) {
@@ -266,6 +297,7 @@ describe('GuestGroupImportDialog — more than one group', () => {
     );
 
     await screen.findByText('Family');
+    await expandAll(user);
 
     await user.click(screen.getByLabelText(/Alice/));
     await user.click(screen.getByLabelText(/Dana/));
@@ -334,10 +366,17 @@ describe('GuestGroupImportDialog — more than one group', () => {
 
     await screen.findByText('Family');
 
-    // Reopening to add a second family must not lose the first.
+    // The queued group opens itself: folded is the default for a group the user
+    // has not decided about, and "Family — 1 selected" does not say which one.
     expect(screen.getByLabelText(/Tom/)).toBeChecked();
     expect(screen.getByLabelText(/Alice/)).not.toBeChecked();
-    expect(screen.getByLabelText(/Bob/)).not.toBeChecked();
+
+    // The group they queued nothing from stays folded.
+    expect(screen.queryByLabelText(/Bob/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ski crew/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 
   it('adds to the queue it opened with rather than replacing it', async () => {
@@ -358,6 +397,7 @@ describe('GuestGroupImportDialog — more than one group', () => {
     );
 
     await screen.findByText('Family');
+    await expandAll(user);
     await user.click(screen.getByLabelText(/Bob/));
     await user.click(screen.getByRole('button', { name: /guestGroups.importConfirm/ }));
 
@@ -371,6 +411,121 @@ describe('GuestGroupImportDialog — more than one group', () => {
     expect(selections[1].memberIds).toEqual([ski.members[0]!.id]);
   });
 
+  it('narrows the list to the groups whose name matches', async () => {
+    const user = userEvent.setup();
+    await seedFamily();
+    await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={vi.fn()} />,
+    );
+
+    await screen.findByText('Family');
+    await user.type(screen.getByLabelText('guestGroups.searchLabel'), 'ski');
+
+    expect(screen.getByText('Ski crew')).toBeInTheDocument();
+    expect(screen.queryByText('Family')).not.toBeInTheDocument();
+  });
+
+  it('finds a group by the name of somebody in it', async () => {
+    const user = userEvent.setup();
+    await seedFamily();
+    await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={vi.fn()} />,
+    );
+
+    await screen.findByText('Family');
+    // "Which group is Dana in again?" is the question the search exists for.
+    await user.type(screen.getByLabelText('guestGroups.searchLabel'), 'dana');
+
+    expect(screen.getByText('Ski crew')).toBeInTheDocument();
+    expect(screen.queryByText('Family')).not.toBeInTheDocument();
+    // …and it opens, because a group that matched on a hidden member would be
+    // a worse answer than none.
+    expect(screen.getByLabelText(/Dana/)).toBeInTheDocument();
+  });
+
+  it('says so when nothing matches', async () => {
+    const user = userEvent.setup();
+    await seedFamily();
+    await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={vi.fn()} />,
+    );
+
+    await screen.findByText('Family');
+    await user.type(screen.getByLabelText('guestGroups.searchLabel'), 'nobody');
+
+    expect(screen.getByText('guestGroups.searchEmpty')).toBeInTheDocument();
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+  });
+
+  it('folds the groups again when the search is cleared', async () => {
+    const user = userEvent.setup();
+    await seedFamily();
+    await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={vi.fn()} />,
+    );
+
+    await screen.findByText('Family');
+    const search = screen.getByLabelText('guestGroups.searchLabel');
+
+    await user.type(search, 'family');
+    expect(screen.getAllByRole('checkbox')).toHaveLength(3);
+
+    await user.clear(search);
+    // A search that leaves everything hanging open defeats the fold.
+    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+  });
+
+  it('keeps a tick made during a search after the search is cleared', async () => {
+    const user = userEvent.setup(),
+      onConfirm = vi.fn().mockResolvedValue(undefined),
+      family = await seedFamily();
+    await seedSkiCrew();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={onConfirm} />,
+    );
+
+    await screen.findByText('Family');
+    const search = screen.getByLabelText('guestGroups.searchLabel');
+
+    await user.type(search, 'alice');
+    await user.click(screen.getByLabelText(/Alice/));
+    await user.clear(search);
+
+    // Folding a group away must not un-tick the person inside it.
+    await user.click(screen.getByRole('button', { name: /guestGroups.importConfirm/ }));
+
+    await waitFor(() => {
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+    });
+    expect(onConfirm.mock.calls[0]?.[0][0].memberIds).toEqual([
+      family.members[1]!.id,
+    ]);
+  });
+
+  it('offers no search for a single group', async () => {
+    await seedFamily();
+
+    render(
+      <GuestGroupImportDialog open onOpenChange={vi.fn()} onConfirm={vi.fn()} />,
+    );
+
+    await screen.findByText('Family');
+
+    // Nothing to narrow, and the group is open already.
+    expect(
+      screen.queryByLabelText('guestGroups.searchLabel'),
+    ).not.toBeInTheDocument();
+  });
+
   it('counts people across groups, not rows', async () => {
     const user = userEvent.setup();
     await seedFamily();
@@ -381,6 +536,7 @@ describe('GuestGroupImportDialog — more than one group', () => {
     );
 
     await screen.findByText('Family');
+    await expandAll(user);
 
     // Tom + Léa stands for two people, Bob for one.
     await user.click(screen.getByLabelText(/Tom/));
