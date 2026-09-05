@@ -447,6 +447,13 @@ call the REST API with that key.
 - **Never paste the database password or the `service_role` key into a chat or a
   migration.** `supabase link` / `db push` are run by a human. Secrets that a
   migration needs live in Supabase Vault.
+- **Never overwrite the client ID or secret of an auth provider.** The hosted
+  project holds the only copy of every `[auth.external.*]` credential: nothing
+  reads one back — `/auth/v1/settings` says a provider is enabled without
+  revealing what it is set to — and no backup exists. Overwriting one takes that
+  sign-in down for every user until someone fetches the value from the
+  provider's own console. A human rotates these in the Supabase dashboard;
+  no migration, script, config push, or agent in this repo may set them.
 - **Push config with `bun run db:config-push`, never `supabase config push`.**
   The `env(...)` references under `[auth.external.*]` are resolved from the
   calling shell, and an unresolved one is pushed *verbatim* as the credential,
