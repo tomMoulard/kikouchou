@@ -16,7 +16,7 @@ import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { TripForm } from '@/features/trips/components/TripForm';
 import { createTrip, setCurrentTrip, cloneRoomsToTrip } from '@/lib/db';
-import posthog from '@/lib/posthog';
+import { captureUsage } from '@/lib/posthog';
 import type { TripFormData, TripId } from '@/types';
 
 // ============================================================================
@@ -99,7 +99,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
       // Set the new trip as the current trip so CalendarPage can display it
       await setCurrentTrip(newTrip.id);
 
-      posthog?.capture('trip_created', { imported_rooms: didImportRooms });
+      captureUsage('trip_created', { imported_rooms: didImportRooms });
 
       // Reset dirty state and skip blocker before navigation.
       // skipNextBlock() prevents the blocker from firing if setIsDirty(false)

@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import posthog from '@/lib/posthog';
+import posthog, { captureUsage } from '@/lib/posthog';
 import { useAuth } from '@/features/auth/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { redeemInvite, type RedeemInviteResult } from '@/lib/sync/invites';
@@ -127,7 +127,7 @@ export function useJoinTrip(token: string | null): {
 
       // 'joined' and 'already-local' are the same outcome from here: the trip is
       // on the device and linked to the server row.
-      posthog?.capture('trip_joined', { already_local: local.status === 'already-local' });
+      captureUsage('trip_joined', { already_local: local.status === 'already-local' });
       setPhase({ kind: 'joined', tripId: local.tripId });
     };
 

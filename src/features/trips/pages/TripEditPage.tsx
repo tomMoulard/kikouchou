@@ -30,7 +30,7 @@ import { TripForm } from '@/features/trips/components/TripForm';
 import { useTripContext } from '@/contexts/TripContext';
 
 import { deleteTrip, getTripById, updateTrip } from '@/lib/db';
-import posthog from '@/lib/posthog';
+import posthog, { captureUsage } from '@/lib/posthog';
 import type { Trip, TripFormData, TripId } from '@/types';
 
 // ============================================================================
@@ -186,7 +186,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
 
       await updateTrip(tripId as TripId, data);
 
-      posthog?.capture('trip_updated');
+      captureUsage('trip_updated');
 
       // Reset dirty state and skip blocker before navigation.
       // skipNextBlock() prevents the blocker from firing if setIsDirty(false)

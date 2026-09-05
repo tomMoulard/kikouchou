@@ -82,7 +82,7 @@ import {
   getAssistantModelPreset,
   isAssistantModelId,
 } from '../models';
-import posthog from '@/lib/posthog';
+import posthog, { captureUsage } from '@/lib/posthog';
 import type { AssistantModelId } from '@/types';
 
 // ============================================================================
@@ -959,7 +959,7 @@ function AssistantPageComponent(): ReactElement {
       // and where they are staying, and those people are not users of this app
       // and have not agreed to anything. `prompt_length` is kept alongside so
       // the volume question stays answerable if the text is ever dropped.
-      posthog?.capture('assistant_prompt_sent', {
+      captureUsage('assistant_prompt_sent', {
         prompt: text,
         prompt_length: text.length,
         model_id: selectedModelId,

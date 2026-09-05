@@ -62,6 +62,13 @@ vi.mock('@/lib/posthog', () => ({
   // The real module exports `undefined` without env config, which is the case
   // in tests, so nothing here could observe a capture without this.
   default: { capture: (...args: unknown[]) => mockCapture(...args) },
+  // `captureUsage` fires the domain event *and* `app_used` beside it, and the
+  // double is faithful to that: a mock that only forwarded the first would let
+  // a call site lose the activity event without a single test noticing.
+  captureUsage: (action: string, properties?: unknown) => {
+    mockCapture(action, properties);
+    mockCapture('app_used', { action });
+  },
 }));
 
 /**

@@ -22,12 +22,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mockInit = vi.fn();
 const mockRegister = vi.fn();
 const mockReset = vi.fn();
+const mockCapture = vi.fn();
 
 vi.mock('posthog-js', () => ({
   default: {
     init: (...args: unknown[]) => mockInit(...args),
     register: (...args: unknown[]) => mockRegister(...args),
     reset: (...args: unknown[]) => mockReset(...args),
+    capture: (...args: unknown[]) => mockCapture(...args),
   },
 }));
 
@@ -47,6 +49,7 @@ beforeEach(() => {
   mockInit.mockClear();
   mockRegister.mockClear();
   mockReset.mockClear();
+  mockCapture.mockClear();
 });
 
 afterEach(() => {
@@ -203,5 +206,54 @@ describe('resetAnalyticsIdentity', () => {
 
     expect(() => resetAnalyticsIdentity()).not.toThrow();
     expect(mockReset).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// captureUsage
+// ============================================================================
+
+describe('captureUsage', () => {
+  it('fires the domain event and the one activity event beside it', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+    const { captureUsage } = await importPosthog();
+
+    captureUsage('activity_saved', { operation: 'created' });
+
+    // The domain event is unchanged — every insight and funnel built on it
+    // keeps working, and its properties are not diluted by the second one.
+    expect(mockCapture).toHaveBeenNthCalledWith(1, 'activity_saved', {
+      operation: 'created',
+    });
+    // `app_used` is the whole reason this helper exists: PostHog's activity
+    // setting takes a single event name, and no one domain event means "this
+    // person used the app". `action` keeps the specific one addressable.
+    expect(mockCapture).toHaveBeenNthCalledWith(2, 'app_used', {
+      action: 'activity_saved',
+    });
+  });
+
+  it('sends the domain event with no properties as one, not as undefined', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+    const { captureUsage } = await importPosthog();
+
+    captureUsage('trip_updated');
+
+    expect(mockCapture).toHaveBeenNthCalledWith(1, 'trip_updated', undefined);
+    expect(mockCapture).toHaveBeenNthCalledWith(2, 'app_used', {
+      action: 'trip_updated',
+    });
+  });
+
+  it('is a no-op when analytics is off, rather than throwing', async () => {
+    // The default in tests, in a fresh clone and in a fork's CI. A call site
+    // that used to write `posthog?.capture(...)` must not lose that safety by
+    // moving to a named import.
+    const { captureUsage } = await importPosthog();
+
+    expect(() => captureUsage('trip_created')).not.toThrow();
+    expect(mockCapture).not.toHaveBeenCalled();
   });
 });
