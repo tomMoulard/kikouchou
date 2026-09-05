@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import i18n from '@/lib/i18n';
+import posthog from '@/lib/posthog';
 import { formatBytes } from '@/lib/utils/format-bytes';
 import type { AssistantModelPreset } from '../models';
 import type {
@@ -84,6 +85,39 @@ export function isFatalEngineError(error: unknown): error is FatalEngineError {
     error instanceof Error &&
     (error as { readonly fatal?: unknown }).fatal === true
   );
+}
+
+/**
+ * Why a model failed to load, as far as the error message can be trusted to
+ * say. Four different fixes: ship a device gate, shrink the prompt or the
+ * preset, retry the download, or go and read the message.
+ */
+export type ModelLoadFailureReason =
+  | 'webgpu-unavailable'
+  | 'out-of-memory'
+  | 'network'
+  | 'unknown';
+
+/**
+ * Buckets a load failure by its message.
+ *
+ * Order matters. An allocation failure raised by the WebGPU backend names both
+ * WebGPU and the memory, and the memory is the half somebody can act on — so
+ * it is tested first, or every OOM would be filed as a missing device.
+ */
+export function classifyModelLoadFailure(
+  message: string,
+): ModelLoadFailureReason {
+  if (/out of memory|failed to allocate|buffer mapping/i.test(message)) {
+    return 'out-of-memory';
+  }
+  if (/no available backend|gpu adapter|webgpu|no adapter/i.test(message)) {
+    return 'webgpu-unavailable';
+  }
+  if (/failed to fetch|network|load model file|unauthorized|not found/i.test(message)) {
+    return 'network';
+  }
+  return 'unknown';
 }
 
 /**
@@ -530,6 +564,31 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to load model';
+
+      // The only place this failure is ever reported. The worker catches it and
+      // posts it back as a message, so it is never an unhandled error or
+      // rejection — and posthog-js's `capture_exceptions` autocapture hooks
+      // exactly those, on `window`, on the main thread. Nothing about a caught
+      // error in a worker reaches it on its own, which is why a device that
+      // cannot run the assistant at all used to look, in PostHog, like somebody
+      // who opened the page and lost interest.
+      posthog?.capture('assistant_model_load_failed', {
+        reason: classifyModelLoadFailure(message),
+        model_id: preset.modelId,
+        dtype: preset.dtype,
+        device: preset.device ?? 'default',
+        // Separates a download that broke from a session that would not build
+        // on weights already sitting in the browser cache.
+        from_cache: loadingFromCache,
+        error_message: message,
+      });
+      // And again as an exception, so it groups into an issue in Error tracking
+      // rather than only being countable as an event.
+      posthog?.captureException(err, {
+        model_id: preset.modelId,
+        device: preset.device ?? 'default',
+      });
+
       setError(message);
       setStatus('error');
       setLoadProgress(null);
