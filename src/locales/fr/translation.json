@@ -1083,5 +1083,65 @@
     "openInMaps": "Ouvrir dans Plans",
     "copyAddress": "Copier l’adresse",
     "addressCopied": "Adresse copiée"
+  },
+  "rides": {
+    "title": "Trajets",
+    "ride": "Trajet",
+    "rides_one": "{{count}} trajet",
+    "rides_other": "{{count}} trajets",
+    "noRides": "Aucun trajet prévu",
+    "directions": {
+      "pickup": "Aller chercher",
+      "dropoff": "Déposer"
+    },
+    "meetAt": "Rendez-vous à {{time}}",
+    "leaveAt": "Départ à {{time}}",
+    "leadTime": "Partir {{count}} min avant",
+    "driver": "Conducteur",
+    "noDriver": "Personne au volant",
+    "selfDriven": "Conduisent eux-mêmes",
+    "vehicle": "Voiture",
+    "noVehicle": "Aucune voiture choisie",
+    "passengers_one": "{{count}} passager",
+    "passengers_other": "{{count}} passagers",
+    "legMismatch": {
+      "after": "{{name}} arrive maintenant {{minutes}} min après ce trajet",
+      "before": "{{name}} arrive maintenant {{minutes}} min avant ce trajet"
+    }
+  },
+  "vehicles": {
+    "title": "Voitures",
+    "vehicle": "Voiture",
+    "vehicles_one": "{{count}} voiture",
+    "vehicles_other": "{{count}} voitures",
+    "noVehicles": "Aucune voiture ajoutée",
+    "name": "Nom",
+    "owner": "Propriétaire",
+    "rental": "Voiture de location",
+    "seatCount": "Places",
+    "seatCountHint": "Conducteur compris",
+    "seatsUnknown": "Places non renseignées",
+    "luggageNotes": "Bagages",
+    "seatsUsed": "{{used}} places sur {{total}}",
+    "overCapacity": "{{used}} personnes pour {{total}} places",
+    "full": "Complète"
+  },
+  "childSeats": {
+    "label": "Siège auto",
+    "none": "Aucun",
+    "rearFacing": "Siège dos à la route",
+    "forwardFacing": "Siège face à la route",
+    "booster": "Réhausseur",
+    "required_one": "{{count}} {{kind}}",
+    "required_other": "{{count}} {{kind}}",
+    "missing": "Il manque {{count}} {{kind}}"
+  },
+  "identity": {
+    "title": "Qui êtes-vous ?",
+    "description": "Choisissez votre nom pour voir vos propres trajets et les personnes que vous conduisez.",
+    "nobody": "Non défini",
+    "you": "Vous",
+    "scopeMine": "Seulement les miens",
+    "scopeAll": "Tout le monde"
   }
 }

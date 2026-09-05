@@ -51,6 +51,7 @@ import {
 
 import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
+import { useRideContext } from '@/contexts/RideContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -653,6 +654,8 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     error: transportsError,
     deleteTransport,
   } = useTransportContext(),
+   // Same reason as the panel: a driven ride covers its legs.
+   { rides } = useRideContext(),
 
   // Local state
    [transportToDelete, setTransportToDelete] = useState<TransportId | null>(null),
@@ -725,8 +728,8 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // Amber pickup alerts only when at least one upcoming pickup still needs a
   // driver — same selection the panel counts and the analytics badge reports.
    hasUnassignedUpcomingPickup = useMemo(
-    () => selectPickupsNeedingDriver(upcomingPickups).length > 0,
-    [upcomingPickups],
+    () => selectPickupsNeedingDriver(upcomingPickups, rides).length > 0,
+    [upcomingPickups, rides],
   );
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context

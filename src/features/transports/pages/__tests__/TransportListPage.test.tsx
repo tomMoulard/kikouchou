@@ -108,6 +108,12 @@ vi.mock('@/contexts/TripContext', () => ({
   })),
 }));
 
+// Same reason as the panel: a driven ride covers its legs, so the page's alert
+// gate reads the rides as well as the legs.
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: vi.fn(() => ({ rides: [] })),
+}));
+
 vi.mock('@/contexts/PersonContext', () => ({
   usePersonContext: vi.fn(() => ({
     persons: [mockPerson],

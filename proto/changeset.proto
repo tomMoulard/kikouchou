@@ -24,6 +24,8 @@ message EntityList {
   repeated RoomAssignment assignments = 2;
   repeated Transport transports = 3;
   repeated Room rooms = 4;
+  repeated Ride rides = 5;
+  repeated Vehicle vehicles = 6;
 }
 
 // Minimal trip metadata for import when the local trip id differs from the exporter.
@@ -61,6 +63,9 @@ message Person {
   optional uint32 headcount = 8;
   // Contact number, stored as typed. Reaches every member of the trip.
   optional string phone = 9;
+  // Child restraint this guest needs in a car. Absent = none, which is the
+  // answer for every adult.
+  optional ChildSeatKind child_seat = 10;
 }
 
 // Links a person to a room for a specific date range.
@@ -90,6 +95,44 @@ message Transport {
   // Optional origin of this leg (e.g. previous station) for map routing.
   optional string start_location = 13;
   optional Coordinates start_coordinates = 14;
+  // The car journey carrying this leg. Membership lives here, on the leg, and
+  // not as a passenger list on Ride: the CRDT merges an array field atomically,
+  // so two guests joining one car offline would keep only one of the joins.
+  optional string ride_id = 15;
+}
+
+// A car available to the trip — someone's own, or the one hired for the week.
+message Vehicle {
+  string id = 1;
+  string trip_id = 2;
+  string name = 3;
+  optional string owner_id = 4;
+  optional bool is_rental = 5;
+  // People it carries, driver included. Absent = not known, never zero.
+  optional uint32 seat_count = 6;
+  // One entry per installed seat, so two boosters appear twice.
+  repeated ChildSeatKind child_seats = 7;
+  // Free text. Nothing is counted against it — there is no per-guest bag count.
+  optional string luggage_notes = 8;
+  optional string notes = 9;
+}
+
+// A car journey serving one or more Transport legs.
+message Ride {
+  string id = 1;
+  string trip_id = 2;
+  RideDirection direction = 3;
+  // When the car must be at the meeting point, ISO datetime.
+  string meet_datetime = 4;
+  string location = 5;
+  optional Coordinates coordinates = 6;
+  // Minutes before meet_datetime that the driver sets off. Absent = 30.
+  optional uint32 lead_time_minutes = 7;
+  // May also own one of the legs on this ride — that is a self-driven ride, and
+  // it is derived rather than flagged.
+  optional string driver_id = 8;
+  optional string vehicle_id = 9;
+  optional string notes = 10;
 }
 
 // GPS coordinates.
@@ -102,6 +145,19 @@ enum TransportType {
   TRANSPORT_TYPE_UNSPECIFIED = 0;
   TRANSPORT_TYPE_ARRIVAL = 1;
   TRANSPORT_TYPE_DEPARTURE = 2;
+}
+
+enum RideDirection {
+  RIDE_DIRECTION_UNSPECIFIED = 0;
+  RIDE_DIRECTION_PICKUP = 1;
+  RIDE_DIRECTION_DROPOFF = 2;
+}
+
+enum ChildSeatKind {
+  CHILD_SEAT_KIND_UNSPECIFIED = 0;
+  CHILD_SEAT_KIND_REAR_FACING = 1;
+  CHILD_SEAT_KIND_FORWARD_FACING = 2;
+  CHILD_SEAT_KIND_BOOSTER = 3;
 }
 
 enum TransportMode {

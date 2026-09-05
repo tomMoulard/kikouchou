@@ -47,6 +47,7 @@ import {
 import { statusVariants } from '@/components/ui/status.variants';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { usePersonContext } from '@/contexts/PersonContext';
+import { useRideContext } from '@/contexts/RideContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
@@ -451,7 +452,10 @@ const UpcomingPickups = memo(function UpcomingPickups({
   className,
 }: UpcomingPickupsProps): ReactElement | null {
   const { t, i18n } = useTranslation();
-  const { upcomingPickups, updateTransport } = useTransportContext();
+  const { upcomingPickups, updateTransport } = useTransportContext(),
+    // A leg sitting in a ride somebody has volunteered for is not unassigned,
+    // even though the leg itself carries no `driverId`.
+    { rides } = useRideContext();
   const { persons } = usePersonContext();
   const { successToast } = useOfflineAwareToast();
 
@@ -478,8 +482,8 @@ const UpcomingPickups = memo(function UpcomingPickups({
   // transport list's alert gate and the analytics badge, so the number in the
   // header, the visibility of this panel and the cards below always agree.
   const pickupsNeedingDriver = useMemo(
-    () => selectPickupsNeedingDriver(upcomingPickups),
-    [upcomingPickups],
+    () => selectPickupsNeedingDriver(upcomingPickups, rides),
+    [upcomingPickups, rides],
   );
 
   // Group those pickups by station proximity for combined-trip planning.

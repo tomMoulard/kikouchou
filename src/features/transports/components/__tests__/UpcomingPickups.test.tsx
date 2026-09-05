@@ -93,6 +93,13 @@ vi.mock('@/contexts/TransportContext', () => ({
   })),
 }));
 
+// The panel asks the rides too: a leg sitting in a car somebody volunteered
+// for is not unassigned, even though the leg carries no `driverId`. Empty here,
+// so every case below keeps testing the leg-level behaviour it was written for.
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: vi.fn(() => ({ rides: [] })),
+}));
+
 vi.mock('@/contexts/PersonContext', () => ({
   usePersonContext: vi.fn(() => ({
     persons: [],

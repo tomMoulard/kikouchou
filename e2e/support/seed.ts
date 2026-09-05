@@ -242,6 +242,13 @@ export interface SeedTransportOptions {
   readonly location?: string;
   /** Pin it on the map; `TransportMapPage` shows an empty state without this. */
   readonly coordinates?: { readonly lat: number; readonly lon: number };
+  /**
+   * The car journey carrying this leg, from {@link seedRide}.
+   *
+   * Membership lives on the leg, so a shared ride is seeded by giving several
+   * transports the same `rideId` — never by listing passengers on the ride.
+   */
+  readonly rideId?: string;
 }
 
 /**
@@ -275,6 +282,7 @@ export async function seedTransport(
           mode: options.mode ?? 'plane',
           location: options.location ?? 'Test Station',
           ...(options.coordinates === undefined ? {} : { coordinates: options.coordinates }),
+          ...(options.rideId === undefined ? {} : { rideId: options.rideId }),
           needsPickup: options.type === 'arrival',
         });
 
@@ -285,6 +293,136 @@ export async function seedTransport(
         tx.onerror = () => {
           db.close();
           reject(new Error('Failed to create transport'));
+        };
+      };
+    });
+  }, options);
+}
+
+/**
+ * A car to seed into the `vehicles` store.
+ */
+export interface SeedVehicleOptions {
+  readonly tripId: string;
+  readonly name: string;
+  /** People it carries, driver included. Omit for "not measured". */
+  readonly seatCount?: number;
+  /** One entry per installed seat, so two boosters appear twice. */
+  readonly childSeats?: readonly ('rearFacing' | 'forwardFacing' | 'booster')[];
+  readonly ownerId?: string;
+  readonly isRental?: boolean;
+}
+
+/**
+ * Writes one vehicle into the `vehicles` store.
+ *
+ * Same ordering rule as {@link seedPerson}: seed before the trip is current, or
+ * `YjsTripSync` races the raw write with its own projection.
+ *
+ * @param page - Playwright page object
+ * @param options - The vehicle to write
+ * @returns The new vehicle's id
+ */
+export async function seedVehicle(
+  page: Page,
+  options: SeedVehicleOptions,
+): Promise<string> {
+  return await page.evaluate(async (options: SeedVehicleOptions) => {
+    const id = `seed-vehicle-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+    return new Promise<string>((resolve, reject) => {
+      const request = indexedDB.open('kikouchou');
+      request.onerror = () => reject(new Error('Failed to open database'));
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('vehicles', 'readwrite');
+        tx.objectStore('vehicles').add({
+          id,
+          tripId: options.tripId,
+          name: options.name,
+          ...(options.seatCount === undefined ? {} : { seatCount: options.seatCount }),
+          ...(options.childSeats === undefined
+            ? {}
+            : { childSeats: [...options.childSeats] }),
+          ...(options.ownerId === undefined ? {} : { ownerId: options.ownerId }),
+          ...(options.isRental === undefined ? {} : { isRental: options.isRental }),
+        });
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve(id);
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(new Error('Failed to create vehicle'));
+        };
+      };
+    });
+  }, options);
+}
+
+/**
+ * A car journey to seed into the `rides` store.
+ */
+export interface SeedRideOptions {
+  readonly tripId: string;
+  /** ISO 8601 with a timezone, from `fixtureDatetime` — never a literal month. */
+  readonly meetDatetime: string;
+  readonly location: string;
+  readonly direction?: 'pickup' | 'dropoff';
+  /** Minutes before the meeting time the driver sets off. Omit for 30. */
+  readonly leadTimeMinutes?: number;
+  /** The guest driving. Omit to seed a ride nobody has volunteered for. */
+  readonly driverId?: string;
+  readonly vehicleId?: string;
+}
+
+/**
+ * Writes one ride into the `rides` store.
+ *
+ * Passengers are **not** an argument, because they are not a field: attach legs
+ * by passing this ride's id as `rideId` to {@link seedTransport}. Seeding a
+ * shared car is therefore one `seedRide` and several `seedTransport` calls.
+ *
+ * Same ordering rule as {@link seedPerson}: seed before the trip is current.
+ *
+ * @param page - Playwright page object
+ * @param options - The ride to write
+ * @returns The new ride's id
+ */
+export async function seedRide(
+  page: Page,
+  options: SeedRideOptions,
+): Promise<string> {
+  return await page.evaluate(async (options: SeedRideOptions) => {
+    const id = `seed-ride-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+    return new Promise<string>((resolve, reject) => {
+      const request = indexedDB.open('kikouchou');
+      request.onerror = () => reject(new Error('Failed to open database'));
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('rides', 'readwrite');
+        tx.objectStore('rides').add({
+          id,
+          tripId: options.tripId,
+          direction: options.direction ?? 'pickup',
+          meetDatetime: options.meetDatetime,
+          location: options.location,
+          ...(options.leadTimeMinutes === undefined
+            ? {}
+            : { leadTimeMinutes: options.leadTimeMinutes }),
+          ...(options.driverId === undefined ? {} : { driverId: options.driverId }),
+          ...(options.vehicleId === undefined ? {} : { vehicleId: options.vehicleId }),
+        });
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve(id);
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(new Error('Failed to create ride'));
         };
       };
     });

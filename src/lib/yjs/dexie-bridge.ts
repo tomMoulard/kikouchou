@@ -15,7 +15,14 @@
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
-import { MAX_LENGTHS, sanitizeOptionalText } from '@/lib/db/sanitize';
+import {
+  MAX_LENGTHS,
+  normalizeChildSeats,
+  normalizeLeadTimeMinutes,
+  normalizeSeatCount,
+  sanitizeOptionalText,
+  sanitizeText,
+} from '@/lib/db/sanitize';
 import { isGuestPhoneSharingEnabled } from '@/lib/flags';
 import { toSharedGuest } from '@/lib/sharing/guest-privacy';
 import i18n from '@/lib/i18n';
@@ -32,7 +39,9 @@ import {
 } from './doc-model';
 import type {
   Activity,
+  ChildSeatKind,
   Person,
+  Ride,
   Room,
   RoomAssignment,
   ShareId,
@@ -40,7 +49,9 @@ import type {
   Trip,
   TripId,
   UnixTimestamp,
+  Vehicle,
 } from '@/types';
+import { CHILD_SEAT_KINDS, RIDE_DIRECTIONS } from '@/types';
 
 const COMPACTION_THRESHOLD = 100;
 
@@ -242,6 +253,72 @@ function buildGuestRecord(
   return person;
 }
 
+/**
+ * Projects one ride out of the document, bounding what the log carried.
+ *
+ * A ride arrives from another member's device and has passed no form of ours.
+ * Two fields do real damage unbounded, so both are pinned here at the trust
+ * boundary rather than at the components that read them:
+ *
+ * - `leadTimeMinutes` is subtracted from an instant to produce a "leave now"
+ *   time. A peer sending 10^9 puts that alert nineteen centuries in the past,
+ *   where it is permanently due and permanently on screen.
+ * - `direction` drives an icon and a phrase lookup. An unknown value from a
+ *   newer peer falls back to `pickup` rather than rendering an empty pill.
+ *
+ * @param ride - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row ready for Dexie
+ */
+function buildRideRecord(ride: SharedRecord, tripId: TripId): Ride {
+  const row = { ...ride, tripId } as Ride;
+
+  row.location = sanitizeText(String(row.location ?? ''), MAX_LENGTHS.rideLocation);
+  row.leadTimeMinutes = normalizeLeadTimeMinutes(row.leadTimeMinutes);
+  row.notes = sanitizeOptionalText(row.notes, MAX_LENGTHS.rideNotes);
+
+  if (!RIDE_DIRECTIONS.includes(row.direction)) {
+    row.direction = 'pickup';
+  }
+
+  return row;
+}
+
+/**
+ * Projects one vehicle out of the document, bounding what the log carried.
+ *
+ * `seatCount` and `childSeats` are the fields that matter. A seat count is
+ * compared against a headcount and rendered; a child-seat list is rendered one
+ * badge per entry, so an unbounded array from a peer is a rendering bomb rather
+ * than merely wrong data — the shape of the `capacity` bug this codebase
+ * already paid for once, where `Array.from({length: capacity})` killed the tab.
+ *
+ * @param vehicle - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row ready for Dexie
+ */
+function buildVehicleRecord(vehicle: SharedRecord, tripId: TripId): Vehicle {
+  const row = { ...vehicle, tripId } as Vehicle;
+
+  row.name = sanitizeText(String(row.name ?? ''), MAX_LENGTHS.vehicleName);
+  row.seatCount = normalizeSeatCount(row.seatCount);
+  row.luggageNotes = sanitizeOptionalText(
+    row.luggageNotes,
+    MAX_LENGTHS.vehicleLuggageNotes,
+  );
+  row.notes = sanitizeOptionalText(row.notes, MAX_LENGTHS.vehicleNotes);
+
+  row.childSeats = Array.isArray(row.childSeats)
+    ? normalizeChildSeats(
+        row.childSeats.filter((kind): kind is ChildSeatKind =>
+          (CHILD_SEAT_KINDS as readonly unknown[]).includes(kind),
+        ),
+      )
+    : undefined;
+
+  return row;
+}
+
 async function replaceTripScopedRows<T extends { id: string; tripId: TripId }>(
   currentRows: readonly T[],
   nextRows: readonly T[],
@@ -411,7 +488,16 @@ export async function syncDocToDexie(
   try {
     await db.transaction(
       'rw',
-      [db.trips, db.persons, db.rooms, db.roomAssignments, db.transports, db.activities],
+      [
+        db.trips,
+        db.persons,
+        db.rooms,
+        db.roomAssignments,
+        db.transports,
+        db.rides,
+        db.vehicles,
+        db.activities,
+      ],
       async () => {
         await db.trips.put(nextTrip);
 
@@ -427,6 +513,14 @@ export async function syncDocToDexie(
         const currentTransport = await db.transports
           .where('[tripId+datetime]')
           .between([tripId, ''], [tripId, '\uffff'])
+          .toArray();
+        const currentRides = await db.rides
+          .where('[tripId+meetDatetime]')
+          .between([tripId, ''], [tripId, '\uffff'])
+          .toArray();
+        const currentVehicles = await db.vehicles
+          .where('tripId')
+          .equals(tripId)
           .toArray();
         const currentActivities = await db.activities
           .where('[tripId+startDatetime]')
@@ -449,6 +543,12 @@ export async function syncDocToDexie(
         );
         const nextTransport = readCollection(doc, 'transport').map(
           (transport) => ({ ...transport, tripId } as Transport),
+        );
+        const nextRides = readCollection(doc, 'rides').map((ride) =>
+          buildRideRecord(ride, tripId),
+        );
+        const nextVehicles = readCollection(doc, 'vehicles').map((vehicle) =>
+          buildVehicleRecord(vehicle, tripId),
         );
         const nextActivities = readCollection(doc, 'activities').map(
           (activity) => ({ ...activity, tripId } as Activity),
@@ -479,6 +579,18 @@ export async function syncDocToDexie(
           (ids) => db.transports.bulkDelete([...ids]),
         );
         await replaceTripScopedRows(
+          currentRides,
+          nextRides,
+          (rows) => db.rides.bulkPut(rows),
+          (ids) => db.rides.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
+          currentVehicles,
+          nextVehicles,
+          (rows) => db.vehicles.bulkPut(rows),
+          (ids) => db.vehicles.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
           currentActivities,
           nextActivities,
           (rows) => db.activities.bulkPut(rows),
@@ -500,26 +612,32 @@ export async function syncDocToDexie(
 export const applyDocToDexie = syncDocToDexie;
 
 export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<void> {
-  const [trip, guests, rooms, assignments, transport, activities] = await Promise.all([
-    db.trips.get(tripId),
-    db.persons.where('tripId').equals(tripId).toArray(),
-    db.rooms
-      .where('[tripId+order]')
-      .between([tripId, -Infinity], [tripId, Infinity])
-      .toArray(),
-    db.roomAssignments
-      .where('[tripId+startDate]')
-      .between([tripId, ''], [tripId, '\uffff'])
-      .toArray(),
-    db.transports
-      .where('[tripId+datetime]')
-      .between([tripId, ''], [tripId, '\uffff'])
-      .toArray(),
-    db.activities
-      .where('[tripId+startDatetime]')
-      .between([tripId, ''], [tripId, '\uffff'])
-      .toArray(),
-  ]);
+  const [trip, guests, rooms, assignments, transport, rides, vehicles, activities] =
+    await Promise.all([
+      db.trips.get(tripId),
+      db.persons.where('tripId').equals(tripId).toArray(),
+      db.rooms
+        .where('[tripId+order]')
+        .between([tripId, -Infinity], [tripId, Infinity])
+        .toArray(),
+      db.roomAssignments
+        .where('[tripId+startDate]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+      db.transports
+        .where('[tripId+datetime]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+      db.rides
+        .where('[tripId+meetDatetime]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+      db.vehicles.where('tripId').equals(tripId).toArray(),
+      db.activities
+        .where('[tripId+startDatetime]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+    ]);
 
   if (!trip) {
     return;
@@ -556,6 +674,8 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
       ['rooms', rooms],
       ['roomAssignments', assignments],
       ['transport', transport],
+      ['rides', rides],
+      ['vehicles', vehicles],
       ['activities', activities],
     ];
 

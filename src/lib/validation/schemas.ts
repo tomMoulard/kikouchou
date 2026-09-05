@@ -12,18 +12,24 @@ import {
   ACTIVITY_CATEGORIES,
   MAX_ACTIVITY_PARTICIPANTS,
   MAX_GUEST_GROUP_MEMBERS,
+  MAX_LEAD_TIME_MINUTES,
   MAX_PERSON_HEADCOUNT,
+  MAX_VEHICLE_SEAT_COUNT,
+  MIN_LEAD_TIME_MINUTES,
   MIN_PERSON_HEADCOUNT,
+  MIN_VEHICLE_SEAT_COUNT,
 } from '@/types';
 import type {
   ActivityCategory,
   HexColor,
   ISODateString,
   PersonId,
+  RideId,
   RoomIcon,
   RoomId,
   TransportMode,
   TransportType,
+  VehicleId,
 } from '@/types';
 
 // ============================================================================
@@ -102,6 +108,15 @@ export const roomIconSchema = z.enum([
 /**
  * Transport type validator.
  */
+export const rideDirectionSchema = z.enum(['pickup', 'dropoff'], {
+  message: 'Direction must be pickup or dropoff',
+});
+
+export const childSeatKindSchema = z.enum(
+  ['rearFacing', 'forwardFacing', 'booster'],
+  { message: 'Unknown child seat kind' },
+);
+
 export const transportTypeSchema = z.enum([
   'arrival',
   'departure',
@@ -136,6 +151,8 @@ const brandedIdSchema = <T extends string>() =>
  * PersonId validator.
  */
 export const personIdSchema = brandedIdSchema<PersonId>();
+export const rideIdSchema = brandedIdSchema<RideId>();
+export const vehicleIdSchema = brandedIdSchema<VehicleId>();
 
 /**
  * RoomId validator.
@@ -251,6 +268,7 @@ export const PersonFormDataSchema = z
       .min(MIN_PERSON_HEADCOUNT, `Headcount must be at least ${MIN_PERSON_HEADCOUNT}`)
       .max(MAX_PERSON_HEADCOUNT, `Headcount must be ${MAX_PERSON_HEADCOUNT} or less`)
       .optional(),
+    childSeat: childSeatKindSchema.optional(),
   })
   .refine(
     (data) => {
@@ -324,11 +342,70 @@ export const TransportFormDataSchema = z.object({
     .max(50, 'Transport number must be 50 characters or less')
     .optional(),
   driverId: personIdSchema.optional(),
+  rideId: rideIdSchema.optional(),
   needsPickup: z.boolean(),
   notes: z
     .string()
     .max(500, 'Notes must be 500 characters or less')
     .optional(),
+});
+
+/**
+ * Vehicle form data schema.
+ *
+ * Every capacity field is optional, and that is the product decision rather
+ * than laxness: a car nobody has measured still names itself on a ride card,
+ * and a missing `seatCount` means "not known" — no warning is ever raised
+ * against an absent limit.
+ */
+export const VehicleFormDataSchema = z.object({
+  name: z
+    .string()
+    .min(1, 'Name is required')
+    .max(100, 'Name must be 100 characters or less'),
+  ownerId: personIdSchema.optional(),
+  isRental: z.boolean().optional(),
+  seatCount: z
+    .number()
+    .int('Seats must be a whole number')
+    .min(MIN_VEHICLE_SEAT_COUNT, `Seats must be at least ${MIN_VEHICLE_SEAT_COUNT}`)
+    .max(MAX_VEHICLE_SEAT_COUNT, `Seats must be ${MAX_VEHICLE_SEAT_COUNT} or less`)
+    .optional(),
+  childSeats: z.array(childSeatKindSchema).max(MAX_VEHICLE_SEAT_COUNT).optional(),
+  luggageNotes: z
+    .string()
+    .max(500, 'Luggage note must be 500 characters or less')
+    .optional(),
+  notes: z.string().max(1000, 'Notes must be 1000 characters or less').optional(),
+});
+
+/**
+ * Ride form data schema.
+ *
+ * No passenger list, deliberately: membership is a scalar on each leg
+ * (`Transport.rideId`), because the shared document merges an array field
+ * atomically and two guests joining one car offline would lose a join.
+ *
+ * `leadTimeMinutes` allows zero — a guest already standing at the station
+ * leaves now — which is why its floor is 0 rather than 1.
+ */
+export const RideFormDataSchema = z.object({
+  direction: rideDirectionSchema,
+  meetDatetime: isoDateTimeStringSchema,
+  location: z
+    .string()
+    .min(1, 'Location is required')
+    .max(200, 'Location must be 200 characters or less'),
+  coordinates: coordinatesSchema.optional(),
+  leadTimeMinutes: z
+    .number()
+    .int('Lead time must be a whole number of minutes')
+    .min(MIN_LEAD_TIME_MINUTES)
+    .max(MAX_LEAD_TIME_MINUTES, `Lead time must be ${MAX_LEAD_TIME_MINUTES} minutes or less`)
+    .optional(),
+  driverId: personIdSchema.optional(),
+  vehicleId: vehicleIdSchema.optional(),
+  notes: z.string().max(1000, 'Notes must be 1000 characters or less').optional(),
 });
 
 /**
@@ -466,6 +543,8 @@ export type RoomAssignmentFormDataInput = z.input<
   typeof RoomAssignmentFormDataSchema
 >;
 export type TransportFormDataInput = z.input<typeof TransportFormDataSchema>;
+export type RideFormDataInput = z.input<typeof RideFormDataSchema>;
+export type VehicleFormDataInput = z.input<typeof VehicleFormDataSchema>;
 export type ActivityFormDataInput = z.input<typeof ActivityFormDataSchema>;
 export type GuestGroupFormDataInput = z.input<typeof GuestGroupFormDataSchema>;
 export type GuestGroupMemberFormDataInput = z.input<

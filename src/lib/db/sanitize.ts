@@ -11,8 +11,13 @@
  */
 
 import {
+  CHILD_SEAT_KINDS,
   MAX_ACTIVITY_PARTICIPANTS,
   MAX_GUEST_GROUP_MEMBERS,
+  MAX_LEAD_TIME_MINUTES,
+  MAX_VEHICLE_SEAT_COUNT,
+  MIN_LEAD_TIME_MINUTES,
+  MIN_VEHICLE_SEAT_COUNT,
   normalizePersonHeadcount,
 } from '@/types';
 
@@ -72,6 +77,16 @@ export const MAX_LENGTHS = {
   activityNotes: 1000,
   /** Guest group name (e.g., "Family") */
   guestGroupName: 100,
+  /** Vehicle name (e.g., "Espace de location") */
+  vehicleName: 100,
+  /** Vehicle luggage note (e.g., "Coffre pris par la poussette") */
+  vehicleLuggageNotes: 500,
+  /** Vehicle notes (e.g., "Boîte automatique") */
+  vehicleNotes: 1000,
+  /** Ride meeting point (e.g., "Lyon Part-Dieu") */
+  rideLocation: 200,
+  /** Ride notes (e.g., "Passer prendre le pain en redescendant") */
+  rideNotes: 1000,
 } as const;
 
 // ============================================================================
@@ -240,6 +255,59 @@ export function sanitizeTransportData<
 }
 
 /**
+ * Sanitizes vehicle form data.
+ *
+ * Beyond trimming, the two numeric-ish fields are bounded here rather than at
+ * the form: a vehicle also arrives from a QR changeset and from a peer's
+ * document, neither of which has ever seen an `<input max>`. `childSeats` is
+ * filtered to known kinds and capped at the seat count's own ceiling, because
+ * it is rendered one badge per entry — an unbounded array from a peer is a
+ * rendering bomb, not a data problem.
+ *
+ * @param data - Vehicle form data to sanitize
+ * @returns Sanitized vehicle form data
+ */
+export function sanitizeVehicleData<
+  T extends {
+    name: string;
+    seatCount?: number;
+    childSeats?: readonly string[];
+    luggageNotes?: string;
+    notes?: string;
+  },
+>(data: T): T {
+  return {
+    ...data,
+    name: sanitizeText(data.name, MAX_LENGTHS.vehicleName),
+    seatCount: normalizeSeatCount(data.seatCount),
+    childSeats: normalizeChildSeats(data.childSeats),
+    luggageNotes: sanitizeOptionalText(data.luggageNotes, MAX_LENGTHS.vehicleLuggageNotes),
+    notes: sanitizeOptionalText(data.notes, MAX_LENGTHS.vehicleNotes),
+  };
+}
+
+/**
+ * Sanitizes ride form data.
+ *
+ * @param data - Ride form data to sanitize
+ * @returns Sanitized ride form data
+ */
+export function sanitizeRideData<
+  T extends {
+    location: string;
+    leadTimeMinutes?: number;
+    notes?: string;
+  },
+>(data: T): T {
+  return {
+    ...data,
+    location: sanitizeText(data.location, MAX_LENGTHS.rideLocation),
+    leadTimeMinutes: normalizeLeadTimeMinutes(data.leadTimeMinutes),
+    notes: sanitizeOptionalText(data.notes, MAX_LENGTHS.rideNotes),
+  };
+}
+
+/**
  * Sanitizes activity form data.
  *
  * Trims text fields, drops empty optional text, de-duplicates participants
@@ -267,6 +335,80 @@ export function sanitizeActivityData<
       : data.participantIds,
     maxParticipants: normalizeMaxParticipants(data.maxParticipants),
   };
+}
+
+/**
+ * Clamps a raw seat count to a whole number within the allowed range.
+ *
+ * Returns undefined (not known) for undefined, non-finite or non-positive
+ * values — and "not known" is the right reading of a missing capacity: no
+ * warning is ever raised against an absent limit, whereas a zero would claim
+ * every car is full.
+ *
+ * @param value - Raw seat count (form input, imported changeset, peer document)
+ * @returns A whole number within the vehicle bounds, or undefined
+ */
+export function normalizeSeatCount(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  const rounded = Math.round(value);
+  if (rounded < MIN_VEHICLE_SEAT_COUNT) {
+    return undefined;
+  }
+
+  return rounded > MAX_VEHICLE_SEAT_COUNT ? MAX_VEHICLE_SEAT_COUNT : rounded;
+}
+
+/**
+ * Clamps a lead time to a whole number of minutes inside its bounds.
+ *
+ * Unlike a seat count, **zero is meaningful** — a guest already standing at the
+ * station leaves now — so an out-of-range value clamps rather than vanishing.
+ * Dropping it would silently reinstate the 30-minute default and tell a driver
+ * to set off half an hour before a departure they are already at.
+ *
+ * @param value - The raw lead time, from a form or a peer
+ * @returns A whole number of minutes within bounds, or undefined when absent
+ */
+export function normalizeLeadTimeMinutes(
+  value: number | undefined,
+): number | undefined {
+  if (value === undefined || !Number.isFinite(value)) {
+    return undefined;
+  }
+
+  const rounded = Math.round(value);
+  if (rounded < MIN_LEAD_TIME_MINUTES) {
+    return MIN_LEAD_TIME_MINUTES;
+  }
+
+  return rounded > MAX_LEAD_TIME_MINUTES ? MAX_LEAD_TIME_MINUTES : rounded;
+}
+
+/**
+ * Keeps only recognised child-seat kinds, bounded by the largest vehicle.
+ *
+ * An unknown string is dropped on its own rather than rejecting the list: a
+ * newer peer may name a seat kind this build has never heard of, and losing one
+ * badge is better than losing the car.
+ *
+ * @param value - The raw seat list, from a form or a peer
+ * @returns A bounded list of known kinds, or undefined when absent
+ */
+export function normalizeChildSeats<T extends readonly string[]>(
+  value: T | undefined,
+): T | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  return value
+    .filter((kind): kind is T[number] =>
+      (CHILD_SEAT_KINDS as readonly string[]).includes(kind),
+    )
+    .slice(0, MAX_VEHICLE_SEAT_COUNT) as unknown as T;
 }
 
 /**

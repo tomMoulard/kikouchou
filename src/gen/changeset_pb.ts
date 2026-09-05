@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file changeset.proto.
  */
 export const file_changeset: GenFile = /*@__PURE__*/
-  fileDesc("Cg9jaGFuZ2VzZXQucHJvdG8SEWtpa291Y2hvdS5zaGFyaW5nIp4CCg1UcmlwQ2hhbmdlc2V0Eg8KB3ZlcnNpb24YASABKA0SDwoHdHJpcF9pZBgCIAEoCRIQCghzaGFyZV9pZBgDIAEoCRITCgtleHBvcnRlZF9ieRgEIAEoCRITCgtleHBvcnRlZF9hdBgFIAEoAxIYChBiYXNlX3NuYXBzaG90X2F0GAYgASgDEiwKBWFkZGVkGAcgASgLMh0ua2lrb3VjaG91LnNoYXJpbmcuRW50aXR5TGlzdBIvCghtb2RpZmllZBgIIAEoCzIdLmtpa291Y2hvdS5zaGFyaW5nLkVudGl0eUxpc3QSNgoNdHJpcF9zbmFwc2hvdBgJIAEoCzIfLmtpa291Y2hvdS5zaGFyaW5nLlRyaXBTbmFwc2hvdCLKAQoKRW50aXR5TGlzdBIqCgdwZXJzb25zGAEgAygLMhkua2lrb3VjaG91LnNoYXJpbmcuUGVyc29uEjYKC2Fzc2lnbm1lbnRzGAIgAygLMiEua2lrb3VjaG91LnNoYXJpbmcuUm9vbUFzc2lnbm1lbnQSMAoKdHJhbnNwb3J0cxgDIAMoCzIcLmtpa291Y2hvdS5zaGFyaW5nLlRyYW5zcG9ydBImCgVyb29tcxgEIAMoCzIXLmtpa291Y2hvdS5zaGFyaW5nLlJvb20i3AEKDFRyaXBTbmFwc2hvdBIMCgRuYW1lGAEgASgJEhIKCnN0YXJ0X2RhdGUYAiABKAkSEAoIZW5kX2RhdGUYAyABKAkSFQoIbG9jYXRpb24YBCABKAlIAIgBARIYCgtkZXNjcmlwdGlvbhgFIAEoCUgBiAEBEhYKCWNvb3JkX2xhdBgGIAEoAUgCiAEBEhYKCWNvb3JkX2xvbhgHIAEoAUgDiAEBQgsKCV9sb2NhdGlvbkIOCgxfZGVzY3JpcHRpb25CDAoKX2Nvb3JkX2xhdEIMCgpfY29vcmRfbG9uIpgBCgRSb29tEgoKAmlkGAEgASgJEg8KB3RyaXBfaWQYAiABKAkSDAoEbmFtZRgDIAEoCRIQCghjYXBhY2l0eRgEIAEoDRINCgVvcmRlchgFIAEoBRIYCgtkZXNjcmlwdGlvbhgGIAEoCUgAiAEBEhEKBGljb24YByABKAlIAYgBAUIOCgxfZGVzY3JpcHRpb25CBwoFX2ljb24ihAIKBlBlcnNvbhIKCgJpZBgBIAEoCRIPCgd0cmlwX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSDQoFY29sb3IYBCABKAkSHAoPc3RheV9zdGFydF9kYXRlGAUgASgJSACIAQESGgoNc3RheV9lbmRfZGF0ZRgGIAEoCUgBiAEBEhIKBW5vdGVzGAcgASgJSAKIAQESFgoJaGVhZGNvdW50GAggASgNSAOIAQESEgoFcGhvbmUYCSABKAlIBIgBAUISChBfc3RheV9zdGFydF9kYXRlQhAKDl9zdGF5X2VuZF9kYXRlQggKBl9ub3Rlc0IMCgpfaGVhZGNvdW50QggKBl9waG9uZSJ3Cg5Sb29tQXNzaWdubWVudBIKCgJpZBgBIAEoCRIPCgd0cmlwX2lkGAIgASgJEg8KB3Jvb21faWQYAyABKAkSEQoJcGVyc29uX2lkGAQgASgJEhIKCnN0YXJ0X2RhdGUYBSABKAkSEAoIZW5kX2RhdGUYBiABKAkivwQKCVRyYW5zcG9ydBIKCgJpZBgBIAEoCRIPCgd0cmlwX2lkGAIgASgJEhEKCXBlcnNvbl9pZBgDIAEoCRIuCgR0eXBlGAQgASgOMiAua2lrb3VjaG91LnNoYXJpbmcuVHJhbnNwb3J0VHlwZRIQCghkYXRldGltZRgFIAEoCRIQCghsb2NhdGlvbhgGIAEoCRI4Cgtjb29yZGluYXRlcxgHIAEoCzIeLmtpa291Y2hvdS5zaGFyaW5nLkNvb3JkaW5hdGVzSACIAQESPQoOdHJhbnNwb3J0X21vZGUYCCABKA4yIC5raWtvdWNob3Uuc2hhcmluZy5UcmFuc3BvcnRNb2RlSAGIAQESHQoQdHJhbnNwb3J0X251bWJlchgJIAEoCUgCiAEBEhYKCWRyaXZlcl9pZBgKIAEoCUgDiAEBEhQKDG5lZWRzX3BpY2t1cBgLIAEoCBISCgVub3RlcxgMIAEoCUgEiAEBEhsKDnN0YXJ0X2xvY2F0aW9uGA0gASgJSAWIAQESPgoRc3RhcnRfY29vcmRpbmF0ZXMYDiABKAsyHi5raWtvdWNob3Uuc2hhcmluZy5Db29yZGluYXRlc0gGiAEBQg4KDF9jb29yZGluYXRlc0IRCg9fdHJhbnNwb3J0X21vZGVCEwoRX3RyYW5zcG9ydF9udW1iZXJCDAoKX2RyaXZlcl9pZEIICgZfbm90ZXNCEQoPX3N0YXJ0X2xvY2F0aW9uQhQKEl9zdGFydF9jb29yZGluYXRlcyInCgtDb29yZGluYXRlcxILCgNsYXQYASABKAESCwoDbG9uGAIgASgBKmkKDVRyYW5zcG9ydFR5cGUSHgoaVFJBTlNQT1JUX1RZUEVfVU5TUEVDSUZJRUQQABIaChZUUkFOU1BPUlRfVFlQRV9BUlJJVkFMEAESHAoYVFJBTlNQT1JUX1RZUEVfREVQQVJUVVJFEAIqrQEKDVRyYW5zcG9ydE1vZGUSHgoaVFJBTlNQT1JUX01PREVfVU5TUEVDSUZJRUQQABIYChRUUkFOU1BPUlRfTU9ERV9UUkFJThABEhgKFFRSQU5TUE9SVF9NT0RFX1BMQU5FEAISFgoSVFJBTlNQT1JUX01PREVfQ0FSEAMSFgoSVFJBTlNQT1JUX01PREVfQlVTEAQSGAoUVFJBTlNQT1JUX01PREVfT1RIRVIQBWIGcHJvdG8z");
+  fileDesc("Cg9jaGFuZ2VzZXQucHJvdG8SEWtpa291Y2hvdS5zaGFyaW5nIp4CCg1UcmlwQ2hhbmdlc2V0Eg8KB3ZlcnNpb24YASABKA0SDwoHdHJpcF9pZBgCIAEoCRIQCghzaGFyZV9pZBgDIAEoCRITCgtleHBvcnRlZF9ieRgEIAEoCRITCgtleHBvcnRlZF9hdBgFIAEoAxIYChBiYXNlX3NuYXBzaG90X2F0GAYgASgDEiwKBWFkZGVkGAcgASgLMh0ua2lrb3VjaG91LnNoYXJpbmcuRW50aXR5TGlzdBIvCghtb2RpZmllZBgIIAEoCzIdLmtpa291Y2hvdS5zaGFyaW5nLkVudGl0eUxpc3QSNgoNdHJpcF9zbmFwc2hvdBgJIAEoCzIfLmtpa291Y2hvdS5zaGFyaW5nLlRyaXBTbmFwc2hvdCKgAgoKRW50aXR5TGlzdBIqCgdwZXJzb25zGAEgAygLMhkua2lrb3VjaG91LnNoYXJpbmcuUGVyc29uEjYKC2Fzc2lnbm1lbnRzGAIgAygLMiEua2lrb3VjaG91LnNoYXJpbmcuUm9vbUFzc2lnbm1lbnQSMAoKdHJhbnNwb3J0cxgDIAMoCzIcLmtpa291Y2hvdS5zaGFyaW5nLlRyYW5zcG9ydBImCgVyb29tcxgEIAMoCzIXLmtpa291Y2hvdS5zaGFyaW5nLlJvb20SJgoFcmlkZXMYBSADKAsyFy5raWtvdWNob3Uuc2hhcmluZy5SaWRlEiwKCHZlaGljbGVzGAYgAygLMhoua2lrb3VjaG91LnNoYXJpbmcuVmVoaWNsZSLcAQoMVHJpcFNuYXBzaG90EgwKBG5hbWUYASABKAkSEgoKc3RhcnRfZGF0ZRgCIAEoCRIQCghlbmRfZGF0ZRgDIAEoCRIVCghsb2NhdGlvbhgEIAEoCUgAiAEBEhgKC2Rlc2NyaXB0aW9uGAUgASgJSAGIAQESFgoJY29vcmRfbGF0GAYgASgBSAKIAQESFgoJY29vcmRfbG9uGAcgASgBSAOIAQFCCwoJX2xvY2F0aW9uQg4KDF9kZXNjcmlwdGlvbkIMCgpfY29vcmRfbGF0QgwKCl9jb29yZF9sb24imAEKBFJvb20SCgoCaWQYASABKAkSDwoHdHJpcF9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhAKCGNhcGFjaXR5GAQgASgNEg0KBW9yZGVyGAUgASgFEhgKC2Rlc2NyaXB0aW9uGAYgASgJSACIAQESEQoEaWNvbhgHIAEoCUgBiAEBQg4KDF9kZXNjcmlwdGlvbkIHCgVfaWNvbiLOAgoGUGVyc29uEgoKAmlkGAEgASgJEg8KB3RyaXBfaWQYAiABKAkSDAoEbmFtZRgDIAEoCRINCgVjb2xvchgEIAEoCRIcCg9zdGF5X3N0YXJ0X2RhdGUYBSABKAlIAIgBARIaCg1zdGF5X2VuZF9kYXRlGAYgASgJSAGIAQESEgoFbm90ZXMYByABKAlIAogBARIWCgloZWFkY291bnQYCCABKA1IA4gBARISCgVwaG9uZRgJIAEoCUgEiAEBEjkKCmNoaWxkX3NlYXQYCiABKA4yIC5raWtvdWNob3Uuc2hhcmluZy5DaGlsZFNlYXRLaW5kSAWIAQFCEgoQX3N0YXlfc3RhcnRfZGF0ZUIQCg5fc3RheV9lbmRfZGF0ZUIICgZfbm90ZXNCDAoKX2hlYWRjb3VudEIICgZfcGhvbmVCDQoLX2NoaWxkX3NlYXQidwoOUm9vbUFzc2lnbm1lbnQSCgoCaWQYASABKAkSDwoHdHJpcF9pZBgCIAEoCRIPCgdyb29tX2lkGAMgASgJEhEKCXBlcnNvbl9pZBgEIAEoCRISCgpzdGFydF9kYXRlGAUgASgJEhAKCGVuZF9kYXRlGAYgASgJIuEECglUcmFuc3BvcnQSCgoCaWQYASABKAkSDwoHdHJpcF9pZBgCIAEoCRIRCglwZXJzb25faWQYAyABKAkSLgoEdHlwZRgEIAEoDjIgLmtpa291Y2hvdS5zaGFyaW5nLlRyYW5zcG9ydFR5cGUSEAoIZGF0ZXRpbWUYBSABKAkSEAoIbG9jYXRpb24YBiABKAkSOAoLY29vcmRpbmF0ZXMYByABKAsyHi5raWtvdWNob3Uuc2hhcmluZy5Db29yZGluYXRlc0gAiAEBEj0KDnRyYW5zcG9ydF9tb2RlGAggASgOMiAua2lrb3VjaG91LnNoYXJpbmcuVHJhbnNwb3J0TW9kZUgBiAEBEh0KEHRyYW5zcG9ydF9udW1iZXIYCSABKAlIAogBARIWCglkcml2ZXJfaWQYCiABKAlIA4gBARIUCgxuZWVkc19waWNrdXAYCyABKAgSEgoFbm90ZXMYDCABKAlIBIgBARIbCg5zdGFydF9sb2NhdGlvbhgNIAEoCUgFiAEBEj4KEXN0YXJ0X2Nvb3JkaW5hdGVzGA4gASgLMh4ua2lrb3VjaG91LnNoYXJpbmcuQ29vcmRpbmF0ZXNIBogBARIUCgdyaWRlX2lkGA8gASgJSAeIAQFCDgoMX2Nvb3JkaW5hdGVzQhEKD190cmFuc3BvcnRfbW9kZUITChFfdHJhbnNwb3J0X251bWJlckIMCgpfZHJpdmVyX2lkQggKBl9ub3Rlc0IRCg9fc3RhcnRfbG9jYXRpb25CFAoSX3N0YXJ0X2Nvb3JkaW5hdGVzQgoKCF9yaWRlX2lkIqkCCgdWZWhpY2xlEgoKAmlkGAEgASgJEg8KB3RyaXBfaWQYAiABKAkSDAoEbmFtZRgDIAEoCRIVCghvd25lcl9pZBgEIAEoCUgAiAEBEhYKCWlzX3JlbnRhbBgFIAEoCEgBiAEBEhcKCnNlYXRfY291bnQYBiABKA1IAogBARI1CgtjaGlsZF9zZWF0cxgHIAMoDjIgLmtpa291Y2hvdS5zaGFyaW5nLkNoaWxkU2VhdEtpbmQSGgoNbHVnZ2FnZV9ub3RlcxgIIAEoCUgDiAEBEhIKBW5vdGVzGAkgASgJSASIAQFCCwoJX293bmVyX2lkQgwKCl9pc19yZW50YWxCDQoLX3NlYXRfY291bnRCEAoOX2x1Z2dhZ2Vfbm90ZXNCCAoGX25vdGVzIu0CCgRSaWRlEgoKAmlkGAEgASgJEg8KB3RyaXBfaWQYAiABKAkSMwoJZGlyZWN0aW9uGAMgASgOMiAua2lrb3VjaG91LnNoYXJpbmcuUmlkZURpcmVjdGlvbhIVCg1tZWV0X2RhdGV0aW1lGAQgASgJEhAKCGxvY2F0aW9uGAUgASgJEjgKC2Nvb3JkaW5hdGVzGAYgASgLMh4ua2lrb3VjaG91LnNoYXJpbmcuQ29vcmRpbmF0ZXNIAIgBARIeChFsZWFkX3RpbWVfbWludXRlcxgHIAEoDUgBiAEBEhYKCWRyaXZlcl9pZBgIIAEoCUgCiAEBEhcKCnZlaGljbGVfaWQYCSABKAlIA4gBARISCgVub3RlcxgKIAEoCUgEiAEBQg4KDF9jb29yZGluYXRlc0IUChJfbGVhZF90aW1lX21pbnV0ZXNCDAoKX2RyaXZlcl9pZEINCgtfdmVoaWNsZV9pZEIICgZfbm90ZXMiJwoLQ29vcmRpbmF0ZXMSCwoDbGF0GAEgASgBEgsKA2xvbhgCIAEoASppCg1UcmFuc3BvcnRUeXBlEh4KGlRSQU5TUE9SVF9UWVBFX1VOU1BFQ0lGSUVEEAASGgoWVFJBTlNQT1JUX1RZUEVfQVJSSVZBTBABEhwKGFRSQU5TUE9SVF9UWVBFX0RFUEFSVFVSRRACKmYKDVJpZGVEaXJlY3Rpb24SHgoaUklERV9ESVJFQ1RJT05fVU5TUEVDSUZJRUQQABIZChVSSURFX0RJUkVDVElPTl9QSUNLVVAQARIaChZSSURFX0RJUkVDVElPTl9EUk9QT0ZGEAIqkgEKDUNoaWxkU2VhdEtpbmQSHwobQ0hJTERfU0VBVF9LSU5EX1VOU1BFQ0lGSUVEEAASHwobQ0hJTERfU0VBVF9LSU5EX1JFQVJfRkFDSU5HEAESIgoeQ0hJTERfU0VBVF9LSU5EX0ZPUldBUkRfRkFDSU5HEAISGwoXQ0hJTERfU0VBVF9LSU5EX0JPT1NURVIQAyqtAQoNVHJhbnNwb3J0TW9kZRIeChpUUkFOU1BPUlRfTU9ERV9VTlNQRUNJRklFRBAAEhgKFFRSQU5TUE9SVF9NT0RFX1RSQUlOEAESGAoUVFJBTlNQT1JUX01PREVfUExBTkUQAhIWChJUUkFOU1BPUlRfTU9ERV9DQVIQAxIWChJUUkFOU1BPUlRfTU9ERV9CVVMQBBIYChRUUkFOU1BPUlRfTU9ERV9PVEhFUhAFYgZwcm90bzM");
 
 /**
  * Top-level changeset message — this is what goes into the QR code.
@@ -112,6 +112,16 @@ export type EntityList = Message<"kikouchou.sharing.EntityList"> & {
    * @generated from field: repeated kikouchou.sharing.Room rooms = 4;
    */
   rooms: Room[];
+
+  /**
+   * @generated from field: repeated kikouchou.sharing.Ride rides = 5;
+   */
+  rides: Ride[];
+
+  /**
+   * @generated from field: repeated kikouchou.sharing.Vehicle vehicles = 6;
+   */
+  vehicles: Vehicle[];
 };
 
 /**
@@ -285,6 +295,14 @@ export type Person = Message<"kikouchou.sharing.Person"> & {
    * @generated from field: optional string phone = 9;
    */
   phone?: string;
+
+  /**
+   * Child restraint this guest needs in a car. Absent = none, which is the
+   * answer for every adult.
+   *
+   * @generated from field: optional kikouchou.sharing.ChildSeatKind child_seat = 10;
+   */
+  childSeat?: ChildSeatKind;
 };
 
 /**
@@ -421,6 +439,15 @@ export type Transport = Message<"kikouchou.sharing.Transport"> & {
    * @generated from field: optional kikouchou.sharing.Coordinates start_coordinates = 14;
    */
   startCoordinates?: Coordinates;
+
+  /**
+   * The car journey carrying this leg. Membership lives here, on the leg, and
+   * not as a passenger list on Ride: the CRDT merges an array field atomically,
+   * so two guests joining one car offline would keep only one of the joins.
+   *
+   * @generated from field: optional string ride_id = 15;
+   */
+  rideId?: string;
 };
 
 /**
@@ -429,6 +456,142 @@ export type Transport = Message<"kikouchou.sharing.Transport"> & {
  */
 export const TransportSchema: GenMessage<Transport> = /*@__PURE__*/
   messageDesc(file_changeset, 6);
+
+/**
+ * A car available to the trip — someone's own, or the one hired for the week.
+ *
+ * @generated from message kikouchou.sharing.Vehicle
+ */
+export type Vehicle = Message<"kikouchou.sharing.Vehicle"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string trip_id = 2;
+   */
+  tripId: string;
+
+  /**
+   * @generated from field: string name = 3;
+   */
+  name: string;
+
+  /**
+   * @generated from field: optional string owner_id = 4;
+   */
+  ownerId?: string;
+
+  /**
+   * @generated from field: optional bool is_rental = 5;
+   */
+  isRental?: boolean;
+
+  /**
+   * People it carries, driver included. Absent = not known, never zero.
+   *
+   * @generated from field: optional uint32 seat_count = 6;
+   */
+  seatCount?: number;
+
+  /**
+   * One entry per installed seat, so two boosters appear twice.
+   *
+   * @generated from field: repeated kikouchou.sharing.ChildSeatKind child_seats = 7;
+   */
+  childSeats: ChildSeatKind[];
+
+  /**
+   * Free text. Nothing is counted against it — there is no per-guest bag count.
+   *
+   * @generated from field: optional string luggage_notes = 8;
+   */
+  luggageNotes?: string;
+
+  /**
+   * @generated from field: optional string notes = 9;
+   */
+  notes?: string;
+};
+
+/**
+ * Describes the message kikouchou.sharing.Vehicle.
+ * Use `create(VehicleSchema)` to create a new message.
+ */
+export const VehicleSchema: GenMessage<Vehicle> = /*@__PURE__*/
+  messageDesc(file_changeset, 7);
+
+/**
+ * A car journey serving one or more Transport legs.
+ *
+ * @generated from message kikouchou.sharing.Ride
+ */
+export type Ride = Message<"kikouchou.sharing.Ride"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string trip_id = 2;
+   */
+  tripId: string;
+
+  /**
+   * @generated from field: kikouchou.sharing.RideDirection direction = 3;
+   */
+  direction: RideDirection;
+
+  /**
+   * When the car must be at the meeting point, ISO datetime.
+   *
+   * @generated from field: string meet_datetime = 4;
+   */
+  meetDatetime: string;
+
+  /**
+   * @generated from field: string location = 5;
+   */
+  location: string;
+
+  /**
+   * @generated from field: optional kikouchou.sharing.Coordinates coordinates = 6;
+   */
+  coordinates?: Coordinates;
+
+  /**
+   * Minutes before meet_datetime that the driver sets off. Absent = 30.
+   *
+   * @generated from field: optional uint32 lead_time_minutes = 7;
+   */
+  leadTimeMinutes?: number;
+
+  /**
+   * May also own one of the legs on this ride — that is a self-driven ride, and
+   * it is derived rather than flagged.
+   *
+   * @generated from field: optional string driver_id = 8;
+   */
+  driverId?: string;
+
+  /**
+   * @generated from field: optional string vehicle_id = 9;
+   */
+  vehicleId?: string;
+
+  /**
+   * @generated from field: optional string notes = 10;
+   */
+  notes?: string;
+};
+
+/**
+ * Describes the message kikouchou.sharing.Ride.
+ * Use `create(RideSchema)` to create a new message.
+ */
+export const RideSchema: GenMessage<Ride> = /*@__PURE__*/
+  messageDesc(file_changeset, 8);
 
 /**
  * GPS coordinates.
@@ -452,7 +615,7 @@ export type Coordinates = Message<"kikouchou.sharing.Coordinates"> & {
  * Use `create(CoordinatesSchema)` to create a new message.
  */
 export const CoordinatesSchema: GenMessage<Coordinates> = /*@__PURE__*/
-  messageDesc(file_changeset, 7);
+  messageDesc(file_changeset, 9);
 
 /**
  * @generated from enum kikouchou.sharing.TransportType
@@ -479,6 +642,63 @@ export enum TransportType {
  */
 export const TransportTypeSchema: GenEnum<TransportType> = /*@__PURE__*/
   enumDesc(file_changeset, 0);
+
+/**
+ * @generated from enum kikouchou.sharing.RideDirection
+ */
+export enum RideDirection {
+  /**
+   * @generated from enum value: RIDE_DIRECTION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: RIDE_DIRECTION_PICKUP = 1;
+   */
+  PICKUP = 1,
+
+  /**
+   * @generated from enum value: RIDE_DIRECTION_DROPOFF = 2;
+   */
+  DROPOFF = 2,
+}
+
+/**
+ * Describes the enum kikouchou.sharing.RideDirection.
+ */
+export const RideDirectionSchema: GenEnum<RideDirection> = /*@__PURE__*/
+  enumDesc(file_changeset, 1);
+
+/**
+ * @generated from enum kikouchou.sharing.ChildSeatKind
+ */
+export enum ChildSeatKind {
+  /**
+   * @generated from enum value: CHILD_SEAT_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: CHILD_SEAT_KIND_REAR_FACING = 1;
+   */
+  REAR_FACING = 1,
+
+  /**
+   * @generated from enum value: CHILD_SEAT_KIND_FORWARD_FACING = 2;
+   */
+  FORWARD_FACING = 2,
+
+  /**
+   * @generated from enum value: CHILD_SEAT_KIND_BOOSTER = 3;
+   */
+  BOOSTER = 3,
+}
+
+/**
+ * Describes the enum kikouchou.sharing.ChildSeatKind.
+ */
+export const ChildSeatKindSchema: GenEnum<ChildSeatKind> = /*@__PURE__*/
+  enumDesc(file_changeset, 2);
 
 /**
  * @generated from enum kikouchou.sharing.TransportMode
@@ -519,5 +739,5 @@ export enum TransportMode {
  * Describes the enum kikouchou.sharing.TransportMode.
  */
 export const TransportModeSchema: GenEnum<TransportMode> = /*@__PURE__*/
-  enumDesc(file_changeset, 1);
+  enumDesc(file_changeset, 3);
 

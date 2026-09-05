@@ -1083,5 +1083,65 @@
     "openInMaps": "Open in Maps",
     "copyAddress": "Copy address",
     "addressCopied": "Address copied"
+  },
+  "rides": {
+    "title": "Rides",
+    "ride": "Ride",
+    "rides_one": "{{count}} ride",
+    "rides_other": "{{count}} rides",
+    "noRides": "No rides arranged yet",
+    "directions": {
+      "pickup": "Pick-up",
+      "dropoff": "Drop-off"
+    },
+    "meetAt": "Meeting at {{time}}",
+    "leaveAt": "Leave at {{time}}",
+    "leadTime": "Leave {{count}} min before",
+    "driver": "Driver",
+    "noDriver": "Nobody driving yet",
+    "selfDriven": "Driving themselves",
+    "vehicle": "Car",
+    "noVehicle": "No car chosen",
+    "passengers_one": "{{count}} passenger",
+    "passengers_other": "{{count}} passengers",
+    "legMismatch": {
+      "after": "{{name}} now arrives {{minutes}} min after this ride",
+      "before": "{{name}} now arrives {{minutes}} min before this ride"
+    }
+  },
+  "vehicles": {
+    "title": "Cars",
+    "vehicle": "Car",
+    "vehicles_one": "{{count}} car",
+    "vehicles_other": "{{count}} cars",
+    "noVehicles": "No cars added yet",
+    "name": "Name",
+    "owner": "Owner",
+    "rental": "Hire car",
+    "seatCount": "Seats",
+    "seatCountHint": "Including the driver",
+    "seatsUnknown": "Seats not set",
+    "luggageNotes": "Luggage",
+    "seatsUsed": "{{used}} of {{total}} seats",
+    "overCapacity": "{{used}} people for {{total}} seats",
+    "full": "Full"
+  },
+  "childSeats": {
+    "label": "Child seat",
+    "none": "None needed",
+    "rearFacing": "Rear-facing seat",
+    "forwardFacing": "Forward-facing seat",
+    "booster": "Booster seat",
+    "required_one": "{{count}} {{kind}}",
+    "required_other": "{{count}} {{kind}}",
+    "missing": "Missing {{count}} {{kind}}"
+  },
+  "identity": {
+    "title": "Who are you?",
+    "description": "Pick your name so the app can show your own travel and the people you are driving.",
+    "nobody": "Not set",
+    "you": "You",
+    "scopeMine": "Only mine",
+    "scopeAll": "Everyone"
   }
 }

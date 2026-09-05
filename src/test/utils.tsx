@@ -680,6 +680,132 @@ export async function createTestRoom(
   }
 }
 
+/**
+ * Create a test vehicle in the database.
+ *
+ * @param tripId - ID of the trip to add the vehicle to
+ * @param data - Vehicle data
+ * @returns Created vehicle ID
+ * @throws Error if vehicle creation fails
+ */
+export async function createTestVehicle(
+  tripId: import('@/types').TripId,
+  data: {
+    name: string;
+    seatCount?: number;
+    childSeats?: import('@/types').ChildSeatKind[];
+    ownerId?: import('@/types').PersonId;
+    isRental?: boolean;
+  },
+): Promise<import('@/types').VehicleId> {
+  try {
+    const { createVehicle } = await import(
+      '@/lib/db/repositories/vehicle-repository'
+    );
+    const vehicle = await createVehicle(tripId, data);
+    return vehicle.id;
+  } catch (error) {
+    throw new Error(
+      `Failed to create test vehicle "${data.name}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error },
+    );
+  }
+}
+
+/**
+ * Create a test ride in the database.
+ *
+ * Pass `meetDatetime` through `localInstant()` rather than a `…Z` literal
+ * whenever the test cares which calendar day the ride lands on — CI runs at
+ * UTC, where every timezone bug in that family disappears.
+ *
+ * @param tripId - ID of the trip to add the ride to
+ * @param data - Ride data
+ * @returns Created ride ID
+ * @throws Error if ride creation fails
+ */
+export async function createTestRide(
+  tripId: import('@/types').TripId,
+  data: {
+    meetDatetime: string;
+    location: string;
+    direction?: import('@/types').RideDirection;
+    leadTimeMinutes?: number;
+    driverId?: import('@/types').PersonId;
+    vehicleId?: import('@/types').VehicleId;
+  },
+): Promise<import('@/types').RideId> {
+  try {
+    const { createRide } = await import('@/lib/db/repositories/ride-repository');
+    const ride = await createRide(tripId, {
+      direction: data.direction ?? 'pickup',
+      meetDatetime: data.meetDatetime,
+      location: data.location,
+      leadTimeMinutes: data.leadTimeMinutes,
+      driverId: data.driverId,
+      vehicleId: data.vehicleId,
+    });
+    return ride.id;
+  } catch (error) {
+    throw new Error(
+      `Failed to create test ride at "${data.location}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+      { cause: error },
+    );
+  }
+}
+
+// ============================================================================
+// Browser Storage Test Helpers
+// ============================================================================
+
+/**
+ * Installs a working `window.localStorage` for one test file.
+ *
+ * jsdom in this suite exposes **no** `localStorage` at all, which is itself one
+ * of the states the app has to survive (private browsing, disabled site data) —
+ * so it is deliberately not installed globally in `setup.ts`, and
+ * `lib/theme.test` depends on its absence.
+ *
+ * Opt in from any test that needs the store to work. Reach for this rather than
+ * writing a fourth copy of the same fake: the guest-identity parser reached six
+ * copies before it was pulled back together, and a stub is no different.
+ *
+ * The store is per-call, so a test file that installs it in `beforeEach` starts
+ * each test empty.
+ *
+ * @returns The installed store, for direct inspection
+ *
+ * @example
+ * ```typescript
+ * beforeEach(() => { installTestLocalStorage(); });
+ * ```
+ */
+export function installTestLocalStorage(): Storage {
+  const entries = new Map<string, string>(),
+    store: Storage = {
+      get length(): number {
+        return entries.size;
+      },
+      clear: () => entries.clear(),
+      getItem: (key) => entries.get(key) ?? null,
+      key: (index) => [...entries.keys()][index] ?? null,
+      removeItem: (key) => {
+        entries.delete(key);
+      },
+      setItem: (key, value) => {
+        entries.set(key, value);
+      },
+    };
+
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    writable: true,
+    value: store,
+  });
+
+  return store;
+}
+
 // ============================================================================
 // Branded Type Test Helpers
 // ============================================================================

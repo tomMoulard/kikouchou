@@ -194,6 +194,8 @@ describe('sumTripStats', () => {
       arrivalCount: 0,
       departureCount: 0,
       transportCount: 0,
+      rideCount: 0,
+      vehicleCount: 0,
       pickupsNeedingDriver: 0,
     });
   });

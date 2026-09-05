@@ -38,6 +38,12 @@ export type TransportId = Brand<'TransportId'>;
 /** Type-safe Activity identifier (nanoid generated) */
 export type ActivityId = Brand<'ActivityId'>;
 
+/** Type-safe Ride identifier (nanoid generated) */
+export type RideId = Brand<'RideId'>;
+
+/** Type-safe Vehicle identifier (nanoid generated) */
+export type VehicleId = Brand<'VehicleId'>;
+
 /** Type-safe Share identifier (shorter nanoid for sharing URLs) */
 export type ShareId = Brand<'ShareId'>;
 
@@ -95,6 +101,73 @@ export type TransportType = 'arrival' | 'departure';
  * Mode of transportation for arrivals and departures.
  */
 export type TransportMode = 'train' | 'plane' | 'car' | 'bus' | 'other';
+
+/**
+ * Which way a car journey runs relative to the house.
+ *
+ * `pickup` fetches guests from a station or airport and brings them back;
+ * `dropoff` takes them out to one. It is the ride's own direction, not the
+ * direction of the legs it serves — a ride that drops Tom at the airport and
+ * collects Alice on the way home is two rides, because it is two meetings.
+ */
+export type RideDirection = 'pickup' | 'dropoff';
+
+/**
+ * All ride directions, in the order they are offered in the form.
+ */
+export const RIDE_DIRECTIONS: readonly RideDirection[] = [
+  'pickup',
+  'dropoff',
+] as const;
+
+/**
+ * Kind of child restraint a guest needs in a car.
+ *
+ * Deliberately *declared* rather than derived. Which seat a child needs is a
+ * legal question answered by national regulation (R129/i-Size against the older
+ * R44), it depends on height as well as age and weight, and it changes. The app
+ * stores no birthdate and no weight, and encoding a compliance table in a
+ * holiday-house planner would be a promise it cannot keep. The parent knows the
+ * answer; this records it.
+ */
+export type ChildSeatKind = 'rearFacing' | 'forwardFacing' | 'booster';
+
+/**
+ * All child seat kinds, in increasing order of child size.
+ */
+export const CHILD_SEAT_KINDS: readonly ChildSeatKind[] = [
+  'rearFacing',
+  'forwardFacing',
+  'booster',
+] as const;
+
+/**
+ * Minutes before a ride's meeting time that the driver must set off, when the
+ * ride does not say otherwise.
+ */
+export const DEFAULT_LEAD_TIME_MINUTES = 30;
+
+/**
+ * Bounds for {@link Ride.leadTimeMinutes}.
+ *
+ * Zero is allowed — a guest already at the station leaves now — and the upper
+ * bound exists because this value is subtracted from an instant and rendered:
+ * an unbounded one arriving over sync would put a "leave now" alert years in
+ * the past and keep it permanently on screen.
+ */
+export const MIN_LEAD_TIME_MINUTES = 0;
+export const MAX_LEAD_TIME_MINUTES = 24 * 60;
+
+/**
+ * Bounds for {@link Vehicle.seatCount}.
+ *
+ * The upper bound is a minibus, not a coach, and it is a guard rather than a
+ * product limit: an unbounded capacity arriving from a peer used to reach
+ * `Array.from({length: capacity})` elsewhere in this codebase and permanently
+ * OOM the tab.
+ */
+export const MIN_VEHICLE_SEAT_COUNT = 1;
+export const MAX_VEHICLE_SEAT_COUNT = 99;
 
 /**
  * Kind of shared activity planned during a trip.
@@ -225,6 +298,8 @@ export interface Identifiable {
  * - For Room: `[tripId+order]`
  * - For RoomAssignment: `[tripId+startDate]`, `[tripId+personId]`, `[tripId+roomId]`
  * - For Transport: `[tripId+datetime]`, `[tripId+personId]`, `[tripId+type]`
+ * - For Ride: `[tripId+meetDatetime]`
+ * - For Vehicle: `tripId`
  * - For Activity: `[tripId+startDatetime]`, `[tripId+category]`, `*participantIds`
  */
 export interface TripScoped {
@@ -496,6 +571,23 @@ export interface Person extends Identifiable, TripScoped {
    * @example 2
    */
   headcount?: number;
+
+  /**
+   * The child restraint this guest needs in a car, when they need one.
+   *
+   * Absent means no seat is required — which is the answer for every adult, so
+   * the field stays empty for most of a trip's roster. It is a property of the
+   * child rather than of a journey, so it is entered once here and every ride
+   * that carries them tallies it automatically.
+   *
+   * A child who needs a seat should be their own guest row rather than part of
+   * a parent's {@link headcount}: a headcount of 2 says how many bodies to
+   * count, never which of them is small.
+   *
+   * @see {@link ChildSeatKind}
+   * @example "booster"
+   */
+  childSeat?: ChildSeatKind;
 }
 
 /**
@@ -642,8 +734,29 @@ export interface Transport extends Identifiable, TripScoped {
   transportNumber?: string;
 
   /**
+   * The car journey carrying this leg, when one has been arranged.
+   *
+   * Membership is a scalar on the leg rather than a passenger array on
+   * {@link Ride}, and that is load-bearing rather than stylistic. The shared
+   * document merges an array field atomically (see `lib/yjs/doc-model`), so two
+   * guests joining the same car while both offline would keep only one of the
+   * two joins — the bug that shape already produced for activity participants.
+   * Each guest writing one field on their own record cannot collide.
+   *
+   * @see {@link Ride}
+   */
+  rideId?: RideId;
+
+  /**
    * Reference to the person responsible for pickup/dropoff.
-   * Only relevant when needsPickup is true.
+   *
+   * @deprecated Legacy single-passenger form, kept because records created
+   * before {@link Ride} existed still carry it and no upgrade invents rides for
+   * them — an upgrade running on one device would launder that device's guess
+   * into the shared document. A transport with a `driverId` and no
+   * {@link rideId} is *read* as a one-passenger ride by `resolveRides()`; new
+   * arrangements always create a `Ride`.
+   *
    * @see {@link Person}
    */
   driverId?: PersonId;
@@ -657,6 +770,213 @@ export interface Transport extends Identifiable, TripScoped {
   /**
    * Additional notes about the transport.
    * @example "Platform 12" or "Terminal 2E"
+   */
+  notes?: string;
+}
+
+/**
+ * A car available to the trip.
+ *
+ * @description Somebody's own car or the one hired for the week. A vehicle is
+ * entered once and picked per {@link Ride}, so "the rented Espace" does not get
+ * retyped for every airport run and "which car has the boosters in it" has an
+ * answer.
+ *
+ * Every capacity field is optional. A vehicle nobody has measured is still
+ * useful — it names the car on a ride card — and a missing `seatCount` means
+ * "not known", never "zero seats": no warning is raised against an absent limit.
+ *
+ * @see {@link Trip} - Parent entity
+ * @see {@link Ride} - The journeys that use it
+ * @see {@link Person} - The owner (ownerId)
+ *
+ * @example
+ * ```typescript
+ * const vehicle: Vehicle = {
+ *   id: 'veh123' as VehicleId,
+ *   tripId: 'trip456' as TripId,
+ *   name: 'Espace de location',
+ *   isRental: true,
+ *   seatCount: 7,
+ *   childSeats: ['booster', 'booster'],
+ *   luggageNotes: 'Coffre pris par la poussette',
+ * };
+ * ```
+ */
+export interface Vehicle extends Identifiable, TripScoped {
+  /** Unique vehicle identifier */
+  readonly id: VehicleId;
+
+  /**
+   * Display name, however the group refers to the car.
+   * @example "Espace de location" or "la Clio de Guillaume"
+   */
+  name: string;
+
+  /**
+   * Reference to the guest whose car this is.
+   *
+   * Absent for a hire car, or for one nobody on the trip owns. It does not
+   * imply anything about who drives — a ride names its own driver.
+   *
+   * @see {@link Person}
+   */
+  ownerId?: PersonId;
+
+  /**
+   * Whether this is a hire car.
+   *
+   * A rental can be left at the destination, so a departure run that drops it
+   * at the airport needs no return leg. That is the difference the flag exists
+   * to record.
+   */
+  isRental?: boolean;
+
+  /**
+   * How many people the car carries, **driver included**.
+   *
+   * Compared against the sum of the passengers' `headcount`, never against the
+   * number of guest rows: one row can stand for a couple.
+   *
+   * @see {@link MAX_VEHICLE_SEAT_COUNT}
+   * @example 7
+   */
+  seatCount?: number;
+
+  /**
+   * The child restraints physically installed in, or travelling with, this car.
+   *
+   * One entry per seat, so two boosters are `['booster', 'booster']`. A ride
+   * warns when the children it carries need a seat this list does not hold.
+   */
+  childSeats?: ChildSeatKind[];
+
+  /**
+   * Free text about what the car will take in the way of luggage.
+   *
+   * Deliberately not a number. Nothing is counted against it: the app has no
+   * per-guest bag count and inventing one would make every guest fill in a
+   * field to silence a warning nobody asked for.
+   *
+   * @example "Grand coffre, mais la galerie n'est pas montée"
+   */
+  luggageNotes?: string;
+
+  /**
+   * Additional notes about the vehicle.
+   * @example "Boîte automatique — Aurélia ne peut pas la conduire"
+   */
+  notes?: string;
+}
+
+/**
+ * A car journey serving one or more guests' arrival or departure legs.
+ *
+ * @description A {@link Transport} is a guest's own leg — Alice's TGV lands at
+ * 17:02. A ride is the car that meets it: who drives, in what, from when. They
+ * are separate because they are separate facts about different people at
+ * different times, and because one car serves several legs at once.
+ *
+ * Passengers are **not** listed here. A leg points at its ride through
+ * {@link Transport.rideId}; see that field for why the arrow runs that way.
+ *
+ * The driver may be one of the passengers. Three guests taking the hire car to
+ * the airport and leaving it there is a ride whose `driverId` owns one of the
+ * legs pointing at it — no chauffeur, no separate return. Nothing stores that
+ * fact; `resolveRides()` derives it, so it cannot go stale.
+ *
+ * @see {@link Trip} - Parent entity
+ * @see {@link Transport} - The legs it serves
+ * @see {@link Vehicle} - The car
+ * @see {@link Person} - The driver (driverId)
+ *
+ * @example
+ * ```typescript
+ * const ride: Ride = {
+ *   id: 'ride123' as RideId,
+ *   tripId: 'trip456' as TripId,
+ *   direction: 'pickup',
+ *   meetDatetime: '2024-07-15T15:02:00.000Z',
+ *   location: 'Lyon Part-Dieu',
+ *   leadTimeMinutes: 30,
+ *   driverId: 'person789' as PersonId,
+ *   vehicleId: 'veh123' as VehicleId,
+ * };
+ * ```
+ */
+export interface Ride extends Identifiable, TripScoped {
+  /** Unique ride identifier */
+  readonly id: RideId;
+
+  /**
+   * Whether the car is fetching guests or taking them away.
+   */
+  direction: RideDirection;
+
+  /**
+   * When the car must be at the meeting point, ISO 8601 with timezone.
+   *
+   * This is the *rendez-vous*, not the departure from the house — subtract
+   * {@link leadTimeMinutes} for that. Keeping the meeting time as the stored
+   * value means a change to the lead time never moves the appointment.
+   *
+   * @example "2024-07-15T15:02:00.000Z"
+   */
+  meetDatetime: ISODateTimeString;
+
+  /**
+   * Where the car meets its passengers.
+   * @example "Lyon Part-Dieu"
+   */
+  location: string;
+
+  /**
+   * Optional GPS coordinates for the meeting point, for maps and directions.
+   */
+  coordinates?: {
+    readonly lat: number;
+    readonly lon: number;
+  };
+
+  /**
+   * Minutes before {@link meetDatetime} that the driver has to set off.
+   *
+   * Typed by whoever knows the road, not computed from coordinates: the
+   * estimate would need a routing service and a network connection at exactly
+   * the moment the app is most likely to be offline, and it would still be
+   * worse than the driver's own answer.
+   *
+   * Absent means {@link DEFAULT_LEAD_TIME_MINUTES}.
+   *
+   * @see {@link MAX_LEAD_TIME_MINUTES}
+   * @example 30
+   */
+  leadTimeMinutes?: number;
+
+  /**
+   * Reference to the guest driving.
+   *
+   * May be one of the passengers — see the note on self-driven rides above.
+   * Absent means the ride still needs somebody to volunteer, which is what puts
+   * it in the "needs a driver" list.
+   *
+   * @see {@link Person}
+   */
+  driverId?: PersonId;
+
+  /**
+   * Reference to the car being used.
+   *
+   * Absent until one is chosen; capacity and child-seat checks simply have
+   * nothing to compare against until then.
+   *
+   * @see {@link Vehicle}
+   */
+  vehicleId?: VehicleId;
+
+  /**
+   * Additional notes about the journey.
+   * @example "Passer prendre le pain en redescendant"
    */
   notes?: string;
 }
@@ -924,6 +1244,21 @@ export interface AppSettings extends Identifiable {
    * Undefined means "use the app default".
    */
   assistantModelId?: AssistantModelId;
+
+  /**
+   * Which guest this device's owner *is*, per trip: `{ [tripId]: personId }`.
+   *
+   * Device-local and never synced — it says who is holding this phone, which is
+   * not a fact about the trip and must not travel to anybody else's copy of it.
+   * Two people sharing a tablet are one device with one answer, and that is the
+   * correct behaviour: the tablet shows one person's rides at a time.
+   *
+   * A plain record rather than a table because it is read on every render of
+   * the transport views and holds one short string per trip. It is the explicit
+   * answer only; `lib/identity/trip-identity` falls back to the share-link
+   * identity and then to the claimed trip membership when this is empty.
+   */
+  myPersonIdByTripId?: Record<string, string>;
 }
 
 // ============================================================================
@@ -992,6 +1327,8 @@ export interface PersonFormData {
   phone?: string;
   /** Number of real people this guest stands for (defaults to 1) */
   headcount?: number;
+  /** The child restraint this guest needs in a car, when they need one */
+  childSeat?: ChildSeatKind;
 }
 
 /**
@@ -1074,10 +1411,63 @@ export interface TransportFormData {
   transportMode?: TransportMode;
   /** Train/flight number or other identifier */
   transportNumber?: string;
-  /** Reference to the driver for pickup/dropoff */
+  /** The car journey carrying this leg, when one has been arranged */
+  rideId?: RideId;
+  /** @deprecated Legacy single-passenger driver — see {@link Transport.driverId} */
   driverId?: PersonId;
   /** Whether pickup/dropoff is needed */
   needsPickup: boolean;
+  /** Additional notes */
+  notes?: string;
+}
+
+/**
+ * Data required to create or update a Vehicle.
+ * Excludes auto-generated fields (id, tripId).
+ *
+ * @see {@link Vehicle}
+ */
+export interface VehicleFormData {
+  /** Display name of the car */
+  name: string;
+  /** Optional reference to the guest whose car it is */
+  ownerId?: PersonId;
+  /** Whether this is a hire car */
+  isRental?: boolean;
+  /** How many people it carries, driver included */
+  seatCount?: number;
+  /** The child restraints it carries, one entry per seat */
+  childSeats?: ChildSeatKind[];
+  /** Free text about luggage room */
+  luggageNotes?: string;
+  /** Additional notes */
+  notes?: string;
+}
+
+/**
+ * Data required to create or update a Ride.
+ * Excludes auto-generated fields (id, tripId).
+ *
+ * @see {@link Ride}
+ */
+export interface RideFormData {
+  /** Whether the car is fetching guests or taking them away */
+  direction: RideDirection;
+  /** When the car must be at the meeting point, ISO 8601 with timezone */
+  meetDatetime: ISODateTimeString;
+  /** Where the car meets its passengers */
+  location: string;
+  /** Optional GPS coordinates for the meeting point */
+  coordinates?: {
+    readonly lat: number;
+    readonly lon: number;
+  };
+  /** Minutes before the meeting time that the driver sets off */
+  leadTimeMinutes?: number;
+  /** Optional reference to the guest driving */
+  driverId?: PersonId;
+  /** Optional reference to the car being used */
+  vehicleId?: VehicleId;
   /** Additional notes */
   notes?: string;
 }
@@ -1123,7 +1513,14 @@ export interface ActivityFormData {
 /**
  * Union of all trip-scoped entity types.
  */
-export type TripEntity = Room | Person | RoomAssignment | Transport | Activity;
+export type TripEntity =
+  | Room
+  | Person
+  | RoomAssignment
+  | Transport
+  | Ride
+  | Vehicle
+  | Activity;
 
 /**
  * Union of all entity types in the application.

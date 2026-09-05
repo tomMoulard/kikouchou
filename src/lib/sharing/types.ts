@@ -132,7 +132,11 @@ export type ConflictResolution = 'keep-host' | 'accept-guest' | 'manual';
  */
 export interface MergeWarning {
   /** Type of warning */
-  readonly type: 'orphaned-room-ref' | 'orphaned-person-ref' | 'date-out-of-range';
+  readonly type:
+    | 'orphaned-room-ref'
+    | 'orphaned-person-ref'
+    | 'orphaned-ride-ref'
+    | 'date-out-of-range';
   /** Human-readable description */
   readonly message: string;
   /** The entity that has the issue */

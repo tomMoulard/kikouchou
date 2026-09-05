@@ -18,7 +18,7 @@ import {
   sortTransportsByInstant,
   toTransportInstant,
 } from '../pickup-utils';
-import type { PersonId, Transport, TransportId, TripId } from '@/types';
+import type { PersonId, Ride, RideId, Transport, TransportId, TripId } from '@/types';
 
 // ============================================================================
 // Test Helpers
@@ -36,6 +36,18 @@ function makeTransport(overrides: Partial<Transport> = {}): Transport {
     datetime: new Date(Date.now() + 3600_000).toISOString(), // 1 hour from now
     location: 'Gare de Vannes',
     needsPickup: true,
+    ...overrides,
+  };
+}
+
+/** A ride to hand to {@link selectPickupsNeedingDriver}. */
+function makeRide(overrides: Partial<Ride> = {}): Ride {
+  return {
+    id: `r-${Math.random().toString(36).slice(2, 8)}` as RideId,
+    tripId: 'trip-1' as TripId,
+    direction: 'pickup',
+    meetDatetime: new Date(Date.now() + 3600_000).toISOString(),
+    location: 'Gare de Vannes',
     ...overrides,
   };
 }
@@ -130,26 +142,58 @@ describe('sortTransportsByInstant', () => {
 
 describe('selectPickupsNeedingDriver', () => {
   it('returns nothing for an empty base set', () => {
-    expect(selectPickupsNeedingDriver([])).toEqual([]);
+    expect(selectPickupsNeedingDriver([], [])).toEqual([]);
   });
 
   it('excludes transports that do not need a pickup', () => {
     expect(
-      selectPickupsNeedingDriver([makeTransport({ needsPickup: false })]),
+      selectPickupsNeedingDriver([makeTransport({ needsPickup: false })], []),
     ).toEqual([]);
   });
 
   it('excludes pickups that already have a driver', () => {
     expect(
-      selectPickupsNeedingDriver([
-        makeTransport({ needsPickup: true, driverId: 'driver-1' as PersonId }),
-      ]),
+      selectPickupsNeedingDriver(
+        [makeTransport({ needsPickup: true, driverId: 'driver-1' as PersonId })],
+        [],
+      ),
     ).toEqual([]);
+  });
+
+  it('excludes a leg sitting in a ride somebody drives', () => {
+    // The leg itself carries no `driverId` — Guillaume volunteered on the ride,
+    // not on each passenger's record — so a ride-blind selection would list
+    // three people as still needing a lift.
+    expect(
+      selectPickupsNeedingDriver(
+        [makeTransport({ needsPickup: true, rideId: 'r1' as RideId })],
+        [makeRide({ id: 'r1' as RideId, driverId: 'guillaume' as PersonId })],
+      ),
+    ).toEqual([]);
+  });
+
+  it('still lists a leg in a ride nobody has volunteered for', () => {
+    // Being put in a car nobody is driving is precisely what this list is for.
+    expect(
+      selectPickupsNeedingDriver(
+        [makeTransport({ id: 't-9' as TransportId, needsPickup: true, rideId: 'r1' as RideId })],
+        [makeRide({ id: 'r1' as RideId })],
+      ).map((transport) => transport.id),
+    ).toEqual(['t-9']);
+  });
+
+  it('still lists a leg whose ride this device does not hold', () => {
+    expect(
+      selectPickupsNeedingDriver(
+        [makeTransport({ id: 't-9' as TransportId, needsPickup: true, rideId: 'gone' as RideId })],
+        [],
+      ),
+    ).toHaveLength(1);
   });
 
   it('excludes pickups whose datetime cannot be parsed', () => {
     expect(
-      selectPickupsNeedingDriver([makeTransport({ datetime: 'not-a-date' })]),
+      selectPickupsNeedingDriver([makeTransport({ datetime: 'not-a-date' })], []),
     ).toEqual([]);
   });
 
@@ -162,7 +206,7 @@ describe('selectPickupsNeedingDriver', () => {
       datetime: new Date(Date.now() - 5 * 60_000).toISOString(),
     });
 
-    expect(selectPickupsNeedingDriver([justPast]).map((t) => t.id)).toEqual([
+    expect(selectPickupsNeedingDriver([justPast], []).map((t) => t.id)).toEqual([
       't-just-past',
     ]);
   });
@@ -173,7 +217,7 @@ describe('selectPickupsNeedingDriver', () => {
       makeTransport({ id: 't-early' as TransportId, datetime: '2026-07-15T14:00:00.000Z' }),
     ];
 
-    expect(selectPickupsNeedingDriver(pickups).map((t) => t.id)).toEqual([
+    expect(selectPickupsNeedingDriver(pickups, []).map((t) => t.id)).toEqual([
       't-early',
       't-late',
     ]);
@@ -218,12 +262,15 @@ describe('groupPickupsByProximity', () => {
    * is not on screen.
    */
   it('places every selected pickup in exactly one group', () => {
-    const pickups = selectPickupsNeedingDriver([
-      makeTransport({ id: 't-1' as TransportId, datetime: '2026-07-15T14:00:00.000Z', location: 'Gare de Vannes' }),
-      makeTransport({ id: 't-2' as TransportId, datetime: '2026-07-15T14:30:00.000Z', location: 'Gare de Vannes' }),
-      makeTransport({ id: 't-3' as TransportId, datetime: '2026-07-15T18:00:00.000Z', location: 'Aeroport de Nantes' }),
-      makeTransport({ id: 't-4' as TransportId, datetime: '2026-07-14T09:00:00.000Z', location: 'Gare de Vannes' }),
-    ]);
+    const pickups = selectPickupsNeedingDriver(
+      [
+        makeTransport({ id: 't-1' as TransportId, datetime: '2026-07-15T14:00:00.000Z', location: 'Gare de Vannes' }),
+        makeTransport({ id: 't-2' as TransportId, datetime: '2026-07-15T14:30:00.000Z', location: 'Gare de Vannes' }),
+        makeTransport({ id: 't-3' as TransportId, datetime: '2026-07-15T18:00:00.000Z', location: 'Aeroport de Nantes' }),
+        makeTransport({ id: 't-4' as TransportId, datetime: '2026-07-14T09:00:00.000Z', location: 'Gare de Vannes' }),
+      ],
+      [],
+    );
 
     const groups = groupPickupsByProximity(pickups, 60);
     const grouped = groups.flatMap((g) => g.pickups.map((p) => p.id));

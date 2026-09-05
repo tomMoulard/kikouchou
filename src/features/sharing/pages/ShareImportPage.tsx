@@ -33,6 +33,7 @@ import {
 import { onboardingSurface, statusVariants } from '@/components/ui/status.variants';
 
 import { getTripByShareId, setCurrentTrip } from '@/lib/db';
+import { getGuestIdentityStorageKey } from '@/lib/sharing/guest-identity';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatDateRange } from '@/lib/utils/date-format';
@@ -61,15 +62,6 @@ interface StoredGuestIdentity {
 // ============================================================================
 // Constants
 // ============================================================================
-
-/**
- * Returns the localStorage key used to persist guest identity across visits.
- *
- * @param shareId - The share ID from the URL
- * @returns The localStorage key string
- */
-const getGuestStorageKey = (shareId: string): string =>
-  `kikouchou_guest_${shareId}`;
 
 // ============================================================================
 // Helper Functions
@@ -101,7 +93,7 @@ function isValidStoredGuestIdentity(obj: unknown): obj is StoredGuestIdentity {
  */
 function getStoredGuestIdentity(shareId: string): StoredGuestIdentity | undefined {
   try {
-    const raw = localStorage.getItem(getGuestStorageKey(shareId));
+    const raw = localStorage.getItem(getGuestIdentityStorageKey(shareId));
     if (!raw) {return undefined;}
     const parsed: unknown = JSON.parse(raw);
     return isValidStoredGuestIdentity(parsed) ? parsed : undefined;

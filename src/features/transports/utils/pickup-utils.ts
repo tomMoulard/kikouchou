@@ -11,7 +11,7 @@
 
 import { parseISO } from 'date-fns';
 
-import type { Transport } from '@/types';
+import type { Ride, Transport } from '@/types';
 
 // ============================================================================
 // Constants
@@ -134,21 +134,48 @@ export function sortTransportsByInstant(
  * badge, the alert panel's visibility gate and the count inside the panel
  * disagree with one another.
  *
+ * A leg is covered when *somebody is actually driving it*, which since rides
+ * exist is three different arrangements:
+ *
+ * - it sits in a {@link Ride} that has a driver — the normal case;
+ * - it carries a legacy `driverId` of its own, from before rides existed;
+ * - it sits in a ride the driver is also a passenger on, which is still a
+ *   driver.
+ *
+ * A leg in a ride **without** a driver is not covered. Being put in a car
+ * nobody has volunteered to drive is precisely the state this list exists to
+ * surface, and treating the ride's existence as an answer would hide three
+ * people who still have no lift.
+ *
+ * `rides` is required rather than optional. An optional argument defaulting to
+ * an empty list is how a new call site silently regresses to pre-ride
+ * behaviour — it would report Guillaume's three passengers as unassigned, on
+ * one screen only, with nothing failing.
+ *
  * Rows whose datetime cannot be parsed are excluded, so every returned pickup
  * can be placed on a timeline by {@link groupPickupsByProximity} — the count
  * above the cards and the cards themselves therefore always match.
  *
  * @param upcomingPickups - The trip's upcoming pickups, from `TransportContext`
- * @returns Unassigned pickups, earliest first
+ * @param rides - The trip's rides, from `RideContext`
+ * @returns Pickups nobody is driving yet, earliest first
  */
 export function selectPickupsNeedingDriver(
   upcomingPickups: readonly Transport[],
+  rides: readonly Ride[],
 ): readonly Transport[] {
+  const drivenRideIds = new Set(
+    rides
+      .filter((ride) => ride.driverId !== undefined)
+      .map((ride) => ride.id as string),
+  );
+
   return sortTransportsByInstant(
     upcomingPickups.filter(
       (transport) =>
         transport.needsPickup &&
         !transport.driverId &&
+        !(transport.rideId !== undefined && drivenRideIds.has(transport.rideId)) &&
         toTransportInstant(transport.datetime) !== null,
     ),
   );

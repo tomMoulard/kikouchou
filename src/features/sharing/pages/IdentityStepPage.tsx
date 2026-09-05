@@ -37,6 +37,7 @@ import {
   getPersonsByTripId,
   getTripByShareId,
 } from '@/lib/db';
+import { getGuestIdentityStorageKey } from '@/lib/sharing/guest-identity';
 import { cn } from '@/lib/utils';
 import type { Person, PersonId, ShareId, Trip, TripId } from '@/types';
 
@@ -65,15 +66,6 @@ interface StoredGuestIdentity {
 // ============================================================================
 // Constants
 // ============================================================================
-
-/**
- * Returns the localStorage key used to persist guest identity across visits.
- *
- * @param shareId - The share ID from the URL
- * @returns The localStorage key string
- */
-const getGuestStorageKey = (shareId: string): string =>
-  `kikouchou_guest_${shareId}`;
 
 // ============================================================================
 // Component
@@ -271,7 +263,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
         tripId: trip.id,
       };
       try {
-        localStorage.setItem(getGuestStorageKey(shareId), JSON.stringify(identity));
+        localStorage.setItem(getGuestIdentityStorageKey(shareId), JSON.stringify(identity));
       } catch {
         // Non-fatal: wizard can still proceed, but returning-guest detection
         // in Story 2.1 won't work for this session.

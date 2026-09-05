@@ -61,6 +61,11 @@ describe('MAX_LENGTHS constants', () => {
       'activityLocation',
       'activityNotes',
       'guestGroupName',
+      'vehicleName',
+      'vehicleLuggageNotes',
+      'vehicleNotes',
+      'rideLocation',
+      'rideNotes',
     ];
     expect(Object.keys(MAX_LENGTHS).sort()).toEqual(expectedKeys.sort());
   });

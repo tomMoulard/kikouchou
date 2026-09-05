@@ -15,6 +15,7 @@
 import {
   getAssignmentsByTripId,
   getPersonsByTripId,
+  getRidesByTripId,
   getRoomsByTripId,
   getTransportsByTripId,
 } from '@/lib/db';
@@ -51,12 +52,17 @@ export async function computeMerge(changeset: AppChangeset): Promise<MergeResult
   const tripId = changeset.tripId;
 
   // Load host's current state
-  const [hostPersons, hostAssignments, hostTransports, hostRooms] = await Promise.all([
-    getPersonsByTripId(tripId),
-    getAssignmentsByTripId(tripId),
-    getTransportsByTripId(tripId),
-    getRoomsByTripId(tripId),
-  ]);
+  const [hostPersons, hostAssignments, hostTransports, hostRooms, hostRides] =
+    await Promise.all([
+      getPersonsByTripId(tripId),
+      getAssignmentsByTripId(tripId),
+      getTransportsByTripId(tripId),
+      getRoomsByTripId(tripId),
+      // Rides do not travel in a changeset, but the host's own are what decide
+      // whether an incoming `rideId` still resolves. Read them to tell "the
+      // host put you in this car" apart from "that car is gone".
+      getRidesByTripId(tripId),
+    ]);
 
   // Build lookup maps
   const hostPersonMap = new Map(hostPersons.map(p => [p.id, p]));
@@ -64,6 +70,7 @@ export async function computeMerge(changeset: AppChangeset): Promise<MergeResult
   const hostTransportMap = new Map(hostTransports.map(t => [t.id, t]));
   const hostRoomMap = new Map(hostRooms.map(r => [r.id, r]));
   const hostRoomIds = new Set(hostRooms.map(r => r.id));
+  const hostRideIds = new Set<string>(hostRides.map(r => r.id));
 
   const incomingRoomIds = collectIncomingRoomIds(changeset);
 
@@ -102,7 +109,7 @@ export async function computeMerge(changeset: AppChangeset): Promise<MergeResult
   }
 
   for (const transport of changeset.added.transports) {
-    const transportWarnings = checkTransportRefs(transport, hostPersonMap);
+    const transportWarnings = checkTransportRefs(transport, hostPersonMap, hostRideIds);
     warnings.push(...transportWarnings);
 
     if (hostTransportMap.has(transport.id)) {
@@ -138,7 +145,7 @@ export async function computeMerge(changeset: AppChangeset): Promise<MergeResult
   }
 
   for (const transport of changeset.modified.transports) {
-    const transportWarnings = checkTransportRefs(transport, hostPersonMap);
+    const transportWarnings = checkTransportRefs(transport, hostPersonMap, hostRideIds);
     warnings.push(...transportWarnings);
     processTransportModification(transport, hostTransportMap, autoApplyTransports, conflicts);
   }
@@ -332,6 +339,7 @@ function getTransportConflictingFields(host: Transport, guest: Transport): strin
   if (host.transportNumber !== guest.transportNumber) fields.push('transportNumber');
   if (host.needsPickup !== guest.needsPickup) fields.push('needsPickup');
   if (host.driverId !== guest.driverId) fields.push('driverId');
+  if (host.rideId !== guest.rideId) fields.push('rideId');
   if (host.notes !== guest.notes) fields.push('notes');
   if (JSON.stringify(host.coordinates) !== JSON.stringify(guest.coordinates)) fields.push('coordinates');
   if (host.startLocation !== guest.startLocation) fields.push('startLocation');
@@ -387,6 +395,7 @@ function checkAssignmentRefs(
 function checkTransportRefs(
   transport: Transport,
   hostPersonMap: Map<PersonId, Person>,
+  hostRideIds: ReadonlySet<string>,
 ): MergeWarning[] {
   const warnings: MergeWarning[] = [];
 
@@ -403,6 +412,20 @@ function checkTransportRefs(
     warnings.push({
       type: 'orphaned-person-ref',
       message: `Transport references driver "${transport.driverId}" which no longer exists`,
+      entityType: 'transport',
+      entityId: transport.id,
+    });
+  }
+
+  // A ride the host does not hold. Reported rather than silently cleared: the
+  // usual cause is a guest returning a leg the host itself put in a car, in
+  // which case the host *does* hold the ride and no warning fires. When one
+  // does fire the arrangement is genuinely gone, and dropping the reference
+  // quietly would turn "your car was cancelled" into "you were never in one".
+  if (transport.rideId && !hostRideIds.has(transport.rideId)) {
+    warnings.push({
+      type: 'orphaned-ride-ref',
+      message: `Transport references ride "${transport.rideId}" which no longer exists`,
       entityType: 'transport',
       entityId: transport.id,
     });

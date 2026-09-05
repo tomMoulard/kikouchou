@@ -49,6 +49,14 @@ vi.mock('@/contexts/PersonContext', () => ({
   usePersonContext: vi.fn(() => ({ persons: [] })),
 }));
 
+// The panel now asks the rides too, because a leg sitting in a car somebody
+// volunteered for is not unassigned even though the leg carries no `driverId`.
+// Stubbed empty here so the three answers are still compared over the same
+// pre-ride base set this file was written to guard.
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: vi.fn(() => ({ rides: [] })),
+}));
+
 vi.mock('@/hooks', () => ({
   useOfflineAwareToast: vi.fn(() => ({ successToast: vi.fn() })),
 }));
@@ -140,10 +148,10 @@ describe('pickup count consistency across views', () => {
     ).length;
 
     // 2. The alert panel's visibility gate (TransportListPage).
-    const listGateShowsPanel = selectPickupsNeedingDriver(upcomingPickups).length > 0;
+    const listGateShowsPanel = selectPickupsNeedingDriver(upcomingPickups, []).length > 0;
 
     // 3. The count and the cards inside the panel (UpcomingPickups).
-    const selected = selectPickupsNeedingDriver(upcomingPickups);
+    const selected = selectPickupsNeedingDriver(upcomingPickups, []);
     const groupedCount = groupPickupsByProximity(selected).reduce(
       (sum, group) => sum + group.pickups.length,
       0,
@@ -228,7 +236,7 @@ describe('pickup count consistency across views', () => {
     const analyticsCount = upcomingPickups.filter(
       (tr) => tr.needsPickup && !tr.driverId,
     ).length;
-    const listGateShowsPanel = selectPickupsNeedingDriver(upcomingPickups).length > 0;
+    const listGateShowsPanel = selectPickupsNeedingDriver(upcomingPickups, []).length > 0;
 
     expect(analyticsCount).toBe(0);
     expect(listGateShowsPanel).toBe(false);
@@ -279,7 +287,7 @@ describe('pickup count consistency across views', () => {
 
     // 2/3. The panel's count and its visibility gate on the transport list.
     const upcomingPickups = deriveUpcomingPickups(transports, nowMs);
-    const selected = selectPickupsNeedingDriver(upcomingPickups);
+    const selected = selectPickupsNeedingDriver(upcomingPickups, []);
     const groupedCount = groupPickupsByProximity(selected).reduce(
       (sum, group) => sum + group.pickups.length,
       0,
@@ -310,7 +318,7 @@ describe('pickup count consistency across views', () => {
     const upcomingPickups = deriveUpcomingPickups(transports, nowMs);
 
     expect(upcomingPickups).toHaveLength(0);
-    expect(selectPickupsNeedingDriver(upcomingPickups)).toHaveLength(0);
+    expect(selectPickupsNeedingDriver(upcomingPickups, [])).toHaveLength(0);
     expect(
       upcomingPickups.filter((tr) => tr.needsPickup && !tr.driverId),
     ).toHaveLength(0);

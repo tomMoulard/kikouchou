@@ -19,7 +19,13 @@
  */
 
 // Database instance
-export { db, DB_VERSION, type KikouchouDatabase, type YjsUpdateRow } from './database';
+export {
+  db,
+  DB_VERSION,
+  type KikouchouDatabase,
+  type RideNoticeRow,
+  type YjsUpdateRow,
+} from './database';
 
 // Utility functions
 export {
@@ -29,6 +35,8 @@ export {
   createPersonId,
   createRoomAssignmentId,
   createTransportId,
+  createRideId,
+  createVehicleId,
   createActivityId,
   createGuestGroupId,
   createGuestGroupMemberId,
@@ -139,6 +147,44 @@ export {
   deleteTransportWithOwnershipCheck,
 } from './repositories/transport-repository';
 
+// Ride repository
+export {
+  createRide,
+  getRidesByTripId,
+  getRideById,
+  getRidesByDriverId,
+  getRidesByVehicleId,
+  getTransportIdsForRide,
+  getRideCount,
+  // Membership is a scalar on the leg — never write a passenger list
+  setTransportRide,
+  // Transactional operations with ownership validation
+  updateRideWithOwnershipCheck,
+  deleteRideWithOwnershipCheck,
+} from './repositories/ride-repository';
+
+// Vehicle repository
+export {
+  createVehicle,
+  getVehiclesByTripId,
+  getVehicleById,
+  getVehiclesByOwnerId,
+  getVehicleCount,
+  // Transactional operations with ownership validation
+  updateVehicleWithOwnershipCheck,
+  deleteVehicleWithOwnershipCheck,
+} from './repositories/vehicle-repository';
+
+// Ride notices (device-local: what this phone has already shown)
+export {
+  rideNoticeKey,
+  getRideNotices,
+  markTransportSeen,
+  markNoticeFired,
+  clearRideNotices,
+} from './repositories/ride-notice-repository';
+export type { RideNoticeKind } from './repositories/ride-notice-repository';
+
 // Activity repository
 export {
   createActivity,
@@ -173,6 +219,8 @@ export {
   getSettings,
   ensureSettings,
   updateSettings,
+  setMyPersonId,
+  getMyPersonId,
   setCurrentTrip,
   setLanguage,
   getCurrentTripId,

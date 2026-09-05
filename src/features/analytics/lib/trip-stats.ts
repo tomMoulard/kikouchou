@@ -56,7 +56,18 @@ export interface TripStats {
   readonly departureCount: number;
   /** All transports — always `arrivalCount + departureCount`. */
   readonly transportCount: number;
-  /** Upcoming transports flagged `needsPickup` that still have no driver. */
+  /** Car journeys arranged for the trip. */
+  readonly rideCount: number;
+  /** Cars available to the trip. */
+  readonly vehicleCount: number;
+  /**
+   * Upcoming transports flagged `needsPickup` that nobody is driving yet.
+   *
+   * "Nobody is driving" now spans three arrangements — no ride at all, a ride
+   * with no driver, and no legacy `driverId` — which is why the count is taken
+   * from `selectPickupsNeedingDriver` with the trip's rides rather than
+   * recomputed here.
+   */
   readonly pickupsNeedingDriver: number;
 }
 
@@ -110,26 +121,35 @@ export async function loadTripStats(
   tripId: TripId,
   now: ISODateTimeString,
 ): Promise<TripStats> {
-  const [persons, roomCount, assignmentCount, transports] = await Promise.all([
-    // Same compound ranges as PersonContext / RoomContext / AssignmentContext /
-    // TransportContext, so the analytics totals match the feature pages exactly.
-    db.persons
-      .where('[tripId+name]')
-      .between([tripId, ''], [tripId, MAX_STRING_KEY])
-      .toArray(),
-    db.rooms
-      .where('[tripId+order]')
-      .between([tripId, 0], [tripId, Infinity])
-      .count(),
-    db.roomAssignments
-      .where('[tripId+startDate]')
-      .between([tripId, ''], [tripId, MAX_STRING_KEY])
-      .count(),
-    db.transports
-      .where('[tripId+datetime]')
-      .between([tripId, ''], [tripId, MAX_STRING_KEY])
-      .toArray(),
-  ]);
+  const [persons, roomCount, assignmentCount, transports, rides, vehicleCount] =
+    await Promise.all([
+      // Same compound ranges as PersonContext / RoomContext /
+      // AssignmentContext / TransportContext, so the analytics totals match the
+      // feature pages exactly.
+      db.persons
+        .where('[tripId+name]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .toArray(),
+      db.rooms
+        .where('[tripId+order]')
+        .between([tripId, 0], [tripId, Infinity])
+        .count(),
+      db.roomAssignments
+        .where('[tripId+startDate]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .count(),
+      db.transports
+        .where('[tripId+datetime]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .toArray(),
+      // Read whole rather than counted: "still needs a driver" depends on which
+      // rides have one, not on how many there are.
+      db.rides
+        .where('[tripId+meetDatetime]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .toArray(),
+      db.vehicles.where('tripId').equals(tripId).count(),
+    ]);
 
   // "Count people, not rows" — a guest row can stand for several real people.
   let headcount = 0;
@@ -160,7 +180,10 @@ export async function loadTripStats(
 
   // The shared selection the pickup alert panel and the transport list's alert
   // gate use, so the badge here cannot report a number the panel contradicts.
-  const pickupsNeedingDriver = selectPickupsNeedingDriver(upcomingPickups).length;
+  const pickupsNeedingDriver = selectPickupsNeedingDriver(
+    upcomingPickups,
+    rides,
+  ).length;
 
   return {
     tripId,
@@ -171,6 +194,8 @@ export async function loadTripStats(
     arrivalCount,
     departureCount,
     transportCount: transports.length,
+    rideCount: rides.length,
+    vehicleCount,
     pickupsNeedingDriver,
   };
 }
@@ -217,6 +242,8 @@ export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
       arrivalCount: totals.arrivalCount + row.arrivalCount,
       departureCount: totals.departureCount + row.departureCount,
       transportCount: totals.transportCount + row.transportCount,
+      rideCount: totals.rideCount + row.rideCount,
+      vehicleCount: totals.vehicleCount + row.vehicleCount,
       pickupsNeedingDriver:
         totals.pickupsNeedingDriver + row.pickupsNeedingDriver,
     }),
@@ -228,6 +255,8 @@ export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
       arrivalCount: 0,
       departureCount: 0,
       transportCount: 0,
+      rideCount: 0,
+      vehicleCount: 0,
       pickupsNeedingDriver: 0,
     },
   );

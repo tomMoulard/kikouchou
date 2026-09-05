@@ -168,6 +168,11 @@ const compareTransports = (a: Transport, b: Transport): boolean =>
   a.personId === b.personId &&
   a.needsPickup === b.needsPickup &&
   a.driverId === b.driverId &&
+  // Membership. Missing from this list, joining or leaving a car would never
+  // reach the UI — the ride card would keep the old passenger list until some
+  // unrelated field on the leg happened to change too, which is exactly the
+  // bug the three map fields below record.
+  a.rideId === b.rideId &&
   a.location === b.location &&
   a.transportMode === b.transportMode &&
   a.transportNumber === b.transportNumber &&

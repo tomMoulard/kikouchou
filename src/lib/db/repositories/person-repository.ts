@@ -191,7 +191,7 @@ export async function deletePerson(id: PersonId): Promise<void> {
   try {
     await db.transaction(
       'rw',
-      [db.persons, db.roomAssignments, db.transports, db.activities],
+      [db.persons, db.roomAssignments, db.transports, db.rides, db.activities],
       async () => {
         // Delete related records in parallel
         await Promise.all([
@@ -206,6 +206,11 @@ export async function deletePerson(id: PersonId): Promise<void> {
             .where('driverId')
             .equals(id)
             .modify({ driverId: undefined }),
+
+          // Same, for the rides they were driving. The ride itself survives:
+          // the others still need to get to the station, and a ride with no
+          // driver is exactly the "needs somebody to volunteer" state.
+          db.rides.where('driverId').equals(id).modify({ driverId: undefined }),
 
           // Drop the guest from every activity they had joined or organized
           removePersonFromActivities(id),
@@ -333,7 +338,7 @@ export async function deletePersonWithOwnershipCheck(
 ): Promise<void> {
   await db.transaction(
     'rw',
-    [db.persons, db.roomAssignments, db.transports, db.activities],
+    [db.persons, db.roomAssignments, db.transports, db.rides, db.activities],
     async () => {
       const person = await db.persons.get(id);
 
@@ -357,6 +362,11 @@ export async function deletePersonWithOwnershipCheck(
           .where('driverId')
           .equals(id)
           .modify({ driverId: undefined }),
+
+        // Same, for the rides they were driving. The ride itself survives:
+        // the others still need to get to the station, and a ride with no
+        // driver is exactly the "needs somebody to volunteer" state.
+        db.rides.where('driverId').equals(id).modify({ driverId: undefined }),
 
         // Drop the guest from every activity they had joined or organized
         removePersonFromActivities(id),

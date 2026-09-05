@@ -33,5 +33,8 @@ export {
   type UseOfflineAwareToastReturn,
 } from './useOfflineAwareToast';
 
+// Trip identity — which guest this device belongs to
+export { useTripIdentity, type UseTripIdentityResult } from './useTripIdentity';
+
 // Date/time utilities
 export { useToday, getMsUntilMidnight, type UseTodayResult } from './useToday';
