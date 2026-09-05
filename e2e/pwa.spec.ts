@@ -18,7 +18,6 @@ import {
 } from './support/service-worker';
 import { waitForRoute } from './support/routes';
 import { stubExternalMapServices } from './support/external-services';
-import { fillTripOrganiser } from './support/trip-form';
 
 // ============================================================================
 // Test Configuration & Helpers
@@ -239,8 +238,6 @@ async function createTestTrip(page: Page): Promise<string> {
   const endCalendar = page.locator('[data-slot="calendar"]').first();
   const endDayButton = endCalendar.locator('button').filter({ hasText: /^20$/ }).first();
   await endDayButton.click();
-
-  await fillTripOrganiser(page);
 
   // Submit form
   await page.getByRole('button', { name: /save|sauvegarder/i }).click();

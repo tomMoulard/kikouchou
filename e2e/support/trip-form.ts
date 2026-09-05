@@ -1,11 +1,9 @@
 /**
- * @fileoverview The trip creation form's guest list, for the six specs that
- * drive that form.
+ * @fileoverview The trip creation form's guest list.
  *
- * The first guest row is required, so every path that submits the create form
- * has to fill it — and the suite runs signed out, where nothing pre-fills it.
- * One helper rather than the same line copied into each spec: a change to how
- * that row is labelled would otherwise break five files quietly and one loudly.
+ * Every row is optional, so the specs that merely need *a* trip ignore this
+ * entirely and submit the form with nobody on the list. These are for the tests
+ * that are about the guest list itself.
  *
  * @module e2e/support/trip-form
  */
@@ -29,7 +27,7 @@ export const ORGANISER_NAME = 'Test Organiser';
 // ============================================================================
 
 /**
- * Fills the required first guest — the user themselves — on the create form.
+ * Fills the first guest row — the user's own — on the create form.
  *
  * Matched on the row's `aria-label` rather than an id: the rows are a list, so
  * only the first one carries this label and it stays stable as rows are added.
@@ -42,6 +40,25 @@ export async function fillTripOrganiser(
   name: string = ORGANISER_NAME,
 ): Promise<void> {
   await page.getByLabel(/your name/i).fill(name);
+}
+
+/**
+ * Empties the first guest row, taking the signed-in user off the trip.
+ *
+ * Signed in, that row pre-fills from the account — so a spec that signs in and
+ * then creates a trip through the form gets a guest named after the account
+ * whether it asked for one or not. Clearing it is what somebody who hosts
+ * rather than travels does, and it is the only way to submit the form with an
+ * empty guest list while signed in.
+ *
+ * Safe whether or not the prefill has landed yet: this fires an input event, and
+ * the form stops following the account for that row as soon as the user touches
+ * it.
+ *
+ * @param page - Playwright page sitting on `/trips/new`
+ */
+export async function clearTripOrganiser(page: Page): Promise<void> {
+  await page.getByLabel(/your name/i).clear();
 }
 
 /**

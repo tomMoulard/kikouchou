@@ -223,6 +223,7 @@ async function createTrip(
     location?: string;
     startDate: string;
     endDate: string;
+    organiser?: string;
     guests?: readonly string[];
   },
 ): Promise<void> {
@@ -244,9 +245,11 @@ async function createTrip(
   await page.locator('#trip-end-date').click();
   await selectDate(page, tripData.endDate);
 
-  // The first guest is the user, and it is required — signed out, as the suite
-  // runs, nothing pre-fills it.
-  await fillTripOrganiser(page);
+  // Both opt-in: the guest list is optional in full, so the tests that are not
+  // about it leave it alone and create a trip with nobody on it.
+  if (tripData.organiser) {
+    await fillTripOrganiser(page, tripData.organiser);
+  }
   if (tripData.guests) {
     await addTripGuests(page, tripData.guests);
   }
@@ -520,18 +523,41 @@ test.describe('Trip Lifecycle', () => {
     await page.goto('/trips/new');
     await expectTripFormPage(page, /new trip/i);
 
+    await createTrip(page, {
+      ...TEST_TRIP,
+      organiser: ORGANISER_NAME,
+      guests: ['Marie', 'Camille'],
+    });
+    await expectCalendarPage(page, TEST_TRIP.name);
+
+    await page.getByRole('link', { name: /guests/i }).first().click();
+    await page.waitForURL(/\/persons/);
+
+    // The organiser among them: the first row is the user's own, and filling it
+    // is how they put themselves on the trip they are creating.
+    for (const guestName of [ORGANISER_NAME, 'Marie', 'Camille']) {
+      await expect(page.getByText(guestName).first()).toBeVisible();
+    }
+  });
+
+  test('creates a trip the organiser is not on', async ({ page }) => {
+    await page.goto('/trips/new');
+    await expectTripFormPage(page, /new trip/i);
+
+    // Somebody who hosts rather than travels — an Airbnb owner arranging a trip
+    // for their guests — leaves their own row blank.
     await createTrip(page, { ...TEST_TRIP, guests: ['Marie', 'Camille'] });
     await expectCalendarPage(page, TEST_TRIP.name);
 
     await page.getByRole('link', { name: /guests/i }).first().click();
     await page.waitForURL(/\/persons/);
 
-    // The organiser is on the list too. A trip whose own organiser is missing
-    // starts every headcount, room plan and meal total one person short, which
-    // is the whole reason that first row is required.
-    for (const guestName of [ORGANISER_NAME, 'Marie', 'Camille']) {
-      await expect(page.getByText(guestName).first()).toBeVisible();
-    }
+    // Counted, not merely matched by name: the point of this test is that a
+    // third guest — the organiser — was *not* created.
+    const guests = page.getByRole('list', { name: /guests/i }).getByRole('listitem');
+    await expect(guests).toHaveCount(2);
+    await expect(page.getByText('Marie').first()).toBeVisible();
+    await expect(page.getByText('Camille').first()).toBeVisible();
   });
 
   // ============================================================================
