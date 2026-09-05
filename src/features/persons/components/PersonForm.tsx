@@ -33,6 +33,7 @@ import { isContactPickerSupported, pickContact } from '@/lib/contacts';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toHexColor, toISODateStringFromString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
+import { pickRandomUnusedColor } from '@/lib/utils/guest-colors';
 import {
   MAX_PERSON_HEADCOUNT,
   MIN_PERSON_HEADCOUNT,
@@ -69,28 +70,6 @@ interface FormErrors {
 // ============================================================================
 // Constants
 // ============================================================================
-
-/**
- * Default color for new persons (first color in palette).
- */
-const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6';
-
-function pickRandomUnusedColor(args: {
-  readonly usedColors: ReadonlySet<string>;
-  readonly palette: readonly string[];
-}): string {
-  const { usedColors, palette } = args;
-  const normalizedUsed = new Set(Array.from(usedColors, (c) => c.toLowerCase()));
-
-  const unused = palette.filter((c) => !normalizedUsed.has(c.toLowerCase()));
-  const pool = unused.length > 0 ? unused : palette;
-  if (pool.length === 0) {
-    return DEFAULT_COLOR;
-  }
-
-  const idx = Math.floor(Math.random() * pool.length);
-  return pool[idx] ?? DEFAULT_COLOR;
-}
 
 /**
  * Parses the headcount input into a valid headcount.

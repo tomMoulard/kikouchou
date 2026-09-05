@@ -30,6 +30,7 @@ import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
 import { useFormSubmission } from '@/hooks';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toHexColor } from '@/lib/db/utils';
+import { pickRandomUnusedColor } from '@/lib/utils/guest-colors';
 import {
   MAX_GUEST_GROUP_MEMBERS,
   MAX_PERSON_HEADCOUNT,
@@ -80,26 +81,27 @@ interface FormErrors {
 // Constants
 // ============================================================================
 
-const DEFAULT_COLOR = DEFAULT_COLORS[0] ?? '#3b82f6';
-
 // ============================================================================
 // Helper Functions
 // ============================================================================
 
-/** A colour the group is not already using, so rows are told apart at a glance. */
-function nextColor(drafts: readonly MemberDraft[]): string {
-  const used = new Set(drafts.map((draft) => draft.color.toLowerCase())),
-    free = DEFAULT_COLORS.filter((color) => !used.has(color.toLowerCase()));
-
-  return free[0] ?? DEFAULT_COLORS[drafts.length % DEFAULT_COLORS.length] ?? DEFAULT_COLOR;
-}
-
-/** A blank row, coloured so it does not collide with the rows above it. */
+/**
+ * A blank row, coloured so it does not collide with the rows above it.
+ *
+ * Through the same helper `PersonForm` uses, which is the point: a member
+ * becomes a guest on import, and a group whose colours came out in a different
+ * order from a hand-typed trip's would look like two features rather than one.
+ * The first version here took the first unused swatch instead, so every group
+ * ever created started red, orange, yellow.
+ */
 function emptyDraft(drafts: readonly MemberDraft[]): MemberDraft {
   return {
     key: `member-${Date.now()}-${drafts.length}`,
     name: '',
-    color: nextColor(drafts),
+    color: pickRandomUnusedColor({
+      usedColors: new Set(drafts.map((draft) => draft.color)),
+      palette: DEFAULT_COLORS,
+    }),
     headcount: String(MIN_PERSON_HEADCOUNT),
     notes: '',
     phone: '',
