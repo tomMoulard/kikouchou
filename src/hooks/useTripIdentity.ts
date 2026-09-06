@@ -69,9 +69,21 @@ export function useTripIdentity(): UseTripIdentityResult {
     tripId = currentTrip?.id,
     shareId = currentTrip?.shareId,
     userId = user?.id,
-    identity = useLiveQuery(async () => {
+    // Tagged with the trip it was read for, and discarded when they disagree.
+    //
+    // `useLiveQuery` keeps its previous result across a deps change —
+    // `useObservable` only seeds while `hasResult` is false, and it has been
+    // true since the first trip — so between switching trips and the new query
+    // emitting, this would otherwise hand back the *previous* trip's guest with
+    // `isResolved: true`. `resolveTripIdentity` refuses to return a guest the
+    // trip does not hold, but that check ran against the old trip. A reader
+    // filtering "only mine" would empty the new trip; a writer would stamp the
+    // old trip's person id onto the new trip's ride. `YjsTripSync` carries the
+    // same guard, for the same reason, after the same class of bug moved one
+    // trip's guests into another.
+    tagged = useLiveQuery(async () => {
       if (tripId === undefined || shareId === undefined) {
-        return UNKNOWN_TRIP_IDENTITY;
+        return { tripId, identity: UNKNOWN_TRIP_IDENTITY };
       }
 
       // Touched so Dexie re-runs this query when the settings singleton or a
@@ -87,8 +99,14 @@ export function useTripIdentity(): UseTripIdentityResult {
       await db.settings.get('settings');
       await db.tripMembers.where('tripId').equals(tripId).toArray();
 
-      return resolveTripIdentity({ id: tripId, shareId }, userId);
+      return {
+        tripId,
+        identity: await resolveTripIdentity({ id: tripId, shareId }, userId),
+      };
     }, [tripId, shareId, userId]),
+    identity = tagged !== undefined && tagged.tripId === tripId
+      ? tagged.identity
+      : undefined,
     setIdentity = useCallback(
       async (personId: PersonId | undefined): Promise<void> => {
         if (tripId === undefined) {

@@ -164,21 +164,66 @@ export function selectPickupsNeedingDriver(
   upcomingPickups: readonly Transport[],
   rides: readonly Ride[],
 ): readonly Transport[] {
-  const drivenRideIds = new Set(
-    rides
-      .filter((ride) => ride.driverId !== undefined)
-      .map((ride) => ride.id as string),
-  );
+  const drivenRideIds = collectDrivenRideIds(rides);
 
   return sortTransportsByInstant(
     upcomingPickups.filter(
       (transport) =>
         transport.needsPickup &&
-        !transport.driverId &&
-        !(transport.rideId !== undefined && drivenRideIds.has(transport.rideId)) &&
+        !isLegCovered(transport, drivenRideIds) &&
         toTransportInstant(transport.datetime) !== null,
     ),
   );
+}
+
+/**
+ * Indexes the rides somebody has actually volunteered to drive.
+ *
+ * Built once and passed to {@link isLegCovered} rather than rebuilt per leg: a
+ * list page asks the question for every row it renders.
+ *
+ * @param rides - The trip's rides
+ * @returns The ids of the rides that have a driver
+ */
+export function collectDrivenRideIds(rides: readonly Ride[]): ReadonlySet<string> {
+  return new Set(
+    rides
+      .filter((ride) => ride.driverId !== undefined)
+      .map((ride) => ride.id as string),
+  );
+}
+
+/**
+ * Is somebody actually driving this leg?
+ *
+ * **The single definition.** It was briefly two: this selector knew that a ride
+ * with a driver covers its legs, while the badge on the transport card and the
+ * one in the map popup still asked the pre-ride question `needsPickup &&
+ * !driverId`. So one page contradicted itself — the amber "nobody is driving
+ * yet" panel disappeared once Guillaume volunteered, and Alice's own card went
+ * on telling her nobody was collecting her.
+ *
+ * Three arrangements count as covered, and the third is the one that is easy to
+ * miss: a ride the driver is also a passenger on is still a driven ride.
+ *
+ * A `rideId` naming a ride this device does not hold is **not** coverage. It
+ * happens on the QR-changeset path, where legs travel and rides do not yet, and
+ * treating an unresolvable id as "handled" would quietly drop somebody from the
+ * list of people who still need a lift.
+ *
+ * @param transport - The leg
+ * @param drivenRideIds - From {@link collectDrivenRideIds}
+ * @returns True when somebody is driving it
+ */
+export function isLegCovered(
+  transport: Transport,
+  drivenRideIds: ReadonlySet<string>,
+): boolean {
+  if (transport.driverId !== undefined) {
+    return true;
+  }
+
+  return transport.rideId !== undefined && drivenRideIds.has(transport.rideId);
 }
 
 // ============================================================================

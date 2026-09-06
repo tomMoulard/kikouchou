@@ -32,6 +32,7 @@ import {
   requireCanonicalDatetime,
   toCanonicalDatetime,
 } from '@/lib/db/transport-datetime';
+import { rideNoticeKey } from '@/lib/db/repositories/ride-notice-repository';
 import { createRideId } from '@/lib/db/utils';
 import type {
   PersonId,
@@ -346,17 +347,25 @@ export async function deleteRideWithOwnershipCheck(
   id: RideId,
   tripId: TripId,
 ): Promise<void> {
-  await db.transaction('rw', [db.rides, db.transports], async () => {
-    const ride = await db.rides.get(id);
+  await db.transaction(
+    'rw',
+    [db.rides, db.transports, db.rideNotices],
+    async () => {
+      const ride = await db.rides.get(id);
 
-    if (!ride) {
-      throw new Error(`Ride with ID "${id}" not found`);
-    }
-    if (ride.tripId !== tripId) {
-      throw new Error('Cannot delete ride: ride does not belong to current trip');
-    }
+      if (!ride) {
+        throw new Error(`Ride with ID "${id}" not found`);
+      }
+      if (ride.tripId !== tripId) {
+        throw new Error('Cannot delete ride: ride does not belong to current trip');
+      }
 
-    await db.transports.where('rideId').equals(id).modify({ rideId: undefined });
-    await db.rides.delete(id);
-  });
+      await db.transports.where('rideId').equals(id).modify({ rideId: undefined });
+      // The device's own record of having announced this ride goes with it. Left
+      // behind, and the id ever comes back over a re-join, the "leave now" alert
+      // is suppressed as already fired.
+      await db.rideNotices.delete(rideNoticeKey('leave', id));
+      await db.rides.delete(id);
+    },
+  );
 }

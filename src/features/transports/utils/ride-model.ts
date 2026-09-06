@@ -122,9 +122,17 @@ export interface ResolveRidesInput {
 // Internal helpers
 // ============================================================================
 
-/** Minutes between two instants, or null when either cannot be placed. */
+/**
+ * Whole minutes between two instants, or null when either cannot be placed.
+ *
+ * Rounded here rather than at each call site: the value is rendered straight
+ * into `rides.legMismatch.*`, and a leg 2h30m30s out would otherwise read
+ * "150.5 min".
+ */
 function minutesBetween(left: number | null, right: number | null): number | null {
-  return left === null || right === null ? null : (left - right) / 60_000;
+  return left === null || right === null
+    ? null
+    : Math.round((left - right) / 60_000);
 }
 
 /**

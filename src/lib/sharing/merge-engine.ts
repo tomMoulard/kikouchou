@@ -318,6 +318,10 @@ function getPersonConflictingFields(host: Person, guest: Person): string[] {
   if (host.notes !== guest.notes) fields.push('notes');
   if (host.phone !== guest.phone) fields.push('phone');
   if (getPersonHeadcount(host) !== getPersonHeadcount(guest)) fields.push('headcount');
+  // A change with no field listed here is dropped rather than applied, so a
+  // guest whose only edit was their child's seat would have returned a
+  // changeset the host silently discarded.
+  if (host.childSeat !== guest.childSeat) fields.push('childSeat');
   return fields;
 }
 

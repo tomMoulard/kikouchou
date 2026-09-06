@@ -42,6 +42,7 @@ import {
 
 import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
+import { useRideContext } from '@/contexts/RideContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -58,6 +59,10 @@ import { Button } from '@/components/ui/button';
 import { statusVariants } from '@/components/ui/status.variants';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
+import {
+  collectDrivenRideIds,
+  isLegCovered,
+} from '@/features/transports/utils/pickup-utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import type { Person, PersonId, Transport, TransportMode } from '@/types';
 import { cn } from '@/lib/utils';
@@ -118,6 +123,15 @@ interface TransportPopupContentProps {
   readonly transport: TransportWithCoordinates;
   readonly person: Person | undefined;
   readonly dateLocale: Locale;
+  /**
+   * The rides somebody is driving, from `collectDrivenRideIds`.
+   *
+   * The popup asks the same "is anybody driving this leg" question the
+   * transport list and its alert gate ask, and must answer it the same way —
+   * this pin once showed an amber "needs pickup" chip for a leg whose ride had
+   * a volunteer, on the same trip where the list said nothing was outstanding.
+   */
+  readonly drivenRideIds: ReadonlySet<string>;
 }
 
 /**
@@ -153,6 +167,7 @@ const TransportPopupContent = memo(function TransportPopupContent({
   transport,
   person,
   dateLocale,
+  drivenRideIds,
 }: TransportPopupContentProps): ReactElement {
   const { t } = useTranslation();
   const { date, time } = formatTransportDatetimeParts(transport.datetime, dateLocale, 'dayAndTime');
@@ -232,8 +247,8 @@ const TransportPopupContent = memo(function TransportPopupContent({
         </div>
       )}
 
-      {/* Needs pickup indicator */}
-      {transport.needsPickup && !transport.driverId && (
+      {/* Needs pickup indicator — only while nobody is driving the leg */}
+      {transport.needsPickup && !isLegCovered(transport, drivenRideIds) && (
         <div className={cn('text-xs font-medium', statusVariants({ tone: 'warning', emphasis: 'text' }))}>
           {t('transports.needsPickup')}
         </div>
@@ -267,6 +282,9 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
   // Context hooks
   const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
+  // The popup's "needs pickup" chip must agree with the transport list's, and
+  // both now depend on whether the leg's ride has a driver.
+  const { rides } = useRideContext();
   const {
     arrivals,
     departures,
@@ -317,6 +335,8 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
   }, [transportsWithCoordinates]);
 
   // Create markers (optional start marker + end marker per transport)
+  const drivenRideIds = useMemo(() => collectDrivenRideIds(rides), [rides]);
+
   const markers = useMemo((): readonly MapMarkerData[] => {
     const result: MapMarkerData[] = [];
 
@@ -393,12 +413,20 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
             transport={transport}
             person={person}
             dateLocale={dateLocale}
+            drivenRideIds={drivenRideIds}
           />
         ),
       });
     }
     return result;
-  }, [transportsWithCoordinates, personsMap, dateLocale, t, currentTrip]);
+  }, [
+    transportsWithCoordinates,
+    personsMap,
+    dateLocale,
+    t,
+    currentTrip,
+    drivenRideIds,
+  ]);
 
   // Calculate map center based on markers
   const mapCenter = useMemo((): [number, number] => {

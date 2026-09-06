@@ -289,6 +289,41 @@ describe('cascades', () => {
     expect(await getRidesByDriverId(guillaume)).toEqual([]);
   });
 
+  it('clears a deleted guest’s car ownership but keeps the car', async () => {
+    // The car is still parked outside and still seats five. What must not
+    // survive is the dangling `ownerId`: it renders as a blank owner and makes
+    // the row unfilterable by owner forever.
+    const vehicle = await createVehicle(tripId, {
+      name: 'Clio',
+      ownerId: guillaume,
+    });
+
+    await deletePerson(guillaume);
+
+    const stored = await db.vehicles.get(vehicle.id);
+    expect(stored).toBeDefined();
+    expect(stored?.ownerId).toBeUndefined();
+  });
+
+  it('forgets a deleted ride’s own notice, but not its passengers’ watermarks', async () => {
+    // A surviving `leave:` row would suppress the alert if the id ever came
+    // back over a re-join. The legs' `moved:` watermarks must survive, though —
+    // the legs outlive the ride, and dropping them would make every one of them
+    // look like a fresh change.
+    const rideId = await makeRide(),
+      legId = await makeLeg(alice, rideId);
+
+    await db.rideNotices.bulkPut([
+      { key: `leave:${rideId}`, tripId, firedAtMs: Date.now() },
+      { key: `moved:${legId}`, tripId, seenDatetime: '2026-07-15T15:02:00.000Z' },
+    ]);
+
+    await deleteRideWithOwnershipCheck(rideId, tripId);
+
+    expect(await db.rideNotices.get(`leave:${rideId}`)).toBeUndefined();
+    expect(await db.rideNotices.get(`moved:${legId}`)).toBeDefined();
+  });
+
   it('takes rides and vehicles with the trip', async () => {
     const vehicle = await createVehicle(tripId, { name: 'Espace' });
     await makeRide({ vehicleId: vehicle.id });

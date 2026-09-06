@@ -14,7 +14,16 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { SupabaseTripSync } from '@/lib/sync/SupabaseTripSync';
-import type { Activity, Person, Room, RoomAssignment, Transport, TripId } from '@/types';
+import type {
+  Activity,
+  Person,
+  Ride,
+  Room,
+  RoomAssignment,
+  Transport,
+  TripId,
+  Vehicle,
+} from '@/types';
 
 import { YjsProvider, useYjsContext } from './YjsProvider';
 import {
@@ -23,6 +32,7 @@ import {
   syncDexieToDoc,
   syncTripMetaToDoc,
 } from './dexie-bridge';
+import type { DocCollectionName } from './doc-model';
 
 function stripTripId<T extends { tripId?: unknown }>(
   items: readonly T[],
@@ -128,12 +138,46 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       .between([id, Dexie.minKey], [id, Dexie.maxKey])
       .toArray(),
   );
+  const rides = useTripScopedRows<Ride>(tripId, (id) =>
+    db.rides
+      .where('[tripId+meetDatetime]')
+      .between([id, Dexie.minKey], [id, Dexie.maxKey])
+      .toArray(),
+  );
+  const vehicles = useTripScopedRows<Vehicle>(tripId, (id) =>
+    db.vehicles.where('tripId').equals(id).toArray(),
+  );
   const activities = useTripScopedRows<Activity>(tripId, (id) =>
     db.activities
       .where('[tripId+startDatetime]')
       .between([id, Dexie.minKey], [id, Dexie.maxKey])
       .toArray(),
   );
+
+  /**
+   * Every document collection this component publishes, checked at compile time.
+   *
+   * `syncDocToDexie` deletes every local row the document does not hold, so a
+   * collection that is projected *in* without being published *out* is not
+   * merely unsynced — it is deleted on the next update from any member of the
+   * trip. Rides and vehicles shipped that way and cost a working car.
+   *
+   * `satisfies` is what makes the next one a build error instead: adding a name
+   * to `DocCollectionName` without adding an effect below fails to compile here.
+   * The value is otherwise unused, and deliberately so — the effects still read
+   * their own rows, because a single combined effect would republish all seven
+   * collections every time any one of them ticked.
+   */
+  const publishedCollections = {
+    guests: persons,
+    rooms,
+    roomAssignments,
+    transport: transports,
+    rides,
+    vehicles,
+    activities,
+  } satisfies Record<DocCollectionName, unknown>;
+  void publishedCollections;
 
   useEffect(() => {
     // The trip carries its own id, so it needs no tagging to be checked — but it
@@ -205,6 +249,26 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
   }, [transports, tripId, yjs?.doc, yjs?.loaded]);
+
+  useEffect(() => {
+    if (!yjs?.loaded || !rides) {
+      return;
+    }
+
+    syncDexieToDoc(yjs.doc, 'rides', stripTripId(rides), {
+      allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
+    });
+  }, [rides, tripId, yjs?.doc, yjs?.loaded]);
+
+  useEffect(() => {
+    if (!yjs?.loaded || !vehicles) {
+      return;
+    }
+
+    syncDexieToDoc(yjs.doc, 'vehicles', stripTripId(vehicles), {
+      allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
+    });
+  }, [vehicles, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
     if (!yjs?.loaded || !activities) {

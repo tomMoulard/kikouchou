@@ -81,6 +81,8 @@ import { getTransportModeIcon } from '@/lib/utils/transport-icons';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
 import {
+  collectDrivenRideIds,
+  isLegCovered,
   isTransportUpcoming,
   selectPickupsNeedingDriver,
   sortTransportsByInstant,
@@ -111,6 +113,16 @@ interface TransportCardProps {
   readonly isActionsDisabled?: boolean;
   /** Whether this transport is in the past */
   readonly isPast?: boolean;
+  /**
+   * The rides somebody has volunteered to drive, from `collectDrivenRideIds`.
+   *
+   * Passed in rather than read here so the badge and the page's amber alert
+   * gate answer "is anybody driving this leg" from one index and one
+   * definition. They briefly did not, and the page contradicted itself: the
+   * panel vanished once Guillaume volunteered on the ride while Alice's own
+   * card went on saying nobody was collecting her.
+   */
+  readonly drivenRideIds: ReadonlySet<string>;
 }
 
 /**
@@ -151,6 +163,8 @@ interface TransportListProps {
   readonly emptyDescription: string;
   /** Whether actions are disabled */
   readonly isActionsDisabled?: boolean;
+  /** The rides somebody is driving, from `collectDrivenRideIds`. */
+  readonly drivenRideIds: ReadonlySet<string>;
 }
 
 // ============================================================================
@@ -230,6 +244,7 @@ const TransportCard = memo(function TransportCard({
   dateLocale,
   isActionsDisabled = false,
   isPast = false,
+  drivenRideIds,
 }: TransportCardProps): ReactElement {
   const { t } = useTranslation(),
 
@@ -269,8 +284,11 @@ const TransportCard = memo(function TransportCard({
     [handleEdit],
   ),
 
-  // Smart pickup logic: show "needs pickup" only when needsPickup=true AND no driver assigned
-   showNeedsPickupBadge = transport.needsPickup && !transport.driverId,
+  // "Needs pickup" only while nobody is driving it — which since rides exist
+  // means no legacy driver *and* no driven ride. `isLegCovered` is the single
+  // definition, shared with the page's alert gate and the map popup.
+   showNeedsPickupBadge =
+    transport.needsPickup && !isLegCovered(transport, drivenRideIds),
 
   // Build aria-label for accessibility
    ariaLabel = useMemo(() => {
@@ -445,6 +463,8 @@ interface DateGroupSectionProps {
   readonly isActionsDisabled?: boolean;
   /** Whether transports in this group are past */
   readonly isPast?: boolean;
+  /** The rides somebody is driving, from `collectDrivenRideIds`. */
+  readonly drivenRideIds: ReadonlySet<string>;
 }
 
 /**
@@ -458,6 +478,7 @@ const DateGroupSection = memo(function DateGroupSection({
   dateLocale,
   isActionsDisabled = false,
   isPast = false,
+  drivenRideIds,
 }: DateGroupSectionProps): ReactElement {
   return (
     <section key={group.dateKey} aria-labelledby={`date-header-${group.dateKey}`}>
@@ -496,6 +517,7 @@ const DateGroupSection = memo(function DateGroupSection({
               dateLocale={dateLocale}
               isActionsDisabled={isActionsDisabled}
               isPast={isPast}
+              drivenRideIds={drivenRideIds}
             />
           </div>
         );
@@ -525,6 +547,7 @@ const TransportList = memo(function TransportList({
   emptyTitle,
   emptyDescription,
   isActionsDisabled = false,
+  drivenRideIds,
 }: TransportListProps): ReactElement {
   const { t } = useTranslation();
   
@@ -567,6 +590,7 @@ const TransportList = memo(function TransportList({
           dateLocale={dateLocale}
           isActionsDisabled={isActionsDisabled}
           isPast={false}
+          drivenRideIds={drivenRideIds}
         />
       ))}
 
@@ -611,6 +635,7 @@ const TransportList = memo(function TransportList({
                   dateLocale={dateLocale}
                   isActionsDisabled={isActionsDisabled}
                   isPast={true}
+                  drivenRideIds={drivenRideIds}
                 />
               ))}
             </div>
@@ -730,7 +755,11 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
    hasUnassignedUpcomingPickup = useMemo(
     () => selectPickupsNeedingDriver(upcomingPickups, rides).length > 0,
     [upcomingPickups, rides],
-  );
+  ),
+
+  // Built once for the whole page: every card asks whether somebody is driving
+  // its leg, and the answer must be the same one the alert gate above used.
+   drivenRideIds = useMemo(() => collectDrivenRideIds(rides), [rides]);
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -983,6 +1012,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         listLabel={t('transports.title')}
         emptyTitle={t('transports.empty')}
         emptyDescription={t('transports.emptyDescription')}
+        drivenRideIds={drivenRideIds}
       />
 
       {/* Floating Action Button for mobile */}

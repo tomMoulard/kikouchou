@@ -191,7 +191,7 @@ export async function deletePerson(id: PersonId): Promise<void> {
   try {
     await db.transaction(
       'rw',
-      [db.persons, db.roomAssignments, db.transports, db.rides, db.activities],
+      [db.persons, db.roomAssignments, db.transports, db.rides, db.vehicles, db.activities],
       async () => {
         // Delete related records in parallel
         await Promise.all([
@@ -211,6 +211,11 @@ export async function deletePerson(id: PersonId): Promise<void> {
           // the others still need to get to the station, and a ride with no
           // driver is exactly the "needs somebody to volunteer" state.
           db.rides.where('driverId').equals(id).modify({ driverId: undefined }),
+
+          // And for a car they owned. The car survives too — it is still parked
+          // outside and still seats five — but a dangling `ownerId` renders as
+          // a blank owner and makes the row unfilterable by owner forever.
+          db.vehicles.where('ownerId').equals(id).modify({ ownerId: undefined }),
 
           // Drop the guest from every activity they had joined or organized
           removePersonFromActivities(id),
@@ -338,7 +343,7 @@ export async function deletePersonWithOwnershipCheck(
 ): Promise<void> {
   await db.transaction(
     'rw',
-    [db.persons, db.roomAssignments, db.transports, db.rides, db.activities],
+    [db.persons, db.roomAssignments, db.transports, db.rides, db.vehicles, db.activities],
     async () => {
       const person = await db.persons.get(id);
 
@@ -367,6 +372,11 @@ export async function deletePersonWithOwnershipCheck(
         // the others still need to get to the station, and a ride with no
         // driver is exactly the "needs somebody to volunteer" state.
         db.rides.where('driverId').equals(id).modify({ driverId: undefined }),
+
+        // And for a car they owned. The car survives too — it is still parked
+        // outside and still seats five — but a dangling `ownerId` renders as
+        // a blank owner and makes the row unfilterable by owner forever.
+        db.vehicles.where('ownerId').equals(id).modify({ ownerId: undefined }),
 
         // Drop the guest from every activity they had joined or organized
         removePersonFromActivities(id),

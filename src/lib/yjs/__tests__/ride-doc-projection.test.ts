@@ -257,6 +257,71 @@ describe('projecting rides and vehicles into Dexie', () => {
     expect((await db.rides.get('r1'))?.direction).toBe('pickup');
   });
 
+  it('drops one hostile record without taking the projection with it', async () => {
+    // A non-string `notes` used to reach `sanitizeOptionalText`, throw inside
+    // the transaction, and roll back the whole trip — every guest, room,
+    // assignment and transport with it — while the catch swallowed the error.
+    // The trip then silently stopped receiving remote changes.
+    const doc = makeDoc();
+    replaceDocCollection(
+      doc,
+      'rides',
+      [
+        {
+          id: 'good',
+          direction: 'pickup',
+          meetDatetime: '2026-07-15T15:02:00.000Z',
+          location: 'Lyon Part-Dieu',
+        },
+        {
+          id: 'hostile',
+          direction: 'pickup',
+          meetDatetime: '2026-07-15T16:00:00.000Z',
+          location: 'Gare de Vannes',
+          notes: 42,
+        },
+      ],
+      { allowDeletions: false },
+    );
+    replaceDocCollection(
+      doc,
+      'vehicles',
+      [{ id: 'v-hostile', name: 'Clio', luggageNotes: { nope: true } }],
+      { allowDeletions: false },
+    );
+
+    await syncDocToDexie(doc, tripId);
+
+    expect(await db.rides.get('good')).toBeDefined();
+    expect((await db.rides.get('hostile'))?.notes).toBeUndefined();
+    expect((await db.vehicles.get('v-hostile'))?.luggageNotes).toBeUndefined();
+  });
+
+  it('drops a ride whose meeting time would be unreachable', async () => {
+    // `meetDatetime` is the second half of `[tripId+meetDatetime]`. A numeric
+    // one is filed outside the range every ride read scans — including the
+    // delete-candidate query in this very projection — so the row would be
+    // invisible and unremovable for the life of the trip.
+    const doc = makeDoc();
+    replaceDocCollection(
+      doc,
+      'rides',
+      [
+        {
+          id: 'unreachable',
+          direction: 'pickup',
+          meetDatetime: 1_721_053_320_000,
+          location: 'Lyon Part-Dieu',
+        },
+      ],
+      { allowDeletions: false },
+    );
+
+    await syncDocToDexie(doc, tripId);
+
+    expect(await db.rides.get('unreachable')).toBeUndefined();
+  });
+
   it('never lets a remote row claim another trip', async () => {
     const doc = makeDoc();
     replaceDocCollection(

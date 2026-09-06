@@ -79,6 +79,14 @@ vi.mock('@/contexts/TripContext', () => ({
   })),
 }));
 
+// The popup's "needs pickup" chip now asks whether the leg's ride has a driver,
+// so it answers the same question as the transport list rather than the
+// pre-ride `needsPickup && !driverId`. Empty here: these cases were written
+// against legs that carry no ride at all.
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: vi.fn(() => ({ rides: [] })),
+}));
+
 vi.mock('@/contexts/PersonContext', () => ({
   usePersonContext: vi.fn(() => ({
     persons: [mockPerson],

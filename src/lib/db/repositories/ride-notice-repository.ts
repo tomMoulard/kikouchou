@@ -126,13 +126,18 @@ export async function markNoticeFired(
 }
 
 /**
- * Forgets every notice attached to one ride.
+ * Forgets the notices keyed on the ride itself — today, its `leave` row.
+ *
+ * Deliberately **not** the `moved` watermarks of the legs that were in it.
+ * Those are keyed on the transport, the legs outlive the ride (a cancelled car
+ * does not cancel anybody's train), and dropping their watermarks would make
+ * every one of them look like a fresh change the next time the app opened.
  *
  * Used when a ride is cancelled: its `leave` row would otherwise sit in the
  * table for the life of the trip, and if the same id ever came back over a
  * re-join the alert would be suppressed as already fired.
  *
- * @param rideId - The ride whose notices to drop
+ * @param rideId - The ride whose own notices to drop
  */
 export async function clearRideNotices(rideId: RideId): Promise<void> {
   await db.rideNotices.delete(rideNoticeKey('leave', rideId));

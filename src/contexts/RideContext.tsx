@@ -207,7 +207,19 @@ export function RideProvider({ children }: RideProviderProps): ReactElement {
       }
 
       try {
-        return await db.vehicles.where('tripId').equals(currentTripId).toArray();
+        // Sorted here rather than left in primary-key order: `getVehiclesByTripId`
+        // and the document's own `compareRecords` both order by name so every
+        // device renders the same list, and a context handing the car picker a
+        // nanoid-ordered list would be the one surface that disagreed.
+        const rows = await db.vehicles
+          .where('tripId')
+          .equals(currentTripId)
+          .toArray();
+
+        return rows.sort((left, right) => {
+          const byName = left.name.localeCompare(right.name);
+          return byName === 0 ? left.id.localeCompare(right.id) : byName;
+        });
       } catch (err) {
         setError(err instanceof Error ? err : new Error('Failed to load vehicles'));
         return [];

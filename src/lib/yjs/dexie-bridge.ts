@@ -254,6 +254,31 @@ function buildGuestRecord(
 }
 
 /**
+ * Coerces a peer-supplied value to a string before anything calls `.trim()`.
+ *
+ * `sanitizeText` and `sanitizeOptionalText` are written for form data, where a
+ * string is a type guarantee. The document is not form data: a peer, an older
+ * build or a newer one can put a number under `notes`, and `value.trim is not a
+ * function` thrown inside the projection's transaction rolls back the whole
+ * trip — every guest, room, assignment, transport, ride and vehicle — and the
+ * catch swallows it. The trip then silently stops receiving remote changes for
+ * as long as that one field survives.
+ *
+ * AGENTS.md states the rule this restores: drop an invalid record individually,
+ * never let one bad item abort a transaction that carries the rest.
+ */
+function boundedString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+/** {@link boundedString} for an optional field: a non-string reads as absent. */
+function optionalBoundedText(value: unknown, maxLength: number): string | undefined {
+  return typeof value === 'string'
+    ? sanitizeOptionalText(value, maxLength)
+    : undefined;
+}
+
+/**
  * Projects one ride out of the document, bounding what the log carried.
  *
  * A ride arrives from another member's device and has passed no form of ours.
@@ -270,12 +295,22 @@ function buildGuestRecord(
  * @param tripId - The local trip id, which is the only write key
  * @returns A bounded row ready for Dexie
  */
-function buildRideRecord(ride: SharedRecord, tripId: TripId): Ride {
+function buildRideRecord(ride: SharedRecord, tripId: TripId): Ride | undefined {
   const row = { ...ride, tripId } as Ride;
 
-  row.location = sanitizeText(String(row.location ?? ''), MAX_LENGTHS.rideLocation);
+  // `meetDatetime` is the second component of `[tripId+meetDatetime]`, the index
+  // every ride read in the app uses. A non-string one is not merely wrong data:
+  // IndexedDB files it outside the range those reads scan, so the row becomes
+  // invisible to the context, the repository, the analytics read *and* to
+  // `syncDocToDexie`'s own delete-candidate query — which means nothing can ever
+  // remove it either. Drop the record instead of storing an unreachable one.
+  if (typeof row.meetDatetime !== 'string' || row.meetDatetime.length === 0) {
+    return undefined;
+  }
+
+  row.location = sanitizeText(boundedString(row.location), MAX_LENGTHS.rideLocation);
   row.leadTimeMinutes = normalizeLeadTimeMinutes(row.leadTimeMinutes);
-  row.notes = sanitizeOptionalText(row.notes, MAX_LENGTHS.rideNotes);
+  row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.rideNotes);
 
   if (!RIDE_DIRECTIONS.includes(row.direction)) {
     row.direction = 'pickup';
@@ -300,13 +335,13 @@ function buildRideRecord(ride: SharedRecord, tripId: TripId): Ride {
 function buildVehicleRecord(vehicle: SharedRecord, tripId: TripId): Vehicle {
   const row = { ...vehicle, tripId } as Vehicle;
 
-  row.name = sanitizeText(String(row.name ?? ''), MAX_LENGTHS.vehicleName);
+  row.name = sanitizeText(boundedString(row.name), MAX_LENGTHS.vehicleName);
   row.seatCount = normalizeSeatCount(row.seatCount);
-  row.luggageNotes = sanitizeOptionalText(
+  row.luggageNotes = optionalBoundedText(
     row.luggageNotes,
     MAX_LENGTHS.vehicleLuggageNotes,
   );
-  row.notes = sanitizeOptionalText(row.notes, MAX_LENGTHS.vehicleNotes);
+  row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.vehicleNotes);
 
   row.childSeats = Array.isArray(row.childSeats)
     ? normalizeChildSeats(
@@ -544,9 +579,9 @@ export async function syncDocToDexie(
         const nextTransport = readCollection(doc, 'transport').map(
           (transport) => ({ ...transport, tripId } as Transport),
         );
-        const nextRides = readCollection(doc, 'rides').map((ride) =>
-          buildRideRecord(ride, tripId),
-        );
+        const nextRides = readCollection(doc, 'rides')
+          .map((ride) => buildRideRecord(ride, tripId))
+          .filter((ride): ride is Ride => ride !== undefined);
         const nextVehicles = readCollection(doc, 'vehicles').map((vehicle) =>
           buildVehicleRecord(vehicle, tripId),
         );
