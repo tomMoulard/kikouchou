@@ -9,6 +9,7 @@
 // Components
 // ============================================================================
 
+export { GuestIdentitySelector } from './components/GuestIdentitySelector';
 export { ThemeSelector } from './components/ThemeSelector';
 
 // ============================================================================

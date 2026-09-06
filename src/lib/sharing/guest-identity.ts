@@ -109,3 +109,67 @@ export function getTripGuestPersonId(
   const identity = readGuestIdentity(trip.shareId);
   return identity && identity.tripId === trip.id ? identity.personId : undefined;
 }
+
+/**
+ * Persists the guest identity for a share link.
+ *
+ * Storage can refuse the write — private browsing, disabled cookies, a full
+ * quota — and the caller has something to say about it, so this reports the
+ * failure rather than swallowing it the way a read's is. The onboarding wizard
+ * warns the guest they will have to pick again next visit; the settings card
+ * says the same.
+ *
+ * @param shareId - The trip's share ID
+ * @param identity - The participant this browser is, and the trip it belongs to
+ * @returns True when the identity was written, false when storage refused it
+ *
+ * @example
+ * ```typescript
+ * if (!writeGuestIdentity(trip.shareId, { personId, tripId: trip.id })) {
+ *   toast.error(t('sharing.identityStorageFailed'));
+ * }
+ * ```
+ */
+export function writeGuestIdentity(
+  shareId: ShareId | string,
+  identity: StoredGuestIdentity,
+): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    window.localStorage.setItem(
+      getGuestIdentityStorageKey(shareId),
+      JSON.stringify(identity),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Forgets the guest identity stored for a share link.
+ *
+ * Removing the key is the only way to say "nobody in particular". Writing an
+ * identity with an empty `personId` would not do it: the payload still parses,
+ * so every consumer goes on believing this browser is somebody and resolves it
+ * to a guest that does not exist.
+ *
+ * @param shareId - The trip's share ID
+ * @returns True when the key was removed or was already absent, false when
+ *   storage refused
+ */
+export function clearGuestIdentity(shareId: ShareId | string): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    window.localStorage.removeItem(getGuestIdentityStorageKey(shareId));
+    return true;
+  } catch {
+    return false;
+  }
+}

@@ -34,6 +34,7 @@ import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { AccountSection } from '@/features/auth/components/AccountSection';
+import { GuestIdentitySelector } from '@/features/settings/components/GuestIdentitySelector';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
 import { TripForm } from '@/features/trips/components/TripForm';
 import { useTripContext } from '@/contexts/TripContext';
@@ -483,6 +484,7 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
  *
  * Features:
  * - Current trip: edit or delete, with loading, error and empty states
+ * - Guest identity: which guest this browser is on the current trip
  * - Account: sign in with Google, sign out
  * - Language selector (French/English)
  * - Theme selector (light/dark/system)
@@ -514,6 +516,10 @@ function SettingsPageComponent(): ReactElement {
       <div className="mt-6 space-y-6">
         {/* Current Trip Section — carries its own loading, error and empty states */}
         <CurrentTripSection />
+
+        {/* Which guest this browser is — directly under the trip it belongs to,
+            because the answer is per trip and means nothing without one. */}
+        <GuestIdentitySelector />
 
         {/* Account Section */}
         <AccountCard />

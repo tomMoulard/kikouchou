@@ -941,7 +941,19 @@
     "noTripsYetDescription": "Create your first trip and its name, dates and location become editable here.",
     "chooseTrip": "Choose a trip",
     "createFirstTrip": "Create a trip",
-    "unsavedTripChanges": "You have unsaved changes"
+    "unsavedTripChanges": "You have unsaved changes",
+    "guestIdentity": "Who you are",
+    "guestIdentityDescription": "Which guest this browser is, on the current trip",
+    "guestIdentityCurrent": "On this trip you are",
+    "guestIdentityNone": "Nobody in particular",
+    "guestIdentityChanged": "You are {{name}} on this trip",
+    "guestIdentityCleared": "You are nobody in particular now",
+    "guestIdentityLoading": "Loading guests…",
+    "guestIdentityNoTrip": "Open a trip to say which guest you are.",
+    "guestIdentityNoGuests": "This trip has no guests yet. Add yourself to the guest list first.",
+    "guestIdentityOpenGuests": "Open guests",
+    "guestIdentityMissing": "The guest you picked is no longer on this trip. Choose again.",
+    "guestIdentityHint": "Kept on this device only. It decides whose sign-ups and travel the trip pages offer to change."
   },
   "confirm": {
     "deleteTrip": "Delete this trip?",

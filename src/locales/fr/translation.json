@@ -941,7 +941,19 @@
     "noTripsYetDescription": "Créez votre premier voyage pour modifier ici son nom, ses dates et son lieu.",
     "chooseTrip": "Choisir un voyage",
     "createFirstTrip": "Créer un voyage",
-    "unsavedTripChanges": "Vous avez des modifications non enregistrées"
+    "unsavedTripChanges": "Vous avez des modifications non enregistrées",
+    "guestIdentity": "Qui vous êtes",
+    "guestIdentityDescription": "Quel participant est ce navigateur, sur le voyage actuel",
+    "guestIdentityCurrent": "Sur ce voyage, vous êtes",
+    "guestIdentityNone": "Personne en particulier",
+    "guestIdentityChanged": "Vous êtes {{name}} sur ce voyage",
+    "guestIdentityCleared": "Vous n'êtes plus personne en particulier",
+    "guestIdentityLoading": "Chargement des participants…",
+    "guestIdentityNoTrip": "Ouvrez un voyage pour indiquer quel participant vous êtes.",
+    "guestIdentityNoGuests": "Ce voyage n'a encore aucun participant. Ajoutez-vous d'abord à la liste.",
+    "guestIdentityOpenGuests": "Ouvrir les participants",
+    "guestIdentityMissing": "Le participant que vous aviez choisi ne fait plus partie du voyage. Choisissez à nouveau.",
+    "guestIdentityHint": "Conservé sur cet appareil uniquement. Détermine les inscriptions et les trajets que les pages du voyage vous proposent de modifier."
   },
   "confirm": {
     "deleteTrip": "Supprimer ce voyage ?",

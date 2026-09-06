@@ -135,6 +135,12 @@ vi.mock('@/features/auth/components/AccountSection', () => ({
   AccountSection: () => <div data-testid="account-section" />,
 }));
 
+// Same reason for the guest identity card — it needs PersonProvider — and its
+// own states live in features/settings/components/__tests__.
+vi.mock('@/features/settings/components/GuestIdentitySelector', () => ({
+  GuestIdentitySelector: () => <div data-testid="guest-identity-selector" />,
+}));
+
 // Mock ConfirmDialog to capture confirm callback and onOpenChange
 vi.mock('@/components/shared/ConfirmDialog', () => ({
   ConfirmDialog: ({ open, onConfirm, onOpenChange }: { open: boolean; onConfirm: () => Promise<void>; onOpenChange?: (o: boolean) => void }) =>
@@ -186,6 +192,11 @@ describe('SettingsPage', () => {
   it('mounts the account panel', () => {
     render(<SettingsPage />, { withProviders: false });
     expect(screen.getByTestId('account-section')).toBeInTheDocument();
+  });
+
+  it('mounts the guest identity card', () => {
+    render(<SettingsPage />, { withProviders: false });
+    expect(screen.getByTestId('guest-identity-selector')).toBeInTheDocument();
   });
 
   it('renders current trip section when trip is selected', () => {
