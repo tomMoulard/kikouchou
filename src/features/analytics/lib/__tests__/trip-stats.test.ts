@@ -192,6 +192,21 @@ describe('loadTripStats', () => {
     expect(stats.transportCount).toBe(2);
   });
 
+  it('counts a legacy self-driven leg as the journey every view draws', async () => {
+    // What the share wizard writes when a guest says they will have a car:
+    // a leg naming itself as its own driver, with no `Ride` row anywhere.
+    // Counting `db.rides` would report zero journeys on a trip whose transport
+    // list draws one.
+    await db.transports.bulkPut([
+      transport('t1', TRIP_A, { personId: 'p1', driverId: 'p1' }),
+    ]);
+
+    const stats = await loadTripStats(TRIP_A, NOW);
+
+    expect(stats.rideCount).toBe(1);
+    expect(stats.transportCount).toBe(1);
+  });
+
   it('returns zeros for a trip with no rows', async () => {
     const stats = await loadTripStats(TRIP_A, NOW);
 

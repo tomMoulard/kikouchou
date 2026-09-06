@@ -290,6 +290,13 @@ const TransportCard = memo(function TransportCard({
    showNeedsPickupBadge =
     transport.needsPickup && !isLegCovered(transport, drivenRideIds),
 
+  // The traveller driving their own leg. `resolveRides()` derives the same
+  // thing for a real ride and calls it `isSelfDriven`; this is the legacy
+  // shape of it, and the share wizard writes exactly that when a guest says
+  // they will have a car of their own. Named as a driver, Alice would appear
+  // on her own card as the person collecting Alice.
+   isSelfDriven = driver !== undefined && driver.id === transport.personId,
+
   // Build aria-label for accessibility
    ariaLabel = useMemo(() => {
     const parts = [
@@ -302,11 +309,13 @@ const TransportCard = memo(function TransportCard({
     if (showNeedsPickupBadge) {
       parts.push(t('transports.needsPickup'));
     }
-    if (driver) {
+    if (isSelfDriven) {
+      parts.push(t('rides.selfDriven'));
+    } else if (driver) {
       parts.push(`${t('transports.driver')}: ${driver.name}`);
     }
     return parts.filter(Boolean).join(', ');
-  }, [transport, person, driver, date, time, t, showNeedsPickupBadge]);
+  }, [transport, person, driver, date, time, t, showNeedsPickupBadge, isSelfDriven]);
 
   return (
     <Card
@@ -349,8 +358,10 @@ const TransportCard = memo(function TransportCard({
                 {t('transports.needsPickup')}
               </Badge>
             )}
-            {/* Show driver badge when driver is assigned (pickup resolved) */}
-            {driver && transport.needsPickup && (
+            {/* Show driver badge when driver is assigned (pickup resolved) —
+                unless the driver is the traveller, which is not a pickup being
+                resolved but somebody getting themselves there. */}
+            {driver && !isSelfDriven && transport.needsPickup && (
               <Badge
                 variant="outline"
                 className={cn('shrink-0', statusVariants({ tone: 'success' }))}
@@ -421,8 +432,16 @@ const TransportCard = memo(function TransportCard({
           </div>
         )}
 
+        {/* Somebody is driving this leg, and it is the traveller themselves. */}
+        {isSelfDriven && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <User className="size-4 shrink-0" aria-hidden="true" />
+            <span>{t('rides.selfDriven')}</span>
+          </div>
+        )}
+
         {/* Driver - only show in content if not already shown in badge (badge shown when needsPickup is true) */}
-        {driver && !transport.needsPickup && (
+        {driver && !isSelfDriven && !transport.needsPickup && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <User className="size-4 shrink-0" aria-hidden="true" />
             <span>{t('transports.driver')}:</span>

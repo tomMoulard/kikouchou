@@ -178,7 +178,7 @@ test.describe('a car shared by several guests', () => {
     await expect(page.getByText(TEXT.needsPickup)).toHaveCount(0);
   });
 
-  // Waiting on feat/rides-on-transport-list: nothing renders a ride card yet.
+  // Waiting on #54 (feat/rides-on-transport-list): no ride card on this base.
   test.fixme('three guests in one ride render as one car, not three', async ({ page }) => {
     const { tripId } = await seedEmptyTrip(page, 'Three Guests Trip');
     const alice = await seedPerson(page, tripId, 'Alice');
@@ -229,7 +229,7 @@ test.describe('a car shared by several guests', () => {
 // ============================================================================
 
 test.describe('a ride driven by one of its passengers', () => {
-  // Waiting on feat/rides-on-transport-list: nothing renders a ride card yet.
+  // Waiting on #54 (feat/rides-on-transport-list): no ride card on this base.
   test.fixme('reads as self-driven rather than naming a chauffeur', async ({ page }) => {
     // Tom and Aurélia fly in and take the hire car on from the airport. Nothing
     // stores "self-driven": it is derived from the driver owning one of the
@@ -277,7 +277,8 @@ test.describe('a ride driven by one of its passengers', () => {
 // ============================================================================
 
 test.describe('a car with a capacity', () => {
-  // Waiting on feat/ride-capacity-warnings: no capacity surface renders yet.
+  // Waiting on #50 (feat/ride-capacity-warnings): the badge exists there but
+  // no card consumes it yet, so nothing renders on this base.
   test.fixme('warns when the passengers outnumber the seats, counting people', async ({
     page,
   }) => {
@@ -325,7 +326,8 @@ test.describe('a car with a capacity', () => {
 // ============================================================================
 
 test.describe('a child who needs a seat', () => {
-  // Waiting on feat/ride-capacity-warnings: no child-seat shortfall renders yet.
+  // Waiting on #50 (feat/ride-capacity-warnings), same reason: the shortfall is
+  // computed there and drawn by nothing on this base.
   test.fixme('names the restraint the car is short of', async ({ page }) => {
     // Léa needs a booster and the Clio carries a rear-facing seat and nothing
     // else. "This car is not suitable" would be useless: the parent needs to
@@ -368,7 +370,7 @@ test.describe('a child who needs a seat', () => {
 // ============================================================================
 
 test.describe('an identified guest filtering to their own travel', () => {
-  // Waiting on feat/transport-scope-filter: the scope switch does not exist yet.
+  // Waiting on feat/transport-scope-filter: no scope switch exists on this base.
   test.fixme('the mine scope hides another guest\'s leg, and the switch brings it back', async ({
     page,
   }) => {
@@ -461,7 +463,8 @@ test.describe('a passenger moving their pickup time', () => {
     return { tripId, shareId, driver: guillaume, passenger: alice };
   }
 
-  // Waiting on feat/pickup-change-feed: no moved-leg notice renders yet.
+  // Waiting on #51 (feat/ride-mismatch-resolution): the notice is standalone
+  // there and reaches no page on this base.
   test.fixme('is reported to the driver, who is the only one who can act on it', async ({
     page,
   }) => {
@@ -473,7 +476,7 @@ test.describe('a passenger moving their pickup time', () => {
     await expect(page.getByText(TEXT.aliceMovedTwoHours)).toBeVisible();
   });
 
-  // Waiting on feat/pickup-change-feed too, and fixme'd although it is green:
+  // Waiting on #51 too, and fixme'd although it is green:
   // with no notice rendered anywhere the assertion cannot fail, and a test that
   // cannot fail is worse than one that says why it is skipped.
   test.fixme('is not reported to a passenger, who would only be alarmed by it', async ({

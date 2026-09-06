@@ -293,9 +293,16 @@ describe('TransportForm', () => {
     // Instead, test error display via the existing mock shape
   });
 
-  it('re-derives needsPickup on save, even for a record that had it set', async () => {
-    // Consequence of inferring it: a stored `needsPickup` with nobody driving
-    // is not represented in the form any more, so saving clears it.
+  it('keeps a stored needsPickup on save, since no field represents it', async () => {
+    // It used to clear it, and that was a real loss rather than a quirk: a
+    // guest self-entering their arrival through the share wizard can say they
+    // need a lift, which is a `needsPickup` with nobody driving yet — the one
+    // state this form has no field for. The organiser opening that leg to fix
+    // a station name silently answered "no, they don't", dropping the guest
+    // out of the pickup panel and out of `pickupsNeedingDriver`.
+    //
+    // Inference still *sets* the flag when a driver is picked. It just never
+    // unsets one it cannot see.
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
@@ -319,6 +326,36 @@ describe('TransportForm', () => {
     );
 
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+
+    await user.click(screen.getByText('common.save'));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ needsPickup: true }),
+    );
+  });
+
+  it('leaves needsPickup false for a record that never had it', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const transport = {
+      id: 't1' as import('@/types').Transport['id'],
+      tripId: 't1' as import('@/types').Transport['tripId'],
+      personId: 'p1' as import('@/types').Transport['personId'],
+      type: 'arrival' as const,
+      datetime: '2027-07-15T14:00:00.000Z' as import('@/types').Transport['datetime'],
+      location: 'Station',
+      needsPickup: false,
+    };
+    render(
+      <TransportForm
+        transport={transport}
+        persons={mockPersons}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+      { withProviders: false },
+    );
 
     await user.click(screen.getByText('common.save'));
 

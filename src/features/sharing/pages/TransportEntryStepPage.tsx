@@ -115,22 +115,30 @@ type TravelPlan = 'lift' | 'driving' | 'ownWay';
 const TRAVEL_PLANS: readonly {
   readonly plan: TravelPlan;
   readonly labelKey: string;
+  readonly label: string;
   readonly hintKey: string;
+  readonly hint: string;
 }[] = [
   {
     plan: 'lift',
     labelKey: 'sharing.transportPlanLift',
+    label: 'I need a lift',
     hintKey: 'sharing.transportPlanLiftHint',
+    hint: 'Somebody from the house drives out to meet you.',
   },
   {
     plan: 'driving',
     labelKey: 'sharing.transportPlanDriving',
+    label: "I'll be driving",
     hintKey: 'sharing.transportPlanDrivingHint',
+    hint: "You'll have a car, so nobody has to come and get you.",
   },
   {
     plan: 'ownWay',
     labelKey: 'sharing.transportPlanOwnWay',
+    label: "I'll make my own way",
     hintKey: 'sharing.transportPlanOwnWayHint',
+    hint: 'Taxi, bus, or a lift from outside the group.',
   },
 ] as const;
 
@@ -689,7 +697,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
                 disabled={isSubmitting}
                 aria-label={t('sharing.transportPlan', 'Getting to the house')}
               >
-                {TRAVEL_PLANS.map(({ plan, labelKey, hintKey }) => (
+                {TRAVEL_PLANS.map(({ plan, labelKey, label, hintKey, hint }) => (
                   <div key={plan} className="flex items-start gap-3">
                     <RadioGroupItem
                       value={plan}
@@ -701,9 +709,9 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
                         htmlFor={`transport-plan-${plan}`}
                         className="cursor-pointer text-sm font-medium text-warning-on-surface"
                       >
-                        {t(labelKey)}
+                        {t(labelKey, label)}
                       </Label>
-                      <p className="text-xs text-muted-foreground">{t(hintKey)}</p>
+                      <p className="text-xs text-muted-foreground">{t(hintKey, hint)}</p>
                     </div>
                   </div>
                 ))}

@@ -115,6 +115,11 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
     retry();
   }, [checkConnection, retry]);
 
+  // Cars are on this line for the same reason they are in `isTripStatsEmpty`:
+  // a trip can hold the hire car months before anybody's train times exist, and
+  // a row reading "0 people · 0 rooms · 0 transport legs · 0 assignments" under
+  // totals that count that car is the wall of zeros the empty state avoids,
+  // moved one section down.
   const rowSummary = useCallback(
     (stats: TripStats): string =>
       [
@@ -122,6 +127,8 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
         t('analytics.countRooms', { count: stats.roomCount }),
         t('analytics.countTransports', { count: stats.transportCount }),
         t('analytics.countAssignments', { count: stats.assignmentCount }),
+        t('analytics.countRides', { count: stats.rideCount }),
+        t('analytics.countVehicles', { count: stats.vehicleCount }),
       ].join(HINT_SEPARATOR),
     [t],
   );

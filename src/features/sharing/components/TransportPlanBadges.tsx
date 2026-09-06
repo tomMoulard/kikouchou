@@ -8,12 +8,21 @@
  * entering the trip still said nothing at all.
  *
  * Everything below is read from the leg itself, never from a {@link Ride}. The
- * wizard runs on a device that reached the trip through a share link, and
- * neither `Ride` nor `Vehicle` travels in a QR changeset yet, so a badge that
- * needed a ride row would be blank on exactly the devices this screen runs on.
- * A leg sitting in a ride whose row this device does not hold therefore shows
- * no driver badge rather than a guessed one: not knowing who is driving and
- * knowing that nobody is are different things to tell somebody.
+ * wizard runs outside `AppProviders` on a device that reached the trip through
+ * a share link, and neither `Ride` nor `Vehicle` travels in a QR changeset yet,
+ * so a badge that needed a ride row would be blank on exactly the devices this
+ * screen runs on.
+ *
+ * That cuts both ways, and both directions are deliberate. A leg sitting in a
+ * ride whose row this device does not hold shows **no driver badge** rather
+ * than a guessed one — not knowing who is driving and knowing that nobody is
+ * are different things to tell somebody. And it still shows **"Needs pickup"**,
+ * because from this device's knowledge that is true: the guest asked to be
+ * collected and there is no evidence here that anybody has agreed to. The
+ * trip's own transport list, which does hold the rides, will say otherwise;
+ * the two disagree only in the sense that they know different things, and the
+ * alternative — suppressing a real request on the strength of an id this
+ * device cannot resolve — is the one that loses somebody a lift.
  *
  * @module features/sharing/components/TransportPlanBadges
  */
