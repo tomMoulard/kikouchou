@@ -178,10 +178,13 @@ describe('LocationPicker', () => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
       });
 
-      expect(screen.getAllByRole('option')).toHaveLength(3);
+      // Three places, plus the "use what I typed" row that always closes the
+      // list — a place the geocoder does not know is still enterable.
+      expect(screen.getAllByRole('option')).toHaveLength(4);
+      expect(screen.getByText('locationPicker.useTyped')).toBeInTheDocument();
     });
 
-    it('shows no results message when empty', async () => {
+    it('offers the typed text when the geocoder knows nothing', async () => {
       fetchMock.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve([]),
@@ -195,9 +198,13 @@ describe('LocationPicker', () => {
 
       await act(() => { vi.advanceTimersByTime(350); });
 
+      // "No locations found" used to be the whole answer here, and it was a
+      // dead end: `onChange` fired only on a confirmed result, so a place the
+      // geocoder does not know could not be entered at all.
       await waitFor(() => {
-        expect(screen.getByText('locationPicker.noResults')).toBeInTheDocument();
+        expect(screen.getByText('locationPicker.useTyped')).toBeInTheDocument();
       });
+      expect(screen.queryByText('locationPicker.noResults')).not.toBeInTheDocument();
     });
 
     it('shows loading state during search', async () => {
@@ -448,8 +455,11 @@ describe('LocationPicker', () => {
         expect(screen.getByRole('listbox')).toBeInTheDocument();
       });
 
-      // Move down past last item
-      await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}');
+      // Three places and the typed row, so five presses wrap back to the top.
+      // The typed row is part of the cycle deliberately: a keyboard user has to
+      // be able to reach it, and it is the only way to enter a place the
+      // geocoder does not know.
+      await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}');
 
       const firstOption = screen.getAllByRole('option')[0];
       expect(firstOption).toHaveAttribute('aria-selected', 'true');
@@ -648,6 +658,94 @@ describe('LocationPicker', () => {
       render(<LocationPicker value="Paris" onChange={mockOnChange} disabled />);
 
       expect(screen.queryByLabelText('locationPicker.clear')).not.toBeInTheDocument();
+    });
+  });
+
+  // ==========================================================================
+  // Using the Typed Text
+  // ==========================================================================
+
+  describe('using what was typed', () => {
+    it('reports the text with no coordinates', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LocationPicker value="" onChange={mockOnChange} />);
+
+      await user.type(screen.getByRole('combobox'), 'chez Mamie');
+      await act(() => { vi.advanceTimersByTime(350); });
+
+      await waitFor(() => {
+        expect(screen.getByText('locationPicker.useTyped')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByText('locationPicker.useTyped'));
+
+      // Undefined, not omitted and not a guess. A location with no coordinates
+      // is a first-class state everywhere downstream — it is what every
+      // transport had before geocoding existed.
+      expect(mockOnChange).toHaveBeenCalledWith('chez Mamie', undefined);
+    });
+
+    it('trims what it commits', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LocationPicker value="" onChange={mockOnChange} />);
+
+      await user.type(screen.getByRole('combobox'), '  chez Mamie  ');
+      await act(() => { vi.advanceTimersByTime(350); });
+
+      await waitFor(() => {
+        expect(screen.getByText('locationPicker.useTyped')).toBeInTheDocument();
+      });
+      await user.click(screen.getByText('locationPicker.useTyped'));
+
+      // The value is stored and rendered as a place name, and a trailing space
+      // is not part of one.
+      expect(mockOnChange).toHaveBeenCalledWith('chez Mamie', undefined);
+    });
+
+    it('skips the map confirmation, because there is no pin to nudge', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LocationPicker value="" onChange={mockOnChange} />);
+
+      await user.type(screen.getByRole('combobox'), 'chez Mamie');
+      await act(() => { vi.advanceTimersByTime(350); });
+
+      await waitFor(() => {
+        expect(screen.getByText('locationPicker.useTyped')).toBeInTheDocument();
+      });
+      await user.click(screen.getByText('locationPicker.useTyped'));
+
+      // Confirming a *search result* opens a map so the user can drag the pin
+      // the geocoder placed. There is no pin here, and an empty map asking to
+      // be confirmed would be a step that does nothing.
+      expect(screen.queryByText('locationPicker.confirmLocation')).not.toBeInTheDocument();
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    });
+
+    it('is reachable below the last place with the keyboard', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LocationPicker value="" onChange={mockOnChange} />);
+
+      await user.type(screen.getByRole('combobox'), 'Paris');
+      await act(() => { vi.advanceTimersByTime(350); });
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      // Past the three places is the typed row; Enter there takes the text.
+      await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}{Enter}');
+
+      expect(mockOnChange).toHaveBeenCalledWith('Paris', undefined);
+    });
+
+    it('offers nothing when the field is only whitespace', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LocationPicker value="" onChange={mockOnChange} />);
+
+      await user.type(screen.getByRole('combobox'), '   ');
+      await act(() => { vi.advanceTimersByTime(350); });
+
+      expect(screen.queryByText('locationPicker.useTyped')).not.toBeInTheDocument();
     });
   });
 });

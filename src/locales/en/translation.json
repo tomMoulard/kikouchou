@@ -1094,7 +1094,9 @@
     "searchError": "Search failed. Please try again.",
     "timeoutError": "Search timed out. Please try again.",
     "dragToAdjust": "Drag marker or click to adjust location",
-    "confirmLocation": "Confirm"
+    "confirmLocation": "Confirm",
+    "useTyped": "Use “{{value}}”",
+    "useTypedHint": "Kept as written, with no place on the map"
   },
   "colors": {
     "red": "Red",

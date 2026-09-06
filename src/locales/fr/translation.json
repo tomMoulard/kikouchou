@@ -1094,7 +1094,9 @@
     "searchError": "La recherche a échoué. Veuillez réessayer.",
     "timeoutError": "La recherche a expiré. Veuillez réessayer.",
     "dragToAdjust": "Glissez le marqueur ou cliquez pour ajuster",
-    "confirmLocation": "Confirmer"
+    "confirmLocation": "Confirmer",
+    "useTyped": "Utiliser « {{value}} »",
+    "useTypedHint": "Conservé tel quel, sans position sur la carte"
   },
   "colors": {
     "red": "Rouge",

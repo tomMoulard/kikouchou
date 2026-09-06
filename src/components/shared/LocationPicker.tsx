@@ -16,7 +16,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, MapPin, X } from 'lucide-react';
+import { Loader2, MapPin, TextCursorInput, X } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -139,7 +139,11 @@ export const LocationPicker = memo(function LocationPicker({
   const search = useCallback(async (query: string) => {
     if (query.length < GEOCODING_MIN_QUERY_LENGTH) {
       setResults([]);
-      setIsOpen(false);
+      // Still opened for anything the user has actually typed, because the
+      // "use what I typed" row lives in this list and a two-letter place name
+      // is exactly the kind the geocoder was never going to know.
+      setIsOpen(query.trim().length > 0);
+      setHighlightedIndex(-1);
       return;
     }
 
@@ -221,6 +225,22 @@ export const LocationPicker = memo(function LocationPicker({
     [debouncedSearch]
   );
 
+  /**
+   * What "use what I typed" would commit, or empty when there is nothing.
+   *
+   * Trimmed, because the value is stored and rendered as a place name and a
+   * trailing space is not part of one.
+   */
+  const typedValue = inputValue.trim();
+
+  /**
+   * How many rows the dropdown is offering, the typed one included.
+   *
+   * The keyboard walks this, not `results`: the typed row sits at index
+   * `results.length`, so arrowing past the last place reaches it.
+   */
+  const optionCount = results.length + (typedValue.length > 0 ? 1 : 0);
+
   const handleSelect = useCallback(
     (place: GeocodingPlace) => {
       // Set pending selection to show map preview
@@ -273,11 +293,31 @@ export const LocationPicker = memo(function LocationPicker({
     inputRef.current?.focus();
   }, [onChange]);
 
+  /**
+   * Commits the typed text as the location, with no coordinates.
+   *
+   * The map confirmation step is skipped deliberately: it exists to let the
+   * user nudge a pin the geocoder placed, and there is no pin. A location
+   * without coordinates is a first-class state everywhere downstream — it is
+   * what every transport had before geocoding existed — so this loses nothing
+   * except the map.
+   */
+  const handleUseTyped = useCallback(() => {
+    if (typedValue.length === 0) {
+      return;
+    }
+    setInputValue(typedValue);
+    setResults([]);
+    setIsOpen(false);
+    setHighlightedIndex(-1);
+    onChange(typedValue, undefined);
+  }, [onChange, typedValue]);
+
   const handleInputFocus = useCallback(() => {
-    if (results.length > 0) {
+    if (optionCount > 0) {
       setIsOpen(true);
     }
-  }, [results.length]);
+  }, [optionCount]);
 
   const handleInputBlur = useCallback(() => {
     // Delay closing to allow click on results
@@ -289,31 +329,33 @@ export const LocationPicker = memo(function LocationPicker({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
-      if (!isOpen || results.length === 0) {
+      if (!isOpen || optionCount === 0) {
         return;
       }
 
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault();
-          setHighlightedIndex((prev) =>
-            prev < results.length - 1 ? prev + 1 : 0
-          );
+          setHighlightedIndex((prev) => (prev < optionCount - 1 ? prev + 1 : 0));
           break;
         case 'ArrowUp':
           e.preventDefault();
-          setHighlightedIndex((prev) =>
-            prev > 0 ? prev - 1 : results.length - 1
-          );
+          setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : optionCount - 1));
           break;
         case 'Enter':
           e.preventDefault();
-          if (highlightedIndex >= 0 && highlightedIndex < results.length) {
+          if (highlightedIndex < 0) {
+            break;
+          }
+          if (highlightedIndex < results.length) {
             const result = results[highlightedIndex];
             if (result) {
               handleSelect(result);
             }
+            break;
           }
+          // Past the last place is the typed row.
+          handleUseTyped();
           break;
         case 'Escape':
           e.preventDefault();
@@ -322,7 +364,7 @@ export const LocationPicker = memo(function LocationPicker({
           break;
       }
     },
-    [isOpen, results, highlightedIndex, handleSelect]
+    [isOpen, results, optionCount, highlightedIndex, handleSelect, handleUseTyped]
   );
 
   // ============================================================================
@@ -424,7 +466,7 @@ export const LocationPicker = memo(function LocationPicker({
       )}
 
       {/* Results dropdown */}
-      {isOpen && results.length > 0 && (
+      {isOpen && optionCount > 0 && (
         <ul
           ref={listRef}
           id={listboxId}
@@ -436,6 +478,7 @@ export const LocationPicker = memo(function LocationPicker({
             <li
               key={place.id}
               id={`${inputId}-option-${index}`}
+              data-testid="location-search-result"
               role="option"
               aria-selected={highlightedIndex === index}
               className={cn(
@@ -458,6 +501,54 @@ export const LocationPicker = memo(function LocationPicker({
               </p>
             </li>
           ))}
+
+          {/*
+            Take the text as written.
+
+            Not every meeting point is in OpenStreetMap — "chez Mamie", a car
+            park entrance, a friend's flat — and until this row existed those
+            were simply not enterable: `onChange` only ever fired when a search
+            result was confirmed, so typing a place and saving submitted an
+            empty location and the form said "Required". It also happens to be
+            the only way to enter anything at all while offline.
+
+            Last rather than first: when the geocoder does know the place, its
+            answer carries coordinates and belongs at the top. `onMouseDown`,
+            not `onClick`, to match the rows above — the input's blur handler
+            closes this list, and a click fires after that.
+
+            Both kinds of row carry a test id, because they are told apart by
+            *when* they appear rather than by what they say: this one is there
+            the moment there is text, a geocoded one only once the search comes
+            back. A browser test picking "the first option" silently gets
+            whichever won that race.
+          */}
+          {typedValue.length > 0 && (
+            <li
+              id={`${inputId}-option-${results.length}`}
+              data-testid="location-use-typed"
+              role="option"
+              aria-selected={highlightedIndex === results.length}
+              className={cn(
+                'cursor-pointer border-t px-3 py-2 text-sm',
+                highlightedIndex === results.length
+                  ? 'bg-accent text-accent-foreground'
+                  : 'hover:bg-accent/50',
+              )}
+              onMouseDown={handleUseTyped}
+              onMouseEnter={() => setHighlightedIndex(results.length)}
+            >
+              <div className="flex items-center gap-2">
+                <TextCursorInput className="size-4 shrink-0" aria-hidden="true" />
+                <span className="truncate font-medium">
+                  {t('locationPicker.useTyped', { value: typedValue })}
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t('locationPicker.useTypedHint')}
+              </p>
+            </li>
+          )}
         </ul>
       )}
 
@@ -465,6 +556,7 @@ export const LocationPicker = memo(function LocationPicker({
       {isOpen &&
         results.length === 0 &&
         !isLoading &&
+        typedValue.length === 0 &&
         inputValue.length >= GEOCODING_MIN_QUERY_LENGTH && (
         <div
           className="absolute z-50 mt-1 w-full rounded-md border bg-popover p-3 text-sm text-muted-foreground shadow-md"

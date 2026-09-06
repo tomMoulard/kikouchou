@@ -46,6 +46,7 @@ const LABELS = {
   confirmDelete: /^delete$|^supprimer$/i,
   actions: /^actions/i,
   dragToRide: /drag onto a ride|glisser vers un trajet/i,
+  useTyped: /^use “|^utiliser «/i,
 } as const;
 
 /** A meeting time inside the fixture month, as the datetime-local input wants it. */
@@ -153,7 +154,15 @@ async function pickMeetingPoint(page: Page, name: string): Promise<void> {
   await field.press('ControlOrMeta+a');
   await field.pressSequentially(name, { delay: 20 });
 
-  await page.getByRole('option', { name: new RegExp(name, 'i') }).first().click();
+  // The *search result*, addressed by its own test id. "The first option" is
+  // a race: the "use what I typed" row is there as soon as there is text,
+  // while a geocoded row waits on the network, so a positional locator picks
+  // whichever won — and the typed row commits without a map to confirm.
+  await page
+    .getByTestId('location-search-result')
+    .filter({ hasText: new RegExp(name, 'i') })
+    .first()
+    .click();
   await page.getByRole('button', { name: LABELS.confirmLocation }).click();
   await expect(page.getByRole('button', { name: LABELS.confirmLocation })).toHaveCount(0);
 }
@@ -422,5 +431,36 @@ test.describe('arranging a car journey', () => {
         }, transportId),
       )
       .toBe(rideId);
+  });
+
+  test('a meeting point the geocoder has never heard of can still be saved', async ({
+    page,
+  }) => {
+    const tripId = await openTransports(page);
+
+    // The stub answers every search with "Gare de Vannes", so a name it cannot
+    // possibly match is what proves the typed row rather than a lucky result.
+    await page.route('**/nominatim.openstreetmap.org/**', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+
+    await page.getByRole('button', { name: LABELS.newRide }).first().click();
+    await page.getByLabel(LABELS.meetDatetime).fill(MEET_LOCAL);
+
+    const field = page.getByLabel(LABELS.meetingPoint);
+    await field.click();
+    await field.pressSequentially('chez Mamie', { delay: 20 });
+
+    // Before this row existed the form said "Required" no matter what was
+    // typed, because a location only ever reached it through a confirmed
+    // search result — which made an informal meeting point, and anything at
+    // all offline, impossible to enter.
+    await page.getByTestId('location-use-typed').click();
+
+    await page.getByRole('button', { name: LABELS.save }).click();
+
+    await expect
+      .poll(async () => (await storedRides(page, tripId)).map((r) => r.location))
+      .toEqual(['chez Mamie']);
   });
 });
