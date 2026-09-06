@@ -270,6 +270,8 @@
     "moreDetails": "Plus de détails",
     "headcount": "Nombre de personnes",
     "headcountHint": "Combien de personnes cette fiche représente — mettez 2 pour un duo comme « Alice+Auré ». Les comptages de repas s'appuient dessus.",
+    "childSeatHint": "Créez une fiche à part pour l'enfant qui a besoin d'un siège — une voiture compte un siège par fiche, quel que soit le nombre de personnes qu'elle représente.",
+    "childSeatDisclaimer": "L'application enregistre ce que vous choisissez et ne le confronte à la réglementation d'aucun pays.",
     "headcountBadge_one": "{{count}} personne",
     "headcountBadge_other": "{{count}} personnes",
     "headcountSummary_one": "Compte pour {{count}} personne",

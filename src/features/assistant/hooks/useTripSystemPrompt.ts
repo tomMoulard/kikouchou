@@ -234,8 +234,9 @@ function formatActivityLine(
 }
 
 /**
- * Builds the guest line, including headcount, phone and notes so the assistant
- * can answer catering, accessibility and "who do I call" questions.
+ * Builds the guest line, including headcount, phone, notes and child seat so
+ * the assistant can answer catering, accessibility, "who do I call" and "whose
+ * car has to carry a booster" questions.
  */
 function formatGuestLine(person: Person): string {
   // A guest with no dates of their own is here for the whole trip, the way the
@@ -251,8 +252,10 @@ function formatGuestLine(person: Person): string {
   const notes = person.notes
     ? ` — notes: ${toPromptText(person.notes)}`
     : '';
+  // Costs nothing on the roster it is absent from, which is most of them.
+  const childSeat = person.childSeat ? ` — child seat: ${person.childSeat}` : '';
 
-  return `- "${toPromptText(person.name)}" (id: ${person.id})${stay}${headcountLabel}${phone}${notes}`;
+  return `- "${toPromptText(person.name)}" (id: ${person.id})${stay}${headcountLabel}${phone}${notes}${childSeat}`;
 }
 
 // ============================================================================

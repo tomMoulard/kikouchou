@@ -190,6 +190,12 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         description: 'Allergies, diet, accessibility…',
         example: 'Vegetarian',
       },
+      childSeat: {
+        type: 'string',
+        required: false,
+        description: 'Child seat needed: rearFacing, forwardFacing or booster',
+        example: 'booster',
+      },
     },
   },
   {

@@ -8,7 +8,12 @@
  */
 
 import { db } from '@/lib/db/database';
-import { MAX_LENGTHS, sanitizeOptionalText, sanitizePersonData } from '@/lib/db/sanitize';
+import {
+  MAX_LENGTHS,
+  normalizeChildSeat,
+  sanitizeOptionalText,
+  sanitizePersonData,
+} from '@/lib/db/sanitize';
 import { createPersonId } from '@/lib/db/utils';
 import type { Person, PersonFormData, PersonId, TripId } from '@/types';
 import { getDefaultPersonColor, normalizePersonHeadcount } from '@/types';
@@ -156,6 +161,9 @@ export async function updatePerson(
   }
   if (sanitizedData.headcount !== undefined) {
     sanitizedData.headcount = normalizePersonHeadcount(sanitizedData.headcount);
+  }
+  if (sanitizedData.childSeat !== undefined) {
+    sanitizedData.childSeat = normalizeChildSeat(sanitizedData.childSeat);
   }
   // Note: color field is not sanitized (it's a hex color, not free text)
 
@@ -317,6 +325,9 @@ export async function updatePersonWithOwnershipCheck(
     }
     if (patch.headcount !== undefined) {
       patch.headcount = normalizePersonHeadcount(patch.headcount);
+    }
+    if (patch.childSeat !== undefined) {
+      patch.childSeat = normalizeChildSeat(patch.childSeat);
     }
 
     await db.persons.update(id, patch);

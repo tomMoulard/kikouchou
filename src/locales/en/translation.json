@@ -270,6 +270,8 @@
     "moreDetails": "More details",
     "headcount": "Number of people",
     "headcountHint": "How many people this entry stands for — use 2 for a couple like \"Alice+Auré\". Meal headcounts use this.",
+    "childSeatHint": "Give a child who needs a seat their own guest entry — a car counts one seat per entry, whatever number of people it stands for.",
+    "childSeatDisclaimer": "The app records what you pick and checks it against no country's rules.",
     "headcountBadge_one": "{{count}} person",
     "headcountBadge_other": "{{count}} people",
     "headcountSummary_one": "Counts as {{count}} person",

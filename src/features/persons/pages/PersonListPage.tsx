@@ -32,6 +32,7 @@ import { type Locale, format, parseISO } from 'date-fns';
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Baby,
   Phone,
   Plus,
   Trash2,
@@ -212,6 +213,9 @@ const PersonCard = memo(function PersonCard({
     if (headcount > 1) {
       parts.push(t('persons.headcountSummary', 'Counts as {{count}} people', { count: headcount }));
     }
+    if (person.childSeat) {
+      parts.push(`${t('childSeats.label')}: ${t(`childSeats.${person.childSeat}`)}`);
+    }
     return parts.join(', ');
   }, [dateLocale, person, roomsDisplay, stayRangeLabel, transportSummary.departure, transportSummary.arrival, t]),
 
@@ -297,6 +301,16 @@ const PersonCard = memo(function PersonCard({
       </CardHeader>
 
       <CardContent className="pt-0 space-y-2">
+        {/* The declared child restraint. A badge rather than a labelled row:
+            it is the one thing on this card a driver scans the roster for. */}
+        {person.childSeat && (
+          <p>
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              <Baby className="size-3 shrink-0" aria-hidden="true" />
+              {t(`childSeats.${person.childSeat}`)}
+            </span>
+          </p>
+        )}
         {stayRangeLabel && (
           <p className="text-sm text-muted-foreground">
             <span className="font-medium text-foreground">{t('persons.stayDates')}</span>
@@ -360,7 +374,7 @@ const PersonCard = memo(function PersonCard({
           <div
             className={cn(
               'text-sm',
-              (stayRangeLabel || roomsDisplay || hasTransportInfo) &&
+              (person.childSeat || stayRangeLabel || roomsDisplay || hasTransportInfo) &&
                 'mt-2 border-t border-muted/60 pt-2',
             )}
           >
@@ -385,7 +399,11 @@ const PersonCard = memo(function PersonCard({
           <div
             className={cn(
               'text-sm text-muted-foreground',
-              (stayRangeLabel || roomsDisplay || hasTransportInfo || trimmedPhone) &&
+              (person.childSeat ||
+                stayRangeLabel ||
+                roomsDisplay ||
+                hasTransportInfo ||
+                trimmedPhone) &&
                 'mt-2 border-t border-muted/60 pt-2',
             )}
           >

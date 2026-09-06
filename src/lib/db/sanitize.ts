@@ -20,6 +20,7 @@ import {
   MIN_VEHICLE_SEAT_COUNT,
   normalizePersonHeadcount,
 } from '@/types';
+import type { ChildSeatKind } from '@/types';
 
 // ============================================================================
 // Constants - Maximum Lengths
@@ -179,11 +180,22 @@ export function sanitizeRoomData<T extends { name: string; description?: string 
 /**
  * Sanitizes person form data.
  *
+ * `childSeat` is bounded here rather than only at the form, for the same reason
+ * a vehicle's seat list is: a guest also arrives from a QR changeset, from a
+ * peer's document and from the assistant's own JSON, and none of those has ever
+ * seen a `<select>`.
+ *
  * @param data - Person form data to sanitize
  * @returns Sanitized person form data
  */
 export function sanitizePersonData<
-  T extends { name: string; notes?: string; phone?: string; headcount?: number },
+  T extends {
+    name: string;
+    notes?: string;
+    phone?: string;
+    headcount?: number;
+    childSeat?: string;
+  },
 >(data: T): T {
   return {
     ...data,
@@ -192,6 +204,7 @@ export function sanitizePersonData<
     phone: sanitizeOptionalText(data.phone, MAX_LENGTHS.personPhone),
     headcount:
       data.headcount === undefined ? undefined : normalizePersonHeadcount(data.headcount),
+    childSeat: normalizeChildSeat(data.childSeat),
   };
 }
 
@@ -219,6 +232,7 @@ export function sanitizeGuestGroupData<
       notes?: string;
       phone?: string;
       headcount?: number;
+      childSeat?: string;
     }[];
   },
 >(data: T): T {
@@ -409,6 +423,23 @@ export function normalizeChildSeats<T extends readonly string[]>(
       (CHILD_SEAT_KINDS as readonly string[]).includes(kind),
     )
     .slice(0, MAX_VEHICLE_SEAT_COUNT) as unknown as T;
+}
+
+/**
+ * Keeps a guest's declared child-seat kind only when this build knows it.
+ *
+ * Unknown reads as "no seat needed" rather than aborting the guest: the guest
+ * is what the trip is about, and losing one badge is recoverable in a way that
+ * losing the person is not. The same reasoning as {@link normalizeChildSeats},
+ * one guest at a time.
+ *
+ * @param value - The raw kind, from a form, a peer or an imported changeset
+ * @returns A known kind, or undefined when absent or unrecognised
+ */
+export function normalizeChildSeat(value: string | undefined): ChildSeatKind | undefined {
+  return value !== undefined && (CHILD_SEAT_KINDS as readonly string[]).includes(value)
+    ? (value as ChildSeatKind)
+    : undefined;
 }
 
 /**

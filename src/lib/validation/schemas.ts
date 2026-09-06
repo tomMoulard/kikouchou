@@ -484,6 +484,7 @@ export const ActivityFormDataSchema = z
  * - headcount: optional, whole number between 1 and 99
  * - notes: optional, max 2000 characters
  * - phone: optional, max 32 characters
+ * - childSeat: optional, one of the known child seat kinds
  */
 export const GuestGroupMemberFormDataSchema = z.object({
   name: z
@@ -505,6 +506,7 @@ export const GuestGroupMemberFormDataSchema = z.object({
     .string()
     .max(32, 'Phone number must be 32 characters or less')
     .optional(),
+  childSeat: childSeatKindSchema.optional(),
 });
 
 /**
