@@ -3,6 +3,17 @@
  * prominent alert cards. Pickups at the same station within a time window
  * are grouped for combined trip planning.
  *
+ * The grouping is the app saying "these three could share a car", so this panel
+ * is also where that suggestion becomes one: a group turns into a {@link Ride}
+ * in a single tap, and volunteering to drive a lone pickup creates the car
+ * around it. Nothing here writes `Transport.driverId` any more — that field is
+ * the pre-ride shape, kept readable and never written.
+ *
+ * Membership always travels through `setTransportRide`, one scalar on the
+ * passenger's own leg. Writing a passenger list on the ride instead would merge
+ * badly: two guests joining the same car while both offline would come back
+ * with only one of the joins.
+ *
  * @module features/transports/components/UpcomingPickups
  */
 
@@ -10,7 +21,9 @@ import {
   type ReactElement,
   memo,
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -22,6 +35,7 @@ import {
   ArrowUpFromLine,
   Car,
   Clock,
+  Loader2,
   MapPin,
   Users,
 } from 'lucide-react';
@@ -52,12 +66,28 @@ import { useTransportContext } from '@/contexts/TransportContext';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatTransportDatetime } from '@/lib/utils/datetime-format';
+import { RidePickerDialog } from '@/features/transports/components/RidePickerDialog';
 import {
   DEFAULT_TIME_WINDOW_MINUTES,
+  type PickupGroup,
   groupPickupsByProximity,
   selectPickupsNeedingDriver,
 } from '@/features/transports/utils/pickup-utils';
-import type { Person, PersonId, Transport, TransportId } from '@/types';
+import {
+  type RideSuggestion,
+  rideDirectionForLeg,
+  selectJoinableRides,
+  suggestRidesForGroup,
+} from '@/features/transports/utils/ride-suggestion';
+import {
+  DEFAULT_LEAD_TIME_MINUTES,
+  type Person,
+  type PersonId,
+  type Ride,
+  type RideId,
+  type Transport,
+  type TransportId,
+} from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -83,6 +113,16 @@ interface PickupAlertCardProps {
   readonly dateLocale: Locale;
   /** Callback to volunteer to drive */
   readonly onVolunteer: (transportId: TransportId) => void;
+  /**
+   * Whether any existing car goes the same way to the same place.
+   *
+   * The offer is hidden rather than disabled when there is none: a button that
+   * opens an empty list is a dead end, and this card already carries the action
+   * that creates the car instead.
+   */
+  readonly canJoinRide: boolean;
+  /** Callback to open the picker of cars this leg could join */
+  readonly onJoinRide: (transportId: TransportId) => void;
 }
 
 /**
@@ -215,6 +255,20 @@ function getUrgencyClasses(
   }
 }
 
+/**
+ * Identifies one "build a car from this group" action while it is in flight.
+ *
+ * A mixed group offers two of them, so the direction is part of the key: the
+ * arrivals button has to keep working while the departures one spins.
+ *
+ * @param group - The proximity group
+ * @param direction - The suggested car's direction
+ * @returns A key unique to that button
+ */
+function groupActionKey(group: PickupGroup, direction: RideSuggestion['direction']): string {
+  return `${group.station}|${group.startTime}|${direction}`;
+}
+
 // ============================================================================
 // DriverSelectDialog Subcomponent
 // ============================================================================
@@ -335,6 +389,8 @@ const PickupAlertCard = memo(function PickupAlertCard({
   person,
   dateLocale,
   onVolunteer,
+  canJoinRide,
+  onJoinRide,
 }: PickupAlertCardProps): ReactElement {
   const { t } = useTranslation();
 
@@ -349,6 +405,10 @@ const PickupAlertCard = memo(function PickupAlertCard({
   const handleVolunteer = useCallback(() => {
     onVolunteer(transport.id);
   }, [transport.id, onVolunteer]);
+
+  const handleJoinRide = useCallback(() => {
+    onJoinRide(transport.id);
+  }, [transport.id, onJoinRide]);
 
   return (
     <div
@@ -424,6 +484,19 @@ const PickupAlertCard = memo(function PickupAlertCard({
         <Car className="size-4 mr-2" aria-hidden="true" />
         {t('pickups.volunteerDrive')}
       </Button>
+
+      {/* Join a car that is already going there */}
+      {canJoinRide && (
+        <Button
+          onClick={handleJoinRide}
+          size="default"
+          className="w-full h-11 md:h-9 mt-2"
+          variant="outline"
+        >
+          <Users className="size-4 mr-2" aria-hidden="true" />
+          {t('pickups.addToRide')}
+        </Button>
+      )}
     </div>
   );
 });
@@ -437,10 +510,12 @@ const PickupAlertCard = memo(function PickupAlertCard({
  * Groups nearby pickups (same station, similar time) for combined trip planning.
  *
  * Features:
- * - Filters to show ONLY unassigned pickups (needsPickup && !driverId)
+ * - Filters to show ONLY the pickups nobody is driving yet
  * - Alert-style cards with amber/warning styling
- * - "Volunteer to drive" button with person selector dialog
- * - Station/time grouping with "Combined trip" badge
+ * - Station/time grouping with "Combined trip" badge, and a one-tap action that
+ *   turns a group into a car with every one of its legs inside
+ * - "Volunteer to drive", which arranges a car rather than writing a `driverId`
+ * - "Add to an existing car" on a leg, over the cars already going that way
  * - Renders nothing when there are no unassigned upcoming pickups
  * - Animated removal when pickup is resolved
  * - Full i18n support
@@ -452,19 +527,35 @@ const UpcomingPickups = memo(function UpcomingPickups({
   className,
 }: UpcomingPickupsProps): ReactElement | null {
   const { t, i18n } = useTranslation();
-  const { upcomingPickups, updateTransport } = useTransportContext(),
+  const { upcomingPickups, nowMs } = useTransportContext(),
     // A leg sitting in a ride somebody has volunteered for is not unassigned,
     // even though the leg itself carries no `driverId`.
-    { rides } = useRideContext();
+    { rides, createRide, updateRide, setTransportRide } = useRideContext();
   const { persons } = usePersonContext();
   const { successToast } = useOfflineAwareToast();
 
   // Dialog state
   const [driverDialogOpen, setDriverDialogOpen] = useState(false);
   const [selectedTransport, setSelectedTransport] = useState<Transport | null>(null);
+  const [joinDialogOpen, setJoinDialogOpen] = useState(false);
+  const [joinTransport, setJoinTransport] = useState<Transport | null>(null);
+
+  // Which "build a car for this group" button is in flight, or null.
+  const [buildingRideKey, setBuildingRideKey] = useState<string | null>(null);
 
   // Track recently resolved pickups for animation (transport ID -> driver name)
   const [resolvingMap, setResolvingMap] = useState<Map<TransportId, string>>(new Map());
+
+  // Set on setup, not only in cleanup: StrictMode's mount → cleanup → mount
+  // would otherwise latch this false forever and freeze the optimistic
+  // "resolving" card the moment a driver is chosen.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Get date locale
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
@@ -477,6 +568,26 @@ const UpcomingPickups = memo(function UpcomingPickups({
     }
     return map;
   }, [persons]);
+
+  // Rides by id, so volunteering can tell "this leg is already in a car nobody
+  // drives" from "this leg has no car at all" without a scan per click.
+  //
+  // Both readings go through this map rather than through `Transport.rideId`
+  // alone: a leg can name a ride this device does not hold — legs travel on the
+  // QR-changeset path and rides do not yet — and treating that as membership
+  // would aim every write at a car that is not there.
+  const ridesById = useMemo(() => {
+    const map = new Map<RideId, Ride>();
+    for (const ride of rides) {
+      map.set(ride.id, ride);
+    }
+    return map;
+  }, [rides]);
+
+  const knownRideIds = useMemo(
+    () => new Set<string>(ridesById.keys()),
+    [ridesById],
+  );
 
   // The one answer to "which pickups still need a driver" — shared with the
   // transport list's alert gate and the analytics badge, so the number in the
@@ -494,7 +605,50 @@ const UpcomingPickups = memo(function UpcomingPickups({
     [pickupsNeedingDriver],
   );
 
+  // Each group alongside the car — or, for a mixed arrival/departure group, the
+  // two cars — it implies. Read once here so the buttons and the handler that
+  // acts on them can never disagree about which legs are in which car.
+  const groupPlans = useMemo(
+    () =>
+      pickupGroups.map((group) => ({
+        group,
+        suggestions: suggestRidesForGroup(group, knownRideIds),
+      })),
+    [pickupGroups, knownRideIds],
+  );
+
+  // The cars each waiting leg could still be added to. Computed for the whole
+  // list rather than on demand, so a card only offers the action when the
+  // picker it opens would have something in it.
+  const joinableRidesByTransport = useMemo(() => {
+    const map = new Map<TransportId, readonly Ride[]>();
+    for (const pickup of pickupsNeedingDriver) {
+      const candidates = selectJoinableRides(rides, pickup, nowMs);
+      if (candidates.length > 0) {
+        map.set(pickup.id, candidates);
+      }
+    }
+    return map;
+  }, [pickupsNeedingDriver, rides, nowMs]);
+
+  const joinableRides = useMemo(
+    () =>
+      joinTransport === null
+        ? []
+        : (joinableRidesByTransport.get(joinTransport.id) ?? []),
+    [joinTransport, joinableRidesByTransport],
+  );
+
   const unassignedCount = pickupsNeedingDriver.length;
+
+  /** Drops a pickup out of the optimistic "resolving" state. */
+  const stopResolving = useCallback((transportId: TransportId) => {
+    setResolvingMap((prev) => {
+      const next = new Map(prev);
+      next.delete(transportId);
+      return next;
+    });
+  }, []);
 
   // Handle volunteer button click - open driver selector
   const handleVolunteer = useCallback(
@@ -508,41 +662,158 @@ const UpcomingPickups = memo(function UpcomingPickups({
     [pickupsNeedingDriver],
   );
 
-  // Handle driver confirmed
+  /**
+   * Turns a proximity group into one car, then puts every leg of it inside.
+   *
+   * The ride is created first and kept whatever happens next: a car carrying
+   * two of its three passengers is something the user can finish from the ride
+   * card, whereas undoing the ride because the third write failed throws away
+   * the arrangement they just made. Each leg is attached on its own so one
+   * refusal does not take the rest of the group with it — and a group that
+   * already has a car half-filled extends that car rather than starting a
+   * second one beside it.
+   */
+  const handleBuildRide = useCallback(
+    async (group: PickupGroup, suggestion: RideSuggestion) => {
+      setBuildingRideKey(groupActionKey(group, suggestion.direction));
+
+      try {
+        const rideId =
+          suggestion.existingRideId ??
+          (
+            await createRide({
+              direction: suggestion.direction,
+              meetDatetime: suggestion.meetDatetime,
+              location: suggestion.location,
+              leadTimeMinutes: DEFAULT_LEAD_TIME_MINUTES,
+            })
+          ).id;
+
+        const boarding = suggestion.legs.filter((leg) => leg.rideId !== rideId);
+        let attached = 0;
+
+        for (const leg of boarding) {
+          try {
+            await setTransportRide(leg.id, rideId);
+            attached += 1;
+          } catch (error) {
+            console.error('Failed to put a pickup in the new ride:', error);
+          }
+        }
+
+        if (attached === boarding.length) {
+          successToast(t('pickups.rideCreated'));
+        } else {
+          toast.error(t('pickups.rideCreatedPartial'));
+        }
+      } catch (error) {
+        console.error('Failed to build a ride from a pickup group:', error);
+        toast.error(t('errors.saveFailed'));
+      } finally {
+        if (isMountedRef.current) {
+          setBuildingRideKey(null);
+        }
+      }
+    },
+    [createRide, setTransportRide, successToast, t],
+  );
+
+  // Handle "add to an existing car" click - open the ride picker
+  const handleJoinRide = useCallback(
+    (transportId: TransportId) => {
+      const transport = pickupsNeedingDriver.find((p) => p.id === transportId);
+      if (transport) {
+        setJoinTransport(transport);
+        setJoinDialogOpen(true);
+      }
+    },
+    [pickupsNeedingDriver],
+  );
+
+  // Handle a car chosen in the picker
+  const handleJoinConfirm = useCallback(
+    async (transportId: TransportId, rideId: RideId) => {
+      setJoinDialogOpen(false);
+
+      try {
+        await setTransportRide(transportId, rideId);
+        successToast(t('pickups.addedToRide'));
+      } catch (error) {
+        console.error('Failed to add a pickup to a ride:', error);
+        toast.error(t('errors.saveFailed'));
+      }
+    },
+    [setTransportRide, successToast, t],
+  );
+
+  /**
+   * Handles a volunteered driver.
+   *
+   * Volunteering arranges a *car*, never a `Transport.driverId`: that field is
+   * the pre-ride shape and nothing writes it any more. A leg already sitting in
+   * a driverless car gains its driver there — so the passengers already in it
+   * keep the lift they were promised — and a leg with no car at all gets one
+   * built around it.
+   */
   const handleDriverConfirm = useCallback(
     async (transportId: TransportId, driverId: PersonId) => {
+      const transport = pickupsNeedingDriver.find((p) => p.id === transportId);
+      if (!transport) {
+        return;
+      }
+
+      // Read the driver's name before the write, for the resolving card
+      const driverName = personsMap.get(driverId)?.name ?? t('pickups.volunteerSuccess');
+
+      // Mark as resolving for animation (store driver name for display)
+      setResolvingMap((prev) => new Map(prev).set(transportId, driverName));
+      setDriverDialogOpen(false);
+
       try {
-        // Get driver name before async operation for display during animation
-        const driver = personsMap.get(driverId);
-        const driverName = driver?.name ?? t('pickups.volunteerSuccess');
+        const existingRide =
+          transport.rideId === undefined ? undefined : ridesById.get(transport.rideId);
 
-        // Mark as resolving for animation (store driver name for display)
-        setResolvingMap((prev) => new Map(prev).set(transportId, driverName));
-        setDriverDialogOpen(false);
-
-        await updateTransport(transportId, { driverId });
+        if (existingRide !== undefined) {
+          await updateRide(existingRide.id, { driverId });
+        } else {
+          const ride = await createRide({
+            direction: rideDirectionForLeg(transport),
+            meetDatetime: transport.datetime,
+            location: transport.location,
+            leadTimeMinutes: DEFAULT_LEAD_TIME_MINUTES,
+            driverId,
+          });
+          // A failure here leaves an empty car with a driver in it rather than
+          // no car at all — recoverable from the ride card, and the toast below
+          // says the seat was not taken.
+          await setTransportRide(transportId, ride.id);
+        }
 
         successToast(t('pickups.volunteerSuccess'));
 
         // Show driver name briefly, then remove from resolving
         setTimeout(() => {
-          setResolvingMap((prev) => {
-            const next = new Map(prev);
-            next.delete(transportId);
-            return next;
-          });
+          if (isMountedRef.current) {
+            stopResolving(transportId);
+          }
         }, 2000);
       } catch (error) {
         console.error('Failed to assign driver:', error);
         toast.error(t('errors.saveFailed'));
-        setResolvingMap((prev) => {
-          const next = new Map(prev);
-          next.delete(transportId);
-          return next;
-        });
+        stopResolving(transportId);
       }
     },
-    [updateTransport, personsMap, t, successToast],
+    [
+      createRide,
+      updateRide,
+      setTransportRide,
+      ridesById,
+      personsMap,
+      pickupsNeedingDriver,
+      stopResolving,
+      t,
+      successToast,
+    ],
   );
 
   // No unassigned upcoming pickups (including "all covered" and empty)
@@ -569,8 +840,11 @@ const UpcomingPickups = memo(function UpcomingPickups({
 
       {/* Pickup groups */}
       <div className="space-y-4">
-        {pickupGroups.map((group) => {
+        {groupPlans.map(({ group, suggestions }) => {
           const isGrouped = group.pickups.length > 1;
+          // A group whose car exists keeps its cards — the car still needs a
+          // driver — but not the offer to build another one around it.
+          const buildable = suggestions.filter((each) => !each.isArranged);
 
           if (isGrouped) {
             // Grouped display with shared station header
@@ -609,6 +883,48 @@ const UpcomingPickups = memo(function UpcomingPickups({
                   {t('pickups.combinedTripHint')}
                 </p>
 
+                {/* A car cannot both fetch and drop off, so a group holding
+                    each says so rather than quietly arranging one of them. */}
+                {suggestions.length > 1 && buildable.length > 0 && (
+                  <p className="text-xs text-muted-foreground mb-3">
+                    {t('pickups.mixedDirections')}
+                  </p>
+                )}
+
+                {/* Build the car (or, for a mixed group, one per direction) */}
+                {buildable.length > 0 && (
+                  <div className="flex flex-col gap-2 mb-3 sm:flex-row">
+                    {buildable.map((suggestion) => {
+                      const isBuilding =
+                        buildingRideKey === groupActionKey(group, suggestion.direction);
+
+                      return (
+                        <Button
+                          key={suggestion.direction}
+                          onClick={() => void handleBuildRide(group, suggestion)}
+                          disabled={isBuilding}
+                          className="h-11 md:h-9 flex-1"
+                        >
+                          {isBuilding ? (
+                            <Loader2 className="size-4 mr-2 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Car className="size-4 mr-2" aria-hidden="true" />
+                          )}
+                          {/* Named per direction only when the group really
+                              implies two cars — `suggestions`, not the
+                              buildable subset, so a half-arranged mixed group
+                              still says which half this button covers. */}
+                          {suggestions.length === 1
+                            ? t('pickups.oneCar')
+                            : suggestion.direction === 'pickup'
+                              ? t('pickups.oneCarArrivals')
+                              : t('pickups.oneCarDepartures')}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 {/* Individual pickup cards within group */}
                 <div className="space-y-3">
                   {group.pickups.map((pickup) => {
@@ -637,6 +953,8 @@ const UpcomingPickups = memo(function UpcomingPickups({
                             person={personsMap.get(pickup.personId)}
                             dateLocale={dateLocale}
                             onVolunteer={handleVolunteer}
+                            canJoinRide={joinableRidesByTransport.has(pickup.id)}
+                            onJoinRide={handleJoinRide}
                           />
                         )}
                       </div>
@@ -674,6 +992,8 @@ const UpcomingPickups = memo(function UpcomingPickups({
                   person={personsMap.get(pickup.personId)}
                   dateLocale={dateLocale}
                   onVolunteer={handleVolunteer}
+                  canJoinRide={joinableRidesByTransport.has(pickup.id)}
+                  onJoinRide={handleJoinRide}
                 />
               )}
             </div>
@@ -689,6 +1009,17 @@ const UpcomingPickups = memo(function UpcomingPickups({
         pickupPerson={selectedTransport ? personsMap.get(selectedTransport.personId) : undefined}
         persons={persons}
         onConfirm={handleDriverConfirm}
+      />
+
+      {/* Picker of cars this pickup could join */}
+      <RidePickerDialog
+        open={joinDialogOpen}
+        onOpenChange={setJoinDialogOpen}
+        transport={joinTransport}
+        rides={joinableRides}
+        personsById={personsMap}
+        dateLocale={dateLocale}
+        onSelect={handleJoinConfirm}
       />
     </div>
   );

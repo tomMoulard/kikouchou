@@ -524,6 +524,16 @@
     "needsDriver": "Needs a driver",
     "unassignedCount_one": "{{count}} pickup needs a driver",
     "unassignedCount_other": "{{count}} pickups need a driver",
+    "oneCar": "Put them all in one car",
+    "oneCarArrivals": "One car for the arrivals",
+    "oneCarDepartures": "One car for the departures",
+    "mixedDirections": "Arrivals and departures cannot share a car — arrange one of each.",
+    "rideCreated": "Car arranged — everyone here is in it",
+    "rideCreatedPartial": "Car arranged, but some guests could not be added — try again from the car",
+    "addToRide": "Add to an existing car",
+    "addToRideDescription": "Cars already going to {{location}}",
+    "noJoinableRides": "No car is going that way yet",
+    "addedToRide": "Added to the car",
     "overdue": "Overdue"
   },
   "calendar": {
