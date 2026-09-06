@@ -24,6 +24,7 @@ import {
   sanitizeText,
 } from '@/lib/db/sanitize';
 import { isGuestPhoneSharingEnabled } from '@/lib/flags';
+import { hasValidCoordinates } from '@/lib/geocoding';
 import { toSharedGuest } from '@/lib/sharing/guest-privacy';
 import i18n from '@/lib/i18n';
 import {
@@ -225,6 +226,18 @@ function buildGuestRecord(
 ): Person {
   const person = { ...guest, tripId } as Person;
 
+  // A seat kind this build does not recognise is dropped rather than stored.
+  // It reaches `tallyRequiredChildSeats`, which indexes a tally by it, so an
+  // unknown value becomes a `NaN` under a bogus key and a newer peer's seat
+  // kind would render as "NaN hoverboard" on the ride card. Dropping it costs
+  // one badge; keeping it corrupts the tally for the whole car.
+  if (
+    person.childSeat !== undefined &&
+    !(CHILD_SEAT_KINDS as readonly unknown[]).includes(person.childSeat)
+  ) {
+    delete person.childSeat;
+  }
+
   if (person.phone !== undefined) {
     const boundedPhone = sanitizeOptionalText(person.phone, MAX_LENGTHS.personPhone);
     if (boundedPhone === undefined) {
@@ -279,6 +292,28 @@ function optionalBoundedText(value: unknown, maxLength: number): string | undefi
 }
 
 /**
+ * Keeps a peer-supplied pin only when it is somewhere on Earth.
+ *
+ * Delegates to `hasValidCoordinates`, which is what the trips map already
+ * filters with — rather than a fourth hand-rolled `typeof` pair, and rather
+ * than the looser `!isNaN` shape, which lets `null`, `Infinity` and a lat of
+ * 500 through. Those do not merely draw a wrong pin: they poison the centroid
+ * the map centres on and the bounds it fits, so one bad row pushes every real
+ * pin off the screen.
+ */
+function boundedCoordinates(
+  value: unknown,
+): { readonly lat: number; readonly lon: number } | undefined {
+  const candidate = value as
+    | { readonly lat?: unknown; readonly lon?: unknown }
+    | undefined;
+
+  return hasValidCoordinates(candidate)
+    ? { lat: candidate.lat, lon: candidate.lon }
+    : undefined;
+}
+
+/**
  * Projects one ride out of the document, bounding what the log carried.
  *
  * A ride arrives from another member's device and has passed no form of ours.
@@ -311,6 +346,7 @@ function buildRideRecord(ride: SharedRecord, tripId: TripId): Ride | undefined {
   row.location = sanitizeText(boundedString(row.location), MAX_LENGTHS.rideLocation);
   row.leadTimeMinutes = normalizeLeadTimeMinutes(row.leadTimeMinutes);
   row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.rideNotes);
+  row.coordinates = boundedCoordinates(row.coordinates);
 
   if (!RIDE_DIRECTIONS.includes(row.direction)) {
     row.direction = 'pickup';

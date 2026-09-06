@@ -327,7 +327,18 @@ export async function setTransportRide(
       }
     }
 
-    await db.transports.update(transportId, { rideId });
+    // Attaching also clears the legacy `driverId`, and that is the point rather
+    // than tidiness. The two representations would otherwise coexist on one
+    // record and disagree: a leg created before rides existed carries a driver
+    // of its own, `resolveRides` lets the ride win, and any surface that still
+    // reads the old field renders a second "Driver:" row naming somebody else.
+    // A guest looking at their own arrival could not tell which of the two
+    // people was actually fetching them.
+    //
+    // Detaching leaves it cleared. The ride became the authority the moment the
+    // leg joined one, and restoring a pre-ride driver nobody has confirmed
+    // since would be inventing an arrangement.
+    await db.transports.update(transportId, { rideId, driverId: undefined });
   });
 }
 

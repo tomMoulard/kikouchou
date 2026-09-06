@@ -93,7 +93,14 @@ export function tallyRequiredChildSeats(
   const tally: Record<ChildSeatKind, number> = { ...EMPTY_TALLY };
 
   for (const passenger of passengers) {
-    if (passenger.childSeat !== undefined) {
+    // Guarded rather than trusted, even though the type says otherwise: these
+    // guests come out of the shared document, where a peer or a newer build can
+    // put anything. An unknown kind would index a fresh key with `undefined + 1`
+    // and leave `NaN` in the tally the card renders.
+    if (
+      passenger.childSeat !== undefined &&
+      (CHILD_SEAT_KINDS as readonly unknown[]).includes(passenger.childSeat)
+    ) {
       tally[passenger.childSeat] += 1;
     }
   }
@@ -153,12 +160,19 @@ export function summariseRideCapacity(
       (total, leg) => total + resolveHeadcount(leg.transport.personId),
       0,
     ),
-    // Only when the driver is not already one of the passengers. `isSelfDriven`
+    // Keyed on `driverId`, not on the resolved `driver`. A driver this device
+    // cannot name is still a person in the car — the same reading
+    // `seatsFromLegs` already gives an unresolved passenger, and the same one
+    // `createHeadcountResolver` gives an orphaned assignment. Reading the
+    // resolved object instead made a full car report a free seat whenever the
+    // driver's guest row had not projected yet.
+    //
+    // Zero only when the driver is already one of the passengers. `isSelfDriven`
     // is exactly that question, derived from who owns the legs.
     driverSeats =
-      journey.driver === undefined || journey.isSelfDriven
+      journey.driverId === undefined || journey.isSelfDriven
         ? 0
-        : resolveHeadcount(journey.driver.id),
+        : resolveHeadcount(journey.driverId),
     seatsUsed = seatsFromLegs + driverSeats,
     seatsAvailable = journey.vehicle?.seatCount,
     requiredChildSeats = tallyRequiredChildSeats(

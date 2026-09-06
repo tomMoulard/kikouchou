@@ -322,6 +322,78 @@ describe('projecting rides and vehicles into Dexie', () => {
     expect(await db.rides.get('unreachable')).toBeUndefined();
   });
 
+  it('drops a child seat kind it does not recognise', async () => {
+    // A peer, or a newer build with a fourth restraint class, can put anything
+    // here. It reaches `tallyRequiredChildSeats`, which indexes a tally by it.
+    const doc = makeDoc();
+    replaceDocCollection(
+      doc,
+      'guests',
+      [
+        { id: 'g1', name: 'Jeanne', color: '#ef4444', childSeat: 'rearFacing' },
+        { id: 'g2', name: 'Alien', color: '#3b82f6', childSeat: 'hoverboard' },
+      ],
+      { allowDeletions: false },
+    );
+
+    await syncDocToDexie(doc, tripId);
+
+    expect((await db.persons.get('g1'))?.childSeat).toBe('rearFacing');
+    expect((await db.persons.get('g2'))?.childSeat).toBeUndefined();
+  });
+
+  it('drops a pin that is not somewhere on Earth', async () => {
+    // Not merely a wrong marker: an out-of-range or non-finite pin poisons the
+    // centroid the map centres on and the bounds it fits, so one bad row pushes
+    // every real pin off the screen.
+    const doc = makeDoc();
+    replaceDocCollection(
+      doc,
+      'rides',
+      [
+        {
+          id: 'good',
+          direction: 'pickup',
+          meetDatetime: '2026-07-15T15:02:00.000Z',
+          location: 'Lyon Part-Dieu',
+          coordinates: { lat: 45.7605, lon: 4.8598 },
+        },
+        {
+          id: 'null-pin',
+          direction: 'pickup',
+          meetDatetime: '2026-07-15T15:02:00.000Z',
+          location: 'Nowhere',
+          coordinates: null,
+        },
+        {
+          id: 'infinite',
+          direction: 'pickup',
+          meetDatetime: '2026-07-15T15:02:00.000Z',
+          location: 'Everywhere',
+          coordinates: { lat: Infinity, lon: 2.5 },
+        },
+        {
+          id: 'off-planet',
+          direction: 'pickup',
+          meetDatetime: '2026-07-15T15:02:00.000Z',
+          location: 'Orbit',
+          coordinates: { lat: 500, lon: 2.5 },
+        },
+      ],
+      { allowDeletions: false },
+    );
+
+    await syncDocToDexie(doc, tripId);
+
+    expect((await db.rides.get('good'))?.coordinates).toEqual({
+      lat: 45.7605,
+      lon: 4.8598,
+    });
+    for (const id of ['null-pin', 'infinite', 'off-planet']) {
+      expect((await db.rides.get(id))?.coordinates).toBeUndefined();
+    }
+  });
+
   it('never lets a remote row claim another trip', async () => {
     const doc = makeDoc();
     replaceDocCollection(

@@ -37,7 +37,13 @@ import { createRide } from '@/lib/db/repositories/ride-repository';
 import { createVehicle } from '@/lib/db/repositories/vehicle-repository';
 import { loadPersistedUpdates, syncDocToDexie } from '@/lib/yjs/dexie-bridge';
 import { readDocCollection } from '@/lib/yjs/doc-model';
-import { createTestTrip, render, screen, waitFor, waitForDb } from '@/test/utils';
+import {
+  createTestTrip,
+  render,
+  screen,
+  waitFor,
+  waitForTripDoc,
+} from '@/test/utils';
 import type { TripId } from '@/types';
 
 // ============================================================================
@@ -86,7 +92,14 @@ describe('a car arranged locally reaches the shared document', () => {
     await waitFor(() => {
       expect(screen.getByTestId('current-trip')).toHaveTextContent('Summer');
     });
-    await waitForDb();
+
+    // Wait for the document to have actually been seeded, not merely for the
+    // trip name to appear. `YjsTripSync` mounts, seeds the document from Dexie
+    // and projects it back, all asynchronously — and writing into that window
+    // races the projection's own transaction. This test failed roughly one run
+    // in three without it, which is worse than not having it: a flaky guard on
+    // a data-loss bug is a guard nobody trusts.
+    await waitForTripDoc(tripId);
 
     // The trip is open and its document is loaded. Now arrange a car — which is
     // what a user does *after* the trip is on screen, never before.

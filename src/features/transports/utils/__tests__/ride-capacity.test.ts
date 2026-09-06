@@ -174,6 +174,25 @@ describe('summariseRideCapacity — seats', () => {
     expect(summary.seatsUsed).toBe(2);
   });
 
+  it('counts a driver the trip cannot name as a person', () => {
+    // `driver` is undefined for two different reasons — nobody is driving, or
+    // somebody is and this device has not projected their row yet — and only
+    // the second is a body in the car. Reading the resolved object instead of
+    // the id made a full car report a free seat, while an unresolved
+    // *passenger* was already counted as one.
+    const persons = [makePerson('alice')];
+
+    const summary = summarise(persons, {
+      passengerIds: ['alice'],
+      driverId: 'not-yet-projected',
+      vehicle: makeVehicle({ seatCount: 2 }),
+    });
+
+    expect(summary.seatsUsed).toBe(2);
+    expect(summary.isFull).toBe(true);
+    expect(summary.seatsFree).toBe(0);
+  });
+
   it('raises nothing against a car whose seats are not set', () => {
     const persons = [makePerson('alice'), makePerson('tom'), makePerson('bob')];
 
@@ -262,6 +281,28 @@ describe('summariseRideCapacity — child seats', () => {
     });
 
     expect(summary.requiredChildSeats.rearFacing).toBe(1);
+  });
+
+  it('ignores a seat kind it does not recognise', () => {
+    // These guests come out of the shared document, where a peer or a newer
+    // build can put anything. Unguarded, the tally indexed a fresh key with
+    // `undefined + 1`, so the card rendered "NaN hoverboard" and the whole
+    // tally for that car became unreadable.
+    const alien = makePerson('alien', {
+      childSeat: 'hoverboard' as unknown as ChildSeatKind,
+    });
+
+    const summary = summarise([alien, jeanne], {
+      passengerIds: ['alien', 'jeanne'],
+      vehicle: makeVehicle({ childSeats: ['rearFacing'] }),
+    });
+
+    expect(summary.requiredChildSeats).toEqual({
+      rearFacing: 1,
+      forwardFacing: 0,
+      booster: 0,
+    });
+    expect(summary.childSeatShortfalls).toEqual([]);
   });
 
   it('raises no shortfall when no car is chosen', () => {

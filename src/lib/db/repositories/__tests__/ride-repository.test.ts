@@ -152,6 +152,26 @@ describe('membership', () => {
     expect(await getTransportIdsForRide(rideId)).toEqual([]);
   });
 
+  it('clears the legacy driver when a leg joins a car', async () => {
+    // Otherwise both representations sit on one record and disagree: the ride
+    // wins in `resolveRides`, but a surface still reading `transport.driverId`
+    // shows a second driver, and the guest cannot tell who is fetching them.
+    const rideId = await makeRide({ driverId: guillaume }),
+      legId = await createTransport(tripId, {
+        personId: alice,
+        type: 'arrival',
+        datetime: '2026-07-15T15:02:00.000Z',
+        location: 'Lyon Part-Dieu',
+        needsPickup: true,
+        driverId: guillaume,
+      });
+
+    await setTransportRide(legId.id, tripId, rideId);
+
+    expect((await db.transports.get(legId.id))?.driverId).toBeUndefined();
+    expect((await db.transports.get(legId.id))?.rideId).toBe(rideId);
+  });
+
   it('refuses to attach a leg to another trip’s ride', async () => {
     const other = await createTrip({
         name: 'Other',

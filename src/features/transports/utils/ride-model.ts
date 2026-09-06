@@ -94,7 +94,17 @@ export interface ResolvedRide {
   readonly leadTimeMinutes: number;
   /** When the driver must set off, epoch ms, or null when unplaceable. */
   readonly leaveAtMs: number | null;
+  /**
+   * The driver, when the trip still holds them.
+   *
+   * `undefined` means two different things — nobody is driving, or somebody is
+   * and this device cannot name them — so anything counting seats must read
+   * {@link driverId} instead. That distinction cost a seat: a car whose driver
+   * had not projected yet reported itself one place emptier than it was.
+   */
   readonly driver: Person | undefined;
+  /** Who is driving, whether or not this device can name them. */
+  readonly driverId: PersonId | undefined;
   readonly vehicle: Vehicle | undefined;
   readonly legs: readonly ResolvedLeg[];
   /**
@@ -165,24 +175,33 @@ function resolveLeg(
   };
 }
 
-/** Orders legs the way a driver reads them: earliest first, unplaceable last. */
+/**
+ * Orders legs the way a driver reads them: earliest first, unplaceable last.
+ *
+ * Decorate-sort-undecorate, because a comparator is called O(n log n) times and
+ * `toTransportInstant` is a full `parseISO`. `resolveLeg` has already parsed
+ * each datetime one step earlier to place the leg against the ride, so parsing
+ * again inside the comparison was doing the expensive part of the work
+ * `log n` times over. `sortRides` never had the problem — it compares the
+ * `meetAtMs` it was handed — which is the shape copied here.
+ */
 function sortLegs(legs: ResolvedLeg[]): ResolvedLeg[] {
-  return legs.sort((left, right) => {
-    const leftAt = toTransportInstant(left.transport.datetime),
-      rightAt = toTransportInstant(right.transport.datetime);
-
-    if (leftAt === null) {
-      return rightAt === null
-        ? left.transport.id.localeCompare(right.transport.id)
-        : 1;
-    }
-    if (rightAt === null) {
-      return -1;
-    }
-    return leftAt === rightAt
-      ? left.transport.id.localeCompare(right.transport.id)
-      : leftAt - rightAt;
-  });
+  return legs
+    .map((leg) => ({ leg, at: toTransportInstant(leg.transport.datetime) }))
+    .sort((left, right) => {
+      if (left.at === null) {
+        return right.at === null
+          ? left.leg.transport.id.localeCompare(right.leg.transport.id)
+          : 1;
+      }
+      if (right.at === null) {
+        return -1;
+      }
+      return left.at === right.at
+        ? left.leg.transport.id.localeCompare(right.leg.transport.id)
+        : left.at - right.at;
+    })
+    .map(({ leg }) => leg);
 }
 
 /** Orders journeys chronologically, unplaceable ones last. */
@@ -275,6 +294,7 @@ export function resolveRides(input: ResolveRidesInput): ResolvedRide[] {
       leaveAtMs: meetAtMs === null ? null : meetAtMs - leadTimeMinutes * 60_000,
       driver:
         ride.driverId === undefined ? undefined : personsById.get(ride.driverId),
+      driverId: ride.driverId,
       vehicle:
         ride.vehicleId === undefined ? undefined : vehiclesById.get(ride.vehicleId),
       legs,
@@ -306,6 +326,7 @@ export function resolveRides(input: ResolveRidesInput): ResolvedRide[] {
         transport.driverId === undefined
           ? undefined
           : personsById.get(transport.driverId),
+      driverId: transport.driverId,
       vehicle: undefined,
       legs: [
         {
