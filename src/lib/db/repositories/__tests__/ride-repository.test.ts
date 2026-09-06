@@ -22,7 +22,10 @@ import {
   setTransportRide,
   updateRideWithOwnershipCheck,
 } from '@/lib/db/repositories/ride-repository';
-import { createTransport } from '@/lib/db/repositories/transport-repository';
+import {
+  createTransport,
+  updateTransportWithOwnershipCheck,
+} from '@/lib/db/repositories/transport-repository';
 import {
   createVehicle,
   deleteVehicleWithOwnershipCheck,
@@ -170,6 +173,39 @@ describe('membership', () => {
 
     expect((await db.transports.get(legId.id))?.driverId).toBeUndefined();
     expect((await db.transports.get(legId.id))?.rideId).toBe(rideId);
+  });
+
+  it('takes a leg out of its car when a driver is named on the leg itself', async () => {
+    // The other half of the one-driver rule. Without it a leg carried both: the
+    // trip showed the ride's driver while any surface reading the leg showed the
+    // other one, and a driverless ride reported its passenger as covered.
+    const rideId = await makeRide({ driverId: guillaume }),
+      legId = await makeLeg(alice, rideId);
+
+    await updateTransportWithOwnershipCheck(legId as never, tripId, {
+      driverId: guillaume,
+    });
+
+    const leg = await db.transports.get(legId);
+    expect(leg?.driverId).toBe(guillaume);
+    expect(leg?.rideId).toBeUndefined();
+  });
+
+  it('keeps a leg in its car when an unrelated field is edited', async () => {
+    // A form saving a corrected station name sends `driverId: undefined` for a
+    // leg whose driver lives on its ride. That must not quietly remove the
+    // passenger from the car.
+    const rideId = await makeRide({ driverId: guillaume }),
+      legId = await makeLeg(alice, rideId);
+
+    await updateTransportWithOwnershipCheck(legId as never, tripId, {
+      location: 'Lyon Perrache',
+      driverId: undefined,
+    });
+
+    const leg = await db.transports.get(legId);
+    expect(leg?.location).toBe('Lyon Perrache');
+    expect(leg?.rideId).toBe(rideId);
   });
 
   it('refuses to attach a leg to another trip’s ride', async () => {
