@@ -31,7 +31,7 @@ import { toast } from 'sonner';
 import type { Locale } from 'date-fns';
 import { CalendarDays, ChevronDown, ChevronRight, History, Plus } from 'lucide-react';
 
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareToast, useTripIdentity } from '@/hooks';
 import { useToday } from '@/hooks/useToday';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -45,7 +45,6 @@ import { usePersonContext } from '@/contexts/PersonContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
-import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { cn } from '@/lib/utils';
 import type { Activity, ActivityId, ISODateString, Person, PersonId } from '@/types';
 
@@ -198,13 +197,15 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
   }, [persons]);
 
   /**
-   * The guest this browser identified as when opening a share link, if any.
-   * Owners of the trip have no stored identity and manage sign-ups in the form.
+   * The guest holding this device, from all three sources rather than one.
+   *
+   * This used to read the share-link identity directly, which meant the same
+   * person was somebody on the transport views and anonymous here: an organiser
+   * who picked themselves in Settings, or a guest who joined through an invite,
+   * had no share-link entry and so could not sign themselves up for an
+   * activity. `useTripIdentity` answers the question once, for every screen.
    */
-  const currentPersonId = useMemo(
-    () => getTripGuestPersonId(currentTrip),
-    [currentTrip],
-  );
+  const { myPersonId: currentPersonId } = useTripIdentity();
 
   /**
    * Day a new activity starts on: today while the trip is running, its first

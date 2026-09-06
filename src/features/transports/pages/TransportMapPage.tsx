@@ -10,6 +10,7 @@
  * - Person-colored markers option
  * - Click marker to see transport details in popup
  * - Fit bounds to show all markers
+ * - "Only mine" / "Everyone" scope filter, persisted in `?scope=`
  * - Empty state when no transports have coordinates
  *
  * @module features/transports/pages/TransportMapPage
@@ -60,6 +61,8 @@ import { statusVariants } from '@/components/ui/status.variants';
 import { createHeadcountResolver } from '@/features/rooms/utils/capacity-utils';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
 import { RideSummary } from '@/features/transports/components/RideSummary';
+import { TransportScopeFilter } from '@/features/transports/components/TransportScopeFilter';
+import { useTransportScope } from '@/features/transports/hooks/useTransportScope';
 import {
   collectDrivenRideIds,
   isLegCovered,
@@ -67,6 +70,7 @@ import {
 import { countRidePassengers } from '@/features/transports/utils/ride-capacity';
 import {
   resolveRides,
+  rideConcernsPerson,
   selectRideByLeg,
   type ResolvedRide,
 } from '@/features/transports/utils/ride-model';
@@ -418,6 +422,11 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
   const mapRef = useRef<MapViewRef>(null);
 
   // Combined loading state
+  // The rides count towards loading: `drivenRideIds` is empty until they land,
+  // so a paint taken before that shows the amber "needs pickup" chip on a leg
+  // whose car already has a volunteer — the contradiction `drivenRideIds` was
+  // added to remove, and the scope filter would meanwhile resolve no cars at
+  // all and hide the legs sharing mine.
   const isLoading =
     isTripLoading || isPersonsLoading || isTransportsLoading || isRidesLoading;
 
@@ -464,16 +473,39 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
   /** How many people a guest row stands for — never assume one. */
   const headcountOf = useMemo(() => createHeadcountResolver(persons), [persons]);
 
-  /** Journeys whose meeting point can be drawn. */
-  const mappableJourneys = useMemo(
-    () => journeys.filter(hasRideCoordinates),
-    [journeys],
-  );
+  // "Only mine" versus the whole trip, from `?scope=`. The hook resolves the
+  // cars from *every* transport on the trip, not from the pinned subset here —
+  // a leg without coordinates still puts its passenger in a car, and losing it
+  // would take the rest of that car off the map with it.
+  const {
+    scope,
+    canFilter: canFilterScope,
+    myPersonId,
+    visibleTransports,
+    hiddenCount,
+    setScope,
+  } = useTransportScope(transportsWithCoordinates);
+
+  /**
+   * Journeys whose meeting point can be drawn, under the scope in force.
+   *
+   * Filtered on the *journey*, not on the legs left visible: a car I am in is
+   * mine even on the day every one of my car-mates' legs is somebody else's
+   * row, and dropping its rendez-vous marker would leave the passenger lines
+   * pointing at nothing.
+   */
+  const mappableJourneys = useMemo(() => {
+    const drawable = journeys.filter(hasRideCoordinates);
+    if (scope === 'all' || myPersonId === undefined) {
+      return drawable;
+    }
+    return drawable.filter((journey) => rideConcernsPerson(journey, myPersonId));
+  }, [journeys, myPersonId, scope]);
 
   /** Line from start to end when both GPS points exist */
   const routePolylines = useMemo((): readonly MapPolylineData[] => {
     const lines: MapPolylineData[] = [];
-    for (const transport of transportsWithCoordinates) {
+    for (const transport of visibleTransports) {
       if (!hasStartCoordinates(transport)) continue;
       const start = transport.startCoordinates;
       if (!start) continue;
@@ -512,7 +544,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
     }
 
     return lines;
-  }, [mappableJourneys, transportsWithCoordinates]);
+  }, [mappableJourneys, visibleTransports]);
 
   // Create markers (optional start marker + end marker per transport)
   const drivenRideIds = useMemo(() => collectDrivenRideIds(rides), [rides]);
@@ -543,7 +575,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
       });
     }
 
-    for (const transport of transportsWithCoordinates) {
+    for (const transport of visibleTransports) {
       const person = personsMap.get(transport.personId);
       const { date, time } = formatTransportDatetimeParts(transport.datetime, dateLocale, 'dayAndTime');
 
@@ -656,7 +688,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
 
     return result;
   }, [
-    transportsWithCoordinates,
+    visibleTransports,
     mappableJourneys,
     rideByTransportId,
     personsMap,
@@ -850,6 +882,14 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
         action={headerAction}
       />
 
+      {/* Whose travel this map is showing, and what that is hiding */}
+      <TransportScopeFilter
+        scope={scope}
+        canFilter={canFilterScope}
+        hiddenCount={hiddenCount}
+        onScopeChange={setScope}
+      />
+
       {/*
         Map legend.
 
@@ -912,26 +952,45 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
         */}
         <div className="ml-auto text-xs">
           {t('transports.mappedCount', {
-            count: transportsWithCoordinates.length,
+            count: visibleTransports.length,
           })}
         </div>
       </div>
 
-      {/* Interactive Map */}
-      <div className="relative rounded-lg border border-border overflow-hidden">
-        <MapView
-          ref={mapRef}
-          center={mapCenter}
-          zoom={markers.length === 1 ? 14 : 10}
-          markers={markers}
-          polylines={routePolylines}
-          interactive={true}
-          showZoomControl={true}
-          showAttribution={true}
-          height={500}
-          aria-label={t('transports.mapAriaLabel', 'Map showing transport locations')}
-        />
-      </div>
+      {/*
+        A scope that pins nothing gets a sentence rather than an empty map: a
+        blank map reads as "the app lost your travel". The filter above already
+        carries the count and the way back, so this states the situation and
+        does not repeat the button.
+      */}
+      {visibleTransports.length === 0 && mappableJourneys.length === 0 ? (
+        <div className="flex min-h-[400px] items-center justify-center rounded-lg border">
+          <EmptyState
+            icon={MapPin}
+            title={t('transports.scope.empty', 'Nothing here concerns you')}
+            description={t(
+              'transports.scope.emptyDescription',
+              'None of this trip’s travel involves you. Switch to Everyone to see the whole trip.',
+            )}
+          />
+        </div>
+      ) : (
+        /* Interactive Map */
+        <div className="relative rounded-lg border border-border overflow-hidden">
+          <MapView
+            ref={mapRef}
+            center={mapCenter}
+            zoom={markers.length === 1 ? 14 : 10}
+            markers={markers}
+            polylines={routePolylines}
+            interactive={true}
+            showZoomControl={true}
+            showAttribution={true}
+            height={500}
+            aria-label={t('transports.mapAriaLabel', 'Map showing transport locations')}
+          />
+        </div>
+      )}
 
       {/* Mobile back to list button */}
       <div className="mt-4 sm:hidden">

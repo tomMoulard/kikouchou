@@ -425,7 +425,17 @@
     "backToList": "Back to list",
     "mappedCount_one": "{{count}} transport on the map",
     "mappedCount_other": "{{count}} transports on the map",
-    "mapAriaLabel": "Map showing transport locations"
+    "mapAriaLabel": "Map showing transport locations",
+    "scope": {
+      "label": "Whose transport to show",
+      "hidden_one": "{{count}} other transport hidden",
+      "hidden_other": "{{count}} other transports hidden",
+      "showAll": "Show everyone",
+      "unknownIdentity": "Tell the app which guest you are to see only your own travel.",
+      "chooseIdentity": "Choose in Settings",
+      "empty": "Nothing here concerns you",
+      "emptyDescription": "None of this trip’s travel involves you. Switch to Everyone to see the whole trip."
+    }
   },
   "activities": {
     "title": "Activities",
@@ -1241,6 +1251,11 @@
     "nobody": "Not set",
     "you": "You",
     "scopeMine": "Only mine",
-    "scopeAll": "Everyone"
+    "scopeAll": "Everyone",
+    "saved": "Saved on this device",
+    "noTrip": "Open a trip to say who you are on it.",
+    "noGuests": "Add a guest to this trip first, then pick yourself here.",
+    "fromShareLink": "Taken from the name you picked when you opened this trip’s share link. Choose another to change it.",
+    "fromAccount": "Taken from the guest your account claimed when you joined this trip. Choose another to change it."
   }
 }

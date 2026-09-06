@@ -27,6 +27,7 @@
  * - Edit/delete actions via dropdown menu
  * - Add transport action (FAB on mobile, header button on desktop)
  * - Empty state when no transports
+ * - "Only mine" / "Everyone" scope filter, persisted in `?scope=`
  * - Responsive design
  *
  * @module features/transports/pages/TransportListPage
@@ -96,7 +97,9 @@ import { getTransportModeIcon } from '@/lib/utils/transport-icons';
 import { RideCard } from '@/features/transports/components/RideCard';
 import { RideChangeFeed } from '@/features/transports/components/RideChangeFeed';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
+import { TransportScopeFilter } from '@/features/transports/components/TransportScopeFilter';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
+import { useTransportScope } from '@/features/transports/hooks/useTransportScope';
 import {
   collectDrivenRideIds,
   isLegCovered,
@@ -107,6 +110,7 @@ import {
 import {
   type ResolvedRide,
   resolveRides,
+  rideConcernsPerson,
 } from '@/features/transports/utils/ride-model';
 import type { Person, PersonId, Transport, TransportId, TransportType } from '@/types';
 
@@ -828,8 +832,10 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     deleteTransport,
   } = useTransportContext(),
    // Same reason as the panel: a driven ride covers its legs. The list also
-   // draws those rides, so it takes the cars along with them.
-   { rides, vehicles } = useRideContext(),
+   // draws those rides, so it takes the cars along with them — and gates on the
+   // ride load, because a paint before they arrive filters against no cars at
+   // all and flags every ride-covered pickup as driverless.
+   { rides, vehicles, isLoading: isRidesLoading } = useRideContext(),
 
   // Local state
    [transportToDelete, setTransportToDelete] = useState<TransportId | null>(null),
@@ -842,8 +848,13 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // Track if we're currently navigating to prevent double-clicks
    isNavigatingRef = useRef(false),
 
-  // Combined loading state
-   isLoading = isTripLoading || isPersonsLoading || isTransportsLoading,
+  // Combined loading state. The rides are part of it: until they land,
+  // `drivenRideIds` is empty, so a paint taken before that flags every
+  // ride-covered pickup as needing a driver — the contradiction the ids were
+  // added to remove — and the scope filter resolves no cars, hiding the legs
+  // sharing mine.
+   isLoading =
+    isTripLoading || isPersonsLoading || isTransportsLoading || isRidesLoading,
 
   // Get date locale based on current language
    dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
@@ -868,10 +879,64 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     [allTransports, rides, vehicles, persons],
   ),
 
-   listEntries = useMemo(
-    () => buildListEntries(journeys, allTransports),
-    [journeys, allTransports],
+  // "Only mine" versus the whole trip's logistics, persisted in `?scope=`.
+  // Shared with the map so the two views can never disagree about which rows
+  // concern the guest holding this device.
+   {
+    scope,
+    canFilter: canFilterScope,
+    myPersonId,
+    visibleTransports,
+    hiddenCount,
+    setScope,
+  } = useTransportScope(allTransports),
+
+  // What the summary above the list counts. Filtered, because "3 arrivals"
+  // over a list showing one is a lie the user has no way to resolve.
+   visibleCounts = useMemo(() => {
+    let arrivalCount = 0,
+      departureCount = 0;
+
+    for (const transport of visibleTransports) {
+      if (transport.type === 'arrival') {
+        arrivalCount += 1;
+      } else {
+        departureCount += 1;
+      }
+    }
+
+    return { arrivalCount, departureCount };
+  }, [visibleTransports]),
+
+  // The trip has travel; none of it is mine. Saying "No travel plans yet" here
+  // would be false, and false in the direction that reads as data loss — the
+  // map says the same thing with the same words.
+   isScopedToNothing =
+    scope === 'mine' && visibleTransports.length === 0 && allTransports.length > 0,
+
+   visibleTransportIds = useMemo(
+    () => new Set(visibleTransports.map((transport) => transport.id)),
+    [visibleTransports],
   ),
+
+  // The scope filter is applied to the *journeys*, not to the flat leg list.
+  // A car is shown when any leg it carries concerns me, or when I am driving
+  // it — hiding one passenger's leg must not hide the car the other two are
+  // still sitting in, and a ride I drive but have no leg on is still mine.
+   listEntries = useMemo(() => {
+    const entries = buildListEntries(journeys, allTransports);
+
+    if (scope === 'all' || myPersonId === undefined) {
+      return entries;
+    }
+
+    return entries.filter((entry) =>
+      entry.kind === 'ride'
+        ? rideConcernsPerson(entry.journey, myPersonId) ||
+          entry.journey.legs.some((leg) => visibleTransportIds.has(leg.transport.id))
+        : visibleTransportIds.has(entry.transport.id),
+    );
+  }, [journeys, allTransports, scope, visibleTransportIds, myPersonId]),
 
   // Separate upcoming and past entries against the context's single reference
   // instant, so this split and the pickup alerts agree — and so the list ages
@@ -1119,6 +1184,14 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         action={headerAction}
       />
 
+      {/* Whose travel this page is showing, and what that is hiding */}
+      <TransportScopeFilter
+        scope={scope}
+        canFilter={canFilterScope}
+        hiddenCount={hiddenCount}
+        onScopeChange={setScope}
+      />
+
       {/* Transport count summary */}
       {allTransports.length > 0 && (
         <div className="flex items-center gap-4 mb-6 text-sm text-muted-foreground">
@@ -1129,7 +1202,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
             />
             <span>
               {t('transports.arrivalsCount', {
-                count: arrivals.length,
+                count: visibleCounts.arrivalCount,
                 defaultValue_one: '{{count}} arrival',
                 defaultValue_other: '{{count}} arrivals',
               })}
@@ -1142,7 +1215,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
             />
             <span>
               {t('transports.departuresCount', {
-                count: departures.length,
+                count: visibleCounts.departureCount,
                 defaultValue_one: '{{count}} departure',
                 defaultValue_other: '{{count}} departures',
               })}
@@ -1179,8 +1252,12 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         onDelete={handleDeleteClick}
         dateLocale={dateLocale}
         listLabel={t('transports.title')}
-        emptyTitle={t('transports.empty')}
-        emptyDescription={t('transports.emptyDescription')}
+        emptyTitle={isScopedToNothing ? t('transports.scope.empty') : t('transports.empty')}
+        emptyDescription={
+          isScopedToNothing
+            ? t('transports.scope.emptyDescription')
+            : t('transports.emptyDescription')
+        }
         drivenRideIds={drivenRideIds}
       />
 

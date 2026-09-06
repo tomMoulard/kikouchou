@@ -61,6 +61,9 @@ export type {
 export { RideChangeFeed } from './components/RideChangeFeed';
 export type { RideChangeFeedProps } from './components/RideChangeFeed';
 
+export { TransportScopeFilter } from './components/TransportScopeFilter';
+export type { TransportScopeFilterProps } from './components/TransportScopeFilter';
+
 // ============================================================================
 // Hooks
 // ============================================================================
@@ -73,6 +76,9 @@ export type {
   RideChange,
   UseRideChangesResult,
 } from './hooks/useRideChanges';
+
+export { useTransportScope } from './hooks/useTransportScope';
+export type { UseTransportScopeResult } from './hooks/useTransportScope';
 
 // ============================================================================
 // Utilities
@@ -100,6 +106,14 @@ export type {
   ChildSeatTally,
   RideCapacitySummary,
 } from './utils/ride-capacity';
+
+// "Does this concern me?" — the one definition both transport views filter by.
+export {
+  parseTransportScope,
+  selectTransportsConcerning,
+  TRANSPORT_SCOPE_PARAM,
+  type TransportScope,
+} from './utils/transport-scope';
 
 // ============================================================================
 // Routes
