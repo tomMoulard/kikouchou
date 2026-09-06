@@ -4,6 +4,21 @@
  *
  * Route: /trips/:tripId/transports
  *
+ * The list has two kinds of row, and only two:
+ *
+ * - **A car journey** (`RideCard`), with the legs riding in it nested inside
+ *   it. Three guests landing at the same terminal within the hour used to be
+ *   three unrelated cards that never mentioned one another, so the driver had
+ *   to reconstruct the car in their head.
+ * - **A leg travelling on its own** (`TransportCard`) — a transport with no
+ *   ride and nobody driving it, rendered exactly as it always was.
+ *
+ * Which is which is decided by `resolveRides`, never here: the card, the
+ * calendar, the map and the "time to leave" notification all read that one
+ * function so they cannot disagree about the same car. A legacy `driverId`-only
+ * transport therefore arrives as a one-passenger journey — nothing migrates
+ * those rows, and the read is where the two storage shapes converge.
+ *
  * Features:
  * - Single chronological list (no tabs)
  * - Date grouping with date headers
@@ -78,6 +93,7 @@ import { cn } from '@/lib/utils';
 import { formatFullDate } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { getTransportModeIcon } from '@/lib/utils/transport-icons';
+import { RideCard } from '@/features/transports/components/RideCard';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
 import {
@@ -85,8 +101,12 @@ import {
   isLegCovered,
   isTransportUpcoming,
   selectPickupsNeedingDriver,
-  sortTransportsByInstant,
+  toTransportInstant,
 } from '@/features/transports/utils/pickup-utils';
+import {
+  type ResolvedRide,
+  resolveRides,
+} from '@/features/transports/utils/ride-model';
 import type { Person, PersonId, Transport, TransportId, TransportType } from '@/types';
 
 // ============================================================================
@@ -126,26 +146,49 @@ interface TransportCardProps {
 }
 
 /**
- * A group of transports for a single date.
+ * One row of the list.
+ *
+ * A journey and a lone leg are different shapes with different cards, so the
+ * list carries the discriminated union rather than two parallel arrays — the
+ * two have to interleave chronologically inside a day.
+ */
+type TransportListEntry =
+  | {
+      readonly kind: 'ride';
+      /** React key: the journey's id, which a legacy journey borrows from its leg. */
+      readonly key: string;
+      /** The instant this row is filed and sorted under — the meeting time. */
+      readonly datetime: string;
+      readonly journey: ResolvedRide;
+    }
+  | {
+      readonly kind: 'leg';
+      readonly key: string;
+      readonly datetime: string;
+      readonly transport: Transport;
+    };
+
+/**
+ * A group of list entries for a single date.
  */
 interface DateGroup {
   /** Date key (YYYY-MM-DD format) */
   readonly dateKey: string;
   /** Formatted date for display */
   readonly displayDate: string;
-  /** Transports for this date, sorted by time */
-  readonly transports: readonly Transport[];
+  /** Entries for this date, sorted by time */
+  readonly entries: readonly TransportListEntry[];
 }
 
 /**
  * Props for the TransportList component.
  */
 interface TransportListProps {
-  /** Array of date groups for upcoming transports */
+  /** Array of date groups for upcoming entries */
   readonly upcomingDateGroups: readonly DateGroup[];
-  /** Array of date groups for past transports */
+  /** Array of date groups for past entries */
   readonly pastDateGroups: readonly DateGroup[];
-  /** Total count of past transports */
+  /** Total count of past entries — cards, not legs */
   readonly pastCount: number;
   /** Map of person ID to Person object */
   readonly personsMap: Map<PersonId, Person>;
@@ -188,44 +231,126 @@ function getDateKey(datetime: string): string {
 }
 
 /**
- * Groups transports by date, sorted chronologically.
+ * Orders list entries chronologically by instant.
  *
- * @param transports - Array of transports to group
- * @param locale - date-fns locale for date formatting
- * @returns Array of date groups, each containing transports for that date
+ * Sorting by the raw string mis-orders mixed-offset values — see
+ * `toTransportInstant`. An entry whose datetime cannot be parsed sorts last,
+ * and ties break on the key so the order does not wobble between renders.
+ *
+ * @param entries - Entries to order (not mutated)
+ * @returns A new array sorted earliest first
  */
-function groupTransportsByDate(
-  transports: readonly Transport[],
+function sortEntriesByInstant(
+  entries: readonly TransportListEntry[],
+): TransportListEntry[] {
+  return [...entries].sort((a, b) => {
+    const left = toTransportInstant(a.datetime),
+      right = toTransportInstant(b.datetime);
+
+    if (left === null) {
+      return right === null ? a.key.localeCompare(b.key) : 1;
+    }
+    if (right === null) {
+      return -1;
+    }
+    return left === right ? a.key.localeCompare(b.key) : left - right;
+  });
+}
+
+/**
+ * Groups list entries by date, sorted chronologically.
+ *
+ * @param entries - Entries to group
+ * @param locale - date-fns locale for date formatting
+ * @returns Array of date groups, each containing the entries for that date
+ */
+function groupEntriesByDate(
+  entries: readonly TransportListEntry[],
   locale: Locale,
 ): DateGroup[] {
-  // Create a map of date key to transports
-  const groupsMap = new Map<string, Transport[]>();
-  
-  for (const transport of transports) {
-    const dateKey = getDateKey(transport.datetime);
+  // Create a map of date key to entries
+  const groupsMap = new Map<string, TransportListEntry[]>();
+
+  for (const entry of entries) {
+    const dateKey = getDateKey(entry.datetime);
     if (!dateKey) {continue;}
-    
+
     const existing = groupsMap.get(dateKey);
     if (existing) {
-      existing.push(transport);
+      existing.push(entry);
     } else {
-      groupsMap.set(dateKey, [transport]);
+      groupsMap.set(dateKey, [entry]);
     }
   }
-  
+
   // Convert to array and sort by date key (chronological). Date keys are all
-  // `yyyy-MM-dd`, so comparing them as strings is sound; the transports inside a
+  // `yyyy-MM-dd`, so comparing them as strings is sound; the entries inside a
   // day are ordered by instant, because their datetimes may carry different UTC
   // offsets and would then sort by wall clock rather than by when they happen.
   const groups: DateGroup[] = Array.from(groupsMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([dateKey, transports]) => ({
+    .map(([dateKey, dayEntries]) => ({
       dateKey,
       displayDate: formatFullDate(dateKey, locale),
-      transports: sortTransportsByInstant(transports),
+      entries: sortEntriesByInstant(dayEntries),
     }));
-  
+
   return groups;
+}
+
+/**
+ * Splits a trip's transports into the rows the list draws.
+ *
+ * The partition is `resolveRides`' own: every leg it places in a journey is
+ * covered by that journey's card, and what is left is a leg travelling alone —
+ * no ride, nobody driving. Re-deriving that split here (say, by testing
+ * `transport.rideId`) is exactly how a leg ends up rendered twice, or not at
+ * all: a `rideId` naming a ride this device does not yet hold is not membership,
+ * and `resolveRides` is the only place that knows it.
+ *
+ * @param journeys - The resolved journeys, already ordered by meeting time
+ * @param transports - Every transport of the trip
+ * @returns One entry per card, in no particular order (the grouping sorts them)
+ */
+function buildListEntries(
+  journeys: readonly ResolvedRide[],
+  transports: readonly Transport[],
+): TransportListEntry[] {
+  const covered = new Set<TransportId>(),
+    entries: TransportListEntry[] = [];
+
+  for (const journey of journeys) {
+    for (const leg of journey.legs) {
+      covered.add(leg.transport.id);
+    }
+    entries.push({
+      kind: 'ride',
+      key: journey.id,
+      // A journey is filed under its meeting time — except when that time
+      // cannot be placed at all, in which case the earliest leg's own datetime
+      // stands in. Without the fallback a single unreadable `meetDatetime`
+      // would drop the card out of every date group and take three perfectly
+      // valid arrivals off the page with it.
+      datetime:
+        journey.meetAtMs === null
+          ? (journey.legs[0]?.transport.datetime ?? journey.meetDatetime)
+          : journey.meetDatetime,
+      journey,
+    });
+  }
+
+  for (const transport of transports) {
+    if (!covered.has(transport.id)) {
+      entries.push({
+        kind: 'leg',
+        key: transport.id,
+        datetime: transport.datetime,
+        transport,
+      });
+    }
+  }
+
+  return entries;
 }
 
 // ============================================================================
@@ -461,7 +586,7 @@ interface DateGroupSectionProps {
   readonly dateLocale: Locale;
   /** Whether actions are disabled */
   readonly isActionsDisabled?: boolean;
-  /** Whether transports in this group are past */
+  /** Whether the entries in this group are past */
   readonly isPast?: boolean;
   /** The rides somebody is driving, from `collectDrivenRideIds`. */
   readonly drivenRideIds: ReadonlySet<string>;
@@ -500,14 +625,36 @@ const DateGroupSection = memo(function DateGroupSection({
         'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
       )}
     >
-      {group.transports.map((transport) => {
-        const person = personsMap.get(transport.personId),
+      {group.entries.map((entry) => {
+        if (entry.kind === 'ride') {
+          return (
+            <div key={entry.key} role="listitem">
+              <RideCard
+                journey={entry.journey}
+                dateLocale={dateLocale}
+                drivenRideIds={drivenRideIds}
+                onEditLeg={onEdit}
+                onDeleteLeg={onDelete}
+                isActionsDisabled={isActionsDisabled}
+                isPast={isPast}
+              />
+            </div>
+          );
+        }
+
+        // A leg reaching this branch has nobody driving it — `resolveRides`
+        // took every driven one into a journey above — so this card's driver
+        // and its `isLegCovered` badge both answer "nobody" today. Both are
+        // still asked rather than assumed, so the card degrades honestly if
+        // that partition ever widens.
+        const { transport } = entry,
+         person = personsMap.get(transport.personId),
          driver = transport.driverId
           ? personsMap.get(transport.driverId)
           : undefined;
 
         return (
-          <div key={transport.id} role="listitem">
+          <div key={entry.key} role="listitem">
             <TransportCard
               transport={transport}
               person={person}
@@ -679,8 +826,9 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     error: transportsError,
     deleteTransport,
   } = useTransportContext(),
-   // Same reason as the panel: a driven ride covers its legs.
-   { rides } = useRideContext(),
+   // Same reason as the panel: a driven ride covers its legs. The list also
+   // draws those rides, so it takes the cars along with them.
+   { rides, vehicles } = useRideContext(),
 
   // Local state
    [transportToDelete, setTransportToDelete] = useState<TransportId | null>(null),
@@ -711,42 +859,56 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // Combine arrivals and departures into a single list
    allTransports = useMemo(() => [...arrivals, ...departures], [arrivals, departures]),
 
-  // Separate upcoming and past transports against the context's single
-  // reference instant, so this split and the pickup alerts agree — and so the
-  // list ages on the same minute tick instead of only when something else
-  // happens to re-render it.
-   { upcomingTransports, pastTransports } = useMemo(() => {
-    const upcoming: Transport[] = [];
-    const past: Transport[] = [];
+  // The one read of the journey model. Everything below — which rows exist,
+  // when each is filed, what a card draws — comes from this, so the list, the
+  // map and the notifications cannot disagree about the same car.
+   journeys = useMemo(
+    () => resolveRides({ transports: allTransports, rides, vehicles, persons }),
+    [allTransports, rides, vehicles, persons],
+  ),
 
-    for (const transport of allTransports) {
-      if (isTransportUpcoming(transport.datetime, nowMs)) {
-        upcoming.push(transport);
+   listEntries = useMemo(
+    () => buildListEntries(journeys, allTransports),
+    [journeys, allTransports],
+  ),
+
+  // Separate upcoming and past entries against the context's single reference
+  // instant, so this split and the pickup alerts agree — and so the list ages
+  // on the same minute tick instead of only when something else happens to
+  // re-render it. A journey is filed by its meeting time, not by its earliest
+  // leg: the car is what the row is about.
+   { upcomingEntries, pastEntries } = useMemo(() => {
+    const upcoming: TransportListEntry[] = [];
+    const past: TransportListEntry[] = [];
+
+    for (const entry of listEntries) {
+      if (isTransportUpcoming(entry.datetime, nowMs)) {
+        upcoming.push(entry);
       } else {
-        past.push(transport);
+        past.push(entry);
       }
     }
 
-    return { upcomingTransports: upcoming, pastTransports: past };
-  }, [allTransports, nowMs]),
+    return { upcomingEntries: upcoming, pastEntries: past };
+  }, [listEntries, nowMs]),
 
-  // Group upcoming transports by date (chronological)
+  // Group upcoming entries by date (chronological)
    upcomingDateGroups = useMemo(
-    () => groupTransportsByDate(upcomingTransports, dateLocale),
-    [upcomingTransports, dateLocale],
+    () => groupEntriesByDate(upcomingEntries, dateLocale),
+    [upcomingEntries, dateLocale],
   ),
 
-  // Group past transports by date (reverse chronological - most recent first)
+  // Group past entries by date (reverse chronological - most recent first)
    pastDateGroups = useMemo(
-    () => groupTransportsByDate(pastTransports, dateLocale).reverse(),
-    [pastTransports, dateLocale],
+    () => groupEntriesByDate(pastEntries, dateLocale).reverse(),
+    [pastEntries, dateLocale],
   ),
 
-  // Count what the accordion actually renders: `groupTransportsByDate` drops
-  // rows whose datetime cannot be parsed, so counting `pastTransports` promised
-  // more entries than the section could show.
+  // Count what the accordion actually renders: `groupEntriesByDate` drops rows
+  // whose datetime cannot be parsed, so counting `pastEntries` promised more
+  // entries than the section could show.
    pastCount = useMemo(
-    () => pastDateGroups.reduce((total, group) => total + group.transports.length, 0),
+    () => pastDateGroups.reduce((total, group) => total + group.entries.length, 0),
     [pastDateGroups],
   ),
 
