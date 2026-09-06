@@ -112,6 +112,20 @@ vi.mock('@/hooks', () => ({
     successToast: vi.fn(),
     errorToast: vi.fn(),
   }),
+  // As on the list: unidentified, so the map plots the whole trip and the
+  // scope filter renders its hint rather than a switch.
+  useTripIdentity: () => ({
+    myPersonId: undefined,
+    source: undefined,
+    isResolved: true,
+    setMyPersonId: vi.fn(),
+  }),
+}));
+
+// The scope filter resolves the trip's cars to answer "does this concern me",
+// so the map now reads the rides too. Empty here: these tests are about pins.
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: vi.fn(() => ({ rides: [], vehicles: [], isLoading: false })),
 }));
 
 // Mock MapView to avoid Leaflet in jsdom. It exposes both halves of a marker:

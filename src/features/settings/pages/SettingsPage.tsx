@@ -35,6 +35,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { AccountSection } from '@/features/auth/components/AccountSection';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
+import { TripIdentitySelector } from '@/features/settings/components/TripIdentitySelector';
 import { TripForm } from '@/features/trips/components/TripForm';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db';
@@ -483,6 +484,7 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
  *
  * Features:
  * - Current trip: edit or delete, with loading, error and empty states
+ * - Identity: which guest of the current trip this device belongs to
  * - Account: sign in with Google, sign out
  * - Language selector (French/English)
  * - Theme selector (light/dark/system)
@@ -514,6 +516,11 @@ function SettingsPageComponent(): ReactElement {
       <div className="mt-6 space-y-6">
         {/* Current Trip Section — carries its own loading, error and empty states */}
         <CurrentTripSection />
+
+        {/* Who is holding this device, on the current trip — the transport
+            views filter by it, so it sits directly under the trip it answers
+            for rather than among the presentation preferences below. */}
+        <TripIdentitySelector />
 
         {/* Account Section */}
         <AccountCard />

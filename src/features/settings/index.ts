@@ -10,6 +10,7 @@
 // ============================================================================
 
 export { ThemeSelector } from './components/ThemeSelector';
+export { TripIdentitySelector } from './components/TripIdentitySelector';
 
 // ============================================================================
 // Pages

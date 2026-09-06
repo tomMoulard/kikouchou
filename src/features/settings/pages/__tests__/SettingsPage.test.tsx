@@ -135,6 +135,14 @@ vi.mock('@/features/auth/components/AccountSection', () => ({
   AccountSection: () => <div data-testid="account-section" />,
 }));
 
+// Same reason for the identity card: it reads PersonProvider and, through
+// `useTripIdentity`, AuthProvider and Dexie. Its own states are covered in
+// features/settings/components/__tests__/TripIdentitySelector.test.tsx; what
+// this file asserts is that the page still composes it.
+vi.mock('@/features/settings/components/TripIdentitySelector', () => ({
+  TripIdentitySelector: () => <div data-testid="trip-identity-selector" />,
+}));
+
 // Mock ConfirmDialog to capture confirm callback and onOpenChange
 vi.mock('@/components/shared/ConfirmDialog', () => ({
   ConfirmDialog: ({ open, onConfirm, onOpenChange }: { open: boolean; onConfirm: () => Promise<void>; onOpenChange?: (o: boolean) => void }) =>
@@ -186,6 +194,11 @@ describe('SettingsPage', () => {
   it('mounts the account panel', () => {
     render(<SettingsPage />, { withProviders: false });
     expect(screen.getByTestId('account-section')).toBeInTheDocument();
+  });
+
+  it('mounts the identity card, which is the only way to answer "who am I"', () => {
+    render(<SettingsPage />, { withProviders: false });
+    expect(screen.getByTestId('trip-identity-selector')).toBeInTheDocument();
   });
 
   it('renders current trip section when trip is selected', () => {

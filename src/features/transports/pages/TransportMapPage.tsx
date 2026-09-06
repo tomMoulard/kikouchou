@@ -10,6 +10,7 @@
  * - Person-colored markers option
  * - Click marker to see transport details in popup
  * - Fit bounds to show all markers
+ * - "Only mine" / "Everyone" scope filter, persisted in `?scope=`
  * - Empty state when no transports have coordinates
  *
  * @module features/transports/pages/TransportMapPage
@@ -59,6 +60,8 @@ import { Button } from '@/components/ui/button';
 import { statusVariants } from '@/components/ui/status.variants';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
+import { TransportScopeFilter } from '@/features/transports/components/TransportScopeFilter';
+import { useTransportScope } from '@/features/transports/hooks/useTransportScope';
 import {
   collectDrivenRideIds,
   isLegCovered,
@@ -284,7 +287,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
   // The popup's "needs pickup" chip must agree with the transport list's, and
   // both now depend on whether the leg's ride has a driver.
-  const { rides } = useRideContext();
+  const { rides, isLoading: isRidesLoading } = useRideContext();
   const {
     arrivals,
     departures,
@@ -296,7 +299,13 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
   const mapRef = useRef<MapViewRef>(null);
 
   // Combined loading state
-  const isLoading = isTripLoading || isPersonsLoading || isTransportsLoading;
+  // The rides count towards loading: `drivenRideIds` is empty until they land,
+  // so a paint taken before that shows the amber "needs pickup" chip on a leg
+  // whose car already has a volunteer — the contradiction `drivenRideIds` was
+  // added to remove, and the scope filter would meanwhile resolve no cars at
+  // all and hide the legs sharing mine.
+  const isLoading =
+    isTripLoading || isPersonsLoading || isTransportsLoading || isRidesLoading;
 
   // Get date locale based on current language
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
@@ -316,10 +325,22 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
     return allTransports.filter(hasCoordinates);
   }, [arrivals, departures]);
 
+  // "Only mine" versus the whole trip, from `?scope=`. The hook resolves the
+  // cars from *every* transport on the trip, not from the pinned subset here —
+  // a leg without coordinates still puts its passenger in a car, and losing it
+  // would take the rest of that car off the map with it.
+  const {
+    scope,
+    canFilter: canFilterScope,
+    visibleTransports,
+    hiddenCount,
+    setScope,
+  } = useTransportScope(transportsWithCoordinates);
+
   /** Line from start to end when both GPS points exist */
   const routePolylines = useMemo((): readonly MapPolylineData[] => {
     const lines: MapPolylineData[] = [];
-    for (const transport of transportsWithCoordinates) {
+    for (const transport of visibleTransports) {
       if (!hasStartCoordinates(transport)) continue;
       const start = transport.startCoordinates;
       if (!start) continue;
@@ -332,7 +353,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
       });
     }
     return lines;
-  }, [transportsWithCoordinates]);
+  }, [visibleTransports]);
 
   // Create markers (optional start marker + end marker per transport)
   const drivenRideIds = useMemo(() => collectDrivenRideIds(rides), [rides]);
@@ -363,7 +384,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
       });
     }
 
-    for (const transport of transportsWithCoordinates) {
+    for (const transport of visibleTransports) {
       const person = personsMap.get(transport.personId);
       const { date, time } = formatTransportDatetimeParts(transport.datetime, dateLocale, 'dayAndTime');
 
@@ -419,14 +440,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
       });
     }
     return result;
-  }, [
-    transportsWithCoordinates,
-    personsMap,
-    dateLocale,
-    t,
-    currentTrip,
-    drivenRideIds,
-  ]);
+  }, [visibleTransports, personsMap, dateLocale, t, currentTrip, drivenRideIds]);
 
   // Calculate map center based on markers
   const mapCenter = useMemo((): [number, number] => {
@@ -607,6 +621,14 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
         action={headerAction}
       />
 
+      {/* Whose travel this map is showing, and what that is hiding */}
+      <TransportScopeFilter
+        scope={scope}
+        canFilter={canFilterScope}
+        hiddenCount={hiddenCount}
+        onScopeChange={setScope}
+      />
+
       {/*
         Map legend.
 
@@ -655,26 +677,45 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
         */}
         <div className="ml-auto text-xs">
           {t('transports.mappedCount', {
-            count: transportsWithCoordinates.length,
+            count: visibleTransports.length,
           })}
         </div>
       </div>
 
-      {/* Interactive Map */}
-      <div className="relative rounded-lg border border-border overflow-hidden">
-        <MapView
-          ref={mapRef}
-          center={mapCenter}
-          zoom={markers.length === 1 ? 14 : 10}
-          markers={markers}
-          polylines={routePolylines}
-          interactive={true}
-          showZoomControl={true}
-          showAttribution={true}
-          height={500}
-          aria-label={t('transports.mapAriaLabel', 'Map showing transport locations')}
-        />
-      </div>
+      {/*
+        A scope that pins nothing gets a sentence rather than an empty map: a
+        blank map reads as "the app lost your travel". The filter above already
+        carries the count and the way back, so this states the situation and
+        does not repeat the button.
+      */}
+      {visibleTransports.length === 0 ? (
+        <div className="flex min-h-[400px] items-center justify-center rounded-lg border">
+          <EmptyState
+            icon={MapPin}
+            title={t('transports.scope.empty', 'Nothing here concerns you')}
+            description={t(
+              'transports.scope.emptyDescription',
+              'None of this trip’s travel involves you. Switch to Everyone to see the whole trip.',
+            )}
+          />
+        </div>
+      ) : (
+        /* Interactive Map */
+        <div className="relative rounded-lg border border-border overflow-hidden">
+          <MapView
+            ref={mapRef}
+            center={mapCenter}
+            zoom={markers.length === 1 ? 14 : 10}
+            markers={markers}
+            polylines={routePolylines}
+            interactive={true}
+            showZoomControl={true}
+            showAttribution={true}
+            height={500}
+            aria-label={t('transports.mapAriaLabel', 'Map showing transport locations')}
+          />
+        </div>
+      )}
 
       {/* Mobile back to list button */}
       <div className="mt-4 sm:hidden">

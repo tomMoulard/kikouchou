@@ -111,7 +111,11 @@ vi.mock('@/contexts/TripContext', () => ({
 // Same reason as the panel: a driven ride covers its legs, so the page's alert
 // gate reads the rides as well as the legs.
 vi.mock('@/contexts/RideContext', () => ({
-  useRideContext: vi.fn(() => ({ rides: [] })),
+  // `vehicles` is read too now: the scope filter resolves the trip's cars to
+  // decide which legs concern the guest holding the device. `isLoading` counts
+  // towards the page's own loading state, because a paint taken with no rides
+  // yet contradicts itself about who needs a driver.
+  useRideContext: vi.fn(() => ({ rides: [], vehicles: [], isLoading: false })),
 }));
 
 vi.mock('@/contexts/PersonContext', () => ({
@@ -140,6 +144,12 @@ vi.mock('@/hooks', () => ({
     successToast: vi.fn(),
     errorToast: vi.fn(),
   }),
+  // Defaulted to "nobody has said who they are" in `resetMocks`, which is the
+  // state every other assertion in this file was written against: the scope
+  // filter shows everything and offers the hint instead of the switch. The
+  // filter's own behaviour is covered in
+  // features/transports/components/__tests__/TransportScopeFilter.test.tsx.
+  useTripIdentity: vi.fn(),
 }));
 
 // Mock child components
@@ -152,6 +162,7 @@ vi.mock('@/features/transports/components/UpcomingPickups', () => ({
 }));
 
 import { TransportListPage } from '../TransportListPage';
+import { useTripIdentity } from '@/hooks';
 import { useTripContext } from '@/contexts/TripContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { usePersonContext } from '@/contexts/PersonContext';
@@ -160,7 +171,22 @@ import { usePersonContext } from '@/contexts/PersonContext';
 // Helpers
 // ============================================================================
 
+/**
+ * Sets which guest this device is.
+ *
+ * @param myPersonId - The identified guest, or undefined for an unidentified device
+ */
+function mockIdentity(myPersonId: Person['id'] | undefined): void {
+  vi.mocked(useTripIdentity).mockReturnValue({
+    myPersonId,
+    source: myPersonId === undefined ? undefined : 'explicit',
+    isResolved: true,
+    setMyPersonId: vi.fn(),
+  });
+}
+
 function resetMocks() {
+  mockIdentity(undefined);
   vi.mocked(useTripContext).mockReturnValue({
     currentTrip: mockTrip,
     isLoading: false,
@@ -266,9 +292,27 @@ describe('TransportListPage', () => {
     expect(screen.getByText('transports.empty')).toBeInTheDocument();
   });
 
+  it('says the filter is empty, not the trip, when "mine" hides everything', () => {
+    // A guest with no leg of their own on a trip that is fully planned. "No
+    // travel plans yet" would be false here, and false in the direction that
+    // reads as data loss.
+    mockIdentity('person-2' as Person['id']);
+
+    render(<TransportListPage />, { withProviders: false });
+
+    expect(screen.getByText('transports.scope.empty')).toBeInTheDocument();
+    expect(screen.queryByText('transports.empty')).not.toBeInTheDocument();
+    // And the way back is on screen rather than in the URL bar.
+    expect(
+      screen.getByRole('button', { name: 'transports.scope.showAll' }),
+    ).toBeInTheDocument();
+  });
+
   it('renders back link', () => {
     render(<TransportListPage />, { withProviders: false });
-    const backLink = screen.getByRole('link');
+    // Named, not "the only link on the page": the scope filter adds one of its
+    // own pointing at Settings when nobody has said who they are.
+    const backLink = screen.getByRole('link', { name: 'common.back' });
     expect(backLink).toBeInTheDocument();
   });
 

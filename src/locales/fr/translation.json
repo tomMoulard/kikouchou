@@ -422,7 +422,17 @@
     "backToList": "Retour à la liste",
     "mappedCount_one": "{{count}} transport sur la carte",
     "mappedCount_other": "{{count}} transports sur la carte",
-    "mapAriaLabel": "Carte montrant les lieux de transport"
+    "mapAriaLabel": "Carte montrant les lieux de transport",
+    "scope": {
+      "label": "Trajets à afficher",
+      "hidden_one": "{{count}} autre trajet masqué",
+      "hidden_other": "{{count}} autres trajets masqués",
+      "showAll": "Afficher tout le monde",
+      "unknownIdentity": "Indiquez quel participant vous êtes pour ne voir que vos propres trajets.",
+      "chooseIdentity": "Choisir dans les réglages",
+      "empty": "Rien ici ne vous concerne",
+      "emptyDescription": "Aucun trajet de ce séjour ne vous concerne. Passez à « Tout le monde » pour voir tout le séjour."
+    }
   },
   "activities": {
     "title": "Activités",
@@ -1142,6 +1152,11 @@
     "nobody": "Non défini",
     "you": "Vous",
     "scopeMine": "Seulement les miens",
-    "scopeAll": "Tout le monde"
+    "scopeAll": "Tout le monde",
+    "saved": "Enregistré sur cet appareil",
+    "noTrip": "Ouvrez un séjour pour indiquer qui vous y êtes.",
+    "noGuests": "Ajoutez d’abord un participant à ce séjour, puis choisissez-vous ici.",
+    "fromShareLink": "Repris du nom choisi à l’ouverture du lien de partage de ce séjour. Choisissez-en un autre pour le modifier.",
+    "fromAccount": "Repris du participant que votre compte a revendiqué en rejoignant ce séjour. Choisissez-en un autre pour le modifier."
   }
 }

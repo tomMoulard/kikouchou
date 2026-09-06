@@ -34,6 +34,16 @@ export type { TransportDialogProps } from './components/TransportDialog';
 export { UpcomingPickups } from './components/UpcomingPickups';
 export type { UpcomingPickupsProps } from './components/UpcomingPickups';
 
+export { TransportScopeFilter } from './components/TransportScopeFilter';
+export type { TransportScopeFilterProps } from './components/TransportScopeFilter';
+
+// ============================================================================
+// Hooks
+// ============================================================================
+
+export { useTransportScope } from './hooks/useTransportScope';
+export type { UseTransportScopeResult } from './hooks/useTransportScope';
+
 // ============================================================================
 // Utilities
 // ============================================================================
@@ -47,6 +57,14 @@ export {
   sortTransportsByInstant,
   toTransportInstant,
 } from './utils/pickup-utils';
+
+// "Does this concern me?" — the one definition both transport views filter by.
+export {
+  parseTransportScope,
+  selectTransportsConcerning,
+  TRANSPORT_SCOPE_PARAM,
+  type TransportScope,
+} from './utils/transport-scope';
 
 // ============================================================================
 // Routes
