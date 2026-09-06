@@ -134,14 +134,16 @@ vi.mock('@/hooks', () => ({
     successToast: vi.fn(),
     errorToast: vi.fn(),
   }),
-  // As on the list: unidentified, so the map plots the whole trip and the
-  // scope filter renders its hint rather than a switch.
-  useTripIdentity: () => ({
+  // As on the list: unidentified by default, so the map plots the whole trip
+  // and the scope filter renders its hint rather than a switch. A `vi.fn()`
+  // rather than a fixed literal so a test about the scope can say who is
+  // holding the device — `beforeEach` puts this default back.
+  useTripIdentity: vi.fn(() => ({
     myPersonId: undefined,
     source: undefined,
     isResolved: true,
     setMyPersonId: vi.fn(),
-  }),
+  })),
 }));
 
 // The scope filter resolves the trip's cars to answer "does this concern me",
@@ -192,6 +194,7 @@ import { TransportMapPage } from '../TransportMapPage';
 import { useTripContext } from '@/contexts/TripContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useRideContext } from '@/contexts/RideContext';
+import { useTripIdentity } from '@/hooks';
 
 // ============================================================================
 // Tests
@@ -222,6 +225,15 @@ describe('TransportMapPage', () => {
       isLoading: false,
       error: null,
     } as unknown as ReturnType<typeof useRideContext>);
+    // `clearAllMocks` clears the call log but leaves a `mockReturnValue`
+    // standing, so a test that says who is holding the device would otherwise
+    // leak that guest into every test after it.
+    vi.mocked(useTripIdentity).mockReturnValue({
+      myPersonId: undefined,
+      source: undefined,
+      isResolved: true,
+      setMyPersonId: vi.fn(),
+    } as unknown as ReturnType<typeof useTripIdentity>);
   });
 
   it('renders the page with map when transports have coordinates', () => {
@@ -908,6 +920,65 @@ describe('TransportMapPage', () => {
       expect(screen.queryByText('transports.noLocations')).not.toBeInTheDocument();
       expect(screen.getByTestId('map-view')).toHaveAttribute('data-markers', '1');
       expect(screen.getByTestId('ride-popup')).toBeInTheDocument();
+    });
+
+    /** A second car, at a station Alice has nothing to do with. */
+    const rideAtVannes: Ride = {
+      id: 'ride-2' as Ride['id'],
+      tripId: 'trip-1' as Ride['tripId'],
+      direction: 'pickup',
+      meetDatetime: MEET_DATETIME as Ride['meetDatetime'],
+      location: 'Gare de Vannes',
+      coordinates: { lat: 47.6559, lon: -2.7599 },
+      leadTimeMinutes: 30,
+      driverId: mockDriver.id,
+    };
+
+    /** Chloé's leg, riding in that other car. */
+    const chloeAtVannes: Transport = {
+      ...chloeLeg,
+      id: 'transport-chloe-vannes' as Transport['id'],
+      location: 'Gare de Vannes',
+      coordinates: { lat: 47.6559, lon: -2.7599 },
+      rideId: rideAtVannes.id,
+    };
+
+    /** The rendez-vous pins the map is currently drawing, by their location. */
+    function pinnedMeetingPoints(): string[] {
+      return screen
+        .getAllByTestId(/^marker-popup-/)
+        .map((marker) => marker.getAttribute('data-label') ?? '')
+        .filter((label) => label.startsWith('rides.meetingPoint'));
+    }
+
+    it('drops a rendez-vous belonging to a car that does not concern me', () => {
+      mockRides([rideAtAirport, rideAtVannes], [mockVehicle]);
+      mockLegs([aliceLeg, chloeAtVannes]);
+
+      // Unidentified first, so the assertion below is about the filter rather
+      // than about one of the two cars never having been drawn at all.
+      const { unmount } = render(<TransportMapPage />, { withProviders: false });
+      expect(pinnedMeetingPoints()).toEqual([
+        'rides.meetingPoint — Paris CDG',
+        'rides.meetingPoint — Gare de Vannes',
+      ]);
+      unmount();
+
+      // Now this device is Alice, who is in the airport car and not the other
+      // one. With no `?scope=` in the URL an identified guest defaults to
+      // "mine", which is the state a guest actually opens the map in.
+      vi.mocked(useTripIdentity).mockReturnValue({
+        myPersonId: mockPerson.id,
+        source: 'explicit',
+        isResolved: true,
+        setMyPersonId: vi.fn(),
+      } as unknown as ReturnType<typeof useTripIdentity>);
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      // Filtered on the *journey*: the pin goes with the car, so a rendez-vous
+      // never outlives the passengers whose lines point at it.
+      expect(pinnedMeetingPoints()).toEqual(['rides.meetingPoint — Paris CDG']);
     });
   });
 });
