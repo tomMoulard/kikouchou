@@ -34,6 +34,22 @@ export type { TransportDialogProps } from './components/TransportDialog';
 export { UpcomingPickups } from './components/UpcomingPickups';
 export type { UpcomingPickupsProps } from './components/UpcomingPickups';
 
+export { RideChangeFeed } from './components/RideChangeFeed';
+export type { RideChangeFeedProps } from './components/RideChangeFeed';
+
+// ============================================================================
+// Hooks
+// ============================================================================
+
+// The detection half of "Alice moved her pickup": one device's watermark
+// against the document's current times. Exported because the same signal feeds
+// more than the feed that renders it.
+export { useRideChanges } from './hooks/useRideChanges';
+export type {
+  RideChange,
+  UseRideChangesResult,
+} from './hooks/useRideChanges';
+
 // ============================================================================
 // Utilities
 // ============================================================================

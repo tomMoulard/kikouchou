@@ -78,6 +78,7 @@ import { cn } from '@/lib/utils';
 import { formatFullDate } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { getTransportModeIcon } from '@/lib/utils/transport-icons';
+import { RideChangeFeed } from '@/features/transports/components/RideChangeFeed';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
 import {
@@ -987,6 +988,12 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
           </div>
         </div>
       )}
+
+      {/* What moved since this device last looked — above the driver alerts
+          because a time that changed under you is news, where a pickup still
+          needing a driver has been true all along. Renders nothing of its own
+          when there is nothing to say. */}
+      <RideChangeFeed className="mb-6" />
 
       {/* Pickup alerts section - only when a driver is still needed */}
       {hasUnassignedUpcomingPickup && (

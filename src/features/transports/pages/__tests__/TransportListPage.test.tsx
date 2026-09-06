@@ -151,6 +151,13 @@ vi.mock('@/features/transports/components/UpcomingPickups', () => ({
   UpcomingPickups: () => <div data-testid="upcoming-pickups" />,
 }));
 
+// The change feed resolves who is holding the device, which reaches
+// `AuthContext` and Dexie — neither of which this page's own tests provide.
+// It has its own tests; here it only has to exist.
+vi.mock('@/features/transports/components/RideChangeFeed', () => ({
+  RideChangeFeed: () => <div data-testid="ride-change-feed" />,
+}));
+
 import { TransportListPage } from '../TransportListPage';
 import { useTripContext } from '@/contexts/TripContext';
 import { useTransportContext } from '@/contexts/TransportContext';

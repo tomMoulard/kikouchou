@@ -1084,6 +1084,24 @@
     "copyAddress": "Copy address",
     "addressCopied": "Address copied"
   },
+  "rideChanges": {
+    "title": "Changed travel times",
+    "description": "Somebody in your car moved their train or flight. The car still leaves at its old time until the driver moves it.",
+    "count_one": "{{count}} change",
+    "count_other": "{{count}} changes",
+    "announce_one": "{{count}} travel time changed",
+    "announce_other": "{{count}} travel times changed",
+    "movedLater": "Later than before",
+    "movedEarlier": "Earlier than before",
+    "was": "Was",
+    "now": "Now",
+    "unknownGuest": "A guest",
+    "acknowledge": "Got it",
+    "acknowledgeAll": "Mark all as seen",
+    "watchHint_one": "{{count}} travel time in your cars is not watched on this device yet.",
+    "watchHint_other": "{{count}} travel times in your cars are not watched on this device yet.",
+    "watch": "Watch for changes"
+  },
   "rides": {
     "title": "Rides",
     "ride": "Ride",
