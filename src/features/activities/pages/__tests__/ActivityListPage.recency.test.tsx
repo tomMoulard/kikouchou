@@ -102,6 +102,14 @@ vi.mock('@/hooks', () => ({
     successToast: vi.fn(),
     errorToast: vi.fn(),
   }),
+  // Anonymous device: this file is about which activities are shown and in
+  // what order, not about who can join them.
+  useTripIdentity: () => ({
+    myPersonId: undefined,
+    source: undefined,
+    isResolved: true,
+    setMyPersonId: vi.fn(),
+  }),
 }));
 
 vi.mock('@/features/activities/components/ActivityDialog', () => ({

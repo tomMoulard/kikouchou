@@ -112,6 +112,11 @@ vi.mock('@/hooks', () => ({
     successToast: vi.fn(),
     errorToast: vi.fn(),
   }),
+  // The page asks "who is holding this device" through the shared resolver now,
+  // not through the share-link store directly: an organiser who picked
+  // themselves in Settings, and a guest who joined through an invite, are both
+  // identified and neither has a share-link entry.
+  useTripIdentity: vi.fn(),
 }));
 
 vi.mock('@/hooks/useToday', () => ({
@@ -124,19 +129,29 @@ vi.mock('@/features/activities/components/ActivityDialog', () => ({
   ActivityDialog: () => <div data-testid="activity-dialog" />,
 }));
 
-vi.mock('@/lib/sharing/guest-identity', () => ({
-  getTripGuestPersonId: vi.fn(() => undefined),
-}));
-
 import { ActivityListPage } from '../ActivityListPage';
 import { useActivityContext } from '@/contexts/ActivityContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTripContext } from '@/contexts/TripContext';
-import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
+import { useTripIdentity } from '@/hooks';
 
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Sets which guest this device is, for one test.
+ *
+ * @param myPersonId - The identified guest, or undefined for an anonymous device
+ */
+function mockIdentity(myPersonId: Person['id'] | undefined): void {
+  vi.mocked(useTripIdentity).mockReturnValue({
+    myPersonId,
+    source: myPersonId === undefined ? undefined : 'explicit',
+    isResolved: true,
+    setMyPersonId: vi.fn(),
+  });
+}
 
 function setMocks(activities: readonly Activity[] = [upcomingActivity]) {
   vi.mocked(useTripContext).mockReturnValue({
@@ -186,7 +201,7 @@ function renderPage(route = '/trips/trip-1/activities') {
 describe('ActivityListPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getTripGuestPersonId).mockReturnValue(undefined);
+    mockIdentity(undefined);
     setMocks();
   });
 
@@ -281,7 +296,7 @@ describe('ActivityListPage', () => {
   });
 
   it('lets an identified guest join an activity', async () => {
-    vi.mocked(getTripGuestPersonId).mockReturnValue(mockPerson.id);
+    mockIdentity(mockPerson.id);
     const { user } = renderPage('/trips/trip-1/activities?view=list');
 
     await user.click(screen.getByRole('button', { name: /activities.join/ }));
@@ -294,7 +309,7 @@ describe('ActivityListPage', () => {
   });
 
   it('lets an identified guest leave an activity they joined', async () => {
-    vi.mocked(getTripGuestPersonId).mockReturnValue(mockPerson.id);
+    mockIdentity(mockPerson.id);
     setMocks([{ ...upcomingActivity, participantIds: [mockPerson.id] }]);
     const { user } = renderPage('/trips/trip-1/activities?view=list');
 
@@ -308,7 +323,7 @@ describe('ActivityListPage', () => {
   });
 
   it('disables joining a full activity', () => {
-    vi.mocked(getTripGuestPersonId).mockReturnValue(mockPerson.id);
+    mockIdentity(mockPerson.id);
     setMocks([
       { ...upcomingActivity, participantIds: ['other' as Person['id']], maxParticipants: 1 },
     ]);
