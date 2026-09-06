@@ -186,6 +186,8 @@
     "name": "Nom de la chambre",
     "namePlaceholder": "ex. Chambre parentale",
     "capacity": "Nombre de lits",
+    "bedsDecrease": "Enlever un lit",
+    "bedsIncrease": "Ajouter un lit",
     "description": "Description",
     "descriptionPlaceholder": "Notes optionnelles...",
     "deleteConfirm": "Voulez-vous vraiment supprimer cette chambre ?",

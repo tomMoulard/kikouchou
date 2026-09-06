@@ -186,6 +186,8 @@
     "name": "Room name",
     "namePlaceholder": "e.g. Master bedroom",
     "capacity": "Number of beds",
+    "bedsDecrease": "Remove a bed",
+    "bedsIncrease": "Add a bed",
     "description": "Description",
     "descriptionPlaceholder": "Optional notes...",
     "deleteConfirm": "Are you sure you want to delete this room?",
