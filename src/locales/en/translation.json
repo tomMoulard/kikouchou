@@ -1269,5 +1269,25 @@
     "noGuests": "Add a guest to this trip first, then pick yourself here.",
     "fromShareLink": "Taken from the name you picked when you opened this trip’s share link. Choose another to change it.",
     "fromAccount": "Taken from the guest your account claimed when you joined this trip. Choose another to change it."
+  },
+  "notifications": {
+    "title": "Ride alerts",
+    "description": "Let this device tell you when a car needs you",
+    "whatYouGet": "Turned on, this device tells you:",
+    "leaveItem": "when it is time to leave for a pick-up you are driving",
+    "movedItem": "when somebody riding in your car changes their time",
+    "onlyDriver": "Only the driver of a ride is told about it, and only on devices where you allowed notifications.",
+    "statusLabel": "On this device",
+    "states": {
+      "unsupported": "Not available",
+      "default": "Off",
+      "granted": "On",
+      "denied": "Blocked"
+    },
+    "enable": "Turn on ride alerts",
+    "enabling": "Waiting for your answer…",
+    "bestEffort": "Kikouchou has no server, so an alert can only be sent while the app is running or recently used. The alert inside the app is always there when you open it.",
+    "deniedHint": "Your browser is blocking notifications for Kikouchou. The app cannot ask again — allow them for this site in your browser or system settings.",
+    "unsupportedHint": "This browser cannot show notifications. On an iPhone, add Kikouchou to the Home Screen first. Ride alerts still appear inside the app."
   }
 }

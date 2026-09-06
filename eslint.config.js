@@ -143,6 +143,28 @@ export default defineConfig([
       'kikouchou/require-disable-description': 'error',
     },
   },
+  // `public/` is copied verbatim into `dist` — nothing compiles or bundles it,
+  // so a typo there ships. `sw-notifications.js` is imported into the generated
+  // service worker (`workbox.importScripts`), which makes it worker code:
+  // `self`, `clients` and `registration` are its globals, not the window's, and
+  // `sourceType: 'script'` is what `importScripts` actually evaluates it as.
+  {
+    files: ['public/**/*.js'],
+    extends: [js.configs.recommended],
+    plugins: { kikouchou },
+    linterOptions: {
+      reportUnusedDisableDirectives: 'error',
+    },
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'script',
+      globals: globals.serviceworker,
+    },
+    rules: {
+      'kikouchou/no-raw-palette-class': 'error',
+      'kikouchou/require-disable-description': 'error',
+    },
+  },
   // Disable React Compiler rules for context files that use intentional patterns
   {
     files: ['**/contexts/*.tsx'],

@@ -34,6 +34,7 @@ import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { AccountSection } from '@/features/auth/components/AccountSection';
+import { NotificationSettings } from '@/features/settings/components/NotificationSettings';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
 import { TripIdentitySelector } from '@/features/settings/components/TripIdentitySelector';
 import { TripForm } from '@/features/trips/components/TripForm';
@@ -488,6 +489,7 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
  * - Account: sign in with Google, sign out
  * - Language selector (French/English)
  * - Theme selector (light/dark/system)
+ * - Ride alerts: opt in to OS notifications for the cars you drive
  * - App version display
  * - Clear data option with confirmation
  * - About section
@@ -530,6 +532,11 @@ function SettingsPageComponent(): ReactElement {
 
         {/* Theme Section - grouped with Language: both are presentation preferences */}
         <ThemeSelector />
+
+        {/* Ride alerts — below the presentation preferences because it is the
+            only card here that asks the browser for something, and above About
+            because it is a preference rather than reference material. */}
+        <NotificationSettings />
 
         {/* About Section */}
         <AboutSection />
