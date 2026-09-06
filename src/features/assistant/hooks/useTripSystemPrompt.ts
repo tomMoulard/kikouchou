@@ -39,6 +39,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { formatCoordinates, hasValidCoordinates } from '@/lib/geocoding';
 import { DEFAULT_LANGUAGE } from '@/lib/i18n';
+import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 
 import {
   getPersonHeadcount,
@@ -318,6 +319,12 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       ].join('\n');
     }
 
+    // The guest this browser identified as — picked in the share wizard or on
+    // the settings page, and stored per share key rather than in the trip, so
+    // it is undefined for an owner who never followed their own link.
+    const selfGuestId = getTripGuestPersonId(currentTrip);
+    const selfGuest = persons.find((person) => person.id === selfGuestId);
+
     // The createTrip / updateTrip / selectTrip rules used to be restated here
     // as well as in the action prompt. Saying them once is not just tidier: the
     // whole prompt is re-tokenised every turn and prefill memory grows with it,
@@ -344,6 +351,14 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       ...(currentTrip.description
         ? [`- Description: ${toPromptText(currentTrip.description)}`]
         : []),
+      // Who this device is, chosen in the share wizard or on the settings page.
+      // Stated either way rather than only when known: told nothing, the model
+      // picks a guest out of the roster and answers "your room is the attic"
+      // about somebody else. The negative line is what stops the guess, and it
+      // is the one the floor budget pays for, so it is the shorter of the two.
+      selfGuest
+        ? `- You are "${toPromptText(selfGuest.name)}" (id: ${selfGuest.id}); "me"/"my" mean that guest.`
+        : '- The user has not said which guest they are; never guess who "me" is.',
       ...tripsListLines,
     ];
 

@@ -9,7 +9,7 @@
  */
 
 import type { ReactNode } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 
 import { AppProviders } from '@/contexts/AppProviders';
@@ -20,8 +20,9 @@ import { createGuestGroup } from '@/lib/db/repositories/guest-group-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { toLocalISODateString } from '@/lib/db/utils';
+import { writeGuestIdentity } from '@/lib/sharing/guest-identity';
 import { hexColor, isoDate, waitForTripDoc } from '@/test/utils';
-import type { ISODateTimeString, PersonId, TripId } from '@/types';
+import type { ISODateTimeString, PersonId, ShareId, TripId } from '@/types';
 
 import { useTripSystemPrompt } from '../useTripSystemPrompt';
 
@@ -31,6 +32,44 @@ import { useTripSystemPrompt } from '../useTripSystemPrompt';
 
 function Wrapper({ children }: { children: ReactNode }) {
   return <AppProviders>{children}</AppProviders>;
+}
+
+/**
+ * jsdom in this suite refuses every `localStorage` write, and
+ * `writeGuestIdentity` reports the refusal rather than throwing — so without a
+ * store the guest-identity assertions below would both land on the "nobody has
+ * said who they are" branch and pass for the wrong reason.
+ */
+function installLocalStorage(): () => void {
+  const entries = new Map<string, string>();
+  const original = Object.getOwnPropertyDescriptor(window, 'localStorage');
+
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    writable: true,
+    value: {
+      get length(): number {
+        return entries.size;
+      },
+      clear: (): void => entries.clear(),
+      getItem: (key: string): string | null => entries.get(key) ?? null,
+      key: (index: number): string | null => [...entries.keys()][index] ?? null,
+      removeItem: (key: string): void => {
+        entries.delete(key);
+      },
+      setItem: (key: string, value: string): void => {
+        entries.set(key, value);
+      },
+    } satisfies Storage,
+  });
+
+  return () => {
+    if (original) {
+      Object.defineProperty(window, 'localStorage', original);
+    } else {
+      Reflect.deleteProperty(window as unknown as Record<string, unknown>, 'localStorage');
+    }
+  };
 }
 
 function useCombined() {
@@ -44,7 +83,11 @@ function todayAt(hours: number, minutes = 0): ISODateTimeString {
   return date.toISOString() as ISODateTimeString;
 }
 
-async function seedTrip(): Promise<{ tripId: TripId; personId: PersonId }> {
+async function seedTrip(): Promise<{
+  tripId: TripId;
+  personId: PersonId;
+  shareId: ShareId;
+}> {
   const trip = await createTrip({
     name: 'Test Trip',
     startDate: isoDate('2024-07-15'),
@@ -54,7 +97,7 @@ async function seedTrip(): Promise<{ tripId: TripId; personId: PersonId }> {
     name: 'Alice',
     color: hexColor('#ef4444'),
   });
-  return { tripId: trip.id, personId: person.id };
+  return { tripId: trip.id, personId: person.id, shareId: trip.shareId };
 }
 
 /** Renders the hook with the seeded trip selected. */
@@ -86,6 +129,16 @@ async function renderWithTrip(tripId: TripId) {
 // ============================================================================
 
 describe('useTripSystemPrompt', () => {
+  let restoreLocalStorage: () => void;
+
+  beforeAll(() => {
+    restoreLocalStorage = installLocalStorage();
+  });
+
+  afterAll(() => {
+    restoreLocalStorage();
+  });
+
   /**
    * The suite renders in English (`TEST_LANGUAGE` in `src/test/setup.ts`); the
    * app itself falls back to French. What matters here is that the prompt names
@@ -311,6 +364,32 @@ describe('useTripSystemPrompt', () => {
     });
 
     expect(result.current.prompt.systemPrompt).toContain('phone: +33 6 12 34 56 78');
+  });
+
+  /**
+   * Who the device is answers "which room am I in?" — and gets it wrong for
+   * somebody else when the prompt leaves it out, because a model handed a
+   * roster and no "you" picks a name from the roster.
+   */
+  it('names the guest this browser identified as', async () => {
+    const { tripId, personId, shareId } = await seedTrip();
+    expect(writeGuestIdentity(shareId, { personId, tripId })).toBe(true);
+
+    const result = await renderWithTrip(tripId);
+
+    expect(result.current.prompt.systemPrompt).toContain(
+      `- You are "Alice" (id: ${personId}); "me"/"my" mean that guest.`,
+    );
+  });
+
+  it('forbids guessing when this browser has no identity', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    expect(result.current.prompt.systemPrompt).toContain(
+      'The user has not said which guest they are',
+    );
+    expect(result.current.prompt.systemPrompt).not.toContain('- You are "');
   });
 
   it('omits the phone segment for a guest without one', async () => {
