@@ -31,6 +31,12 @@ export type { TransportFormProps } from './components/TransportForm';
 export { TransportDialog } from './components/TransportDialog';
 export type { TransportDialogProps } from './components/TransportDialog';
 
+export { RideForm } from './components/RideForm';
+export type { RideFormProps } from './components/RideForm';
+
+export { RideDialog } from './components/RideDialog';
+export type { RideDialogProps } from './components/RideDialog';
+
 export { UpcomingPickups } from './components/UpcomingPickups';
 export type { UpcomingPickupsProps } from './components/UpcomingPickups';
 

@@ -23,6 +23,38 @@ import type { Ride, Transport } from '@/types';
 export const DEFAULT_TIME_WINDOW_MINUTES = 60;
 
 // ============================================================================
+// Places
+// ============================================================================
+
+/**
+ * Folds a place name into the key two places are compared on.
+ *
+ * One definition, because two features now decide "is this the same place?":
+ * the proximity grouping below, which offers to put three legs in one car, and
+ * `RideForm`, which remembers how long the drive to that place took last time.
+ * A private copy in either is how the app comes to propose a shared car for a
+ * station it then refuses to remember — `getDateLocale` reached twelve copies
+ * in this repo before it was pulled back together.
+ *
+ * `location` is required by the `Transport` type, but nothing enforces that on
+ * a record arriving over Yjs from a peer, and one such row used to throw
+ * `Cannot read properties of undefined (reading 'trim')` straight into the
+ * error boundary — taking the whole transports page down rather than the one
+ * malformed pickup. An absent name folds to the empty key instead.
+ *
+ * @param location - A place name as stored, possibly absent
+ * @returns The trimmed, case-folded key
+ *
+ * @example
+ * ```typescript
+ * normaliseStation('  CDG Terminal 2 '); // 'cdg terminal 2'
+ * ```
+ */
+export function normaliseStation(location: string | undefined): string {
+  return (location ?? '').trim().toLowerCase();
+}
+
+// ============================================================================
 // Type Definitions
 // ============================================================================
 
@@ -274,12 +306,8 @@ export function groupPickupsByProximity(
       continue;
     }
 
-    // `location` is required by the `Transport` type, but nothing enforces that
-    // on a record arriving over Yjs from a peer, and one such row used to throw
-    // `Cannot read properties of undefined (reading 'trim')` straight into the
-    // error boundary — taking the whole transports page down rather than the
-    // one malformed pickup. Group those under the empty station instead.
-    const normalizedStation = (pickup.location ?? '').trim().toLowerCase();
+    // Shared with `RideForm`'s destination memory — see `normaliseStation`.
+    const normalizedStation = normaliseStation(pickup.location);
 
     // Find an existing group that matches (within timeWindow of any pickup in the group)
     let matched = false;

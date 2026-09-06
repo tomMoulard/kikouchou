@@ -993,7 +993,8 @@
       "error": "Erreur :",
       "stack": "Pile d'appels :",
       "componentStack": "Pile de composants :"
-    }
+    },
+    "rideNotFound": "Trajet introuvable. Veuillez réessayer."
   },
   "pwa": {
     "install": "Installer l'application",
@@ -1122,6 +1123,22 @@
       "dropDescription": "{{name}} garde son voyage — seule sa place dans cette voiture disparaît. Son trajet redevient « à prendre en charge », donc quelqu'un d'autre peut encore proposer de la conduire.",
       "dropConfirm": "Retirer du trajet",
       "dropSuccess": "{{name}} a de nouveau besoin d'être conduit"
+    },
+    "new": "Nouveau trajet",
+    "edit": "Modifier le trajet",
+    "newDescription": "Indiquez où la voiture retrouve les passagers, quand, et qui conduit.",
+    "editDescription": "Modifiez les détails de ce trajet ci-dessous.",
+    "createSuccess": "Trajet ajouté",
+    "updateSuccess": "Trajet mis à jour",
+    "direction": "Sens",
+    "meetDatetime": "Date et heure du rendez-vous",
+    "location": "Point de rendez-vous",
+    "locationPlaceholder": "ex. Lyon Part-Dieu",
+    "leadTimeRemembered": "Repris du dernier trajet vers {{location}}",
+    "errors": {
+      "invalidLeadTime": "La marge doit être un nombre entier de minutes compris entre {{min}} et {{max}}",
+      "locationTooLong": "Le point de rendez-vous ne doit pas dépasser 200 caractères",
+      "notesTooLong": "Les notes ne doivent pas dépasser 1000 caractères"
     }
   },
   "vehicles": {

@@ -993,7 +993,8 @@
       "error": "Error:",
       "stack": "Stack trace:",
       "componentStack": "Component stack:"
-    }
+    },
+    "rideNotFound": "Ride not found. Please try again."
   },
   "pwa": {
     "install": "Install app",
@@ -1122,6 +1123,22 @@
       "dropDescription": "{{name}} keeps their travel plans — only their seat in this car goes. Their journey goes back to needing a lift, so somebody else can still offer one.",
       "dropConfirm": "Drop from ride",
       "dropSuccess": "{{name}} needs a lift again"
+    },
+    "new": "New ride",
+    "edit": "Edit ride",
+    "newDescription": "Say where the car meets people, when, and who is driving.",
+    "editDescription": "Change this ride's details below.",
+    "createSuccess": "Ride added",
+    "updateSuccess": "Ride updated",
+    "direction": "Direction",
+    "meetDatetime": "Meeting date and time",
+    "location": "Meeting point",
+    "locationPlaceholder": "e.g. Lyon Part-Dieu",
+    "leadTimeRemembered": "Kept from the last ride to {{location}}",
+    "errors": {
+      "invalidLeadTime": "The lead time must be a whole number of minutes between {{min}} and {{max}}",
+      "locationTooLong": "The meeting point must be 200 characters or less",
+      "notesTooLong": "The notes must be 1000 characters or less"
     }
   },
   "vehicles": {
