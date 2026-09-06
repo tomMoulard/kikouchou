@@ -45,6 +45,15 @@ import {
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import {
+  DndContext,
+  MouseSensor,
+  TouchSensor,
+  useDraggable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
 import { toast } from 'sonner';
 import { useOfflineAwareToast } from '@/hooks';
 import { type Locale, format, parseISO } from 'date-fns';
@@ -56,6 +65,7 @@ import {
   ChevronRight,
   Clock,
   Edit,
+  GripVertical,
   History,
   Map as MapIcon,
   MapPin,
@@ -63,6 +73,7 @@ import {
   Plane,
   Plus,
   Trash2,
+  Unlink,
   User,
 } from 'lucide-react';
 
@@ -100,6 +111,10 @@ import {
   createHeadcountResolver,
   type HeadcountResolver,
 } from '@/features/rooms/utils/capacity-utils';
+import {
+  DroppableRide,
+  type DroppableRideData,
+} from '@/features/transports/components/DroppableRide';
 import { RideCard } from '@/features/transports/components/RideCard';
 import { RideDialog } from '@/features/transports/components/RideDialog';
 import { RideChangeFeed } from '@/features/transports/components/RideChangeFeed';
@@ -162,6 +177,14 @@ interface TransportCardProps {
    * card went on saying nobody was collecting her.
    */
   readonly drivenRideIds: ReadonlySet<string>;
+  /**
+   * Whether this leg can be dragged onto a ride.
+   *
+   * False when the trip has no ride to drag it to, so the handle is absent
+   * rather than present and futile — and false outside a `DndContext`, where
+   * `useDraggable` throws and this card is rendered on its own by tests.
+   */
+  readonly isDraggable?: boolean;
 }
 
 /**
@@ -235,6 +258,13 @@ interface TransportListProps {
   readonly onEditRide: (rideId: RideId) => void;
   /** Asks to cancel one car journey. */
   readonly onDeleteRide: (rideId: RideId) => void;
+  /**
+   * Whether a lone leg can be dragged onto a ride.
+   *
+   * False when the trip has no ride at all: a handle that can only ever be
+   * dropped on nothing is an invitation to a dead end.
+   */
+  readonly canDropOnRide: boolean;
 }
 
 // ============================================================================
@@ -381,6 +411,25 @@ function buildListEntries(
 }
 
 // ============================================================================
+// Drag and Drop
+// ============================================================================
+
+/** What a dragged leg carries to the drop handler. */
+interface DraggableLegData {
+  /** The leg being moved into a car. */
+  readonly transportId: TransportId;
+}
+
+/**
+ * The prefix every dragged leg's id carries.
+ *
+ * Matched on rather than parsed: the id only has to be unique and recognisable
+ * within the one `DndContext` this page owns, and the `transportId` travels in
+ * `data` where it keeps its type.
+ */
+const LEG_DRAGGABLE_PREFIX = 'leg-drag-';
+
+// ============================================================================
 // TransportCard Component
 // ============================================================================
 
@@ -397,6 +446,7 @@ const TransportCard = memo(function TransportCard({
   isActionsDisabled = false,
   isPast = false,
   drivenRideIds,
+  isDraggable = false,
 }: TransportCardProps): ReactElement {
   const { t } = useTranslation(),
 
@@ -449,6 +499,20 @@ const TransportCard = memo(function TransportCard({
   // on her own card as the person collecting Alice.
    isSelfDriven = driver !== undefined && driver.id === transport.personId,
 
+  // Drag-and-drop onto a ride card. Called unconditionally — this card is only
+  // ever rendered by the page, which wraps the whole list in a `DndContext` —
+  // while `isDraggable` decides whether the handle that activates it exists.
+   {
+    attributes: dragAttributes,
+    listeners: dragListeners,
+    setNodeRef: setDragNodeRef,
+    setActivatorNodeRef,
+    isDragging,
+  } = useDraggable({
+    id: `${LEG_DRAGGABLE_PREFIX}${transport.id}`,
+    data: { transportId: transport.id } satisfies DraggableLegData,
+  }),
+
   // Build aria-label for accessibility
    ariaLabel = useMemo(() => {
     const parts = [
@@ -471,6 +535,7 @@ const TransportCard = memo(function TransportCard({
 
   return (
     <Card
+      ref={setDragNodeRef}
       role="article"
       tabIndex={0}
       aria-label={ariaLabel}
@@ -479,8 +544,13 @@ const TransportCard = memo(function TransportCard({
         'transition-all duration-200',
         'hover:shadow-md hover:border-primary/20',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        // A guest's own leg, drawn flat and bordered. The car journeys it can
+        // join are the tinted, accented cards — see `RideCard`. Two rows that
+        // mean different things must not look the same.
+        'border-dashed',
         // Past transport styling - dimmed appearance
         isPast && 'opacity-60',
+        isDragging && 'opacity-40',
       )}
     >
       <CardHeader className="pb-2">
@@ -522,6 +592,50 @@ const TransportCard = memo(function TransportCard({
               </Badge>
             )}
           </div>
+
+          {/*
+            No car. Distinct from "needs pickup", which is a request the guest
+            made: this says only that the leg is in no car, which is equally
+            true of somebody who never asked for one. Both can be on the card at
+            once, and they answer different questions.
+
+            An icon with a real accessible name, not a bare glyph — the whole
+            statement is "nobody is carrying this" and a decorative pictogram
+            would put it out of reach of a screen reader.
+          */}
+          {!isLegCovered(transport, drivenRideIds) && transport.rideId === undefined && (
+            <span
+              className="shrink-0 text-muted-foreground"
+              title={t('transports.noRideYet')}
+            >
+              <Unlink className="size-4" aria-hidden="true" />
+              <span className="sr-only">{t('transports.noRideYet')}</span>
+            </span>
+          )}
+
+          {/*
+            The drag handle, not the whole card. A card carries a menu, a
+            person badge and selectable text, and making all of it draggable
+            takes those away; a handle is also the only visible clue that this
+            can be dragged at all.
+
+            Dragging is never the only way in: the same move is the Ride select
+            in this leg's own dialog, which is where a keyboard reaches it.
+          */}
+          {isDraggable && (
+            <Button
+              ref={setActivatorNodeRef}
+              variant="ghost"
+              size="icon"
+              className="md:size-8 shrink-0 cursor-grab touch-none active:cursor-grabbing"
+              disabled={isActionsDisabled}
+              aria-label={t('transports.dragToRide')}
+              {...dragAttributes}
+              {...dragListeners}
+            >
+              <GripVertical className="size-5 md:size-4" aria-hidden="true" />
+            </Button>
+          )}
 
           {/* Actions dropdown */}
           <DropdownMenu>
@@ -644,6 +758,13 @@ interface DateGroupSectionProps {
   readonly onEditRide: (rideId: RideId) => void;
   /** Asks to cancel one car journey. */
   readonly onDeleteRide: (rideId: RideId) => void;
+  /**
+   * Whether a lone leg can be dragged onto a ride.
+   *
+   * False when the trip has no ride at all: a handle that can only ever be
+   * dropped on nothing is an invitation to a dead end.
+   */
+  readonly canDropOnRide: boolean;
 }
 
 /**
@@ -662,6 +783,7 @@ const DateGroupSection = memo(function DateGroupSection({
   myPersonId,
   onEditRide,
   onDeleteRide,
+  canDropOnRide,
 }: DateGroupSectionProps): ReactElement {
   return (
     <section key={group.dateKey} aria-labelledby={`date-header-${group.dateKey}`}>
@@ -685,9 +807,8 @@ const DateGroupSection = memo(function DateGroupSection({
     >
       {group.entries.map((entry) => {
         if (entry.kind === 'ride') {
-          return (
-            <div key={entry.key} role="listitem">
-              <RideCard
+          const card = (
+            <RideCard
                 journey={entry.journey}
                 dateLocale={dateLocale}
                 drivenRideIds={drivenRideIds}
@@ -697,11 +818,25 @@ const DateGroupSection = memo(function DateGroupSection({
                 }
                 onEditRide={onEditRide}
                 onDeleteRide={onDeleteRide}
-                onEditLeg={onEdit}
-                onDeleteLeg={onDelete}
-                isActionsDisabled={isActionsDisabled}
-                isPast={isPast}
-              />
+              onEditLeg={onEdit}
+              onDeleteLeg={onDelete}
+              isActionsDisabled={isActionsDisabled}
+              isPast={isPast}
+            />
+          );
+
+          return (
+            <div key={entry.key} role="listitem">
+              {/*
+                Only a real `Ride` accepts a drop. A legacy `driverId`-only
+                journey is drawn like one so the list has a single shape, but it
+                has no row to point a leg's `rideId` at.
+              */}
+              {entry.journey.ride === undefined ? (
+                card
+              ) : (
+                <DroppableRide rideId={entry.journey.ride.id}>{card}</DroppableRide>
+              )}
             </div>
           );
         }
@@ -729,6 +864,7 @@ const DateGroupSection = memo(function DateGroupSection({
               isActionsDisabled={isActionsDisabled}
               isPast={isPast}
               drivenRideIds={drivenRideIds}
+              isDraggable={canDropOnRide}
             />
           </div>
         );
@@ -763,6 +899,7 @@ const TransportList = memo(function TransportList({
   myPersonId,
   onEditRide,
   onDeleteRide,
+  canDropOnRide,
 }: TransportListProps): ReactElement {
   const { t } = useTranslation();
   
@@ -810,6 +947,7 @@ const TransportList = memo(function TransportList({
           myPersonId={myPersonId}
           onEditRide={onEditRide}
           onDeleteRide={onDeleteRide}
+          canDropOnRide={canDropOnRide}
         />
       ))}
 
@@ -859,6 +997,7 @@ const TransportList = memo(function TransportList({
                   myPersonId={myPersonId}
                   onEditRide={onEditRide}
                   onDeleteRide={onDeleteRide}
+                  canDropOnRide={canDropOnRide}
                 />
               ))}
             </div>
@@ -906,7 +1045,13 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
    // draws those rides, so it takes the cars along with them — and gates on the
    // ride load, because a paint before they arrive filters against no cars at
    // all and flags every ride-covered pickup as driverless.
-   { rides, vehicles, deleteRide, isLoading: isRidesLoading } = useRideContext(),
+   {
+     rides,
+     vehicles,
+     deleteRide,
+     setTransportRide,
+     isLoading: isRidesLoading,
+   } = useRideContext(),
 
   // Local state
    [transportToDelete, setTransportToDelete] = useState<TransportId | null>(null),
@@ -1071,7 +1216,15 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // How many people a guest row stands for. One resolver for the page, so the
   // ride cards and the capacity chips on them cannot disagree about whether
   // "Alice+Auré" is one person or two.
-   headcountOf = useMemo(() => createHeadcountResolver(persons), [persons]);
+   headcountOf = useMemo(() => createHeadcountResolver(persons), [persons]),
+
+  // A short drag before the pointer takes over, and a hold before touch does,
+  // so a tap on the handle is still a tap and a scroll is still a scroll. Same
+  // thresholds the rooms timeline settled on.
+   dragSensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  );
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -1138,6 +1291,37 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       setTransportToDelete(null);
     }
   }, []),
+
+  /**
+   * Puts a dragged leg into the car it was dropped on.
+   *
+   * `setTransportRide` is the one writer for membership: it sets the leg's
+   * scalar `rideId` and clears the legacy `driverId`, so a leg never names two
+   * people collecting it. Nothing is written to the ride — it holds no
+   * passenger list, deliberately, so two guests joining the same car offline
+   * both survive the merge.
+   */
+   handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const legData = event.active.data.current as DraggableLegData | undefined,
+        rideData = event.over?.data.current as DroppableRideData | undefined;
+
+      // Dropped on nothing, or on something that is not a ride.
+      if (legData?.transportId === undefined || rideData?.rideId === undefined) {
+        return;
+      }
+
+      void setTransportRide(legData.transportId, rideData.rideId)
+        .then(() => {
+          successToast(t('transports.addedToRide'));
+        })
+        .catch((error: unknown) => {
+          console.error('Failed to put the leg in the ride:', error);
+          toast.error(t('errors.saveFailed'));
+        });
+    },
+    [setTransportRide, successToast, t],
+  ),
 
   /**
    * Handles add transport button click - opens the create transport dialog.
@@ -1438,7 +1622,15 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         </div>
       )}
 
-      {/* Single chronological list grouped by date with collapsible past section */}
+      {/*
+        Single chronological list grouped by date with collapsible past section.
+
+        Wrapped in a `DndContext` so a leg's handle can be dropped on a ride
+        card. The context is here rather than around the whole page because
+        nothing outside this list drags or accepts a drop, and a context that
+        spans more than it needs makes every pointer event its business.
+      */}
+      <DndContext sensors={dragSensors} onDragEnd={handleDragEnd}>
       <TransportList
         upcomingDateGroups={upcomingDateGroups}
         pastDateGroups={pastDateGroups}
@@ -1459,7 +1651,9 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         myPersonId={myPersonId}
         onEditRide={handleEditRide}
         onDeleteRide={handleDeleteRideClick}
+        canDropOnRide={rides.length > 0}
       />
+      </DndContext>
 
       {/* Floating Action Button for mobile */}
       <Button

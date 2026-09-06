@@ -401,6 +401,12 @@ const RideCard = memo(function RideCard({
       className={cn(
         'transition-all duration-200',
         'hover:shadow-md hover:border-primary/20',
+        // A car journey, drawn as a container: tinted, solidly bordered, and
+        // with an accent down its left edge. A guest's own leg is the flat,
+        // dashed card next to it. The two mean different things — one is a
+        // vehicle carrying people, the other a person needing carrying — and
+        // for a while they were the same rectangle.
+        'border-l-4 border-l-primary bg-primary/5',
         isPast && 'opacity-60',
       )}
     >

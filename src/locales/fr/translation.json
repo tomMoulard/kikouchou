@@ -447,7 +447,10 @@
     "ride": "Trajet",
     "ridePlaceholder": "Voyage dans…",
     "noRides": "Aucun trajet organisé. Ajoutez-en un avec « Nouveau trajet » depuis la liste des transports — une voiture seule n’est pas un trajet.",
-    "noRidesForType": "Aucun trajet ne va dans ce sens pour l’instant"
+    "noRidesForType": "Aucun trajet ne va dans ce sens pour l’instant",
+    "noRideYet": "Pas dans une voiture",
+    "dragToRide": "Glisser vers un trajet",
+    "addedToRide": "Ajouté au trajet"
   },
   "activities": {
     "title": "Activités",

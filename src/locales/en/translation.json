@@ -447,7 +447,10 @@
     "ride": "Ride",
     "ridePlaceholder": "Travelling in…",
     "noRides": "No ride arranged yet. Add one with “New ride” on the transport list — a car on its own is not a ride.",
-    "noRidesForType": "No ride is going that way yet"
+    "noRidesForType": "No ride is going that way yet",
+    "noRideYet": "Not in a car",
+    "dragToRide": "Drag onto a ride",
+    "addedToRide": "Added to the ride"
   },
   "activities": {
     "title": "Activities",

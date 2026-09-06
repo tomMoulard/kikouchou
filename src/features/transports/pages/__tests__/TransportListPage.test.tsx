@@ -15,7 +15,7 @@
 import { format } from 'date-fns';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, userEvent, within } from '@/test/utils';
-import type { Person, Transport, Trip } from '@/types';
+import type { Person, Ride, Transport, Trip } from '@/types';
 
 // ============================================================================
 // Fixture dates
@@ -913,6 +913,81 @@ describe('TransportListPage', () => {
       // last ride somebody edited and save over it.
       const dialog = screen.getByTestId('ride-dialog');
       expect(dialog).toHaveAttribute('data-ride-id', '');
+    });
+  });
+
+  // ==========================================================================
+  // Legs Without a Car
+  // ==========================================================================
+
+  describe('a leg that is in no car', () => {
+    it('says so with a pictogram that has a name', () => {
+      render(<TransportListPage />, { withProviders: false });
+
+      // A name, not a bare glyph: the whole statement is "nobody is carrying
+      // this", and a decorative icon would keep that from a screen reader.
+      expect(screen.getByText('transports.noRideYet')).toBeInTheDocument();
+    });
+
+    it('drops the pictogram once the leg is in a driven car', () => {
+      const ride = {
+        id: 'ride-1' as Ride['id'],
+        tripId: 'trip-1' as Ride['tripId'],
+        direction: 'pickup' as const,
+        meetDatetime: mockArrival.datetime,
+        location: 'Gare de Vannes',
+        driverId: 'person-2' as Ride['driverId'],
+      };
+      vi.mocked(useRideContext).mockReturnValue({
+        rides: [ride],
+        vehicles: [],
+        isLoading: false,
+      } as unknown as ReturnType<typeof useRideContext>);
+      vi.mocked(useTransportContext).mockReturnValue({
+        arrivals: [{ ...mockArrival, rideId: ride.id }],
+        departures: [],
+        upcomingPickups: [],
+        nowMs: Date.now(),
+        isLoading: false,
+        error: null,
+        deleteTransport: vi.fn(),
+      } as unknown as ReturnType<typeof useTransportContext>);
+
+      render(<TransportListPage />, { withProviders: false });
+
+      expect(screen.queryByText('transports.noRideYet')).not.toBeInTheDocument();
+    });
+
+    it('offers no drag handle while the trip has no ride to drop it on', () => {
+      render(<TransportListPage />, { withProviders: false });
+
+      // Absent, not disabled. A handle whose only possible destination does not
+      // exist is an invitation to a dead end.
+      expect(
+        screen.queryByRole('button', { name: 'transports.dragToRide' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('offers a drag handle once there is a ride', () => {
+      vi.mocked(useRideContext).mockReturnValue({
+        rides: [
+          {
+            id: 'ride-1' as Ride['id'],
+            tripId: 'trip-1' as Ride['tripId'],
+            direction: 'pickup' as const,
+            meetDatetime: mockArrival.datetime,
+            location: 'Gare de Vannes',
+          },
+        ],
+        vehicles: [],
+        isLoading: false,
+      } as unknown as ReturnType<typeof useRideContext>);
+
+      render(<TransportListPage />, { withProviders: false });
+
+      expect(
+        screen.getByRole('button', { name: 'transports.dragToRide' }),
+      ).toBeInTheDocument();
     });
   });
 });

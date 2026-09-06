@@ -25,7 +25,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { stubExternalMapServices } from './support/external-services';
 import { fixtureDate } from './support/fixture-dates';
 import { waitForRoute } from './support/routes';
-import { seedPerson, seedTrip } from './support/seed';
+import { seedPerson, seedRide, seedTransport, seedTrip } from './support/seed';
 
 // ============================================================================
 // Constants
@@ -45,6 +45,7 @@ const LABELS = {
   save: /^save$|^enregistrer$/i,
   confirmDelete: /^delete$|^supprimer$/i,
   actions: /^actions/i,
+  dragToRide: /drag onto a ride|glisser vers un trajet/i,
 } as const;
 
 /** A meeting time inside the fixture month, as the datetime-local input wants it. */
@@ -314,5 +315,112 @@ test.describe('arranging a car journey', () => {
     const rideSelect = page.getByRole('combobox', { name: LABELS.ride });
     await expect(rideSelect).toBeVisible();
     await expect(rideSelect).toContainText(/no car chosen|aucune voiture/i);
+  });
+
+  test('a leg dragged onto a ride card joins it, and the two cards do not look alike', async ({
+    page,
+  }) => {
+    await stubExternalMapServices(page);
+
+    const { tripId } = await seedTrip(page, {
+        name: 'Drag Trip',
+        startDate: fixtureDate(1),
+        endDate: fixtureDate(10),
+      }),
+      alice = await seedPerson(page, tripId, 'Alice'),
+      guillaume = await seedPerson(page, tripId, 'Guillaume'),
+      rideId = await seedRide(page, {
+        tripId,
+        meetDatetime: `${fixtureDate(4)}T15:00:00.000Z`,
+        location: PLACE.name,
+        driverId: guillaume,
+      });
+
+    // Alice's arrival, in no car: exactly the row the handle exists for.
+    const transportId = await seedTransport(page, {
+      tripId,
+      personId: alice,
+      type: 'arrival',
+      datetime: `${fixtureDate(4)}T15:05:00.000Z`,
+      location: PLACE.name,
+    });
+
+    await page.goto(`/trips/${tripId}/transports`);
+    await waitForRoute(page);
+
+    // Scoped to the chronological list. The pickup alert panel above it also
+    // names Alice and also draws cards, and a page-wide match takes both.
+    const list = page.getByRole('list', { name: /transport/i }),
+      legCard = list.getByRole('article').filter({ hasText: 'Alice' }),
+      rideCard = list
+        .getByRole('article')
+        .filter({ hasText: /pick-up|aller chercher/i });
+
+    // The two rows mean different things and must not be the same rectangle: a
+    // car journey is a container, a leg is a request to be carried.
+    const [legStyle, rideStyle] = await Promise.all([
+      legCard.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { style: s.borderLeftStyle, width: s.borderLeftWidth };
+      }),
+      rideCard.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { style: s.borderLeftStyle, width: s.borderLeftWidth };
+      }),
+    ]);
+    expect(legStyle.style).toBe('dashed');
+    expect(rideStyle.style).toBe('solid');
+    expect(parseFloat(rideStyle.width)).toBeGreaterThan(parseFloat(legStyle.width));
+
+    // Drag the leg's handle onto the car. dnd-kit only starts once the pointer
+    // has moved past its activation distance, so this is a press, two moves and
+    // a release rather than `dragTo` — one jump never crosses the threshold in
+    // a way its sensor sees.
+    const handle = legCard.getByRole('button', { name: LABELS.dragToRide }),
+      from = await handle.boundingBox(),
+      to = await rideCard.boundingBox();
+
+    expect(from).not.toBeNull();
+    expect(to).not.toBeNull();
+    if (from === null || to === null) {
+      throw new Error('the cards have no box to drag between');
+    }
+
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(from.x + from.width / 2 + 20, from.y + from.height / 2 + 20, {
+      steps: 5,
+    });
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 10 });
+    await page.mouse.up();
+
+    // Stored on the *leg*, never as a list on the ride: membership is a scalar
+    // so two guests joining the same car offline both survive the merge.
+    await expect
+      .poll(async () =>
+        page.evaluate((id: string) => {
+          return new Promise<string | undefined>((resolve, reject) => {
+            const request = indexedDB.open('kikouchou');
+            request.onerror = () => reject(new Error('Failed to open database'));
+            request.onsuccess = () => {
+              const database = request.result,
+                row = database
+                  .transaction('transports', 'readonly')
+                  .objectStore('transports')
+                  .get(id);
+              row.onsuccess = () => {
+                const stored = row.result as { rideId?: string } | undefined;
+                database.close();
+                resolve(stored?.rideId);
+              };
+              row.onerror = () => {
+                database.close();
+                reject(new Error('Failed to read the transport'));
+              };
+            };
+          });
+        }, transportId),
+      )
+      .toBe(rideId);
   });
 });
