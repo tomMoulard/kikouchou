@@ -171,6 +171,20 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // The one hand-written line in an otherwise generated worker: a
+        // `notificationclick` listener, so tapping a ride notification focuses
+        // the app instead of doing nothing. `public/sw-notifications.js` is
+        // copied verbatim into `dist`, and Workbox emits
+        // `importScripts("sw-notifications.js")` at the top of `sw.js`.
+        //
+        // Deliberately NOT a switch to `injectManifest`. That mode replaces the
+        // generated worker with a source file of ours, and the Playwright
+        // `production` project (offline-first, pwa, maps-offline) runs against
+        // exactly the worker this mode produces — a rewrite to add one listener
+        // trades a tested gate for a nicety. The notification itself is posted
+        // from the page via `registration.showNotification()`, which needs no
+        // worker source at all; see `src/lib/notifications`.
+        importScripts: ['sw-notifications.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // Exclude the large Transformers.js bundles from precache — the ML
         // runtime now lives in the assistant worker, fetched only when someone
@@ -180,6 +194,11 @@ export default defineConfig({
           '**/llm.worker*.js',
           // Byte-identical to index.html; see githubPagesSpaFallback above.
           '404.html',
+          // Imported by the worker itself (see `importScripts` above), which
+          // means the browser stores it alongside the worker's own script
+          // resource and re-fetches it when the worker updates. A precache
+          // entry would be a second copy that nothing ever reads.
+          'sw-notifications.js',
         ],
         // Runtime caching for external resources
         runtimeCaching: [

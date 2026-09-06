@@ -1143,5 +1143,25 @@
     "you": "Vous",
     "scopeMine": "Seulement les miens",
     "scopeAll": "Tout le monde"
+  },
+  "notifications": {
+    "title": "Alertes trajets",
+    "description": "Laissez cet appareil vous prévenir quand une voiture a besoin de vous",
+    "whatYouGet": "Une fois activées, cet appareil vous prévient :",
+    "leaveItem": "quand il est temps de partir pour un trajet que vous conduisez",
+    "movedItem": "quand un passager de votre voiture change son horaire",
+    "onlyDriver": "Seul le conducteur d’un trajet en est averti, et uniquement sur les appareils où vous avez activé les alertes.",
+    "statusLabel": "Sur cet appareil",
+    "states": {
+      "unsupported": "Indisponible",
+      "default": "Désactivées",
+      "granted": "Activées",
+      "denied": "Bloquées"
+    },
+    "enable": "Activer les alertes trajets",
+    "enabling": "En attente de votre réponse…",
+    "bestEffort": "Kikouchou n’a pas de serveur : une alerte ne peut partir que si l’application tourne ou vient d’être utilisée. L’alerte dans l’application, elle, vous attend à chaque ouverture.",
+    "deniedHint": "Votre navigateur bloque les notifications pour Kikouchou. L’application ne peut plus les demander — autorisez-les pour ce site dans les réglages de votre navigateur ou de votre système.",
+    "unsupportedHint": "Ce navigateur ne peut pas afficher de notifications. Sur iPhone, ajoutez d’abord Kikouchou à l’écran d’accueil. Les alertes trajets restent visibles dans l’application."
   }
 }

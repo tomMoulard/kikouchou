@@ -9,6 +9,7 @@
 // Components
 // ============================================================================
 
+export { NotificationSettings } from './components/NotificationSettings';
 export { ThemeSelector } from './components/ThemeSelector';
 
 // ============================================================================
