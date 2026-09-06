@@ -37,6 +37,9 @@ export type { UpcomingPickupsProps } from './components/UpcomingPickups';
 export { RideCard } from './components/RideCard';
 export type { RideCardProps } from './components/RideCard';
 
+export { RideCapacityBadge } from './components/RideCapacityBadge';
+export type { RideCapacityBadgeProps } from './components/RideCapacityBadge';
+
 // ============================================================================
 // Utilities
 // ============================================================================
@@ -50,6 +53,19 @@ export {
   sortTransportsByInstant,
   toTransportInstant,
 } from './utils/pickup-utils';
+
+// One summary and one predicate, so a badge, a card and a form cannot disagree
+// about whether a car is overloaded. `hasCapacityWarning` is the only question
+// worth colouring: being exactly full is a correctly loaded car.
+export {
+  hasCapacityWarning,
+  summariseRideCapacity,
+} from './utils/ride-capacity';
+export type {
+  ChildSeatShortfall,
+  ChildSeatTally,
+  RideCapacitySummary,
+} from './utils/ride-capacity';
 
 // ============================================================================
 // Routes
