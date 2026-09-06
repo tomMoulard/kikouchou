@@ -204,6 +204,20 @@ describe('notify', () => {
       const [, options] = registration.showNotification.mock.calls[0] ?? [];
       expect(options?.data).toEqual({ url: 'trips/abc/transports' });
     });
+
+    it('drops the segments that would climb out of the app base', async () => {
+      // Same escape, spelled the other way: `..` resolved against the scope
+      // walks above it. The worker re-checks the resolved URL as well, because
+      // it is the side that has to trust a stored notification — but a path
+      // that cannot escape is one fewer thing depending on that check.
+      const registration = createRegistration();
+      setServiceWorker(registration);
+
+      await notify({ ...LEAVE_NOTICE, path: '../../../evil//./page' });
+
+      const [, options] = registration.showNotification.mock.calls[0] ?? [];
+      expect(options?.data).toEqual({ url: 'evil/page' });
+    });
   });
 
   describe('dedupe', () => {

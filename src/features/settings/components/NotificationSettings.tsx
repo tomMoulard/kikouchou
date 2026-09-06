@@ -161,7 +161,7 @@ export const NotificationSettings = memo(function NotificationSettings(): ReactE
           <p className="mt-2 text-sm text-muted-foreground">
             {t(
               'notifications.onlyDriver',
-              'Only the driver of a ride is told about it, and only on the devices where this is turned on.',
+              'Only the driver of a ride is told about it, and only on devices where you allowed notifications.',
             )}
           </p>
         </div>

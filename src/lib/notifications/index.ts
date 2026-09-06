@@ -18,11 +18,18 @@
  * added to the Home Screen, and the worker is evicted aggressively.
  *
  * So this is genuinely best-effort, and it is the *second* half of telling a
- * driver they need to set off. The load-bearing half is the in-app alert, which
- * is computed from the same `rideNotices` rows and is guaranteed to be there
- * the moment the driver opens the app. This module makes the good case better;
- * it is not what makes the feature correct. Nothing that matters may be
- * reachable only through a notification.
+ * driver they need to set off. The load-bearing half is the in-app alert, read
+ * from the same `rideNotices` rows and guaranteed to be there the moment the
+ * driver opens the app. This module makes the good case better; it is not what
+ * makes the feature correct, and nothing that matters may be reachable only
+ * through a notification.
+ *
+ * ## Not wired up yet
+ *
+ * Nothing calls {@link notify} on this branch. Deciding *when* a ride is due,
+ * and rendering the in-app alert beside it, is a separate change; this one is
+ * the permission, delivery and dedupe underneath both. Until that lands a user
+ * can grant permission here and correctly receive nothing.
  *
  * Stating that here rather than papering over it, because the failure is
  * invisible: nothing reports "the notification you expected did not arrive".

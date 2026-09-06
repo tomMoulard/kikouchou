@@ -1150,7 +1150,7 @@
     "whatYouGet": "Turned on, this device tells you:",
     "leaveItem": "when it is time to leave for a pick-up you are driving",
     "movedItem": "when somebody riding in your car changes their time",
-    "onlyDriver": "Only the driver of a ride is told about it, and only on the devices where this is turned on.",
+    "onlyDriver": "Only the driver of a ride is told about it, and only on devices where you allowed notifications.",
     "statusLabel": "On this device",
     "states": {
       "unsupported": "Not available",

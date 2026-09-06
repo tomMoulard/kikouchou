@@ -85,11 +85,20 @@ export function getNotificationState(): NotificationState {
  * so a retry button would look like it did nothing. The card explains the
  * browser's own site settings instead.
  *
- * Never throws. A browser that refuses the request, or that only implements the
- * pre-Promise callback form, resolves to whatever the permission reads as
- * afterwards.
+ * Never throws. A browser that refuses the request resolves to whatever the
+ * permission reads as afterwards.
  *
- * @returns The state after the user answered
+ * **Racy on the pre-Promise callback form**, and deliberately left that way.
+ * Older Safari and some in-app webviews return `undefined` here and answer
+ * through a callback, so the `await` lands before the user has decided and the
+ * card shows `default` for a moment after they pressed Allow. Racing a callback
+ * would close that, at the price of hanging forever on a stub that implements
+ * neither form — an enable button disabled for the life of the page, which is
+ * worse than a label that is briefly stale. It corrects itself on the next
+ * click or the card's `visibilitychange` re-read, and delivery is unaffected:
+ * `notify` reads the live permission, not this return value.
+ *
+ * @returns The state as of this call returning
  */
 export async function requestNotificationPermission(): Promise<NotificationState> {
   const current = getNotificationState();

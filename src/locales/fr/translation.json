@@ -1150,7 +1150,7 @@
     "whatYouGet": "Une fois activées, cet appareil vous prévient :",
     "leaveItem": "quand il est temps de partir pour un trajet que vous conduisez",
     "movedItem": "quand un passager de votre voiture change son horaire",
-    "onlyDriver": "Seul le conducteur d’un trajet en est averti, et uniquement sur les appareils où vous avez activé les alertes.",
+    "onlyDriver": "Seul le conducteur d’un trajet en est averti, et uniquement sur les appareils où vous avez autorisé les notifications.",
     "statusLabel": "Sur cet appareil",
     "states": {
       "unsupported": "Indisponible",

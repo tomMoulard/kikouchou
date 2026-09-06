@@ -53,7 +53,13 @@ async function focusOrOpen(target) {
     return;
   }
 
-  const [existing] = windows;
+  // Prefer the window the user was actually looking at. `matchAll()` is not
+  // ordered "most recently focused", so `windows[0]` can be a background tab —
+  // and `navigate()` is a full page load that bypasses the app's own
+  // unsaved-changes guard. Reloading a background tab that happened to be
+  // holding a half-filled transport form throws the input away, and the user
+  // never sees why.
+  const existing = windows.find((client) => client.focused) || windows[0];
 
   if (existing) {
     // Focus first, then route. If `navigate()` is refused the user is at least
@@ -74,6 +80,37 @@ async function focusOrOpen(target) {
   await self.clients.openWindow(target);
 }
 
+/**
+ * Resolves a stored path to a URL inside this app, or to the app's own base.
+ *
+ * The page already reduces the path to plain relative segments, but this is the
+ * side that has to *trust* it: `data.url` arrives from a notification, and a
+ * notification can outlive the build that wrote it. Anything that resolves
+ * outside the registration scope is discarded for the scope itself rather than
+ * followed — opening the host root, or somebody else's page, is never a better
+ * answer than opening Kikouchou.
+ *
+ * @param {unknown} path Stored path, relative to the app's base.
+ * @returns {string} An absolute URL known to be inside the app.
+ */
+function resolveInsideApp(path) {
+  const scope = self.registration.scope;
+
+  if (typeof path !== 'string' || path === '') {
+    return scope;
+  }
+
+  try {
+    const resolved = new URL(path, scope).href;
+
+    return resolved.startsWith(scope) ? resolved : scope;
+  } catch {
+    // `new URL` throws only on input this should never see, and the app's own
+    // base is always a safe landing.
+    return scope;
+  }
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
@@ -82,9 +119,8 @@ self.addEventListener('notificationclick', (event) => {
   // a hard-coded '/' — or a leading slash here — would open the host root
   // instead, which is the wrong page on a sub-path deploy.
   const data = event.notification.data;
-  const path =
-    data && typeof data.url === 'string' ? data.url : DEFAULT_TARGET_PATH;
-  const target = new URL(path, self.registration.scope).href;
+  const path = data && typeof data.url === 'string' ? data.url : DEFAULT_TARGET_PATH;
+  const target = resolveInsideApp(path);
 
   // Without `waitUntil` the worker may be killed before the client is focused.
   // The rejection is swallowed rather than left to `waitUntil`: a browser can

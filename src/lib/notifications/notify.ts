@@ -99,9 +99,28 @@ async function findRegistration(): Promise<NotifyingRegistration | undefined> {
     : undefined;
 }
 
-/** Strips a leading slash so the path resolves under the app's base. */
+/**
+ * Reduces a path to plain relative segments.
+ *
+ * The click handler resolves this against the worker's registration scope, so
+ * a leading slash or a `..` segment would escape a sub-path deploy and open the
+ * host root — the wrong page, and not one this app controls. Empty and `.`
+ * segments go with them, which also collapses a doubled slash.
+ *
+ * The handler re-checks the resolved URL against its own scope rather than
+ * trusting this, because it is the side that has to: `data.url` reaches it from
+ * a stored notification, and a notification can outlive the build that wrote it.
+ *
+ * @param path - A path relative to the app's base
+ * @returns The same path with nothing that could escape the base
+ */
 function toAppRelative(path: string): string {
-  return path.replace(/^\/+/, '');
+  return path
+    .split('/')
+    .filter(
+      (segment) => segment !== '' && segment !== '.' && segment !== '..',
+    )
+    .join('/');
 }
 
 // ============================================================================
