@@ -60,6 +60,7 @@ const SRC_DIR = resolve(process.cwd(), 'src'),
  DYNAMIC_KEY_PREFIXES = [
    'activities.categories',
    'assistant.actionDetails.tripField',
+   'rides.directions',
    'settings.languages',
    'transports.modes',
  ],

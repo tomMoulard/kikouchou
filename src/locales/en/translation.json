@@ -815,7 +815,12 @@
     "guestNotFound": "That guest was not found.",
     "guestGroupNotFound": "No saved group with that id",
     "roomNotFound": "That room was not found.",
+    "rideNotFound": "That ride was not found.",
+    "vehicleNotFound": "That car was not found.",
+    "transportNotFound": "That arrival or departure was not found.",
     "invalidActivity": "Those activity details are invalid, nothing was saved.",
+    "invalidRide": "Those ride details are invalid, nothing was saved.",
+    "invalidVehicle": "Those car details are invalid, nothing was saved.",
     "tripSwitched": "Switched to {{name}}",
     "models": {
       "gemma-3-1b": {
@@ -859,7 +864,14 @@
       "updateActivity": "Updated activity {{title}} ({{fields}})",
       "removeActivity": "Removed activity: {{title}}",
       "joinActivity": "{{person}} joined {{title}}",
-      "leaveActivity": "{{person}} left {{title}}"
+      "leaveActivity": "{{person}} left {{title}}",
+      "addRide": "Added {{direction}} ride — {{location}}",
+      "updateRide": "Updated ride to {{location}} ({{fields}})",
+      "removeRide": "Cancelled {{direction}} ride — {{location}} (its passengers need a lift again)",
+      "addVehicle": "Added car: {{name}}",
+      "removeVehicle": "Removed car: {{name}} (its rides keep their times)",
+      "joinRide": "{{person}} rides to {{location}}",
+      "leaveRide": "{{person}} left the car for {{location}}"
     },
     "initializingCachedLoader": "Initializing cached model…",
     "loadingCachedModelFiles": "Loading cached model files…"
@@ -1107,7 +1119,12 @@
     "legMismatch": {
       "after": "{{name}} now arrives {{minutes}} min after this ride",
       "before": "{{name}} now arrives {{minutes}} min before this ride"
-    }
+    },
+    "createSuccess": "Ride created successfully",
+    "updateSuccess": "Ride updated successfully",
+    "deleteSuccess": "Ride cancelled",
+    "passengerAdded": "Added to the ride",
+    "passengerRemoved": "Taken out of the ride"
   },
   "vehicles": {
     "title": "Cars",
@@ -1124,7 +1141,9 @@
     "luggageNotes": "Luggage",
     "seatsUsed": "{{used}} of {{total}} seats",
     "overCapacity": "{{used}} people for {{total}} seats",
-    "full": "Full"
+    "full": "Full",
+    "createSuccess": "Car added successfully",
+    "deleteSuccess": "Car removed successfully"
   },
   "childSeats": {
     "label": "Child seat",

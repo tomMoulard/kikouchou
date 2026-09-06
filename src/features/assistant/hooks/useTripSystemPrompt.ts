@@ -1,8 +1,8 @@
 /**
  * @fileoverview Builds a structured system prompt from trip context data.
- * Serializes trip, guests, rooms, assignments, transports and the shared
- * activity agenda into a text representation that the LLM can understand
- * and reason about.
+ * Serializes trip, guests, rooms, assignments, transports, car journeys, cars
+ * and the shared activity agenda into a text representation that the LLM can
+ * understand and reason about.
  *
  * Every user-facing trip feature must be represented here, otherwise the
  * assistant answers "I don't have access to that" — see AGENTS.md
@@ -27,11 +27,17 @@ import {
 
 import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
 
+import {
+  collectDrivenRideIds,
+  isLegCovered,
+} from '@/features/transports/utils/pickup-utils';
+
 import { useToday } from '@/hooks/useToday';
 
 import { useActivityContext } from '@/contexts/ActivityContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
+import { useRideContext } from '@/contexts/RideContext';
 import { useRoomContext } from '@/contexts/RoomContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
@@ -41,10 +47,15 @@ import { formatCoordinates, hasValidCoordinates } from '@/lib/geocoding';
 import { DEFAULT_LANGUAGE } from '@/lib/i18n';
 
 import {
+  DEFAULT_LEAD_TIME_MINUTES,
   getPersonHeadcount,
   type Activity,
   type Language,
   type Person,
+  type PersonId,
+  type Ride,
+  type Transport,
+  type Vehicle,
 } from '@/types';
 
 import { generateActionPrompt } from '../action-schema';
@@ -149,6 +160,44 @@ function formatLocalTime(datetime: string): string | undefined {
 }
 
 /**
+ * Local calendar day and clock time of a stored instant.
+ *
+ * A ride and the legs riding in it are stated in one timezone — the device's —
+ * rather than one as a `Z` instant and the other as a local one, which left the
+ * model reconciling two spellings of the same moment before it could say
+ * whether a train still fits its car.
+ *
+ * @param datetime - The stored ISO instant
+ * @returns `2026-04-20 15:02`, or the raw value when it cannot be parsed
+ */
+function formatLocalDatetime(datetime: string): string {
+  const date = parseISO(datetime);
+  return isValid(date)
+    ? format(date, 'yyyy-MM-dd HH:mm')
+    : toPromptText(datetime);
+}
+
+/**
+ * Resolves a guest id to the name the prompt prints for it.
+ *
+ * Shared by every section that names a guest it does not own — an activity's
+ * participants, a ride's driver and passengers, a car's owner — because a
+ * fourth copy of the same `find` is how the twelve copies of `getDateLocale`
+ * AGENTS.md counts got started.
+ *
+ * @param persons - All guests of the trip
+ * @param personId - The id to resolve
+ * @returns The guest's prompt-safe name, or `Unknown`
+ */
+function personNameById(
+  persons: ReadonlyMap<string, Person>,
+  personId: PersonId | string,
+): string {
+  const person = persons.get(personId);
+  return person ? toPromptText(person.name) : 'Unknown';
+}
+
+/**
  * Human-readable "when" for an activity, using local calendar days so it
  * matches what the user sees on the calendar and timeline.
  *
@@ -193,7 +242,7 @@ function formatActivityWhen(activity: Activity): string {
  */
 function formatActivityLine(
   activity: Activity,
-  persons: readonly Person[],
+  persons: ReadonlyMap<string, Person>,
   todayIso: string,
 ): string {
   const startDay = getActivityStartDayKey(activity);
@@ -204,10 +253,8 @@ function formatActivityLine(
     startDay <= todayIso &&
     endDay >= todayIso;
 
-  const nameOf = (personId: string): string => {
-    const person = persons.find((candidate) => candidate.id === personId);
-    return person ? toPromptText(person.name) : 'Unknown';
-  };
+  const nameOf = (personId: string): string =>
+    personNameById(persons, personId);
 
   const participants = activity.participantIds ?? [];
   const cap =
@@ -248,11 +295,151 @@ function formatGuestLine(person: Person): string {
   const headcount = getPersonHeadcount(person);
   const headcountLabel = headcount > 1 ? ` — counts as ${headcount} people` : '';
   const phone = person.phone ? ` — phone: ${toPromptText(person.phone)}` : '';
+  // Declared by the parent rather than derived from an age nobody stored, so a
+  // guest without the field needs no restraint — see `ChildSeatKind`.
+  const childSeat = person.childSeat ? ` — child seat: ${person.childSeat}` : '';
   const notes = person.notes
     ? ` — notes: ${toPromptText(person.notes)}`
     : '';
 
-  return `- "${toPromptText(person.name)}" (id: ${person.id})${stay}${headcountLabel}${phone}${notes}`;
+  return `- "${toPromptText(person.name)}" (id: ${person.id})${stay}${headcountLabel}${phone}${childSeat}${notes}`;
+}
+
+/**
+ * Builds the line for one guest's own arrival or departure leg.
+ *
+ * The leg's id leads, because `joinRide`, `leaveRide` and `removeTransport` all
+ * take it and it was not in the prompt at all: the model could read a transport
+ * and then had nothing to name it by, so every action against one was a guess
+ * the validator threw away.
+ *
+ * "Needs a lift" is asked through the shared {@link isLegCovered}, never as
+ * `needsPickup` alone. The two answers diverge the moment somebody volunteers:
+ * a leg riding in a driven car is handled, and an assistant still reporting it
+ * as unassigned would contradict the same trip's own transport list — the exact
+ * split that helper was written to close.
+ *
+ * @param transport - The leg to serialize
+ * @param persons - All guests of the trip, used to resolve names
+ * @param drivenRideIds - Rides somebody has volunteered to drive
+ * @returns A single prompt line
+ */
+function formatTransportLine(
+  transport: Transport,
+  persons: ReadonlyMap<string, Person>,
+  drivenRideIds: ReadonlySet<string>,
+): string {
+  const segments = [
+    `- ${transport.type} (transport id: ${transport.id})`,
+    personNameById(persons, transport.personId),
+    `${formatLocalDatetime(transport.datetime)} at ${toPromptText(transport.location)}`,
+    transport.transportMode ?? '',
+    transport.transportNumber ? `#${toPromptText(transport.transportNumber)}` : '',
+    transport.needsPickup && !isLegCovered(transport, drivenRideIds)
+      ? 'needs a lift'
+      : '',
+    // Which car it rides in, by id. `leaveRide` is addressed by *leg*, so
+    // without this the model has to join the two sections through a display
+    // name — and two guests called Alice, or one the device cannot name, take
+    // the wrong leg out of the car. It also separates a leg that is being
+    // driven from one that never needed a lift: neither prints "needs a lift",
+    // and a covered leg has had its legacy driver cleared.
+    transport.rideId ? `in ride: ${transport.rideId}` : '',
+    // The pre-ride shape: a driver named on the leg itself, with no `Ride` row.
+    // It still answers "who is fetching Alice", so it is stated rather than
+    // silently folded into the rides below. It cannot contradict one either —
+    // `setTransportRide` clears this field when a leg joins a ride, so no leg
+    // ever names two drivers.
+    transport.driverId
+      ? `driver: ${personNameById(persons, transport.driverId)}`
+      : '',
+    transport.notes ? `notes: ${toPromptText(transport.notes)}` : '',
+  ].filter(Boolean);
+
+  return segments.join(' — ');
+}
+
+/**
+ * Builds the line for one car journey.
+ *
+ * Reads as what a ride is: who drives, in what, from where and when, and who is
+ * in it. Passengers come from the legs pointing at the ride — there is no list
+ * on the ride itself, deliberately, so that two guests joining the same car
+ * offline both survive the merge.
+ *
+ * @param ride - The journey to serialize
+ * @param legs - The legs whose `rideId` names this ride
+ * @param persons - All guests of the trip, used to resolve names
+ * @param vehicles - The trip's cars, used to resolve the chosen one
+ * @returns A single prompt line
+ */
+function formatRideLine(
+  ride: Ride,
+  legs: readonly Transport[],
+  persons: ReadonlyMap<string, Person>,
+  vehicles: ReadonlyMap<string, Vehicle>,
+): string {
+  const vehicle =
+    ride.vehicleId === undefined ? undefined : vehicles.get(ride.vehicleId);
+  const passengers = legs.map((leg) => personNameById(persons, leg.personId));
+
+  const segments = [
+    `- ${ride.direction} (id: ${ride.id})`,
+    `${formatLocalDatetime(ride.meetDatetime)} at ${toPromptText(ride.location)}`,
+    // Both stated even when empty: "nobody is driving this yet" is the question
+    // the ride list exists to answer, and a missing segment reads as unknown.
+    //
+    // Asked of `driverId`, not of the resolved guest — the same distinction
+    // `ResolvedRide` keeps by carrying both. A ride nobody has volunteered for
+    // and a ride whose driver this device cannot yet name are different facts,
+    // and collapsing them puts a car that has a driver back on the list of cars
+    // that need one.
+    `driver: ${ride.driverId ? personNameById(persons, ride.driverId) : 'nobody yet'}`,
+    `car: ${vehicle ? `"${toPromptText(vehicle.name)}"` : 'not chosen'}`,
+    // The effective value, not the stored one, so an unset lead time answers
+    // "when do I leave" instead of leaving the default unstated.
+    `leaves ${ride.leadTimeMinutes ?? DEFAULT_LEAD_TIME_MINUTES} min before`,
+    passengers.length > 0
+      ? `passengers: ${passengers.join(', ')}`
+      : 'no passengers yet',
+    ride.notes ? `notes: ${toPromptText(ride.notes)}` : '',
+  ];
+
+  return segments.filter(Boolean).join(' — ');
+}
+
+/**
+ * Builds the line for one car.
+ *
+ * An unmeasured car says so rather than reading as a car with no room in it:
+ * every capacity field is optional and a missing `seatCount` means "nobody has
+ * counted", which is not the same claim as zero seats.
+ *
+ * @param vehicle - The car to serialize
+ * @param persons - All guests of the trip, used to resolve the owner
+ * @returns A single prompt line
+ */
+function formatVehicleLine(
+  vehicle: Vehicle,
+  persons: ReadonlyMap<string, Person>,
+): string {
+  const segments = [
+    `- "${toPromptText(vehicle.name)}" (id: ${vehicle.id})`,
+    vehicle.seatCount === undefined
+      ? 'seats not counted'
+      : `${vehicle.seatCount} seats incl. driver`,
+    vehicle.isRental ? 'hire car' : '',
+    vehicle.ownerId
+      ? `owner: ${personNameById(persons, vehicle.ownerId)}`
+      : '',
+    vehicle.childSeats && vehicle.childSeats.length > 0
+      ? `child seats: ${vehicle.childSeats.join(', ')}`
+      : '',
+    vehicle.luggageNotes ? `luggage: ${toPromptText(vehicle.luggageNotes)}` : '',
+    vehicle.notes ? `notes: ${toPromptText(vehicle.notes)}` : '',
+  ].filter(Boolean);
+
+  return segments.join(' — ');
 }
 
 // ============================================================================
@@ -271,6 +458,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
   const { persons } = usePersonContext();
   const { assignments } = useAssignmentContext();
   const { transports } = useTransportContext();
+  const { rides, vehicles } = useRideContext();
   const { activities } = useActivityContext();
   const { groups: guestGroups } = useGuestGroups();
   const { today } = useToday();
@@ -322,9 +510,21 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     // as well as in the action prompt. Saying them once is not just tidier: the
     // whole prompt is re-tokenised every turn and prefill memory grows with it,
     // so duplicated instructions are paid for on every single answer.
+    // Indexed once. Every section names guests it does not own — participants,
+    // a driver, passengers, an owner — and this memo re-runs on every live
+    // query tick from five contexts, so a linear scan per name is a scan of
+    // the guest list per guest, per tick. `resolveRides` indexes for the same
+    // reason.
+    const personsById = new Map<string, Person>(
+      persons.map((person) => [person.id, person]),
+    );
+    const vehiclesById = new Map<string, Vehicle>(
+      vehicles.map((vehicle) => [vehicle.id, vehicle]),
+    );
+
     const parts: string[] = [
       ...buildOpeningLines(languageName),
-      'The current trip is below — its guests, rooms, room assignments, transports and shared activity agenda. Answer from that data directly; never say you lack access to it.',
+      'The current trip is below — its guests, rooms, assignments, transports, rides, cars and agenda. Answer from that data directly; never say you lack access to it.',
       todayLine,
       '',
       '## Current trip (selected)',
@@ -410,20 +610,57 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       parts.push('', '## Room Assignments', 'No assignments yet.');
     }
 
-    // Transports
+    // Transports — each guest's own arrival or departure leg
+    const drivenRideIds = collectDrivenRideIds(rides);
+
     if (transports.length > 0) {
       parts.push('', '## Transports');
       for (const transport of transports) {
-        const person = persons.find((p) => p.id === transport.personId);
-        const driver = transport.driverId
-          ? persons.find((p) => p.id === transport.driverId)
-          : undefined;
-        parts.push(
-          `- ${person ? toPromptText(person.name) : 'Unknown'}: ${transport.type} at ${toPromptText(transport.location)} on ${transport.datetime}${transport.transportMode ? ` (${transport.transportMode})` : ''}${transport.transportNumber ? ` #${toPromptText(transport.transportNumber)}` : ''}${transport.needsPickup ? ' — needs pickup' : ''}${driver ? ` — driver: ${toPromptText(driver.name)}` : ''}${transport.notes ? ` — notes: ${toPromptText(transport.notes)}` : ''}`,
-        );
+        parts.push(formatTransportLine(transport, personsById, drivenRideIds));
       }
     } else {
       parts.push('', '## Transports', 'No transport plans yet.');
+    }
+
+    // Rides — the cars meeting those legs. Membership lives on the leg, so the
+    // passengers of a ride are the legs pointing back at it.
+    const legsByRideId = new Map<string, Transport[]>();
+    for (const transport of transports) {
+      if (transport.rideId === undefined) {
+        continue;
+      }
+      const existing = legsByRideId.get(transport.rideId);
+      if (existing === undefined) {
+        legsByRideId.set(transport.rideId, [transport]);
+      } else {
+        existing.push(transport);
+      }
+    }
+
+    if (rides.length > 0) {
+      parts.push('', '## Rides (cars meeting the transports above)');
+      for (const ride of rides) {
+        parts.push(
+          formatRideLine(
+            ride,
+            legsByRideId.get(ride.id) ?? [],
+            personsById,
+            vehiclesById,
+          ),
+        );
+      }
+    } else {
+      parts.push('', '## Rides', 'No rides yet.');
+    }
+
+    // Cars
+    if (vehicles.length > 0) {
+      parts.push('', '## Cars');
+      for (const vehicle of vehicles) {
+        parts.push(formatVehicleLine(vehicle, personsById));
+      }
+    } else {
+      parts.push('', '## Cars', 'No cars yet.');
     }
 
     // Activities (shared agenda)
@@ -434,7 +671,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
         'Activities happening on today\'s date are tagged with "TODAY".',
       );
       for (const activity of activities) {
-        parts.push(formatActivityLine(activity, persons, todayIso));
+        parts.push(formatActivityLine(activity, personsById, todayIso));
       }
     } else {
       parts.push(
@@ -455,6 +692,8 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     persons,
     assignments,
     transports,
+    rides,
+    vehicles,
     activities,
     guestGroups,
     todayIso,

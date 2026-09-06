@@ -815,7 +815,12 @@
     "guestNotFound": "Cette personne est introuvable.",
     "guestGroupNotFound": "Aucun groupe enregistré avec cet identifiant",
     "roomNotFound": "Cette chambre est introuvable.",
+    "rideNotFound": "Ce trajet est introuvable.",
+    "vehicleNotFound": "Cette voiture est introuvable.",
+    "transportNotFound": "Cette arrivée ou ce départ est introuvable.",
     "invalidActivity": "Ces informations d'activité sont invalides, rien n'a été enregistré.",
+    "invalidRide": "Ces informations de trajet sont invalides, rien n'a été enregistré.",
+    "invalidVehicle": "Ces informations de voiture sont invalides, rien n'a été enregistré.",
     "tripSwitched": "Passage à {{name}}",
     "models": {
       "gemma-3-1b": {
@@ -859,7 +864,14 @@
       "updateActivity": "Activité {{title}} mise à jour ({{fields}})",
       "removeActivity": "Activité supprimée : {{title}}",
       "joinActivity": "{{person}} participe à {{title}}",
-      "leaveActivity": "{{person}} ne participe plus à {{title}}"
+      "leaveActivity": "{{person}} ne participe plus à {{title}}",
+      "addRide": "Trajet ajouté ({{direction}}) — {{location}}",
+      "updateRide": "Trajet vers {{location}} mis à jour ({{fields}})",
+      "removeRide": "Trajet annulé ({{direction}}) — {{location}} (ses passagers ont de nouveau besoin d'être conduits)",
+      "addVehicle": "Voiture ajoutée : {{name}}",
+      "removeVehicle": "Voiture supprimée : {{name}} (ses trajets gardent leurs horaires)",
+      "joinRide": "{{person}} monte dans la voiture pour {{location}}",
+      "leaveRide": "{{person}} ne monte plus dans la voiture pour {{location}}"
     },
     "initializingCachedLoader": "Initialisation du modèle en cache…",
     "loadingCachedModelFiles": "Chargement des fichiers du modèle depuis le cache…"
@@ -1107,7 +1119,12 @@
     "legMismatch": {
       "after": "{{name}} arrive maintenant {{minutes}} min après ce trajet",
       "before": "{{name}} arrive maintenant {{minutes}} min avant ce trajet"
-    }
+    },
+    "createSuccess": "Trajet créé avec succès",
+    "updateSuccess": "Trajet mis à jour avec succès",
+    "deleteSuccess": "Trajet annulé",
+    "passengerAdded": "Ajouté au trajet",
+    "passengerRemoved": "Retiré du trajet"
   },
   "vehicles": {
     "title": "Voitures",
@@ -1124,7 +1141,9 @@
     "luggageNotes": "Bagages",
     "seatsUsed": "{{used}} places sur {{total}}",
     "overCapacity": "{{used}} personnes pour {{total}} places",
-    "full": "Complète"
+    "full": "Complète",
+    "createSuccess": "Voiture ajoutée avec succès",
+    "deleteSuccess": "Voiture supprimée avec succès"
   },
   "childSeats": {
     "label": "Siège auto",
