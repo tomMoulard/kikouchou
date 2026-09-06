@@ -533,7 +533,15 @@ const TransportForm = memo(function TransportForm({
         // Inferred from the driver rather than asked for separately: picking
         // someone to drive is what says this person is being collected, and the
         // form asked the same question twice.
-        needsPickup: formState.driverId !== '',
+        //
+        // Inferred, but never *unset* by inference. A guest self-entering their
+        // arrival through the share wizard can now say they need a lift, which
+        // is a `needsPickup` with nobody driving yet — precisely the state this
+        // form has no field for. Re-deriving it would have quietly answered
+        // "no, they don't" the next time the organiser opened the leg to fix a
+        // station name, dropping that guest out of the pickup panel and out of
+        // `pickupsNeedingDriver` with nobody deciding to.
+        needsPickup: formState.driverId !== '' || (transport?.needsPickup ?? false),
         notes: formState.notes.trim() || undefined,
       };
 
@@ -543,7 +551,7 @@ const TransportForm = memo(function TransportForm({
         // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, doSubmit, formState],
+    [validateForm, doSubmit, formState, transport],
   );
 
   // ============================================================================

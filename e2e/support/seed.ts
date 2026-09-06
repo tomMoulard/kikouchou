@@ -122,6 +122,20 @@ export async function seedTrip(
 }
 
 /**
+ * The optional guest fields a seed can express beyond a name and a colour.
+ *
+ * Both are why they are here rather than in the caller: a spec that cannot say
+ * `headcount` cannot tell "counts rows" apart from "counts people", and a spec
+ * that cannot say `childSeat` cannot put a child in a car.
+ */
+export interface SeedPersonOptions {
+  /** Real people this one guest row stands for. Omit for one. */
+  readonly headcount?: number;
+  /** The restraint this guest needs in a car, when they need one. */
+  readonly childSeat?: 'rearFacing' | 'forwardFacing' | 'booster';
+}
+
+/**
  * Writes one guest into the `persons` store.
  *
  * Seed a trip's rows **before** anything makes that trip current.
@@ -136,16 +150,24 @@ export async function seedTrip(
  * @param tripId - The trip the guest belongs to
  * @param name - Guest name
  * @param color - Badge colour
+ * @param options - Headcount and child seat, when the spec needs them
  * @returns The new guest's id
+ *
+ * @example
+ * ```ts
+ * // A couple in one row: three of these do not fit a four-seat car.
+ * const alice = await seedPerson(page, tripId, 'Alice', '#3b82f6', { headcount: 2 });
+ * ```
  */
 export async function seedPerson(
   page: Page,
   tripId: string,
   name: string,
   color = '#3b82f6',
+  options: SeedPersonOptions = {},
 ): Promise<string> {
   return await page.evaluate(
-    async ({ tripId, name, color }) => {
+    async ({ tripId, name, color, options }) => {
       const id = `seed-person-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
       return new Promise<string>((resolve, reject) => {
@@ -154,7 +176,14 @@ export async function seedPerson(
         request.onsuccess = () => {
           const db = request.result;
           const tx = db.transaction('persons', 'readwrite');
-          tx.objectStore('persons').add({ id, tripId, name, color });
+          tx.objectStore('persons').add({
+            id,
+            tripId,
+            name,
+            color,
+            ...(options.headcount === undefined ? {} : { headcount: options.headcount }),
+            ...(options.childSeat === undefined ? {} : { childSeat: options.childSeat }),
+          });
 
           tx.oncomplete = () => {
             db.close();
@@ -167,8 +196,44 @@ export async function seedPerson(
         };
       });
     },
-    { tripId, name, color },
+    { tripId, name, color, options },
   );
+}
+
+/**
+ * Tells this browser which guest is holding it, for one trip.
+ *
+ * Written through the share-link key in `localStorage`, which is the second of
+ * the three sources `lib/identity/trip-identity` resolves — the one a device
+ * can be given without a UI and without touching the settings singleton the app
+ * writes itself. An explicit choice in Settings would outrank it; nothing in a
+ * fresh profile makes one.
+ *
+ * The page must already be on the app's origin: `about:blank` has no storage.
+ * Every trip-scoped seed above leaves it there.
+ *
+ * @param page - Playwright page object
+ * @param identity - The trip, its share id, and the guest this device is
+ *
+ * @example
+ * ```ts
+ * await seedTripIdentity(page, { shareId, tripId, personId: alice });
+ * ```
+ */
+export async function seedTripIdentity(
+  page: Page,
+  identity: {
+    readonly shareId: string;
+    readonly tripId: string;
+    readonly personId: string;
+  },
+): Promise<void> {
+  await page.evaluate((identity) => {
+    localStorage.setItem(
+      `kikouchou_guest_${identity.shareId}`,
+      JSON.stringify({ personId: identity.personId, tripId: identity.tripId }),
+    );
+  }, identity);
 }
 
 /**

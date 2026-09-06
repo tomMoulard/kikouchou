@@ -1,7 +1,20 @@
 /**
  * @fileoverview Transport Entry Step — Step 4 of the guest onboarding wizard.
  * Allows guests to enter their arrival and departure details, including
- * datetime, location, transport mode, and whether they need a pickup.
+ * datetime, location, transport mode, and how they are getting to the house.
+ *
+ * The guest filling this in is the only person who knows two things: whether
+ * somebody has to come and collect them, and whether they will have a car of
+ * their own. Both are facts about themselves, which is why they are asked here
+ * and not left for the organiser to guess — but they are also the *only* two
+ * ride facts this screen may collect. Arranging who shares which car is a
+ * decision about other people, and it belongs to the trip's own ride surfaces.
+ *
+ * Neither `Ride` nor `Vehicle` travels in a QR changeset yet, so nothing this
+ * screen writes may depend on one existing. What it writes instead is
+ * `Transport.driverId` pointing at the guest themselves, which does travel, and
+ * which `resolveRides()` reads as a one-passenger self-driven journey on every
+ * device — including one that holds no rides at all.
  *
  * @module features/sharing/pages/TransportEntryStepPage
  *
@@ -30,6 +43,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Select,
   SelectContent,
@@ -37,7 +51,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { onboardingSurface, statusVariants } from '@/components/ui/status.variants';
 
 import {
@@ -57,6 +70,7 @@ import type {
   TransportType,
   Trip,
 } from '@/types';
+import { TransportPlanBadges } from '../components/TransportPlanBadges';
 import { formatDatetime, getTransportIcon } from '../components/transport-display-helpers';
 
 // ============================================================================
@@ -79,6 +93,54 @@ interface FormErrors {
   location?: string;
   submit?: string;
 }
+
+/**
+ * How the guest gets between the station and the house for one leg.
+ *
+ * Deliberately one exclusive choice rather than two independent switches.
+ * "Somebody collects me" and "I drive myself" cannot both be true of the same
+ * leg, and two toggles would let a guest say they were, leaving the organiser
+ * a car to arrange for someone who has one.
+ */
+type TravelPlan = 'lift' | 'driving' | 'ownWay';
+
+/**
+ * The plan options, in the order they are offered, with their i18n keys.
+ *
+ * Keys are spelled out rather than built from the option name: a `t()` call on
+ * a template literal is a key no grep for `transportPlanDriving` can find, and
+ * a missing translation renders its English fallback in every locale without
+ * anything failing.
+ */
+const TRAVEL_PLANS: readonly {
+  readonly plan: TravelPlan;
+  readonly labelKey: string;
+  readonly label: string;
+  readonly hintKey: string;
+  readonly hint: string;
+}[] = [
+  {
+    plan: 'lift',
+    labelKey: 'sharing.transportPlanLift',
+    label: 'I need a lift',
+    hintKey: 'sharing.transportPlanLiftHint',
+    hint: 'Somebody from the house drives out to meet you.',
+  },
+  {
+    plan: 'driving',
+    labelKey: 'sharing.transportPlanDriving',
+    label: "I'll be driving",
+    hintKey: 'sharing.transportPlanDrivingHint',
+    hint: "You'll have a car, so nobody has to come and get you.",
+  },
+  {
+    plan: 'ownWay',
+    labelKey: 'sharing.transportPlanOwnWay',
+    label: "I'll make my own way",
+    hintKey: 'sharing.transportPlanOwnWayHint',
+    hint: 'Taxi, bus, or a lift from outside the group.',
+  },
+] as const;
 
 // ============================================================================
 // Constants
@@ -151,7 +213,12 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
   const [location, setLocation] = useState('');
   const [transportMode, setTransportMode] = useState<TransportMode | ''>('');
   const [transportNumber, setTransportNumber] = useState('');
-  const [needsPickup, setNeedsPickup] = useState(false);
+  /**
+   * Defaults to "I'll make my own way", which is what the page said before it
+   * asked at all: the old pickup switch started off, and a guest who skips the
+   * question must not be entered into a car nobody agreed to drive.
+   */
+  const [travelPlan, setTravelPlan] = useState<TravelPlan>('ownWay');
 
   /** Form validation errors */
   const [errors, setErrors] = useState<FormErrors>({});
@@ -318,7 +385,16 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
         location: location.trim(),
         transportMode: transportMode || undefined,
         transportNumber: transportNumber.trim() || undefined,
-        needsPickup,
+        // `driverId` is the deprecated single-passenger shape everywhere else,
+        // and it is the right one here for one reason: it is the only way to
+        // say "I am driving" that survives the QR changeset, which carries no
+        // `Ride`. Creating a ride locally instead would point the leg at an id
+        // the host does not hold, and `checkTransportRefs` would report that
+        // back to the guest as a broken reference rather than as a plan.
+        // Pointed at the guest themselves, it is exactly the self-driven
+        // journey `resolveRides()` reads out of a leg with no ride.
+        ...(travelPlan === 'driving' ? { driverId: guestPersonId } : {}),
+        needsPickup: travelPlan === 'lift',
       };
 
       const newTransport = await createTransport(trip.id, formData);
@@ -341,7 +417,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
       setLocation('');
       setTransportMode('');
       setTransportNumber('');
-      setNeedsPickup(false);
+      setTravelPlan('ownWay');
     } catch (error) {
       console.error('Failed to create transport:', error);
       if (isMountedRef.current) {
@@ -351,7 +427,7 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
       isSubmittingRef.current = false;
       if (isMountedRef.current) setIsSubmitting(false);
     }
-  }, [trip, guestPersonId, transportType, datetime, location, transportMode, transportNumber, needsPickup, t]);
+  }, [trip, guestPersonId, transportType, datetime, location, transportMode, transportNumber, travelPlan, t]);
 
   /**
    * Navigates to the summary step.
@@ -373,6 +449,13 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
    */
   const handleModeChange = useCallback((value: string): void => {
     setTransportMode(value as TransportMode | '');
+  }, []);
+
+  /**
+   * Handles the "how are you getting there" choice.
+   */
+  const handleTravelPlanChange = useCallback((value: string): void => {
+    setTravelPlan(value as TravelPlan);
   }, []);
 
   // ============================================================================
@@ -468,15 +551,14 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
                   <p className="text-sm text-muted-foreground">
                     {transport.location}
                   </p>
-                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     {transport.transportNumber && (
                       <span>{transport.transportNumber}</span>
                     )}
-                    {transport.needsPickup && (
-                      <span className="rounded bg-warning-surface px-2 py-0.5 text-warning-on-surface">
-                        {t('sharing.transportNeedsPickupBadge', 'Needs pickup')}
-                      </span>
-                    )}
+                    <TransportPlanBadges
+                      transport={transport}
+                      guestPersonId={guestPersonId}
+                    />
                   </div>
                 </div>
               ))}
@@ -603,22 +685,38 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
               />
             </div>
 
-            {/* Needs pickup switch */}
-            <div className="flex items-center justify-between rounded-lg border border-warning-border bg-card p-4">
-              <div className="space-y-0.5">
-                <Label htmlFor="needs-pickup" className="text-sm font-medium text-warning-on-surface">
-                  {t('sharing.transportNeedsPickup', 'Need a pickup?')}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {t('sharing.transportNeedsPickupDescription', 'Let others know you need a ride from the station')}
-                </p>
-              </div>
-              <Switch
-                id="needs-pickup"
-                checked={needsPickup}
-                onCheckedChange={setNeedsPickup}
-              />
-            </div>
+            {/* How this guest covers the last leg — the two facts only they
+                know, asked as one exclusive choice so they cannot claim both. */}
+            <fieldset className="space-y-3 rounded-lg border border-warning-border bg-card p-4">
+              <legend className="px-1 text-sm font-medium text-warning-on-surface">
+                {t('sharing.transportPlan', 'Getting to the house')}
+              </legend>
+              <RadioGroup
+                value={travelPlan}
+                onValueChange={handleTravelPlanChange}
+                disabled={isSubmitting}
+                aria-label={t('sharing.transportPlan', 'Getting to the house')}
+              >
+                {TRAVEL_PLANS.map(({ plan, labelKey, label, hintKey, hint }) => (
+                  <div key={plan} className="flex items-start gap-3">
+                    <RadioGroupItem
+                      value={plan}
+                      id={`transport-plan-${plan}`}
+                      className="mt-1"
+                    />
+                    <div className="space-y-0.5">
+                      <Label
+                        htmlFor={`transport-plan-${plan}`}
+                        className="cursor-pointer text-sm font-medium text-warning-on-surface"
+                      >
+                        {t(labelKey, label)}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">{t(hintKey, hint)}</p>
+                    </div>
+                  </div>
+                ))}
+              </RadioGroup>
+            </fieldset>
           </div>
 
           {/* Add transport button */}

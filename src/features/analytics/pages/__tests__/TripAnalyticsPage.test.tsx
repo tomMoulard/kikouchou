@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { render, screen, waitFor } from '@/test/utils';
 import { db } from '@/lib/db/database';
-import type { Person, Room, Transport, Trip, TripId } from '@/types';
+import type { Person, Ride, Room, Transport, Trip, TripId, Vehicle } from '@/types';
 
 // ============================================================================
 // Fixtures
@@ -40,10 +40,25 @@ function room(id: string, tripId: TripId, order: number): Room {
   return { id, tripId, name: id, capacity: 2, order } as unknown as Room;
 }
 
+function vehicle(id: string, tripId: TripId): Vehicle {
+  return { id, tripId, name: id, seatCount: 5 } as unknown as Vehicle;
+}
+
+function ride(id: string, tripId: TripId): Ride {
+  return {
+    id,
+    tripId,
+    direction: 'pickup',
+    meetDatetime: '2026-07-02T14:00:00.000Z',
+    location: 'Gare du Nord',
+  } as unknown as Ride;
+}
+
 function transport(
   id: string,
   tripId: TripId,
   type: 'arrival' | 'departure',
+  rideId?: string,
 ): Transport {
   return {
     id,
@@ -53,6 +68,7 @@ function transport(
     datetime: '2026-07-02T14:00:00.000Z',
     location: 'Gare du Nord',
     needsPickup: false,
+    ...(rideId === undefined ? {} : { rideId }),
   } as unknown as Transport;
 }
 
@@ -158,6 +174,37 @@ describe('TripAnalyticsPage', () => {
     await waitFor(() => {
       expect(statValue('analytics.transports')).toBe('3');
     });
+  });
+
+  it('counts a shared car once, beside the legs it serves', async () => {
+    // Guillaume's Espace meets two trains. One ride, one car, two legs — the
+    // three figures the page must keep apart, since a reader who added them
+    // would see three journeys where there is one car.
+    await db.vehicles.bulkPut([vehicle('v1', TRIP_A)]);
+    await db.rides.bulkPut([ride('ride-1', TRIP_A)]);
+    await db.transports.bulkPut([
+      transport('t1', TRIP_A, 'arrival', 'ride-1'),
+      transport('t2', TRIP_A, 'arrival', 'ride-1'),
+    ]);
+
+    render(<TripAnalyticsPage />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(statValue('analytics.rides')).toBe('1');
+    });
+    expect(statValue('analytics.vehicles')).toBe('1');
+    expect(statValue('analytics.transports')).toBe('2');
+  });
+
+  it('does not call a trip empty when it holds only a car', async () => {
+    await db.vehicles.bulkPut([vehicle('v1', TRIP_A)]);
+
+    render(<TripAnalyticsPage />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(statValue('analytics.vehicles')).toBe('1');
+    });
+    expect(screen.queryByText('analytics.emptyTrip')).not.toBeInTheDocument();
   });
 
   it('shows an empty state rather than a wall of zeros', async () => {

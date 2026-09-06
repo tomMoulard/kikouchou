@@ -15,10 +15,12 @@ import { db } from '@/lib/db/database';
 import type {
   ISODateTimeString,
   Person,
+  Ride,
   Room,
   RoomAssignment,
   Transport,
   TripId,
+  Vehicle,
 } from '@/types';
 
 // ============================================================================
@@ -60,6 +62,20 @@ function assignment(id: string, tripId: TripId): RoomAssignment {
     startDate: '2026-07-02',
     endDate: '2026-07-08',
   } as unknown as RoomAssignment;
+}
+
+function vehicle(id: string, tripId: TripId): Vehicle {
+  return { id, tripId, name: id, seatCount: 5 } as unknown as Vehicle;
+}
+
+function ride(id: string, tripId: TripId): Ride {
+  return {
+    id,
+    tripId,
+    direction: 'pickup',
+    meetDatetime: TOMORROW,
+    location: 'Gare du Nord',
+  } as unknown as Ride;
 }
 
 function transport(
@@ -159,6 +175,38 @@ describe('loadTripStats', () => {
     expect(stats.pickupsNeedingDriver).toBe(1);
   });
 
+  it('counts rides and cars apart from the legs they serve', async () => {
+    // One car meeting two trains: two legs, one ride, one vehicle. Adding the
+    // two totals together would report three journeys that nobody is making.
+    await db.vehicles.bulkPut([vehicle('v1', TRIP_A), vehicle('v2', TRIP_B)]);
+    await db.rides.bulkPut([ride('ride-1', TRIP_A), ride('ride-2', TRIP_B)]);
+    await db.transports.bulkPut([
+      transport('t1', TRIP_A, { rideId: 'ride-1' }),
+      transport('t2', TRIP_A, { rideId: 'ride-1' }),
+    ]);
+
+    const stats = await loadTripStats(TRIP_A, NOW);
+
+    expect(stats.rideCount).toBe(1);
+    expect(stats.vehicleCount).toBe(1);
+    expect(stats.transportCount).toBe(2);
+  });
+
+  it('counts a legacy self-driven leg as the journey every view draws', async () => {
+    // What the share wizard writes when a guest says they will have a car:
+    // a leg naming itself as its own driver, with no `Ride` row anywhere.
+    // Counting `db.rides` would report zero journeys on a trip whose transport
+    // list draws one.
+    await db.transports.bulkPut([
+      transport('t1', TRIP_A, { personId: 'p1', driverId: 'p1' }),
+    ]);
+
+    const stats = await loadTripStats(TRIP_A, NOW);
+
+    expect(stats.rideCount).toBe(1);
+    expect(stats.transportCount).toBe(1);
+  });
+
   it('returns zeros for a trip with no rows', async () => {
     const stats = await loadTripStats(TRIP_A, NOW);
 
@@ -204,6 +252,21 @@ describe('sumTripStats', () => {
 describe('isTripStatsEmpty', () => {
   it('is false as soon as the trip holds anything', async () => {
     await db.rooms.bulkPut([room('r1', TRIP_A, 0)]);
+
+    expect(isTripStatsEmpty(await loadTripStats(TRIP_A, NOW))).toBe(false);
+  });
+
+  it('is false for a trip that holds only a car', async () => {
+    // The hire car is booked months before anybody's train times are known, so
+    // this is a real state and not a corner case. Calling it empty would show
+    // "nothing to add up" on a page whose Cars card reads 1.
+    await db.vehicles.bulkPut([vehicle('v1', TRIP_A)]);
+
+    expect(isTripStatsEmpty(await loadTripStats(TRIP_A, NOW))).toBe(false);
+  });
+
+  it('is false for a trip that holds only a ride', async () => {
+    await db.rides.bulkPut([ride('ride-1', TRIP_A)]);
 
     expect(isTripStatsEmpty(await loadTripStats(TRIP_A, NOW))).toBe(false);
   });
