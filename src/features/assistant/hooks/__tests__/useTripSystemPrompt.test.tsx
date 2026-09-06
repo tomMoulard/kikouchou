@@ -296,6 +296,37 @@ describe('useTripSystemPrompt', () => {
     expect(prompt).toContain('notes: Vegetarian');
   });
 
+  it('names a guest’s child seat so the car question is answerable', async () => {
+    const { tripId } = await seedTrip();
+    await createPerson(tripId, {
+      name: 'Lila',
+      color: hexColor('#22c55e'),
+      childSeat: 'booster',
+    });
+
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('"Lila"');
+    });
+
+    expect(result.current.prompt.systemPrompt).toContain('child seat: booster');
+  });
+
+  it('says nothing about a child seat for a guest who needs none', async () => {
+    // Absent for most of a roster, so it must cost those lines nothing.
+    const { tripId } = await seedTrip();
+    await createPerson(tripId, { name: 'Tom', color: hexColor('#ef4444') });
+
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('"Tom"');
+    });
+
+    expect(result.current.prompt.systemPrompt).not.toContain('child seat');
+  });
+
   it('includes a guest phone number so "who do I call" is answerable', async () => {
     const { tripId } = await seedTrip();
     await createPerson(tripId, {

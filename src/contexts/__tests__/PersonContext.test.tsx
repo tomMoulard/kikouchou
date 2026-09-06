@@ -426,6 +426,12 @@ describe('PersonContext', () => {
         read: (person) => person?.headcount,
         expected: 2,
       },
+      {
+        field: 'childSeat',
+        patch: { childSeat: 'booster' },
+        read: (person) => person?.childSeat,
+        expected: 'booster',
+      },
     ];
 
     for (const { field, patch, read, expected } of mutations) {

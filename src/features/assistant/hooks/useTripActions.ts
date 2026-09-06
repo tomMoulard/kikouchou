@@ -53,6 +53,7 @@ import {
   type ActivityCategory,
   type ActivityFormData,
   type ActivityId,
+  type ChildSeatKind,
   type GuestGroupId,
   type GuestGroupMemberId,
   type ISODateString,
@@ -417,6 +418,12 @@ export function useTripActions(): UseTripActionsReturn {
                 }),
                 ...(d.phone !== undefined && { phone: d.phone as string }),
                 ...(d.notes !== undefined && { notes: d.notes as string }),
+                // Left as the model wrote it: `createPerson` runs it through
+                // `normalizeChildSeat`, which drops anything that is not one of
+                // the three kinds rather than storing an invented one.
+                ...(d.childSeat !== undefined && {
+                  childSeat: d.childSeat as ChildSeatKind,
+                }),
               });
               guestIdCache.delete(tid);
               successToast(t('persons.createSuccess'));

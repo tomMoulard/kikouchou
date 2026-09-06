@@ -1153,6 +1153,20 @@ export interface GuestGroupMember extends Identifiable {
    * @example "+33 6 12 34 56 78"
    */
   phone?: string;
+
+  /**
+   * The child restraint this member needs in a car, copied onto the imported
+   * guest.
+   *
+   * A saved roster is exactly where this belongs: which seat a child needs
+   * changes about once every two years, not once per holiday, so leaving it off
+   * the member would make the parent re-declare it every summer — and a field
+   * that has to be retyped is a field that ends up empty.
+   *
+   * @see {@link ChildSeatKind}
+   * @example "booster"
+   */
+  childSeat?: ChildSeatKind;
 }
 
 /**
@@ -1348,6 +1362,8 @@ export interface GuestGroupMemberFormData {
   notes?: string;
   /** Optional phone number, copied onto the imported guest */
   phone?: string;
+  /** The child restraint this member needs in a car, when they need one */
+  childSeat?: ChildSeatKind;
 }
 
 /**

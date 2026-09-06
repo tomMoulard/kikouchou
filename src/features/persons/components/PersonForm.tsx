@@ -23,6 +23,13 @@ import { useFormSubmission } from '@/hooks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
 import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
@@ -35,12 +42,13 @@ import { toHexColor, toISODateStringFromString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
 import { pickRandomUnusedColor } from '@/lib/utils/guest-colors';
 import {
+  CHILD_SEAT_KINDS,
   MAX_PERSON_HEADCOUNT,
   MIN_PERSON_HEADCOUNT,
   getPersonHeadcount,
   normalizePersonHeadcount,
 } from '@/types';
-import type { Person, PersonFormData } from '@/types';
+import type { ChildSeatKind, Person, PersonFormData } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -70,6 +78,15 @@ interface FormErrors {
 // ============================================================================
 // Constants
 // ============================================================================
+
+/**
+ * The value the child-seat select carries for "no seat needed".
+ *
+ * Radix refuses an empty string as an item value — it reserves it for the
+ * placeholder — so absence needs a name of its own. It never leaves this file:
+ * submit maps it back to `undefined`, which is what the guest stores.
+ */
+const NO_CHILD_SEAT = 'none';
 
 /**
  * Parses the headcount input into a valid headcount.
@@ -163,10 +180,18 @@ const PersonForm = memo(function PersonForm({
   const [headcount, setHeadcount] = useState(() =>
     String(getPersonHeadcount(person ?? {})),
   );
+  // Absent is the answer for every adult, so the select starts on "none needed"
+  // and most of a roster never touches it.
+  const [childSeat, setChildSeat] = useState<ChildSeatKind | undefined>(
+    () => person?.childSeat,
+  );
   // Extra details stay collapsed by default, but open when the guest already
-  // stands for several people so the value is not silently hidden.
+  // stands for several people, or already needs a seat, so neither value is
+  // silently hidden behind a closed section.
   const [isExtraOpen, setIsExtraOpen] = useState(
-    () => getPersonHeadcount(person ?? {}) > MIN_PERSON_HEADCOUNT,
+    () =>
+      getPersonHeadcount(person ?? {}) > MIN_PERSON_HEADCOUNT ||
+      person?.childSeat !== undefined,
   );
 
   // Whether this browser can open the OS contact picker at all. Read once on
@@ -183,6 +208,7 @@ const PersonForm = memo(function PersonForm({
     readonly notes: string;
     readonly phone: string;
     readonly headcount: number;
+    readonly childSeat: ChildSeatKind | undefined;
   } | null>(null);
 
   const currentStayStart = stayDates?.from ? format(stayDates.from, 'yyyy-MM-dd') : '';
@@ -201,10 +227,21 @@ const PersonForm = memo(function PersonForm({
         currentStayEnd !== initialSnapshot.stayEndDate ||
         notes !== initialSnapshot.notes ||
         phone !== initialSnapshot.phone ||
-        currentHeadcount !== initialSnapshot.headcount
+        currentHeadcount !== initialSnapshot.headcount ||
+        childSeat !== initialSnapshot.childSeat
       );
     },
-    [color, currentHeadcount, currentStayEnd, currentStayStart, name, notes, phone, initialSnapshot],
+    [
+      childSeat,
+      color,
+      currentHeadcount,
+      currentStayEnd,
+      currentStayStart,
+      name,
+      notes,
+      phone,
+      initialSnapshot,
+    ],
   );
 
   // Notify parent of dirty state changes
@@ -248,7 +285,12 @@ const PersonForm = memo(function PersonForm({
 
     const nextHeadcount = getPersonHeadcount(person ?? {});
     setHeadcount(String(nextHeadcount));
-    setIsExtraOpen(nextHeadcount > MIN_PERSON_HEADCOUNT);
+
+    const nextChildSeat = person?.childSeat;
+    setChildSeat(nextChildSeat);
+    setIsExtraOpen(
+      nextHeadcount > MIN_PERSON_HEADCOUNT || nextChildSeat !== undefined,
+    );
 
     setInitialSnapshot({
       name: nextName,
@@ -258,6 +300,7 @@ const PersonForm = memo(function PersonForm({
       notes: nextNotes,
       phone: nextPhone,
       headcount: nextHeadcount,
+      childSeat: nextChildSeat,
     });
 
     // Use callback to avoid creating new object if already empty
@@ -408,6 +451,14 @@ const PersonForm = memo(function PersonForm({
   }, []);
 
   /**
+   * Records the declared child restraint, mapping the "none needed" option back
+   * to absence rather than storing a fourth kind meaning "no seat".
+   */
+  const handleChildSeatChange = useCallback((value: string) => {
+    setChildSeat(value === NO_CHILD_SEAT ? undefined : (value as ChildSeatKind));
+  }, []);
+
+  /**
    * Toggles the collapsible "more details" section.
    */
   const handleToggleExtra = useCallback(() => {
@@ -452,12 +503,13 @@ const PersonForm = memo(function PersonForm({
           notes: trimmedNotes.length > 0 ? trimmedNotes : undefined,
           phone: trimmedPhone.length > 0 ? trimmedPhone : undefined,
           headcount: parseHeadcountInput(headcount),
+          childSeat,
         });
       } catch {
         // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, doSubmit, name, color, stayDates, notes, phone, headcount],
+    [validateForm, doSubmit, name, color, stayDates, notes, phone, headcount, childSeat],
   );
 
   // ============================================================================
@@ -619,6 +671,14 @@ const PersonForm = memo(function PersonForm({
                 {t('persons.headcountBadge', '{{count}} people', { count: currentHeadcount })}
               </span>
             )}
+            {/* The section auto-opens when a seat is already set, but the user
+                can collapse it again; without this the value would then be
+                invisible on a form they are about to save. */}
+            {childSeat !== undefined && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
+                {t(`childSeats.${childSeat}`)}
+              </span>
+            )}
           </span>
           <ChevronDown
             className={cn('size-4 shrink-0 transition-transform', isExtraOpen && 'rotate-180')}
@@ -651,6 +711,47 @@ const PersonForm = memo(function PersonForm({
                 'How many people this entry stands for — use 2 for a couple like "Alice+Auré". Meal headcounts use this.',
               )}
             </p>
+
+            {/* Child seat. Declared by the parent, never derived: see
+                `ChildSeatKind`. The two hints below are what keep the field
+                honest — one says how to enter a child so the tally can see
+                them, the other says what the app does not promise. */}
+            <div className="border-t pt-3 space-y-2">
+              <Label htmlFor="person-child-seat">{t('childSeats.label')}</Label>
+              <Select
+                value={childSeat ?? NO_CHILD_SEAT}
+                onValueChange={handleChildSeatChange}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger
+                  id="person-child-seat"
+                  className="w-full"
+                  aria-describedby="person-child-seat-hint person-child-seat-disclaimer"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_CHILD_SEAT}>{t('childSeats.none')}</SelectItem>
+                  {CHILD_SEAT_KINDS.map((kind) => (
+                    <SelectItem key={kind} value={kind}>
+                      {t(`childSeats.${kind}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p id="person-child-seat-hint" className="text-xs text-muted-foreground">
+                {t(
+                  'persons.childSeatHint',
+                  'Give a child who needs a seat their own guest entry — a car counts one seat per entry, whatever number of people it stands for.',
+                )}
+              </p>
+              <p id="person-child-seat-disclaimer" className="text-xs text-muted-foreground">
+                {t(
+                  'persons.childSeatDisclaimer',
+                  "The app records what you pick and checks it against no country's rules.",
+                )}
+              </p>
+            </div>
           </div>
         )}
       </div>

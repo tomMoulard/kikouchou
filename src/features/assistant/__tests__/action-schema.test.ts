@@ -104,6 +104,16 @@ describe('action-schema', () => {
       expect(result).not.toBeNull();
       expect(result?.data.phone).toBeUndefined();
     });
+
+    it('accepts a child seat kind', () => {
+      const result = validateAction({
+        action: 'addGuest',
+        data: { name: 'Lila', childSeat: 'booster' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.data.childSeat).toBe('booster');
+    });
   });
 
   describe('validateAction — string[] fields', () => {
