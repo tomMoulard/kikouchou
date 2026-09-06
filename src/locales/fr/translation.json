@@ -1107,6 +1107,20 @@
     "legMismatch": {
       "after": "{{name}} arrive maintenant {{minutes}} min après ce trajet",
       "before": "{{name}} arrive maintenant {{minutes}} min avant ce trajet"
+    },
+    "mismatch": {
+      "title": "Un horaire a changé",
+      "explanation": "Ce trajet garde son horaire et personne n'en a été retiré. À vous de choisir la suite.",
+      "moveAction": "Décaler le trajet à {{time}}",
+      "moveCost_one": "Ce décalage laisserait {{names}} trop loin de la voiture.",
+      "moveCost_other": "Ce décalage laisserait {{count}} autres passagers trop loin de la voiture : {{names}}.",
+      "moveCostNone": "Ce décalage ne gêne personne d'autre dans cette voiture.",
+      "moveSuccess": "Trajet décalé à {{time}}",
+      "dropAction": "Retirer {{name}} de ce trajet",
+      "dropTitle": "Retirer {{name}} de ce trajet ?",
+      "dropDescription": "{{name}} garde son voyage — seule sa place dans cette voiture disparaît. Son trajet redevient « à prendre en charge », donc quelqu'un d'autre peut encore proposer de la conduire.",
+      "dropConfirm": "Retirer du trajet",
+      "dropSuccess": "{{name}} a de nouveau besoin d'être conduit"
     }
   },
   "vehicles": {

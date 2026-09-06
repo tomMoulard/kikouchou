@@ -1107,6 +1107,20 @@
     "legMismatch": {
       "after": "{{name}} now arrives {{minutes}} min after this ride",
       "before": "{{name}} now arrives {{minutes}} min before this ride"
+    },
+    "mismatch": {
+      "title": "Somebody's times have changed",
+      "explanation": "This ride has kept its time, and nobody has been taken out of it. Choose what happens next.",
+      "moveAction": "Move the ride to {{time}}",
+      "moveCost_one": "Moving there would leave {{names}} too far from the car.",
+      "moveCost_other": "Moving there would leave {{count}} other passengers too far from the car: {{names}}.",
+      "moveCostNone": "Nobody else in this car is put out by that move.",
+      "moveSuccess": "Ride moved to {{time}}",
+      "dropAction": "Drop {{name}} from this ride",
+      "dropTitle": "Drop {{name}} from this ride?",
+      "dropDescription": "{{name}} keeps their travel plans — only their seat in this car goes. Their journey goes back to needing a lift, so somebody else can still offer one.",
+      "dropConfirm": "Drop from ride",
+      "dropSuccess": "{{name}} needs a lift again"
     }
   },
   "vehicles": {

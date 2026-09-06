@@ -40,6 +40,9 @@ export type { RideCardProps } from './components/RideCard';
 export { RideCapacityBadge } from './components/RideCapacityBadge';
 export type { RideCapacityBadgeProps } from './components/RideCapacityBadge';
 
+export { RideMismatchNotice } from './components/RideMismatchNotice';
+export type { RideMismatchNoticeProps } from './components/RideMismatchNotice';
+
 // ============================================================================
 // Utilities
 // ============================================================================
