@@ -8,7 +8,7 @@
  * @module features/assistant/action-schema
  */
 
-import { ACTIVITY_CATEGORIES } from '@/types';
+import { ACTIVITY_CATEGORIES, CHILD_SEAT_KINDS, RIDE_DIRECTIONS } from '@/types';
 
 // ============================================================================
 // Schema Primitive Types
@@ -64,7 +64,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Trip ----------------------------------------------------------------
   {
     action: 'createTrip',
-    label: 'Create a separate new trip and switch to it',
+    label: 'Make another trip and switch to it',
     fields: {
       name: {
         type: 'string',
@@ -100,7 +100,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'selectTrip',
-    label: 'Switch to an existing trip, by its id from All trips',
+    label: 'Switch to another trip',
     fields: {
       tripId: {
         type: 'string',
@@ -112,14 +112,13 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'updateTrip',
-    label:
-      'Edit the selected trip — never creates a new one. Changing location clears the map pin',
+    label: 'Edit the selected trip; a new location clears its map pin',
     fields: {
       name: {
         type: 'string',
         required: false,
         description: 'New trip name',
-        example: 'Summer Getaway',
+        example: 'Alps trip',
       },
       location: {
         type: 'string',
@@ -151,7 +150,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Guests --------------------------------------------------------------
   {
     action: 'addGuest',
-    label: 'Add a new guest',
+    label: 'Add a guest',
     fields: {
       name: {
         type: 'string',
@@ -200,7 +199,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'importGuestGroup',
-    label: 'Copy people from a saved group into this trip as guests',
+    label: 'Copy a saved group in as guests',
     fields: {
       groupId: {
         type: 'string',
@@ -218,13 +217,13 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'removeGuest',
-    label: 'Remove a guest by ID',
+    label: 'Remove a guest',
     fields: {
       personId: {
         type: 'string',
         required: true,
         description: 'ID of the guest (from the guests list)',
-        example: '<id from guests list>',
+        example: '<guest id>',
       },
     },
   },
@@ -232,13 +231,13 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Rooms ---------------------------------------------------------------
   {
     action: 'addRoom',
-    label: 'Add a new room',
+    label: 'Add a room',
     fields: {
       name: {
         type: 'string',
         required: true,
         description: 'Room name',
-        example: 'The Cozy Den',
+        example: 'Attic',
       },
       capacity: {
         type: 'number',
@@ -256,13 +255,13 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'removeRoom',
-    label: 'Remove a room by ID',
+    label: 'Remove a room',
     fields: {
       roomId: {
         type: 'string',
         required: true,
         description: 'ID of the room (from the rooms list)',
-        example: '<id from rooms list>',
+        example: '<room id>',
       },
     },
   },
@@ -270,7 +269,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Room Assignments ----------------------------------------------------
   {
     action: 'assignRoom',
-    label: 'Assign a guest to a room for a date range',
+    label: 'Give a guest a room for a date range',
     fields: {
       personId: {
         type: 'string',
@@ -300,7 +299,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'removeAssignment',
-    label: 'Remove a room assignment by ID',
+    label: 'Undo a room assignment',
     fields: {
       assignmentId: {
         type: 'string',
@@ -314,7 +313,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Transport -----------------------------------------------------------
   {
     action: 'addTransport',
-    label: 'Add transport for a guest',
+    label: "A guest's own arrival or departure",
     fields: {
       personId: {
         type: 'string',
@@ -364,7 +363,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'removeTransport',
-    label: 'Remove a transport entry by ID',
+    label: 'Remove a leg',
     fields: {
       transportId: {
         type: 'string',
@@ -375,10 +374,231 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
     },
   },
 
+  // ---- Rides and cars ------------------------------------------------------
+  {
+    action: 'addRide',
+    label: 'Add a car journey legs can join',
+    fields: {
+      direction: {
+        type: 'string',
+        required: true,
+        description: 'Whether the car fetches guests or takes them away',
+        example: 'pickup',
+        enum: RIDE_DIRECTIONS,
+      },
+      meetDatetime: {
+        type: 'string',
+        required: true,
+        description: 'When the car is at the meeting point (ISO 8601)',
+        example: '2026-04-20T15:00:00',
+      },
+      location: {
+        type: 'string',
+        required: true,
+        description: 'Where the car meets its passengers',
+        example: 'Airport',
+      },
+      leadTimeMinutes: {
+        type: 'number',
+        required: false,
+        description: 'Minutes before the meeting time the driver sets off',
+        example: 30,
+      },
+      driverId: {
+        type: 'string',
+        required: false,
+        description: 'Guest ID of whoever drives',
+        example: '<guest id>',
+      },
+      vehicleId: {
+        type: 'string',
+        required: false,
+        description: 'Car ID from the Cars list',
+        example: '<car id>',
+      },
+      notes: {
+        type: 'string',
+        required: false,
+        description: 'Free-text notes about the journey',
+        example: 'Bring the boosters',
+      },
+    },
+  },
+  {
+    action: 'updateRide',
+    label: 'Edit a car journey, never creates one',
+    fields: {
+      rideId: {
+        type: 'string',
+        required: true,
+        description: 'Ride ID (from the rides list)',
+        example: '<ride id>',
+      },
+      // Editable, and not for symmetry: without it the only way to fix a
+      // pickup entered as a dropoff is removeRide + addRide, and deleting a
+      // ride detaches every passenger — one wrong word would throw four people
+      // out of the car and each would have to re-join. The enum line it needs
+      // is already printed once for addRide.
+      direction: {
+        type: 'string',
+        required: false,
+        description: 'Whether the car fetches guests or takes them away',
+        example: 'pickup',
+        enum: RIDE_DIRECTIONS,
+      },
+      meetDatetime: {
+        type: 'string',
+        required: false,
+        description: 'New meeting time (ISO 8601)',
+        example: '2026-04-20T15:00:00',
+      },
+      location: {
+        type: 'string',
+        required: false,
+        description: 'New meeting point',
+        example: 'Airport',
+      },
+      leadTimeMinutes: {
+        type: 'number',
+        required: false,
+        description: 'Minutes before the meeting time the driver sets off',
+        example: 30,
+      },
+      driverId: {
+        type: 'string',
+        required: false,
+        description: 'Guest ID of whoever drives',
+        example: '<guest id>',
+      },
+      vehicleId: {
+        type: 'string',
+        required: false,
+        description: 'Car ID from the Cars list',
+        example: '<car id>',
+      },
+      notes: {
+        type: 'string',
+        required: false,
+        description: 'Free-text notes about the journey',
+        example: 'Bring the boosters',
+      },
+    },
+  },
+  {
+    action: 'removeRide',
+    label: 'Cancel a car journey',
+    fields: {
+      rideId: {
+        type: 'string',
+        required: true,
+        description: 'Ride ID (from the rides list)',
+        example: '<ride id>',
+      },
+    },
+  },
+  {
+    action: 'addVehicle',
+    label: 'Add a car',
+    fields: {
+      name: {
+        type: 'string',
+        required: true,
+        description: 'However the group refers to the car',
+        example: 'Hired Espace',
+      },
+      ownerId: {
+        type: 'string',
+        required: false,
+        description: "Guest ID of the car's owner. Omit for a hire car",
+        example: '<guest id>',
+      },
+      isRental: {
+        type: 'boolean',
+        required: false,
+        description: 'Whether it is a hire car',
+        example: true,
+      },
+      seatCount: {
+        type: 'number',
+        required: false,
+        description: 'Seats, driver included. Omit when nobody has counted',
+        example: 7,
+      },
+      childSeats: {
+        type: 'string[]',
+        required: false,
+        description: 'One entry per restraint carried, so two boosters repeat it',
+        example: ['booster'],
+        enum: CHILD_SEAT_KINDS,
+      },
+      // The prompt prints a car's luggage note, so something has to be able to
+      // write one — a field the assistant can read and never set is the same
+      // "I don't have access to that" gap one field down.
+      luggageNotes: {
+        type: 'string',
+        required: false,
+        description: 'What it will take in the way of bags',
+        example: 'Big boot',
+      },
+      notes: {
+        type: 'string',
+        required: false,
+        description: 'Gearbox, quirks, anything else',
+        example: 'Automatic',
+      },
+    },
+  },
+  {
+    // No `updateVehicle`: its optional line would cost ~200 characters of a
+    // budget with 50 left, and a car entered wrong can be removed and re-added
+    // — deleting one detaches the rides that named it rather than cancelling
+    // them, so nobody loses a journey over a seat count.
+    action: 'removeVehicle',
+    label: 'Remove a car',
+    fields: {
+      vehicleId: {
+        type: 'string',
+        required: true,
+        description: 'Car ID (from the Cars list)',
+        example: '<car id>',
+      },
+    },
+  },
+  {
+    action: 'joinRide',
+    label: "Put a guest's leg in a car",
+    fields: {
+      transportId: {
+        type: 'string',
+        required: true,
+        description: 'The leg travelling in the car',
+        example: '<transport id>',
+      },
+      rideId: {
+        type: 'string',
+        required: true,
+        description: 'The car journey it joins',
+        example: '<ride id>',
+      },
+    },
+  },
+  {
+    action: 'leaveRide',
+    label: 'Take a leg out of its car',
+    fields: {
+      transportId: {
+        type: 'string',
+        required: true,
+        description: 'The leg leaving the car',
+        example: '<transport id>',
+      },
+    },
+  },
+
   // ---- Activities (shared agenda) ------------------------------------------
   {
     action: 'addActivity',
-    label: 'Add an activity to the shared agenda (outing, meal, hike, market…)',
+    label: 'Add to the shared agenda',
     fields: {
       title: {
         type: 'string',
@@ -445,7 +665,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'updateActivity',
-    label: 'Edit an existing agenda entry — never creates a new one',
+    label: 'Edit an agenda entry, never creates one',
     fields: {
       activityId: {
         type: 'string',
@@ -512,7 +732,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'removeActivity',
-    label: 'Remove an activity from the agenda by ID',
+    label: 'Remove an agenda entry',
     fields: {
       activityId: {
         type: 'string',
@@ -524,7 +744,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'joinActivity',
-    label: 'Sign a guest up for an activity',
+    label: 'Sign a guest up for one',
     fields: {
       activityId: {
         type: 'string',
@@ -542,7 +762,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   },
   {
     action: 'leaveActivity',
-    label: 'Remove a guest from an activity',
+    label: 'Drop a guest from one',
     fields: {
       activityId: {
         type: 'string',
@@ -633,6 +853,42 @@ function typeHint(type: FieldType): string {
 }
 
 /**
+ * Whether an action's whole payload is ids copied out of the lists above it.
+ *
+ * `removeRoom`, `joinActivity`, `leaveRide` and their siblings differ from each
+ * other in exactly two ways: the action name and which id fields they take.
+ * Everything else — the envelope, the `"data"` wrapper, a label that only
+ * restates the name ("removeRoom — Remove a room") — is identical, and the
+ * prompt used to pay ~100 characters per action to repeat it. They are printed
+ * as one line each under a single shared example instead.
+ *
+ * The test that this saves for is not a style guard: `gemma-3-1b` allocates
+ * `prompt_tokens × 262144` logits, so the catalogue is measured in GPU memory.
+ * Roughly half the catalogue is this shape, which is why the saving is worth a
+ * second rendering path.
+ *
+ * Detected rather than declared, so an action added later joins the block by
+ * being that shape — and detected from **structure**, never from the `example`
+ * string. An example is presentation: deciding whether an action keeps its
+ * label and its own JSON block on the strength of a leading `<` would let a
+ * copy-edit silently restructure the catalogue.
+ *
+ * @param def - The action definition to classify
+ * @returns True when every field is a required id
+ */
+function isIdOnlyAction(def: ActionDef): boolean {
+  const entries = Object.entries(def.fields);
+
+  return (
+    entries.length > 0 &&
+    entries.every(
+      ([key, field]) =>
+        field.required && field.type === 'string' && key.endsWith('Id'),
+    )
+  );
+}
+
+/**
  * Generate the "Modification Actions" section of the system prompt
  * directly from the schema definitions.
  *
@@ -642,7 +898,7 @@ export function generateActionPrompt(): string[] {
   const lines: string[] = [
     '',
     '## Modification Actions',
-    'To modify trip data, emit a fenced block tagged EXACTLY ```action (not ```json) holding only valid JSON — no comments, no trailing commas, plain string keys.',
+    'To modify trip data, emit a fenced block tagged EXACTLY ```action (not ```json) holding only valid JSON — no comments, no trailing commas, quoted keys.',
     // "Questions, greetings and small talk" rather than the older "to answer a
     // question": a greeting is neither a change nor a question about the trip,
     // and with no line covering it the model reached for the catalogue below
@@ -654,7 +910,7 @@ export function generateActionPrompt(): string[] {
     // then the block" is demonstrated rather than only stated.
     'I will add a room with 4 beds.',
     '```action',
-    '{"action":"addRoom","data":{"name":"The Cozy Den","capacity":4}}',
+    '{"action":"addRoom","data":{"name":"Attic","capacity":4}}',
     '```',
     '',
     'Actions — the example shows the required fields:',
@@ -663,7 +919,15 @@ export function generateActionPrompt(): string[] {
   /** Enum lines already spelled out, so no value list is printed twice. */
   const emittedEnums = new Set<string>();
 
+  // Partitioned once, so the two lists are provably complementary and the
+  // classifier runs once per action rather than twice.
+  const idOnly: ActionDef[] = [];
+  const detailed: ActionDef[] = [];
   for (const def of ACTION_SCHEMAS) {
+    (isIdOnlyAction(def) ? idOnly : detailed).push(def);
+  }
+
+  for (const def of detailed) {
     lines.push(`${def.action} — ${def.label}`);
     lines.push(`  ${buildExample(def)}`);
 
@@ -702,6 +966,19 @@ export function generateActionPrompt(): string[] {
     }
   }
 
+  const idOnlyExample = idOnly[0];
+  if (idOnlyExample) {
+    lines.push(
+      // The envelope is shown once for the whole family, immediately above the
+      // list, so the shape the model copies is still on screen next to it.
+      'These carry only ids, same shape — copy each id from the lists above:',
+      `  ${buildExample(idOnlyExample)}`,
+      `  ${idOnly
+        .map((def) => `${def.action} ${Object.keys(def.fields).join('+')}`)
+        .join(' · ')}`,
+    );
+  }
+
   lines.push(
     '',
     // The ids above are the only ones that exist. Left unsaid, the model fills
@@ -709,8 +986,10 @@ export function generateActionPrompt(): string[] {
     // "I'll assume it's trip123" — and `validateAction` then rejects the block,
     // so the user sees a confident answer and no change.
     'Never invent an id, a name or a date the user did not give — ask for it instead.',
-    'After createTrip, later actions in the same reply apply to the new trip.',
-    'Change who is signed up with joinActivity / leaveActivity, never through updateActivity.',
+    'After createTrip, the rest of the reply applies to the new trip.',
+    // Covers rides as well as activities: membership is a join/leave verb in
+    // both, and updateRide has no passenger field for the model to reach for.
+    'Change who is in an activity or a car with join / leave, never with update.',
   );
 
   return lines;
@@ -804,7 +1083,19 @@ export function validateAction(
         );
         return null;
       }
-      data[key] = coerced;
+
+      // An enum on a list is enforced by *dropping* the entries outside it,
+      // not by refusing the action. `addVehicle.childSeats` is the first field
+      // to carry both, and the difference matters: a model that answers one of
+      // three restraints in French should still get the car, where a bad
+      // scalar enum (a category, a direction) leaves nothing meaningful to
+      // write. The `continue` below used to skip the scalar enum check
+      // entirely, so a declared enum on a list was documentation only.
+      const allowed = fieldDef.enum;
+      data[key] =
+        allowed === undefined
+          ? coerced
+          : coerced.filter((item) => allowed.includes(item));
       continue;
     }
 

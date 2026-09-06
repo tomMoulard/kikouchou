@@ -20,34 +20,48 @@ import {
 import { useOfflineAwareToast } from '@/hooks';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
+import { toCanonicalDatetime } from '@/lib/db/transport-datetime';
 import {
   createActivity,
   createAssignment,
   createPerson,
+  createRide,
   createRoom,
   createTransport,
   createTrip,
+  createVehicle,
   deleteActivityWithOwnershipCheck,
   deleteAssignmentWithOwnershipCheck,
   deletePersonWithOwnershipCheck,
+  deleteRideWithOwnershipCheck,
   deleteRoomWithOwnershipCheck,
   deleteTransportWithOwnershipCheck,
+  deleteVehicleWithOwnershipCheck,
   getActivityById,
   getAssignmentById,
   getGuestGroupById,
   getPersonById,
   getPersonsByTripId,
+  getRideById,
   getRoomById,
+  getVehicleById,
   importGuestGroupMembers,
   getTransportById,
   getTripById,
   setActivityParticipation,
   setCurrentTrip,
+  setTransportRide,
   updateActivityWithOwnershipCheck,
+  updateRideWithOwnershipCheck,
   updateTrip,
 } from '@/lib/db';
-import { ActivityFormDataSchema } from '@/lib/validation/schemas';
 import {
+  ActivityFormDataSchema,
+  RideFormDataSchema,
+  VehicleFormDataSchema,
+} from '@/lib/validation/schemas';
+import {
+  CHILD_SEAT_KINDS,
   getDefaultPersonColor,
   type Activity,
   type ActivityCategory,
@@ -59,12 +73,18 @@ import {
   type ISODateString,
   type ISODateTimeString,
   type PersonId,
+  type Ride,
+  type RideDirection,
+  type RideFormData,
+  type RideId,
   type RoomAssignmentId,
   type RoomId,
   type TransportId,
   type TransportMode,
   type TransportType,
   type TripId,
+  type VehicleFormData,
+  type VehicleId,
 } from '@/types';
 
 import { type LLMAction, validateAction } from '../action-schema';
@@ -248,6 +268,52 @@ function toActivityFormData(activity: Activity): ActivityFormData {
 }
 
 // ============================================================================
+// Ride Helpers
+// ============================================================================
+
+/**
+ * Projects a stored ride back onto its form shape, so a partial update can be
+ * validated as a whole record before it is written — same reasoning as
+ * {@link toActivityFormData}.
+ *
+ * @param ride - The stored ride
+ * @returns The equivalent form data
+ */
+function toRideFormData(ride: Ride): RideFormData {
+  return {
+    direction: ride.direction,
+    meetDatetime: ride.meetDatetime,
+    location: ride.location,
+    ...(ride.coordinates !== undefined && { coordinates: ride.coordinates }),
+    ...(ride.leadTimeMinutes !== undefined && {
+      leadTimeMinutes: ride.leadTimeMinutes,
+    }),
+    ...(ride.driverId !== undefined && { driverId: ride.driverId }),
+    ...(ride.vehicleId !== undefined && { vehicleId: ride.vehicleId }),
+    ...(ride.notes !== undefined && { notes: ride.notes }),
+  };
+}
+
+/**
+ * Keeps only the child restraints the app actually knows, de-duplicating
+ * nothing — two boosters are two entries, one per seat.
+ *
+ * A kind outside the union is dropped on its own rather than failing the car:
+ * a model that answers "child seat" in French should still get the car created.
+ *
+ * @param raw - The `childSeats` value from the parsed action
+ * @returns The recognised kinds, in the order given
+ */
+function keepKnownChildSeats(raw: unknown): ChildSeatKind[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter((kind): kind is ChildSeatKind =>
+    CHILD_SEAT_KINDS.includes(kind as ChildSeatKind),
+  );
+}
+
+// ============================================================================
 // Hook Implementation
 // ============================================================================
 
@@ -291,6 +357,63 @@ export function useTripActions(): UseTripActionsReturn {
         const ids = new Set(guests.map((guest) => guest.id));
         guestIdCache.set(tripId, ids);
         return ids;
+      };
+
+      /**
+       * The id when it names a guest of this trip, undefined otherwise.
+       *
+       * Rides and cars carry optional references that no repository checks, and
+       * `activeTripId` can change mid-batch (createTrip/selectTrip), so an id
+       * the model carried over from another trip would be stored as a permanent
+       * orphan. Dropping the reference keeps the rest of the record.
+       */
+      const tripPersonId = async (
+        raw: unknown,
+        tripId: TripId,
+      ): Promise<PersonId | undefined> => {
+        if (typeof raw !== 'string') {
+          return undefined;
+        }
+        const person = await getPersonById(raw as PersonId);
+        return person && person.tripId === tripId ? person.id : undefined;
+      };
+
+      /** The id when it names a car of this trip, undefined otherwise. */
+      const tripVehicleId = async (
+        raw: unknown,
+        tripId: TripId,
+      ): Promise<VehicleId | undefined> => {
+        if (typeof raw !== 'string') {
+          return undefined;
+        }
+        const vehicle = await getVehicleById(raw as VehicleId);
+        return vehicle && vehicle.tripId === tripId ? vehicle.id : undefined;
+      };
+
+      /**
+       * Says out loud that a reference was dropped.
+       *
+       * Dropping the id keeps the rest of the record, but doing it in silence
+       * is how the assistant reports a success it did not have: the model
+       * writes "Tom is driving the airport run", the driver never lands, and
+       * the change list shows nothing at all because a dropped optional leaves
+       * `executedCount` untouched.
+       *
+       * @param data - The parsed action data
+       * @param driverId - What `tripPersonId` made of its guest reference
+       * @param vehicleId - What `tripVehicleId` made of its car reference
+       */
+      const reportDroppedRefs = (
+        data: Record<string, unknown>,
+        driverId: PersonId | undefined,
+        vehicleId: VehicleId | undefined,
+      ): void => {
+        if (data.driverId !== undefined && driverId === undefined) {
+          toast.error(t('assistant.guestNotFound'));
+        }
+        if (data.vehicleId !== undefined && vehicleId === undefined) {
+          toast.error(t('assistant.vehicleNotFound'));
+        }
       };
 
       let executedCount = 0;
@@ -682,6 +805,337 @@ export function useTripActions(): UseTripActionsReturn {
                   label,
                   defaultValue: 'Removed transport: {{label}}',
                 }),
+              );
+              break;
+            }
+
+            case 'addRide': {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+
+              // The meeting time is canonicalised first, the way the form's is:
+              // `RideFormDataSchema` demands seconds, and a model that writes
+              // "2026-04-20T15:00" means a real instant rather than a typo.
+              const meetDatetime =
+                typeof d.meetDatetime === 'string'
+                  ? toCanonicalDatetime(d.meetDatetime)
+                  : undefined;
+              if (!meetDatetime) {
+                toast.error(t('assistant.invalidRide'));
+                break;
+              }
+
+              const rideDriverId = await tripPersonId(d.driverId, tid);
+              const rideVehicleId = await tripVehicleId(d.vehicleId, tid);
+              reportDroppedRefs(d, rideDriverId, rideVehicleId);
+
+              const rideData: RideFormData = {
+                direction: d.direction as RideDirection,
+                meetDatetime,
+                location: d.location as string,
+                ...(d.leadTimeMinutes !== undefined && {
+                  leadTimeMinutes: d.leadTimeMinutes as number,
+                }),
+                ...(rideDriverId !== undefined && { driverId: rideDriverId }),
+                ...(rideVehicleId !== undefined && { vehicleId: rideVehicleId }),
+                ...(d.notes !== undefined && { notes: d.notes as string }),
+              };
+
+              const rideValidation = RideFormDataSchema.safeParse(rideData);
+              if (!rideValidation.success) {
+                console.warn(
+                  '[AI Assistant] Rejected addRide:',
+                  rideValidation.error.issues,
+                );
+                toast.error(t('assistant.invalidRide'));
+                break;
+              }
+
+              const createdRide = await createRide(tid, rideData);
+              successToast(t('rides.createSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.addRide', {
+                  // The stored enum is a machine value: interpolated raw, a
+                  // French user reads "Trajet ajouté (pickup)". The UI already
+                  // has both directions translated.
+                  direction: t(`rides.directions.${createdRide.direction}`),
+                  location: createdRide.location,
+                  defaultValue: 'Added {{direction}} ride — {{location}}',
+                }),
+              );
+              break;
+            }
+
+            case 'updateRide': {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              const rideId = d.rideId as RideId;
+              const existingRide = await getRideById(rideId);
+              if (!existingRide || existingRide.tripId !== tid) {
+                toast.error(t('assistant.rideNotFound'));
+                break;
+              }
+
+              const nextMeetDatetime =
+                typeof d.meetDatetime === 'string'
+                  ? toCanonicalDatetime(d.meetDatetime)
+                  : undefined;
+              if (d.meetDatetime !== undefined && !nextMeetDatetime) {
+                toast.error(t('assistant.invalidRide'));
+                break;
+              }
+
+              // An id naming somebody else's guest or car is dropped, so the
+              // rest of the edit still lands rather than the whole block being
+              // refused over one hallucinated reference — but it is reported,
+              // or an edit that changed nothing looks exactly like one that
+              // worked.
+              const nextDriverId = await tripPersonId(d.driverId, tid);
+              const nextVehicleId = await tripVehicleId(d.vehicleId, tid);
+              reportDroppedRefs(d, nextDriverId, nextVehicleId);
+
+              const ridePatch: Partial<RideFormData> = {
+                ...(nextMeetDatetime !== undefined && {
+                  meetDatetime: nextMeetDatetime,
+                }),
+                ...(d.direction !== undefined && {
+                  direction: d.direction as RideDirection,
+                }),
+                ...(d.location !== undefined && {
+                  location: d.location as string,
+                  // A new meeting point invalidates the pin resolved from the
+                  // old one — the same reasoning `updateTrip` states above.
+                  // Left in place, the directions button sends the driver to
+                  // the station the ride no longer meets at, on every device.
+                  coordinates: undefined,
+                }),
+                ...(d.leadTimeMinutes !== undefined && {
+                  leadTimeMinutes: d.leadTimeMinutes as number,
+                }),
+                ...(nextDriverId !== undefined && { driverId: nextDriverId }),
+                ...(nextVehicleId !== undefined && { vehicleId: nextVehicleId }),
+                ...(d.notes !== undefined && { notes: d.notes as string }),
+              };
+
+              // `coordinates` rides along with `location` rather than being
+              // asked for, so it is not something the user changed.
+              const rideFields = Object.keys(ridePatch).filter(
+                (key) => key !== 'coordinates',
+              );
+              if (rideFields.length === 0) {
+                break;
+              }
+
+              // Validated as a whole record, so a patch can never leave the
+              // ride in a state the form itself would reject.
+              const mergedRide = {
+                ...toRideFormData(existingRide),
+                ...ridePatch,
+              };
+              const mergedRideValidation =
+                RideFormDataSchema.safeParse(mergedRide);
+              if (!mergedRideValidation.success) {
+                console.warn(
+                  '[AI Assistant] Rejected updateRide:',
+                  mergedRideValidation.error.issues,
+                );
+                toast.error(t('assistant.invalidRide'));
+                break;
+              }
+
+              await updateRideWithOwnershipCheck(rideId, tid, ridePatch);
+              successToast(t('rides.updateSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.updateRide', {
+                  location: mergedRide.location,
+                  fields: rideFields.join(', '),
+                  defaultValue: 'Updated ride to {{location}} ({{fields}})',
+                }),
+              );
+              break;
+            }
+
+            case 'removeRide': {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const rideId = action.data.rideId as RideId;
+              const ride = await getRideById(rideId);
+              if (!ride || ride.tripId !== tid) {
+                toast.error(t('assistant.rideNotFound'));
+                break;
+              }
+              // The repository detaches the legs rather than deleting them, so
+              // cancelling the car does not cancel anybody's train — and the
+              // summary says so, because "removed the ride" alone reads as
+              // having removed the people in it.
+              await deleteRideWithOwnershipCheck(rideId, tid);
+              successToast(t('rides.deleteSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.removeRide', {
+                  direction: t(`rides.directions.${ride.direction}`),
+                  location: ride.location,
+                  defaultValue:
+                    'Cancelled {{direction}} ride — {{location}} (its passengers need a lift again)',
+                }),
+              );
+              break;
+            }
+
+            case 'addVehicle': {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              const ownerId = await tripPersonId(d.ownerId, tid);
+              if (d.ownerId !== undefined && ownerId === undefined) {
+                toast.error(t('assistant.guestNotFound'));
+              }
+              const childSeats = keepKnownChildSeats(d.childSeats);
+
+              const vehicleData: VehicleFormData = {
+                name: d.name as string,
+                ...(ownerId !== undefined && { ownerId }),
+                ...(d.isRental !== undefined && {
+                  isRental: d.isRental as boolean,
+                }),
+                ...(d.seatCount !== undefined && {
+                  seatCount: d.seatCount as number,
+                }),
+                ...(childSeats.length > 0 && { childSeats }),
+                ...(d.luggageNotes !== undefined && {
+                  luggageNotes: d.luggageNotes as string,
+                }),
+                ...(d.notes !== undefined && { notes: d.notes as string }),
+              };
+
+              const vehicleValidation =
+                VehicleFormDataSchema.safeParse(vehicleData);
+              if (!vehicleValidation.success) {
+                console.warn(
+                  '[AI Assistant] Rejected addVehicle:',
+                  vehicleValidation.error.issues,
+                );
+                toast.error(t('assistant.invalidVehicle'));
+                break;
+              }
+
+              await createVehicle(tid, vehicleData);
+              successToast(t('vehicles.createSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.addVehicle', {
+                  name: vehicleData.name,
+                  defaultValue: 'Added car: {{name}}',
+                }),
+              );
+              break;
+            }
+
+            case 'removeVehicle': {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const vehicleId = action.data.vehicleId as VehicleId;
+              const vehicle = await getVehicleById(vehicleId);
+              if (!vehicle || vehicle.tripId !== tid) {
+                toast.error(t('assistant.vehicleNotFound'));
+                break;
+              }
+              // The repository clears `rides.vehicleId` and leaves the journeys
+              // standing — three people still have a train to meet — so the
+              // summary says which half went.
+              await deleteVehicleWithOwnershipCheck(vehicleId, tid);
+              successToast(t('vehicles.deleteSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.removeVehicle', {
+                  name: vehicle.name,
+                  defaultValue:
+                    'Removed car: {{name}} (its rides keep their times)',
+                }),
+              );
+              break;
+            }
+
+            case 'joinRide':
+            case 'leaveRide': {
+              const tid = activeTripId;
+              if (!tid) {
+                toast.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const joiningRide = action.action === 'joinRide';
+              const legId = action.data.transportId as TransportId;
+
+              const leg = await getTransportById(legId);
+              if (!leg || leg.tripId !== tid) {
+                toast.error(t('assistant.transportNotFound'));
+                break;
+              }
+
+              let targetRide: Ride | undefined;
+              if (joiningRide) {
+                targetRide = await getRideById(action.data.rideId as RideId);
+                if (!targetRide || targetRide.tripId !== tid) {
+                  toast.error(t('assistant.rideNotFound'));
+                  break;
+                }
+              }
+
+              // "Nothing to do" is not simply `rideId` already matching. A leg
+              // from before rides existed carries its own `driverId`, and the
+              // prompt shows it as a leg somebody is driving, so "take Alice
+              // out of Bob's car" is a real request against a leg with no
+              // `rideId` — `setTransportRide` clears that legacy driver, which
+              // is the only way the catalogue has of undoing one.
+              const alreadySettled =
+                leg.rideId === targetRide?.id &&
+                (joiningRide || leg.driverId === undefined);
+              if (alreadySettled) {
+                // Do not report a change that did not happen.
+                break;
+              }
+
+              // The whole of "join this car" is a scalar write on the
+              // passenger's own leg, which is what makes two guests joining the
+              // same car offline both survive the merge.
+              const legPerson = await getPersonById(leg.personId);
+              await setTransportRide(legId, tid, targetRide?.id);
+              successToast(
+                t(joiningRide ? 'rides.passengerAdded' : 'rides.passengerRemoved'),
+              );
+              executedCount++;
+              summaries.push(
+                t(
+                  joiningRide
+                    ? 'assistant.actionDetails.joinRide'
+                    : 'assistant.actionDetails.leaveRide',
+                  {
+                    person: legPerson?.name ?? String(leg.personId),
+                    location: targetRide?.location ?? leg.location,
+                    defaultValue: joiningRide
+                      ? '{{person}} rides to {{location}}'
+                      : '{{person}} left the car for {{location}}',
+                  },
+                ),
               );
               break;
             }

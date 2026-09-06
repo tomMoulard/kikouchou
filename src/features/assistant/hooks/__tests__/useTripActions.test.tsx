@@ -18,10 +18,23 @@ import { db } from '@/lib/db/database';
 import { createActivity } from '@/lib/db/repositories/activity-repository';
 import { createGuestGroup } from '@/lib/db/repositories/guest-group-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
+import {
+  createRide,
+  setTransportRide,
+} from '@/lib/db/repositories/ride-repository';
 import { createRoom } from '@/lib/db/repositories/room-repository';
+import { createTransport } from '@/lib/db/repositories/transport-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
+import { createVehicle } from '@/lib/db/repositories/vehicle-repository';
 import { hexColor, isoDate, waitForTripDoc } from '@/test/utils';
-import type { Activity, ISODateTimeString, PersonId, TripId } from '@/types';
+import type {
+  Activity,
+  ISODateTimeString,
+  PersonId,
+  Ride,
+  TransportId,
+  TripId,
+} from '@/types';
 
 import {
   useTripActions,
@@ -826,5 +839,568 @@ describe('useTripActions — guest groups', () => {
 
     expect(outcome.count).toBe(0);
     expect(await db.persons.count()).toBe(0);
+  });
+});
+
+// ============================================================================
+// Rides and cars
+// ============================================================================
+
+/** A trip with a guest, a would-be driver, a car and one arrival leg. */
+async function seedRideTrip() {
+  const trip = await createTrip({
+    name: 'Ride Trip',
+    startDate: isoDate('2024-07-15'),
+    endDate: isoDate('2024-07-30'),
+  });
+  const alice = await createPerson(trip.id, {
+    name: 'Alice',
+    color: hexColor('#ef4444'),
+  });
+  const tom = await createPerson(trip.id, {
+    name: 'Tom',
+    color: hexColor('#22c55e'),
+  });
+  const vehicle = await createVehicle(trip.id, {
+    name: 'Hired Espace',
+    seatCount: 7,
+  });
+  const leg = await createTransport(trip.id, {
+    personId: alice.id,
+    type: 'arrival',
+    datetime: '2024-07-16T15:00:00.000Z' as ISODateTimeString,
+    location: 'Lyon Part-Dieu',
+    needsPickup: true,
+  });
+
+  return {
+    tripId: trip.id,
+    tomId: tom.id,
+    vehicleId: vehicle.id,
+    legId: leg.id,
+  };
+}
+
+async function ridesOf(tripId: TripId): Promise<Ride[]> {
+  return db.rides.where('tripId').equals(tripId).toArray();
+}
+
+describe('useTripActions — rides and cars', () => {
+  it('creates a ride from an addRide block', async () => {
+    const { tripId, tomId, vehicleId } = await seedRideTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addRide',
+        data: {
+          direction: 'pickup',
+          meetDatetime: '2024-07-16T15:02:00',
+          location: 'Lyon Part-Dieu',
+          leadTimeMinutes: 45,
+          driverId: tomId,
+          vehicleId,
+        },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    const [ride] = await ridesOf(tripId);
+    expect(ride?.direction).toBe('pickup');
+    expect(ride?.location).toBe('Lyon Part-Dieu');
+    expect(ride?.leadTimeMinutes).toBe(45);
+    expect(ride?.driverId).toBe(tomId);
+    expect(ride?.vehicleId).toBe(vehicleId);
+  });
+
+  it('canonicalises a meeting time the model wrote without seconds', async () => {
+    const { tripId } = await seedRideTrip();
+    const result = await renderWithTrip(tripId);
+
+    // `RideFormDataSchema` demands seconds; a model writing "15:02" means a
+    // real instant, so it is normalised the way the form's own input is rather
+    // than refused as invalid.
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addRide',
+        data: {
+          direction: 'pickup',
+          meetDatetime: '2024-07-16T15:02',
+          location: 'Gare',
+        },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    const [ride] = await ridesOf(tripId);
+    expect(ride?.meetDatetime).toMatch(/Z$/);
+  });
+
+  it('refuses a ride whose meeting time cannot be placed', async () => {
+    const { tripId } = await seedRideTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addRide',
+        data: {
+          direction: 'pickup',
+          meetDatetime: 'next Tuesday',
+          location: 'Gare',
+        },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await ridesOf(tripId)).toHaveLength(0);
+  });
+
+  it('refuses a lead time outside its bounds instead of storing it', async () => {
+    const { tripId } = await seedRideTrip();
+    const result = await renderWithTrip(tripId);
+
+    // Unbounded, this value puts a "leave now" alert centuries in the past,
+    // where it is permanently due and permanently on screen.
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addRide',
+        data: {
+          direction: 'pickup',
+          meetDatetime: '2024-07-16T15:02:00',
+          location: 'Gare',
+          leadTimeMinutes: 100000,
+        },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await ridesOf(tripId)).toHaveLength(0);
+  });
+
+  it('drops a driver from another trip and still creates the ride', async () => {
+    const { tripId } = await seedRideTrip();
+    const other = await createTrip({
+      name: 'Other trip',
+      startDate: isoDate('2025-01-01'),
+      endDate: isoDate('2025-01-05'),
+    });
+    const foreign = await createPerson(other.id, {
+      name: 'Not mine',
+      color: hexColor('#8b5cf6'),
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addRide',
+        data: {
+          direction: 'pickup',
+          meetDatetime: '2024-07-16T15:02:00',
+          location: 'Gare',
+          driverId: foreign.id,
+        },
+      }),
+    );
+
+    // The reference is an orphan waiting to happen; the journey itself is not.
+    expect(outcome.count).toBe(1);
+    const [ride] = await ridesOf(tripId);
+    expect(ride?.driverId).toBeUndefined();
+  });
+
+  it('edits an existing ride rather than creating another', async () => {
+    const { tripId, tomId } = await seedRideTrip();
+    const ride = await createRide(tripId, {
+      direction: 'pickup',
+      meetDatetime: '2024-07-16T15:02:00.000Z' as ISODateTimeString,
+      location: 'Lyon Part-Dieu',
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'updateRide',
+        data: { rideId: ride.id, driverId: tomId, location: 'Gare de Brest' },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    const rides = await ridesOf(tripId);
+    expect(rides).toHaveLength(1);
+    expect(rides[0]?.driverId).toBe(tomId);
+    expect(rides[0]?.location).toBe('Gare de Brest');
+  });
+
+  it('refuses to edit a ride that belongs to another trip', async () => {
+    const { tripId } = await seedRideTrip();
+    const other = await createTrip({
+      name: 'Other trip',
+      startDate: isoDate('2025-01-01'),
+      endDate: isoDate('2025-01-05'),
+    });
+    const foreignRide = await createRide(other.id, {
+      direction: 'pickup',
+      meetDatetime: '2025-01-02T10:00:00.000Z' as ISODateTimeString,
+      location: 'Theirs',
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'updateRide',
+        data: { rideId: foreignRide.id, location: 'Mine now' },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect((await db.rides.get(foreignRide.id))?.location).toBe('Theirs');
+  });
+
+  it('cancels a ride and puts its passengers back to needing a lift', async () => {
+    const { tripId, legId } = await seedRideTrip();
+    const ride = await createRide(tripId, {
+      direction: 'pickup',
+      meetDatetime: '2024-07-16T15:02:00.000Z' as ISODateTimeString,
+      location: 'Lyon Part-Dieu',
+    });
+    await setTransportRide(legId, tripId, ride.id);
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'removeRide', data: { rideId: ride.id } }),
+    );
+
+    expect(outcome.count).toBe(1);
+    expect(await ridesOf(tripId)).toHaveLength(0);
+    // Cancelling the car does not cancel anybody's train.
+    const leg = await db.transports.get(legId);
+    expect(leg).toBeDefined();
+    expect(leg?.rideId).toBeUndefined();
+  });
+
+  it('clears the pin when the assistant moves a ride to another place', async () => {
+    const { tripId } = await seedRideTrip();
+    const ride = await createRide(tripId, {
+      direction: 'pickup',
+      meetDatetime: '2024-07-16T15:02:00.000Z' as ISODateTimeString,
+      location: 'Lyon Part-Dieu',
+      coordinates: { lat: 45.7605, lon: 4.8595 },
+    });
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'updateRide',
+        data: { rideId: ride.id, location: 'Aéroport Saint-Exupéry' },
+      }),
+    );
+
+    // Left in place, the directions button sends the driver to the station the
+    // ride no longer meets at — on every device, once it syncs. `updateTrip`
+    // clears the trip's pin for exactly this reason.
+    const stored = await db.rides.get(ride.id);
+    expect(stored?.location).toBe('Aéroport Saint-Exupéry');
+    expect(stored?.coordinates).toBeUndefined();
+  });
+
+  it('turns a pickup into a dropoff without emptying the car', async () => {
+    const { tripId, legId } = await seedRideTrip();
+    const ride = await createRide(tripId, {
+      direction: 'pickup',
+      meetDatetime: '2024-07-16T15:02:00.000Z' as ISODateTimeString,
+      location: 'Lyon Part-Dieu',
+    });
+    await setTransportRide(legId, tripId, ride.id);
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'updateRide',
+        data: { rideId: ride.id, direction: 'dropoff' },
+      }),
+    );
+
+    // The alternative — remove and re-add — detaches every passenger, so one
+    // wrong word would throw the car's occupants out of it.
+    expect(outcome.count).toBe(1);
+    expect((await db.rides.get(ride.id))?.direction).toBe('dropoff');
+    expect((await db.transports.get(legId))?.rideId).toBe(ride.id);
+  });
+
+  it('adds a car with its seats and child restraints', async () => {
+    const { tripId, tomId } = await seedRideTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addVehicle',
+        data: {
+          name: 'La Clio de Guillaume',
+          ownerId: tomId,
+          seatCount: 5,
+          childSeats: ['booster', 'booster'],
+        },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    const vehicle = await db.vehicles
+      .where('tripId')
+      .equals(tripId)
+      .filter((row) => row.name === 'La Clio de Guillaume')
+      .first();
+    expect(vehicle?.seatCount).toBe(5);
+    expect(vehicle?.ownerId).toBe(tomId);
+    // One entry per seat, so the repeat is the point rather than a duplicate.
+    expect(vehicle?.childSeats).toEqual(['booster', 'booster']);
+  });
+
+  it('drops a child seat kind the app does not know, keeping the car', async () => {
+    const { tripId } = await seedRideTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addVehicle',
+        data: { name: 'Kangoo', childSeats: ['booster', 'rehausseur'] },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    const vehicle = await db.vehicles
+      .where('tripId')
+      .equals(tripId)
+      .filter((row) => row.name === 'Kangoo')
+      .first();
+    expect(vehicle?.childSeats).toEqual(['booster']);
+  });
+
+  it('refuses a seat count outside its bounds', async () => {
+    const { tripId } = await seedRideTrip();
+    const result = await renderWithTrip(tripId);
+
+    // An unbounded capacity reached `Array.from({length: capacity})` elsewhere
+    // in this codebase and permanently OOM'd the tab.
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addVehicle',
+        data: { name: 'Coach', seatCount: 100000 },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    const stored = await db.vehicles
+      .where('tripId')
+      .equals(tripId)
+      .filter((row) => row.name === 'Coach')
+      .count();
+    expect(stored).toBe(0);
+  });
+
+  it('puts a leg in a car and takes it back out', async () => {
+    const { tripId, legId } = await seedRideTrip();
+    const ride = await createRide(tripId, {
+      direction: 'pickup',
+      meetDatetime: '2024-07-16T15:02:00.000Z' as ISODateTimeString,
+      location: 'Lyon Part-Dieu',
+    });
+    const result = await renderWithTrip(tripId);
+
+    const joined = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'joinRide',
+        data: { transportId: legId, rideId: ride.id },
+      }),
+    );
+
+    expect(joined.count).toBe(1);
+    expect((await db.transports.get(legId))?.rideId).toBe(ride.id);
+
+    const left = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'leaveRide', data: { transportId: legId } }),
+    );
+
+    expect(left.count).toBe(1);
+    expect((await db.transports.get(legId))?.rideId).toBeUndefined();
+  });
+
+  it('reports no change when the leg is already in that car', async () => {
+    const { tripId, legId } = await seedRideTrip();
+    const ride = await createRide(tripId, {
+      direction: 'pickup',
+      meetDatetime: '2024-07-16T15:02:00.000Z' as ISODateTimeString,
+      location: 'Lyon Part-Dieu',
+    });
+    await setTransportRide(legId, tripId, ride.id);
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'joinRide',
+        data: { transportId: legId, rideId: ride.id },
+      }),
+    );
+
+    // Reporting a change that did not happen is how a change list stops being
+    // worth reading.
+    expect(outcome.count).toBe(0);
+  });
+
+  it('refuses to put a leg from another trip in a car', async () => {
+    const { tripId } = await seedRideTrip();
+    const other = await createTrip({
+      name: 'Other trip',
+      startDate: isoDate('2025-01-01'),
+      endDate: isoDate('2025-01-05'),
+    });
+    const foreignPerson = await createPerson(other.id, {
+      name: 'Not mine',
+      color: hexColor('#8b5cf6'),
+    });
+    const foreignLeg = await createTransport(other.id, {
+      personId: foreignPerson.id,
+      type: 'arrival',
+      datetime: '2025-01-02T10:00:00.000Z' as ISODateTimeString,
+      location: 'Theirs',
+      needsPickup: true,
+    });
+    const ride = await createRide(tripId, {
+      direction: 'pickup',
+      meetDatetime: '2024-07-16T15:02:00.000Z' as ISODateTimeString,
+      location: 'Lyon Part-Dieu',
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'joinRide',
+        data: { transportId: foreignLeg.id, rideId: ride.id },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect((await db.transports.get(foreignLeg.id))?.rideId).toBeUndefined();
+  });
+
+  it('refuses to put a leg in a car from another trip', async () => {
+    const { tripId, legId } = await seedRideTrip();
+    const other = await createTrip({
+      name: 'Other trip',
+      startDate: isoDate('2025-01-01'),
+      endDate: isoDate('2025-01-05'),
+    });
+    const foreignRide = await createRide(other.id, {
+      direction: 'pickup',
+      meetDatetime: '2025-01-02T10:00:00.000Z' as ISODateTimeString,
+      location: 'Theirs',
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'joinRide',
+        data: { transportId: legId, rideId: foreignRide.id },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect((await db.transports.get(legId))?.rideId).toBeUndefined();
+  });
+
+  it('takes a leg out of a pre-ride driver arrangement', async () => {
+    const { tripId, tomId, legId } = await seedRideTrip();
+    // The shape from before rides existed: a driver named on the leg itself,
+    // which the prompt shows as a leg somebody is driving.
+    await db.transports.update(legId, { driverId: tomId });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'leaveRide', data: { transportId: legId } }),
+    );
+
+    // Treating "no rideId" as "already out" made this a silent no-op, and
+    // nothing else in the catalogue can clear a leg's own driver.
+    expect(outcome.count).toBe(1);
+    expect((await db.transports.get(legId))?.driverId).toBeUndefined();
+  });
+
+  it('removes a car and leaves the rides that named it standing', async () => {
+    const { tripId, vehicleId } = await seedRideTrip();
+    const ride = await createRide(tripId, {
+      direction: 'pickup',
+      meetDatetime: '2024-07-16T15:02:00.000Z' as ISODateTimeString,
+      location: 'Lyon Part-Dieu',
+      vehicleId,
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'removeVehicle', data: { vehicleId } }),
+    );
+
+    expect(outcome.count).toBe(1);
+    expect(await db.vehicles.get(vehicleId)).toBeUndefined();
+    // Three people still have a train to meet.
+    const stored = await db.rides.get(ride.id);
+    expect(stored).toBeDefined();
+    expect(stored?.vehicleId).toBeUndefined();
+  });
+
+  it('does nothing for a leg id that does not exist', async () => {
+    const { tripId } = await seedRideTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'leaveRide',
+        data: { transportId: 'made-up' as TransportId },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+  });
+
+  it('refuses a ride action with no trip selected', async () => {
+    const { result } = renderHook(() => useCombined(), { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(result.current.trip.isLoading).toBe(false);
+    });
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addRide',
+        data: {
+          direction: 'pickup',
+          meetDatetime: '2024-07-16T15:02:00',
+          location: 'Gare',
+        },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await db.rides.count()).toBe(0);
   });
 });

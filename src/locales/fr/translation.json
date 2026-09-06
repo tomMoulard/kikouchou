@@ -882,10 +882,22 @@
       "updateActivity": "Activité {{title}} mise à jour ({{fields}})",
       "removeActivity": "Activité supprimée : {{title}}",
       "joinActivity": "{{person}} participe à {{title}}",
-      "leaveActivity": "{{person}} ne participe plus à {{title}}"
+      "leaveActivity": "{{person}} ne participe plus à {{title}}",
+      "addRide": "Trajet ajouté ({{direction}}) — {{location}}",
+      "updateRide": "Trajet vers {{location}} mis à jour ({{fields}})",
+      "removeRide": "Trajet annulé ({{direction}}) — {{location}} (ses passagers ont de nouveau besoin d'être conduits)",
+      "addVehicle": "Voiture ajoutée : {{name}}",
+      "removeVehicle": "Voiture supprimée : {{name}} (ses trajets gardent leurs horaires)",
+      "joinRide": "{{person}} monte dans la voiture pour {{location}}",
+      "leaveRide": "{{person}} ne monte plus dans la voiture pour {{location}}"
     },
     "initializingCachedLoader": "Initialisation du modèle en cache…",
-    "loadingCachedModelFiles": "Chargement des fichiers du modèle depuis le cache…"
+    "loadingCachedModelFiles": "Chargement des fichiers du modèle depuis le cache…",
+    "rideNotFound": "Ce trajet est introuvable.",
+    "vehicleNotFound": "Cette voiture est introuvable.",
+    "transportNotFound": "Cette arrivée ou ce départ est introuvable.",
+    "invalidRide": "Ces informations de trajet sont invalides, rien n'a été enregistré.",
+    "invalidVehicle": "Ces informations de voiture sont invalides, rien n'a été enregistré."
   },
   "auth": {
     "account": {
@@ -1185,7 +1197,10 @@
       "invalidLeadTime": "La marge doit être un nombre entier de minutes compris entre {{min}} et {{max}}",
       "locationTooLong": "Le point de rendez-vous ne doit pas dépasser 200 caractères",
       "notesTooLong": "Les notes ne doivent pas dépasser 1000 caractères"
-    }
+    },
+    "deleteSuccess": "Trajet annulé",
+    "passengerAdded": "Ajouté au trajet",
+    "passengerRemoved": "Retiré du trajet"
   },
   "driverAlert": {
     "title": "Vous conduisez",

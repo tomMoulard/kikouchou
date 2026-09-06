@@ -882,10 +882,22 @@
       "updateActivity": "Updated activity {{title}} ({{fields}})",
       "removeActivity": "Removed activity: {{title}}",
       "joinActivity": "{{person}} joined {{title}}",
-      "leaveActivity": "{{person}} left {{title}}"
+      "leaveActivity": "{{person}} left {{title}}",
+      "addRide": "Added {{direction}} ride — {{location}}",
+      "updateRide": "Updated ride to {{location}} ({{fields}})",
+      "removeRide": "Cancelled {{direction}} ride — {{location}} (its passengers need a lift again)",
+      "addVehicle": "Added car: {{name}}",
+      "removeVehicle": "Removed car: {{name}} (its rides keep their times)",
+      "joinRide": "{{person}} rides to {{location}}",
+      "leaveRide": "{{person}} left the car for {{location}}"
     },
     "initializingCachedLoader": "Initializing cached model…",
-    "loadingCachedModelFiles": "Loading cached model files…"
+    "loadingCachedModelFiles": "Loading cached model files…",
+    "rideNotFound": "That ride was not found.",
+    "vehicleNotFound": "That car was not found.",
+    "transportNotFound": "That arrival or departure was not found.",
+    "invalidRide": "Those ride details are invalid, nothing was saved.",
+    "invalidVehicle": "Those car details are invalid, nothing was saved."
   },
   "auth": {
     "account": {
@@ -1185,7 +1197,10 @@
       "invalidLeadTime": "The lead time must be a whole number of minutes between {{min}} and {{max}}",
       "locationTooLong": "The meeting point must be 200 characters or less",
       "notesTooLong": "The notes must be 1000 characters or less"
-    }
+    },
+    "deleteSuccess": "Ride cancelled",
+    "passengerAdded": "Added to the ride",
+    "passengerRemoved": "Taken out of the ride"
   },
   "driverAlert": {
     "title": "You are driving",
