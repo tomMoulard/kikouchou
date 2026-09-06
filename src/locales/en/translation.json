@@ -444,10 +444,10 @@
       "empty": "Nothing here concerns you",
       "emptyDescription": "None of this trip’s travel involves you. Switch to Everyone to see the whole trip."
     },
-    "ride": "Car",
+    "ride": "Ride",
     "ridePlaceholder": "Travelling in…",
-    "noRides": "No cars arranged yet",
-    "noRidesForType": "No car is going that way yet"
+    "noRides": "No ride arranged yet. Add one with “New ride” on the transport list — a car on its own is not a ride.",
+    "noRidesForType": "No ride is going that way yet"
   },
   "activities": {
     "title": "Activities",
@@ -1244,7 +1244,6 @@
     "noVehicles": "No cars added yet",
     "name": "Name",
     "owner": "Owner",
-    "rental": "Hire car",
     "seatCount": "Seats",
     "seatCountHint": "Including the driver",
     "seatsUnknown": "Seats not set",
@@ -1260,10 +1259,9 @@
     "emptyDescription": "Add the cars you have between you — somebody's own, or the one hired for the week — so a ride can name the one it uses.",
     "namePlaceholder": "e.g. the hired Espace",
     "noOwner": "Nobody in particular",
-    "ownerHint": "Leave this out for a hire car, or one nobody on the trip owns. It says nothing about who drives.",
+    "ownerHint": "Leave this out when nobody on the trip owns it. It says nothing about who drives.",
     "unknownOwner": "Someone not on this trip",
     "unknownOwnerHint": "This car names a guest this device does not have. Leaving it alone keeps the link; picking somebody replaces it.",
-    "rentalHint": "A hire car can be dropped at the airport, so a departure run needs no way back.",
     "seatCountBadge_one": "{{count}} seat",
     "seatCountBadge_other": "{{count}} seats",
     "seatCountInvalid": "Enter a whole number of seats between {{min}} and {{max}}, or leave it empty",

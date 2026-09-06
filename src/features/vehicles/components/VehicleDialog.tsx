@@ -92,7 +92,6 @@ const VehicleDialog = memo(function VehicleDialog({
       // data, and neither is who owns it.
       captureUsage('vehicle_saved', {
         operation: vehicle ? 'updated' : 'created',
-        is_rental: data.isRental === true,
         has_seat_count: data.seatCount !== undefined,
         child_seat_count: data.childSeats?.length ?? 0,
       });

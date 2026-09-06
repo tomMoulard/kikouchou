@@ -364,7 +364,6 @@ export const VehicleFormDataSchema = z.object({
     .min(1, 'Name is required')
     .max(100, 'Name must be 100 characters or less'),
   ownerId: personIdSchema.optional(),
-  isRental: z.boolean().optional(),
   seatCount: z
     .number()
     .int('Seats must be a whole number')

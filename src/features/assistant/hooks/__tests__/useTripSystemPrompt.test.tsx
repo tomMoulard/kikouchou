@@ -431,7 +431,6 @@ async function seedRide(options: { readonly withDriver: boolean }) {
   const vehicle = await createVehicle(trip.id, {
     name: 'Hired Espace',
     ownerId: tom.id,
-    isRental: true,
     seatCount: 7,
     childSeats: ['booster', 'booster'],
   });
@@ -571,7 +570,6 @@ describe('useTripSystemPrompt — rides and cars', () => {
     const prompt = result.current.prompt.systemPrompt;
     expect(prompt).toContain(`- "Hired Espace" (id: ${vehicleId})`);
     expect(prompt).toContain('7 seats incl. driver');
-    expect(prompt).toContain('hire car');
     expect(prompt).toContain('owner: Tom');
     // One entry per seat, so two boosters are two entries.
     expect(prompt).toContain('child seats: booster, booster');

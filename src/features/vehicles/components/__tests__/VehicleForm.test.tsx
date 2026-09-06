@@ -41,7 +41,6 @@ const espace: Vehicle = {
   tripId: TRIP_ID,
   name: 'Espace de location',
   ownerId: bob.id,
-  isRental: true,
   seatCount: 7,
   childSeats: ['booster', 'booster', 'rearFacing'],
   luggageNotes: 'Big boot',
@@ -91,7 +90,6 @@ describe('VehicleForm', () => {
 
     expect(screen.getByLabelText(/vehicles\.name/)).toHaveValue('');
     expect(screen.getByLabelText('vehicles.seatCount')).toHaveValue(null);
-    expect(screen.getByRole('switch', { name: 'vehicles.rental' })).not.toBeChecked();
   });
 
   it('seeds every field from the car being edited', () => {
@@ -99,7 +97,6 @@ describe('VehicleForm', () => {
 
     expect(screen.getByLabelText(/vehicles\.name/)).toHaveValue('Espace de location');
     expect(screen.getByLabelText('vehicles.seatCount')).toHaveValue(7);
-    expect(screen.getByRole('switch', { name: 'vehicles.rental' })).toBeChecked();
     expect(screen.getByLabelText('vehicles.luggageNotes')).toHaveValue('Big boot');
     expect(screen.getByLabelText('vehicles.notes')).toHaveValue('Automatic');
 
@@ -237,22 +234,6 @@ describe('VehicleForm', () => {
     // clears a field it is actually handed.
     const [data] = onSubmit.mock.calls[0] as [Record<string, unknown>];
     expect(data).toHaveProperty('ownerId', undefined);
-  });
-
-  it('flags a hire car', async () => {
-    const user = userEvent.setup(),
-      { onSubmit } = renderForm();
-
-    await user.type(screen.getByLabelText(/vehicles\.name/), 'Espace');
-    await user.click(screen.getByRole('switch', { name: 'vehicles.rental' }));
-    await user.click(screen.getByRole('button', { name: 'common.save' }));
-
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledTimes(1);
-    });
-    expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ isRental: true }),
-    );
   });
 
   it('says the owner is somebody this device does not have', () => {

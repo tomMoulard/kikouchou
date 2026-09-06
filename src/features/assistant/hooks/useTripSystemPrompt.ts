@@ -429,7 +429,6 @@ function formatVehicleLine(
     vehicle.seatCount === undefined
       ? 'seats not counted'
       : `${vehicle.seatCount} seats incl. driver`,
-    vehicle.isRental ? 'hire car' : '',
     vehicle.ownerId
       ? `owner: ${personNameById(persons, vehicle.ownerId)}`
       : '',

@@ -509,14 +509,8 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
       ownerId: {
         type: 'string',
         required: false,
-        description: "Guest ID of the car's owner. Omit for a hire car",
+        description: "Guest ID of the car's owner. Omit when nobody on the trip owns it",
         example: '<guest id>',
-      },
-      isRental: {
-        type: 'boolean',
-        required: false,
-        description: 'Whether it is a hire car',
-        example: true,
       },
       seatCount: {
         type: 'number',

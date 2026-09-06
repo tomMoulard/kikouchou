@@ -35,7 +35,6 @@ const LABELS = {
   addCar: /add car|ajouter une voiture/i,
   cars: /^cars$|^voitures$/i,
   carName: /^name|^nom/i,
-  hireCar: /hire car|voiture de location/i,
   save: /^save$|^enregistrer$/i,
   delete: /^delete$|^supprimer$/i,
   seatsUnknown: /seats not set|places non renseignées/i,
@@ -76,7 +75,6 @@ async function openVehicles(
       seatCount: 7,
       childSeats: ['booster', 'booster'],
       ownerId: personId,
-      isRental: true,
     });
   }
 
@@ -139,10 +137,9 @@ test.describe('the trip’s cars', () => {
     await openVehicles(page, { withVehicle: true });
 
     await expect(page.getByText('Espace de location')).toBeVisible();
-    // Owner, hire flag and seats all come off the same row, so one of them
-    // missing means the card is rendering a different car than the one stored.
+    // The owner comes off the same row as the name, so it missing means the
+    // card is rendering a different car than the one stored.
     await expect(page.getByText('Bob')).toBeVisible();
-    await expect(page.getByRole('main').getByText(LABELS.hireCar)).toBeVisible();
   });
 
   test('an unmeasured car says so rather than showing no seats', async ({ page }) => {

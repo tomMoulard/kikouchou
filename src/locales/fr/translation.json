@@ -444,10 +444,10 @@
       "empty": "Rien ici ne vous concerne",
       "emptyDescription": "Aucun trajet de ce séjour ne vous concerne. Passez à « Tout le monde » pour voir tout le séjour."
     },
-    "ride": "Voiture",
+    "ride": "Trajet",
     "ridePlaceholder": "Voyage dans…",
-    "noRides": "Aucun trajet organisé pour l’instant",
-    "noRidesForType": "Aucune voiture ne va dans ce sens pour l’instant"
+    "noRides": "Aucun trajet organisé. Ajoutez-en un avec « Nouveau trajet » depuis la liste des transports — une voiture seule n’est pas un trajet.",
+    "noRidesForType": "Aucun trajet ne va dans ce sens pour l’instant"
   },
   "activities": {
     "title": "Activités",
@@ -1244,7 +1244,6 @@
     "noVehicles": "Aucune voiture ajoutée",
     "name": "Nom",
     "owner": "Propriétaire",
-    "rental": "Voiture de location",
     "seatCount": "Places",
     "seatCountHint": "Conducteur compris",
     "seatsUnknown": "Places non renseignées",
@@ -1260,10 +1259,9 @@
     "emptyDescription": "Ajoutez les voitures dont vous disposez — celle de quelqu’un, ou celle louée pour la semaine — pour qu’un trajet puisse nommer celle qu’il utilise.",
     "namePlaceholder": "ex. l’Espace de location",
     "noOwner": "Personne en particulier",
-    "ownerHint": "À laisser vide pour une voiture de location, ou une voiture que personne du voyage ne possède. Cela ne dit rien de qui conduit.",
+    "ownerHint": "Laissez vide si personne du voyage n’en est propriétaire. Cela ne dit rien sur qui conduit.",
     "unknownOwner": "Quelqu’un qui n’est pas sur ce voyage",
     "unknownOwnerHint": "Cette voiture désigne un invité que cet appareil ne connaît pas. La laisser telle quelle conserve le lien ; choisir quelqu’un le remplace.",
-    "rentalHint": "Une voiture de location peut être rendue à l’aéroport : un départ n’a alors pas besoin de retour.",
     "seatCountBadge_one": "{{count}} place",
     "seatCountBadge_other": "{{count}} places",
     "seatCountInvalid": "Indiquez un nombre entier de places entre {{min}} et {{max}}, ou laissez vide",

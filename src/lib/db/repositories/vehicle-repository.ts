@@ -103,7 +103,6 @@ export async function getVehicleCount(tripId: TripId): Promise<number> {
  * ```typescript
  * const vehicle = await createVehicle(tripId, {
  *   name: 'Espace de location',
- *   isRental: true,
  *   seatCount: 7,
  *   childSeats: ['booster', 'booster'],
  * });

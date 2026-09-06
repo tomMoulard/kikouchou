@@ -39,7 +39,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useFormSubmission } from '@/hooks';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
@@ -154,7 +153,6 @@ function toSeatCountField(vehicle: Vehicle | undefined): string {
 function snapshot(
   name: string,
   ownerId: string,
-  isRental: boolean,
   seatCount: string,
   tally: ChildSeatTally,
   luggageNotes: string,
@@ -163,7 +161,6 @@ function snapshot(
   return JSON.stringify([
     name.trim(),
     ownerId,
-    isRental,
     seatCount.trim(),
     expandTally(tally),
     luggageNotes.trim(),
@@ -202,7 +199,6 @@ const VehicleForm = memo(function VehicleForm({
 
   const [name, setName] = useState(vehicle?.name ?? '');
   const [ownerId, setOwnerId] = useState<string>(vehicle?.ownerId ?? NO_OWNER);
-  const [isRental, setIsRental] = useState(vehicle?.isRental ?? false);
   const [seatCount, setSeatCount] = useState(() => toSeatCountField(vehicle));
   const [childSeats, setChildSeats] = useState<ChildSeatTally>(() =>
     tallyChildSeats(vehicle?.childSeats),
@@ -214,7 +210,6 @@ const VehicleForm = memo(function VehicleForm({
     snapshot(
       vehicle?.name ?? '',
       vehicle?.ownerId ?? NO_OWNER,
-      vehicle?.isRental ?? false,
       toSeatCountField(vehicle),
       tallyChildSeats(vehicle?.childSeats),
       vehicle?.luggageNotes ?? '',
@@ -224,9 +219,8 @@ const VehicleForm = memo(function VehicleForm({
 
   const isDirty = useMemo(
     () =>
-      snapshot(name, ownerId, isRental, seatCount, childSeats, luggageNotes, notes) !==
-      initial,
-    [childSeats, initial, isRental, luggageNotes, name, notes, ownerId, seatCount],
+      snapshot(name, ownerId, seatCount, childSeats, luggageNotes, notes) !== initial,
+    [childSeats, initial, luggageNotes, name, notes, ownerId, seatCount],
   );
 
   useEffect(() => {
@@ -237,7 +231,6 @@ const VehicleForm = memo(function VehicleForm({
   useEffect(() => {
     const nextName = vehicle?.name ?? '',
       nextOwnerId = vehicle?.ownerId ?? NO_OWNER,
-      nextIsRental = vehicle?.isRental ?? false,
       nextSeatCount = toSeatCountField(vehicle),
       nextChildSeats = tallyChildSeats(vehicle?.childSeats),
       nextLuggageNotes = vehicle?.luggageNotes ?? '',
@@ -245,7 +238,6 @@ const VehicleForm = memo(function VehicleForm({
 
     setName(nextName);
     setOwnerId(nextOwnerId);
-    setIsRental(nextIsRental);
     setSeatCount(nextSeatCount);
     setChildSeats(nextChildSeats);
     setLuggageNotes(nextLuggageNotes);
@@ -254,7 +246,6 @@ const VehicleForm = memo(function VehicleForm({
       snapshot(
         nextName,
         nextOwnerId,
-        nextIsRental,
         nextSeatCount,
         nextChildSeats,
         nextLuggageNotes,
@@ -368,7 +359,6 @@ const VehicleForm = memo(function VehicleForm({
         await doSubmit({
           name: trimmedName,
           ownerId: ownerId === NO_OWNER ? undefined : (ownerId as PersonId),
-          isRental: isRental ? true : undefined,
           seatCount: seats,
           childSeats: expanded.length > 0 ? expanded : undefined,
           luggageNotes: trimmedLuggage.length > 0 ? trimmedLuggage : undefined,
@@ -378,7 +368,7 @@ const VehicleForm = memo(function VehicleForm({
         // Reported through `submitError` by useFormSubmission.
       }
     },
-    [childSeats, doSubmit, isRental, luggageNotes, name, notes, ownerId, seatCount, t],
+    [childSeats, doSubmit, luggageNotes, name, notes, ownerId, seatCount, t],
   );
 
   // ============================================================================
@@ -462,20 +452,6 @@ const VehicleForm = memo(function VehicleForm({
             {t('vehicles.unknownOwnerHint')}
           </p>
         )}
-      </div>
-
-      {/* Hire car */}
-      <div className="flex items-center justify-between gap-4 rounded-md border p-3">
-        <div className="space-y-1">
-          <Label htmlFor="vehicle-rental">{t('vehicles.rental')}</Label>
-          <p className="text-xs text-muted-foreground">{t('vehicles.rentalHint')}</p>
-        </div>
-        <Switch
-          id="vehicle-rental"
-          checked={isRental}
-          onCheckedChange={setIsRental}
-          disabled={isSubmitting}
-        />
       </div>
 
       {/* Seats */}

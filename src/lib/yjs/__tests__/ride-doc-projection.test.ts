@@ -146,7 +146,6 @@ describe('projecting rides and vehicles into Dexie', () => {
           name: 'Espace',
           seatCount: 7,
           childSeats: ['booster', 'booster'],
-          isRental: true,
         },
       ],
       { allowDeletions: false },
@@ -184,7 +183,6 @@ describe('projecting rides and vehicles into Dexie', () => {
       name: 'Espace',
       seatCount: 7,
       childSeats: ['booster', 'booster'],
-      isRental: true,
     });
   });
 

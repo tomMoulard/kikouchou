@@ -1011,9 +1011,6 @@ export function useTripActions(): UseTripActionsReturn {
               const vehicleData: VehicleFormData = {
                 name: d.name as string,
                 ...(ownerId !== undefined && { ownerId }),
-                ...(d.isRental !== undefined && {
-                  isRental: d.isRental as boolean,
-                }),
                 ...(d.seatCount !== undefined && {
                   seatCount: d.seatCount as number,
                 }),

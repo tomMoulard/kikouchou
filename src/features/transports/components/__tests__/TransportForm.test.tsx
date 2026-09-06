@@ -853,11 +853,11 @@ describe('TransportForm', () => {
   });
 
   // ==========================================================================
-  // Car Select
+  // Ride Select
   // ==========================================================================
 
-  describe('the car select', () => {
-    /** Opens the car select and returns the listbox its options live in. */
+  describe('the ride select', () => {
+    /** Opens the ride select and returns the listbox its options live in. */
     async function openCarSelect(
       user: ReturnType<typeof userEvent.setup>,
     ): Promise<HTMLElement> {

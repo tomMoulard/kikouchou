@@ -107,7 +107,11 @@ message Vehicle {
   string trip_id = 2;
   string name = 3;
   optional string owner_id = 4;
-  optional bool is_rental = 5;
+  // 5 was `is_rental`, dropped with the field itself. Reserved rather than
+  // reused: a peer on an older build still sends it, and giving the number to
+  // something else would decode their boolean as that.
+  reserved 5;
+  reserved "is_rental";
   // People it carries, driver included. Absent = not known, never zero.
   optional uint32 seat_count = 6;
   // One entry per installed seat, so two boosters appear twice.

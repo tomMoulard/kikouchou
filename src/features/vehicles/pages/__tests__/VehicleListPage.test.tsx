@@ -38,7 +38,6 @@ const espace: Vehicle = {
   tripId: TRIP_ID,
   name: 'Espace de location',
   ownerId: bob.id,
-  isRental: true,
   seatCount: 7,
   childSeats: ['booster', 'booster'],
 };
@@ -152,13 +151,12 @@ describe('VehicleListPage', () => {
     expect(screen.getByRole('button', { name: 'vehicles.new' })).toBeInTheDocument();
   });
 
-  it('lists a car with its owner, its hire flag, its seats and its child seats', () => {
+  it('lists a car with its owner, its seats and its child seats', () => {
     setMocks([espace]);
     renderPage();
 
     expect(screen.getByText('Espace de location')).toBeInTheDocument();
     expect(screen.getByText('Bob')).toBeInTheDocument();
-    expect(screen.getByText('vehicles.rental')).toBeInTheDocument();
     expect(screen.getByText('vehicles.seatCountBadge')).toBeInTheDocument();
     // Two boosters are one badge saying two, not two badges.
     expect(screen.getByText('childSeats.required')).toBeInTheDocument();

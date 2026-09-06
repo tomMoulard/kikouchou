@@ -847,12 +847,17 @@ const TransportForm = memo(function TransportForm({
       </div>
 
       {/*
-        Car Select.
+        Ride Select.
 
-        Above the driver, because it is the answer for most legs now: a car
-        collects several guests at once, and naming one person to fetch one
-        other is the older, narrower arrangement. The two are mutually
-        exclusive — see `handleRideChange`.
+        Named for the *journey*, not the car, even though the car is what each
+        option leads with. A ride is what a leg can join — the car is a field on
+        it — so labelling this "Car" made adding a vehicle on the Cars page look
+        like it should fill this list, and it never does.
+
+        Above the driver, because it is the answer for most legs now: one car
+        collects several guests, and naming one person to fetch one other is the
+        older, narrower arrangement. The two are mutually exclusive — see
+        `handleRideChange`.
       */}
       <div className="space-y-2">
         <Label htmlFor="transport-ride">{t('transports.ride')}</Label>
@@ -878,9 +883,10 @@ const TransportForm = memo(function TransportForm({
         </Select>
         {/*
           Says which of the two reasons the select is empty, because they lead
-          somewhere different: no cars at all means "go and arrange one", while
-          none in this direction means the trip's cars are all going the other
-          way.
+          somewhere different: no rides at all means "go and arrange one" — and
+          says where, since adding a car is not the same thing and is the
+          mistake this message exists to head off — while none in this direction
+          means the trip's rides are all going the other way.
         */}
         {rideOptions.length === 0 && (
           <p className="text-sm text-muted-foreground">

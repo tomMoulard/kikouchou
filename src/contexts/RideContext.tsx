@@ -134,7 +134,6 @@ const compareVehicles = (a: Vehicle, b: Vehicle): boolean =>
   a.tripId === b.tripId &&
   a.name === b.name &&
   a.ownerId === b.ownerId &&
-  a.isRental === b.isRental &&
   a.seatCount === b.seatCount &&
   a.luggageNotes === b.luggageNotes &&
   a.notes === b.notes &&

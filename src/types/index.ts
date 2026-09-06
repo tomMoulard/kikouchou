@@ -796,7 +796,6 @@ export interface Transport extends Identifiable, TripScoped {
  *   id: 'veh123' as VehicleId,
  *   tripId: 'trip456' as TripId,
  *   name: 'Espace de location',
- *   isRental: true,
  *   seatCount: 7,
  *   childSeats: ['booster', 'booster'],
  *   luggageNotes: 'Coffre pris par la poussette',
@@ -822,15 +821,6 @@ export interface Vehicle extends Identifiable, TripScoped {
    * @see {@link Person}
    */
   ownerId?: PersonId;
-
-  /**
-   * Whether this is a hire car.
-   *
-   * A rental can be left at the destination, so a departure run that drops it
-   * at the airport needs no return leg. That is the difference the flag exists
-   * to record.
-   */
-  isRental?: boolean;
 
   /**
    * How many people the car carries, **driver included**.
@@ -1448,8 +1438,6 @@ export interface VehicleFormData {
   name: string;
   /** Optional reference to the guest whose car it is */
   ownerId?: PersonId;
-  /** Whether this is a hire car */
-  isRental?: boolean;
   /** How many people it carries, driver included */
   seatCount?: number;
   /** The child restraints it carries, one entry per seat */

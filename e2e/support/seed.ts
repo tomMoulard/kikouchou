@@ -375,7 +375,6 @@ export interface SeedVehicleOptions {
   /** One entry per installed seat, so two boosters appear twice. */
   readonly childSeats?: readonly ('rearFacing' | 'forwardFacing' | 'booster')[];
   readonly ownerId?: string;
-  readonly isRental?: boolean;
 }
 
 /**
@@ -410,7 +409,6 @@ export async function seedVehicle(
             ? {}
             : { childSeats: [...options.childSeats] }),
           ...(options.ownerId === undefined ? {} : { ownerId: options.ownerId }),
-          ...(options.isRental === undefined ? {} : { isRental: options.isRental }),
         });
 
         tx.oncomplete = () => {

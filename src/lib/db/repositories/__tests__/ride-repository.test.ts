@@ -337,12 +337,14 @@ describe('vehicles', () => {
   it('leaves an untouched field alone on a partial update', async () => {
     const vehicle = await createVehicle(tripId, { name: 'Espace', seatCount: 7 });
 
-    await updateVehicleWithOwnershipCheck(vehicle.id, tripId, { isRental: true });
+    await updateVehicleWithOwnershipCheck(vehicle.id, tripId, {
+      luggageNotes: 'Coffre pris par la poussette',
+    });
 
     const stored = await db.vehicles.get(vehicle.id);
     expect(stored?.name).toBe('Espace');
     expect(stored?.seatCount).toBe(7);
-    expect(stored?.isRental).toBe(true);
+    expect(stored?.luggageNotes).toBe('Coffre pris par la poussette');
   });
 });
 

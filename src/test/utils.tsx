@@ -695,7 +695,6 @@ export async function createTestVehicle(
     seatCount?: number;
     childSeats?: import('@/types').ChildSeatKind[];
     ownerId?: import('@/types').PersonId;
-    isRental?: boolean;
   },
 ): Promise<import('@/types').VehicleId> {
   try {

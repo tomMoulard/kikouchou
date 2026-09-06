@@ -240,7 +240,6 @@ test.describe('a ride driven by one of its passengers', () => {
       tripId,
       name: 'Espace de location',
       seatCount: 7,
-      isRental: true,
     });
     const rideId = await seedRide(page, {
       tripId,

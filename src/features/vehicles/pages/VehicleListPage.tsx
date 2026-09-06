@@ -148,9 +148,6 @@ const VehicleCard = memo(function VehicleCard({
       </CardHeader>
 
       <CardContent className="flex flex-wrap items-center gap-2">
-        {vehicle.isRental === true && (
-          <Badge variant="secondary">{t('vehicles.rental')}</Badge>
-        )}
 
         <Badge variant="outline" className="tabular-nums">
           <Car className="size-3" aria-hidden="true" />
