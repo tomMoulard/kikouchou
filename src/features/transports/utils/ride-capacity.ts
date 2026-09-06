@@ -225,3 +225,31 @@ export function summariseRideCapacity(
 export function hasCapacityWarning(summary: RideCapacitySummary): boolean {
   return summary.isOverCapacity || summary.childSeatShortfalls.length > 0;
 }
+
+/**
+ * How many *people* a car is collecting.
+ *
+ * Not `legs.length`. `Person.headcount` means one guest row can stand for a
+ * couple or a family, so a car collecting "Alice+Auré", Bruno and Chloé carries
+ * five bodies and would otherwise be reported as three passengers — enough for
+ * somebody to take the four-seater on the strength of it. The same rule every
+ * occupancy figure in this app follows.
+ *
+ * The driver is excluded: they are not a passenger, and on a self-driven ride
+ * they already own one of the legs, so counting them would double them. Use
+ * {@link summariseRideCapacity}'s `seatsUsed` for the figure that includes
+ * them.
+ *
+ * @param journey - The resolved journey
+ * @param resolveHeadcount - Required: how many people a guest row stands for
+ * @returns The number of people in the car's passenger seats
+ */
+export function countRidePassengers(
+  journey: ResolvedRide,
+  resolveHeadcount: HeadcountResolver,
+): number {
+  return journey.legs.reduce(
+    (total, leg) => total + resolveHeadcount(leg.transport.personId),
+    0,
+  );
+}

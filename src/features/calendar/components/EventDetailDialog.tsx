@@ -43,6 +43,9 @@ import {
   formatActivityDayRange,
   formatActivityTimeRange,
 } from '@/features/activities/utils/activity-utils';
+import { RideSummary } from '@/features/transports/components/RideSummary';
+import { collectDrivenRideIds, isLegCovered } from '@/features/transports/utils/pickup-utils';
+import type { ResolvedRide } from '@/features/transports/utils/ride-model';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { getActivityCategoryColor } from '@/types';
 import type {
@@ -51,6 +54,7 @@ import type {
   Room,
   RoomAssignment,
   Transport,
+  TransportId,
 } from '@/types';
 
 // ============================================================================
@@ -77,6 +81,24 @@ export interface TransportEventData {
   readonly transport: Transport;
   readonly person: Person | undefined;
   readonly driver?: Person | undefined;
+  /**
+   * The car journey this leg travels in, from `resolveRides`.
+   *
+   * The question a guest opens their own arrival to ask is "who is fetching me
+   * and who else is in the car", and this is the only thing on the dialog that
+   * can answer it. Left undefined for a legacy `driverId`-only leg, which keeps
+   * its original `driver` row and renders exactly as it always has.
+   */
+  readonly ride?: ResolvedRide;
+  /**
+   * The trip's guests, so the ride's passengers are counted as people.
+   *
+   * A guest row can stand for a couple (`Person.headcount`), and a count beside
+   * a car has to be bodies: reading `legs.length` reports a four-seat car
+   * collecting five people as three passengers, and somebody takes the small
+   * car on the strength of it.
+   */
+  readonly persons?: readonly Person[];
 }
 
 /**
@@ -114,6 +136,16 @@ export interface EventDetailDialogProps {
   /** Callback when delete is confirmed */
   readonly onDelete: () => Promise<void>;
 }
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Stable empty guest list, so a dialog opened without one keeps referential
+ * equality across renders — `RideSummary` memoises its headcount resolver on it.
+ */
+const EMPTY_PERSONS: readonly Person[] = [];
 
 // ============================================================================
 // Helper Functions
@@ -283,6 +315,55 @@ const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }:
 });
 
 // ============================================================================
+// TransportRideSection Subcomponent
+// ============================================================================
+
+interface TransportRideSectionProps {
+  /** The resolved journey this leg travels in */
+  readonly ride: ResolvedRide;
+  /** The leg the dialog is about — its own passenger is not one of the others */
+  readonly transportId: TransportId;
+  /** The trip's guests, so passengers are counted as people rather than rows */
+  readonly persons: readonly Person[];
+  readonly dateLocale: Locale;
+}
+
+/**
+ * Names the car that serves this leg: who drives, in what, when it meets, and
+ * who else is in it.
+ *
+ * The rendering is `RideSummary`, shared with the map popup. It was briefly two
+ * copies, and they had already drifted in opposite directions — this one showed
+ * "driving themselves" and no departure time, the popup showed the departure
+ * time and never mentioned that the driver was also a passenger — so a guest
+ * who read both saw two different cars.
+ */
+const TransportRideSection = memo(function TransportRideSection({
+  ride,
+  transportId,
+  persons,
+  dateLocale,
+}: TransportRideSectionProps) {
+  const { t } = useTranslation();
+
+  return (
+    <>
+      <Separator />
+      <div className="space-y-3" data-testid="transport-ride-section">
+        <h3 className="text-sm font-medium">{t('rides.ride', 'Ride')}</h3>
+        <RideSummary
+          ride={ride}
+          persons={persons}
+          dateLocale={dateLocale}
+          density="dialog"
+          excludeLegId={transportId}
+        />
+      </div>
+    </>
+  );
+});
+
+// ============================================================================
 // TransportDetails Subcomponent
 // ============================================================================
 
@@ -297,6 +378,25 @@ interface TransportDetailsProps {
 const TransportDetails = memo(function TransportDetails({ event, dateLocale }: TransportDetailsProps) {
   const { t } = useTranslation();
   const { transport, person, driver } = event;
+
+  // A legacy `driverId`-only journey has no ride to name — `resolveRides`
+  // reports it as one anyway so nothing downstream branches on storage shape,
+  // and this dialog is the one place that must: it keeps rendering those
+  // through the `driver` row below, exactly as it did before rides existed.
+  const ride =
+    event.ride !== undefined && !event.ride.isLegacy ? event.ride : undefined;
+
+  // The same "is anybody driving this leg" question the transport list, its
+  // alert gate and the map popup ask, answered by the same predicate. This
+  // dialog was the last surface still asking the pre-ride `needsPickup` alone,
+  // and it now renders that amber chip directly above a section naming the
+  // driver — one sheet saying both "nobody is collecting you" and "Bruno is
+  // driving you". The set holds at most this leg's own ride, which is the only
+  // one it can point at.
+  const drivenRideIds = useMemo(
+    () => collectDrivenRideIds(event.ride?.ride ? [event.ride.ride] : []),
+    [event.ride],
+  );
 
   // Render the stored instant the same way every other surface does
   const { date: formattedDate, time: formattedTime } = formatTransportDatetimeParts(
@@ -371,8 +471,8 @@ const TransportDetails = memo(function TransportDetails({ event, dateLocale }: T
         </div>
       )}
 
-      {/* Pickup Status */}
-      {transport.needsPickup && (
+      {/* Pickup Status — only while nobody is driving the leg */}
+      {transport.needsPickup && !isLegCovered(transport, drivenRideIds) && (
         <div className="flex items-center gap-3">
           <Badge variant="secondary" className="text-xs">
             {t('transports.needsPickup')}
@@ -386,6 +486,16 @@ const TransportDetails = memo(function TransportDetails({ event, dateLocale }: T
           {transport.notes}
         </div>
       )}
+
+      {/* The car that serves this leg */}
+      {ride ? (
+        <TransportRideSection
+          ride={ride}
+          transportId={transport.id}
+          persons={event.persons ?? EMPTY_PERSONS}
+          dateLocale={dateLocale}
+        />
+      ) : null}
     </div>
   );
 });

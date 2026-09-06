@@ -1095,15 +1095,21 @@
       "dropoff": "Déposer"
     },
     "meetAt": "Rendez-vous à {{time}}",
+    "meetingPoint": "Point de rendez-vous",
     "leaveAt": "Départ à {{time}}",
     "leadTime": "Partir {{count}} min avant",
     "driver": "Conducteur",
     "noDriver": "Personne au volant",
     "selfDriven": "Conduisent eux-mêmes",
+    "partOfRide": "Trajet partagé",
+    "partOfRideWithDriver": "Trajet partagé — {{name}} au volant",
     "vehicle": "Voiture",
     "noVehicle": "Aucune voiture choisie",
     "passengers_one": "{{count}} passager",
     "passengers_other": "{{count}} passagers",
+    "otherPassengers": "Autres passagers",
+    "ridingAlone": "Personne d’autre dans cette voiture",
+    "noPassengers": "Personne dans cette voiture pour l’instant",
     "legMismatch": {
       "after": "{{name}} arrive maintenant {{minutes}} min après ce trajet",
       "before": "{{name}} arrive maintenant {{minutes}} min avant ce trajet"

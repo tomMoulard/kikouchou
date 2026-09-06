@@ -1095,15 +1095,21 @@
       "dropoff": "Drop-off"
     },
     "meetAt": "Meeting at {{time}}",
+    "meetingPoint": "Meeting point",
     "leaveAt": "Leave at {{time}}",
     "leadTime": "Leave {{count}} min before",
     "driver": "Driver",
     "noDriver": "Nobody driving yet",
     "selfDriven": "Driving themselves",
+    "partOfRide": "Part of a shared ride",
+    "partOfRideWithDriver": "Part of a shared ride — {{name}} driving",
     "vehicle": "Car",
     "noVehicle": "No car chosen",
     "passengers_one": "{{count}} passenger",
     "passengers_other": "{{count}} passengers",
+    "otherPassengers": "Others in the car",
+    "ridingAlone": "Nobody else in this car",
+    "noPassengers": "Nobody in this car yet",
     "legMismatch": {
       "after": "{{name}} now arrives {{minutes}} min after this ride",
       "before": "{{name}} now arrives {{minutes}} min before this ride"

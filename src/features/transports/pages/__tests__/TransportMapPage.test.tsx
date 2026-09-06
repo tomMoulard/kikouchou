@@ -6,8 +6,8 @@
 
 import type React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@/test/utils';
-import type { Person, Transport, Trip } from '@/types';
+import { render, screen, within } from '@/test/utils';
+import type { Person, Ride, Transport, Trip, Vehicle } from '@/types';
 
 // ============================================================================
 // Mocks
@@ -41,6 +41,22 @@ const mockPerson: Person = {
   tripId: 'trip-1' as Person['tripId'],
   name: 'Alice',
   color: '#3b82f6' as Person['color'],
+};
+
+/** The guest who drives, so a ride can name somebody the trip actually holds. */
+const mockDriver: Person = {
+  id: 'person-2' as Person['id'],
+  tripId: 'trip-1' as Person['tripId'],
+  name: 'Bruno',
+  color: '#f97316' as Person['color'],
+};
+
+/** A second passenger, so "who else is in the car" has an answer. */
+const mockPassenger: Person = {
+  id: 'person-3' as Person['id'],
+  tripId: 'trip-1' as Person['tripId'],
+  name: 'Chloé',
+  color: '#22c55e' as Person['color'],
 };
 
 const mockTransportWithCoords: Transport = {
@@ -79,17 +95,9 @@ vi.mock('@/contexts/TripContext', () => ({
   })),
 }));
 
-// The popup's "needs pickup" chip now asks whether the leg's ride has a driver,
-// so it answers the same question as the transport list rather than the
-// pre-ride `needsPickup && !driverId`. Empty here: these cases were written
-// against legs that carry no ride at all.
-vi.mock('@/contexts/RideContext', () => ({
-  useRideContext: vi.fn(() => ({ rides: [] })),
-}));
-
 vi.mock('@/contexts/PersonContext', () => ({
   usePersonContext: vi.fn(() => ({
-    persons: [mockPerson],
+    persons: [mockPerson, mockDriver, mockPassenger],
     isLoading: false,
     error: null,
     getPersonById: vi.fn((id: string) => (id === 'person-1' ? mockPerson : undefined)),
@@ -107,6 +115,20 @@ vi.mock('@/contexts/TransportContext', () => ({
   })),
 }));
 
+// The page reads this context twice over: the popup's "needs pickup" chip asks
+// whether the leg's ride has a driver, so it answers the same question as the
+// transport list rather than the pre-ride `needsPickup && !driverId`, and the
+// meeting-point markers are resolved from the rides and the cars. Empty by
+// default: every case below this one was written against legs in no ride.
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: vi.fn(() => ({
+    rides: [],
+    vehicles: [],
+    isLoading: false,
+    error: null,
+  })),
+}));
+
 vi.mock('@/hooks', () => ({
   useOfflineAwareToast: () => ({
     successToast: vi.fn(),
@@ -117,13 +139,21 @@ vi.mock('@/hooks', () => ({
 // Mock MapView to avoid Leaflet in jsdom. It exposes both halves of a marker:
 // the `popupContent` node and the `label` string, which is the marker's
 // accessible name on the real map and was previously unobservable from a test.
+// The polyline ids come out too, because "this leg is collected at that meeting
+// point" is drawn as a line and is otherwise invisible to a test.
 vi.mock('@/components/shared/MapView', () => ({
   MapView: ({
     markers,
+    polylines,
   }: {
     markers: Array<{ popupContent?: React.ReactNode; label?: string }>;
+    polylines?: Array<{ id: string }>;
   }) => (
-    <div data-testid="map-view" data-markers={markers?.length ?? 0}>
+    <div
+      data-testid="map-view"
+      data-markers={markers?.length ?? 0}
+      data-polylines={(polylines ?? []).map((line) => line.id).join(',')}
+    >
       Map View
       {markers?.map((m, i) => (
         <div key={i} data-testid={`marker-popup-${i}`} data-label={m.label}>
@@ -147,6 +177,7 @@ vi.mock('@/components/shared/PersonBadge', () => ({
 import { TransportMapPage } from '../TransportMapPage';
 import { useTripContext } from '@/contexts/TripContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { useRideContext } from '@/contexts/RideContext';
 
 // ============================================================================
 // Tests
@@ -171,6 +202,12 @@ describe('TransportMapPage', () => {
       error: null,
       deleteTransport: vi.fn(),
     } as unknown as ReturnType<typeof useTransportContext>);
+    vi.mocked(useRideContext).mockReturnValue({
+      rides: [],
+      vehicles: [],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useRideContext>);
   });
 
   it('renders the page with map when transports have coordinates', () => {
@@ -637,6 +674,226 @@ describe('TransportMapPage', () => {
       // The legend counts transports, not pins — one arrival has coordinates.
       expect(screen.getByTestId('map-legend')).toHaveTextContent('transports.mappedCount');
       expect(screen.getByTestId('map-view')).toHaveAttribute('data-markers', '2');
+    });
+  });
+
+  // The one place the driver is going, rather than three pins stacked on the
+  // same station each telling a third of the story.
+  describe('ride meeting points', () => {
+    // Wall-clock literals with no offset, so they read the same in Paris, at
+    // UTC and in Midway — a `…Z` literal would make these assertions pass or
+    // fail by the runner's timezone.
+    const MEET_DATETIME = '2027-07-15T15:00:00';
+
+    const mockVehicle: Vehicle = {
+      id: 'vehicle-1' as Vehicle['id'],
+      tripId: 'trip-1' as Vehicle['tripId'],
+      name: 'Espace de location',
+      seatCount: 7,
+    };
+
+    /** A pick-up meeting at the airport, where both its legs land. */
+    const rideAtAirport: Ride = {
+      id: 'ride-1' as Ride['id'],
+      tripId: 'trip-1' as Ride['tripId'],
+      direction: 'pickup',
+      meetDatetime: MEET_DATETIME as Ride['meetDatetime'],
+      location: 'Paris CDG',
+      coordinates: { lat: 49.0097, lon: 2.5479 },
+      leadTimeMinutes: 30,
+      driverId: mockDriver.id,
+      vehicleId: mockVehicle.id,
+    };
+
+    const aliceLeg: Transport = {
+      ...mockTransportWithCoords,
+      datetime: '2027-07-15T14:55:00',
+      rideId: rideAtAirport.id,
+    };
+
+    const chloeLeg: Transport = {
+      id: 'transport-chloe' as Transport['id'],
+      tripId: 'trip-1' as Transport['tripId'],
+      personId: mockPassenger.id,
+      type: 'arrival',
+      datetime: '2027-07-15T15:05:00',
+      location: 'Paris CDG',
+      needsPickup: true,
+      transportMode: 'train',
+      coordinates: { lat: 49.0097, lon: 2.5479 },
+      rideId: rideAtAirport.id,
+    };
+
+    function mockRides(rides: readonly Ride[], vehicles: readonly Vehicle[] = []): void {
+      vi.mocked(useRideContext).mockReturnValue({
+        rides,
+        vehicles,
+        isLoading: false,
+        error: null,
+      } as unknown as ReturnType<typeof useRideContext>);
+    }
+
+    function mockLegs(arrivals: readonly Transport[]): void {
+      vi.mocked(useTransportContext).mockReturnValue({
+        arrivals,
+        departures: [],
+        upcomingPickups: [],
+        isLoading: false,
+        error: null,
+        deleteTransport: vi.fn(),
+      } as unknown as ReturnType<typeof useTransportContext>);
+    }
+
+    it('pins the meeting point and names the whole car in its popup', () => {
+      mockRides([rideAtAirport], [mockVehicle]);
+      mockLegs([aliceLeg, chloeLeg]);
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      // The rendez-vous pin is pushed LAST, after the two leg pins it serves,
+      // and that ordering is the fix rather than a detail: all three sit on the
+      // same coordinates — the car meets the plane where it lands — and Leaflet
+      // ranks coincident markers by insertion order, so pushed first the
+      // headline pin renders underneath the legs and cannot be clicked.
+      const popup = screen.getByTestId('marker-popup-2');
+      expect(popup).toHaveAttribute('data-label', 'rides.meetingPoint — Paris CDG');
+
+      expect(popup).toHaveTextContent('rides.directions.pickup');
+      // Meeting time and the driver's own alarm clock, 30 minutes before it.
+      expect(popup).toHaveTextContent('rides.meetAt');
+      expect(popup).toHaveTextContent('rides.leaveAt');
+      expect(popup).toHaveTextContent('Espace de location');
+      expect(popup).toHaveTextContent('rides.passengers');
+
+      // Driver first, then everybody the car collects.
+      const names = within(popup)
+        .getAllByTestId('person-badge')
+        .map((badge) => badge.textContent);
+      expect(names).toEqual(['Bruno', 'Alice', 'Chloé']);
+
+      expect(screen.getByTestId('map-legend-swatch-ride')).toBeInTheDocument();
+    });
+
+    it('does not put a marker at (0, 0) for a ride with no coordinates', () => {
+      const rideWithoutCoordinates: Ride = {
+        id: rideAtAirport.id,
+        tripId: rideAtAirport.tripId,
+        direction: rideAtAirport.direction,
+        meetDatetime: rideAtAirport.meetDatetime,
+        location: rideAtAirport.location,
+        leadTimeMinutes: rideAtAirport.leadTimeMinutes,
+        driverId: rideAtAirport.driverId,
+        vehicleId: rideAtAirport.vehicleId,
+      };
+
+      mockRides([rideWithoutCoordinates], [mockVehicle]);
+      mockLegs([aliceLeg]);
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      // One pin only: Alice's own arrival. A ride nobody geocoded contributes
+      // nothing rather than a pin in the Gulf of Guinea, which would drag the
+      // centroid and `fitBounds` off the map with it.
+      expect(screen.getByTestId('map-view')).toHaveAttribute('data-markers', '1');
+      expect(screen.getByTestId('marker-popup-0')).toHaveAttribute(
+        'data-label',
+        'Alice - Paris CDG',
+      );
+      expect(screen.queryByTestId('ride-popup')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('map-legend-swatch-ride')).not.toBeInTheDocument();
+    });
+
+    it('leaves a legacy driverId-only leg exactly as it was', () => {
+      const legacyLeg: Transport = {
+        ...mockTransportWithCoords,
+        needsPickup: true,
+        driverId: mockDriver.id,
+      };
+
+      mockRides([]);
+      mockLegs([legacyLeg]);
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      // `resolveRides` reports the legacy leg as a one-passenger journey so
+      // nothing downstream branches on storage shape. The map must not draw it
+      // as a meeting point regardless: that pin would sit exactly on the
+      // transport pin it was derived from and say the same thing twice.
+      expect(screen.getByTestId('map-view')).toHaveAttribute('data-markers', '1');
+      expect(screen.queryByTestId('ride-popup')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('transport-popup-ride')).not.toBeInTheDocument();
+    });
+
+    it('ties a leg to the meeting point it is collected at', () => {
+      const distantRide: Ride = {
+        ...rideAtAirport,
+        coordinates: { lat: 48.8566, lon: 2.3522 },
+        location: 'Paris centre',
+      };
+
+      mockRides([distantRide], [mockVehicle]);
+      mockLegs([aliceLeg]);
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      expect(screen.getByTestId('map-view').getAttribute('data-polylines')).toContain(
+        'ride-ride-1-leg-transport-1',
+      );
+    });
+
+    it('draws no line for a leg standing on the rendez-vous itself', () => {
+      mockRides([rideAtAirport], [mockVehicle]);
+      mockLegs([aliceLeg]);
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      // The car meets the plane where it lands, so leg and meeting point share
+      // one position. A zero-length polyline draws nothing and would only cost
+      // a Leaflet layer per passenger.
+      expect(screen.getByTestId('map-view')).toHaveAttribute('data-polylines', '');
+    });
+
+    it('names the ride in the leg′s own popup and drops the pickup warning', () => {
+      mockRides([rideAtAirport], [mockVehicle]);
+      mockLegs([chloeLeg]);
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      // Marker 0 is the leg itself; the meeting point is pushed after it.
+      const legPopup = screen.getByTestId('marker-popup-0');
+      const ridePart = within(legPopup).getByTestId('transport-popup-ride');
+      expect(ridePart).toHaveTextContent('Bruno');
+      expect(ridePart).toHaveTextContent('rides.meetAt');
+
+      // The leg is flagged `needsPickup`, but somebody is already driving it —
+      // membership lives on `rideId`, so its own `driverId` stays empty and the
+      // old test for that field alone would have shouted for a driver.
+      expect(legPopup).not.toHaveTextContent('transports.needsPickup');
+    });
+
+    it('still shows the map when only the ride has been geocoded', () => {
+      const legWithoutCoordinates: Transport = {
+        id: aliceLeg.id,
+        tripId: aliceLeg.tripId,
+        personId: aliceLeg.personId,
+        type: aliceLeg.type,
+        datetime: aliceLeg.datetime,
+        location: aliceLeg.location,
+        needsPickup: aliceLeg.needsPickup,
+        transportMode: aliceLeg.transportMode,
+        rideId: aliceLeg.rideId,
+      };
+
+      mockRides([rideAtAirport], [mockVehicle]);
+      mockLegs([legWithoutCoordinates]);
+
+      render(<TransportMapPage />, { withProviders: false });
+
+      // A rendez-vous is a location too: the empty state used to hide the whole
+      // map from a trip whose guests never geocoded their stations.
+      expect(screen.queryByText('transports.noLocations')).not.toBeInTheDocument();
+      expect(screen.getByTestId('map-view')).toHaveAttribute('data-markers', '1');
+      expect(screen.getByTestId('ride-popup')).toBeInTheDocument();
     });
   });
 });

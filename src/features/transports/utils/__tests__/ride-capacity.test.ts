@@ -17,7 +17,11 @@ import { describe, expect, it } from 'vitest';
 
 import { createHeadcountResolver } from '@/features/rooms/utils/capacity-utils';
 import { resolveRides } from '../ride-model';
-import { hasCapacityWarning, summariseRideCapacity } from '../ride-capacity';
+import {
+  countRidePassengers,
+  hasCapacityWarning,
+  summariseRideCapacity,
+} from '../ride-capacity';
 import { hexColor } from '@/test/utils';
 import type {
   ChildSeatKind,
@@ -328,5 +332,65 @@ describe('summariseRideCapacity — child seats', () => {
     expect(summary.seatsUsed).toBe(3);
     expect(summary.requiredChildSeats.booster).toBe(1);
     expect(summary.childSeatShortfalls).toEqual([]);
+  });
+});
+
+describe('countRidePassengers', () => {
+  /** The journey the count is taken from, with whichever guests are given. */
+  function journeyOf(
+    persons: readonly Person[],
+    passengerIds: readonly string[],
+    driverId?: string,
+  ) {
+    return resolveRides({
+      rides: [{ ...RIDE, driverId: driverId as PersonId | undefined }],
+      transports: passengerIds.map((personId, index) =>
+        makeTransport(`t${index}`, personId, 'r1'),
+      ),
+      vehicles: [],
+      persons,
+    })[0]!;
+  }
+
+  it('counts bodies, not guest rows', () => {
+    // The figure a driver reads beside a car. "Alice+Aure" is one row standing
+    // for two people, so a car collecting them, Bruno and Chloe carries four —
+    // `legs.length` says three, which is how somebody takes the four-seater.
+    const persons = [
+      makePerson('alice', { headcount: 2 }),
+      makePerson('bruno'),
+      makePerson('chloe'),
+    ];
+
+    expect(
+      countRidePassengers(
+        journeyOf(persons, ['alice', 'bruno', 'chloe']),
+        createHeadcountResolver(persons),
+      ),
+    ).toBe(4);
+  });
+
+  it('counts a guest the trip no longer holds as one person', () => {
+    // Somebody is standing at that station whether or not their row survived —
+    // the same choice `createHeadcountResolver` makes for an orphan assignment.
+    const persons = [makePerson('bruno')];
+
+    expect(
+      countRidePassengers(
+        journeyOf(persons, ['bruno', 'deleted']),
+        createHeadcountResolver(persons),
+      ),
+    ).toBe(2);
+  });
+
+  it('leaves the driver out — they are not a passenger', () => {
+    const persons = [makePerson('alice'), makePerson('bruno', { headcount: 2 })];
+
+    expect(
+      countRidePassengers(
+        journeyOf(persons, ['alice'], 'bruno'),
+        createHeadcountResolver(persons),
+      ),
+    ).toBe(1);
   });
 });

@@ -89,6 +89,15 @@ vi.mock('@/contexts/ActivityContext', () => ({
   }),
 }));
 
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: () => ({
+    rides: [],
+    vehicles: [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 vi.mock('@/hooks', () => ({
   useOfflineAwareToast: () => ({
     successToast: vi.fn(),

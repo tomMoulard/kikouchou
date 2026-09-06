@@ -10,7 +10,15 @@ import { Routes, Route } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { render, screen } from '@/test/utils';
-import type { Activity, Person, Room, RoomAssignment, Transport, Trip } from '@/types';
+import type {
+  Activity,
+  Person,
+  Ride,
+  Room,
+  RoomAssignment,
+  Transport,
+  Trip,
+} from '@/types';
 
 import { CalendarPage } from '../pages/CalendarPage';
 
@@ -89,6 +97,7 @@ const mockUseAssignmentContext = vi.fn();
 const mockUsePersonContext = vi.fn();
 const mockUseTransportContext = vi.fn();
 const mockUseActivityContext = vi.fn();
+const mockUseRideContext = vi.fn();
 
 vi.mock('@/contexts/TripContext', () => ({
   useTripContext: () => mockUseTripContext(),
@@ -112,6 +121,10 @@ vi.mock('@/contexts/TransportContext', () => ({
 
 vi.mock('@/contexts/ActivityContext', () => ({
   useActivityContext: () => mockUseActivityContext(),
+}));
+
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: () => mockUseRideContext(),
 }));
 
 vi.mock('@/hooks', () => ({
@@ -181,6 +194,12 @@ function setDefaultMocks() {
     isLoading: false,
     error: null,
     deleteActivity: vi.fn().mockResolvedValue(undefined),
+  });
+  mockUseRideContext.mockReturnValue({
+    rides: [],
+    vehicles: [],
+    isLoading: false,
+    error: null,
   });
 }
 
@@ -737,6 +756,89 @@ describe('CalendarPage', () => {
       'aria-describedby',
       '2026-04-08-summary',
     );
+  });
+
+  it('carries the resolved ride from the page to the pill and the detail dialog', async () => {
+    // The seam every component test misses: `CalendarPage` is the only place
+    // that calls `resolveRides`, so a pill and a dialog that both read `ride`
+    // correctly still show nothing if the page forgets to put it there.
+    const driver: Person = {
+      ...mockPerson,
+      id: 'person-2' as Person['id'],
+      name: 'Bruno',
+    };
+    const ride: Ride = {
+      id: 'ride-1' as Ride['id'],
+      tripId: mockTrip.id,
+      direction: 'pickup',
+      // Offset-less, like the leg it serves, so the two stay the same 15
+      // minutes apart in every timezone the suite may run in.
+      meetDatetime: '2026-04-01T13:45:00' as Ride['meetDatetime'],
+      location: 'Paris CDG',
+      driverId: driver.id,
+    };
+
+    mockUsePersonContext.mockReturnValue({
+      persons: [mockPerson, driver],
+      getPersonById: vi.fn((id: string) => (id === mockPerson.id ? mockPerson : undefined)),
+      isLoading: false,
+      error: null,
+    });
+    mockUseTransportContext.mockReturnValue({
+      arrivals: [{ ...mockArrival, rideId: ride.id }],
+      departures: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn().mockResolvedValue(undefined),
+    });
+    mockUseRideContext.mockReturnValue({
+      rides: [ride],
+      vehicles: [],
+      isLoading: false,
+      error: null,
+    });
+
+    const { user } = renderCalendarPage();
+
+    // The default view is the timeline, and it is where the feature has to
+    // appear first: it was invisible there for a while because only the month
+    // grid was wired, so the whole shared-car feature was missing from the page
+    // users land on. Asserted *before* any view switch, deliberately.
+    // Both places the timeline names a leg: the 10px marker inside the stay
+    // pill, and the pill's own hover text and accessible name.
+    expect(
+      screen.getByTitle('Paris CDG — rides.partOfRideWithDriver'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/↓ 14:00 — Paris CDG — rides\.partOfRideWithDriver/),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
+    const indicator = screen.getByTitle(/14:00 Alice - Paris CDG — rides\.partOfRideWithDriver/);
+    expect(indicator.querySelector('[data-testid="ride-glyph"]')).not.toBeNull();
+
+    await user.click(indicator);
+
+    const section = await screen.findByTestId('transport-ride-section');
+    expect(section).toHaveTextContent('rides.directions.pickup');
+    expect(section).toHaveTextContent('Bruno');
+  });
+
+  it('waits for the rides before drawing anything', () => {
+    // `selectedEvent` is a snapshot taken at click time, so a dialog opened
+    // while the ride query was still in flight would show no car for as long as
+    // it stayed open — the rides arriving a moment later cannot reach it.
+    mockUseRideContext.mockReturnValue({
+      rides: [],
+      vehicles: [],
+      isLoading: true,
+      error: null,
+    });
+
+    renderCalendarPage();
+
+    expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
   it('paints a transport dot grey when the person colour is too short to be a colour', async () => {

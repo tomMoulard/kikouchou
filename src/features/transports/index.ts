@@ -34,6 +34,15 @@ export type { TransportDialogProps } from './components/TransportDialog';
 export { UpcomingPickups } from './components/UpcomingPickups';
 export type { UpcomingPickupsProps } from './components/UpcomingPickups';
 
+// The one rendering of a car journey, shared by the calendar's detail dialog
+// and the map's meeting-point popup so the two cannot show different subsets of
+// the same facts.
+export { RideSummary } from './components/RideSummary';
+export type {
+  RideSummaryDensity,
+  RideSummaryProps,
+} from './components/RideSummary';
+
 // ============================================================================
 // Utilities
 // ============================================================================
