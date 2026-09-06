@@ -225,6 +225,19 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
           value={totals.assignmentCount}
           testId="stat-total-assignments"
         />
+        {/* Beside the legs rather than folded into them: one car meeting three
+            trains is one ride and three legs, so the two totals answer
+            different questions and summing them would answer neither. */}
+        <StatCard
+          label={t('analytics.totalRides')}
+          value={totals.rideCount}
+          testId="stat-total-rides"
+        />
+        <StatCard
+          label={t('analytics.totalVehicles')}
+          value={totals.vehicleCount}
+          testId="stat-total-vehicles"
+        />
       </div>
 
       <div className="mb-8">

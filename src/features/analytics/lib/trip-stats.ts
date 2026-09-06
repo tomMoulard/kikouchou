@@ -265,16 +265,29 @@ export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
 /**
  * Whether a trip has nothing to summarise yet.
  *
- * Six zeros read like a load failure; the page shows an empty state instead.
+ * A grid of zeros reads like a load failure; the page shows an empty state
+ * instead. The condition lists every count that is read from a table of its
+ * own — guests, rooms, assignments, transports, rides and vehicles — and
+ * nothing else. The rest of {@link TripStats} is derived from those reads
+ * (`headcount` from the guest rows, `arrivalCount` / `departureCount` /
+ * `pickupsNeedingDriver` from the transports), so a derived figure cannot be
+ * non-zero while its source is zero and adding it here would say nothing.
+ *
+ * Rides and vehicles belong in the list for the opposite reason: they are
+ * genuinely independent. Cars are entered before anybody's train times are
+ * known, so a trip holding two cars and nothing else would otherwise be told
+ * it has nothing to add up on a page that was about to show it a 2.
  *
  * @param stats - The trip's stats.
- * @returns True when the trip holds no guests, rooms, assignments or transports.
+ * @returns True when the trip holds none of the six.
  */
 export function isTripStatsEmpty(stats: TripStats): boolean {
   return (
     stats.guestCount === 0 &&
     stats.roomCount === 0 &&
     stats.assignmentCount === 0 &&
-    stats.transportCount === 0
+    stats.transportCount === 0 &&
+    stats.rideCount === 0 &&
+    stats.vehicleCount === 0
   );
 }

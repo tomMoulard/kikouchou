@@ -284,6 +284,27 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
           ].join(HINT_SEPARATOR)}
           testId="stat-transports"
         />
+        {/* A car journey is not a transport leg and the two must never be
+            added together: one car meeting three trains is one ride and three
+            legs. They sit side by side so the difference is visible rather
+            than explained.
+
+            The count is arranged `Ride` rows. A leg carrying only the legacy
+            `driverId` is *read* as a one-passenger journey by `resolveRides()`
+            and is not counted here, so a trip whose arrangements are all in
+            that shape reports zero journeys while the transport list draws
+            them. Nothing renders those journeys yet; whoever lands the ride
+            cards should decide which of the two numbers this card means. */}
+        <StatCard
+          label={t('analytics.rides')}
+          value={stats.rideCount}
+          testId="stat-rides"
+        />
+        <StatCard
+          label={t('analytics.vehicles')}
+          value={stats.vehicleCount}
+          testId="stat-vehicles"
+        />
         <StatCard
           label={t('analytics.pickupsNeedingDriver')}
           value={stats.pickupsNeedingDriver}

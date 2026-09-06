@@ -5,7 +5,7 @@
  * 4.1 Page loads with form fields visible (type toggle, datetime, location, mode, number, pickup switch)
  * 4.2 Missing localStorage identity redirects to identity step
  * 4.3 Filling in valid data and submitting calls `createTransport` with correct `TransportFormData`
- * 4.4 `needsPickup: true` toggle is passed through to `createTransport`
+ * 4.4 the travel-plan choice is passed through to `createTransport`
  * 4.5 After successful submit, transport appears as summary card and form resets with opposite type
  * 4.6 Validation — empty datetime shows error, empty location shows error
  * 4.7 "Skip for now" navigates to `/share/:shareId/summary`
@@ -166,7 +166,7 @@ beforeEach(() => {
 // ============================================================================
 
 describe('TransportEntryStepPage — 4.1: page loads with form fields visible', () => {
-  it('renders form fields after loading (type toggle, datetime, location, mode, number, pickup switch)', async () => {
+  it('renders form fields after loading (type toggle, datetime, location, mode, number, travel plan)', async () => {
     setStoredIdentity('abc123', { personId: 'person1', tripId: 'trip1' });
     mockGetTripByShareId.mockResolvedValue(makeTrip());
     mockGetTransportsByPersonId.mockResolvedValue([]);
@@ -185,8 +185,10 @@ describe('TransportEntryStepPage — 4.1: page loads with form fields visible', 
       expect(screen.getByRole('combobox')).toBeInTheDocument();
       // Transport number input
       expect(screen.getByLabelText('sharing.transportNumber')).toBeInTheDocument();
-      // Needs pickup switch
-      expect(screen.getByRole('switch')).toBeInTheDocument();
+      // Travel plan — one exclusive choice, not a pair of toggles
+      expect(screen.getByRole('radio', { name: 'sharing.transportPlanLift' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'sharing.transportPlanDriving' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'sharing.transportPlanOwnWay' })).toBeInTheDocument();
     });
   });
 });
@@ -322,44 +324,82 @@ describe('TransportEntryStepPage — 4.3: submitting valid data calls createTran
 });
 
 // ============================================================================
-// 4.4 — needsPickup toggle is passed through to createTransport
+// 4.4 — the travel-plan choice is passed through to createTransport
 // ============================================================================
 
-describe('TransportEntryStepPage — 4.4: needsPickup toggle passed to createTransport', () => {
-  it('passes needsPickup: true when switch is toggled on', async () => {
+/**
+ * Fills the two required fields and picks one travel plan, then submits.
+ *
+ * @param user - The userEvent instance from the render helper
+ * @param planLabel - The i18n key the radio renders as its label
+ */
+async function submitWithPlan(
+  user: ReturnType<typeof renderTransportEntryPage>['user'],
+  planLabel: string,
+): Promise<void> {
+  await waitFor(() => {
+    expect(screen.getByRole('radio', { name: planLabel })).toBeInTheDocument();
+  });
+
+  const datetimeInput = screen.getByLabelText('sharing.transportDatetime');
+  await user.clear(datetimeInput);
+  await user.type(datetimeInput, '2026-07-15T14:30');
+
+  const locationInput = screen.getByLabelText(/sharing\.transportLocation/);
+  await user.type(locationInput, 'Gare de Vannes');
+
+  await user.click(screen.getByRole('radio', { name: planLabel }));
+  await user.click(screen.getByRole('button', { name: /sharing\.transportAdd/i }));
+}
+
+describe('TransportEntryStepPage — 4.4: travel plan passed to createTransport', () => {
+  beforeEach(() => {
     setStoredIdentity('abc123', { personId: 'person1', tripId: 'trip1' });
     mockGetTripByShareId.mockResolvedValue(makeTrip());
     mockGetTransportsByPersonId.mockResolvedValue([]);
     mockCreateTransport.mockResolvedValue(makeTransport());
+  });
 
+  it('asks for a pickup, and names no driver, when the guest needs a lift', async () => {
     const { user } = renderTransportEntryPage();
 
-    // Wait for form to load
-    await waitFor(() => {
-      expect(screen.getByRole('switch')).toBeInTheDocument();
-    });
-
-    // Fill in required fields
-    const datetimeInput = screen.getByLabelText('sharing.transportDatetime');
-    await user.clear(datetimeInput);
-    await user.type(datetimeInput, '2026-07-15T14:30');
-
-    const locationInput = screen.getByLabelText(/sharing\.transportLocation/);
-    await user.type(locationInput, 'Gare de Vannes');
-
-    // Toggle needsPickup on
-    const pickupSwitch = screen.getByRole('switch');
-    await user.click(pickupSwitch);
-
-    // Submit
-    const addButton = screen.getByRole('button', { name: /sharing\.transportAdd/i });
-    await user.click(addButton);
+    await submitWithPlan(user, 'sharing.transportPlanLift');
 
     await waitFor(() => {
       expect(mockCreateTransport).toHaveBeenCalledWith('trip1', expect.objectContaining({
         needsPickup: true,
       }));
     });
+    expect(mockCreateTransport.mock.calls[0]?.[1]).not.toHaveProperty('driverId');
+  });
+
+  it('names the guest as their own driver when they say they are driving', async () => {
+    // The only shape that survives the QR changeset: `Ride` does not travel, so
+    // a locally-created ride would reach the host as a dangling reference.
+    // `resolveRides()` reads this leg back as a self-driven journey.
+    const { user } = renderTransportEntryPage();
+
+    await submitWithPlan(user, 'sharing.transportPlanDriving');
+
+    await waitFor(() => {
+      expect(mockCreateTransport).toHaveBeenCalledWith('trip1', expect.objectContaining({
+        driverId: 'person1',
+        needsPickup: false,
+      }));
+    });
+  });
+
+  it('leaves both empty when the guest makes their own way', async () => {
+    const { user } = renderTransportEntryPage();
+
+    await submitWithPlan(user, 'sharing.transportPlanOwnWay');
+
+    await waitFor(() => {
+      expect(mockCreateTransport).toHaveBeenCalledWith('trip1', expect.objectContaining({
+        needsPickup: false,
+      }));
+    });
+    expect(mockCreateTransport.mock.calls[0]?.[1]).not.toHaveProperty('driverId');
   });
 });
 
