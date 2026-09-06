@@ -18,6 +18,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useFormSubmission } from '@/hooks';
 
+import { Plus } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,6 +43,7 @@ import type {
   Person,
   PersonId,
   Ride,
+  RideDirection,
   RideId,
   Transport,
   TransportFormData,
@@ -71,6 +74,26 @@ interface TransportFormProps {
   readonly rides: readonly Ride[];
   /** The trip's cars, so a ride can be named by the car serving it. */
   readonly vehicles: readonly Vehicle[];
+  /**
+   * Opens the caller's ride dialog, pre-set to the direction this leg needs.
+   *
+   * A leg often needs a car that does not exist yet, and sending the user back
+   * to the transport list to make one loses everything they have typed here.
+   * The direction travels with the request because only this form knows whether
+   * the leg is an arrival or a departure.
+   *
+   * Absent when the caller has no dialog to open, and the affordance is then
+   * not rendered rather than rendered dead.
+   */
+  readonly onCreateRide?: (direction: RideDirection) => void;
+  /**
+   * A ride the caller has just created on this form's behalf.
+   *
+   * Selected as soon as it arrives, keyed on the id itself: a later manual
+   * change to the select must not be undone by a re-render, and creating a
+   * second ride must still take effect.
+   */
+  readonly newRideId?: RideId;
   /** Default transport type for create mode (from URL param). */
   readonly defaultType?: TransportType;
   /** Callback when form is successfully submitted with validated data. */
@@ -232,6 +255,8 @@ const TransportForm = memo(function TransportForm({
   persons,
   rides,
   vehicles,
+  onCreateRide,
+  newRideId,
   defaultType,
   onSubmit,
   onCancel,
@@ -300,6 +325,10 @@ const TransportForm = memo(function TransportForm({
   /** The date-fns locale the ride labels are formatted in. */
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
 
+  /** The ride direction this leg needs: a pickup collects, a dropoff carries. */
+  const neededDirection: RideDirection =
+    formState.type === 'arrival' ? 'pickup' : 'dropoff';
+
   /**
    * The cars this leg could plausibly join, with the vehicle serving each.
    *
@@ -311,7 +340,7 @@ const TransportForm = memo(function TransportForm({
    * save of an unrelated field.
    */
   const rideOptions = useMemo(() => {
-    const wanted = formState.type === 'arrival' ? 'pickup' : 'dropoff',
+    const wanted = neededDirection,
       vehicleName = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle.name]));
 
     return rides
@@ -327,7 +356,7 @@ const TransportForm = memo(function TransportForm({
             : (vehicleName.get(ride.vehicleId) ?? t('rides.noVehicle')),
         detail: `${formatTransportDatetime(ride.meetDatetime, dateLocale)} · ${ride.location}`,
       }));
-  }, [rides, vehicles, formState.type, formState.rideId, dateLocale, t]);
+  }, [rides, vehicles, neededDirection, formState.rideId, dateLocale, t]);
 
   /**
    * Check if the selected person still exists.
@@ -346,6 +375,20 @@ const TransportForm = memo(function TransportForm({
     setFormState(getInitialFormState(transport, defaultType));
     setErrors({});
   }, [transport?.id, defaultType]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on transport.id change
+
+  // Select a ride the caller just made on this form's behalf.
+  //
+  // Keyed on the id, not on a "did we ask" flag: a re-render must not undo a
+  // manual change the user made afterwards, and creating a second ride must
+  // still take effect. Clears the leg's own driver for the same reason picking
+  // a ride by hand does — the two say contradictory things about who is
+  // collecting this guest.
+  useEffect(() => {
+    if (newRideId === undefined) {
+      return;
+    }
+    setFormState((prev) => ({ ...prev, rideId: newRideId, driverId: '' }));
+  }, [newRideId]);
 
   // Prefill datetime when creating a new transport and a person is selected.
   // Uses person's stayStartDate/stayEndDate as the best available "arrival to house" date hint.
@@ -550,6 +593,13 @@ const TransportForm = memo(function TransportForm({
       driverId: rideId === '' ? prev.driverId : '',
     }));
   }, []);
+
+  /**
+   * Asks the caller for a new ride, in the direction this leg needs.
+   */
+  const handleCreateRide = useCallback(() => {
+    onCreateRide?.(neededDirection);
+  }, [onCreateRide, neededDirection]);
 
   /**
    * Handles driver select change.
@@ -860,7 +910,27 @@ const TransportForm = memo(function TransportForm({
         `handleRideChange`.
       */}
       <div className="space-y-2">
-        <Label htmlFor="transport-ride">{t('transports.ride')}</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="transport-ride">{t('transports.ride')}</Label>
+          {/*
+            Rendered only when the caller can actually open a dialog, so it is
+            never a dead control. A leg frequently needs a car that does not
+            exist yet, and sending the user to the transport list to make one
+            would throw away everything typed here.
+          */}
+          {onCreateRide !== undefined && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleCreateRide}
+              disabled={isSubmitting}
+            >
+              <Plus className="size-4 mr-1" aria-hidden="true" />
+              {t('rides.new')}
+            </Button>
+          )}
+        </div>
         <Select
           value={formState.rideId || NO_SELECTION}
           onValueChange={handleRideChange}

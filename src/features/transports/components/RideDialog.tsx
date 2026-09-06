@@ -52,6 +52,15 @@ export interface RideDialogProps {
   readonly onOpenChange: (open: boolean) => void;
   /** Direction to preselect in create mode. */
   readonly defaultDirection?: RideDirection;
+  /**
+   * Called with the ride a create just made.
+   *
+   * Exists so a caller that opened this dialog *in order to* get a ride — the
+   * transport form's "New ride" — can select the result. Watching the context's
+   * ride list for a new entry instead would pick the wrong one the moment two
+   * devices are syncing.
+   */
+  readonly onCreated?: (ride: Ride) => void;
 }
 
 // ============================================================================
@@ -88,6 +97,7 @@ const RideDialog = memo(function RideDialog({
   open,
   onOpenChange,
   defaultDirection,
+  onCreated,
 }: RideDialogProps) {
   const { t } = useTranslation(),
     { rides, vehicles, isLoading, createRide, updateRide } = useRideContext(),
@@ -163,8 +173,9 @@ const RideDialog = memo(function RideDialog({
           await updateRide(rideId, data);
           successToast(t('rides.updateSuccess'));
         } else {
-          await createRide(data);
+          const created = await createRide(data);
           successToast(t('rides.createSuccess'));
+          onCreated?.(created);
         }
 
         captureUsage('ride_saved', {
@@ -184,6 +195,7 @@ const RideDialog = memo(function RideDialog({
         rideId,
         updateRide,
         createRide,
+        onCreated,
         successToast,
         t,
         passengerIds,

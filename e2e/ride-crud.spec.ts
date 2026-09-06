@@ -34,6 +34,9 @@ import { seedPerson, seedTrip } from './support/seed';
 /** Both locales, because the suite runs against whichever the browser asks for. */
 const LABELS = {
   newRide: /^new ride$|^nouveau trajet$/i,
+  newTransport: /^new transport$|^nouveau transport$/i,
+  ride: /^ride$|^trajet$/i,
+  guest: /participant|guest/i,
   confirmLocation: /^confirm$|^confirmer$/i,
   editRide: /^edit ride$|^modifier le trajet$/i,
   cancelRide: /^cancel ride$|^annuler le trajet$/i,
@@ -281,5 +284,35 @@ test.describe('arranging a car journey', () => {
     await page.getByRole('button', { name: LABELS.confirmDelete }).click();
 
     await expect.poll(async () => (await storedRides(page, tripId)).length).toBe(0);
+  });
+
+  test('a ride can be made from inside the transport dialog, and is selected', async ({
+    page,
+  }) => {
+    const tripId = await openTransports(page);
+
+    await page.getByRole('button', { name: LABELS.newTransport }).first().click();
+
+    // No ride exists yet, so the select says so rather than offering nothing
+    // with no explanation.
+    await expect(page.getByText(/no ride arranged|aucun trajet organis/i)).toBeVisible();
+
+    // The way out is right there, and the transport dialog stays open behind
+    // it — losing what has been typed to go and make a car is the whole reason
+    // this exists.
+    await page.getByRole('button', { name: LABELS.newRide }).click();
+    await page.getByLabel(LABELS.meetDatetime).fill(MEET_LOCAL);
+    await pickMeetingPoint(page, PLACE.name);
+    await page.getByRole('button', { name: LABELS.save }).click();
+
+    await expect
+      .poll(async () => (await storedRides(page, tripId)).length)
+      .toBe(1);
+
+    // Back on the transport form, with the new ride already chosen: the point
+    // is not merely that the ride now exists but that the leg is in it.
+    const rideSelect = page.getByRole('combobox', { name: LABELS.ride });
+    await expect(rideSelect).toBeVisible();
+    await expect(rideSelect).toContainText(/no car chosen|aucune voiture/i);
   });
 });

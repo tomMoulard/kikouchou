@@ -26,9 +26,18 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useRideContext } from '@/contexts/RideContext';
+import { RideDialog } from '@/features/transports/components/RideDialog';
 import { TransportForm } from '@/features/transports/components/TransportForm';
 import { captureUsage } from '@/lib/posthog';
-import type { Transport, TransportFormData, TransportId, TransportType } from '@/types';
+import type {
+  Ride,
+  RideDirection,
+  RideId,
+  Transport,
+  TransportFormData,
+  TransportId,
+  TransportType,
+} from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -93,6 +102,25 @@ const TransportDialog = memo(function TransportDialog({
   // The car select's options. Resolved here rather than inside the form so the
   // form stays renderable without a `RideProvider` around it.
   const { rides, vehicles } = useRideContext();
+
+  // The nested ride dialog, opened from the form's "New ride". The transport
+  // dialog stays mounted underneath it, so nothing the user has typed is lost.
+  const [rideDirection, setRideDirection] = useState<RideDirection | undefined>(undefined);
+  const [createdRideId, setCreatedRideId] = useState<RideId | undefined>(undefined);
+
+  const handleCreateRide = useCallback((direction: RideDirection) => {
+    setRideDirection(direction);
+  }, []);
+
+  const handleRideDialogOpenChange = useCallback((next: boolean) => {
+    if (!next) {
+      setRideDirection(undefined);
+    }
+  }, []);
+
+  const handleRideCreated = useCallback((ride: Ride) => {
+    setCreatedRideId(ride.id);
+  }, []);
   const { persons } = usePersonContext();
   const { successToast } = useOfflineAwareToast();
 
@@ -261,12 +289,31 @@ const TransportDialog = memo(function TransportDialog({
             transport={transport}
             persons={persons}
             defaultType={isEditMode ? undefined : defaultType}
+            onCreateRide={handleCreateRide}
+            newRideId={createdRideId}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             onDirtyChange={setIsDirty}
           />
         </DialogContent>
       </Dialog>
+
+      {/*
+        The ride dialog, nested over this one.
+
+        Rendered only while it is wanted rather than kept mounted with
+        `open={false}`: it subscribes to three contexts and resolves the trip's
+        rides on every render, and the transport dialog is opened far more often
+        than a leg needs a brand-new car.
+      */}
+      {rideDirection !== undefined && (
+        <RideDialog
+          open
+          onOpenChange={handleRideDialogOpenChange}
+          defaultDirection={rideDirection}
+          onCreated={handleRideCreated}
+        />
+      )}
 
       {/* Discard changes confirmation */}
       <ConfirmDialog

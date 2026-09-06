@@ -986,4 +986,92 @@ describe('TransportForm', () => {
       );
     });
   });
+
+  // ==========================================================================
+  // Creating a Ride From Here
+  // ==========================================================================
+
+  describe('creating a ride from the leg', () => {
+    it('asks for the direction the leg actually needs', async () => {
+      const user = userEvent.setup(),
+        onCreateRide = vi.fn();
+
+      render(
+        <TransportForm
+          rides={[]}
+          vehicles={[]}
+          persons={mockPersons}
+          onCreateRide={onCreateRide}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+        { withProviders: false },
+      );
+
+      // An arrival is collected by a pick-up…
+      await user.click(screen.getByRole('button', { name: 'rides.new' }));
+      expect(onCreateRide).toHaveBeenLastCalledWith('pickup');
+
+      // …and a departure is carried by a drop-off. The caller cannot work this
+      // out: only the form knows which way the leg is going.
+      await user.click(screen.getByLabelText('transports.departure'));
+      await user.click(screen.getByRole('button', { name: 'rides.new' }));
+      expect(onCreateRide).toHaveBeenLastCalledWith('dropoff');
+    });
+
+    it('offers nothing when the caller has no dialog to open', () => {
+      render(
+        <TransportForm
+          rides={[]}
+          vehicles={[]}
+          persons={mockPersons}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+        { withProviders: false },
+      );
+
+      // Not rendered rather than rendered dead: a button that does nothing is
+      // worse than an absent one.
+      expect(
+        screen.queryByRole('button', { name: 'rides.new' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('selects the ride the caller made, and drops the leg\'s own driver', async () => {
+      const user = userEvent.setup(),
+        onSubmit = vi.fn().mockResolvedValue(undefined),
+        transport = {
+          id: 't1' as import('@/types').Transport['id'],
+          tripId: 't1' as import('@/types').Transport['tripId'],
+          personId: 'p1' as import('@/types').Transport['personId'],
+          type: 'arrival' as const,
+          datetime: '2026-07-15T14:00:00.000Z' as import('@/types').Transport['datetime'],
+          location: 'Gare de Vannes',
+          needsPickup: true,
+          driverId: 'p2' as import('@/types').Transport['personId'],
+        },
+        props = {
+          rides: mockRides,
+          vehicles: [mockVehicle],
+          transport,
+          persons: mockPersons,
+          onSubmit,
+          onCancel: vi.fn(),
+        };
+
+      const { rerender } = render(<TransportForm {...props} />, {
+        withProviders: false,
+      });
+
+      // The caller's dialog has just created this one and hands it back.
+      rerender(<TransportForm {...props} newRideId={mockRides[0]?.id} />);
+
+      await user.click(screen.getByText('common.save'));
+
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ rideId: 'r-pickup', driverId: undefined }),
+      );
+    });
+  });
 });
