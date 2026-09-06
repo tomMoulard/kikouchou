@@ -52,7 +52,11 @@ import {
 import { statusVariants } from '@/components/ui/status.variants';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { TransportIcon } from '@/components/shared/TransportIcon';
+import { RideCapacityBadge } from '@/features/transports/components/RideCapacityBadge';
+import { RideMismatchNotice } from '@/features/transports/components/RideMismatchNotice';
+import type { HeadcountResolver } from '@/features/rooms/utils/capacity-utils';
 import { isLegCovered } from '@/features/transports/utils/pickup-utils';
+import { summariseRideCapacity } from '@/features/transports/utils/ride-capacity';
 import type {
   ResolvedLeg,
   ResolvedRide,
@@ -84,6 +88,23 @@ export interface RideCardProps {
    * Guillaume volunteered while Alice's card went on saying nobody was coming.
    */
   readonly drivenRideIds: ReadonlySet<string>;
+  /**
+   * How many people a guest row stands for.
+   *
+   * Required, never optional-with-a-default-of-one: "Alice+Auré" is a single
+   * row worth two seats, and a card that assumed one would report a full car
+   * as having room. Build it with `createHeadcountResolver(persons)`.
+   */
+  readonly resolveHeadcount: HeadcountResolver;
+  /**
+   * Whether this device may act on a leg that has drifted out of the window.
+   *
+   * The notice offers *move the car* and *drop the passenger*, which are the
+   * driver's calls — so it is shown to the driver alone. A passenger who moved
+   * their own train already knows; what the rest of the car gets is the change
+   * feed above the list, which reports without offering to reshuffle anybody.
+   */
+  readonly canResolveMismatch?: boolean;
   /** Opens one passenger's own leg for editing. */
   readonly onEditLeg: (transportId: TransportId) => void;
   /** Asks to delete one passenger's own leg. */
@@ -259,6 +280,8 @@ const RidePassengerRow = memo(function RidePassengerRow({
  *     journey={journey}
  *     dateLocale={dateLocale}
  *     drivenRideIds={drivenRideIds}
+ *     resolveHeadcount={resolveHeadcount}
+ *     canResolveMismatch={journey.driverId === myPersonId}
  *     onEditLeg={handleEdit}
  *     onDeleteLeg={handleDelete}
  *   />
@@ -269,6 +292,8 @@ const RideCard = memo(function RideCard({
   journey,
   dateLocale,
   drivenRideIds,
+  resolveHeadcount,
+  canResolveMismatch = false,
   onEditLeg,
   onDeleteLeg,
   isActionsDisabled = false,
@@ -287,6 +312,13 @@ const RideCard = memo(function RideCard({
     leaveTime = useMemo(
       () => formatInstantTime(journey.leaveAtMs, dateLocale),
       [journey.leaveAtMs, dateLocale],
+    ),
+    // Does this lot fit in that car, and are the right restraints in it. Asked
+    // through the one helper the ride form and the badge also ask, so a card
+    // and the form that produced it cannot give different answers.
+    capacity = useMemo(
+      () => summariseRideCapacity(journey, resolveHeadcount),
+      [journey, resolveHeadcount],
     ),
     // Is anybody driving this? Read off the ride's own `driverId` — the very
     // field `collectDrivenRideIds` indexes — plus `isLegCovered` for the legacy
@@ -405,6 +437,16 @@ const RideCard = memo(function RideCard({
             {journey.vehicle?.name ?? t('rides.noVehicle')}
           </span>
         </div>
+
+        {/* Seats and child seats. Below the car it is measured against, so
+            "4 people for 3 seats" reads as a sentence about the Espace rather
+            than a number floating above it. Renders nothing when no car is
+            chosen — an unmeasured car is not a car with no room in it. */}
+        <RideCapacityBadge summary={capacity} />
+
+        {/* A leg that has drifted out of the car's window, and the two ways
+            out of it. The driver's alone: see `canResolveMismatch`. */}
+        {canResolveMismatch && <RideMismatchNotice journey={journey} />}
 
         {/* Who is in it. A ride nobody has joined yet is a real state — the
             badge above already says so, and an empty bordered box would not. */}

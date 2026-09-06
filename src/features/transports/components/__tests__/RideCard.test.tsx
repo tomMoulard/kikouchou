@@ -23,6 +23,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { enUS } from 'date-fns/locale';
 
 import { render, screen, userEvent, within } from '@/test/utils';
+import { createHeadcountResolver } from '@/features/rooms/utils/capacity-utils';
 import { collectDrivenRideIds } from '@/features/transports/utils/pickup-utils';
 import {
   type ResolvedRide,
@@ -137,6 +138,14 @@ const ALICE = makePerson('person-alice', 'Alice', '#3b82f6'),
 interface CardFixture {
   readonly journey: ResolvedRide;
   readonly drivenRideIds: ReadonlySet<string>;
+  /**
+   * The real resolver over the fixture's own roster, not a stub returning 1.
+   *
+   * The card's capacity chips are counted through it, and a stub would make a
+   * guest row standing for a couple take one seat — which is the exact reading
+   * `HeadcountResolver` is required rather than optional to prevent.
+   */
+  readonly resolveHeadcount: ReturnType<typeof createHeadcountResolver>;
 }
 
 /**
@@ -159,7 +168,11 @@ function resolveFixture(
   if (journey === undefined) {
     throw new Error('resolveRides returned no journey for the fixture');
   }
-  return { journey, drivenRideIds: collectDrivenRideIds(rides) };
+  return {
+    journey,
+    drivenRideIds: collectDrivenRideIds(rides),
+    resolveHeadcount: createHeadcountResolver(persons),
+  };
 }
 
 /**
@@ -216,6 +229,7 @@ function renderCard(
       journey={fixture.journey}
       dateLocale={enUS}
       drivenRideIds={fixture.drivenRideIds}
+      resolveHeadcount={fixture.resolveHeadcount}
       onEditLeg={onEditLeg}
       onDeleteLeg={onDeleteLeg}
     />,
@@ -425,6 +439,7 @@ describe('RideCard', () => {
         journey={fixture.journey}
         dateLocale={enUS}
         drivenRideIds={fixture.drivenRideIds}
+        resolveHeadcount={fixture.resolveHeadcount}
         onEditLeg={vi.fn()}
         onDeleteLeg={vi.fn()}
         isActionsDisabled

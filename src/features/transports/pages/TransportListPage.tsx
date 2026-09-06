@@ -95,6 +95,10 @@ import { formatFullDate } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { getTransportModeIcon } from '@/lib/utils/transport-icons';
 import { DriverAlert } from '@/features/transports/components/DriverAlert';
+import {
+  createHeadcountResolver,
+  type HeadcountResolver,
+} from '@/features/rooms/utils/capacity-utils';
 import { RideCard } from '@/features/transports/components/RideCard';
 import { RideChangeFeed } from '@/features/transports/components/RideChangeFeed';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
@@ -214,6 +218,10 @@ interface TransportListProps {
   readonly isActionsDisabled?: boolean;
   /** The rides somebody is driving, from `collectDrivenRideIds`. */
   readonly drivenRideIds: ReadonlySet<string>;
+  /** How many people a guest row stands for — never assume one. */
+  readonly resolveHeadcount: HeadcountResolver;
+  /** The guest holding this device, so a car knows whose call it is. */
+  readonly myPersonId: PersonId | undefined;
 }
 
 // ============================================================================
@@ -615,6 +623,10 @@ interface DateGroupSectionProps {
   readonly isPast?: boolean;
   /** The rides somebody is driving, from `collectDrivenRideIds`. */
   readonly drivenRideIds: ReadonlySet<string>;
+  /** How many people a guest row stands for — never assume one. */
+  readonly resolveHeadcount: HeadcountResolver;
+  /** The guest holding this device, so a car knows whose call it is. */
+  readonly myPersonId: PersonId | undefined;
 }
 
 /**
@@ -629,6 +641,8 @@ const DateGroupSection = memo(function DateGroupSection({
   isActionsDisabled = false,
   isPast = false,
   drivenRideIds,
+  resolveHeadcount,
+  myPersonId,
 }: DateGroupSectionProps): ReactElement {
   return (
     <section key={group.dateKey} aria-labelledby={`date-header-${group.dateKey}`}>
@@ -658,6 +672,10 @@ const DateGroupSection = memo(function DateGroupSection({
                 journey={entry.journey}
                 dateLocale={dateLocale}
                 drivenRideIds={drivenRideIds}
+                resolveHeadcount={resolveHeadcount}
+                canResolveMismatch={
+                  myPersonId !== undefined && entry.journey.driverId === myPersonId
+                }
                 onEditLeg={onEdit}
                 onDeleteLeg={onDelete}
                 isActionsDisabled={isActionsDisabled}
@@ -720,6 +738,8 @@ const TransportList = memo(function TransportList({
   emptyDescription,
   isActionsDisabled = false,
   drivenRideIds,
+  resolveHeadcount,
+  myPersonId,
 }: TransportListProps): ReactElement {
   const { t } = useTranslation();
   
@@ -763,6 +783,8 @@ const TransportList = memo(function TransportList({
           isActionsDisabled={isActionsDisabled}
           isPast={false}
           drivenRideIds={drivenRideIds}
+          resolveHeadcount={resolveHeadcount}
+          myPersonId={myPersonId}
         />
       ))}
 
@@ -808,6 +830,8 @@ const TransportList = memo(function TransportList({
                   isActionsDisabled={isActionsDisabled}
                   isPast={true}
                   drivenRideIds={drivenRideIds}
+                  resolveHeadcount={resolveHeadcount}
+                  myPersonId={myPersonId}
                 />
               ))}
             </div>
@@ -1007,7 +1031,12 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
 
   // Built once for the whole page: every card asks whether somebody is driving
   // its leg, and the answer must be the same one the alert gate above used.
-   drivenRideIds = useMemo(() => collectDrivenRideIds(rides), [rides]);
+   drivenRideIds = useMemo(() => collectDrivenRideIds(rides), [rides]),
+
+  // How many people a guest row stands for. One resolver for the page, so the
+  // ride cards and the capacity chips on them cannot disagree about whether
+  // "Alice+Auré" is one person or two.
+   headcountOf = useMemo(() => createHeadcountResolver(persons), [persons]);
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
@@ -1293,6 +1322,8 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
             : t('transports.emptyDescription')
         }
         drivenRideIds={drivenRideIds}
+        resolveHeadcount={headcountOf}
+        myPersonId={myPersonId}
       />
 
       {/* Floating Action Button for mobile */}
