@@ -1098,6 +1098,24 @@
     "copyAddress": "Copier l’adresse",
     "addressCopied": "Adresse copiée"
   },
+  "rideChanges": {
+    "title": "Horaires modifiés",
+    "description": "Quelqu'un de votre voiture a déplacé son train ou son vol. La voiture part toujours à l'heure prévue tant que le conducteur ne la déplace pas.",
+    "count_one": "{{count}} changement",
+    "count_other": "{{count}} changements",
+    "announce_one": "{{count}} horaire a changé",
+    "announce_other": "{{count}} horaires ont changé",
+    "movedLater": "Plus tard qu'avant",
+    "movedEarlier": "Plus tôt qu'avant",
+    "was": "Avant",
+    "now": "Maintenant",
+    "unknownGuest": "Un invité",
+    "acknowledge": "C'est noté",
+    "acknowledgeAll": "Tout marquer comme vu",
+    "watchHint_one": "{{count}} horaire de vos voitures n'est pas encore surveillé sur cet appareil.",
+    "watchHint_other": "{{count}} horaires de vos voitures ne sont pas encore surveillés sur cet appareil.",
+    "watch": "Surveiller les changements"
+  },
   "rides": {
     "title": "Trajets",
     "ride": "Trajet",
