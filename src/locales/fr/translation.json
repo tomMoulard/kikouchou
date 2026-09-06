@@ -525,6 +525,16 @@
     "needsDriver": "Cherche conducteur",
     "unassignedCount_one": "{{count}} arrivée a besoin d'un conducteur",
     "unassignedCount_other": "{{count}} arrivées ont besoin d'un conducteur",
+    "oneCar": "Tous dans une seule voiture",
+    "oneCarArrivals": "Une voiture pour les arrivées",
+    "oneCarDepartures": "Une voiture pour les départs",
+    "mixedDirections": "Les arrivées et les départs ne peuvent pas partager une voiture — prévoyez-en une de chaque.",
+    "rideCreated": "Voiture prévue — tout le monde est dedans",
+    "rideCreatedPartial": "Voiture prévue, mais certains invités n'ont pas pu être ajoutés — réessayez depuis la voiture",
+    "addToRide": "Ajouter à une voiture existante",
+    "addToRideDescription": "Les voitures qui vont déjà à {{location}}",
+    "noJoinableRides": "Aucune voiture ne va encore par là",
+    "addedToRide": "Ajouté à la voiture",
     "overdue": "En retard"
   },
   "calendar": {
