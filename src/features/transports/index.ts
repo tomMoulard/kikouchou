@@ -34,6 +34,9 @@ export type { TransportDialogProps } from './components/TransportDialog';
 export { UpcomingPickups } from './components/UpcomingPickups';
 export type { UpcomingPickupsProps } from './components/UpcomingPickups';
 
+export { RideMismatchNotice } from './components/RideMismatchNotice';
+export type { RideMismatchNoticeProps } from './components/RideMismatchNotice';
+
 // ============================================================================
 // Utilities
 // ============================================================================
