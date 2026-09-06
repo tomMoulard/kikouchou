@@ -276,7 +276,8 @@ export type UsageAction =
   | 'trip_created'
   | 'trip_imported'
   | 'trip_joined'
-  | 'trip_updated';
+  | 'trip_updated'
+  | 'vehicle_saved';
 
 /**
  * The one event that means "a person used this app".

@@ -23,6 +23,7 @@ import {
   BarChart2,
   Calendar,
   Car,
+  CarFront,
   ChevronLeft,
   ChevronRight,
   Home,
@@ -106,6 +107,7 @@ const TRIP_NAV_ITEMS: readonly NavItem[] = [
   { labelKey: 'nav.rooms', pathSuffix: 'rooms', icon: Home, requiresTrip: true },
   { labelKey: 'nav.persons', pathSuffix: 'persons', icon: Users, requiresTrip: true },
   { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
+  { labelKey: 'nav.vehicles', pathSuffix: 'vehicles', icon: CarFront, requiresTrip: true },
   { labelKey: 'nav.activities', pathSuffix: 'activities', icon: PartyPopper, requiresTrip: true },
   { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: BarChart2, requiresTrip: true },
 ] as const;
@@ -150,6 +152,7 @@ const ASSISTANT_NAV_ITEM: NavItem = {
  * width evenly, and a sixth makes the labels wrap on a small phone.
  */
 const MOBILE_SECONDARY_TRIP_PATHS: readonly string[] = [
+  'vehicles',
   'activities',
   'analytics',
 ];
