@@ -983,6 +983,7 @@
     "roomNotFound": "Room not found. Please try again.",
     "personNotFound": "Guest not found. Please try again.",
     "transportNotFound": "Transport not found. Please try again.",
+    "rideNotFound": "Ride not found. Please try again.",
     "loadingFailed": "Failed to load",
     "saveFailed": "Failed to save",
     "deleteFailed": "Failed to delete",
@@ -1090,13 +1091,24 @@
     "rides_one": "{{count}} ride",
     "rides_other": "{{count}} rides",
     "noRides": "No rides arranged yet",
+    "new": "New ride",
+    "edit": "Edit ride",
+    "newDescription": "Say where the car meets people, when, and who is driving.",
+    "editDescription": "Change this ride's details below.",
+    "createSuccess": "Ride added",
+    "updateSuccess": "Ride updated",
+    "direction": "Direction",
     "directions": {
       "pickup": "Pick-up",
       "dropoff": "Drop-off"
     },
+    "meetDatetime": "Meeting date and time",
+    "location": "Meeting point",
+    "locationPlaceholder": "e.g. Lyon Part-Dieu",
     "meetAt": "Meeting at {{time}}",
     "leaveAt": "Leave at {{time}}",
     "leadTime": "Leave {{count}} min before",
+    "leadTimeRemembered": "Kept from the last ride to {{location}}",
     "driver": "Driver",
     "noDriver": "Nobody driving yet",
     "selfDriven": "Driving themselves",
@@ -1107,6 +1119,11 @@
     "legMismatch": {
       "after": "{{name}} now arrives {{minutes}} min after this ride",
       "before": "{{name}} now arrives {{minutes}} min before this ride"
+    },
+    "errors": {
+      "invalidLeadTime": "The lead time must be a whole number of minutes between {{min}} and {{max}}",
+      "locationTooLong": "The meeting point must be 200 characters or less",
+      "notesTooLong": "The notes must be 1000 characters or less"
     }
   },
   "vehicles": {

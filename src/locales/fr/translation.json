@@ -983,6 +983,7 @@
     "roomNotFound": "Chambre non trouvée. Veuillez réessayer.",
     "personNotFound": "Participant non trouvé. Veuillez réessayer.",
     "transportNotFound": "Transport non trouvé. Veuillez réessayer.",
+    "rideNotFound": "Trajet introuvable. Veuillez réessayer.",
     "loadingFailed": "Échec du chargement",
     "saveFailed": "Échec de l'enregistrement",
     "deleteFailed": "Échec de la suppression",
@@ -1090,13 +1091,24 @@
     "rides_one": "{{count}} trajet",
     "rides_other": "{{count}} trajets",
     "noRides": "Aucun trajet prévu",
+    "new": "Nouveau trajet",
+    "edit": "Modifier le trajet",
+    "newDescription": "Indiquez où la voiture retrouve les passagers, quand, et qui conduit.",
+    "editDescription": "Modifiez les détails de ce trajet ci-dessous.",
+    "createSuccess": "Trajet ajouté",
+    "updateSuccess": "Trajet mis à jour",
+    "direction": "Sens",
     "directions": {
       "pickup": "Aller chercher",
       "dropoff": "Déposer"
     },
+    "meetDatetime": "Date et heure du rendez-vous",
+    "location": "Point de rendez-vous",
+    "locationPlaceholder": "ex. Lyon Part-Dieu",
     "meetAt": "Rendez-vous à {{time}}",
     "leaveAt": "Départ à {{time}}",
     "leadTime": "Partir {{count}} min avant",
+    "leadTimeRemembered": "Repris du dernier trajet vers {{location}}",
     "driver": "Conducteur",
     "noDriver": "Personne au volant",
     "selfDriven": "Conduisent eux-mêmes",
@@ -1107,6 +1119,11 @@
     "legMismatch": {
       "after": "{{name}} arrive maintenant {{minutes}} min après ce trajet",
       "before": "{{name}} arrive maintenant {{minutes}} min avant ce trajet"
+    },
+    "errors": {
+      "invalidLeadTime": "La marge doit être un nombre entier de minutes compris entre {{min}} et {{max}}",
+      "locationTooLong": "Le point de rendez-vous ne doit pas dépasser 200 caractères",
+      "notesTooLong": "Les notes ne doivent pas dépasser 1000 caractères"
     }
   },
   "vehicles": {

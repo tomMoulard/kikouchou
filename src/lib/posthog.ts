@@ -271,6 +271,7 @@ export type UsageAction =
   | 'guest_group_imported'
   | 'guest_group_saved'
   | 'person_saved'
+  | 'ride_saved'
   | 'room_saved'
   | 'transport_saved'
   | 'trip_created'
