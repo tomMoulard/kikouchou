@@ -278,7 +278,7 @@ export function sanitizeVehicleData<
 >(data: T): T {
   return {
     ...data,
-    name: sanitizeText(data.name, MAX_LENGTHS.vehicleName),
+    name: sanitizeText(data.name ?? '', MAX_LENGTHS.vehicleName),
     seatCount: normalizeSeatCount(data.seatCount),
     childSeats: normalizeChildSeats(data.childSeats),
     luggageNotes: sanitizeOptionalText(data.luggageNotes, MAX_LENGTHS.vehicleLuggageNotes),
@@ -301,7 +301,7 @@ export function sanitizeRideData<
 >(data: T): T {
   return {
     ...data,
-    location: sanitizeText(data.location, MAX_LENGTHS.rideLocation),
+    location: sanitizeText(data.location ?? '', MAX_LENGTHS.rideLocation),
     leadTimeMinutes: normalizeLeadTimeMinutes(data.leadTimeMinutes),
     notes: sanitizeOptionalText(data.notes, MAX_LENGTHS.rideNotes),
   };

@@ -187,9 +187,7 @@ export function selectPickupsNeedingDriver(
  */
 export function collectDrivenRideIds(rides: readonly Ride[]): ReadonlySet<string> {
   return new Set(
-    rides
-      .filter((ride) => ride.driverId !== undefined)
-      .map((ride) => ride.id as string),
+    rides.filter((ride) => Boolean(ride.driverId)).map((ride) => ride.id as string),
   );
 }
 
@@ -219,11 +217,17 @@ export function isLegCovered(
   transport: Transport,
   drivenRideIds: ReadonlySet<string>,
 ): boolean {
-  if (transport.driverId !== undefined) {
+  // Truthiness, not `!== undefined`. An empty-string `driverId` is what a form
+  // that cleared its select and a peer that serialised a blank both produce,
+  // and it means *nobody is driving* — reading it as a driver drops the leg out
+  // of the one list whose job is to surface people who still need a lift. The
+  // pre-ride check was `!transport.driverId`; narrowing it to `!== undefined`
+  // was a silent regression.
+  if (transport.driverId) {
     return true;
   }
 
-  return transport.rideId !== undefined && drivenRideIds.has(transport.rideId);
+  return Boolean(transport.rideId) && drivenRideIds.has(transport.rideId!);
 }
 
 // ============================================================================

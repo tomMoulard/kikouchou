@@ -191,6 +191,39 @@ describe('selectPickupsNeedingDriver', () => {
     ).toHaveLength(1);
   });
 
+  it('treats a blank driver as nobody driving', () => {
+    // What a form whose select was cleared and a peer that serialised a blank
+    // both produce. Read as a driver, the leg drops out of the one list whose
+    // job is to surface people who still need a lift.
+    expect(
+      selectPickupsNeedingDriver(
+        [
+          makeTransport({
+            id: 't-blank' as TransportId,
+            needsPickup: true,
+            driverId: '' as PersonId,
+          }),
+        ],
+        [],
+      ).map((transport) => transport.id),
+    ).toEqual(['t-blank']);
+  });
+
+  it('does not treat a ride with a blank driver as driven', () => {
+    expect(
+      selectPickupsNeedingDriver(
+        [
+          makeTransport({
+            id: 't-r' as TransportId,
+            needsPickup: true,
+            rideId: 'r1' as RideId,
+          }),
+        ],
+        [makeRide({ id: 'r1' as RideId, driverId: '' as PersonId })],
+      ),
+    ).toHaveLength(1);
+  });
+
   it('excludes pickups whose datetime cannot be parsed', () => {
     expect(
       selectPickupsNeedingDriver([makeTransport({ datetime: 'not-a-date' })], []),

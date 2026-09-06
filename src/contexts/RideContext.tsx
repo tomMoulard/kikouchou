@@ -35,6 +35,7 @@ import {
 import { db } from '@/lib/db/database';
 import {
   createRide as repositoryCreateRide,
+  getRidesByTripId,
   createVehicle as repositoryCreateVehicle,
   deleteRideWithOwnershipCheck,
   deleteVehicleWithOwnershipCheck,
@@ -192,10 +193,13 @@ export function RideProvider({ children }: RideProviderProps): ReactElement {
       }
 
       try {
-        return await db.rides
-          .where('[tripId+meetDatetime]')
-          .between([currentTripId, ''], [currentTripId, '\uffff'])
-          .toArray();
+        // Through the repository, not a raw index read. `[tripId+meetDatetime]`
+        // orders by the stored *characters*, and a trip mixing representations
+        // is not in instant order that way — `2026-07-15T17:02:00+02:00` sorts
+        // after `2026-07-15T15:02:00Z` even though it happens at the same
+        // moment. `getRidesByTripId` coerces and re-sorts, which is what this
+        // context's own docblock has been promising all along.
+        return await getRidesByTripId(currentTripId);
       } catch (err) {
         setError(err instanceof Error ? err : new Error('Failed to load rides'));
         return [];

@@ -214,6 +214,21 @@ describe('updateRideWithOwnershipCheck', () => {
     expect(ride?.driverId).toBe(guillaume);
   });
 
+  it('survives a patch that explicitly clears an optional field', async () => {
+    // `{ notes: undefined }` is what a form sends when its textarea is emptied.
+    // The sanitiser runs over the merged record, so a naive spread handed it an
+    // `undefined` location and `.trim()` threw before the write was attempted.
+    const rideId = await makeRide({ location: 'Lyon Part-Dieu', notes: 'bring bread' });
+
+    await expect(
+      updateRideWithOwnershipCheck(rideId, tripId, { notes: undefined }),
+    ).resolves.toBeUndefined();
+
+    const ride = await getRideById(rideId);
+    expect(ride?.location).toBe('Lyon Part-Dieu');
+    expect(ride?.notes).toBeUndefined();
+  });
+
   it('refuses a ride belonging to another trip', async () => {
     const other = await createTrip({
         name: 'Other',

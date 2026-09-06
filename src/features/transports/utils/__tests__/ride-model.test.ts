@@ -334,6 +334,29 @@ describe('rideConcernsPerson', () => {
     expect(rideConcernsPerson(journeys[0]!, TOM.id)).toBe(false);
   });
 
+  it('still counts a driver whose guest row has not projected yet', () => {
+    // `driver` is undefined both when nobody drives and when this device cannot
+    // name them. Reading it dropped a driver out of their own car's filter for
+    // as long as their row was missing — on a freshly joined device, exactly
+    // when they most want to know what they are driving.
+    const unprojected = resolveRides({
+      rides: [
+        makeRide('r9', '2026-07-15T15:02:00.000Z', {
+          driverId: 'not-yet-here' as PersonId,
+        }),
+      ],
+      transports: [],
+      vehicles: [],
+      persons: [],
+    });
+
+    expect(unprojected[0]!.driver).toBeUndefined();
+    expect(rideConcernsPerson(unprojected[0]!, 'not-yet-here' as PersonId)).toBe(true);
+    expect(
+      selectRidesDrivenBy(unprojected, 'not-yet-here' as PersonId).map((r) => r.id),
+    ).toEqual(['r9']);
+  });
+
   it('is false when nobody has said who they are', () => {
     expect(rideConcernsPerson(journeys[0]!, undefined)).toBe(false);
   });

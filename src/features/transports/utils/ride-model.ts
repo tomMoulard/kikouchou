@@ -237,7 +237,7 @@ function sortRides(rides: ResolvedRide[]): ResolvedRide[] {
  * @example
  * ```typescript
  * const journeys = resolveRides({ transports, rides, vehicles, persons });
- * const mine = journeys.filter((journey) => journey.driver?.id === myPersonId);
+ * const mine = journeys.filter((journey) => journey.driverId === myPersonId);
  * ```
  */
 export function resolveRides(input: ResolveRidesInput): ResolvedRide[] {
@@ -357,6 +357,12 @@ export function resolveRides(input: ResolveRidesInput): ResolvedRide[] {
  * I am driving, and the car I am sitting in. Anything else on the trip is
  * somebody else's logistics.
  *
+ * Compares `driverId`, not `driver?.id`. The resolved `driver` is undefined both
+ * when nobody is driving and when this device has not projected that guest's row
+ * yet — so reading it dropped a driver out of their *own* car's filter for as
+ * long as their row was missing, which on a freshly joined device is exactly
+ * when they most want to know what they are driving.
+ *
  * @param journey - A resolved journey
  * @param personId - The guest asking, or undefined when nobody is identified
  * @returns True when the journey involves that guest
@@ -370,7 +376,7 @@ export function rideConcernsPerson(
   }
 
   return (
-    journey.driver?.id === personId ||
+    journey.driverId === personId ||
     journey.legs.some((leg) => leg.transport.personId === personId)
   );
 }
@@ -393,7 +399,7 @@ export function selectRidesDrivenBy(
     return [];
   }
 
-  return journeys.filter((journey) => journey.driver?.id === personId);
+  return journeys.filter((journey) => journey.driverId === personId);
 }
 
 /**
