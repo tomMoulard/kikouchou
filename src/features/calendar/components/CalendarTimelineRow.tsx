@@ -7,12 +7,14 @@
 import { type ReactElement, memo, useCallback, useMemo } from 'react';
 import { addDays, format, type Locale } from 'date-fns';
 import { useTranslation } from 'react-i18next';
+import { Car } from 'lucide-react';
 
 import { TIMELINE_LABEL_CELL_STYLE } from '@/components/shared/timeline-label-cell';
 import type { TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
 import { getPersonHeadcount } from '@/types';
-import type { HexColor, RoomAssignment, Transport } from '@/types';
+import type { HexColor, RoomAssignment, Transport, TransportId } from '@/types';
 import { guestInitial } from '@/features/persons/utils/guest-initial';
+import type { ResolvedRide } from '@/features/transports/utils/ride-model';
 import { cn } from '@/lib/utils';
 import type { CalendarTransport, CalendarTimelineRowModel, TimelineItemWithLane } from '../types';
 import { formatTime, getContrastTextColor } from '../utils/calendar-utils';
@@ -28,6 +30,8 @@ interface CalendarTimelineRowProps {
   readonly dateLocale: Locale;
   readonly onAssignmentClick: (assignment: RoomAssignment, relatedTransports?: readonly Transport[]) => void;
   readonly onTransportClick?: (transport: CalendarTransport) => void;
+  /** Reads the car serving one leg, from the page's `resolveRides` index */
+  readonly rideForTransport?: (transportId: TransportId) => ResolvedRide | undefined;
 }
 
 const CalendarTimelineRow = memo(function CalendarTimelineRow({
@@ -37,6 +41,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
   dateLocale,
   onAssignmentClick,
   onTransportClick,
+  rideForTransport,
 }: CalendarTimelineRowProps): ReactElement {
   const { t } = useTranslation();
 
@@ -47,14 +52,51 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
   // A guest entry can stand for several people (e.g. a couple under one name).
   const personHeadcount = getPersonHeadcount(model.person);
 
+  /**
+   * Says whether a leg travels in a shared car, and who is driving it.
+   *
+   * A timeline row is 22px tall and a transport marker is a 10px `↓ 14:30`, so
+   * there is no room for a glyph beside the ones already there. The answer goes
+   * into the marker's `title` and the button's `aria-label` instead, which is
+   * where the location and the time already live — nothing on this row is
+   * available only by looking at it.
+   */
+  const rideLabelFor = useCallback(
+    (transport: Transport): string | undefined => {
+      const ride = rideForTransport?.(transport.id);
+      if (ride === undefined || ride.isLegacy) {
+        return undefined;
+      }
+      const driverName = ride.driver?.name;
+      return driverName === undefined
+        ? t('rides.partOfRide', 'Part of a shared ride')
+        : t('rides.partOfRideWithDriver', 'Part of a shared ride — {{name}} driving', {
+            name: driverName,
+          });
+    },
+    [rideForTransport, t],
+  );
+
+  /** The hover text on a 10px leg marker inside a stay pill. */
+  const legMarkerTitle = useCallback(
+    (transport: Transport): string => {
+      const rideLabel = rideLabelFor(transport);
+      return rideLabel === undefined
+        ? transport.location
+        : `${transport.location} — ${rideLabel}`;
+    },
+    [rideLabelFor],
+  );
+
   const transportToCalendarTransport = useCallback(
     (item: Extract<TimelineItemWithLane, { kind: 'transport' }>): CalendarTransport => ({
       transport: item.transport,
       person: item.person,
       personName: item.person?.name ?? t('common.unknown'),
       color: item.person?.color ?? ('#6b7280' as import('@/types').HexColor),
+      ride: rideForTransport?.(item.transport.id),
     }),
-    [t],
+    [rideForTransport, t],
   );
 
   const handleItemClick = useCallback(
@@ -97,6 +139,9 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
 
       const transportTime = isTransport ? formatTime(item.transport.datetime) : '';
       const transportLabel = transportTime;
+      const transportRideLabel = isTransport
+        ? rideLabelFor(item.transport)
+        : undefined;
 
       const shouldHatchCheckoutDay =
         isAssignment &&
@@ -150,7 +195,9 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         const legSummaries = markers
           .map((m) => {
             const arrow = m.transport.type === 'arrival' ? '↓' : '↑';
-            return `${arrow} ${formatTime(m.transport.datetime)} — ${m.transport.location}`;
+            const rideLabel = rideLabelFor(m.transport);
+            const base = `${arrow} ${formatTime(m.transport.datetime)} — ${m.transport.location}`;
+            return rideLabel === undefined ? base : `${base} — ${rideLabel}`;
           })
           .join('; ');
         assignmentTitle = assignmentTitle ? `${assignmentTitle}. ${legSummaries}` : legSummaries;
@@ -184,14 +231,29 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
             backgroundColor: isAssignment ? item.color : orphanBg,
             color: isAssignment ? item.textColor : orphanTextColor,
           }}
-          title={isTransport ? `${transportLabel} — ${item.label}` : assignmentTitle}
-          aria-label={isTransport ? `${transportLabel} — ${item.label}` : assignmentAria}
+          title={
+            isTransport
+              ? transportRideLabel === undefined
+                ? `${transportLabel} — ${item.label}`
+                : `${transportLabel} — ${item.label} — ${transportRideLabel}`
+              : assignmentTitle
+          }
+          aria-label={
+            isTransport
+              ? transportRideLabel === undefined
+                ? `${transportLabel} — ${item.label}`
+                : `${transportLabel} — ${item.label} — ${transportRideLabel}`
+              : assignmentAria
+          }
         >
           {isTransport ? (
             <span className="flex items-center justify-center gap-1 w-full">
               <span className="font-semibold leading-none" aria-hidden="true">
                 {item.transport.type === 'arrival' ? '↓' : '↑'}
               </span>
+              {transportRideLabel !== undefined && (
+                <Car className="size-3 shrink-0" aria-hidden="true" data-testid="ride-glyph" />
+              )}
               <span className="font-medium tabular-nums leading-none">{transportLabel}</span>
             </span>
           ) : (
@@ -212,7 +274,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
                       <span
                         key={m.transport.id}
                         className="flex items-center gap-0.5 text-[10px] font-semibold tabular-nums leading-none opacity-95"
-                        title={m.transport.location}
+                        title={legMarkerTitle(m.transport)}
                       >
                         <span aria-hidden="true">↓</span>
                         <span>{formatTime(m.transport.datetime)}</span>
@@ -249,7 +311,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
                       <span
                         key={m.transport.id}
                         className="flex items-center gap-0.5 text-[10px] font-semibold tabular-nums leading-none opacity-95"
-                        title={m.transport.location}
+                        title={legMarkerTitle(m.transport)}
                       >
                         <span aria-hidden="true">↑</span>
                         <span>{formatTime(m.transport.datetime)}</span>
@@ -283,8 +345,10 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
     dayCount,
     formatVisibleAssignmentRange,
     handleItemClick,
+    legMarkerTitle,
     model.items,
     model.checkoutDayIndex,
+    rideLabelFor,
     t,
     viewport.laneHeightPx,
   ]);

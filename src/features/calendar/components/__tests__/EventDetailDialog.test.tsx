@@ -15,11 +15,14 @@ import {
   type AssignmentEventData,
   type TransportEventData,
 } from '../EventDetailDialog';
+import { resolveRides } from '@/features/transports/utils/ride-model';
 import type {
   HexColor,
   ISODateString,
   Person,
   PersonId,
+  Ride,
+  RideId,
   Room,
   RoomAssignment,
   RoomAssignmentId,
@@ -27,6 +30,8 @@ import type {
   Transport,
   TransportId,
   TripId,
+  Vehicle,
+  VehicleId,
 } from '@/types';
 
 // ============================================================================
@@ -115,6 +120,75 @@ function makeTransportEvent(overrides: Partial<TransportEventData> = {}): Transp
     transport: makeTransport(),
     person: makePerson(),
     ...overrides,
+  };
+}
+
+/**
+ * Builds a transport event whose leg travels in a real car.
+ *
+ * The journey goes through `resolveRides` rather than being hand-written, so
+ * the dialog is tested against the shape the app actually hands it — including
+ * the `isLegacy` flag the legacy test below turns on by leaving the ride out.
+ *
+ * Every datetime is a `…Z` instant: nothing here asserts a rendered clock, and
+ * a bare literal would put the leg inside or outside the ride's match window
+ * depending on the runner's offset.
+ */
+function makeRideEvent(
+  options: {
+    readonly withDriver?: boolean;
+    readonly withVehicle?: boolean;
+    readonly withSecondPassenger?: boolean;
+    readonly needsPickup?: boolean;
+  } = {},
+): { readonly event: TransportEventData } {
+  const {
+    withDriver = true,
+    withVehicle = true,
+    withSecondPassenger = true,
+    needsPickup = false,
+  } = options;
+
+  const driver = makePerson({ id: 'p2' as PersonId, name: 'Bruno' });
+  const otherPassenger = makePerson({ id: 'p3' as PersonId, name: 'Chloé' });
+
+  const vehicle: Vehicle = {
+    id: 'vehicle-1' as VehicleId,
+    tripId: 'trip-1' as TripId,
+    name: 'Espace de location',
+    seatCount: 7,
+  };
+
+  const ride: Ride = {
+    id: 'ride-1' as RideId,
+    tripId: 'trip-1' as TripId,
+    direction: 'pickup',
+    meetDatetime: '2026-01-10T14:45:00.000Z',
+    location: 'Paris CDG Airport',
+    leadTimeMinutes: 30,
+    ...(withDriver ? { driverId: driver.id } : {}),
+    ...(withVehicle ? { vehicleId: vehicle.id } : {}),
+  };
+
+  const ownLeg = makeTransport({ rideId: ride.id, needsPickup });
+  const otherLeg = makeTransport({
+    id: 'transport-2' as TransportId,
+    personId: otherPassenger.id,
+    datetime: '2026-01-10T14:50:00.000Z',
+    rideId: ride.id,
+  });
+
+  const persons = [makePerson(), driver, otherPassenger];
+
+  const [journey] = resolveRides({
+    transports: withSecondPassenger ? [ownLeg, otherLeg] : [ownLeg],
+    rides: [ride],
+    vehicles: withVehicle ? [vehicle] : [],
+    persons,
+  });
+
+  return {
+    event: makeTransportEvent({ transport: ownLeg, ride: journey, persons }),
   };
 }
 
@@ -272,6 +346,100 @@ describe('EventDetailDialog', () => {
       render(<EventDetailDialog {...defaultProps} event={event} />);
       // No MapPin text content for empty location
       expect(screen.queryByText('Paris CDG Airport')).not.toBeInTheDocument();
+    });
+  });
+
+  // The question a guest opens their own arrival to ask: who is fetching me,
+  // and who else is in the car.
+  describe('The car that serves the leg', () => {
+    it('names the driver, the car, the meeting time and the other passengers', () => {
+      const { event } = makeRideEvent();
+
+      render(<EventDetailDialog {...defaultProps} event={event} />);
+
+      const section = screen.getByTestId('transport-ride-section');
+
+      // Which way the car is going, in words as well as the arrow.
+      expect(section).toHaveTextContent('rides.directions.pickup');
+      expect(section).toHaveTextContent('↓');
+
+      // When and where it meets.
+      expect(section).toHaveTextContent('rides.meetAt');
+      expect(section).toHaveTextContent('Paris CDG Airport');
+
+      // Who drives, and in what.
+      expect(within(section).getByText('Bruno')).toBeInTheDocument();
+      expect(within(section).getByText('Espace de location')).toBeInTheDocument();
+
+      // Who else is in it — and not the guest whose own leg this dialog is.
+      expect(section).toHaveTextContent('Others in the car');
+      expect(within(section).getByText('Chloé')).toBeInTheDocument();
+      expect(within(section).queryByText('Alice')).not.toBeInTheDocument();
+    });
+
+    it('drops the "needs pickup" badge once somebody is driving the leg', () => {
+      const { event } = makeRideEvent({ needsPickup: true });
+
+      render(<EventDetailDialog {...defaultProps} event={event} />);
+
+      // The leg is flagged `needsPickup` and its own `driverId` is empty, which
+      // is how a leg in a ride is stored. Asking that field alone put an amber
+      // "nobody is collecting you" chip directly above a section naming Bruno
+      // as the driver — one dialog saying both things at once.
+      expect(screen.queryByText('transports.needsPickup')).not.toBeInTheDocument();
+      expect(screen.getByTestId('transport-ride-section')).toBeInTheDocument();
+    });
+
+    it('keeps the "needs pickup" badge while the ride has no driver', () => {
+      const { event } = makeRideEvent({ needsPickup: true, withDriver: false });
+
+      render(<EventDetailDialog {...defaultProps} event={event} />);
+
+      expect(screen.getByText('transports.needsPickup')).toBeInTheDocument();
+    });
+
+    it('says so when nobody else is in the car', () => {
+      const { event } = makeRideEvent({ withSecondPassenger: false });
+
+      render(<EventDetailDialog {...defaultProps} event={event} />);
+
+      const section = screen.getByTestId('transport-ride-section');
+      expect(section).toHaveTextContent('Nobody else in this car');
+    });
+
+    it('falls back to "nobody driving" and "no car" when neither is chosen', () => {
+      const { event } = makeRideEvent({ withDriver: false, withVehicle: false });
+
+      render(<EventDetailDialog {...defaultProps} event={event} />);
+
+      const section = screen.getByTestId('transport-ride-section');
+      expect(section).toHaveTextContent('rides.noDriver');
+      expect(section).toHaveTextContent('rides.noVehicle');
+    });
+
+    it('renders a legacy driverId-only leg exactly as it did before rides', () => {
+      const driver = makePerson({ id: 'p2' as PersonId, name: 'Bruno' });
+      const transport = makeTransport({ driverId: driver.id });
+
+      // What `resolveRides` reports for a bare `driverId`: a one-passenger
+      // journey flagged `isLegacy`. The dialog must ignore it and keep drawing
+      // the old driver row, or every pre-ride trip would sprout a ride section
+      // for a car nobody arranged.
+      const [journey] = resolveRides({
+        transports: [transport],
+        rides: [],
+        vehicles: [],
+        persons: [makePerson(), driver],
+      });
+      expect(journey?.isLegacy).toBe(true);
+
+      const event = makeTransportEvent({ transport, driver, ride: journey });
+
+      render(<EventDetailDialog {...defaultProps} event={event} />);
+
+      expect(screen.queryByTestId('transport-ride-section')).not.toBeInTheDocument();
+      expect(screen.getByText('transports.driver:')).toBeInTheDocument();
+      expect(screen.getByText('Bruno')).toBeInTheDocument();
     });
   });
 

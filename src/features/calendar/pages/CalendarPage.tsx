@@ -53,6 +53,7 @@ import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useActivityContext } from '@/contexts/ActivityContext';
+import { useRideContext } from '@/contexts/RideContext';
 import { useToday } from '@/hooks/useToday';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -91,6 +92,11 @@ import {
 
 // Import TransportDialog for editing transports
 import { TransportDialog } from '@/features/transports';
+import {
+  resolveRides,
+  selectRideByLeg,
+  type ResolvedRide,
+} from '@/features/transports/utils/ride-model';
 
 // Import ActivityDialog + helpers for the shared agenda
 import { ActivityDialog } from '@/features/activities/components/ActivityDialog';
@@ -178,6 +184,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     error: activitiesError,
     deleteActivity,
   } = useActivityContext();
+  const { rides, vehicles, isLoading: isRidesLoading } = useRideContext();
 
   // Local state for current viewing month
   // Initialized to today - will sync with trip start date via useEffect when loaded
@@ -265,14 +272,21 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     return undefined;
   }, [currentTrip?.startDate]);
 
-  // Combined loading state
+  // Combined loading state.
+  //
+  // `isRidesLoading` is in here for a reason that is not symmetry. A pill and
+  // its detail dialog take their ride from the resolved index, and
+  // `selectedEvent` is a *snapshot* taken at click time — so a dialog opened
+  // while the ride query was still in flight would show no car for as long as
+  // it stayed open, even once the rides arrived a moment later.
   const isLoading =
     isTripLoading ||
     isRoomsLoading ||
     isAssignmentsLoading ||
     isPersonsLoading ||
     isTransportsLoading ||
-    isActivitiesLoading;
+    isActivitiesLoading ||
+    isRidesLoading;
 
   // Date locale based on current language
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
@@ -535,6 +549,41 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     return map;
   }, [assignments, getPersonById, roomsMap, calendarDays, unknownLabel, tripBoundaries]);
 
+  /**
+   * The car serving each leg, keyed by the leg it serves.
+   *
+   * Resolved once for the whole page rather than per pill: `resolveRides` is
+   * the single reading of "who is driving whom", so the month grid, the
+   * timeline and the detail dialog cannot disagree about the same car.
+   *
+   * Legacy `driverId`-only journeys are deliberately left out. `resolveRides`
+   * reports them as one-passenger rides so nothing downstream branches on
+   * storage shape, but the calendar has always drawn those through
+   * `Transport.driverId` and keeps doing so — a car glyph and a ride section
+   * would appear on legs where nobody has actually arranged a shared car.
+   */
+  const rideByTransportId = useMemo(
+    () =>
+      selectRideByLeg(
+        rides.length === 0
+          ? []
+          : resolveRides({
+              transports: [...arrivals, ...departures],
+              rides,
+              vehicles,
+              persons,
+            }),
+      ),
+    [arrivals, departures, persons, rides, vehicles],
+  );
+
+  /** Reads the car serving one leg — the lookup the timeline row is handed. */
+  const rideForTransport = useCallback(
+    (transportId: TransportId): ResolvedRide | undefined =>
+      rideByTransportId.get(transportId),
+    [rideByTransportId],
+  );
+
   // Build transport events grouped by date
   const transportsByDate = useMemo(() => {
     const map = new Map<string, CalendarTransport[]>();
@@ -572,6 +621,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         person,
         personName: person?.name ?? unknownLabel,
         color: color as HexColor,
+        ride: rideByTransportId.get(transport.id),
       };
 
       const existing = map.get(transportDate);
@@ -601,6 +651,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         person,
         personName: person?.name ?? unknownLabel,
         color: color as HexColor,
+        ride: rideByTransportId.get(transport.id),
       };
 
       const existing = map.get(transportDate);
@@ -612,7 +663,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     }
 
     return map;
-  }, [arrivals, departures, getPersonById, calendarDays, unknownLabel]);
+  }, [arrivals, departures, getPersonById, calendarDays, rideByTransportId, unknownLabel]);
 
   // Today's date for highlighting
   const { today } = useToday();
@@ -797,12 +848,21 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         transport: calTransport.transport,
         person: calTransport.person,
         driver,
+        // Looked up rather than taken off `calTransport`: the timeline builds
+        // its own `CalendarTransport` from a timeline item, so a pill clicked
+        // there would otherwise open a dialog that knows nothing about the car
+        // while the month grid's opens one that does.
+        ride: rideByTransportId.get(calTransport.transport.id),
+        // The ride's passenger count is people, not guest rows — one row can
+        // stand for a couple — so the dialog needs the guest list to sum
+        // `headcount` through.
+        persons,
       };
 
       setSelectedEvent(eventData);
       setIsEventDialogOpen(true);
     },
-    [getPersonById],
+    [getPersonById, persons, rideByTransportId],
   );
 
   const handleActivityClick = useCallback(
@@ -1191,6 +1251,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           onAssignmentClick={handleEventClick}
           onTransportClick={handleTransportClick}
           onActivityClick={handleActivityClick}
+          rideForTransport={rideForTransport}
           onAddGuests={handleAddGuests}
           onAddRooms={handleAddRooms}
         />

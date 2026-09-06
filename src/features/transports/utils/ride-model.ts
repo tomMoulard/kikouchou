@@ -31,6 +31,7 @@ import {
   type Ride,
   type RideId,
   type Transport,
+  type TransportId,
   type Vehicle,
 } from '@/types';
 
@@ -427,4 +428,45 @@ export function selectMismatchedLegs(
   }
 
   return mismatched;
+}
+
+/**
+ * Indexes journeys by the leg each one serves.
+ *
+ * Every spatial and temporal view asks the same question — "which car is this
+ * one leg in?" — for every row, pill or pin it draws, and each was building the
+ * same `Map` a slightly different way. Two copies is where `getDateLocale`
+ * started before it reached twelve.
+ *
+ * Legacy `driverId`-only journeys are **excluded**. `resolveRides` reports one
+ * as a one-passenger ride so that nothing downstream branches on storage shape,
+ * which is right for a list that simply enumerates journeys and wrong for every
+ * caller of this index: those views already draw a bare `driverId` themselves,
+ * and a second rendering of the same fact would either duplicate it or, on a
+ * map, drop a pin exactly on top of the leg it came from.
+ *
+ * @param journeys - Resolved journeys
+ * @returns The car serving each leg, keyed by the leg's own id
+ *
+ * @example
+ * ```typescript
+ * const rideByLeg = selectRideByLeg(resolveRides({ … }));
+ * const mine = rideByLeg.get(transport.id);
+ * ```
+ */
+export function selectRideByLeg(
+  journeys: readonly ResolvedRide[],
+): ReadonlyMap<TransportId, ResolvedRide> {
+  const byLeg = new Map<TransportId, ResolvedRide>();
+
+  for (const journey of journeys) {
+    if (journey.isLegacy) {
+      continue;
+    }
+    for (const leg of journey.legs) {
+      byLeg.set(leg.transport.id, journey);
+    }
+  }
+
+  return byLeg;
 }

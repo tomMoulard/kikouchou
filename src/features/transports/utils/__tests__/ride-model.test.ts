@@ -19,6 +19,7 @@ import {
   resolveRides,
   rideConcernsPerson,
   selectMismatchedLegs,
+  selectRideByLeg,
   selectRidesDrivenBy,
 } from '../ride-model';
 import { hexColor } from '@/test/utils';
@@ -405,5 +406,50 @@ describe('selectMismatchedLegs', () => {
     expect(mismatched).toHaveLength(1);
     expect(mismatched[0]!.leg.person?.name).toBe('alice');
     expect(mismatched[0]!.journey.id).toBe('r1');
+  });
+});
+
+describe('selectRideByLeg', () => {
+  it('keys every leg of a car to the journey serving it', () => {
+    const journeys = resolveRides({
+      rides: [makeRide('r1', '2026-07-15T15:02:00.000Z', { driverId: GUILLAUME.id })],
+      transports: [
+        makeTransport('t1', 'alice', '2026-07-15T15:02:00.000Z', {
+          rideId: 'r1' as RideId,
+        }),
+        makeTransport('t2', 'tom', '2026-07-15T15:02:00.000Z', {
+          rideId: 'r1' as RideId,
+        }),
+      ],
+      vehicles: [],
+      persons: [ALICE, TOM, GUILLAUME],
+    });
+
+    const byLeg = selectRideByLeg(journeys);
+
+    expect(byLeg.size).toBe(2);
+    expect(byLeg.get('t1' as TransportId)?.id).toBe('r1');
+    expect(byLeg.get('t2' as TransportId)?.id).toBe('r1');
+  });
+
+  it('leaves a legacy driverId-only leg out', () => {
+    // `resolveRides` reports one as a one-passenger journey so that nothing
+    // downstream branches on storage shape. Every caller of this index already
+    // draws a bare `driverId` itself, and a second rendering either duplicates
+    // it or — on the map — drops a pin exactly on top of the leg it came from.
+    const journeys = resolveRides({
+      rides: [],
+      transports: [
+        makeTransport('t1', 'alice', '2026-07-15T15:02:00.000Z', {
+          driverId: GUILLAUME.id,
+        }),
+      ],
+      vehicles: [],
+      persons: [ALICE, GUILLAUME],
+    });
+
+    expect(journeys).toHaveLength(1);
+    expect(journeys[0]?.isLegacy).toBe(true);
+    expect(selectRideByLeg(journeys).size).toBe(0);
   });
 });

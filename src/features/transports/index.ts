@@ -49,6 +49,15 @@ export type { RideCapacityBadgeProps } from './components/RideCapacityBadge';
 export { RideMismatchNotice } from './components/RideMismatchNotice';
 export type { RideMismatchNoticeProps } from './components/RideMismatchNotice';
 
+// The one rendering of a car journey, shared by the calendar's detail dialog
+// and the map's meeting-point popup so the two cannot show different subsets of
+// the same facts.
+export { RideSummary } from './components/RideSummary';
+export type {
+  RideSummaryDensity,
+  RideSummaryProps,
+} from './components/RideSummary';
+
 // ============================================================================
 // Utilities
 // ============================================================================
