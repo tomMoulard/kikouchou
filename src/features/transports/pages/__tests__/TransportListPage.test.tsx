@@ -192,6 +192,13 @@ vi.mock('@/features/transports/components/RideChangeFeed', () => ({
   RideChangeFeed: () => <div data-testid="ride-change-feed" />,
 }));
 
+// The driver's departure banner is stubbed for the same reason. It reads the
+// identity hook and the whole transport list, neither of which this file's
+// mocks supply.
+vi.mock('@/features/transports/components/DriverAlert', () => ({
+  DriverAlert: () => <div data-testid="driver-alert" />,
+}));
+
 import { TransportListPage } from '../TransportListPage';
 import { useTripIdentity } from '@/hooks';
 import { useTripContext } from '@/contexts/TripContext';

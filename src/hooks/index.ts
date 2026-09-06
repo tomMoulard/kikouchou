@@ -38,3 +38,6 @@ export { useTripIdentity, type UseTripIdentityResult } from './useTripIdentity';
 
 // Date/time utilities
 export { useToday, getMsUntilMidnight, type UseTodayResult } from './useToday';
+
+// The app's minute clock — the one implementation of "now", refreshed on resume
+export { useNowMs, NOW_REFRESH_INTERVAL_MS } from './useNowMs';

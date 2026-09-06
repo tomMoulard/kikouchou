@@ -94,6 +94,7 @@ import { cn } from '@/lib/utils';
 import { formatFullDate } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { getTransportModeIcon } from '@/lib/utils/transport-icons';
+import { DriverAlert } from '@/features/transports/components/DriverAlert';
 import { RideCard } from '@/features/transports/components/RideCard';
 import { RideChangeFeed } from '@/features/transports/components/RideChangeFeed';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
@@ -1224,11 +1225,25 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         </div>
       )}
 
-      {/* What moved since this device last looked — above the driver alerts
-          because a time that changed under you is news, where a pickup still
-          needing a driver has been true all along. Renders nothing of its own
-          when there is nothing to say. */}
+      {/*
+        Three bands of news, in the order a driver has to read them.
+
+        What *moved* comes first. "Leave now" is computed from a meeting time,
+        and a driver who reads the banner before the feed leaves for a pickup
+        that has since been pushed to 19:00. Then the driver's own departure
+        banner — a car this device is already driving is news. Then the panel
+        below, which asks for volunteers: a car still looking for anybody has
+        been looking all along, so it is a request rather than news.
+
+        Both render nothing when they have nothing to say, so on most visits
+        this costs two empty nodes.
+
+        In the page flow rather than fixed: a fixed overlay eats every tap
+        underneath it, and the nav bar, the FAB and the toasts already share
+        the bottom edge.
+      */}
       <RideChangeFeed className="mb-6" />
+      <DriverAlert className="mb-6" />
 
       {/* Pickup alerts section - only when a driver is still needed */}
       {hasUnassignedUpcomingPickup && (

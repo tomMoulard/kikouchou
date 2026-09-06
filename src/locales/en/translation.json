@@ -1187,6 +1187,18 @@
       "notesTooLong": "The notes must be 1000 characters or less"
     }
   },
+  "driverAlert": {
+    "title": "You are driving",
+    "upcomingPickup": "Leave at {{time}} to pick up {{names}}",
+    "upcomingDropoff": "Leave at {{time}} to drop off {{names}}",
+    "upcomingSelf": "Leave at {{time}} for {{location}}",
+    "leaveNowPickup": "Leave now to pick up {{names}}",
+    "leaveNowDropoff": "Leave now to drop off {{names}}",
+    "leaveNowSelf": "Leave now for {{location}}",
+    "latePickup": "You should have left at {{time}} — {{names}} are waiting",
+    "lateDropoff": "You should have left at {{time}} to drop off {{names}}",
+    "lateSelf": "You should have left at {{time}} for {{location}}"
+  },
   "vehicles": {
     "title": "Cars",
     "vehicle": "Car",

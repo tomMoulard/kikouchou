@@ -1187,6 +1187,18 @@
       "notesTooLong": "Les notes ne doivent pas dépasser 1000 caractères"
     }
   },
+  "driverAlert": {
+    "title": "Vous conduisez",
+    "upcomingPickup": "Partez à {{time}} pour aller chercher {{names}}",
+    "upcomingDropoff": "Partez à {{time}} pour déposer {{names}}",
+    "upcomingSelf": "Partez à {{time}} pour {{location}}",
+    "leaveNowPickup": "Partez maintenant pour aller chercher {{names}}",
+    "leaveNowDropoff": "Partez maintenant pour déposer {{names}}",
+    "leaveNowSelf": "Partez maintenant pour {{location}}",
+    "latePickup": "Vous auriez dû partir à {{time}} — {{names}} vous attend",
+    "lateDropoff": "Vous auriez dû partir à {{time}} pour déposer {{names}}",
+    "lateSelf": "Vous auriez dû partir à {{time}} pour {{location}}"
+  },
   "vehicles": {
     "title": "Voitures",
     "vehicle": "Voiture",
