@@ -246,6 +246,25 @@ describe('summariseRideCapacity — child seats', () => {
     expect(summary.childSeatShortfalls).toEqual([]);
   });
 
+  it('ignores a seat kind the car claims but nothing recognises', () => {
+    // The mirror of the passenger-side guard. A vehicle row written before the
+    // projection filtered these is still sitting in somebody's Dexie.
+    const summary = summarise([jeanne, guillaume], {
+      passengerIds: ['jeanne'],
+      driverId: 'guillaume',
+      vehicle: makeVehicle({
+        childSeats: ['hoverboard' as unknown as ChildSeatKind, 'rearFacing'],
+      }),
+    });
+
+    expect(summary.availableChildSeats).toEqual({
+      rearFacing: 1,
+      forwardFacing: 0,
+      booster: 0,
+    });
+    expect(summary.childSeatShortfalls).toEqual([]);
+  });
+
   it('reports the kinds the car is short of', () => {
     const summary = summarise([jeanne, louis, mila, guillaume], {
       passengerIds: ['jeanne', 'louis', 'mila'],

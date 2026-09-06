@@ -394,6 +394,59 @@ describe('projecting rides and vehicles into Dexie', () => {
     }
   });
 
+  it('bounds a leg the way it bounds a ride', async () => {
+    // Transports were the last collection still cast straight out of the
+    // document. `pickup-utils` records the resulting crash: a row with no
+    // `location` threw inside a `.trim()` and took the whole transports page
+    // into the error boundary rather than dropping the one bad row.
+    const doc = makeDoc();
+    replaceDocCollection(
+      doc,
+      'transport',
+      [
+        {
+          id: 'ok',
+          personId: 'p1',
+          type: 'arrival',
+          datetime: '2026-07-15T15:02:00.000Z',
+          location: 'Lyon Part-Dieu',
+          needsPickup: true,
+          coordinates: { lat: 45.7605, lon: 4.8598 },
+        },
+        {
+          id: 'no-location',
+          personId: 'p2',
+          type: 'arrival',
+          datetime: '2026-07-15T16:00:00.000Z',
+          needsPickup: true,
+          coordinates: { lat: 999, lon: 4 },
+        },
+        {
+          id: 'unreadable-datetime',
+          personId: 'p3',
+          type: 'arrival',
+          datetime: 42,
+          location: 'Nowhere',
+          needsPickup: true,
+        },
+      ],
+      { allowDeletions: false },
+    );
+
+    await syncDocToDexie(doc, tripId);
+
+    expect((await db.transports.get('ok'))?.coordinates).toEqual({
+      lat: 45.7605,
+      lon: 4.8598,
+    });
+    // Kept, but readable: an empty station beats a page that will not render.
+    expect((await db.transports.get('no-location'))?.location).toBe('');
+    expect((await db.transports.get('no-location'))?.coordinates).toBeUndefined();
+    // Dropped: filed outside the index every transport read scans, so it would
+    // have been invisible and unremovable for the life of the trip.
+    expect(await db.transports.get('unreadable-datetime')).toBeUndefined();
+  });
+
   it('never lets a remote row claim another trip', async () => {
     const doc = makeDoc();
     replaceDocCollection(

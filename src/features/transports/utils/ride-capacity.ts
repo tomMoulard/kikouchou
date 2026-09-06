@@ -120,7 +120,13 @@ export function tallyAvailableChildSeats(
   const tally: Record<ChildSeatKind, number> = { ...EMPTY_TALLY };
 
   for (const kind of vehicle?.childSeats ?? []) {
-    tally[kind] += 1;
+    // Same guard as `tallyRequiredChildSeats`, for the same reason: a vehicle
+    // comes out of the shared document too, and an unrecognised kind would
+    // index a fresh key with `undefined + 1`. The projection filters these, but
+    // a row written before that filter existed is still in somebody's Dexie.
+    if ((CHILD_SEAT_KINDS as readonly unknown[]).includes(kind)) {
+      tally[kind] += 1;
+    }
   }
 
   return tally;

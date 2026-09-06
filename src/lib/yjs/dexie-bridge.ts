@@ -314,6 +314,57 @@ function boundedCoordinates(
 }
 
 /**
+ * Projects one leg out of the document, bounding what the log carried.
+ *
+ * Transports were the last collection still cast straight out of the document —
+ * `{ ...transport, tripId } as Transport` — while guests, rides and vehicles
+ * were each bounded. The cast is not free: `pickup-utils` already documents a
+ * row arriving with no `location` and throwing
+ * `Cannot read properties of undefined (reading 'trim')` straight into the error
+ * boundary, taking the whole transports page down rather than the one bad row.
+ * Anything that parses `datetime` fails the same way, and more surfaces parse it
+ * every time this feature grows.
+ *
+ * `datetime` decides the record's fate rather than being repaired: it is the
+ * second component of `[tripId+datetime]`, the index every transport read uses,
+ * so a non-string one is filed outside the range those reads scan — invisible to
+ * the app *and* to this projection's own delete-candidate query, which means
+ * nothing could ever remove it either.
+ *
+ * @param transport - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row, or undefined when it could never be read back
+ */
+function buildTransportRecord(
+  transport: SharedRecord,
+  tripId: TripId,
+): Transport | undefined {
+  const row = { ...transport, tripId } as Transport;
+
+  if (typeof row.datetime !== 'string' || row.datetime.length === 0) {
+    return undefined;
+  }
+
+  row.location = sanitizeText(
+    boundedString(row.location),
+    MAX_LENGTHS.transportLocation,
+  );
+  row.startLocation = optionalBoundedText(
+    row.startLocation,
+    MAX_LENGTHS.transportLocation,
+  );
+  row.transportNumber = optionalBoundedText(
+    row.transportNumber,
+    MAX_LENGTHS.transportNumber,
+  );
+  row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.transportNotes);
+  row.coordinates = boundedCoordinates(row.coordinates);
+  row.startCoordinates = boundedCoordinates(row.startCoordinates);
+
+  return row;
+}
+
+/**
  * Projects one ride out of the document, bounding what the log carried.
  *
  * A ride arrives from another member's device and has passed no form of ours.
@@ -612,9 +663,9 @@ export async function syncDocToDexie(
         const nextAssignments = readCollection(doc, 'roomAssignments').map(
           (assignment) => ({ ...assignment, tripId } as RoomAssignment),
         );
-        const nextTransport = readCollection(doc, 'transport').map(
-          (transport) => ({ ...transport, tripId } as Transport),
-        );
+        const nextTransport = readCollection(doc, 'transport')
+          .map((transport) => buildTransportRecord(transport, tripId))
+          .filter((transport): transport is Transport => transport !== undefined);
         const nextRides = readCollection(doc, 'rides')
           .map((ride) => buildRideRecord(ride, tripId))
           .filter((ride): ride is Ride => ride !== undefined);

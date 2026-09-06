@@ -23,6 +23,8 @@ import { db } from '@/lib/db/database';
 import type {
   ISODateTimeString,
   PersonId,
+  Ride,
+  RideId,
   Transport,
   TransportId,
   TripId,
@@ -297,6 +299,57 @@ describe('pickup count consistency across views', () => {
     expect(selected).toHaveLength(stats.pickupsNeedingDriver);
     expect(groupedCount).toBe(stats.pickupsNeedingDriver);
     expect(selected.length > 0).toBe(true);
+  });
+
+  it('agrees that a leg in a driven ride needs nobody, through the real read', async () => {
+    // The case every other test in this file stubs away by passing `[]` for the
+    // rides. Since the selector became ride-aware, the analytics badge reads
+    // rides out of Dexie while the panel reads them from `RideContext` — two
+    // sources for one answer, which is exactly the shape of disagreement this
+    // file exists to catch. Nothing here re-types the predicate; both sides run
+    // the same selector over the same rides.
+    const nowMs = Date.now(),
+      now = new Date(nowMs).toISOString() as ISODateTimeString;
+
+    const covered = makePickup({
+        id: 't-in-a-car',
+        datetime: new Date(nowMs + 30 * MINUTE_MS).toISOString(),
+        rideId: 'r-1' as RideId,
+      }),
+      stranded = makePickup({
+        id: 't-still-waiting',
+        datetime: new Date(nowMs + 35 * MINUTE_MS).toISOString(),
+      });
+
+    const rides: Ride[] = [
+      {
+        id: 'r-1' as RideId,
+        tripId: 'trip-1' as TripId,
+        direction: 'pickup',
+        meetDatetime: new Date(nowMs + 30 * MINUTE_MS).toISOString(),
+        location: 'Gare de Vannes',
+        driverId: 'driver-1' as PersonId,
+      },
+    ];
+
+    await db.transports.bulkPut([covered, stranded]);
+    await db.rides.bulkPut(rides);
+
+    // 1. The analytics badge, through the read the page actually calls — which
+    //    loads the rides itself.
+    const stats = await loadTripStats('trip-1' as TripId, now);
+
+    // 2/3. The panel's gate and its cards, over the rides the context publishes.
+    const upcomingPickups = deriveUpcomingPickups([covered, stranded], nowMs),
+      selected = selectPickupsNeedingDriver(upcomingPickups, rides),
+      groupedCount = groupPickupsByProximity(selected).reduce(
+        (sum, group) => sum + group.pickups.length,
+        0,
+      );
+
+    expect(stats.pickupsNeedingDriver).toBe(1);
+    expect(selected.map((transport) => transport.id)).toEqual(['t-still-waiting']);
+    expect(groupedCount).toBe(stats.pickupsNeedingDriver);
   });
 
   it('agrees on a pickup stored with a UTC offset instead of Z', () => {
