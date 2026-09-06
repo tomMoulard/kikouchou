@@ -443,7 +443,11 @@
       "chooseIdentity": "Choose in Settings",
       "empty": "Nothing here concerns you",
       "emptyDescription": "None of this trip’s travel involves you. Switch to Everyone to see the whole trip."
-    }
+    },
+    "ride": "Car",
+    "ridePlaceholder": "Travelling in…",
+    "noRides": "No cars arranged yet",
+    "noRidesForType": "No car is going that way yet"
   },
   "activities": {
     "title": "Activities",
@@ -1007,7 +1011,9 @@
     "clearAllData": "Clear all application data?",
     "clearAllDataDescription": "This will permanently erase all trips, rooms, participants, transports, and settings from this device. This cannot be undone.",
     "deleteActivity": "Delete this activity?",
-    "deleteActivityDescription": "This activity will be removed from the trip agenda. This cannot be undone."
+    "deleteActivityDescription": "This activity will be removed from the trip agenda. This cannot be undone.",
+    "deleteRide": "Cancel this ride?",
+    "deleteRideDescription": "The car journey is removed. Everyone in it keeps their own arrival or departure — they simply stop having a lift."
   },
   "unsaved": {
     "title": "Unsaved changes",
@@ -1215,7 +1221,8 @@
     },
     "deleteSuccess": "Ride cancelled",
     "passengerAdded": "Added to the ride",
-    "passengerRemoved": "Taken out of the ride"
+    "passengerRemoved": "Taken out of the ride",
+    "cancel": "Cancel ride"
   },
   "driverAlert": {
     "title": "You are driving",

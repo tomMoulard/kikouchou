@@ -33,6 +33,7 @@ import { seedPerson, seedTrip, seedVehicle } from './support/seed';
  */
 const LABELS = {
   addCar: /add car|ajouter une voiture/i,
+  cars: /^cars$|^voitures$/i,
   carName: /^name|^nom/i,
   hireCar: /hire car|voiture de location/i,
   save: /^save$|^enregistrer$/i,
@@ -79,7 +80,7 @@ async function openVehicles(
     });
   }
 
-  await page.goto(`/trips/${tripId}/vehicles`);
+  await page.goto(`/trips/${tripId}/transports/vehicles`);
   await waitForRoute(page);
 
   return tripId;
@@ -152,7 +153,7 @@ test.describe('the trip’s cars', () => {
     });
     await seedVehicle(page, { tripId, name: 'La Clio' });
 
-    await page.goto(`/trips/${tripId}/vehicles`);
+    await page.goto(`/trips/${tripId}/transports/vehicles`);
     await waitForRoute(page);
 
     await expect(page.getByText('La Clio')).toBeVisible();
@@ -208,5 +209,33 @@ test.describe('the trip’s cars', () => {
       page.getByRole('listitem').filter({ hasText: 'Espace de location' }),
     ).toHaveCount(0);
     await expect.poll(async () => await readStoredVehicles(page, tripId)).toEqual([]);
+  });
+
+  test('is reached from the transport list, and is not in the navigation', async ({
+    page,
+  }) => {
+    const { tripId } = await seedTrip(page, {
+      name: 'Cars Route Trip',
+      startDate: fixtureDate(1),
+      endDate: fixtureDate(10),
+    });
+    await seedVehicle(page, { tripId, name: 'La Clio' });
+
+    await page.goto(`/trips/${tripId}/transports`);
+    await waitForRoute(page);
+
+    // Not in the sidebar or the mobile bar. Asserted against the navigation
+    // landmarks rather than the whole page, because the transport list itself
+    // carries the button we are about to press and a page-wide query would
+    // match that and pass while the nav entry was still there.
+    for (const nav of await page.getByRole('navigation').all()) {
+      await expect(nav.getByRole('link', { name: LABELS.cars })).toHaveCount(0);
+    }
+
+    await page.getByRole('button', { name: LABELS.cars }).first().click();
+    await waitForRoute(page);
+
+    await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/transports/vehicles$`));
+    await expect(page.getByText('La Clio')).toBeVisible();
   });
 });

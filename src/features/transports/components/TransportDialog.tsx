@@ -25,6 +25,7 @@ import {
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { useRideContext } from '@/contexts/RideContext';
 import { TransportForm } from '@/features/transports/components/TransportForm';
 import { captureUsage } from '@/lib/posthog';
 import type { Transport, TransportFormData, TransportId, TransportType } from '@/types';
@@ -89,6 +90,9 @@ const TransportDialog = memo(function TransportDialog({
 }: TransportDialogProps) {
   const { t } = useTranslation();
   const { transports, createTransport, updateTransport } = useTransportContext();
+  // The car select's options. Resolved here rather than inside the form so the
+  // form stays renderable without a `RideProvider` around it.
+  const { rides, vehicles } = useRideContext();
   const { persons } = usePersonContext();
   const { successToast } = useOfflineAwareToast();
 
@@ -252,6 +256,8 @@ const TransportDialog = memo(function TransportDialog({
           </DialogHeader>
 
           <TransportForm
+            rides={rides}
+            vehicles={vehicles}
             transport={transport}
             persons={persons}
             defaultType={isEditMode ? undefined : defaultType}

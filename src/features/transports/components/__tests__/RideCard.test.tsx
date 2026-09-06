@@ -219,6 +219,8 @@ function renderCard(
   handlers: {
     onEditLeg?: (id: TransportId) => void;
     onDeleteLeg?: (id: TransportId) => void;
+    onEditRide?: (id: RideId) => void;
+    onDeleteRide?: (id: RideId) => void;
   } = {},
 ) {
   const onEditLeg = handlers.onEditLeg ?? vi.fn(),
@@ -230,6 +232,8 @@ function renderCard(
       dateLocale={enUS}
       drivenRideIds={fixture.drivenRideIds}
       resolveHeadcount={fixture.resolveHeadcount}
+      onEditRide={handlers.onEditRide}
+      onDeleteRide={handlers.onDeleteRide}
       onEditLeg={onEditLeg}
       onDeleteLeg={onDeleteLeg}
     />,
@@ -466,5 +470,77 @@ describe('RideCard', () => {
     expect(label).toContain('14:30');
     expect(label).toContain('Paris CDG');
     expect(label).toContain('rides.driver: Diane');
+  });
+
+  // ==========================================================================
+  // The Car's Own Actions
+  // ==========================================================================
+
+  describe('the journey menu', () => {
+    /** The card's own actions trigger, distinct from a passenger row's. */
+    function journeyMenuButton(): HTMLElement {
+      return screen.getByRole('button', {
+        name: 'common.actions: rides.directions.pickup',
+      });
+    }
+
+    it('opens the ride for editing, naming the ride and not a leg', async () => {
+      const onEditRide = vi.fn(),
+        fixture = resolveSharedRide(),
+        user = userEvent.setup();
+
+      renderCard(fixture, { onEditRide });
+
+      await user.click(journeyMenuButton());
+      await user.click(screen.getByText('rides.edit'));
+
+      // The *ride's* id. A card carries three legs and one journey, and handing
+      // back a leg id here would open one passenger's arrival on a control that
+      // says it edits the car.
+      expect(onEditRide).toHaveBeenCalledWith(fixture.journey.ride?.id);
+    });
+
+    it('offers to cancel the journey', async () => {
+      const onDeleteRide = vi.fn(),
+        fixture = resolveSharedRide(),
+        user = userEvent.setup();
+
+      renderCard(fixture, { onDeleteRide });
+
+      await user.click(journeyMenuButton());
+      await user.click(screen.getByText('rides.cancel'));
+
+      expect(onDeleteRide).toHaveBeenCalledWith(fixture.journey.ride?.id);
+    });
+
+    it('is absent on a legacy journey, which has no ride to act on', () => {
+      const legacy = makeTransport('t-legacy', ALICE.id, MEET_DATETIME, {
+          driverId: DRIVER.id,
+        }),
+        fixture = resolveFixture([legacy], [], [ALICE, DRIVER]);
+
+      expect(fixture.journey.isLegacy).toBe(true);
+
+      renderCard(fixture, { onEditRide: vi.fn(), onDeleteRide: vi.fn() });
+
+      // Both handlers were supplied, so their absence is the card's decision
+      // and not the caller's: a `driverId`-only leg has no `Ride` row, so there
+      // is nothing for an edit to open and nothing for a cancel to remove.
+      expect(
+        screen.queryByRole('button', {
+          name: 'common.actions: rides.directions.pickup',
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('shows no journey menu when the page offers no handlers', () => {
+      renderCard(resolveSharedRide());
+
+      expect(
+        screen.queryByRole('button', {
+          name: 'common.actions: rides.directions.pickup',
+        }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

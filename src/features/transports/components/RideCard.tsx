@@ -63,7 +63,7 @@ import type {
 } from '@/features/transports/utils/ride-model';
 import { cn } from '@/lib/utils';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
-import type { TransportId } from '@/types';
+import type { RideId, TransportId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -105,6 +105,18 @@ export interface RideCardProps {
    * feed above the list, which reports without offering to reshuffle anybody.
    */
   readonly canResolveMismatch?: boolean;
+  /**
+   * Opens this car journey for editing.
+   *
+   * Absent on a legacy journey, and the card is what decides that: a
+   * `driverId`-only leg has no `Ride` row behind it, so there is nothing for an
+   * edit to open and nothing for a delete to remove. Its own leg is still
+   * editable through the passenger row below, which is the shape both storage
+   * forms share.
+   */
+  readonly onEditRide?: (rideId: RideId) => void;
+  /** Asks to cancel this car journey, leaving its passengers' legs alone. */
+  readonly onDeleteRide?: (rideId: RideId) => void;
   /** Opens one passenger's own leg for editing. */
   readonly onEditLeg: (transportId: TransportId) => void;
   /** Asks to delete one passenger's own leg. */
@@ -294,6 +306,8 @@ const RideCard = memo(function RideCard({
   drivenRideIds,
   resolveHeadcount,
   canResolveMismatch = false,
+  onEditRide,
+  onDeleteRide,
   onEditLeg,
   onDeleteLeg,
   isActionsDisabled = false,
@@ -320,6 +334,24 @@ const RideCard = memo(function RideCard({
       () => summariseRideCapacity(journey, resolveHeadcount),
       [journey, resolveHeadcount],
     ),
+    // The journey-level menu exists only where there is a `Ride` row to act
+    // on. A legacy `driverId`-only leg is presented as a one-passenger journey
+    // so the list has one shape to render, but it has no ride to edit and none
+    // to cancel — offering either would open a dialog on nothing.
+    canEditJourney = journey.ride !== undefined && onEditRide !== undefined,
+    canCancelJourney = journey.ride !== undefined && onDeleteRide !== undefined,
+    handleEditRide = useCallback(() => {
+      const id = journey.ride?.id;
+      if (id !== undefined) {
+        onEditRide?.(id);
+      }
+    }, [journey.ride, onEditRide]),
+    handleDeleteRide = useCallback(() => {
+      const id = journey.ride?.id;
+      if (id !== undefined) {
+        onDeleteRide?.(id);
+      }
+    }, [journey.ride, onDeleteRide]),
     // Is anybody driving this? Read off the ride's own `driverId` — the very
     // field `collectDrivenRideIds` indexes — plus `isLegCovered` for the legacy
     // shape, where the driver lives on the leg instead. Deliberately *not*
@@ -388,6 +420,42 @@ const RideCard = memo(function RideCard({
           <Badge variant="secondary" className="shrink-0 ml-auto">
             {t('rides.passengers', { count: journey.legs.length })}
           </Badge>
+
+          {/*
+            The car's own actions, distinct from the per-passenger menu on each
+            row below. Editing here changes when and where the car meets and
+            who is driving it — a decision about everybody in it — where the
+            row menu edits one guest's own leg.
+          */}
+          {(canEditJourney || canCancelJourney) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 -mr-2"
+                  disabled={isActionsDisabled}
+                  aria-label={`${t('common.actions', 'Actions')}: ${directionLabel}`}
+                >
+                  <MoreVertical className="size-5 md:size-4" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canEditJourney && (
+                  <DropdownMenuItem onClick={handleEditRide}>
+                    <Edit className="size-4" aria-hidden="true" />
+                    {t('rides.edit')}
+                  </DropdownMenuItem>
+                )}
+                {canCancelJourney && (
+                  <DropdownMenuItem variant="destructive" onClick={handleDeleteRide}>
+                    <Trash2 className="size-4" aria-hidden="true" />
+                    {t('rides.cancel')}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </CardHeader>
 

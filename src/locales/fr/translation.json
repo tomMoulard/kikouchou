@@ -443,7 +443,11 @@
       "chooseIdentity": "Choisir dans les réglages",
       "empty": "Rien ici ne vous concerne",
       "emptyDescription": "Aucun trajet de ce séjour ne vous concerne. Passez à « Tout le monde » pour voir tout le séjour."
-    }
+    },
+    "ride": "Voiture",
+    "ridePlaceholder": "Voyage dans…",
+    "noRides": "Aucun trajet organisé pour l’instant",
+    "noRidesForType": "Aucune voiture ne va dans ce sens pour l’instant"
   },
   "activities": {
     "title": "Activités",
@@ -1007,7 +1011,9 @@
     "clearAllData": "Effacer toutes les données ?",
     "clearAllDataDescription": "Cela effacera définitivement tous les voyages, chambres, participants, transports et paramètres de cet appareil. Cette action est irréversible.",
     "deleteActivity": "Supprimer l'activité ?",
-    "deleteActivityDescription": "Cette activité sera retirée de l'agenda du voyage. Cette action est irréversible."
+    "deleteActivityDescription": "Cette activité sera retirée de l'agenda du voyage. Cette action est irréversible.",
+    "deleteRide": "Annuler ce trajet ?",
+    "deleteRideDescription": "Le trajet en voiture est supprimé. Chaque passager garde son arrivée ou son départ — il n’a simplement plus de transport."
   },
   "unsaved": {
     "title": "Modifications non enregistrées",
@@ -1215,7 +1221,8 @@
     },
     "deleteSuccess": "Trajet annulé",
     "passengerAdded": "Ajouté au trajet",
-    "passengerRemoved": "Retiré du trajet"
+    "passengerRemoved": "Retiré du trajet",
+    "cancel": "Annuler le trajet"
   },
   "driverAlert": {
     "title": "Vous conduisez",

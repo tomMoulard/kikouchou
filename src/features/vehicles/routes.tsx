@@ -4,6 +4,11 @@
  * One route, trip-scoped: a car is entered for a trip and picked per ride, so
  * unlike a guest group it does not outlive the trip it belongs to.
  *
+ * It sits *under* `transports` rather than beside it. A car is not a thing
+ * anybody sets out to manage — it exists to be picked on a ride — so it does
+ * not earn a place in the main navigation, and the one way in is the Cars
+ * button on the transport list.
+ *
  * @module features/vehicles/routes
  */
 
@@ -38,14 +43,14 @@ export interface VehicleListParams {
  * Routes for the vehicles feature, spread into the app's children.
  *
  * Routes:
- * - `/trips/:tripId/vehicles` - The trip's cars
+ * - `/trips/:tripId/transports/vehicles` - The trip's cars
  *
  * Create and edit go through `VehicleDialog` rather than their own pages, as
  * guests, rooms and transports do.
  */
 export const vehicleRoutes: RouteObject[] = [
   {
-    path: 'trips/:tripId/vehicles',
+    path: 'trips/:tripId/transports/vehicles',
     element: withSuspense(VehicleListPage),
   },
 ];

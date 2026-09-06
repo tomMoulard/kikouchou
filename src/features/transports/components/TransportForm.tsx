@@ -35,13 +35,18 @@ import {
   formatDatetimeLocal,
   toISODatetime,
 } from '@/features/transports/utils/datetime-input';
+import { getDateLocale } from '@/lib/i18n/date-locale';
+import { formatTransportDatetime } from '@/lib/utils/datetime-format';
 import type {
   Person,
   PersonId,
+  Ride,
+  RideId,
   Transport,
   TransportFormData,
   TransportMode,
   TransportType,
+  Vehicle,
 } from '@/types';
 
 // ============================================================================
@@ -56,6 +61,16 @@ interface TransportFormProps {
   readonly transport?: Transport;
   /** List of persons for the person and driver select dropdowns. */
   readonly persons: readonly Person[];
+  /**
+   * The trip's car journeys, for the car select.
+   *
+   * Passed in rather than read from context here, like `persons`: this form is
+   * rendered by a dialog that already holds both, and a component that reaches
+   * for its own data cannot be rendered in a test without one.
+   */
+  readonly rides: readonly Ride[];
+  /** The trip's cars, so a ride can be named by the car serving it. */
+  readonly vehicles: readonly Vehicle[];
   /** Default transport type for create mode (from URL param). */
   readonly defaultType?: TransportType;
   /** Callback when form is successfully submitted with validated data. */
@@ -89,6 +104,7 @@ interface FormState {
   coordinates: Coordinates | undefined;
   transportMode: TransportMode | '';
   transportNumber: string;
+  rideId: RideId | '';
   driverId: PersonId | '';
   notes: string;
 }
@@ -147,6 +163,7 @@ function getInitialFormState(
     coordinates: transport?.coordinates,
     transportMode: transport?.transportMode ?? '',
     transportNumber: transport?.transportNumber ?? '',
+    rideId: transport?.rideId ?? '',
     driverId: transport?.driverId ?? '',
     notes: transport?.notes ?? '',
   };
@@ -213,12 +230,14 @@ function isValidDatetime(datetime: string): boolean {
 const TransportForm = memo(function TransportForm({
   transport,
   persons,
+  rides,
+  vehicles,
   defaultType,
   onSubmit,
   onCancel,
   onDirtyChange,
 }: TransportFormProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   // ============================================================================
   // Form State
@@ -249,6 +268,7 @@ const TransportForm = memo(function TransportForm({
       formState.startLocation !== initialFormState.startLocation ||
       formState.transportMode !== initialFormState.transportMode ||
       formState.transportNumber !== initialFormState.transportNumber ||
+      formState.rideId !== initialFormState.rideId ||
       formState.driverId !== initialFormState.driverId ||
       formState.notes !== initialFormState.notes ||
       formState.coordinates?.lat !== initialFormState.coordinates?.lat ||
@@ -276,6 +296,38 @@ const TransportForm = memo(function TransportForm({
     if (!formState.personId) {return persons;}
     return persons.filter((p) => p.id !== formState.personId);
   }, [persons, formState.personId]);
+
+  /** The date-fns locale the ride labels are formatted in. */
+  const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
+
+  /**
+   * The cars this leg could plausibly join, with the vehicle serving each.
+   *
+   * Filtered by direction, not merely listed: a `pickup` collects arrivals and
+   * a `dropoff` carries departures, so offering every ride would let somebody
+   * book their Sunday flight home into the car that fetched them on Friday.
+   * The ride the leg is already in is always kept, even if the type has since
+   * been flipped — dropping it would silently detach the guest on the next
+   * save of an unrelated field.
+   */
+  const rideOptions = useMemo(() => {
+    const wanted = formState.type === 'arrival' ? 'pickup' : 'dropoff',
+      vehicleName = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle.name]));
+
+    return rides
+      .filter((ride) => ride.direction === wanted || ride.id === formState.rideId)
+      .map((ride) => ({
+        id: ride.id,
+        // The car leads, because the car is what the user came here to pick.
+        // Where and when it meets disambiguates two cars of the same name, and
+        // is the only label an unmeasured ride has.
+        label:
+          ride.vehicleId === undefined
+            ? t('rides.noVehicle')
+            : (vehicleName.get(ride.vehicleId) ?? t('rides.noVehicle')),
+        detail: `${formatTransportDatetime(ride.meetDatetime, dateLocale)} · ${ride.location}`,
+      }));
+  }, [rides, vehicles, formState.type, formState.rideId, dateLocale, t]);
 
   /**
    * Check if the selected person still exists.
@@ -483,11 +535,34 @@ const TransportForm = memo(function TransportForm({
   );
 
   /**
+   * Handles car select change.
+   *
+   * Picking a car clears the leg's own driver, because the two answer the same
+   * question and the repository would clear one of them anyway — better that
+   * the form say so while the user is looking at it than that a field they
+   * filled in vanish on save.
+   */
+  const handleRideChange = useCallback((value: string) => {
+    const rideId = value === NO_SELECTION ? '' : (value as RideId);
+    setFormState((prev) => ({
+      ...prev,
+      rideId,
+      driverId: rideId === '' ? prev.driverId : '',
+    }));
+  }, []);
+
+  /**
    * Handles driver select change.
    */
   const handleDriverChange = useCallback((value: string) => {
     const driverId = value === NO_SELECTION ? '' : (value as PersonId);
-    setFormState((prev) => ({ ...prev, driverId }));
+    // The mirror of `handleRideChange`: naming somebody to collect this guest
+    // is saying they are not in the shared car.
+    setFormState((prev) => ({
+      ...prev,
+      driverId,
+      rideId: driverId === '' ? prev.rideId : '',
+    }));
   }, []);
 
   /**
@@ -529,6 +604,11 @@ const TransportForm = memo(function TransportForm({
         startCoordinates: startTrimmed ? formState.startCoordinates : undefined,
         transportMode: formState.transportMode || undefined,
         transportNumber: formState.transportNumber.trim() || undefined,
+        // The car this leg travels in. Mutually exclusive with `driverId` in
+        // the UI above, and enforced again by the repository: naming a driver
+        // on the leg detaches it from any shared car, because "Bob is
+        // collecting Alice" is a statement that she is not in Guillaume's.
+        rideId: formState.rideId || undefined,
         driverId: formState.driverId || undefined,
         // Inferred from the driver rather than asked for separately: picking
         // someone to drive is what says this person is being collected, and the
@@ -541,7 +621,14 @@ const TransportForm = memo(function TransportForm({
         // "no, they don't" the next time the organiser opened the leg to fix a
         // station name, dropping that guest out of the pickup panel and out of
         // `pickupsNeedingDriver` with nobody deciding to.
-        needsPickup: formState.driverId !== '' || (transport?.needsPickup ?? false),
+        //
+        // Joining a car says the same thing a driver does, so it counts here
+        // too: a guest booked into the 15:00 to the station is being collected
+        // whether the arrangement is a shared ride or one person's lift.
+        needsPickup:
+          formState.driverId !== '' ||
+          formState.rideId !== '' ||
+          (transport?.needsPickup ?? false),
         notes: formState.notes.trim() || undefined,
       };
 
@@ -757,6 +844,49 @@ const TransportForm = memo(function TransportForm({
           placeholder={t('transports.numberPlaceholder')}
           disabled={isSubmitting}
         />
+      </div>
+
+      {/*
+        Car Select.
+
+        Above the driver, because it is the answer for most legs now: a car
+        collects several guests at once, and naming one person to fetch one
+        other is the older, narrower arrangement. The two are mutually
+        exclusive — see `handleRideChange`.
+      */}
+      <div className="space-y-2">
+        <Label htmlFor="transport-ride">{t('transports.ride')}</Label>
+        <Select
+          value={formState.rideId || NO_SELECTION}
+          onValueChange={handleRideChange}
+          disabled={isSubmitting || rideOptions.length === 0}
+        >
+          <SelectTrigger id="transport-ride" className="w-full">
+            <SelectValue placeholder={t('transports.ridePlaceholder')} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_SELECTION}>—</SelectItem>
+            {rideOptions.map((ride) => (
+              <SelectItem key={ride.id} value={ride.id}>
+                <div className="flex flex-col items-start">
+                  <span>{ride.label}</span>
+                  <span className="text-xs text-muted-foreground">{ride.detail}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/*
+          Says which of the two reasons the select is empty, because they lead
+          somewhere different: no cars at all means "go and arrange one", while
+          none in this direction means the trip's cars are all going the other
+          way.
+        */}
+        {rideOptions.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            {rides.length === 0 ? t('transports.noRides') : t('transports.noRidesForType')}
+          </p>
+        )}
       </div>
 
       {/* Driver Select */}

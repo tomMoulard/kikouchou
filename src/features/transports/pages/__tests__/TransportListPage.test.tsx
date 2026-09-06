@@ -14,7 +14,7 @@
 
 import { format } from 'date-fns';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@/test/utils';
+import { render, screen, userEvent, within } from '@/test/utils';
 import type { Person, Transport, Trip } from '@/types';
 
 // ============================================================================
@@ -183,6 +183,13 @@ vi.mock('@/features/transports/components/TransportDialog', () => ({
 
 vi.mock('@/features/transports/components/UpcomingPickups', () => ({
   UpcomingPickups: () => <div data-testid="upcoming-pickups" />,
+}));
+
+// The ride dialog reports whether the page opened it, and in which mode: a
+// create action must not arrive carrying the id of whatever was edited last.
+vi.mock('@/features/transports/components/RideDialog', () => ({
+  RideDialog: ({ open, rideId }: { open: boolean; rideId?: string }) =>
+    open ? <div data-testid="ride-dialog" data-ride-id={rideId ?? ''} /> : null,
 }));
 
 // The change feed resolves who is holding the device, which reaches
@@ -873,5 +880,39 @@ describe('TransportListPage', () => {
     } as unknown as ReturnType<typeof useTransportContext>);
     render(<TransportListPage />, { withProviders: false });
     expect(screen.getByText('transports.needsPickup')).toBeInTheDocument();
+  });
+
+  // ==========================================================================
+  // Cars and Rides
+  // ==========================================================================
+
+  describe('the cars and rides actions', () => {
+    it('sends the Cars button to the sub-page under transports', async () => {
+      const user = userEvent.setup();
+
+      render(<TransportListPage />, { withProviders: false });
+
+      await user.click(screen.getByRole('button', { name: 'vehicles.title' }));
+
+      // Under `transports`, not beside it. The cars are deliberately out of the
+      // main navigation, so this button is the only way in and the path it uses
+      // is the one the router registers.
+      expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/transports/vehicles');
+    });
+
+    it('opens the ride dialog in create mode', async () => {
+      const user = userEvent.setup();
+
+      render(<TransportListPage />, { withProviders: false });
+
+      expect(screen.queryByTestId('ride-dialog')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'rides.new' }));
+
+      // Create mode carries no id. A dialog handed a stale one would open the
+      // last ride somebody edited and save over it.
+      const dialog = screen.getByTestId('ride-dialog');
+      expect(dialog).toHaveAttribute('data-ride-id', '');
+    });
   });
 });

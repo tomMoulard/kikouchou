@@ -51,6 +51,7 @@ import { type Locale, format, parseISO } from 'date-fns';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
+  CarFront,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -100,6 +101,7 @@ import {
   type HeadcountResolver,
 } from '@/features/rooms/utils/capacity-utils';
 import { RideCard } from '@/features/transports/components/RideCard';
+import { RideDialog } from '@/features/transports/components/RideDialog';
 import { RideChangeFeed } from '@/features/transports/components/RideChangeFeed';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { TransportScopeFilter } from '@/features/transports/components/TransportScopeFilter';
@@ -117,7 +119,14 @@ import {
   resolveRides,
   rideConcernsPerson,
 } from '@/features/transports/utils/ride-model';
-import type { Person, PersonId, Transport, TransportId, TransportType } from '@/types';
+import type {
+  Person,
+  PersonId,
+  RideId,
+  Transport,
+  TransportId,
+  TransportType,
+} from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -222,6 +231,10 @@ interface TransportListProps {
   readonly resolveHeadcount: HeadcountResolver;
   /** The guest holding this device, so a car knows whose call it is. */
   readonly myPersonId: PersonId | undefined;
+  /** Opens one car journey for editing. */
+  readonly onEditRide: (rideId: RideId) => void;
+  /** Asks to cancel one car journey. */
+  readonly onDeleteRide: (rideId: RideId) => void;
 }
 
 // ============================================================================
@@ -627,6 +640,10 @@ interface DateGroupSectionProps {
   readonly resolveHeadcount: HeadcountResolver;
   /** The guest holding this device, so a car knows whose call it is. */
   readonly myPersonId: PersonId | undefined;
+  /** Opens one car journey for editing. */
+  readonly onEditRide: (rideId: RideId) => void;
+  /** Asks to cancel one car journey. */
+  readonly onDeleteRide: (rideId: RideId) => void;
 }
 
 /**
@@ -643,6 +660,8 @@ const DateGroupSection = memo(function DateGroupSection({
   drivenRideIds,
   resolveHeadcount,
   myPersonId,
+  onEditRide,
+  onDeleteRide,
 }: DateGroupSectionProps): ReactElement {
   return (
     <section key={group.dateKey} aria-labelledby={`date-header-${group.dateKey}`}>
@@ -676,6 +695,8 @@ const DateGroupSection = memo(function DateGroupSection({
                 canResolveMismatch={
                   myPersonId !== undefined && entry.journey.driverId === myPersonId
                 }
+                onEditRide={onEditRide}
+                onDeleteRide={onDeleteRide}
                 onEditLeg={onEdit}
                 onDeleteLeg={onDelete}
                 isActionsDisabled={isActionsDisabled}
@@ -740,6 +761,8 @@ const TransportList = memo(function TransportList({
   drivenRideIds,
   resolveHeadcount,
   myPersonId,
+  onEditRide,
+  onDeleteRide,
 }: TransportListProps): ReactElement {
   const { t } = useTranslation();
   
@@ -785,6 +808,8 @@ const TransportList = memo(function TransportList({
           drivenRideIds={drivenRideIds}
           resolveHeadcount={resolveHeadcount}
           myPersonId={myPersonId}
+          onEditRide={onEditRide}
+          onDeleteRide={onDeleteRide}
         />
       ))}
 
@@ -832,6 +857,8 @@ const TransportList = memo(function TransportList({
                   drivenRideIds={drivenRideIds}
                   resolveHeadcount={resolveHeadcount}
                   myPersonId={myPersonId}
+                  onEditRide={onEditRide}
+                  onDeleteRide={onDeleteRide}
                 />
               ))}
             </div>
@@ -879,7 +906,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
    // draws those rides, so it takes the cars along with them — and gates on the
    // ride load, because a paint before they arrive filters against no cars at
    // all and flags every ride-covered pickup as driverless.
-   { rides, vehicles, isLoading: isRidesLoading } = useRideContext(),
+   { rides, vehicles, deleteRide, isLoading: isRidesLoading } = useRideContext(),
 
   // Local state
    [transportToDelete, setTransportToDelete] = useState<TransportId | null>(null),
@@ -888,6 +915,14 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
    [isDialogOpen, setIsDialogOpen] = useState(false),
    [editingTransportId, setEditingTransportId] = useState<TransportId | undefined>(undefined),
    [defaultTransportType, setDefaultTransportType] = useState<TransportType>('arrival'),
+
+  // Dialog state for create/edit ride. Kept apart from the transport dialog
+  // rather than folded into it: a car journey and a guest's own leg are
+  // different rows with different fields, and one dialog switching shape on a
+  // mode flag is how both halves end up half-tested.
+   [isRideDialogOpen, setIsRideDialogOpen] = useState(false),
+   [editingRideId, setEditingRideId] = useState<RideId | undefined>(undefined),
+   [rideToDelete, setRideToDelete] = useState<RideId | null>(null),
 
   // Track if we're currently navigating to prevent double-clicks
    isNavigatingRef = useRef(false),
@@ -1114,6 +1149,74 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   }, []),
 
   /**
+   * Opens the ride dialog in create mode.
+   *
+   * A pickup arranged from here starts empty and is filled by the legs that
+   * join it — membership lives on the leg's `rideId`, never on a list held by
+   * the ride, so there is nothing to pick here and nothing to keep in step.
+   */
+   handleAddRide = useCallback(() => {
+    setEditingRideId(undefined);
+    setIsRideDialogOpen(true);
+  }, []),
+
+  /**
+   * Opens one car journey for editing.
+   */
+   handleEditRide = useCallback((rideId: RideId) => {
+    if (isNavigatingRef.current) {return;}
+    setEditingRideId(rideId);
+    setIsRideDialogOpen(true);
+  }, []),
+
+  /**
+   * Opens the confirmation for cancelling a car journey.
+   */
+   handleDeleteRideClick = useCallback((rideId: RideId) => {
+    setRideToDelete(rideId);
+  }, []),
+
+  /**
+   * Cancels the car journey, leaving its passengers' own legs alone.
+   *
+   * `deleteRide` clears the `rideId` of every leg pointing at it, so the guests
+   * keep their arrivals and simply stop being in a car. Deleting their legs too
+   * would throw away the fact that they are still turning up.
+   */
+   handleConfirmDeleteRide = useCallback(async () => {
+    if (!rideToDelete) {return;}
+
+    try {
+      await deleteRide(rideToDelete);
+      setRideToDelete(null);
+      successToast(t('rides.deleteSuccess'));
+    } catch (error) {
+      console.error('Failed to delete ride:', error);
+      toast.error(t('errors.deleteFailed', 'Failed to delete'));
+      throw error; // Re-thrown so the dialog stays open for a retry
+    }
+  }, [rideToDelete, deleteRide, t, successToast]),
+
+  /**
+   * Closes the ride delete confirmation.
+   */
+   handleCancelDeleteRide = useCallback((open: boolean) => {
+    if (!open) {
+      setRideToDelete(null);
+    }
+  }, []),
+
+  /**
+   * Closes the ride dialog and forgets what was being edited.
+   */
+   handleRideDialogOpenChange = useCallback((open: boolean) => {
+    setIsRideDialogOpen(open);
+    if (!open) {
+      setEditingRideId(undefined);
+    }
+  }, []),
+
+  /**
    * Handles back navigation.
    */
    handleBack = useCallback(() => {
@@ -1125,6 +1228,17 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
    */
    handleOpenMap = useCallback(() => {
     navigate(`/trips/${tripIdFromUrl}/transports/map`);
+  }, [navigate, tripIdFromUrl]),
+
+  /**
+   * Handles navigation to the trip's cars.
+   *
+   * This button is the only way in. The cars are not in the main navigation:
+   * a car exists to be picked on a ride, and nobody sets out to manage one for
+   * its own sake, so it lives under the transport list that uses it.
+   */
+   handleOpenCars = useCallback(() => {
+    navigate(`/trips/${tripIdFromUrl}/transports/vehicles`);
   }, [navigate, tripIdFromUrl]),
 
   /**
@@ -1143,18 +1257,37 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
 
    headerAction = useMemo(
     () => (
-      <div className="hidden sm:flex items-center gap-2">
-        <Button variant="outline" onClick={handleOpenMap}>
-          <MapIcon className="size-4 mr-2" aria-hidden="true" />
-          {t('transports.mapView', 'Map view')}
+      /*
+        Four controls, and only one of them is hidden on a phone.
+
+        "New transport" stays desktop-only because the FAB below already is
+        that button on a small screen, and two of the same control is worse
+        than none. The other three have no mobile equivalent at all, so they
+        drop their labels rather than themselves — "Cars" in particular is the
+        single way into a page that is deliberately not in the navigation.
+      */
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button variant="outline" onClick={handleOpenCars}>
+          <CarFront className="size-4 sm:mr-2" aria-hidden="true" />
+          <span className="sr-only sm:not-sr-only">{t('vehicles.title')}</span>
         </Button>
-        <Button onClick={handleAddTransport}>
+        <Button variant="outline" onClick={handleOpenMap}>
+          <MapIcon className="size-4 sm:mr-2" aria-hidden="true" />
+          <span className="sr-only sm:not-sr-only">
+            {t('transports.mapView', 'Map view')}
+          </span>
+        </Button>
+        <Button variant="outline" onClick={handleAddRide}>
+          <Plus className="size-4 mr-2" aria-hidden="true" />
+          {t('rides.new')}
+        </Button>
+        <Button className="hidden sm:inline-flex" onClick={handleAddTransport}>
           <Plus className="size-4 mr-2" aria-hidden="true" />
           {t('transports.new')}
         </Button>
       </div>
     ),
-    [handleAddTransport, handleOpenMap, t],
+    [handleAddRide, handleAddTransport, handleOpenCars, handleOpenMap, t],
   );
 
   // ============================================================================
@@ -1324,6 +1457,8 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         drivenRideIds={drivenRideIds}
         resolveHeadcount={headcountOf}
         myPersonId={myPersonId}
+        onEditRide={handleEditRide}
+        onDeleteRide={handleDeleteRideClick}
       />
 
       {/* Floating Action Button for mobile */}
@@ -1350,6 +1485,24 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         confirmLabel={t('common.delete')}
         variant="destructive"
         onConfirm={handleConfirmDelete}
+      />
+
+      {/* Ride Cancel Confirmation Dialog */}
+      <ConfirmDialog
+        open={rideToDelete !== null}
+        onOpenChange={handleCancelDeleteRide}
+        title={t('confirm.deleteRide')}
+        description={t('confirm.deleteRideDescription')}
+        confirmLabel={t('common.delete')}
+        variant="destructive"
+        onConfirm={handleConfirmDeleteRide}
+      />
+
+      {/* Ride Create/Edit Dialog */}
+      <RideDialog
+        rideId={editingRideId}
+        open={isRideDialogOpen}
+        onOpenChange={handleRideDialogOpenChange}
       />
 
       {/* Transport Create/Edit Dialog */}

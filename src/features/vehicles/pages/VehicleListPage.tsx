@@ -191,7 +191,7 @@ const VehicleCard = memo(function VehicleCard({
  *
  * @example
  * ```tsx
- * { path: '/trips/:tripId/vehicles', element: <VehicleListPage /> }
+ * { path: '/trips/:tripId/transports/vehicles', element: <VehicleListPage /> }
  * ```
  */
 const VehicleListPage = memo(function VehicleListPage(): ReactElement {

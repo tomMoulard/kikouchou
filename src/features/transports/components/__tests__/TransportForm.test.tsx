@@ -1,6 +1,6 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@/test/utils';
-import type { Person } from '@/types';
+import { describe, expect, it, vi, beforeAll, beforeEach } from 'vitest';
+import { render, screen, userEvent, within } from '@/test/utils';
+import type { Person, Ride, Vehicle } from '@/types';
 
 const mockPersons: Person[] = [
   {
@@ -14,6 +14,33 @@ const mockPersons: Person[] = [
     tripId: 't1' as Person['tripId'],
     name: 'Bob',
     color: '#ef4444' as Person['color'],
+  },
+];
+
+/** One car, so a ride can be named by something other than "no car". */
+const mockVehicle: Vehicle = {
+  id: 'v1' as Vehicle['id'],
+  tripId: 't1' as Vehicle['tripId'],
+  name: 'Espace de location',
+  seatCount: 7,
+};
+
+/** A car meeting the arrivals, and one taking people away. */
+const mockRides: Ride[] = [
+  {
+    id: 'r-pickup' as Ride['id'],
+    tripId: 't1' as Ride['tripId'],
+    direction: 'pickup',
+    meetDatetime: '2026-07-15T15:00:00' as Ride['meetDatetime'],
+    location: 'Gare de Vannes',
+    vehicleId: mockVehicle.id,
+  },
+  {
+    id: 'r-dropoff' as Ride['id'],
+    tripId: 't1' as Ride['tripId'],
+    direction: 'dropoff',
+    meetDatetime: '2026-07-22T09:00:00' as Ride['meetDatetime'],
+    location: 'Aéroport de Nantes',
   },
 ];
 
@@ -47,6 +74,17 @@ vi.mock('@/components/shared/LocationPicker', () => ({
 
 import { TransportForm } from '../TransportForm';
 
+// Radix's Select drives itself with pointer capture and scrolls the highlighted
+// option into view, neither of which jsdom implements — without these the
+// listbox never opens and every assertion about its options fails on a missing
+// element rather than on the thing it means to check.
+beforeAll(() => {
+  Element.prototype.hasPointerCapture ??= (): boolean => false;
+  Element.prototype.setPointerCapture ??= (): void => undefined;
+  Element.prototype.releasePointerCapture ??= (): void => undefined;
+  Element.prototype.scrollIntoView ??= (): void => undefined;
+});
+
 describe('TransportForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -54,7 +92,13 @@ describe('TransportForm', () => {
 
   it('renders create mode with type radio buttons', () => {
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     expect(screen.getByLabelText('transports.arrival')).toBeInTheDocument();
@@ -63,7 +107,13 @@ describe('TransportForm', () => {
 
   it('renders person select with persons', () => {
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     expect(screen.getByText('assignments.person')).toBeInTheDocument();
@@ -71,7 +121,13 @@ describe('TransportForm', () => {
 
   it('renders datetime, location, and mode fields', () => {
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     expect(screen.getByLabelText(/transports.datetime/)).toBeInTheDocument();
@@ -83,7 +139,13 @@ describe('TransportForm', () => {
     // Picking a driver is what says this person is being collected, so the
     // form asked the same question twice. `needsPickup` is inferred now.
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     expect(screen.queryByText('transports.needsPickup')).not.toBeInTheDocument();
@@ -95,7 +157,9 @@ describe('TransportForm', () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={onCancel} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]} persons={mockPersons} onSubmit={vi.fn()} onCancel={onCancel} />,
       { withProviders: false },
     );
     await user.click(screen.getByText('common.cancel'));
@@ -104,7 +168,9 @@ describe('TransportForm', () => {
 
   it('disables submit when no persons available', () => {
     render(
-      <TransportForm persons={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]} persons={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { withProviders: false },
     );
     const submitBtn = screen.getByText('common.save');
@@ -116,7 +182,9 @@ describe('TransportForm', () => {
     const user = userEvent.setup();
     const onDirtyChange = vi.fn();
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} onDirtyChange={onDirtyChange} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]} persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} onDirtyChange={onDirtyChange} />,
       { withProviders: false },
     );
     const locationInputs = screen.getAllByTestId('location-picker');
@@ -127,7 +195,9 @@ describe('TransportForm', () => {
 
   it('renders empty persons message when no persons', () => {
     render(
-      <TransportForm persons={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]} persons={[]} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { withProviders: false },
     );
     expect(screen.getByText('persons.empty')).toBeInTheDocument();
@@ -138,7 +208,9 @@ describe('TransportForm', () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     render(
-      <TransportForm persons={mockPersons} onSubmit={onSubmit} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]} persons={mockPersons} onSubmit={onSubmit} onCancel={vi.fn()} />,
       { withProviders: false },
     );
     // Submit without filling any fields
@@ -164,6 +236,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={vi.fn()}
@@ -178,7 +252,13 @@ describe('TransportForm', () => {
 
   it('renders notes field', () => {
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     expect(screen.getByLabelText(/transports\.notes/)).toBeInTheDocument();
@@ -188,7 +268,13 @@ describe('TransportForm', () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     const departureRadio = screen.getByLabelText('transports.departure');
@@ -199,6 +285,8 @@ describe('TransportForm', () => {
   it('uses defaultType prop for initial type selection', () => {
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         persons={mockPersons}
         onSubmit={vi.fn()}
         onCancel={vi.fn()}
@@ -212,7 +300,13 @@ describe('TransportForm', () => {
 
   it('renders transport number input field', () => {
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     expect(screen.getByLabelText(/transports\.number/)).toBeInTheDocument();
@@ -222,7 +316,13 @@ describe('TransportForm', () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     const numberInput = screen.getByLabelText(/transports\.number/);
@@ -234,7 +334,13 @@ describe('TransportForm', () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     const notesField = screen.getByLabelText(/transports\.notes/);
@@ -257,6 +363,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={onSubmit}
@@ -274,7 +382,13 @@ describe('TransportForm', () => {
 
   it('renders driver select section', () => {
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     expect(screen.getByText('transports.driver')).toBeInTheDocument();
@@ -317,6 +431,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={onSubmit}
@@ -349,6 +465,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={onSubmit}
@@ -377,6 +495,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={vi.fn()}
@@ -393,7 +513,13 @@ describe('TransportForm', () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     const datetimeInput = screen.getByLabelText(/transports.datetime/);
@@ -416,6 +542,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={onSubmit}
@@ -438,7 +566,13 @@ describe('TransportForm', () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     const datetimeInput = screen.getByLabelText(/transports.datetime/);
@@ -463,7 +597,13 @@ describe('TransportForm', () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        rides={[]}
+        vehicles={[]}
+        persons={mockPersons}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
     // Submitting an empty form flags person, datetime and location at once
@@ -499,6 +639,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={onSubmit}
@@ -528,6 +670,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={singlePerson}
         onSubmit={vi.fn()}
@@ -556,6 +700,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={onSubmit}
@@ -592,6 +738,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={vi.fn()}
@@ -617,6 +765,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={vi.fn()}
@@ -640,6 +790,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={vi.fn()}
@@ -662,6 +814,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={vi.fn()}
@@ -686,6 +840,8 @@ describe('TransportForm', () => {
     };
     render(
       <TransportForm
+        rides={[]}
+        vehicles={[]}
         transport={transport}
         persons={mockPersons}
         onSubmit={vi.fn()}
@@ -694,5 +850,140 @@ describe('TransportForm', () => {
       { withProviders: false },
     );
     expect(screen.getAllByTestId('location-picker')[1]).toHaveValue('CDG Airport');
+  });
+
+  // ==========================================================================
+  // Car Select
+  // ==========================================================================
+
+  describe('the car select', () => {
+    /** Opens the car select and returns the listbox its options live in. */
+    async function openCarSelect(
+      user: ReturnType<typeof userEvent.setup>,
+    ): Promise<HTMLElement> {
+      await user.click(screen.getByRole('combobox', { name: 'transports.ride' }));
+      return screen.getByRole('listbox');
+    }
+
+    it('offers only the cars going the same way as the leg', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <TransportForm
+          rides={mockRides}
+          vehicles={[mockVehicle]}
+          persons={mockPersons}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+        { withProviders: false },
+      );
+
+      // The form opens on `arrival`, which is collected by a `pickup`. The
+      // dropoff must not be on offer: booking Sunday's flight home into the car
+      // that fetched you on Friday is not a mistake the user should be able to
+      // make in one click.
+      const listbox = await openCarSelect(user);
+      expect(within(listbox).getByText('Espace de location')).toBeInTheDocument();
+      expect(within(listbox).queryByText(/Aéroport de Nantes/)).not.toBeInTheDocument();
+    });
+
+    it('follows the leg when it is flipped to a departure', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <TransportForm
+          rides={mockRides}
+          vehicles={[mockVehicle]}
+          persons={mockPersons}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+        { withProviders: false },
+      );
+
+      await user.click(screen.getByLabelText('transports.departure'));
+
+      const listbox = await openCarSelect(user);
+      expect(within(listbox).getByText(/Aéroport de Nantes/)).toBeInTheDocument();
+      expect(within(listbox).queryByText('Espace de location')).not.toBeInTheDocument();
+    });
+
+    it('says why it is empty, and which kind of empty it is', () => {
+      const { unmount } = render(
+        <TransportForm
+          rides={[]}
+          vehicles={[]}
+          persons={mockPersons}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+        { withProviders: false },
+      );
+
+      expect(screen.getByText('transports.noRides')).toBeInTheDocument();
+      unmount();
+
+      // A trip that has cars, none of them going this way, is a different
+      // situation with a different answer, and one message for both would send
+      // the user off to create a car they already have.
+      render(
+        <TransportForm
+          rides={[mockRides[1] as Ride]}
+          vehicles={[]}
+          persons={mockPersons}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+        { withProviders: false },
+      );
+
+      expect(screen.getByText('transports.noRidesForType')).toBeInTheDocument();
+    });
+
+    it('submits the chosen car, and drops the leg\'s own driver with it', async () => {
+      const user = userEvent.setup(),
+        onSubmit = vi.fn().mockResolvedValue(undefined),
+        // Pre-filled so the form is valid without driving every field, and
+        // seeded with a driver so there is something for the car to displace.
+        transport = {
+          id: 't1' as import('@/types').Transport['id'],
+          tripId: 't1' as import('@/types').Transport['tripId'],
+          personId: 'p1' as import('@/types').Transport['personId'],
+          type: 'arrival' as const,
+          datetime: '2026-07-15T14:00:00.000Z' as import('@/types').Transport['datetime'],
+          location: 'Gare de Vannes',
+          needsPickup: true,
+          driverId: 'p2' as import('@/types').Transport['personId'],
+        };
+
+      render(
+        <TransportForm
+          rides={mockRides}
+          vehicles={[mockVehicle]}
+          transport={transport}
+          persons={mockPersons}
+          onSubmit={onSubmit}
+          onCancel={vi.fn()}
+        />,
+        { withProviders: false },
+      );
+
+      await user.click(screen.getByRole('combobox', { name: 'transports.ride' }));
+      await user.click(within(screen.getByRole('listbox')).getByText('Espace de location'));
+
+      await user.click(screen.getByText('common.save'));
+
+      // Picking a car is saying this guest is in the shared one, so Bob's lift
+      // goes with it. The repository enforces the same rule on write; the form
+      // asserts it here so a leg never leaves this dialog naming two drivers.
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rideId: 'r-pickup',
+          driverId: undefined,
+          needsPickup: true,
+        }),
+      );
+    });
   });
 });

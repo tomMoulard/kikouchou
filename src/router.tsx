@@ -235,7 +235,9 @@ export const appRoutes: RouteObject = {
     // Note: transportRoutes uses 'transports' path, need to check if it needs trip scoping
     ...transportRoutes,
 
-    // The trip's cars (trip-scoped) — picked per ride, entered once here
+    // The trip's cars, under the transport list rather than beside it — a car
+    // is entered in order to be picked on a ride, never for its own sake
+
     ...vehicleRoutes,
 
     // Shared activity agenda (trip-scoped)
@@ -295,7 +297,7 @@ const publicRoutes: RouteObject = {
  *   - `/trips/:tripId/rooms` - Room management
  *   - `/trips/:tripId/persons` - Person management
  *   - `/trips/:tripId/transports` - Transport management
- *   - `/trips/:tripId/vehicles` - The cars available to the trip
+ *   - `/trips/:tripId/transports/vehicles` - The cars available to the trip
  *   - `/trips/:tripId/activities` - Shared activity agenda
  *   - `/trips/:tripId/analytics` - Trip analytics
  *   - `/analytics` - Analytics across all trips
