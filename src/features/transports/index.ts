@@ -34,6 +34,12 @@ export type { TransportDialogProps } from './components/TransportDialog';
 export { UpcomingPickups } from './components/UpcomingPickups';
 export type { UpcomingPickupsProps } from './components/UpcomingPickups';
 
+export { DriverAlert } from './components/DriverAlert';
+export type {
+  DriverAlertProps,
+  RideDepartureAnnouncement,
+} from './components/DriverAlert';
+
 // ============================================================================
 // Utilities
 // ============================================================================
@@ -47,6 +53,19 @@ export {
   sortTransportsByInstant,
   toTransportInstant,
 } from './utils/pickup-utils';
+
+// When the driver has to set off, and whether that is worth saying yet.
+export {
+  classifyRideDeparture,
+  selectRideDepartures,
+  LATE_GRACE_MINUTES,
+  RIDE_DEPARTURE_STATUSES,
+  UPCOMING_HORIZON_MINUTES,
+} from './utils/ride-departure';
+export type {
+  RideDeparture,
+  RideDepartureStatus,
+} from './utils/ride-departure';
 
 // ============================================================================
 // Routes

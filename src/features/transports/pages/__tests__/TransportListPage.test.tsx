@@ -151,6 +151,13 @@ vi.mock('@/features/transports/components/UpcomingPickups', () => ({
   UpcomingPickups: () => <div data-testid="upcoming-pickups" />,
 }));
 
+// The driver's departure banner has its own tests; here it is stubbed for the
+// same reason as the two above. It reads the identity hook and the whole
+// transport list, neither of which this file's mocks supply.
+vi.mock('@/features/transports/components/DriverAlert', () => ({
+  DriverAlert: () => <div data-testid="driver-alert" />,
+}));
+
 import { TransportListPage } from '../TransportListPage';
 import { useTripContext } from '@/contexts/TripContext';
 import { useTransportContext } from '@/contexts/TransportContext';

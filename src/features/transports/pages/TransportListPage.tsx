@@ -78,6 +78,7 @@ import { cn } from '@/lib/utils';
 import { formatFullDate } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { getTransportModeIcon } from '@/lib/utils/transport-icons';
+import { DriverAlert } from '@/features/transports/components/DriverAlert';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
 import {
@@ -987,6 +988,18 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
           </div>
         </div>
       )}
+
+      {/*
+        The driver's own "you need to leave" banner, above the panel that asks
+        for volunteers: a car this device is already driving is news, and a car
+        still looking for anybody is a request. In the page flow rather than
+        fixed — a fixed overlay eats every tap underneath it, and the nav bar,
+        the FAB and the toasts already share the bottom edge.
+
+        It renders nothing unless this device is driving something due soon, so
+        it costs an empty node on every other visit.
+      */}
+      <DriverAlert className="mb-6" />
 
       {/* Pickup alerts section - only when a driver is still needed */}
       {hasUnassignedUpcomingPickup && (
