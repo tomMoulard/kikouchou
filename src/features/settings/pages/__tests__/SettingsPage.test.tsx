@@ -135,12 +135,12 @@ vi.mock('@/features/auth/components/AccountSection', () => ({
   AccountSection: () => <div data-testid="account-section" />,
 }));
 
-// Same reason for the identity card: it reads PersonProvider and, through
-// `useTripIdentity`, AuthProvider and Dexie. Its own states are covered in
-// features/settings/components/__tests__/TripIdentitySelector.test.tsx; what
-// this file asserts is that the page still composes it.
-vi.mock('@/features/settings/components/TripIdentitySelector', () => ({
-  TripIdentitySelector: () => <div data-testid="trip-identity-selector" />,
+// Same reason for the guest identity card: it reads PersonProvider and, through
+// `useTripIdentity`, AuthProvider and Dexie. Its own states live in
+// features/settings/components/__tests__; what this file asserts is that the
+// page still composes it.
+vi.mock('@/features/settings/components/GuestIdentitySelector', () => ({
+  GuestIdentitySelector: () => <div data-testid="guest-identity-selector" />,
 }));
 
 // Mock ConfirmDialog to capture confirm callback and onOpenChange
@@ -196,9 +196,9 @@ describe('SettingsPage', () => {
     expect(screen.getByTestId('account-section')).toBeInTheDocument();
   });
 
-  it('mounts the identity card, which is the only way to answer "who am I"', () => {
+  it('mounts the guest identity card, the only way to answer "who am I"', () => {
     render(<SettingsPage />, { withProviders: false });
-    expect(screen.getByTestId('trip-identity-selector')).toBeInTheDocument();
+    expect(screen.getByTestId('guest-identity-selector')).toBeInTheDocument();
   });
 
   it('renders current trip section when trip is selected', () => {

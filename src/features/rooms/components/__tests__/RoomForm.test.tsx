@@ -363,7 +363,11 @@ describe('RoomForm', () => {
     // Error should be cleared
   });
 
-  it('handles empty capacity input by setting to minimum', async () => {
+  // Clearing the box used to snap it to the minimum on the keystroke, so a
+  // five-bed room saved as a one-bed room if the reader emptied the field and
+  // submitted without retyping. Nothing is committed while it is empty now, so
+  // the last good value stands.
+  it('keeps the last good capacity when the input is left empty', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
@@ -381,11 +385,36 @@ describe('RoomForm', () => {
     const capacityInput = screen.getByLabelText(/rooms.capacity/);
     // Clear the input entirely
     await user.clear(capacityInput);
-    // Submit - should use MIN_CAPACITY (1)
+    // Submit — the room keeps the five beds it already had.
     await user.click(screen.getByText('common.save'));
     expect(onSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({ capacity: 1 }),
+      expect.objectContaining({ capacity: 5 }),
     );
+  });
+
+  it('steps the bed count with the buttons beside the field', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<RoomForm onSubmit={onSubmit} onCancel={vi.fn()} />, {
+      withProviders: false,
+    });
+
+    await user.type(screen.getByLabelText(/rooms.name/), 'Room');
+    await user.click(screen.getByRole('button', { name: 'rooms.bedsIncrease' }));
+    await user.click(screen.getByRole('button', { name: 'rooms.bedsIncrease' }));
+    await user.click(screen.getByText('common.save'));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ capacity: 3 }));
+  });
+
+  it('will not step the bed count below one', () => {
+    render(<RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} />, {
+      withProviders: false,
+    });
+
+    // A new room starts at one bed, which is the floor.
+    expect(screen.getByRole('button', { name: 'rooms.bedsDecrease' })).toBeDisabled();
   });
 
   it('reports dirty state via onDirtyChange when capacity changes', async () => {

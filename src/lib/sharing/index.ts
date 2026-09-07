@@ -87,5 +87,7 @@ export {
   getGuestIdentityStorageKey,
   readGuestIdentity,
   getTripGuestPersonId,
+  writeGuestIdentity,
+  clearGuestIdentity,
   type StoredGuestIdentity,
 } from './guest-identity';
