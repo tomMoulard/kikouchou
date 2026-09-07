@@ -21,6 +21,7 @@ import { useFormSubmission } from '@/hooks';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NumberStepper } from '@/components/ui/number-stepper';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RoomIconPicker } from '@/components/shared/RoomIconPicker';
@@ -231,30 +232,18 @@ const RoomForm = memo(function RoomForm({
   }, [name, validateName]);
 
   /**
-   * Handles capacity input change.
-   * Allows user to type freely, validation happens on blur and submit.
+   * Takes a new bed count from the stepper.
+   *
+   * The stepper only reports whole numbers at or above its `min`, so there is
+   * nothing to re-parse or clamp here. This used to read the raw input and
+   * clamp on every keystroke, which is what made the field fight back: clearing
+   * it to type a new number refilled it with the minimum before the next digit
+   * arrived, so 1 could only become 2 by typing around the existing digit.
    */
-  const handleCapacityChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const rawValue = e.target.value;
-      
-      // Allow empty input temporarily (user is clearing to type new value)
-      if (rawValue === '') {
-        setCapacity(MIN_CAPACITY);
-        return;
-      }
-      
-      // Parse to integer and enforce minimum
-      const parsed = parseInt(rawValue, 10);
-      if (!isNaN(parsed)) {
-        setCapacity(Math.max(MIN_CAPACITY, parsed));
-      }
-      
-      // Clear error when user changes value (functional update)
-      setErrors((prev) => (prev.capacity ? { ...prev, capacity: undefined } : prev));
-    },
-    [],
-  );
+  const handleCapacityChange = useCallback((next: number) => {
+    setCapacity(next);
+    setErrors((prev) => (prev.capacity ? { ...prev, capacity: undefined } : prev));
+  }, []);
 
   /**
    * Handles capacity input blur for validation.
@@ -365,21 +354,18 @@ const RoomForm = memo(function RoomForm({
           {t('rooms.capacity')}
           <span className="text-destructive ml-1" aria-hidden="true">*</span>
         </Label>
-        <Input
+        <NumberStepper
           id="room-capacity"
-          type="number"
-          inputMode="numeric"
-          min={MIN_CAPACITY}
           value={capacity}
-          onChange={handleCapacityChange}
+          onValueChange={handleCapacityChange}
           onBlur={handleCapacityBlur}
+          min={MIN_CAPACITY}
+          decrementLabel={t('rooms.bedsDecrease', 'Remove a bed')}
+          incrementLabel={t('rooms.bedsIncrease', 'Add a bed')}
           aria-invalid={Boolean(errors.capacity)}
           aria-describedby={errors.capacity ? 'room-capacity-error' : undefined}
           disabled={isSubmitting}
-          className={cn(
-            'w-full sm:w-32',
-            errors.capacity && 'border-destructive',
-          )}
+          className={cn(errors.capacity && 'border-destructive')}
         />
         {errors.capacity && (
           <p

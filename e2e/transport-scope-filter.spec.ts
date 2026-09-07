@@ -4,7 +4,7 @@
  * The browser is the only place this can be asserted, because the feature is
  * three separately-testable halves that have to agree on one guest id:
  *
- *   - Settings writes the identity into `AppSettings.myPersonIdByTripId`;
+ *   - the Settings card writes the identity into `AppSettings.myPersonIdByTripId`;
  *   - `useTripIdentity` resolves it out of Dexie on a *different* route;
  *   - the transport list turns it into a filter and persists the choice in the
  *     URL, where a reload reads it back.
@@ -38,7 +38,7 @@ import { seedPerson, seedRide, seedTransport, seedTrip } from './support/seed';
  * Both locales, because the suite runs against whichever the browser asks for.
  */
 const LABELS = {
-  identity: /who are you\?|qui êtes-vous \?/i,
+  identity: /^who you are$|^qui vous êtes$/i,
   scopeMine: /only mine|seulement les miens/i,
   scopeAll: /everyone|tout le monde/i,
   hidden: /hidden|masqué/i,

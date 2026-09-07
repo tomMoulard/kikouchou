@@ -9,9 +9,9 @@
 // Components
 // ============================================================================
 
+export { GuestIdentitySelector } from './components/GuestIdentitySelector';
 export { NotificationSettings } from './components/NotificationSettings';
 export { ThemeSelector } from './components/ThemeSelector';
-export { TripIdentitySelector } from './components/TripIdentitySelector';
 
 // ============================================================================
 // Pages

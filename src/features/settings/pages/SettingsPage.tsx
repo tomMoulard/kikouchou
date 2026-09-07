@@ -34,9 +34,9 @@ import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { AccountSection } from '@/features/auth/components/AccountSection';
+import { GuestIdentitySelector } from '@/features/settings/components/GuestIdentitySelector';
 import { NotificationSettings } from '@/features/settings/components/NotificationSettings';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
-import { TripIdentitySelector } from '@/features/settings/components/TripIdentitySelector';
 import { TripForm } from '@/features/trips/components/TripForm';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db';
@@ -485,7 +485,7 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
  *
  * Features:
  * - Current trip: edit or delete, with loading, error and empty states
- * - Identity: which guest of the current trip this device belongs to
+ * - Guest identity: which guest this browser is on the current trip
  * - Account: sign in with Google, sign out
  * - Language selector (French/English)
  * - Theme selector (light/dark/system)
@@ -519,10 +519,11 @@ function SettingsPageComponent(): ReactElement {
         {/* Current Trip Section — carries its own loading, error and empty states */}
         <CurrentTripSection />
 
-        {/* Who is holding this device, on the current trip — the transport
-            views filter by it, so it sits directly under the trip it answers
-            for rather than among the presentation preferences below. */}
-        <TripIdentitySelector />
+        {/* Which guest this browser is — directly under the trip it belongs to,
+            because the answer is per trip and means nothing without one. The
+            transport views filter by this answer too, which is why the card
+            writes the explicit choice and not only the share-link store. */}
+        <GuestIdentitySelector />
 
         {/* Account Section */}
         <AccountCard />
