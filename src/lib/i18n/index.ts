@@ -132,13 +132,22 @@ const resources: I18nResources = {
  *
  * Detection order:
  * 1. localStorage - Persisted user preference
- * 2. navigator - Browser's language setting
+ * 2. querystring - `?lng=` on a shared invite link
+ * 3. navigator - Browser's language setting
  *
  * The detected language is cached in localStorage for subsequent visits.
+ *
+ * The querystring sits *between* the two on purpose. `share.kikouchou.app`
+ * redirects to `/join/<token>?lng=fr`, carrying the language of whoever shared
+ * the trip — a better guess for a first-time visitor than their browser's
+ * setting, and the same language as the preview card that brought them here.
+ * It is still only a guess, so a returning user's own stored choice wins over
+ * it: a French link must not flip somebody's app to French because a friend
+ * sent them one.
  */
  detectionOptions: DetectorOptions = {
   // Detection order priority
-  order: ['localStorage', 'navigator'],
+  order: ['localStorage', 'querystring', 'navigator'],
 
   // Cache detected language in localStorage
   caches: ['localStorage'],
@@ -149,8 +158,9 @@ const resources: I18nResources = {
   // Do not cache in cookies (PWA, localStorage is sufficient)
   lookupCookie: undefined,
 
-  // Exclude query string and path detection (not needed for PWA)
-  lookupQuerystring: undefined,
+  // `?lng=fr`, set by the share link. Path and subdomain detection stay off:
+  // the app is one origin, and its routes are trips rather than languages.
+  lookupQuerystring: 'lng',
   lookupFromPathIndex: undefined,
   lookupFromSubdomainIndex: undefined,
 },

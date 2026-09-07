@@ -66,6 +66,20 @@ export type RedeemInviteResult =
 /**
  * Builds the URL to hand somebody.
  *
+ * Two shapes, and which one comes out depends on whether a share origin is
+ * configured.
+ *
+ * **With one** — `https://share.kikouchou.app/fr/<token>`. That host runs the
+ * preview service in `server/share-preview`, which answers a crawler with this
+ * trip's own name, dates and occupancy grid, and sends a real browser on to
+ * `/join/<token>` in the app. The language is in the path because a crawler's
+ * `Accept-Language` describes a data centre, not the group chat the card lands
+ * in: whoever shares the trip picks it, and the link carries it.
+ *
+ * **Without one** — `https://app.kikouchou.app/join/<token>`, the direct link.
+ * A build with no preview service configured still shares perfectly well; every
+ * link then shows the one generic card in `index.html`.
+ *
  * Takes the origin and base path as arguments rather than reading
  * `window.location`, because `lib/` must not — reading the URL fragment there is
  * what once let the a11y skip link `#main-content` overwrite a trip's encryption
@@ -74,12 +88,18 @@ export type RedeemInviteResult =
  * @param origin - e.g. `https://kikouchou.app`
  * @param basePath - Vite's `BASE_URL`, e.g. `/`
  * @param token - The invite token
+ * @param share - The preview service, when the build has one
  */
 export function buildInviteUrl(
   origin: string,
   basePath: string,
   token: string,
+  share?: { readonly origin: string; readonly language: string },
 ): string {
+  if (share !== undefined && share.origin !== '') {
+    const shareOrigin = share.origin.replace(/\/+$/, '');
+    return `${shareOrigin}/${share.language}/${encodeURIComponent(token)}`;
+  }
   const base = basePath.endsWith('/') ? basePath : `${basePath}/`;
   return `${origin}${base}${JOIN_PATH}/${encodeURIComponent(token)}`;
 }
@@ -111,7 +131,13 @@ export function extractInviteToken(raw: string): string | null {
     return null;
   }
 
-  const match = new RegExp(`/${JOIN_PATH}/([A-Za-z0-9_-]{8,64})/?$`).exec(path);
+  // `/join/<token>`, the app's own link, and `/<lang>/<token>`, what the
+  // preview service hands out. Both end in the token; the second is matched
+  // only when the segment before it is a language, so `/anything/<token>` is
+  // not silently treated as an invite.
+  const match =
+    new RegExp(`/${JOIN_PATH}/([A-Za-z0-9_-]{8,64})/?$`).exec(path) ??
+    new RegExp(`^/[a-z]{2}/([A-Za-z0-9_-]{${TOKEN_LENGTH}})/?$`).exec(path);
   if (!match?.[1]) {
     return null;
   }

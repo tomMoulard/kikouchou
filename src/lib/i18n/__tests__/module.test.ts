@@ -114,6 +114,20 @@ describe('the shipped i18n module', () => {
       expect(i18n.options.detection?.lookupLocalStorage).toBe(LANGUAGE_STORAGE_KEY);
       expect(LANGUAGE_STORAGE_KEY).toBe('i18nextLng');
     });
+
+    it('reads a shared link\'s language, but never over a stored preference', () => {
+      // A share link arrives as `/join/<token>?lng=fr`, carrying the language of
+      // whoever sent it. That beats guessing from the browser for somebody who
+      // has never chosen — and must lose to somebody who has, or a French link
+      // flips a returning English user's whole app.
+      expect(i18n.options.detection?.lookupQuerystring).toBe('lng');
+
+      const order = i18n.options.detection?.order ?? [];
+
+      expect(order.indexOf('localStorage')).toBeGreaterThanOrEqual(0);
+      expect(order.indexOf('localStorage')).toBeLessThan(order.indexOf('querystring'));
+      expect(order.indexOf('querystring')).toBeLessThan(order.indexOf('navigator'));
+    });
   });
 
   describe('getCurrentLanguage', () => {

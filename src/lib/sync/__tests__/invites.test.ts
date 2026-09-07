@@ -78,6 +78,54 @@ describe('buildInviteUrl', () => {
 
     expect(extractInviteToken(url)).toBe(token);
   });
+
+  it('hands out the preview service link when the build has one', () => {
+    expect(
+      buildInviteUrl('https://app.kikouchou.app', '/', 'OMIMwxRIi6TF_KP6', {
+        origin: 'https://share.kikouchou.app',
+        language: 'fr',
+      }),
+    ).toBe('https://share.kikouchou.app/fr/OMIMwxRIi6TF_KP6');
+  });
+
+  it('puts the sharer\'s own language in the path', () => {
+    expect(
+      buildInviteUrl('https://app.kikouchou.app', '/', 'OMIMwxRIi6TF_KP6', {
+        origin: 'https://share.kikouchou.app',
+        language: 'en',
+      }),
+    ).toBe('https://share.kikouchou.app/en/OMIMwxRIi6TF_KP6');
+  });
+
+  it('tolerates a share origin with a trailing slash', () => {
+    expect(
+      buildInviteUrl('https://app.kikouchou.app', '/', 'OMIMwxRIi6TF_KP6', {
+        origin: 'https://share.kikouchou.app/',
+        language: 'fr',
+      }),
+    ).toBe('https://share.kikouchou.app/fr/OMIMwxRIi6TF_KP6');
+  });
+
+  it('falls back to the direct link when no share origin is configured', () => {
+    // An unset `VITE_SHARE_ORIGIN` reaches here as an empty string, and a build
+    // without the preview service still has to produce a working link.
+    expect(
+      buildInviteUrl('https://app.kikouchou.app', '/', 'OMIMwxRIi6TF_KP6', {
+        origin: '',
+        language: 'fr',
+      }),
+    ).toBe('https://app.kikouchou.app/join/OMIMwxRIi6TF_KP6');
+  });
+
+  it('round-trips a preview link through the parser', () => {
+    const token = 'OMIMwxRIi6TF_KP6';
+    const url = buildInviteUrl('https://app.kikouchou.app', '/', token, {
+      origin: 'https://share.kikouchou.app',
+      language: 'fr',
+    });
+
+    expect(extractInviteToken(url)).toBe(token);
+  });
 });
 
 describe('extractInviteToken', () => {
@@ -89,6 +137,9 @@ describe('extractInviteToken', () => {
     ['the token alone', 'aBcDeFgHiJkL3456', 'aBcDeFgHiJkL3456'],
     ['surrounding whitespace', '  /join/aBcDeFgHiJkL3456  ', 'aBcDeFgHiJkL3456'],
     ['a token using both URL-safe extras', 'https://k.app/join/aB-dEfGhIjKl_456', 'aB-dEfGhIjKl_456'],
+    ['a preview link', 'https://share.kikouchou.app/fr/aBcDeFgHiJkL3456', 'aBcDeFgHiJkL3456'],
+    ['a preview link in English', 'https://share.kikouchou.app/en/aBcDeFgHiJkL3456', 'aBcDeFgHiJkL3456'],
+    ['a preview link with a trailing slash', 'https://share.kikouchou.app/fr/aBcDeFgHiJkL3456/', 'aBcDeFgHiJkL3456'],
   ])('reads %s', (_label, input, expected) => {
     expect(extractInviteToken(input)).toBe(expected);
   });
@@ -101,6 +152,10 @@ describe('extractInviteToken', () => {
     ['some other URL', 'https://example.com/'],
     ['a token that is too short', '/join/abc'],
     ['a path with no token', '/join/'],
+    // Two segments where the first is not a language: `/trips/<id>` must not
+    // read as a preview link just because the second segment is 16 characters.
+    ['a two-segment path that is not a preview link', 'https://kikouchou.app/abc/aBcDeFgHiJkL3456'],
+    ['a preview link with a deeper path', 'https://share.kikouchou.app/fr/aBcDeFgHiJkL3456/card.png'],
   ])('rejects %s', (_label, input) => {
     expect(extractInviteToken(input)).toBeNull();
   });

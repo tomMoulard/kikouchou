@@ -59,6 +59,19 @@ interface ImportMetaEnv {
    */
   readonly VITE_POSTHOG_ALLOW_LOCALHOST?: string;
 
+  /**
+   * Origin of the link preview service, e.g. `https://share.kikouchou.app`.
+   *
+   * Set it and the share dialog hands out `<origin>/<lang>/<token>`, which is
+   * answered by `server/share-preview`: a crawler gets that trip's own name,
+   * dates and occupancy grid, and a browser is sent on to `/join/<token>`.
+   *
+   * Absent means the dialog hands out the direct `/join/<token>` link instead,
+   * and every share shows the one generic card in `index.html`. Both work; only
+   * the preview differs.
+   */
+  readonly VITE_SHARE_ORIGIN?: string;
+
   /** Version string shown in Settings; set by CI from the ref and SHA. */
   readonly VITE_APP_VERSION?: string;
 }
