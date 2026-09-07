@@ -8397,37 +8397,32 @@ These features are **NOT** part of the MVP but are documented for future referen
 8. **Export to PDF** - Print-friendly trip summary
 9. **Import from Calendar** - Import dates from iCal/Google Calendar
 10. **Weather Integration** - Show weather forecast for trip location
-11. **Per-trip link preview** - A pasted share link shows that trip's own name,
-    dates and occupancy grid. Today every link shows the one generic card in
-    `index.html`. This work is deferred. It needs a proxy in front of
-    `app.kikouchou.app`, and we do not want one yet. The design below is
-    settled. The Storage findings were tested against a real instance.
-    - Link crawlers do not run JavaScript. Tags that React sets are invisible
-      to them. The tags must be in the HTML that the server sends.
-    - The client can draw the image at share time. The browser renders the
-      room-by-day grid to a canvas and uploads the PNG to Supabase Storage.
-      Storage serves `image/png` correctly. Only the client holds the room
-      names and the guest colors, so no server decodes the Yjs document.
-    - Storage **cannot** serve the HTML. It rewrites an uploaded `text/html`
-      object to `Content-Type: text/plain; charset=UTF-8`. It also stamps
-      `x-robots-tag: none` on the response. No crawler reads `og:` tags out of
-      that. Tested on storage-api 1.71.0.
-    - One small Supabase edge function must answer the share URL. It reads
-      `trip_invites` joined to `trips` with the service role. That table already
-      holds `name`, `start_date` and `end_date` in plain text. It must reject a
-      revoked or expired invite, because a withdrawn link must not keep showing
-      its card. It then returns about fifteen lines of HTML. A real browser is
-      redirected to `/join/<token>`.
-    - **The blocker**: the `https://app.kikouchou.app/join/<token>` format
-      requires routing `/join/*` to that function. GitHub Pages cannot rewrite.
-      This needs a Cloudflare Worker route on the domain, or a move to a host
-      with rewrite support. Without a proxy, the share URL becomes
-      `https://<ref>.supabase.co/functions/v1/...`. That reads badly in a chat.
-    - Privacy note: every link scanner that sees the URL fetches the card, and
-      chat apps cache it. The generic card therefore carries only the landing
-      page's illustrative trip: the guest names on it are Aurelia, Tom, Alice +
-      Julie, Guillaume, Clementine and Hippolyte, the same fictional group the
-      site shows. A real trip's guest names must never reach it. A per-trip
-      card is fetched with a token that the crawler was given by whoever pasted
-      the link, so it may show that trip, but it must stop showing anything
-      once the invite is revoked.
+11. **Per-trip link preview** - **done**, see `server/share-preview`. A pasted
+    share link shows that trip's own name, dates and occupancy grid, with guest
+    acronyms rather than guest names.
+    - `share.kikouchou.app` runs a small Rust service behind Traefik. It reads
+      `trip_invites`, `trips`, `trip_doc_snapshots` and `trip_doc_updates` with
+      the service role key, rebuilds the Yjs document with `yrs`, draws the card
+      the landing page hero draws, rasterises it with `resvg`, and writes the
+      `og:` tags into the HTML it serves. A browser is then redirected to
+      `/join/<token>` in the app. The language is in the path -
+      `/fr/<token>` - because a crawler unfurls from a data centre and its
+      `Accept-Language` says nothing about the chat the card lands in.
+    - The blocker recorded here was routing `/join/*` through a proxy on
+      `app.kikouchou.app`, which GitHub Pages cannot do. It went away by not
+      needing it: the share link is a different host, so the app stays on Pages
+      untouched and only the link the share dialog hands out changed.
+    - The rejected alternatives are still worth knowing. Supabase Storage cannot
+      serve the HTML: it rewrites an uploaded `text/html` object to
+      `Content-Type: text/plain; charset=UTF-8` and stamps `x-robots-tag: none`,
+      and no crawler reads `og:` tags out of that. Tested on storage-api 1.71.0.
+      A client-rendered card uploaded at share time was the other candidate; it
+      needs no server, and it goes stale the moment somebody moves a bed.
+    - The privacy rule survived into the implementation. The generic card in
+      `index.html` still carries only the landing page's illustrative trip:
+      Aurelia, Tom, Alice + Julie, Guillaume, Clementine and Hippolyte, the same
+      fictional group the site shows. The per-trip card carries acronyms and
+      colours, never names, because every link scanner that sees the URL fetches
+      it and chat apps cache what they fetch. A revoked, expired or used-up
+      invite stops rendering within the service's cache TTL, and all four dead
+      states return one identical page.

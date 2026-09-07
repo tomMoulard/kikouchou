@@ -28,10 +28,14 @@
       That is also why every value here is generic. This one card answers the
       root page and, because `vite.config.ts` copies `index.html` to `404.html`,
       every client-routed path as well — a `/join/<token>` invite included, which
-      GitHub Pages serves from that same fallback. A crawler therefore cannot be
-      told which trip a share link points at. Showing the trip's own name, dates
-      and occupancy needs a server-rendered endpoint behind a proxy on the
-      domain: see "Per-trip link preview" under Future Enhancements in TODO.md.
+      GitHub Pages serves from that same fallback. A crawler reaching this file
+      cannot be told which trip a share link points at.
+
+      A trip's own name, dates and occupancy come from somewhere else entirely:
+      `server/share-preview`, answering on share.kikouchou.app, which renders
+      those tags per invite and then redirects here. A build with
+      `VITE_SHARE_ORIGIN` set hands out that link; one without hands out
+      `/join/<token>` and gets the generic card below. Both work.
 
       `og:image` must be absolute — a relative path is silently dropped by most
       crawlers — so the domain is written out rather than derived. The file is
