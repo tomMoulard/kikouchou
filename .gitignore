@@ -50,3 +50,6 @@ public/favicon.ico
 
 # Posthog
 .posthog-wizard-cache/
+
+# Generated from public/og-card.svg by `bun run generate-icons`.
+public/og-card.png
