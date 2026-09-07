@@ -48,6 +48,15 @@ a link from a data centre: its `Accept-Language` says nothing about the group
 chat the card lands in. The person who shares the trip picks the language, and
 the app puts it in the link.
 
+## Database privileges
+
+`service_role` bypasses Row-Level Security, which is not the same as being
+granted the tables. It needs `SELECT` on `trips`, `trip_invites`,
+`trip_doc_snapshots` and `trip_doc_updates`; without it every read fails with
+`42501 permission denied` and every live link renders as no longer valid. The
+grants are in
+`supabase/migrations/20260907190000_share_preview_service_role_reads.sql`.
+
 ## Configuration
 
 | Variable | Required | Default | Meaning |
