@@ -44,7 +44,7 @@ const ICON_SIZES = [
 
 const FAVICON_SIZES = [16, 32, 48];
 
-// Link preview card, from public/og-card.svg to public/og-card.png.
+// Link preview cards, from public/og-card*.svg to public/og-card*.png.
 //
 // 1200x630 is the size every consumer of `og:image` is built around: Facebook,
 // Slack, LinkedIn and iMessage all render a 1.91:1 card, and Twitter's
@@ -52,6 +52,21 @@ const FAVICON_SIZES = [16, 32, 48];
 // small square card.
 const OG_CARD_WIDTH = 1200;
 const OG_CARD_HEIGHT = 630;
+
+// One card per language.
+//
+// `og-card.png` keeps its name because index.html points at that URL and link
+// scanners have cached it. It answers the app itself, which serves one static
+// HTML file to every reader and so has to pick a language.
+//
+// The French card exists for the one place the language *is* known and the
+// trip is not: the page share.kikouchou.app serves for a revoked, expired or
+// unknown link. That page is already rendered in the language the link named,
+// and it was handing a French reader an English picture.
+const OG_CARDS = [
+  { source: 'og-card.svg', output: 'og-card.png' },
+  { source: 'og-card.fr.svg', output: 'og-card.fr.png' },
+];
 
 async function main() {
   console.log('🎨 Kikouchou PWA Icon Generator\n');
@@ -137,16 +152,18 @@ async function main() {
   // absolute og:image URL in index.html stays short.
   console.log('\n📦 Generating link preview card...\n');
 
-  try {
-    const ogSvgPath = join(ROOT_DIR, 'public', 'og-card.svg');
-    const ogPngPath = join(ROOT_DIR, 'public', 'og-card.png');
-    const svgBuffer = await readFile(ogSvgPath);
+  for (const card of OG_CARDS) {
+    try {
+      const ogSvgPath = join(ROOT_DIR, 'public', card.source);
+      const ogPngPath = join(ROOT_DIR, 'public', card.output);
+      const svgBuffer = await readFile(ogSvgPath);
 
-    await sharp(svgBuffer).resize(OG_CARD_WIDTH, OG_CARD_HEIGHT).png().toFile(ogPngPath);
+      await sharp(svgBuffer).resize(OG_CARD_WIDTH, OG_CARD_HEIGHT).png().toFile(ogPngPath);
 
-    console.log(`   ✅ og-card.png (${OG_CARD_WIDTH}x${OG_CARD_HEIGHT})`);
-  } catch (error) {
-    console.error(`   ❌ Failed to generate og-card.png: ${error.message}`);
+      console.log(`   ✅ ${card.output} (${OG_CARD_WIDTH}x${OG_CARD_HEIGHT})`);
+    } catch (error) {
+      console.error(`   ❌ Failed to generate ${card.output}: ${error.message}`);
+    }
   }
 
   console.log('\n✨ Icon generation complete!\n');
