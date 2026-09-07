@@ -204,6 +204,55 @@ jobs:
           retention-days: 1
 
   # ============================================================================
+  # Share preview - The Rust service behind share.kikouchou.app
+  # ============================================================================
+  #
+  # It has its own toolchain, its own tests and its own image, and it does not
+  # touch the bundle, so it runs beside the app's jobs rather than after them.
+  # `paths-ignore` is deliberately not used: a change to the app's Yjs document
+  # shape breaks this service's reader without touching a file under `server/`,
+  # and a job that skipped itself would let that through.
+  share-preview:
+    name: Share Preview
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server/share-preview
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            server/share-preview/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('server/share-preview/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      # The image is what actually ships, and two things only break inside it:
+      # the release profile, and the font package resvg needs to draw any text
+      # at all. Building it here catches both before a deploy does.
+      - name: Build the image
+        run: docker build -t share-preview:ci .
+
+  # ============================================================================
   # Build - Build production bundle
   # ============================================================================
   build:

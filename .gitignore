@@ -53,3 +53,8 @@ public/favicon.ico
 
 # Generated from public/og-card.svg by `bun run generate-icons`.
 public/og-card.png
+
+# Rust build output for the share-preview service, and the sample card its
+# ignored layout test writes.
+server/share-preview/target/
+server/share-preview/sample-card.png
