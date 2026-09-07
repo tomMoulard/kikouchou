@@ -312,19 +312,39 @@ describe('createInvite', () => {
     expect(values.created_by).toBe('user-uuid');
   });
 
-  it('omits expiry and cap when not asked for', async () => {
+  it('expires a new invite one month out by default', async () => {
     const insert = vi.fn(() => ({
       select: () => ({ single: async () => ({ data: {}, error: null }) }),
     }));
     const client = { from: () => ({ insert }) } as never;
 
-    await createInvite(client, 'trip-uuid', 'user-uuid');
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-07T10:00:00.000Z'));
+    try {
+      await createInvite(client, 'trip-uuid', 'user-uuid');
+    } finally {
+      vi.useRealTimers();
+    }
 
     const [values] = insert.mock.calls[0] as unknown as [Record<string, unknown>];
-    // Null means "no expiry" server-side; sending an explicit null would be the
-    // same, but omitting keeps the insert honest about what was requested.
-    expect(values).not.toHaveProperty('expires_at');
+    // A share link is a bearer credential, so an unattended one stops working
+    // rather than staying live for good.
+    expect(values.expires_at).toBe('2026-10-07T10:00:00.000Z');
     expect(values).not.toHaveProperty('max_uses');
+  });
+
+  it('mints a link that never expires when asked explicitly', async () => {
+    const insert = vi.fn(() => ({
+      select: () => ({ single: async () => ({ data: {}, error: null }) }),
+    }));
+    const client = { from: () => ({ insert }) } as never;
+
+    await createInvite(client, 'trip-uuid', 'user-uuid', { expiresAt: null });
+
+    const [values] = insert.mock.calls[0] as unknown as [Record<string, unknown>];
+    // Null means "no expiry" server-side; omitting the column says the same
+    // thing and keeps the insert honest about what was requested.
+    expect(values).not.toHaveProperty('expires_at');
   });
 
   it('passes an expiry and cap through when given', async () => {
