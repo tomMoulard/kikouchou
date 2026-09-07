@@ -62,6 +62,16 @@ jobs:
           # undefined and every capture becomes a no-op.
           VITE_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
           VITE_POSTHOG_HOST: ${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
+          # The link preview service, server/share-preview. With it set, the
+          # share dialog hands out https://share.kikouchou.app/<lang>/<token>,
+          # which shows that trip's own name, dates and occupancy when the link
+          # is pasted into a chat. Without it the dialog hands out the direct
+          # /join/<token> link and every share shows the generic card.
+          #
+          # A literal, not a secret: it is a hostname, it is in the built bundle
+          # by design, and a missing secret would fail silently back to the old
+          # link — which is exactly what happened on the first deploy of this.
+          VITE_SHARE_ORIGIN: https://share.kikouchou.app
 
       # Rewrites the built bundles in place to carry a chunk ID, then uploads
       # the .map files to PostHog and deletes them. It must run between the
