@@ -28,5 +28,34 @@ services:
       - traefik.http.routers.app.tls.certresolver=letsencrypt
       - traefik.http.services.app.loadbalancer.server.port=3000
 
+  # share.kikouchou.app — the per-trip link preview.
+  #
+  # A share link is answered here rather than by the app: a crawler runs no
+  # JavaScript, so the trip's own name, dates and occupancy have to be in the
+  # HTML the server sends. This service reads them, draws the card, and sends a
+  # real browser on to /join/<token> in the app.
+  #
+  # SUPABASE_SERVICE_ROLE_KEY bypasses Row-Level Security. It is passed at run
+  # time and never as a build arg, so it stays out of the image and out of
+  # `docker history`. Both variables come from the shell or from a `.env` beside
+  # this file, and the `:?` form makes a missing one a refused `up` rather than
+  # a container that starts and 500s.
+  share:
+    build: ./server/share-preview
+    expose:
+      - "8080"
+    restart: unless-stopped
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:?set SUPABASE_URL for the share preview}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?set SUPABASE_SERVICE_ROLE_KEY for the share preview}
+      SHARE_ORIGIN: https://share.kikouchou.app
+      APP_ORIGIN: https://app.kikouchou.app
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.share.rule=Host(`share.kikouchou.app`)
+      - traefik.http.routers.share.entrypoints=websecure
+      - traefik.http.routers.share.tls.certresolver=letsencrypt
+      - traefik.http.services.share.loadbalancer.server.port=8080
+
 volumes:
   letsencrypt:

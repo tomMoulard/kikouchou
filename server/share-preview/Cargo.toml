@@ -1,0 +1,25 @@
+[package]
+name = "share-preview"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Serves share.kikouchou.app: a per-trip link preview, then a redirect into the app."
+publish = false
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+resvg = "0.45"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+time = { version = "0.3", features = ["parsing", "formatting"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+yrs = "0.23"
+
+[profile.release]
+# One binary that starts fast and stays small. `strip` and `lto` together take
+# the image from tens of megabytes to a few.
+lto = true
+codegen-units = 1
+strip = true

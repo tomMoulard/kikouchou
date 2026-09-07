@@ -63,6 +63,9 @@ export default defineConfig({
      * is to read `supabase/config.toml` correctly. It ships as plain `.js`
      * because `scripts/` is run by `node` with no build step, so the pattern has
      * to admit that extension — `src/` stays TypeScript-only either way.
+     *
+     * `server/` is deliberately absent. The share-preview service is Rust; its
+     * tests are `cargo test`, run by their own CI job.
      */
     include: ['src/**/*.{test,spec}.{ts,tsx}', 'scripts/**/*.{test,spec}.js'],
 
