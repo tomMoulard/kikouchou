@@ -42,6 +42,12 @@ read.
 | `/<token>` | A 302 to the language from `Accept-Language` |
 | `/healthz` | `ok`, with no database behind it |
 | `/robots.txt` | Permissive |
+| anything else | 404, with the English generic card |
+
+A 404 speaks the language its path named, so `/fr/<revoked token>` stays French
+and carries the French card. A path that named no language — `/wp-admin`, a
+stray `/de/…` — gets English, because whoever followed it is not one of the
+app's French-speaking users yet.
 
 `<lang>` is `en` or `fr`. The language is in the path because a crawler unfurls
 a link from a data centre: its `Accept-Language` says nothing about the group
