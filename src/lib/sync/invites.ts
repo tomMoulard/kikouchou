@@ -33,6 +33,24 @@ const TOKEN_LENGTH = 16;
 /** Path an invite link points at. */
 const JOIN_PATH = 'join';
 
+/**
+ * How long a new invite lasts when the caller does not say.
+ *
+ * A share link is a bearer credential: whoever holds the URL joins the trip. It
+ * is forwarded, screenshotted and left in group chats, so it should stop working
+ * once the trip has been shared. One calendar month covers planning a trip
+ * without leaving the link live forever. Pass `expiresAt: null` for a link that
+ * never expires.
+ */
+const DEFAULT_EXPIRY_MONTHS = 1;
+
+/** The default expiry, one calendar month after `from`. */
+function defaultExpiry(from: Date): Date {
+  const expiry = new Date(from);
+  expiry.setMonth(expiry.getMonth() + DEFAULT_EXPIRY_MONTHS);
+  return expiry;
+}
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -167,15 +185,19 @@ function safePathname(url: string): string | null {
  * @param client - Authenticated Supabase client
  * @param remoteTripId - Server `trips.id`
  * @param userId - The creator, recorded for provenance
- * @param options - Optional expiry and use cap
+ * @param options - Optional expiry and use cap. Without `expiresAt` the invite
+ *   expires one month from now; `expiresAt: null` mints a link that never
+ *   expires.
  */
 export async function createInvite(
   client: TypedSupabaseClient,
   remoteTripId: string,
   userId: string,
-  options: { readonly expiresAt?: Date; readonly maxUses?: number } = {},
+  options: { readonly expiresAt?: Date | null; readonly maxUses?: number } = {},
 ): Promise<CreateInviteResult> {
   const token = nanoid(TOKEN_LENGTH);
+  const expiresAt =
+    options.expiresAt === undefined ? defaultExpiry(new Date()) : options.expiresAt;
 
   try {
     const { data, error } = await client
@@ -184,7 +206,7 @@ export async function createInvite(
         token,
         trip_id: remoteTripId,
         created_by: userId,
-        ...(options.expiresAt ? { expires_at: options.expiresAt.toISOString() } : {}),
+        ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}),
         ...(options.maxUses !== undefined ? { max_uses: options.maxUses } : {}),
       })
       .select('token, created_at, expires_at, max_uses, uses, revoked_at')
