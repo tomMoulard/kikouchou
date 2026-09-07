@@ -148,6 +148,25 @@ if (!posthogKey || !posthogHost) {
 } else {
   posthog.init(posthogKey, {
     api_host: posthogHost,
+
+    /**
+     * Where the PostHog app itself lives, as opposed to where events go.
+     *
+     * `VITE_POSTHOG_HOST` points at `events.kikouchou.app`, a reverse proxy
+     * this organization owns in front of PostHog's EU ingestion host. The proxy
+     * is what keeps a content blocker from dropping analytics: the requests go
+     * to a first-party domain rather than to a domain on every blocklist.
+     *
+     * posthog-js otherwise assumes the ingestion host is also the app host, and
+     * builds the toolbar and session-replay links from `api_host` — which would
+     * point them at the proxy, where the PostHog UI is not served. This project
+     * is on EU cloud, the same region the source-map upload in
+     * `.github/workflows/deploy.yml` targets. Hardcoded rather than read from
+     * the environment: it is a property of the PostHog project, not of a
+     * deployment, and it must not follow the proxy domain when that changes.
+     */
+    ui_host: 'https://eu.posthog.com',
+
     defaults: '2026-05-30',
 
     /**
