@@ -44,6 +44,15 @@ const ICON_SIZES = [
 
 const FAVICON_SIZES = [16, 32, 48];
 
+// Link preview card, from public/og-card.svg to public/og-card.png.
+//
+// 1200x630 is the size every consumer of `og:image` is built around: Facebook,
+// Slack, LinkedIn and iMessage all render a 1.91:1 card, and Twitter's
+// `summary_large_image` crops to it. Smaller makes Facebook fall back to the
+// small square card.
+const OG_CARD_WIDTH = 1200;
+const OG_CARD_HEIGHT = 630;
+
 async function main() {
   console.log('🎨 Kikouchou PWA Icon Generator\n');
   
@@ -119,6 +128,25 @@ async function main() {
     }
   } catch (error) {
     console.error(`   ❌ Failed to generate favicon.ico: ${error.message}`);
+  }
+
+  // Generate the link preview card
+  //
+  // Not in ICON_SIZES: that loop resizes to a square and writes into
+  // public/icons/, and this one is 1200x630 and sits at the public root so the
+  // absolute og:image URL in index.html stays short.
+  console.log('\n📦 Generating link preview card...\n');
+
+  try {
+    const ogSvgPath = join(ROOT_DIR, 'public', 'og-card.svg');
+    const ogPngPath = join(ROOT_DIR, 'public', 'og-card.png');
+    const svgBuffer = await readFile(ogSvgPath);
+
+    await sharp(svgBuffer).resize(OG_CARD_WIDTH, OG_CARD_HEIGHT).png().toFile(ogPngPath);
+
+    console.log(`   ✅ og-card.png (${OG_CARD_WIDTH}x${OG_CARD_HEIGHT})`);
+  } catch (error) {
+    console.error(`   ❌ Failed to generate og-card.png: ${error.message}`);
   }
 
   console.log('\n✨ Icon generation complete!\n');

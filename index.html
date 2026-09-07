@@ -18,6 +18,57 @@
     <meta name="description" content="Organize your vacation house rooms and arrivals" />
     <meta name="theme-color" content="#0f172a" />
 
+    <!--
+      Link preview (Open Graph + Twitter).
+
+      These sit in the static HTML on purpose. A link crawler does not run
+      JavaScript, so a tag that React sets is invisible to it: whatever is in
+      this file is the whole preview, for every URL in the app.
+
+      That is also why every value here is generic. This one card answers the
+      root page and, because `vite.config.ts` copies `index.html` to `404.html`,
+      every client-routed path as well — a `/join/<token>` invite included, which
+      GitHub Pages serves from that same fallback. A crawler therefore cannot be
+      told which trip a share link points at. Showing the trip's own name, dates
+      and occupancy needs a server-rendered endpoint behind a proxy on the
+      domain: see "Per-trip link preview" under Future Enhancements in TODO.md.
+
+      `og:image` must be absolute — a relative path is silently dropped by most
+      crawlers — so the domain is written out rather than derived. The file is
+      generated from `public/og-card.svg` by `bun run generate-icons`, which CI
+      runs before the build.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Kikouchou" />
+    <meta property="og:title" content="Kikouchou — who sleeps where, and when" />
+    <meta
+      property="og:description"
+      content="Plan a house full of friends: room assignments, arrivals and departures, on one shared calendar."
+    />
+    <meta property="og:url" content="https://app.kikouchou.app/" />
+    <meta property="og:image" content="https://app.kikouchou.app/og-card.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="A week-long trip timeline: six rooms down the left, seven days across, and a colored bar for each guest's stay."
+    />
+    <meta property="og:locale" content="en" />
+
+    <!-- Twitter reads its own names, and falls back to og: for anything absent.
+         `summary_large_image` is what renders the 1200x630 card rather than a
+         cropped thumbnail. -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Kikouchou — who sleeps where, and when" />
+    <meta
+      name="twitter:description"
+      content="Plan a house full of friends: room assignments, arrivals and departures, on one shared calendar."
+    />
+    <meta name="twitter:image" content="https://app.kikouchou.app/og-card.png" />
+
+    <link rel="canonical" href="https://app.kikouchou.app/" />
+
     <!-- Apple PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
