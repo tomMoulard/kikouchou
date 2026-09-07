@@ -156,18 +156,33 @@ async function expectTappable(locator: Locator, what: string): Promise<void> {
  */
 async function scrollToBottom(page: Page): Promise<void> {
   await page.evaluate(() => {
-    window.scrollTo(0, document.documentElement.scrollHeight);
+    const el = document.scrollingElement ?? document.documentElement;
+    el.scrollTo(0, el.scrollHeight);
   });
 
+  // Polls a *description* rather than a boolean, so a page that will not reach
+  // its own bottom says by how much instead of `Received: false`. This failed
+  // only on CI's Linux text metrics, and a bare false told us nothing about
+  // whether the page was unscrollable, still growing, or a subpixel short.
+  //
+  // `clientHeight` rather than `window.innerHeight` (which includes a
+  // scrollbar), and both sides rounded the same way. The previous form ceiled
+  // the position and compared it against a raw fractional `scrollHeight`, so a
+  // page overflowing by half a pixel could never satisfy it.
   await expect
     .poll(() =>
-      page.evaluate(
-        () =>
-          Math.ceil(window.scrollY + window.innerHeight) >=
-          document.documentElement.scrollHeight,
-      ),
+      page.evaluate(() => {
+        const el = document.scrollingElement ?? document.documentElement,
+          reached = Math.ceil(el.scrollTop + el.clientHeight),
+          total = Math.floor(el.scrollHeight);
+
+        return reached >= total
+          ? 'at-bottom'
+          : `stuck ${total - reached}px short (scrollTop ${el.scrollTop}, ` +
+              `clientHeight ${el.clientHeight}, scrollHeight ${el.scrollHeight})`;
+      }),
     )
-    .toBe(true);
+    .toBe('at-bottom');
 }
 
 // ============================================================================

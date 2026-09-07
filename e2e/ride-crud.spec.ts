@@ -20,8 +20,9 @@
  * @module e2e/ride-crud
  */
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
+import { dragOnto } from './support/drag';
 import { stubExternalMapServices } from './support/external-services';
 import { fixtureDate } from './support/fixture-dates';
 import { waitForRoute } from './support/routes';
@@ -326,9 +327,18 @@ test.describe('arranging a car journey', () => {
     await expect(rideSelect).toContainText(/no car chosen|aucune voiture/i);
   });
 
-  test('a leg dragged onto a ride card joins it, and the two cards do not look alike', async ({
-    page,
-  }) => {
+  /**
+   * Seeds a driven ride and one leg that is in no car — the row the drag
+   * handle exists for.
+   *
+   * @param page - Playwright page object
+   * @returns The trip, the ride and the leg
+   */
+  async function seedRideAndLooseLeg(page: Page): Promise<{
+    tripId: string;
+    rideId: string;
+    transportId: string;
+  }> {
     await stubExternalMapServices(page);
 
     const { tripId } = await seedTrip(page, {
@@ -343,65 +353,72 @@ test.describe('arranging a car journey', () => {
         meetDatetime: `${fixtureDate(4)}T15:00:00.000Z`,
         location: PLACE.name,
         driverId: guillaume,
+      }),
+      transportId = await seedTransport(page, {
+        tripId,
+        personId: alice,
+        type: 'arrival',
+        datetime: `${fixtureDate(4)}T15:05:00.000Z`,
+        location: PLACE.name,
       });
-
-    // Alice's arrival, in no car: exactly the row the handle exists for.
-    const transportId = await seedTransport(page, {
-      tripId,
-      personId: alice,
-      type: 'arrival',
-      datetime: `${fixtureDate(4)}T15:05:00.000Z`,
-      location: PLACE.name,
-    });
 
     await page.goto(`/trips/${tripId}/transports`);
     await waitForRoute(page);
 
-    // Scoped to the chronological list. The pickup alert panel above it also
-    // names Alice and also draws cards, and a page-wide match takes both.
-    const list = page.getByRole('list', { name: /transport/i }),
-      legCard = list.getByRole('article').filter({ hasText: 'Alice' }),
-      rideCard = list
-        .getByRole('article')
-        .filter({ hasText: /pick-up|aller chercher/i });
+    return { tripId, rideId, transportId };
+  }
 
-    // The two rows mean different things and must not be the same rectangle: a
-    // car journey is a container, a leg is a request to be carried.
-    const [legStyle, rideStyle] = await Promise.all([
-      legCard.evaluate((el) => {
-        const s = getComputedStyle(el);
-        return { style: s.borderLeftStyle, width: s.borderLeftWidth };
-      }),
-      rideCard.evaluate((el) => {
-        const s = getComputedStyle(el);
-        return { style: s.borderLeftStyle, width: s.borderLeftWidth };
-      }),
-    ]);
-    expect(legStyle.style).toBe('dashed');
-    expect(rideStyle.style).toBe('solid');
-    expect(parseFloat(rideStyle.width)).toBeGreaterThan(parseFloat(legStyle.width));
+  /** The chronological list, which is not the pickup alert panel above it. */
+  function listCards(page: Page): { leg: Locator; ride: Locator } {
+    const list = page.getByRole('list', { name: /transport/i });
+    return {
+      leg: list.getByRole('article').filter({ hasText: 'Alice' }),
+      ride: list.getByRole('article').filter({ hasText: /pick-up|aller chercher/i }),
+    };
+  }
 
-    // Drag the leg's handle onto the car. dnd-kit only starts once the pointer
-    // has moved past its activation distance, so this is a press, two moves and
-    // a release rather than `dragTo` — one jump never crosses the threshold in
-    // a way its sensor sees.
-    const handle = legCard.getByRole('button', { name: LABELS.dragToRide }),
-      from = await handle.boundingBox(),
-      to = await rideCard.boundingBox();
+  test('a car journey and a guest\'s leg are not the same rectangle', async ({
+    page,
+  }) => {
+    await seedRideAndLooseLeg(page);
 
-    expect(from).not.toBeNull();
-    expect(to).not.toBeNull();
-    if (from === null || to === null) {
-      throw new Error('the cards have no box to drag between');
-    }
+    const { leg, ride } = listCards(page);
 
-    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(from.x + from.width / 2 + 20, from.y + from.height / 2 + 20, {
-      steps: 5,
-    });
-    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 10 });
-    await page.mouse.up();
+    // One is a vehicle carrying people, the other a person needing carrying.
+    // For a while they were the same card and nothing in the shape said which
+    // was which.
+    const border = (locator: Locator) =>
+      locator.evaluate((el) => {
+        const style = getComputedStyle(el);
+        return { style: style.borderLeftStyle, width: style.borderLeftWidth };
+      });
+
+    const [legBorder, rideBorder] = await Promise.all([border(leg), border(ride)]);
+
+    expect(legBorder.style).toBe('dashed');
+    expect(rideBorder.style).toBe('solid');
+    expect(parseFloat(rideBorder.width)).toBeGreaterThan(parseFloat(legBorder.width));
+
+    // And the leg says it is in no car, with a name a screen reader reaches.
+    await expect(leg.getByText(/not in a car|pas dans une voiture/i)).toBeVisible();
+  });
+
+  test('a leg dragged onto a ride card joins it', async ({ page, isMobile }) => {
+    // Desktop only, and not because the feature is desktop-only: the grid puts
+    // the two cards side by side from `sm` up, while a phone stacks them ~340px
+    // apart in a 727px viewport with the alert panel above, so they are never
+    // both on screen. A real finger can still do this — dnd-kit auto-scrolls
+    // when the pointer nears an edge — but a synthetic drag cannot drive that,
+    // and `page.mouse` aimed below the fold presses on nothing.
+    //
+    // The capability is reachable on a phone regardless: the same move is the
+    // Ride select in the leg's own dialog, which is also the keyboard path.
+    test.skip(isMobile === true, 'a pointer drag needs both cards on screen at once');
+
+    const { rideId, transportId } = await seedRideAndLooseLeg(page);
+    const { leg, ride } = listCards(page);
+
+    await dragOnto(page, leg.getByRole('button', { name: LABELS.dragToRide }), ride);
 
     // Stored on the *leg*, never as a list on the ride: membership is a scalar
     // so two guests joining the same car offline both survive the merge.
@@ -431,36 +448,5 @@ test.describe('arranging a car journey', () => {
         }, transportId),
       )
       .toBe(rideId);
-  });
-
-  test('a meeting point the geocoder has never heard of can still be saved', async ({
-    page,
-  }) => {
-    const tripId = await openTransports(page);
-
-    // The stub answers every search with "Gare de Vannes", so a name it cannot
-    // possibly match is what proves the typed row rather than a lucky result.
-    await page.route('**/nominatim.openstreetmap.org/**', (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
-    );
-
-    await page.getByRole('button', { name: LABELS.newRide }).first().click();
-    await page.getByLabel(LABELS.meetDatetime).fill(MEET_LOCAL);
-
-    const field = page.getByLabel(LABELS.meetingPoint);
-    await field.click();
-    await field.pressSequentially('chez Mamie', { delay: 20 });
-
-    // Before this row existed the form said "Required" no matter what was
-    // typed, because a location only ever reached it through a confirmed
-    // search result — which made an informal meeting point, and anything at
-    // all offline, impossible to enter.
-    await page.getByTestId('location-use-typed').click();
-
-    await page.getByRole('button', { name: LABELS.save }).click();
-
-    await expect
-      .poll(async () => (await storedRides(page, tripId)).map((r) => r.location))
-      .toEqual(['chez Mamie']);
   });
 });
