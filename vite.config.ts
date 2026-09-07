@@ -181,7 +181,7 @@ export default defineConfig({
           // Byte-identical to index.html; see githubPagesSpaFallback above.
           '404.html',
           // The link preview card. Only ever fetched by a crawler resolving
-          // `og:image`, never by the app, so precaching it would spend ~57KB of
+          // `og:image`, never by the app, so precaching it would spend ~115KB of
           // every installed user's cache budget on bytes they will not request.
           'og-card.png',
           'og-card.svg',

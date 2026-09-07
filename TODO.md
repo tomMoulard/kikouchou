@@ -8424,5 +8424,10 @@ These features are **NOT** part of the MVP but are documented for future referen
       with rewrite support. Without a proxy, the share URL becomes
       `https://<ref>.supabase.co/functions/v1/...`. That reads badly in a chat.
     - Privacy note: every link scanner that sees the URL fetches the card, and
-      chat apps cache it. For that reason the card carries room names and
-      colored bars, and no guest names.
+      chat apps cache it. The generic card therefore carries only the landing
+      page's illustrative trip: the guest names on it are Aurelia, Tom, Alice +
+      Julie, Guillaume, Clementine and Hippolyte, the same fictional group the
+      site shows. A real trip's guest names must never reach it. A per-trip
+      card is fetched with a token that the crawler was given by whoever pasted
+      the link, so it may show that trip, but it must stop showing anything
+      once the invite is revoked.
