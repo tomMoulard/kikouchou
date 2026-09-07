@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, type Plugin } from 'vite'
+import { minify as minifyHtmlSource } from 'html-minifier-terser'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -125,6 +126,45 @@ function githubPagesSpaFallback(): Plugin {
         return
       }
       copyFileSync(indexHtml, resolve(outDir, '404.html'))
+    },
+  }
+}
+
+/**
+ * Vite minifies the JS and the CSS it bundles, but it ships `index.html`
+ * essentially as written: the markup keeps its indentation and every comment.
+ * This file is comment-heavy on purpose — the Open Graph block alone explains
+ * why the preview is generic — and those bytes are pure overhead in production.
+ * They are also paid for twice, because `githubPagesSpaFallback` below copies
+ * the emitted HTML to `404.html` and the service worker precaches both.
+ *
+ * `order: 'post'` runs this after every other `transformIndexHtml` hook, so it
+ * minifies the final markup — the hashed asset tags Vite injects and the PWA
+ * tags included — rather than a version other plugins still have to edit.
+ *
+ * Only the safe transforms are on. In particular `removeAttributeQuotes` and
+ * `removeOptionalTags` stay off: they save a few dozen bytes and change what a
+ * link crawler has to parse, and the whole point of the block above is that the
+ * crawler is the only reader of those tags.
+ */
+function minifyHtml(): Plugin {
+  return {
+    name: 'kikouchou:minify-html',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        return minifyHtmlSource(html, {
+          collapseWhitespace: true,
+          conservativeCollapse: false,
+          removeComments: true,
+          removeRedundantAttributes: true,
+          removeScriptTypeAttributes: false,
+          useShortDoctype: true,
+          minifyCSS: true,
+          minifyJS: true,
+        })
+      },
     },
   }
 }
@@ -257,6 +297,7 @@ export default defineConfig({
       },
     }),
     githubPagesSpaFallback(),
+    minifyHtml(),
   ],
   resolve: {
     alias: {
@@ -269,6 +310,14 @@ export default defineConfig({
     format: 'es',
   },
   build: {
+    // esbuild is Vite's default for both, and both are already on for a
+    // production build; they are named here so the intent survives a config
+    // edit and a future `--mode` that is not 'production'. Not Lightning CSS:
+    // it only reaches this repo as a transitive dependency of Tailwind, and it
+    // reads its own browser targets rather than the esbuild ones the JS is
+    // compiled against.
+    minify: 'esbuild',
+    cssMinify: 'esbuild',
     // Emitted so PostHog Error Tracking can de-minify production stack traces.
     // The deploy workflow uploads the maps and then deletes them, so they are
     // never served from GitHub Pages — see .github/workflows/deploy.yml.
