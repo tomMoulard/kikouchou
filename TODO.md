@@ -8397,3 +8397,32 @@ These features are **NOT** part of the MVP but are documented for future referen
 8. **Export to PDF** - Print-friendly trip summary
 9. **Import from Calendar** - Import dates from iCal/Google Calendar
 10. **Weather Integration** - Show weather forecast for trip location
+11. **Per-trip link preview** - A pasted share link shows that trip's own name,
+    dates and occupancy grid. Today every link shows the one generic card in
+    `index.html`. This work is deferred. It needs a proxy in front of
+    `app.kikouchou.app`, and we do not want one yet. The design below is
+    settled. The Storage findings were tested against a real instance.
+    - Link crawlers do not run JavaScript. Tags that React sets are invisible
+      to them. The tags must be in the HTML that the server sends.
+    - The client can draw the image at share time. The browser renders the
+      room-by-day grid to a canvas and uploads the PNG to Supabase Storage.
+      Storage serves `image/png` correctly. Only the client holds the room
+      names and the guest colors, so no server decodes the Yjs document.
+    - Storage **cannot** serve the HTML. It rewrites an uploaded `text/html`
+      object to `Content-Type: text/plain; charset=UTF-8`. It also stamps
+      `x-robots-tag: none` on the response. No crawler reads `og:` tags out of
+      that. Tested on storage-api 1.71.0.
+    - One small Supabase edge function must answer the share URL. It reads
+      `trip_invites` joined to `trips` with the service role. That table already
+      holds `name`, `start_date` and `end_date` in plain text. It must reject a
+      revoked or expired invite, because a withdrawn link must not keep showing
+      its card. It then returns about fifteen lines of HTML. A real browser is
+      redirected to `/join/<token>`.
+    - **The blocker**: the `https://app.kikouchou.app/join/<token>` format
+      requires routing `/join/*` to that function. GitHub Pages cannot rewrite.
+      This needs a Cloudflare Worker route on the domain, or a move to a host
+      with rewrite support. Without a proxy, the share URL becomes
+      `https://<ref>.supabase.co/functions/v1/...`. That reads badly in a chat.
+    - Privacy note: every link scanner that sees the URL fetches the card, and
+      chat apps cache it. For that reason the card carries room names and
+      colored bars, and no guest names.
