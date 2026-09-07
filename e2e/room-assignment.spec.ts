@@ -14,7 +14,8 @@
  * @module e2e/room-assignment
  */
 
-import { test, expect, type Locator, type Page } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+import { dragOnto } from './support/drag';
 import { seedTransport } from './support/seed';
 import { clearIndexedDB } from './support/storage';
 import { fixtureDate } from './support/fixture-dates';
@@ -518,49 +519,6 @@ async function createPerson(
 
   // Verify person appears
   await expect(page.getByText(personData.name)).toBeVisible({ timeout: 5000 });
-}
-
-/**
- * Drags one element onto another in a way dnd-kit actually notices.
- *
- * `locator.dragTo()` is not enough here, and its failure mode is a silent
- * no-op rather than an error. `RoomListPage` configures dnd-kit's `MouseSensor`
- * with an 8px activation constraint and then tracks the pointer through
- * `mousemove` events on the document: the drag only begins on the first move
- * past 8px, and the drop target is resolved from the pointer delta accumulated
- * by the moves that follow. Playwright's built-in drag emits too few moves, and
- * they jump straight to the destination — so the sensor either never activates
- * or activates at the destination with nothing left to travel, and `onDragEnd`
- * fires with `over === null`.
- *
- * Nudging past the threshold first and then travelling in steps produces the
- * event stream a real pointer would.
- */
-async function dragOnto(page: Page, source: Locator, target: Locator): Promise<void> {
-  await target.scrollIntoViewIfNeeded();
-
-  const from = await source.boundingBox();
-  const to = await target.boundingBox();
-
-  if (!from || !to) {
-    throw new Error('Cannot drag: source or target has no bounding box');
-  }
-
-  const fromX = from.x + from.width / 2;
-  const fromY = from.y + from.height / 2;
-  const toX = to.x + to.width / 2;
-  const toY = to.y + to.height / 2;
-
-  await page.mouse.move(fromX, fromY);
-  await page.mouse.down();
-  // Clear the 8px activation constraint before setting off.
-  await page.mouse.move(fromX + 12, fromY, { steps: 5 });
-  await page.mouse.move(toX, toY, { steps: 20 });
-  // One more move at rest: dnd-kit resolves the collision on the last move it
-  // saw, and a drop that lands exactly on the final step of a travel is worth
-  // confirming rather than assuming.
-  await page.mouse.move(toX, toY);
-  await page.mouse.up();
 }
 
 /**
