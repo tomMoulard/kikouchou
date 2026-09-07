@@ -42,6 +42,18 @@ export type { TripCardProps } from './components/TripCard';
 export { TripsLocationMap } from './components/TripsLocationMap';
 export type { TripsLocationMapProps } from './components/TripsLocationMap';
 
+export { PlanOwnTripPrompt } from './components/PlanOwnTripPrompt';
+export type { PlanOwnTripPromptProps } from './components/PlanOwnTripPrompt';
+
+// ============================================================================
+// Hooks
+// ============================================================================
+
+export {
+  usePlanOwnTripPrompt,
+  type UsePlanOwnTripPromptResult,
+} from './hooks/usePlanOwnTripPrompt';
+
 // ============================================================================
 // Route Configuration
 // ============================================================================

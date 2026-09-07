@@ -174,6 +174,12 @@
       "title": "Séjours rejoints ailleurs",
       "description": "Ils sont sur votre compte mais pas encore sur cet appareil.",
       "download": "Récupérer"
+    },
+    "ownTripPrompt": {
+      "title": "À votre tour d'organiser ?",
+      "description": "Vous avez rejoint une maison organisée par quelqu'un d'autre. Créez votre propre séjour, partagez le lien, et vos amis répartissent les chambres et les trajets de la même façon.",
+      "action": "Organiser mon séjour",
+      "notNow": "Plus tard"
     }
   },
   "rooms": {

@@ -22,6 +22,7 @@ import {
   ShareDialog,
 } from '@/features/sharing';
 import { useTripContext } from '@/contexts/TripContext';
+import { PlanOwnTripPrompt } from '../components/PlanOwnTripPrompt';
 import { RemoteTripsSection } from '../components/RemoteTripsSection';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/db/database';
@@ -349,6 +350,10 @@ const TripListPage = memo(function TripListPage() {
             />
           }
         />
+
+        {/* Above the view, not inside the list branch: a guest who left the
+            page on the map view is the same person the invitation is for. */}
+        <PlanOwnTripPrompt trips={trips} onCreateTrip={handleCreateClick} />
 
         {currentView === 'map' ? (
           <div>
