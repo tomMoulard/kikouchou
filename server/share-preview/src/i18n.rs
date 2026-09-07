@@ -136,6 +136,20 @@ impl Language {
         }
     }
 
+    /// Path of the app's generic card, in this language.
+    ///
+    /// Used for a link that is revoked, expired or unknown: there is no trip to
+    /// draw, and the reader still asked for a language. `og-card.png` keeps its
+    /// unsuffixed name because `index.html` points at that URL and link
+    /// scanners have cached it; the French twin sits beside it. Both are
+    /// generated from `public/og-card*.svg` by `bun run generate-icons`.
+    pub fn generic_card_path(self) -> &'static str {
+        match self {
+            Self::En => "/og-card.png",
+            Self::Fr => "/og-card.fr.png",
+        }
+    }
+
     /// Drawn in the grid when the trip has no room assignments yet.
     pub fn no_rooms_yet(self) -> &'static str {
         match self {

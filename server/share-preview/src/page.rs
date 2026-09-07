@@ -245,7 +245,7 @@ pub fn render_preview_page(preview: &TripPreview, context: &PageContext) -> Stri
 /// somebody to `/join/<dead token>` only moves the same dead end into the app.
 pub fn render_unavailable_page(context: &PageContext) -> String {
     let language = context.language;
-    let image = format!("{}/og-card.png", context.app_origin);
+    let image = format!("{}{}", context.app_origin, language.generic_card_path());
 
     let mut head = String::new();
     meta(&mut head, "property", "og:type", "website");
@@ -435,6 +435,21 @@ mod tests {
 
         assert!(html.contains("https://app.kikouchou.app/og-card.png"));
         assert!(!html.contains("Summer house"));
+    }
+
+    #[test]
+    fn a_dead_link_keeps_the_language_it_was_asked_in() {
+        // The trip is gone; the reader's language is not. An English card under
+        // French prose was the one place the locale stopped being honoured.
+        let french = render_unavailable_page(&PageContext {
+            language: Language::Fr,
+            ..context()
+        });
+
+        assert!(french.contains("https://app.kikouchou.app/og-card.fr.png"));
+        assert!(french.contains(r#"<html lang="fr">"#));
+        assert!(french.contains(r#"<meta property="og:locale" content="fr_FR" />"#));
+        assert!(french.contains("Ce lien n&#39;est plus valable"));
     }
 
     #[test]
