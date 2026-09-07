@@ -42,7 +42,11 @@ interface ImportMetaEnv {
    */
   readonly VITE_POSTHOG_KEY?: string;
 
-  /** PostHog ingestion host, e.g. `https://eu.i.posthog.com`. */
+  /**
+   * PostHog ingestion host — the managed reverse proxy
+   * `https://events.kikouchou.app`, or `https://eu.i.posthog.com` direct.
+   * The PostHog app host is a separate `ui_host` in `lib/posthog`.
+   */
   readonly VITE_POSTHOG_HOST?: string;
 
   /**
