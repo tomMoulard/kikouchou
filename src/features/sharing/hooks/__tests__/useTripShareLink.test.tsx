@@ -54,8 +54,18 @@ vi.mock('@/lib/sync/invites', () => ({
     invite: { token: 'tokentokent1' },
   })),
   isInviteUsable: vi.fn(() => true),
-  buildInviteUrl: (origin: string, base: string, token: string) =>
-    `${origin}${base}join/${token}`,
+  // Kept in step with the real signature: the fourth argument is what decides
+  // between the preview link and the direct one, and a mock that ignored it
+  // would let the hook stop passing it without a single test noticing.
+  buildInviteUrl: (
+    origin: string,
+    base: string,
+    token: string,
+    share?: { origin: string; language: string },
+  ) =>
+    share !== undefined && share.origin !== ''
+      ? `${share.origin}/${share.language}/${token}`
+      : `${origin}${base}join/${token}`,
 }));
 
 const mockedEnsure = vi.mocked(ensureRemoteTrip);
@@ -142,6 +152,34 @@ describe('useTripShareLink', () => {
     // Each restart is a round trip to the server, and `listInvites` plus a mint
     // per re-render is how a trip ends up littered with links.
     expect(mockedEnsure.mock.calls.length).toBe(callsAfterFirstResolve);
+  });
+
+  it('hands out a preview link when the build is configured for one', async () => {
+    vi.stubEnv('VITE_SHARE_ORIGIN', 'https://share.kikouchou.app');
+
+    const { result } = renderHook(() => useTripShareLink(tripObject(), true));
+
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({
+        kind: 'invite',
+        url: expect.stringMatching(
+          /^https:\/\/share\.kikouchou\.app\/(en|fr)\/tokentokent1$/,
+        ),
+      });
+    });
+
+    vi.unstubAllEnvs();
+  });
+
+  it('hands out the direct link when it is not', async () => {
+    const { result } = renderHook(() => useTripShareLink(tripObject(), true));
+
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({
+        kind: 'invite',
+        url: expect.stringContaining('/join/tokentokent1'),
+      });
+    });
   });
 
   it('does re-run when a different trip is shared', async () => {

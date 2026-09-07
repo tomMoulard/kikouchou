@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import posthog from '@/lib/posthog';
 import { useAuth } from '@/features/auth/AuthContext';
+import { getCurrentLanguage } from '@/lib/i18n';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import {
   buildInviteUrl,
@@ -213,10 +214,19 @@ export function useTripShareLink(
         kind: 'invite',
         token,
         // Read from `window` here, in a hook a component owns — `lib/` must not.
+        //
+        // The language goes into the link because the preview is rendered once,
+        // by a crawler, before anybody sees it: the card is drawn in whatever
+        // language the person sharing the trip is using, which is the best
+        // available guess at the language of the chat it is pasted into.
         url: buildInviteUrl(
           window.location.origin,
           import.meta.env.BASE_URL || '/',
           token,
+          {
+            origin: import.meta.env.VITE_SHARE_ORIGIN ?? '',
+            language: getCurrentLanguage(),
+          },
         ),
       });
     };
