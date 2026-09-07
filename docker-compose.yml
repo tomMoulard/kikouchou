@@ -41,7 +41,12 @@ services:
   # this file, and the `:?` form makes a missing one a refused `up` rather than
   # a container that starts and 500s.
   share:
-    build: ./server/share-preview
+    image: tommoulard/kikoushou-share:latest
+    build:
+      context: ./server/share-preview
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
     expose:
       - "8080"
     restart: unless-stopped
