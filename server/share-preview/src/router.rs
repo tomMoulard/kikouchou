@@ -24,6 +24,7 @@ use crate::config::Config;
 use crate::i18n::{negotiate_language, Language};
 use crate::page::{render_preview_page, render_unavailable_page, PageContext};
 use crate::trip_preview::TripPreview;
+use crate::trip_source::is_token_shaped;
 use crate::trip_source::LoadResult;
 
 // ============================================================================
@@ -80,6 +81,15 @@ pub trait Backend: Sync {
 const CARD_SEGMENT: &str = "card.png";
 const HTML: &str = "text/html; charset=utf-8";
 const TEXT: &str = "text/plain; charset=utf-8";
+
+/// The language a 404 speaks when the path did not name one.
+///
+/// English, and deliberately not `DEFAULT_LANGUAGE`. That default is French
+/// because the app's own users are; whoever followed a URL this service does
+/// not recognise is not one of them yet, and English is the wider net for a
+/// page whose whole content is "this link does not work". A path that *does*
+/// name a language still wins — `/fr/<dead token>` stays French, card included.
+const FALLBACK_LANGUAGE: Language = Language::En;
 
 // ============================================================================
 // Internal helpers
@@ -225,7 +235,14 @@ pub async fn route<B: Backend>(
     // `/<token>` and `/<token>/card.png`: the language is missing, so it is
     // negotiated once and the caller is sent to the canonical URL. One canonical
     // form per language is what stops a chat app caching the same trip twice.
+    //
+    // Only a token-shaped first segment earns that redirect. Anything else is
+    // not an invite in any language, and bouncing `/wp-admin` into `/fr/wp-admin`
+    // only spent a round trip to reach the same 404.
     let Some(language) = Language::parse(first) else {
+        if !is_token_shaped(first) {
+            return unavailable(FALLBACK_LANGUAGE, "unknown-path", 404);
+        }
         let language = negotiate_language(accept_language);
         let rest = segments.join("/");
         return redirect(format!("/{language}/{rest}"), "negotiate-language");
@@ -477,6 +494,49 @@ mod tests {
 
         assert_eq!(reply.status, 404);
         assert_eq!(stub.renders.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn a_path_that_is_not_an_invite_404s_in_english_without_a_detour() {
+        let stub = Stub::live();
+
+        for path in ["/wp-admin/setup.php", "/de/whatever", "/favicon.ico"] {
+            let reply = get(&stub, path).await;
+
+            assert_ne!(reply.status, 302, "{path} should not redirect");
+            assert_eq!(reply.status, 404, "{path}");
+            assert!(String::from_utf8_lossy(&reply.body).contains("og-card.png"));
+            assert!(String::from_utf8_lossy(&reply.body).contains(r#"<html lang="en">"#));
+        }
+
+        assert_eq!(stub.loads.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn a_bare_language_goes_to_the_app_rather_than_a_dead_end() {
+        // `/en` is not a broken invite, it is somebody who trimmed the URL. The
+        // root does the same thing.
+        let reply = get(&Stub::live(), "/en").await;
+
+        assert_eq!(reply.status, 302);
+        assert_eq!(reply.header("location"), Some("https://app.kikouchou.app"));
+    }
+
+    #[tokio::test]
+    async fn a_language_in_the_path_still_wins_over_the_fallback() {
+        // The previous test is about paths that named no language. One that did
+        // keeps it, card and all.
+        let reply = get(
+            &Stub::answering(LoadResult::Revoked),
+            &format!("/fr/{TOKEN}"),
+        )
+        .await;
+
+        let body = String::from_utf8_lossy(&reply.body);
+
+        assert_eq!(reply.status, 404);
+        assert!(body.contains("og-card.fr.png"));
+        assert!(body.contains(r#"<html lang="fr">"#));
     }
 
     #[tokio::test]
