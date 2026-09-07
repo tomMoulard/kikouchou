@@ -288,7 +288,33 @@ const DateRangePicker = memo(({
   }, [onChange]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    /*
+      `modal` is load-bearing, not a preference.
+
+      Three of this picker's four call sites sit inside a dialog
+      (`PersonForm`, `QuickAssignmentDialog`, `RoomAssignmentSection`), and a
+      Radix dialog puts `pointer-events: none` on `<body>` and hands
+      `pointer-events: auto` to exactly one layer. A non-modal popover claims
+      nothing: it only stays clickable if its own dismissable layer happens to
+      sort above the dialog's, and when it loses that race it renders with no
+      `pointer-events` of its own and inherits `none` from the body.
+
+      The failure is invisible. The calendar is `z-50` and later in the DOM, so
+      it paints over the dialog, highlights on hover and looks entirely normal —
+      every tap falls straight through to the overlay behind it, and the only
+      way out is to close the dialog and open it again. It cost this repo three
+      intermittently failing browser tests that named the overlay as the thing
+      swallowing the click.
+
+      Being modal ends the race rather than shortening it: the popover then
+      disables outside pointer events itself, which makes it the topmost such
+      layer by construction and always emits `pointer-events: auto` for its own
+      content. The scroll lock it brings with it costs nothing here — the app's
+      stylesheet already zeroes `--removed-body-scroll-bar-size`, so there is no
+      scrollbar-width jump — and holding the page still while a popover is
+      anchored to a trigger on it is the behaviour you want anyway.
+    */
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           id={id}

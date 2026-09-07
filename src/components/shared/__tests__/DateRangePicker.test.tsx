@@ -680,4 +680,53 @@ describe('DateRangePicker', () => {
       expect(screen.getByRole('button', { name: /clear/i })).toBeInTheDocument();
     });
   });
+
+  // ==========================================================================
+  // Pointer Events
+  // ==========================================================================
+
+  /**
+   * The bug this pins is invisible to every other assertion in this file.
+   *
+   * A Radix dialog puts `pointer-events: none` on `<body>` and gives
+   * `pointer-events: auto` to one layer. A non-modal popover claims nothing and
+   * only stays clickable if its dismissable layer happens to sort above the
+   * dialog's — and when it loses that race it renders with no `pointer-events`
+   * of its own, inherits `none`, and every tap falls through to the overlay
+   * behind it. The calendar still paints on top, still highlights on hover, and
+   * still reports itself visible and enabled: nothing looks wrong. Three of
+   * this picker's four call sites are inside a dialog.
+   *
+   * The scenario itself is deliberately **not** what is asserted here. jsdom
+   * flushes effects synchronously, so the popover wins that race every time and
+   * a test rendering the picker inside a `Dialog` passes with or without the
+   * fix — it cannot fail, which makes it worse than no test at all. What is
+   * asserted instead is the property that stops the race from existing: a modal
+   * popover disables outside pointer events itself, so it is the topmost layer
+   * doing so by construction rather than by mount order, and it always emits
+   * `pointer-events: auto` for its own content.
+   *
+   * `getByRole`, `toBeVisible` and a synthetic `user.click` all pass against a
+   * click-through popover, because none of them does a hit test. Only the
+   * browser suite catches the real thing.
+   */
+  describe('Pointer events', () => {
+    it('claims pointer events for itself while open', async () => {
+      const user = userEvent.setup();
+
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      expect(document.body.style.pointerEvents).toBe('');
+
+      await openCalendar(user);
+
+      // `auto`, not merely "not none": an unset value inherits the body's
+      // `none` and is exactly the broken state, so asserting the absence of
+      // `none` would pass against the bug.
+      expect(document.body.style.pointerEvents).toBe('none');
+      expect(screen.getByRole('dialog').style.pointerEvents).toBe('auto');
+    });
+  });
 });
