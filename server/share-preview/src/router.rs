@@ -196,9 +196,9 @@ pub async fn route<B: Backend>(
         language,
         token: token.to_owned(),
     };
-    let unavailable = |language: Language, outcome: &'static str| {
+    let unavailable = |language: Language, outcome: &'static str, status: u16| {
         respond(
-            404,
+            status,
             HTML,
             render_unavailable_page(&context_for(language, "")).into_bytes(),
             outcome,
@@ -237,16 +237,28 @@ pub async fn route<B: Backend>(
 
     let wants_card = segments.len() == 3 && segments[2] == CARD_SEGMENT;
     if segments.len() > 2 && !wants_card {
-        return unavailable(language, "unknown-path");
+        return unavailable(language, "unknown-path", 404);
     }
 
     let result = backend.load_trip(token).await;
     let LoadResult::Ok(preview) = result else {
-        // Everything that is not a live invite gets the same page and the same
-        // status. The reason is logged; it is not told to the caller, because
-        // "revoked" and "never existed" are different facts about somebody
-        // else's trip, and a stranger with a guessed token learns neither.
-        return unavailable(language, result.outcome());
+        // Every dead invite gets the same page and the same status. The reason
+        // is logged; it is not told to the caller, because "revoked" and "never
+        // existed" are different facts about somebody else's trip, and a
+        // stranger with a guessed token learns neither.
+        //
+        // A read that *failed* is the one exception, and only in its status
+        // code. 404 means gone, and a chat app caches gone: a Supabase blip, or
+        // a missing grant, would otherwise leave every live link in every chat
+        // showing "no longer valid" long after the service recovered. 503 says
+        // "ask again later", which is what a transient failure is. The body
+        // stays identical, so it still says nothing about the token.
+        let status = if matches!(result, LoadResult::Error) {
+            503
+        } else {
+            404
+        };
+        return unavailable(language, result.outcome(), status);
     };
 
     if wants_card {
@@ -508,11 +520,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn shows_the_same_page_when_the_database_is_down() {
+    async fn a_failed_read_is_transient_rather_than_gone() {
+        // 404 is cached by chat apps. A blip, or a missing grant, must not leave
+        // every live link showing "no longer valid" after the service recovers.
         let reply = get(&Stub::answering(LoadResult::Error), &format!("/en/{TOKEN}")).await;
 
-        assert_eq!(reply.status, 404);
+        assert_eq!(reply.status, 503);
         assert_eq!(reply.outcome, "error");
+        assert_eq!(reply.header("cache-control"), Some("no-store"));
+    }
+
+    #[tokio::test]
+    async fn a_failed_read_still_says_nothing_about_the_token() {
+        let broken = get(&Stub::answering(LoadResult::Error), &format!("/en/{TOKEN}")).await;
+        let dead = get(
+            &Stub::answering(LoadResult::NotFound),
+            &format!("/en/{TOKEN}"),
+        )
+        .await;
+
+        assert_eq!(broken.body, dead.body);
     }
 
     #[test]
