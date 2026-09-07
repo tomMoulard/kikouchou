@@ -70,6 +70,13 @@ function manualChunks(id: string): string | undefined {
     return 'vendor-supabase'
   }
 
+  // PostHog analytics — ~276KB of the entry chunk before it moved here, and a
+  // library the app never renders with, so it has no reason to share a chunk
+  // with the entry and invalidate on every deploy.
+  if (id.includes('posthog-js')) {
+    return 'vendor-analytics'
+  }
+
   // Yjs CRDT — the document model and its local persistence. The y-webrtc and
   // simple-peer members of this chunk went with the transport.
   if (
