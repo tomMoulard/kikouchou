@@ -66,7 +66,9 @@ export {
 
 // Room repository
 export {
+  MAX_ROOMS_PER_SAVE,
   createRoom,
+  createRooms,
   getRoomsByTripId,
   getRoomById,
   /** @deprecated Use updateRoomWithOwnershipCheck instead */
@@ -80,6 +82,7 @@ export {
   // Transactional operations with ownership validation (CR-2)
   updateRoomWithOwnershipCheck,
   deleteRoomWithOwnershipCheck,
+  duplicateRoomWithOwnershipCheck,
 } from './repositories/room-repository';
 
 // Person repository

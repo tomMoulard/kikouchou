@@ -22,8 +22,9 @@ import { useTripContext } from '@/contexts/TripContext';
 import { areArraysEqual, wrapAndSetError } from '@/contexts/utils';
 import { db } from '@/lib/db/database';
 import {
-  createRoom as repositoryCreateRoom,
+  createRooms as repositoryCreateRooms,
   deleteRoomWithOwnershipCheck,
+  duplicateRoomWithOwnershipCheck,
   reorderRooms as repositoryReorderRooms,
   updateRoomWithOwnershipCheck,
 } from '@/lib/db';
@@ -64,6 +65,26 @@ export interface RoomContextValue {
    * @throws {Error} If no trip is currently selected
    */
   createRoom: (data: RoomFormData) => Promise<Room>;
+
+  /**
+   * Creates one room, or several identical ones, in the current trip.
+   *
+   * @param data - The room form data shared by every room
+   * @param count - How many rooms to create (1 to `MAX_ROOMS_PER_SAVE`)
+   * @returns The created rooms, in creation order
+   * @throws {Error} If no trip is currently selected
+   */
+  createRooms: (data: RoomFormData, count: number) => Promise<Room[]>;
+
+  /**
+   * Copies a room within the current trip.
+   * Verifies the room belongs to the current trip before copying.
+   *
+   * @param id - The room ID to copy
+   * @returns The created copy
+   * @throws {Error} If no trip is currently selected, room not found, or room doesn't belong to current trip
+   */
+  duplicateRoom: (id: RoomId) => Promise<Room>;
 
   /**
    * Updates an existing room.
@@ -246,10 +267,10 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
   const
 
   /**
-   * Creates a new room in the current trip.
+   * Creates one room, or several identical ones, in the current trip.
    */
-   createRoom = useCallback(
-    async (data: RoomFormData): Promise<Room> => {
+   createRooms = useCallback(
+    async (data: RoomFormData, count: number): Promise<Room[]> => {
       // Capture tripId at invocation time to avoid stale closure
       const tripId = currentTripId;
       if (!tripId) {
@@ -260,9 +281,46 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
       setError((prev) => (prev === null ? prev : null));
 
       try {
-        return await repositoryCreateRoom(tripId, data);
+        return await repositoryCreateRooms(tripId, data, count);
       } catch (err) {
         throw wrapAndSetError(err, 'Failed to create room', setError);
+      }
+    },
+    [currentTripId],
+  ),
+
+  /**
+   * Creates a new room in the current trip.
+   */
+   createRoom = useCallback(
+    async (data: RoomFormData): Promise<Room> => {
+      const [room] = await createRooms(data, 1);
+
+      if (!room) {
+        throw new Error('Failed to create room');
+      }
+
+      return room;
+    },
+    [createRooms],
+  ),
+
+  /**
+   * Copies a room with ownership validation.
+   */
+   duplicateRoom = useCallback(
+    async (id: RoomId): Promise<Room> => {
+      const tripId = currentTripId;
+      if (!tripId) {
+        throw new Error('Cannot duplicate room: no trip selected');
+      }
+
+      setError((prev) => (prev === null ? prev : null));
+
+      try {
+        return await duplicateRoomWithOwnershipCheck(id, tripId);
+      } catch (err) {
+        throw wrapAndSetError(err, 'Failed to duplicate room', setError);
       }
     },
     [currentTripId],
@@ -369,11 +427,23 @@ export function RoomProvider({ children }: RoomProviderProps): ReactElement {
       isLoading,
       error,
       createRoom,
+      createRooms,
+      duplicateRoom,
       updateRoom,
       deleteRoom,
       reorderRooms,
     }),
-    [rooms, isLoading, error, createRoom, updateRoom, deleteRoom, reorderRooms],
+    [
+      rooms,
+      isLoading,
+      error,
+      createRoom,
+      createRooms,
+      duplicateRoom,
+      updateRoom,
+      deleteRoom,
+      reorderRooms,
+    ],
   );
 
   return (

@@ -199,6 +199,113 @@ describe('RoomContext', () => {
     });
   });
 
+  describe('createRooms', () => {
+    it('creates several numbered rooms and publishes them all', async () => {
+      const tripId = await createTestTripData();
+
+      const { result } = renderHook(() => useCombinedContexts(), {
+        wrapper: AllContextsWrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.trip.isLoading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.trip.setCurrentTrip(tripId);
+      });
+
+      await waitForLiveQuery();
+
+      let created: Room[] = [];
+      await act(async () => {
+        created = await result.current.room.createRooms(
+          { name: 'Double bed', capacity: 2 },
+          3,
+        );
+      });
+
+      expect(created.map((room) => room.name)).toEqual([
+        'Double bed 1',
+        'Double bed 2',
+        'Double bed 3',
+      ]);
+
+      await waitForLiveQuery();
+
+      await waitFor(() => {
+        expect(result.current.room.rooms).toHaveLength(3);
+      });
+    });
+
+    it('throws error when no trip selected', async () => {
+      const { result } = renderHook(() => useRoomContext(), {
+        wrapper: AllContextsWrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      await expect(
+        act(async () => {
+          await result.current.createRooms({ name: 'Room', capacity: 2 }, 2);
+        })
+      ).rejects.toThrow('no trip selected');
+    });
+  });
+
+  describe('duplicateRoom', () => {
+    it('copies a room of the current trip', async () => {
+      const tripId = await createTestTripData();
+      const room = await createTestRoom(tripId, 'Attic');
+
+      const { result } = renderHook(() => useCombinedContexts(), {
+        wrapper: AllContextsWrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.trip.isLoading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.trip.setCurrentTrip(tripId);
+      });
+
+      await waitForLiveQuery();
+
+      let copy: Room | undefined;
+      await act(async () => {
+        copy = await result.current.room.duplicateRoom(room.id);
+      });
+
+      expect(copy!.id).not.toBe(room.id);
+      expect(copy!.name).toBe('Attic 2');
+
+      await waitForLiveQuery();
+
+      await waitFor(() => {
+        expect(result.current.room.rooms).toHaveLength(2);
+      });
+    });
+
+    it('throws error when no trip selected', async () => {
+      const { result } = renderHook(() => useRoomContext(), {
+        wrapper: AllContextsWrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      await expect(
+        act(async () => {
+          await result.current.duplicateRoom('r1' as Room['id']);
+        })
+      ).rejects.toThrow('no trip selected');
+    });
+  });
+
   describe('updateRoom', () => {
     it('updates room name', async () => {
       const tripId = await createTestTripData();
