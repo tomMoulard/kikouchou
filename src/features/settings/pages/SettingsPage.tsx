@@ -41,6 +41,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db';
 import { deleteTrip, updateTrip } from '@/lib/db';
 import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, isLanguageSupported } from '@/lib/i18n';
+import { formatAppVersion } from '@/lib/utils/app-version';
 import type { TripFormData } from '@/types';
 
 // ============================================================================
@@ -48,10 +49,13 @@ import type { TripFormData } from '@/types';
 // ============================================================================
 
 /**
- * Application version from package.json.
- * In a real app, this would be injected at build time.
+ * The build version, as the About card shows it.
+ *
+ * CI injects the git sha, so the raw value goes through
+ * {@link formatAppVersion}, which prints the short sha rather than all 40
+ * characters and supplies the local fallback.
  */
-const APP_VERSION = import.meta.env.VITE_APP_VERSION ?? 'devel';
+const APP_VERSION = formatAppVersion(import.meta.env.VITE_APP_VERSION ?? '');
 
 // ============================================================================
 // Sub-Components
