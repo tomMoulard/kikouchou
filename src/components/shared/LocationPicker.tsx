@@ -453,9 +453,11 @@ export const LocationPicker = memo(function LocationPicker({
                   {place.typeLabel}
                 </span>
               </div>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                {place.fullName}
-              </p>
+              {place.detail && (
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {place.detail}
+                </p>
+              )}
             </li>
           ))}
         </ul>

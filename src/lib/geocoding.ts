@@ -33,8 +33,14 @@ export interface GeocodingPlace {
   readonly id: string;
   /** Short human-readable label — the first few address parts. */
   readonly label: string;
-  /** Full Nominatim display name, shown as the secondary line. */
-  readonly fullName: string;
+  /**
+   * The address parts the label leaves out, shown as the secondary line.
+   *
+   * Empty when the label already holds the whole display name. The two lines
+   * sit one above the other, so a secondary line carrying the full name
+   * printed the label's words a second time.
+   */
+  readonly detail: string;
   /** Short type label ("City", "Station", …). */
   readonly typeLabel: string;
   /** Validated coordinates. */
@@ -171,10 +177,18 @@ export function formatCoordinates(coordinates: Coordinates): string {
 // ============================================================================
 
 /**
- * Shortens a Nominatim display name to its leading address parts.
+ * Splits a Nominatim display name into the short label and the rest.
+ *
+ * A name of {@link LABEL_PART_COUNT} parts or fewer is all label, and the
+ * detail is empty.
  */
-function formatPlaceLabel(displayName: string): string {
-  return displayName.split(', ').slice(0, LABEL_PART_COUNT).join(', ');
+function splitDisplayName(displayName: string): { label: string; detail: string } {
+  const parts = displayName.split(', ');
+
+  return {
+    label: parts.slice(0, LABEL_PART_COUNT).join(', '),
+    detail: parts.slice(LABEL_PART_COUNT).join(', '),
+  };
 }
 
 /**
@@ -203,13 +217,37 @@ function toPlace(result: NominatimResult): GeocodingPlace | null {
     return null;
   }
 
+  const { label, detail } = splitDisplayName(displayName);
+
   return {
     id: String(result.place_id),
-    label: formatPlaceLabel(displayName),
-    fullName: displayName,
+    label,
+    detail,
     typeLabel: formatTypeLabel(result),
     coordinates,
   };
+}
+
+/**
+ * Drops places whose name repeats one already in the list.
+ *
+ * Nominatim answers a town query with one entry per matching OSM object — the
+ * place node and the administrative boundary both come back for `Annecy` — and
+ * they carry the same display name, so the list showed the same town twice
+ * with nothing to tell the two rows apart. The first entry wins, which keeps
+ * Nominatim's relevance order.
+ */
+function dropRepeatedNames(places: readonly GeocodingPlace[]): GeocodingPlace[] {
+  const seen = new Set<string>();
+
+  return places.filter((place) => {
+    const name = place.detail ? `${place.label}, ${place.detail}` : place.label;
+    if (seen.has(name)) {
+      return false;
+    }
+    seen.add(name);
+    return true;
+  });
 }
 
 // ============================================================================
@@ -291,11 +329,14 @@ export async function searchPlaces(
       return [];
     }
 
-    // Drop individually invalid entries rather than failing the whole search.
-    return data
-      .slice(0, limit)
+    // Drop individually invalid entries rather than failing the whole search,
+    // and collapse repeats before counting against the limit so a duplicate
+    // never costs the user a distinct suggestion.
+    const places = data
       .map((item) => toPlace(item as NominatimResult))
       .filter((place): place is GeocodingPlace => place !== null);
+
+    return dropRepeatedNames(places).slice(0, limit);
   } catch (error) {
     if (error instanceof GeocodingError) {
       throw error;

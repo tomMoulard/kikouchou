@@ -533,9 +533,9 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
                           isClaimed ? 'text-success-on-surface' : 'text-muted-foreground',
                         )}
                       >
-                        {t('sharing.roomSpotsTaken', '{{occupied}} of {{capacity}} spots taken', {
+                        {t('sharing.roomSpotsTaken', {
                           occupied,
-                          capacity: room.capacity,
+                          count: room.capacity,
                         })}
                       </p>
                       {/* Visual progress bar */}
@@ -545,9 +545,9 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
                         aria-valuenow={occupancyPct}
                         aria-valuemin={0}
                         aria-valuemax={100}
-                        aria-label={t('sharing.roomSpotsTaken', '{{occupied}} of {{capacity}} spots taken', {
+                        aria-label={t('sharing.roomSpotsTaken', {
                           occupied,
-                          capacity: room.capacity,
+                          count: room.capacity,
                         })}
                       >
                         <div

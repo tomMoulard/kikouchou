@@ -149,7 +149,7 @@ const RoomCard = memo(function RoomCard({
       [
         room.name,
         t('rooms.beds', { count: room.capacity }),
-        t('rooms.spotsTaken', { occupied: peakOccupancy, capacity: room.capacity }),
+        t('rooms.spotsTaken', { occupied: peakOccupancy, count: room.capacity }),
       ].join(', '),
     [room.name, room.capacity, peakOccupancy, t]
   ),
@@ -356,7 +356,7 @@ const RoomCard = memo(function RoomCard({
             <div className="flex items-center gap-2 mb-1.5">
               <Users className="size-4 text-muted-foreground" aria-hidden="true" />
               <span className="text-sm text-muted-foreground">
-                {t('rooms.spotsTaken', { occupied: peakOccupancy, capacity: room.capacity })}
+                {t('rooms.spotsTaken', { occupied: peakOccupancy, count: room.capacity })}
               </span>
               {isFull && (
                 <Badge variant="destructive" className="text-xs">
@@ -371,7 +371,7 @@ const RoomCard = memo(function RoomCard({
               aria-valuenow={peakOccupancy}
               aria-valuemin={0}
               aria-valuemax={room.capacity}
-              aria-label={t('rooms.spotsTaken', { occupied: peakOccupancy, capacity: room.capacity })}
+              aria-label={t('rooms.spotsTaken', { occupied: peakOccupancy, count: room.capacity })}
             >
               <div
                 className={cn('h-full rounded-full transition-all duration-300', progressColor)}

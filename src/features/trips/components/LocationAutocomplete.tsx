@@ -488,9 +488,11 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
                       <MapPin className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="truncate font-medium">{place.label}</span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {place.fullName}
-                        </span>
+                        {place.detail && (
+                          <span className="truncate text-xs text-muted-foreground">
+                            {place.detail}
+                          </span>
+                        )}
                       </div>
                       <span className="mt-0.5 shrink-0 text-xs text-muted-foreground">
                         {place.typeLabel}
