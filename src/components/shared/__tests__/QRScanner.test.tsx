@@ -12,6 +12,7 @@
  * @module components/shared/__tests__/QRScanner.test
  */
 
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from '@/test/utils';
 import { QRScanner } from '../QRScanner';
@@ -35,15 +36,13 @@ const probe: CameraProbe = { playAbortMessage: null, starts: 0 };
 class FakeHtml5Qrcode {
   public isScanning = false;
   private video: HTMLVideoElement | null = null;
+  private readonly elementId: string;
 
-  constructor(private readonly elementId: string) {}
+  constructor(elementId: string) {
+    this.elementId = elementId;
+  }
 
-  async start(
-    _constraints: unknown,
-    _config: unknown,
-    _onScan: (text: string) => void,
-    _onFailure: () => void,
-  ): Promise<void> {
+  async start(): Promise<void> {
     const parent = document.getElementById(this.elementId);
     if (!parent) throw new Error(`missing scanner region ${this.elementId}`);
 
@@ -110,7 +109,9 @@ describe('QRScanner', () => {
 
     unmount();
 
-    await new Promise(resolve => setTimeout(resolve, FAKE_CAMERA_WARMUP_MS * 4));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, FAKE_CAMERA_WARMUP_MS * 4));
+    });
 
     expect(probe.playAbortMessage).toBeNull();
   });
@@ -124,7 +125,9 @@ describe('QRScanner', () => {
 
     rerender(<QRScanner onScan={vi.fn()} active={false} />);
 
-    await new Promise(resolve => setTimeout(resolve, FAKE_CAMERA_WARMUP_MS * 4));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, FAKE_CAMERA_WARMUP_MS * 4));
+    });
 
     expect(probe.playAbortMessage).toBeNull();
   });
