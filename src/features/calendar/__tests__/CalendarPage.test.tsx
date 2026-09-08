@@ -570,17 +570,13 @@ describe('CalendarPage', () => {
       cell.getAttribute('aria-describedby')?.endsWith('-summary'),
     );
 
-    // Only cells with an accessibility summary carry their key in the DOM, so
-    // name the cells that have none. In this fixture there is exactly one: 10
-    // April, the day the trip ends. It is inside the trip and inside the month,
-    // and the last night was the 9th, so nobody is left on site to count and the
-    // cell has nothing to announce. Assert that, so a future fixture that drops
-    // another cell's summary fails here instead of silently shrinking what this
-    // test checks.
-    const unsummarized = allCells.filter((cell) => !cell.getAttribute('aria-describedby'));
+    // Only cells with an accessibility summary carry their key in the DOM, and
+    // in this fixture that is all of them: 10 April is the day the trip ends,
+    // and the guests leaving that morning are counted on it. Assert the
+    // coverage too, so a future fixture that drops a cell's summary fails here
+    // instead of silently shrinking what this test checks.
     expect(allCells.length).toBeGreaterThan(0);
-    expect(unsummarized.map((cell) => cell.querySelector('span')?.textContent)).toEqual(['10']);
-    expect(cells).toHaveLength(allCells.length - 1);
+    expect(cells).toHaveLength(allCells.length);
 
     for (const cell of cells) {
       const dateKey = cell.getAttribute('aria-describedby')!.replace('-summary', '');
@@ -895,6 +891,40 @@ describe('CalendarPage', () => {
     expect(summaryOf('2026-09-13')).not.toContain('calendar.outsideTripDates');
     expect(summaryOf('2026-09-14')).toContain('calendar.outsideTripDates');
     expect(summaryOf('2026-09-10')).toContain('calendar.outsideTripDates');
+  });
+
+  it('counts the guests who leave on the last day of the trip', async () => {
+    // The cell is on the trip, so it also has to say who is in the house that
+    // morning. The headcount read the nights, so the departure day counted
+    // nobody and the host planning breakfast saw an empty cell.
+    mockUseTripContext.mockReturnValue({
+      currentTrip: {
+        ...mockTrip,
+        startDate: '2026-09-11' as Trip['startDate'],
+        endDate: '2026-09-13' as Trip['endDate'],
+      },
+      isLoading: false,
+      setCurrentTrip: vi.fn().mockResolvedValue(undefined),
+    });
+    mockUsePersonContext.mockReturnValue({
+      persons: [
+        {
+          ...mockPerson,
+          stayStartDate: '2026-09-11' as NonNullable<Person['stayStartDate']>,
+          stayEndDate: '2026-09-13' as NonNullable<Person['stayEndDate']>,
+        },
+      ],
+      getPersonById: vi.fn((id: string) => (id === mockPerson.id ? mockPerson : undefined)),
+      isLoading: false,
+      error: null,
+    });
+
+    const { user } = renderCalendarPage();
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
+    expect(summaryOf('2026-09-12')).toContain('calendar.peopleOnSite');
+    expect(summaryOf('2026-09-13')).toContain('calendar.peopleOnSite');
+    expect(summaryOf('2026-09-14')).not.toContain('calendar.peopleOnSite');
   });
 
   it('treats a trip that starts and ends on one day as one day inside the trip', async () => {

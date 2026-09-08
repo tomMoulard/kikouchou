@@ -140,7 +140,10 @@ describe('buildDailyHeadcounts', () => {
     expect(counts.get(day('2024-07-16'))).toEqual({ guests: 1, people: 1 });
   });
 
-  it('excludes the checkout day (guests do not sleep the night they leave)', () => {
+  it('counts the checkout day, when the guests are still here for breakfast', () => {
+    // These headcounts drive meal planning, so they count the people in the
+    // house that day, not the beds slept in that night. A guest who leaves on
+    // the 17th eats there on the 17th, and used to be counted as nobody.
     const person = makePerson({
       id: 'p-1',
       headcount: 3,
@@ -154,11 +157,34 @@ describe('buildDailyHeadcounts', () => {
       departures: [],
       assignments: [],
       tripWindow: TRIP_WINDOW,
-      dayKeys: [day('2024-07-16'), day('2024-07-17')],
+      dayKeys: [day('2024-07-16'), day('2024-07-17'), day('2024-07-18')],
     });
 
     expect(counts.get(day('2024-07-16'))).toEqual({ guests: 1, people: 3 });
-    expect(counts.has(day('2024-07-17'))).toBe(false);
+    expect(counts.get(day('2024-07-17'))).toEqual({ guests: 1, people: 3 });
+    expect(counts.has(day('2024-07-18'))).toBe(false);
+  });
+
+  it('counts the checkout day of a guest whose only record is a room', () => {
+    const person = makePerson({ id: 'p-1', headcount: 2 });
+    const assignment = makeAssignment({
+      id: 'a-1',
+      personId: 'p-1',
+      startDate: '2024-07-16',
+      endDate: '2024-07-18',
+    });
+
+    const counts = buildDailyHeadcounts({
+      persons: [person],
+      arrivals: [],
+      departures: [],
+      assignments: [assignment],
+      tripWindow: NO_TRIP_DATES,
+      dayKeys: [day('2024-07-18'), day('2024-07-19')],
+    });
+
+    expect(counts.get(day('2024-07-18'))).toEqual({ guests: 1, people: 2 });
+    expect(counts.has(day('2024-07-19'))).toBe(false);
   });
 
   // The guest's own dates stop before this night, so the bed is the only thing
@@ -286,9 +312,9 @@ describe('buildDailyHeadcounts', () => {
   });
 
   // A guest the host added and left blank is on site for the trip: counting
-  // them as nobody made the calendar's nightly total disagree with the guest
-  // list the host had just filled in.
-  it('counts a guest with no dates of their own for the trip nights', () => {
+  // them as nobody made the calendar's total disagree with the guest list the
+  // host had just filled in.
+  it('counts a guest with no dates of their own for every day of the trip', () => {
     const blank = makePerson({ id: 'p-1', name: 'Julie', headcount: 2 });
 
     const counts = buildDailyHeadcounts({
@@ -303,8 +329,9 @@ describe('buildDailyHeadcounts', () => {
     expect(counts.has(day('2024-07-14'))).toBe(false);
     expect(counts.get(day('2024-07-15'))).toEqual({ guests: 1, people: 2 });
     expect(counts.get(day('2024-07-19'))).toEqual({ guests: 1, people: 2 });
-    // The trip's last day is the check-out, so it is not a night on site.
-    expect(counts.has(day('2024-07-20'))).toBe(false);
+    // The trip's last day is the check-out. Nobody sleeps that night, but
+    // everybody is still there in the morning, so it is a day on site.
+    expect(counts.get(day('2024-07-20'))).toEqual({ guests: 1, people: 2 });
   });
 
   it('returns an empty map when there are no guests or no days', () => {

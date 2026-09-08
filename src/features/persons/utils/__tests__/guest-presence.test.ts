@@ -12,6 +12,7 @@ import type { HexColor, ISODateString, Person, RoomAssignment, Transport } from 
 import {
   buildGuestIdsByTripDateMap,
   deriveGuestStayDateBounds,
+  isGuestOnSiteDuringDay,
   isGuestOnSiteOnDate,
   listGuestsOnSiteOnDate,
   resolveGuestStayWindow,
@@ -368,6 +369,111 @@ describe('isGuestOnSiteOnDate', () => {
         dateKey: iso('2026-04-13'),
       }),
     ).toBe(true);
+  });
+});
+
+describe('isGuestOnSiteDuringDay', () => {
+  // The night rule answers "who sleeps here"; this one answers "who is here at
+  // some point today". They differ on exactly one day of a stay: the day the
+  // guest leaves, when they are still here for breakfast and the station run.
+  it('counts the day the guest leaves', () => {
+    const p = person('p1', { start: '2026-04-10', end: '2026-04-12' });
+    const query = {
+      person: p,
+      arrivals: [],
+      departures: [],
+      assignments: [],
+      tripWindow: TRIP_WINDOW,
+    };
+
+    expect(isGuestOnSiteDuringDay({ ...query, dateKey: iso('2026-04-12') })).toBe(true);
+    expect(isGuestOnSiteOnDate({ ...query, dateKey: iso('2026-04-12') })).toBe(false);
+  });
+
+  it('counts the day the guest arrives, and neither end beyond that', () => {
+    const p = person('p1', { start: '2026-04-10', end: '2026-04-12' });
+    const query = {
+      person: p,
+      arrivals: [],
+      departures: [],
+      assignments: [],
+      tripWindow: TRIP_WINDOW,
+    };
+
+    expect(isGuestOnSiteDuringDay({ ...query, dateKey: iso('2026-04-09') })).toBe(false);
+    expect(isGuestOnSiteDuringDay({ ...query, dateKey: iso('2026-04-10') })).toBe(true);
+    expect(isGuestOnSiteDuringDay({ ...query, dateKey: iso('2026-04-11') })).toBe(true);
+    expect(isGuestOnSiteDuringDay({ ...query, dateKey: iso('2026-04-13') })).toBe(false);
+  });
+
+  it('counts a guest who comes and goes on the same day', () => {
+    // Zero nights, but the host still feeds them lunch. The night rule drops
+    // this guest entirely, which is right for a bed and wrong for a headcount.
+    const p = person('p1', { start: '2026-04-10', end: '2026-04-10' });
+    const query = {
+      person: p,
+      arrivals: [],
+      departures: [],
+      assignments: [],
+      tripWindow: TRIP_WINDOW,
+    };
+
+    expect(isGuestOnSiteDuringDay({ ...query, dateKey: iso('2026-04-10') })).toBe(true);
+    expect(isGuestOnSiteOnDate({ ...query, dateKey: iso('2026-04-10') })).toBe(false);
+  });
+
+  it('counts the checkout day of a guest whose only record is a room', () => {
+    const p = person('p1');
+    const query = {
+      person: p,
+      arrivals: [],
+      departures: [],
+      assignments: [assignment('p1', '2026-04-10', '2026-04-12')],
+      tripWindow: NO_TRIP_DATES,
+    };
+
+    expect(isGuestOnSiteDuringDay({ ...query, dateKey: iso('2026-04-12') })).toBe(true);
+    expect(isGuestOnSiteDuringDay({ ...query, dateKey: iso('2026-04-13') })).toBe(false);
+  });
+
+  it('ignores a room belonging to another guest', () => {
+    expect(
+      isGuestOnSiteDuringDay({
+        person: person('p1', { start: '2026-04-01', end: '2026-04-02' }),
+        arrivals: [],
+        departures: [],
+        assignments: [assignment('p2', '2026-04-10', '2026-04-12')],
+        tripWindow: NO_TRIP_DATES,
+        dateKey: iso('2026-04-11'),
+      }),
+    ).toBe(false);
+  });
+
+  it('is false when neither the guest nor the trip has any dates', () => {
+    expect(
+      isGuestOnSiteDuringDay({
+        person: person('p1'),
+        arrivals: [],
+        departures: [],
+        assignments: [],
+        tripWindow: NO_TRIP_DATES,
+        dateKey: iso('2026-04-11'),
+      }),
+    ).toBe(false);
+  });
+
+  it('puts an undated guest on every day of the trip, its last day included', () => {
+    const query = {
+      person: person('p1'),
+      arrivals: [],
+      departures: [],
+      assignments: [],
+      tripWindow: TRIP_WINDOW,
+    };
+
+    expect(isGuestOnSiteDuringDay({ ...query, dateKey: iso('2026-04-05') })).toBe(true);
+    expect(isGuestOnSiteDuringDay({ ...query, dateKey: iso('2026-04-25') })).toBe(true);
+    expect(isGuestOnSiteDuringDay({ ...query, dateKey: iso('2026-04-26') })).toBe(false);
   });
 });
 

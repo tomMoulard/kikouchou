@@ -116,7 +116,7 @@ describe('calendar day boundary', () => {
     expect(row?.checkoutDayIndex).toBe(3);
   });
 
-  it('counts the arrival night once, on the night the guest actually sleeps', () => {
+  it('counts the guest from the day they land to the day they leave, locally', () => {
     const counts = buildDailyHeadcounts({
       persons: [GUEST],
       arrivals: [LATE_ARRIVAL],
@@ -126,13 +126,14 @@ describe('calendar day boundary', () => {
       dayKeys: DAY_KEYS,
     });
 
-    // Nobody on site the night before they land.
+    // Nobody on site the day before they land. The 00:30 arrival must not roll
+    // back into the 10th for a viewer ahead of UTC.
     expect(counts.get(iso('2026-04-10'))).toBeUndefined();
     expect(counts.get(iso('2026-04-11'))).toEqual({ guests: 1, people: 1 });
     expect(counts.get(iso('2026-04-12'))).toEqual({ guests: 1, people: 1 });
-    // Departure day is not a night on site — and the 23:30 departure must not
-    // roll into the 14th for a viewer behind UTC.
-    expect(counts.get(iso('2026-04-13'))).toBeUndefined();
+    // The day they leave counts — they are here until 23:30 — and the 23:30
+    // departure must not roll into the 14th for a viewer behind UTC.
+    expect(counts.get(iso('2026-04-13'))).toEqual({ guests: 1, people: 1 });
     expect(counts.get(iso('2026-04-14'))).toBeUndefined();
   });
 
