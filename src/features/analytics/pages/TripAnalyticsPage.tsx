@@ -145,7 +145,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   if (isLoading) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader title={t('analytics.tripTitle')} backLink={backLink} />
+        <PageHeader title={t('analytics.tripTitle')} />
         <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
           <LoadingState variant="inline" size="lg" />
@@ -165,7 +165,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   if (statsError) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader title={t('analytics.tripTitle')} backLink={backLink} />
+        <PageHeader title={t('analytics.tripTitle')} />
         <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
         <ErrorDisplay
           error={statsError}
@@ -211,7 +211,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   if (tripError) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader title={t('analytics.tripTitle')} backLink={backLink} />
+        <PageHeader title={t('analytics.tripTitle')} />
         <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
         <ErrorDisplay
           error={tripError}
@@ -229,7 +229,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   if (isTripStatsEmpty(stats)) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader title={t('analytics.tripTitle')} backLink={backLink} />
+        <PageHeader title={t('analytics.tripTitle')} />
         <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
           <EmptyState
@@ -252,7 +252,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
 
   return (
     <div className="container max-w-4xl py-6 md:py-8">
-      <PageHeader title={t('analytics.tripTitle')} backLink={backLink} />
+      <PageHeader title={t('analytics.tripTitle')} />
 
       <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
 

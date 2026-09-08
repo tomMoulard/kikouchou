@@ -273,10 +273,9 @@ describe('TransportListPage', () => {
     expect(screen.getByText('transports.empty')).toBeInTheDocument();
   });
 
-  it('renders back link', () => {
+  it('renders no back link: the sidebar and the bottom bar both reach the calendar', () => {
     render(<TransportListPage />, { withProviders: false });
-    const backLink = screen.getByRole('link');
-    expect(backLink).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /common\.back/i })).not.toBeInTheDocument();
   });
 
   it('renders add transport button', () => {

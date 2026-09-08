@@ -909,10 +909,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   if (isLoading) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader
-          title={t('rooms.title')}
-          backLink={tripIdFromUrl ? `/trips/${tripIdFromUrl}/calendar` : '/trips'}
-        />
+        <PageHeader title={t('rooms.title')} />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <LoadingState variant="inline" size="lg" />
         </div>
@@ -953,10 +950,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   if (roomsError) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader
-          title={t('rooms.title')}
-          backLink={`/trips/${tripIdFromUrl}/calendar`}
-        />
+        <PageHeader title={t('rooms.title')} />
         <ErrorDisplay
           error={roomsError}
           onRetry={() => window.location.reload()}
@@ -973,10 +967,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   if (rooms.length === 0) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader
-          title={t('rooms.title')}
-          backLink={`/trips/${tripIdFromUrl}/calendar`}
-        />
+        <PageHeader title={t('rooms.title')} />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <EmptyState
             icon={DoorOpen}
@@ -1030,7 +1021,6 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       >
         <PageHeader
           title={t('rooms.title')}
-          backLink={`/trips/${tripIdFromUrl}/calendar`}
           titleAccessory={
             <ViewSwitcher
               value={currentView}
