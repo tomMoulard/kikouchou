@@ -33,7 +33,7 @@
  */
 
 import { db } from '@/lib/db/database';
-import { MAX_LENGTHS } from '@/lib/db/sanitize';
+import { MAX_LENGTHS, normalizeChildSeat } from '@/lib/db/sanitize';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import type { Database, Json } from '@/lib/supabase/database.types';
 import {
@@ -156,6 +156,12 @@ function toMember(value: unknown): GuestGroupMember | undefined {
       ? raw.phone.trim().slice(0, MAX_MEMBER_PHONE_LENGTH)
       : undefined;
 
+  // Enum membership, not merely a string: this value is rendered as a badge and
+  // copied straight onto an imported guest, so an unknown kind would travel
+  // into the trip and out again through the next changeset.
+  const childSeat =
+    typeof raw.childSeat === 'string' ? normalizeChildSeat(raw.childSeat) : undefined;
+
   return {
     id: raw.id as GuestGroupMemberId,
     name: raw.name.trim().slice(0, MAX_MEMBER_NAME_LENGTH),
@@ -163,6 +169,7 @@ function toMember(value: unknown): GuestGroupMember | undefined {
     ...(headcount === undefined ? {} : { headcount }),
     ...(notes === undefined ? {} : { notes }),
     ...(phone === undefined ? {} : { phone }),
+    ...(childSeat === undefined ? {} : { childSeat }),
   };
 }
 

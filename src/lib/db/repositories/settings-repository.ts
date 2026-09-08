@@ -8,7 +8,7 @@
  */
 
 import { db } from '@/lib/db/database';
-import type { AppSettings, Language, TripId } from '@/types';
+import type { AppSettings, Language, PersonId, TripId } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
 
 /**
@@ -124,6 +124,60 @@ export async function setCurrentTrip(tripId: TripId | undefined): Promise<void> 
  */
 export async function setLanguage(language: Language): Promise<void> {
   await updateSettings({ language });
+}
+
+/**
+ * Records which guest the person holding this device is, for one trip.
+ *
+ * Read and written as a whole map because the field is one record: a partial
+ * `updateSettings({ myPersonIdByTripId: { … } })` would replace every other
+ * trip's answer, so the current map is merged first.
+ *
+ * Device-local by design. Who is holding this phone is not a fact about the
+ * trip, and syncing it would tell everybody else's copy of the app that they
+ * are Tom.
+ *
+ * @param tripId - The trip being answered for
+ * @param personId - The guest this device is, or undefined to forget
+ *
+ * @example
+ * ```typescript
+ * await setMyPersonId(tripId, personId);
+ * ```
+ */
+export async function setMyPersonId(
+  tripId: TripId,
+  personId: PersonId | undefined,
+): Promise<void> {
+  const settings = await getSettings(),
+    next = { ...settings.myPersonIdByTripId };
+
+  if (personId === undefined) {
+    delete next[tripId];
+  } else {
+    next[tripId] = personId;
+  }
+
+  await updateSettings({ myPersonIdByTripId: next });
+}
+
+/**
+ * Reads which guest this device is for one trip, as explicitly chosen.
+ *
+ * Only the explicit answer. Callers wanting the full precedence — explicit
+ * choice, then the share-link identity, then a claimed trip membership — go
+ * through `lib/identity/trip-identity`.
+ *
+ * @param tripId - The trip to answer for
+ * @returns The chosen guest id, or undefined
+ */
+export async function getMyPersonId(
+  tripId: TripId,
+): Promise<PersonId | undefined> {
+  const settings = await getSettings(),
+    personId = settings.myPersonIdByTripId?.[tripId];
+
+  return personId === undefined ? undefined : (personId as PersonId);
 }
 
 /**

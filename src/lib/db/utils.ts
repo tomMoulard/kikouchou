@@ -17,12 +17,14 @@ import type {
   ISODateString,
   ISODateTimeString,
   PersonId,
+  RideId,
   RoomAssignmentId,
   RoomId,
   ShareId,
   TransportId,
   TripId,
   UnixTimestamp,
+  VehicleId,
 } from '@/types';
 
 // ============================================================================
@@ -70,6 +72,22 @@ export const createRoomAssignmentId = (): RoomAssignmentId =>
  * const transportId = createTransportId();
  */
 export const createTransportId = (): TransportId => nanoid() as TransportId;
+
+/**
+ * Creates a new unique Ride ID.
+ * @returns A branded RideId string (21 characters)
+ * @example
+ * const rideId = createRideId();
+ */
+export const createRideId = (): RideId => nanoid() as RideId;
+
+/**
+ * Creates a new unique Vehicle ID.
+ * @returns A branded VehicleId string (21 characters)
+ * @example
+ * const vehicleId = createVehicleId();
+ */
+export const createVehicleId = (): VehicleId => nanoid() as VehicleId;
 
 /**
  * Creates a new Activity ID.

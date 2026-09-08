@@ -294,6 +294,38 @@ describe('SummaryStepPage — 5.4: transport entries displayed', () => {
       expect(screen.getByText('Gare de Vannes')).toBeInTheDocument();
     });
   });
+
+  it('shows the guest as their own driver when that is what they entered', async () => {
+    // The last screen before entering the trip, and the only place the guest
+    // can still catch a wrong answer: the transport step used to be the only
+    // one that reflected it, so the summary said nothing at all.
+    setStoredIdentity('abc123', { personId: 'person1', tripId: 'trip1' });
+    setupFullMocks();
+    mockGetTransportsByPersonId.mockResolvedValue([
+      makeTransport({ needsPickup: false, driverId: 'person1' as PersonId }),
+    ]);
+
+    renderSummaryPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('sharing.transportDrivingBadge')).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByText('sharing.transportNeedsPickupBadge'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows a pickup is still needed when that is what they entered', async () => {
+    setStoredIdentity('abc123', { personId: 'person1', tripId: 'trip1' });
+    setupFullMocks();
+
+    renderSummaryPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('sharing.transportNeedsPickupBadge')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('sharing.transportDrivingBadge')).not.toBeInTheDocument();
+  });
 });
 
 // ============================================================================

@@ -290,12 +290,14 @@ export type UsageAction =
   | 'guest_group_imported'
   | 'guest_group_saved'
   | 'person_saved'
+  | 'ride_saved'
   | 'room_saved'
   | 'transport_saved'
   | 'trip_created'
   | 'trip_imported'
   | 'trip_joined'
-  | 'trip_updated';
+  | 'trip_updated'
+  | 'vehicle_saved';
 
 /**
  * The one event that means "a person used this app".

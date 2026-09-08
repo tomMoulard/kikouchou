@@ -7,6 +7,7 @@
 
 import type { KeyboardEvent } from 'react';
 import type { Locale } from 'date-fns/locale';
+import type { ResolvedRide } from '@/features/transports/utils/ride-model';
 import type { DailyHeadcount } from './utils/headcount-utils';
 import type {
   Activity,
@@ -16,6 +17,7 @@ import type {
   Room,
   RoomAssignment,
   Transport,
+  TransportId,
   TransportType,
   Trip,
 } from '@/types';
@@ -77,6 +79,18 @@ export interface CalendarTransport {
   readonly personName: string;
   /** Person's color for badge */
   readonly color: HexColor;
+  /**
+   * The car journey this leg travels in, when one has been arranged.
+   *
+   * Always the output of `resolveRides` — the calendar never re-derives who is
+   * driving, so a pill, the detail dialog, a map popup and a notification
+   * cannot disagree about the same car.
+   *
+   * Undefined covers both "making their own way" and a legacy `driverId`-only
+   * leg: the page leaves it unset for a legacy journey so the calendar keeps
+   * rendering those exactly as it did before rides existed.
+   */
+  readonly ride?: ResolvedRide;
 }
 
 /**
@@ -255,6 +269,14 @@ export interface CalendarTimelineProps {
   ) => void;
   readonly onTransportClick?: (transport: CalendarTransport) => void;
   readonly onActivityClick?: (activity: Activity) => void;
+  /**
+   * Reads the car serving one leg, from the page's `resolveRides` index.
+   *
+   * The timeline is the view users land on, so leaving this out is how the
+   * whole shared-car feature stayed invisible on the default screen: only the
+   * month grid drew it. Omitted, the timeline keeps its pre-ride labels.
+   */
+  readonly rideForTransport?: (transportId: TransportId) => ResolvedRide | undefined;
   /**
    * Sends the user off to create guests, from the "nothing scheduled" empty
    * state. Omitted, the empty state keeps its text-only form.

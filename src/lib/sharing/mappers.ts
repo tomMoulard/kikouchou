@@ -7,6 +7,7 @@
 
 import { create } from '@bufbuild/protobuf';
 import {
+  ChildSeatKind as ProtoChildSeatKind,
   CoordinatesSchema,
   RoomSchema,
   TransportMode as ProtoTransportMode,
@@ -32,11 +33,13 @@ import {
 import { MAX_LENGTHS, sanitizeOptionalText } from '@/lib/db/sanitize';
 import { normalizePersonHeadcount } from '@/types';
 import type {
+  ChildSeatKind,
   HexColor,
   ISODateString,
   ISODateTimeString,
   Person,
   PersonId,
+  RideId,
   Room,
   RoomAssignment,
   RoomAssignmentId,
@@ -109,6 +112,23 @@ const PROTO_TO_TRANSPORT_MODE: Record<ProtoTransportMode, TransportMode | undefi
 };
 
 // ============================================================================
+// Child Seat Mapping
+// ============================================================================
+
+const CHILD_SEAT_TO_PROTO: Record<ChildSeatKind, ProtoChildSeatKind> = {
+  rearFacing: ProtoChildSeatKind.REAR_FACING,
+  forwardFacing: ProtoChildSeatKind.FORWARD_FACING,
+  booster: ProtoChildSeatKind.BOOSTER,
+};
+
+const PROTO_TO_CHILD_SEAT: Record<ProtoChildSeatKind, ChildSeatKind | undefined> = {
+  [ProtoChildSeatKind.UNSPECIFIED]: undefined,
+  [ProtoChildSeatKind.REAR_FACING]: 'rearFacing',
+  [ProtoChildSeatKind.FORWARD_FACING]: 'forwardFacing',
+  [ProtoChildSeatKind.BOOSTER]: 'booster',
+};
+
+// ============================================================================
 // App → Proto Mappers
 // ============================================================================
 
@@ -126,6 +146,10 @@ export function personToProto(person: Person): ProtoPerson {
     notes: person.notes ?? undefined,
     phone: person.phone ?? undefined,
     headcount: person.headcount ?? undefined,
+    childSeat:
+      person.childSeat === undefined
+        ? undefined
+        : CHILD_SEAT_TO_PROTO[person.childSeat],
   });
 }
 
@@ -158,6 +182,13 @@ export function transportToProto(transport: Transport): ProtoTransport {
     notes: transport.notes ?? undefined,
     transportNumber: transport.transportNumber ?? undefined,
     driverId: transport.driverId ?? undefined,
+    // Carried even though `Ride` itself does not travel in a changeset yet.
+    // The round trip that matters is host → guest → host: the host owns the
+    // ride, so returning the leg with its membership intact is what stops a
+    // guest editing their arrival time from silently dropping themselves out of
+    // a shared car. On the guest's own device the id resolves to nothing, which
+    // `checkTransportRefs` reports rather than hides.
+    rideId: transport.rideId ?? undefined,
   });
 
   if (transport.transportMode) {
@@ -273,6 +304,12 @@ export function protoToPerson(proto: ProtoPerson): Person {
   if (proto.headcount) {
     person.headcount = normalizePersonHeadcount(proto.headcount);
   }
+  if (proto.childSeat !== undefined) {
+    const childSeat = PROTO_TO_CHILD_SEAT[proto.childSeat];
+    if (childSeat !== undefined) {
+      person.childSeat = childSeat;
+    }
+  }
   return person;
 }
 
@@ -316,6 +353,7 @@ export function protoToTransport(proto: ProtoTransport): Transport {
     transportMode,
     transportNumber: proto.transportNumber ?? undefined,
     driverId: proto.driverId ? (proto.driverId as PersonId) : undefined,
+    rideId: proto.rideId ? (proto.rideId as RideId) : undefined,
     needsPickup: proto.needsPickup,
     notes: proto.notes ?? undefined,
   };

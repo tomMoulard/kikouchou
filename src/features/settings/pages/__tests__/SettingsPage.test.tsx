@@ -102,11 +102,18 @@ vi.mock('@/lib/i18n', () => ({
 const mockNotifySuccess = vi.fn();
 const mockNotifyError = vi.fn();
 
+// The page renders the ride-alert card too, which reads the browser's
+// notification permission through this module: a mock that answers only
+// `notify` makes that card throw during render.
 vi.mock('@/lib/notifications', () => ({
   notify: {
     success: (...args: unknown[]) => mockNotifySuccess(...args),
     error: (...args: unknown[]) => mockNotifyError(...args),
   },
+  NOTIFICATION_STATES: ['unsupported', 'default', 'granted', 'denied'],
+  getNotificationState: () => 'unsupported',
+  isNotificationSupported: () => false,
+  requestNotificationPermission: vi.fn().mockResolvedValue('unsupported'),
 }));
 
 const mockSuccessToast = vi.fn();
@@ -135,8 +142,10 @@ vi.mock('@/features/auth/components/AccountSection', () => ({
   AccountSection: () => <div data-testid="account-section" />,
 }));
 
-// Same reason for the guest identity card — it needs PersonProvider — and its
-// own states live in features/settings/components/__tests__.
+// Same reason for the guest identity card: it reads PersonProvider and, through
+// `useTripIdentity`, AuthProvider and Dexie. Its own states live in
+// features/settings/components/__tests__; what this file asserts is that the
+// page still composes it.
 vi.mock('@/features/settings/components/GuestIdentitySelector', () => ({
   GuestIdentitySelector: () => <div data-testid="guest-identity-selector" />,
 }));
@@ -194,7 +203,7 @@ describe('SettingsPage', () => {
     expect(screen.getByTestId('account-section')).toBeInTheDocument();
   });
 
-  it('mounts the guest identity card', () => {
+  it('mounts the guest identity card, the only way to answer "who am I"', () => {
     render(<SettingsPage />, { withProviders: false });
     expect(screen.getByTestId('guest-identity-selector')).toBeInTheDocument();
   });

@@ -17,7 +17,13 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { waitForRoute } from './support/routes';
-import { seedTransport, seedTrip } from './support/seed';
+import {
+  seedPerson,
+  seedRide,
+  seedTransport,
+  seedTrip,
+  seedVehicle,
+} from './support/seed';
 import { clearIndexedDB } from './support/storage';
 
 // ============================================================================
@@ -37,11 +43,12 @@ function isoDatetime(daysFromToday: number): string {
 }
 
 /**
- * Writes one guest, with a headcount, into the `persons` store.
+ * Writes one guest standing for several real people.
  *
- * `seedPerson` in `support/seed` cannot express `headcount`, and headcount is
- * exactly what separates the two numbers this spec is about: a guest row can
- * stand for a couple, so "people" and "guests" are not the same count.
+ * Headcount is what separates the two numbers this spec is about: a guest row
+ * can stand for a couple, so "people" and "guests" are not the same count. This
+ * used to be a private copy of `seedPerson` because the shared helper could not
+ * express the field; it can, so this is a name rather than a fork.
  *
  * Same ordering rule as the shared helpers: seed before the trip is current.
  *
@@ -57,37 +64,7 @@ async function seedGuestWithHeadcount(
   name: string,
   headcount: number,
 ): Promise<string> {
-  return await page.evaluate(
-    async ({ tripId, name, headcount }) => {
-      const id = `seed-person-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-
-      return new Promise<string>((resolve, reject) => {
-        const request = indexedDB.open('kikouchou');
-        request.onerror = () => reject(new Error('Failed to open database'));
-        request.onsuccess = () => {
-          const db = request.result;
-          const tx = db.transaction('persons', 'readwrite');
-          tx.objectStore('persons').add({
-            id,
-            tripId,
-            name,
-            color: '#3b82f6',
-            headcount,
-          });
-
-          tx.oncomplete = () => {
-            db.close();
-            resolve(id);
-          };
-          tx.onerror = () => {
-            db.close();
-            reject(new Error('Failed to create guest'));
-          };
-        };
-      });
-    },
-    { tripId, name, headcount },
-  );
+  return await seedPerson(page, tripId, name, '#3b82f6', { headcount });
 }
 
 /**
@@ -150,6 +127,80 @@ test.describe('Analytics', () => {
     await expect(page.getByTestId('stat-assignments')).toHaveText('0');
     // One future arrival, seeded with needsPickup and no driver.
     await expect(page.getByTestId('stat-pickups')).toHaveText('1');
+  });
+
+  test('counts a shared car once, beside the legs it serves', async ({ page }) => {
+    await clearIndexedDB(page);
+
+    // One car meets two trains. Both pages must show one ride, one car and two
+    // legs: a reader who added the ride total to the leg total would see three
+    // journeys where the trip has one car making one trip to the station.
+    const { tripId } = await seedTrip(page, {
+      name: 'Rides Analytics Trip',
+      startDate: isoDate(30),
+      endDate: isoDate(40),
+    });
+    const alice = await seedPerson(page, tripId, 'Alice');
+    const bruno = await seedPerson(page, tripId, 'Bruno');
+    const guillaume = await seedPerson(page, tripId, 'Guillaume');
+    const vehicleId = await seedVehicle(page, {
+      tripId,
+      name: 'Espace de location',
+      seatCount: 7,
+    });
+    const rideId = await seedRide(page, {
+      tripId,
+      meetDatetime: isoDatetime(30),
+      location: 'Gare de Vannes',
+      driverId: guillaume,
+      vehicleId,
+    });
+    await seedTransport(page, {
+      tripId,
+      personId: alice,
+      type: 'arrival',
+      datetime: isoDatetime(30),
+      rideId,
+    });
+    await seedTransport(page, {
+      tripId,
+      personId: bruno,
+      type: 'arrival',
+      datetime: isoDatetime(30),
+      rideId,
+    });
+
+    await openRoute(page, `/trips/${tripId}/analytics`);
+    await expect(page.getByTestId('stat-rides')).toHaveText('1');
+    await expect(page.getByTestId('stat-vehicles')).toHaveText('1');
+    await expect(page.getByTestId('stat-transports')).toHaveText('2');
+    // Both legs sit in a ride somebody is driving, so nothing needs a driver.
+    await expect(page.getByTestId('stat-pickups')).toHaveText('0');
+
+    // The all-trips page reads the same rows through the same function.
+    await openRoute(page, '/analytics');
+    await expect(page.getByTestId('stat-total-rides')).toHaveText('1');
+    await expect(page.getByTestId('stat-total-vehicles')).toHaveText('1');
+    await expect(page.getByTestId('stat-total-transports')).toHaveText('2');
+  });
+
+  test('a trip holding only a car is not called empty', async ({ page }) => {
+    await clearIndexedDB(page);
+
+    // The hire car is booked long before anybody's train times are known.
+    const { tripId } = await seedTrip(page, {
+      name: 'Car Only Trip',
+      startDate: isoDate(30),
+      endDate: isoDate(40),
+    });
+    await seedVehicle(page, { tripId, name: 'Espace de location', seatCount: 7 });
+
+    await openRoute(page, `/trips/${tripId}/analytics`);
+
+    await expect(page.getByTestId('stat-vehicles')).toHaveText('1');
+    await expect(
+      page.getByRole('button', { name: /new guest|nouveau participant/i }),
+    ).toHaveCount(0);
   });
 
   test('switching trips reports the trip in the URL, not the previous one', async ({

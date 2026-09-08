@@ -44,6 +44,7 @@ import {
   getRoomsByTripId,
   getTripByShareId,
 } from '@/lib/db';
+import { getGuestIdentityStorageKey } from '@/lib/sharing/guest-identity';
 import { cn } from '@/lib/utils';
 import type {
   Person,
@@ -71,15 +72,6 @@ type RoomSelectionStepParams = {
 // ============================================================================
 // Constants
 // ============================================================================
-
-/**
- * Returns the localStorage key used to persist guest identity.
- *
- * @param shareId - The share ID from the URL
- * @returns The localStorage key string
- */
-const getGuestStorageKey = (shareId: string): string =>
-  `kikouchou_guest_${shareId}`;
 
 // ============================================================================
 // Component
@@ -183,7 +175,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
   useEffect(() => {
     if (!shareId) return;
 
-    const stored = localStorage.getItem(getGuestStorageKey(shareId));
+    const stored = localStorage.getItem(getGuestIdentityStorageKey(shareId));
     if (!stored) {
       navigate(`/share/${shareId}/identity`, { replace: true });
       return;
@@ -231,7 +223,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
         // A stale identity from a different trip must not be used here.
         if (storedTripIdRef.current !== undefined && storedTripIdRef.current !== tripData.id) {
           // Clear the stale identity and send the user back to identify themselves
-          try { localStorage.removeItem(getGuestStorageKey(shareId)); } catch { /* non-fatal */ }
+          try { localStorage.removeItem(getGuestIdentityStorageKey(shareId)); } catch { /* non-fatal */ }
           navigate(`/share/${shareId}/identity`, { replace: true });
           return;
         }

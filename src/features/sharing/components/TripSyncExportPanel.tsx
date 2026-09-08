@@ -20,33 +20,16 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { MultiFrameQR } from '@/components/shared/MultiFrameQR';
 import { Card, CardContent } from '@/components/ui/card';
 import {
+  findGuestIdentityShareId,
+  readGuestIdentity,
+} from '@/lib/sharing/guest-identity';
+import {
   buildChangeset,
   buildHostChangeset,
   encodeChangeset,
   splitIntoFrames,
 } from '@/lib/sharing';
-import type { Trip, PersonId } from '@/types';
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-const getGuestStorageKeyForTrip = (tripId: string): string | null => {
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key?.startsWith('kikouchou_guest_')) {
-      try {
-        const data = JSON.parse(localStorage.getItem(key) ?? '');
-        if (data && data.tripId === tripId) {
-          return key;
-        }
-      } catch {
-        // Skip malformed entries
-      }
-    }
-  }
-  return null;
-};
+import type { Trip } from '@/types';
 
 // ============================================================================
 // Types
@@ -93,14 +76,12 @@ const TripSyncExportPanel = memo(function TripSyncExportPanel({
     async function loadAndExport(): Promise<void> {
       try {
         setIsHostExport(false);
-        const guestKey = getGuestStorageKeyForTrip(trip.id as string);
+        const shareId = findGuestIdentityShareId(trip.id);
 
         let changeset: Awaited<ReturnType<typeof buildChangeset>>;
 
-        if (guestKey) {
-          const guestData = JSON.parse(localStorage.getItem(guestKey) ?? '{}');
-          const personId = guestData.personId as PersonId | undefined;
-          const shareId = guestKey.replace('kikouchou_guest_', '');
+        if (shareId !== undefined) {
+          const personId = readGuestIdentity(shareId)?.personId;
 
           if (!personId) {
             setError(t('sharing.sync.noGuestIdentity', 'No guest identity found.'));

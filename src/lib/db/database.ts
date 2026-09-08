@@ -13,14 +13,16 @@ import type {
   AppSettings,
   GuestGroup,
   Person,
+  Ride,
   Room,
   RoomAssignment,
   Transport,
   Trip,
+  Vehicle,
 } from '@/types';
 
 /** Current database schema version */
-export const DB_VERSION = 9;
+export const DB_VERSION = 10;
 
 // ============================================================================
 // Yjs Persistence Types
@@ -111,6 +113,40 @@ export interface TripMemberRow {
 }
 
 /**
+ * What this device has already seen, and already announced, about one ride.
+ *
+ * Two jobs, one row, because both answer the same question — "is this news?" —
+ * and both are answered per device:
+ *
+ * - `seenDatetime` is the watermark that makes "Alice moved 17:00 → 19:00"
+ *   possible at all. `Transport` carries no `updatedAt` and no history, so a
+ *   change is only visible as a difference from what this phone last recorded.
+ * - `firedAtMs` stops the same "leave now" being announced on every clock tick,
+ *   every tab focus and every re-render.
+ *
+ * Deliberately **not** a document collection. A notification another device
+ * already showed is a fact about that device, and syncing it would mean the
+ * first phone to open the app silently suppresses everybody else's alerts.
+ */
+export interface RideNoticeRow {
+  /**
+   * Primary key, `${kind}:${subjectId}` — e.g. `leave:ride_abc`,
+   * `moved:transport_xyz`. Composed rather than compound so a notice can be
+   * addressed without knowing which of the two ids it hangs off.
+   */
+  key: string;
+  /** Local trip id, carrying this row through `deleteTrip`'s cascade. */
+  tripId: string;
+  /**
+   * The leg datetime this device last showed the user, ISO 8601.
+   * Present on watermark rows; a difference from the live value is the change.
+   */
+  seenDatetime?: string;
+  /** When this device last announced this notice, epoch ms. */
+  firedAtMs?: number;
+}
+
+/**
  * Kikouchou IndexedDB database class.
  *
  * Provides typed access to all application data tables with optimized
@@ -175,6 +211,35 @@ export class KikouchouDatabase extends Dexie {
    * Compound indexes: [tripId+datetime], [tripId+personId], [tripId+type]
    */
   transports!: Table<Transport, string>;
+
+  /**
+   * Rides table - stores the car journeys that serve transport legs.
+   * Primary key: id (RideId)
+   * Indexes: tripId, driverId (cascade), vehicleId (cascade)
+   * Compound index: [tripId+meetDatetime] for the chronological read
+   *
+   * Passengers are not stored here: a leg points at its ride through
+   * `Transport.rideId`, because the shared document merges an array field
+   * atomically and two guests joining one car offline would lose a join.
+   */
+  rides!: Table<Ride, string>;
+
+  /**
+   * Vehicles table - stores the cars available to a trip.
+   * Primary key: id (VehicleId)
+   * Indexes: tripId, ownerId (cascade)
+   */
+  vehicles!: Table<Vehicle, string>;
+
+  /**
+   * Ride notices - device-local record of what this phone has already shown.
+   * Primary key: key
+   * Indexes: tripId, for the delete cascade
+   *
+   * See {@link RideNoticeRow}. Never a document collection: a notification
+   * another device already fired is not a fact about the trip.
+   */
+  rideNotices!: Table<RideNoticeRow, string>;
 
   /**
    * Activities table - stores the shared trip agenda (outings, events, meals).
@@ -504,6 +569,52 @@ export class KikouchouDatabase extends Dexie {
         'id, tripId, organizerId, *participantIds, [tripId+startDatetime], [tripId+category]',
       settings: 'id',
       guestGroups: 'id, name, remoteGroupId',
+      yjsUpdates: '++id, tripId',
+      yjsOutbox: '++id, tripId',
+      syncCursors: 'tripId',
+      tripMembers: '[tripId+userId], tripId, userId',
+    });
+
+    /**
+     * Schema Version 10 - Rides, vehicles and the notice watermark
+     *
+     * Added:
+     * - `rides`: the car journey that serves one or more transport legs
+     *   - plain `tripId` so the cascade and every trip query can see a row even
+     *     if it is missing the second half of a compound index
+     *   - `driverId` for the cascade that clears a deleted guest's driving
+     *   - `vehicleId` for the cascade that clears a deleted car
+     *   - `[tripId+meetDatetime]` for the chronological read
+     * - `vehicles`: a car available to the trip, `tripId` + `ownerId` for the
+     *   same two reasons
+     * - `rideId` index on `transports`: "who is in this car" is a lookup by the
+     *   ride, and membership lives on the leg
+     * - `rideNotices`: device-local record of what this phone has already shown
+     *   and already seen. `key` is the primary key; `tripId` carries the cascade
+     *
+     * **No data migration.** A transport that already carries a `driverId` is
+     * *read* as a one-passenger ride by `resolveRides()` rather than converted.
+     * An `.upgrade()` that invented `Ride` rows would run on whichever device
+     * happened to open the app first and push its guesses into the shared
+     * document as though the group had agreed them — the same failure mode
+     * `transport-datetime` refuses for timezones. Reading the old shape costs a
+     * branch; writing it costs everyone's data.
+     */
+    this.version(10).stores({
+      trips: 'id, &shareId, remoteTripId, startDate, createdAt',
+      rooms: 'id, [tripId+order]',
+      persons: 'id, tripId, [tripId+name]',
+      roomAssignments:
+        'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+      transports:
+        'id, personId, driverId, rideId, [tripId+datetime], [tripId+personId], [tripId+type]',
+      rides: 'id, tripId, driverId, vehicleId, [tripId+meetDatetime]',
+      vehicles: 'id, tripId, ownerId',
+      activities:
+        'id, tripId, organizerId, *participantIds, [tripId+startDatetime], [tripId+category]',
+      settings: 'id',
+      guestGroups: 'id, name, remoteGroupId',
+      rideNotices: 'key, tripId',
       yjsUpdates: '++id, tripId',
       yjsOutbox: '++id, tripId',
       syncCursors: 'tripId',

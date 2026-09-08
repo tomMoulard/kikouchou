@@ -132,6 +132,15 @@ vi.mock('@/contexts/ActivityContext', () => ({
   useActivityContext: () => mockUseActivityContext(),
 }));
 
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: () => ({
+    rides: [],
+    vehicles: [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 // Local midnight, so "today" is the same calendar day at any UTC offset.
 vi.mock('@/hooks/useToday', () => ({
   useToday: () => ({ today: new Date(2026, 3, 4) }),

@@ -141,6 +141,54 @@ describe('GuestGroupForm', () => {
     });
   });
 
+  it('keeps a member’s child seat through a save that touches nothing else', async () => {
+    // The form rebuilds every member from its draft rows, so a field it does
+    // not read back is a field the next save silently deletes — which would
+    // strip the seat off a child the group was saved from a trip to remember.
+    const user = userEvent.setup(),
+      onSubmit = vi.fn().mockResolvedValue(undefined),
+      withSeat: GuestGroup = {
+        ...familyGroup,
+        members: [
+          {
+            id: 'member-3' as GuestGroupMemberId,
+            name: 'Lila',
+            color: '#22c55e' as HexColor,
+            childSeat: 'booster',
+          },
+        ],
+      };
+
+    render(<GuestGroupForm group={withSeat} onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith({
+        name: 'Family',
+        members: [{ name: 'Lila', color: '#22c55e', childSeat: 'booster' }],
+      });
+    });
+  });
+
+  it('leaves a member with no child seat when the picker stays on "none needed"', async () => {
+    const user = userEvent.setup(),
+      onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    render(<GuestGroupForm group={familyGroup} onSubmit={onSubmit} onCancel={vi.fn()} />);
+
+    expect(
+      screen.getAllByRole('combobox', { name: 'childSeats.label' })[0],
+    ).toHaveTextContent('childSeats.none');
+
+    await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+    expect(onSubmit.mock.calls[0]?.[0].members[0]).not.toHaveProperty('childSeat');
+  });
+
   it('refuses a group with no name', async () => {
     const user = userEvent.setup(),
       onSubmit = vi.fn();

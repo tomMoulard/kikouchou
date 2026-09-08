@@ -322,6 +322,47 @@ describe('createGuestGroupFromPersons', () => {
     expect(persons[0]?.phone).toBe('+33 6 12 34 56 78');
   });
 
+  it('carries a declared child seat both ways', async () => {
+    const source = await createTestTrip('source'),
+      target = await createTestTrip('target');
+
+    await createPerson(source, {
+      name: 'Lila',
+      color: hexColor('#22c55e'),
+      childSeat: 'booster',
+    });
+
+    // Which restraint a child needs changes about once every two years, not
+    // once per holiday. Dropping it here would make the family roster hand back
+    // an adult-shaped guest every summer, and the ride's seat tally read zero.
+    const group = await createGuestGroupFromPersons(
+      'Family',
+      await getPersonsByTripId(source),
+    );
+    expect(group.members[0]?.childSeat).toBe('booster');
+
+    const { persons } = await importGuestGroupMembers(target, group.id);
+    expect(persons[0]?.childSeat).toBe('booster');
+  });
+
+  it('gives an adult member no child seat on either leg of the round trip', async () => {
+    const source = await createTestTrip('source'),
+      target = await createTestTrip('target');
+
+    await createPerson(source, { name: 'Tom', color: hexColor('#ef4444') });
+
+    const group = await createGuestGroupFromPersons(
+      'Family',
+      await getPersonsByTripId(source),
+    );
+    expect(group.members[0]?.childSeat).toBeUndefined();
+
+    const { persons } = await importGuestGroupMembers(target, group.id);
+    // The imported guest carries no key at all, so a ride asks for no seat and
+    // the field reads the same as a hand-typed adult's.
+    expect(persons[0]).not.toHaveProperty('childSeat');
+  });
+
   it('round-trips through an import without losing a headcount', async () => {
     const source = await createTestTrip('source'),
       target = await createTestTrip('target');

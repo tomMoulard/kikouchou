@@ -23,6 +23,7 @@ import {
   selectPickupsNeedingDriver,
   toTransportInstant,
 } from '@/features/transports/utils/pickup-utils';
+import { resolveRides } from '@/features/transports/utils/ride-model';
 import { db } from '@/lib/db/database';
 import { getPersonHeadcount } from '@/types';
 import type { ISODateTimeString, Transport, TripId } from '@/types';
@@ -56,7 +57,24 @@ export interface TripStats {
   readonly departureCount: number;
   /** All transports — always `arrivalCount + departureCount`. */
   readonly transportCount: number;
-  /** Upcoming transports flagged `needsPickup` that still have no driver. */
+  /**
+   * Car journeys the trip holds, as `resolveRides()` reads them.
+   *
+   * Not `db.rides.count()`. A leg carrying a bare `driverId` and no ride is a
+   * one-passenger journey to every transport surface, so counting the table
+   * would report zero where the list draws one.
+   */
+  readonly rideCount: number;
+  /** Cars available to the trip. */
+  readonly vehicleCount: number;
+  /**
+   * Upcoming transports flagged `needsPickup` that nobody is driving yet.
+   *
+   * "Nobody is driving" now spans three arrangements — no ride at all, a ride
+   * with no driver, and no legacy `driverId` — which is why the count is taken
+   * from `selectPickupsNeedingDriver` with the trip's rides rather than
+   * recomputed here.
+   */
   readonly pickupsNeedingDriver: number;
 }
 
@@ -110,26 +128,37 @@ export async function loadTripStats(
   tripId: TripId,
   now: ISODateTimeString,
 ): Promise<TripStats> {
-  const [persons, roomCount, assignmentCount, transports] = await Promise.all([
-    // Same compound ranges as PersonContext / RoomContext / AssignmentContext /
-    // TransportContext, so the analytics totals match the feature pages exactly.
-    db.persons
-      .where('[tripId+name]')
-      .between([tripId, ''], [tripId, MAX_STRING_KEY])
-      .toArray(),
-    db.rooms
-      .where('[tripId+order]')
-      .between([tripId, 0], [tripId, Infinity])
-      .count(),
-    db.roomAssignments
-      .where('[tripId+startDate]')
-      .between([tripId, ''], [tripId, MAX_STRING_KEY])
-      .count(),
-    db.transports
-      .where('[tripId+datetime]')
-      .between([tripId, ''], [tripId, MAX_STRING_KEY])
-      .toArray(),
-  ]);
+  const [persons, roomCount, assignmentCount, transports, rides, vehicles] =
+    await Promise.all([
+      // Same compound ranges as PersonContext / RoomContext /
+      // AssignmentContext / TransportContext, so the analytics totals match the
+      // feature pages exactly.
+      db.persons
+        .where('[tripId+name]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .toArray(),
+      db.rooms
+        .where('[tripId+order]')
+        .between([tripId, 0], [tripId, Infinity])
+        .count(),
+      db.roomAssignments
+        .where('[tripId+startDate]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .count(),
+      db.transports
+        .where('[tripId+datetime]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .toArray(),
+      // Read whole rather than counted: "still needs a driver" depends on which
+      // rides have one, not on how many there are.
+      db.rides
+        .where('[tripId+meetDatetime]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .toArray(),
+      // Read whole for the same reason: a journey's car is part of what
+      // `resolveRides()` resolves, and the count falls out of the array.
+      db.vehicles.where('tripId').equals(tripId).toArray(),
+    ]);
 
   // "Count people, not rows" — a guest row can stand for several real people.
   let headcount = 0;
@@ -160,7 +189,19 @@ export async function loadTripStats(
 
   // The shared selection the pickup alert panel and the transport list's alert
   // gate use, so the badge here cannot report a number the panel contradicts.
-  const pickupsNeedingDriver = selectPickupsNeedingDriver(upcomingPickups).length;
+  const pickupsNeedingDriver = selectPickupsNeedingDriver(
+    upcomingPickups,
+    rides,
+  ).length;
+
+  // Journeys, not `rides` rows. `resolveRides()` is the single shape every
+  // transport surface consumes, and it reads a leg carrying a bare `driverId`
+  // and no ride as a one-passenger journey of its own — the shape the share
+  // wizard writes when a guest says they will have a car. Counting the table
+  // instead would report zero car journeys on a trip whose transport list is
+  // drawing three of them, which is exactly the divergence this module exists
+  // to remove.
+  const rideCount = resolveRides({ transports, rides, vehicles, persons }).length;
 
   return {
     tripId,
@@ -171,6 +212,8 @@ export async function loadTripStats(
     arrivalCount,
     departureCount,
     transportCount: transports.length,
+    rideCount,
+    vehicleCount: vehicles.length,
     pickupsNeedingDriver,
   };
 }
@@ -217,6 +260,8 @@ export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
       arrivalCount: totals.arrivalCount + row.arrivalCount,
       departureCount: totals.departureCount + row.departureCount,
       transportCount: totals.transportCount + row.transportCount,
+      rideCount: totals.rideCount + row.rideCount,
+      vehicleCount: totals.vehicleCount + row.vehicleCount,
       pickupsNeedingDriver:
         totals.pickupsNeedingDriver + row.pickupsNeedingDriver,
     }),
@@ -228,6 +273,8 @@ export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
       arrivalCount: 0,
       departureCount: 0,
       transportCount: 0,
+      rideCount: 0,
+      vehicleCount: 0,
       pickupsNeedingDriver: 0,
     },
   );
@@ -236,16 +283,29 @@ export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
 /**
  * Whether a trip has nothing to summarise yet.
  *
- * Six zeros read like a load failure; the page shows an empty state instead.
+ * A grid of zeros reads like a load failure; the page shows an empty state
+ * instead. The condition lists every count that is read from a table of its
+ * own — guests, rooms, assignments, transports, rides and vehicles — and
+ * nothing else. The rest of {@link TripStats} is derived from those reads
+ * (`headcount` from the guest rows, `arrivalCount` / `departureCount` /
+ * `pickupsNeedingDriver` from the transports), so a derived figure cannot be
+ * non-zero while its source is zero and adding it here would say nothing.
+ *
+ * Rides and vehicles belong in the list for the opposite reason: they are
+ * genuinely independent. Cars are entered before anybody's train times are
+ * known, so a trip holding two cars and nothing else would otherwise be told
+ * it has nothing to add up on a page that was about to show it a 2.
  *
  * @param stats - The trip's stats.
- * @returns True when the trip holds no guests, rooms, assignments or transports.
+ * @returns True when the trip holds none of the six.
  */
 export function isTripStatsEmpty(stats: TripStats): boolean {
   return (
     stats.guestCount === 0 &&
     stats.roomCount === 0 &&
     stats.assignmentCount === 0 &&
-    stats.transportCount === 0
+    stats.transportCount === 0 &&
+    stats.rideCount === 0 &&
+    stats.vehicleCount === 0
   );
 }

@@ -506,12 +506,30 @@ export async function updateTransportWithOwnershipCheck(
       throw new Error('Cannot update transport: transport does not belong to current trip');
     }
 
-    await db.transports.update(
-      id,
-      data.datetime === undefined
-        ? data
-        : { ...data, datetime: requireCanonicalDatetime(data.datetime) },
-    );
+    // Naming a driver on the leg takes it out of any shared car it was in.
+    //
+    // `setTransportRide` clears the leg's `driverId` when it joins a ride, so
+    // that a leg never names two drivers. This is the other half of that rule,
+    // and without it the invariant was simply false: put Alice's arrival in
+    // Guillaume's car, then open the same arrival and pick Bob as her driver,
+    // and the row carried both. `resolveRides` lets the ride win, so the trip
+    // showed Guillaume while any surface reading the leg showed Bob — and if the
+    // ride had no driver at all, `isLegCovered` reported Alice as covered by Bob
+    // while the ride card still read "nobody driving yet".
+    //
+    // Only a *truthy* driver detaches. A form that saves an unrelated edit sends
+    // `driverId: undefined` for a leg whose driver lives on its ride, and that
+    // must not quietly remove the passenger from the car — which is why this
+    // tests the value rather than the key's presence.
+    const detachesFromRide = Boolean(data.driverId);
+
+    await db.transports.update(id, {
+      ...data,
+      ...(data.datetime === undefined
+        ? {}
+        : { datetime: requireCanonicalDatetime(data.datetime) }),
+      ...(detachesFromRide ? { rideId: undefined } : {}),
+    });
   });
 }
 

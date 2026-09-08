@@ -12,6 +12,7 @@ import { RoomProvider } from '@/contexts/RoomContext';
 import { PersonProvider } from '@/contexts/PersonContext';
 import { AssignmentProvider } from '@/contexts/AssignmentContext';
 import { TransportProvider } from '@/contexts/TransportContext';
+import { RideProvider } from '@/contexts/RideContext';
 import { ActivityProvider } from '@/contexts/ActivityContext';
 import { AuthProvider } from '@/features/auth/AuthContext';
 import { AccountTripSync } from '@/lib/sync/AccountTripSync';
@@ -54,7 +55,12 @@ interface AppProvidersProps {
  * 3. PersonProvider - Manages persons for the current trip (depends on TripProvider)
  * 4. AssignmentProvider - Manages room assignments (depends on TripProvider)
  * 5. TransportProvider - Manages transports (depends on TripProvider)
- * 6. ActivityProvider - Manages the shared activity agenda (depends on TripProvider)
+ * 6. RideProvider - Manages the car journeys and the cars (depends on
+ *    TripProvider). Nested *inside* TransportProvider because the two are read
+ *    together — a ride's passenger list is assembled from the legs, and the
+ *    pickup panel asks both whether anybody is driving yet — so a component
+ *    reaching for rides always has transports in scope too.
+ * 7. ActivityProvider - Manages the shared activity agenda (depends on TripProvider)
  *
  * The WebRTC awareness provider that used to sit here is gone with the
  * transport; sync state now comes from SupabaseTripSync inside YjsTripSync.
@@ -128,9 +134,11 @@ export function AppProviders({ children }: AppProvidersProps): ReactElement {
             <PersonProvider>
               <AssignmentProvider>
                 <TransportProvider>
-                  <ActivityProvider>
-                    <YjsTripSync>{children}</YjsTripSync>
-                  </ActivityProvider>
+                  <RideProvider>
+                    <ActivityProvider>
+                      <YjsTripSync>{children}</YjsTripSync>
+                    </ActivityProvider>
+                  </RideProvider>
                 </TransportProvider>
               </AssignmentProvider>
             </PersonProvider>

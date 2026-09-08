@@ -154,6 +154,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
                   dateLocale={props.dateLocale}
                   onAssignmentClick={props.onAssignmentClick}
                   onTransportClick={props.onTransportClick}
+                  rideForTransport={props.rideForTransport}
                 />
               </div>
             ))}

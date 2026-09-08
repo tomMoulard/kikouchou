@@ -7,7 +7,21 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@/test/utils';
-import type { Person, Trip } from '@/types';
+import type { Person, PersonFormData, Trip } from '@/types';
+
+/**
+ * The DOM APIs Radix's `Select` reaches for and jsdom does not implement.
+ * Without them the child-seat picker throws the moment it is opened.
+ */
+function installSelectPolyfills(): void {
+  const proto = window.HTMLElement.prototype as unknown as Record<string, unknown>;
+  proto.hasPointerCapture ??= () => false;
+  proto.setPointerCapture ??= () => undefined;
+  proto.releasePointerCapture ??= () => undefined;
+  proto.scrollIntoView ??= () => undefined;
+}
+
+installSelectPolyfills();
 
 // ============================================================================
 // Mocks
@@ -318,6 +332,104 @@ describe('PersonForm', () => {
       'true',
     );
     expect(screen.getByLabelText(/persons\.headcount/)).toHaveValue(2);
+  });
+
+  it('submits no child seat when the picker is left on "none needed"', async () => {
+    // Absent is the answer for every adult; a form that defaulted to a seat
+    // would have every guest asking a car for a booster.
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { user } = render(
+      <PersonForm onSubmit={onSubmit} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+    await user.type(screen.getByLabelText(/persons\.name/), 'Tom');
+    await user.click(screen.getByRole('button', { name: /persons\.moreDetails/ }));
+
+    expect(screen.getByRole('combobox', { name: 'childSeats.label' })).toHaveTextContent(
+      'childSeats.none',
+    );
+
+    await user.click(screen.getByText('common.save'));
+
+    const submitted = onSubmit.mock.calls[0]?.[0] as PersonFormData;
+    expect(submitted.name).toBe('Tom');
+    expect(submitted.childSeat).toBeUndefined();
+  });
+
+  it('submits the child seat kind the user declares', async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { user } = render(
+      <PersonForm onSubmit={onSubmit} onCancel={vi.fn()} />,
+      { withProviders: false },
+    );
+    await user.type(screen.getByLabelText(/persons\.name/), 'Lila');
+    await user.click(screen.getByRole('button', { name: /persons\.moreDetails/ }));
+    await user.click(screen.getByRole('combobox', { name: 'childSeats.label' }));
+    await user.click(await screen.findByRole('option', { name: 'childSeats.booster' }));
+    await user.click(screen.getByText('common.save'));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Lila', childSeat: 'booster' }),
+    );
+  });
+
+  it('opens the section pre-filled when editing a guest who needs a seat', () => {
+    render(
+      <PersonForm
+        person={{ ...existingPerson, childSeat: 'rearFacing' }}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.getByRole('button', { name: /persons\.moreDetails/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('combobox', { name: 'childSeats.label' })).toHaveTextContent(
+      'childSeats.rearFacing',
+    );
+  });
+
+  it('clears the seat rather than storing one when "none needed" is picked back', async () => {
+    // The seat a child needs changes as they grow; the form has to be able to
+    // say "not any more" without leaving a fourth kind behind that means none.
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const { user } = render(
+      <PersonForm
+        person={{ ...existingPerson, childSeat: 'booster' }}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByRole('combobox', { name: 'childSeats.label' }));
+    await user.click(await screen.findByRole('option', { name: 'childSeats.none' }));
+    await user.click(screen.getByText('common.save'));
+
+    const submitted = onSubmit.mock.calls[0]?.[0] as PersonFormData;
+    expect(submitted.name).toBe('Alice');
+    expect(submitted.childSeat).toBeUndefined();
+  });
+
+  it('reports the form dirty when only the child seat changes', async () => {
+    // The comparator scar, one layer up: a field missing from the dirty check
+    // makes the unsaved-changes guard wave the edit away.
+    const onDirtyChange = vi.fn();
+    const { user } = render(
+      <PersonForm
+        person={existingPerson}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        onDirtyChange={onDirtyChange}
+      />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByRole('button', { name: /persons\.moreDetails/ }));
+    await user.click(screen.getByRole('combobox', { name: 'childSeats.label' }));
+    await user.click(await screen.findByRole('option', { name: 'childSeats.forwardFacing' }));
+
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
   });
 
   it('reports dirty state changes via onDirtyChange', async () => {

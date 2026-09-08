@@ -34,6 +34,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { AccountSection } from '@/features/auth/components/AccountSection';
 import { GuestIdentitySelector } from '@/features/settings/components/GuestIdentitySelector';
+import { NotificationSettings } from '@/features/settings/components/NotificationSettings';
 import { PrintSummaryCard } from '@/features/settings/components/PrintSummaryCard';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
 import { TripForm } from '@/features/trips/components/TripForm';
@@ -494,6 +495,7 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
  * - Account: sign in with Google, sign out
  * - Language selector (French/English)
  * - Theme selector (light/dark/system)
+ * - Ride alerts: opt in to OS notifications for the cars you drive
  * - App version display
  * - Clear data option with confirmation
  * - About section
@@ -524,7 +526,9 @@ function SettingsPageComponent(): ReactElement {
         <CurrentTripSection />
 
         {/* Which guest this browser is — directly under the trip it belongs to,
-            because the answer is per trip and means nothing without one. */}
+            because the answer is per trip and means nothing without one. The
+            transport views filter by this answer too, which is why the card
+            writes the explicit choice and not only the share-link store. */}
         <GuestIdentitySelector />
 
         {/* The printable sheet, reached from here rather than from a
@@ -540,6 +544,11 @@ function SettingsPageComponent(): ReactElement {
 
         {/* Theme Section - grouped with Language: both are presentation preferences */}
         <ThemeSelector />
+
+        {/* Ride alerts — below the presentation preferences because it is the
+            only card here that asks the browser for something, and above About
+            because it is a preference rather than reference material. */}
+        <NotificationSettings />
 
         {/* About Section */}
         <AboutSection />

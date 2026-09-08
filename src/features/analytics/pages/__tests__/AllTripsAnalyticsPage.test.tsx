@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@/test/utils';
 import { loadTripStats } from '@/features/analytics/lib/trip-stats';
 import { db } from '@/lib/db/database';
-import type { Person, Room, Transport, Trip, TripId } from '@/types';
+import type { Person, Ride, Room, Transport, Trip, TripId, Vehicle } from '@/types';
 
 // ============================================================================
 // Fixtures
@@ -45,6 +45,20 @@ function person(id: string, tripId: TripId, headcount?: number): Person {
 
 function room(id: string, tripId: TripId, order: number): Room {
   return { id, tripId, name: id, capacity: 2, order } as unknown as Room;
+}
+
+function vehicle(id: string, tripId: TripId): Vehicle {
+  return { id, tripId, name: id, seatCount: 5 } as unknown as Vehicle;
+}
+
+function ride(id: string, tripId: TripId): Ride {
+  return {
+    id,
+    tripId,
+    direction: 'pickup',
+    meetDatetime: '2026-07-02T14:00:00.000Z',
+    location: 'Gare du Nord',
+  } as unknown as Ride;
 }
 
 function transport(
@@ -151,6 +165,29 @@ describe('AllTripsAnalyticsPage', () => {
     const tripA = await loadTripStats(TRIP_A, new Date().toISOString());
     const tripB = await loadTripStats(TRIP_B, new Date().toISOString());
     expect(tripA.transportCount + tripB.transportCount).toBe(3);
+  });
+
+  it('totals rides and cars across trips, apart from the legs', async () => {
+    await db.vehicles.bulkPut([vehicle('v1', TRIP_A), vehicle('v2', TRIP_B)]);
+    await db.rides.bulkPut([
+      ride('ride-1', TRIP_A),
+      ride('ride-2', TRIP_A),
+      ride('ride-3', TRIP_B),
+    ]);
+
+    render(<AllTripsAnalyticsPage />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(statValue('analytics.totalRides')).toBe('3');
+    });
+    expect(statValue('analytics.totalVehicles')).toBe('2');
+
+    // The sum a reader would get from the two trips' own pages.
+    const now = new Date().toISOString();
+    const tripA = await loadTripStats(TRIP_A, now);
+    const tripB = await loadTripStats(TRIP_B, now);
+    expect(tripA.rideCount + tripB.rideCount).toBe(3);
+    expect(tripA.vehicleCount + tripB.vehicleCount).toBe(2);
   });
 
   it('lists one breakdown row per trip', async () => {

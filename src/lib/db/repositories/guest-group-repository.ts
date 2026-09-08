@@ -198,9 +198,10 @@ export interface ImportGuestGroupResult {
  * Imports members of a group into a trip as new guests.
  *
  * Every selected member becomes a `Person` carrying the member's name, colour,
- * headcount and notes. Stay dates are deliberately not part of a member: they
- * belong to a trip, not to a person, so an imported guest starts with none and
- * the calendar treats them as present for the whole trip until told otherwise.
+ * headcount, notes, phone and child seat. Stay dates are deliberately not part
+ * of a member: they belong to a trip, not to a person, so an imported guest
+ * starts with none and the calendar treats them as present for the whole trip
+ * until told otherwise.
  *
  * @param tripId - The trip receiving the guests
  * @param groupId - The group to import from
@@ -250,6 +251,10 @@ export async function importGuestGroupMembers(
         ...(getPersonHeadcount(member) > 1 ? { headcount: member.headcount } : {}),
         ...(member.notes ? { notes: member.notes } : {}),
         ...(member.phone ? { phone: member.phone } : {}),
+        // Which seat a child needs outlives any one holiday, so it travels with
+        // the member. Without it the family roster gives back an adult-shaped
+        // guest every summer and the ride's seat tally quietly reads zero.
+        ...(member.childSeat ? { childSeat: member.childSeat } : {}),
       });
     }
 
@@ -265,8 +270,9 @@ export async function importGuestGroupMembers(
  * Creates a group from guests that already exist on a trip.
  *
  * The fastest way to a first group: the family is usually already typed into
- * this year's trip. Each guest contributes its name, colour, headcount and
- * notes; nothing trip-specific (stay dates, rooms, transports) comes along.
+ * this year's trip. Each guest contributes its name, colour, headcount, notes,
+ * phone and child seat; nothing trip-specific (stay dates, rooms, transports)
+ * comes along.
  *
  * @param name - Name for the new group
  * @param persons - The guests to capture
@@ -289,6 +295,7 @@ export async function createGuestGroupFromPersons(
       ...(getPersonHeadcount(person) > 1 ? { headcount: person.headcount } : {}),
       ...(person.notes ? { notes: person.notes } : {}),
       ...(person.phone ? { phone: person.phone } : {}),
+      ...(person.childSeat ? { childSeat: person.childSeat } : {}),
     })),
   });
 }

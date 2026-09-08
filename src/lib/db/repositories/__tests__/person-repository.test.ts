@@ -379,6 +379,32 @@ describe('updatePerson', () => {
     expect(retrieved1?.name).toBe('Updated Person 1');
     expect(retrieved2?.name).toBe('Person 2'); // Unchanged
   });
+
+  it('stores a child seat kind it knows', async () => {
+    const tripId = await createTestTrip();
+    const person = await createPerson(tripId, createTestPersonData({ name: 'Lila' }));
+
+    await updatePerson(person.id, { childSeat: 'booster' });
+
+    expect((await getPersonById(person.id))?.childSeat).toBe('booster');
+  });
+
+  it('drops a child seat kind it does not know', async () => {
+    // The update path is the one the assistant and an imported changeset reach,
+    // and neither has ever seen a `<select>`. An unrecognised kind would render
+    // its own translation key as a badge and put NaN in the ride's seat tally.
+    const tripId = await createTestTrip();
+    const person = await createPerson(
+      tripId,
+      createTestPersonData({ name: 'Lila', childSeat: 'booster' }),
+    );
+
+    await updatePerson(person.id, {
+      childSeat: 'hammock' as PersonFormData['childSeat'],
+    });
+
+    expect((await getPersonById(person.id))?.childSeat).toBeUndefined();
+  });
 });
 
 // ============================================================================

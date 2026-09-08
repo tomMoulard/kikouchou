@@ -279,6 +279,18 @@ describe('Layout', () => {
       );
     });
 
+    it('does not offer the trip\'s cars', () => {
+      renderLayout();
+
+      // Deliberately absent from both bars. A car exists to be picked on a
+      // ride, so its page hangs off the transport list that uses it and is
+      // reached by the Cars button there. Asserting it here rather than
+      // trusting the array: dropping the nav entry and leaving the mobile
+      // "More" sheet listing it would put a dead link one tap away.
+      expect(screen.queryByText('nav.vehicles')).not.toBeInTheDocument();
+      expect(screen.queryByText('vehicles.title')).not.toBeInTheDocument();
+    });
+
     it('shows empty trip placeholder in header', () => {
       renderLayout();
 

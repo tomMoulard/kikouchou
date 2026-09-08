@@ -27,6 +27,7 @@ import { db } from '@/lib/db/database';
 import { useAuth } from '@/features/auth/AuthContext';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { cacheClaimedPersonId } from '@/lib/identity/trip-identity';
 import { claimParticipant, fetchClaimedParticipants } from '@/lib/sync/join-trip';
 import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
 import { useJoinTrip } from '../hooks/useJoinTrip';
@@ -177,6 +178,12 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
       }
 
       posthog?.capture('trip_identity_claimed');
+
+      // Cache the confirmed claim locally. The server row stays authoritative,
+      // but until this line existed the claim was written to Postgres and never
+      // read back — so an account-joined guest reached the trip with no local
+      // sense of being anybody, and every "my travel" view showed them nothing.
+      await cacheClaimedPersonId(tripId, user.id, personId);
 
       // Only on a confirmed claim.
       void navigate(`/trips/${tripId}/calendar`);

@@ -16,6 +16,7 @@
  *   usePersonContext,
  *   useAssignmentContext,
  *   useTransportContext,
+ *   useRideContext,
  *   useActivityContext,
  * } from '@/contexts';
  * ```
@@ -81,6 +82,17 @@ export {
   useTransportContext,
   type TransportContextValue,
 } from './TransportContext';
+
+// ============================================================================
+// Ride Context
+// ============================================================================
+
+export {
+  RideProvider,
+  RideContext,
+  useRideContext,
+  type RideContextValue,
+} from './RideContext';
 
 // ============================================================================
 // Activity Context

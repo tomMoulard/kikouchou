@@ -30,6 +30,7 @@ import { roomRoutes } from '@/features/rooms/routes';
 import { personRoutes } from '@/features/persons/routes';
 import { guestGroupRoutes } from '@/features/guest-groups/routes';
 import { transportRoutes } from '@/features/transports/routes';
+import { vehicleRoutes } from '@/features/vehicles/routes';
 import { activityRoutes } from '@/features/activities/routes';
 import { joinRoutes, sharingRoutes, sharingSyncRoutes } from '@/features/sharing/routes';
 import { assistantRoutes } from '@/features/assistant/routes';
@@ -235,6 +236,11 @@ export const appRoutes: RouteObject = {
     // Note: transportRoutes uses 'transports' path, need to check if it needs trip scoping
     ...transportRoutes,
 
+    // The trip's cars, under the transport list rather than beside it — a car
+    // is entered in order to be picked on a ride, never for its own sake
+
+    ...vehicleRoutes,
+
     // Shared activity agenda (trip-scoped)
     ...activityRoutes,
 
@@ -295,6 +301,7 @@ const publicRoutes: RouteObject = {
  *   - `/trips/:tripId/rooms` - Room management
  *   - `/trips/:tripId/persons` - Person management
  *   - `/trips/:tripId/transports` - Transport management
+ *   - `/trips/:tripId/transports/vehicles` - The cars available to the trip
  *   - `/trips/:tripId/activities` - Shared activity agenda
  *   - `/trips/:tripId/analytics` - Trip analytics
  *   - `/trips/:tripId/summary` - Printable one-page trip summary
@@ -349,3 +356,4 @@ export type { PersonListParams } from '@/features/persons/routes';
 export type { AnalyticsParams } from '@/features/analytics/routes';
 export type { SummaryParams } from '@/features/summary/routes';
 export type { ActivityListParams } from '@/features/activities/routes';
+export type { VehicleListParams } from '@/features/vehicles/routes';

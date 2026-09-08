@@ -48,6 +48,16 @@ vi.mock('@/contexts/TripContext', () => ({
   }),
 }));
 
+// The dialog resolves the car select's options so the form does not have to.
+// Empty here: these tests are about the dialog's own modes and its unsaved
+// guard, and `TransportForm.test.tsx` covers what the select does with them.
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: () => ({
+    rides: [],
+    vehicles: [],
+  }),
+}));
+
 vi.mock('@/hooks', () => ({
   useOfflineAwareNotify: () => ({
     notifySuccess: vi.fn(),

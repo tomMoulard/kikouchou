@@ -6,6 +6,7 @@
 
 import { type ReactElement, memo, useCallback, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Car } from 'lucide-react';
 
 import { statusVariants } from '@/components/ui/status.variants';
 import { TransportIcon } from '@/components/shared/TransportIcon';
@@ -17,6 +18,11 @@ import { formatTime } from '../utils/calendar-utils';
  * Transport indicator pill displayed within a calendar day.
  * Shows arrival (green) or departure (orange) with transport icon, time, person, and location.
  * When onClick is provided, becomes an interactive button with keyboard support.
+ *
+ * A leg somebody is driving carries a car glyph as well. The glyph is never
+ * alone: it is announced through the pill's own label and repeated in the
+ * tooltip, because a pill three words wide cannot afford a second line and an
+ * unlabelled icon says nothing to a screen reader.
  */
 const TransportIndicator = memo(function TransportIndicator({
   transport,
@@ -31,12 +37,30 @@ const TransportIndicator = memo(function TransportIndicator({
   const transportMode = transport.transport.transportMode ?? 'other';
   const isInteractive = !!onClick;
 
+  // A legacy `driverId`-only leg has no ride to name, and the calendar keeps
+  // rendering it exactly as it did before rides existed. `CalendarPage` already
+  // leaves `ride` unset for those; the check is repeated here so a caller
+  // assembling a `CalendarTransport` by hand cannot reintroduce the difference.
+  const ride = transport.ride !== undefined && !transport.ride.isLegacy
+    ? transport.ride
+    : undefined;
+  const driverName = ride?.driver?.name;
+
+  const rideLabel =
+    ride === undefined
+      ? undefined
+      : driverName === undefined
+        ? t('rides.partOfRide', 'Part of a shared ride')
+        : t('rides.partOfRideWithDriver', 'Part of a shared ride — {{name}} driving', {
+            name: driverName,
+          });
+
   // Build title for accessibility - enhanced when clickable
   const typeLabel = isArrival
     ? t('transports.arrival', 'Arrival')
     : t('transports.departure', 'Departure');
 
-  const ariaLabel = isInteractive
+  const baseAriaLabel = isInteractive
     ? t('calendar.viewTransportDetails', "View {{name}}'s {{type}} details", {
         name: transport.personName,
         type: typeLabel,
@@ -49,8 +73,13 @@ const TransportIndicator = memo(function TransportIndicator({
           name: transport.personName,
         });
 
+  const ariaLabel =
+    rideLabel === undefined ? baseAriaLabel : `${baseAriaLabel} — ${rideLabel}`;
+
   // Full tooltip with all details
-  const tooltipText = `${time} ${transport.personName}${location ? ` - ${location}` : ''}`;
+  const baseTooltipText = `${time} ${transport.personName}${location ? ` - ${location}` : ''}`;
+  const tooltipText =
+    rideLabel === undefined ? baseTooltipText : `${baseTooltipText} — ${rideLabel}`;
 
   // Handle click
   const handleClick = useCallback(() => {
@@ -88,6 +117,9 @@ const TransportIndicator = memo(function TransportIndicator({
         {isArrival ? '↓' : '↑'}
       </span>
       <TransportIcon mode={transportMode} className="size-3 shrink-0" />
+      {ride && (
+        <Car className="size-3 shrink-0" aria-hidden="true" data-testid="ride-glyph" />
+      )}
       <span className="font-medium">{time}</span>
       <span
         className="size-2 rounded-full shrink-0"
