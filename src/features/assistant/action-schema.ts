@@ -226,7 +226,7 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
   // ---- Rooms ---------------------------------------------------------------
   {
     action: 'addRoom',
-    label: 'Add a new room',
+    label: 'Add a room',
     fields: {
       name: {
         type: 'string',
@@ -239,6 +239,12 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         required: true,
         description: 'Number of beds (positive integer)',
         example: 2,
+      },
+      count: {
+        type: 'number',
+        required: false,
+        description: 'How many rooms, numbered from the name. Defaults to 1',
+        example: 3,
       },
       description: {
         type: 'string',
