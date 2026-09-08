@@ -13,6 +13,7 @@ import {
   calculatePeakOccupancyByRoom,
   createHeadcountResolver,
   isDateInStayRange,
+  isZeroNightWindow,
   listStayNights,
   stayNightsOverlap,
   summarizeRoomOccupancy,
@@ -219,6 +220,33 @@ describe('listStayNights', () => {
     expect(listStayNights('2024-07-16', '2024-07-15')).toEqual([]);
     expect(listStayNights('', '2024-07-15')).toEqual([]);
     expect(listStayNights('2024-07-15', '')).toEqual([]);
+  });
+});
+
+// ============================================================================
+// isZeroNightWindow
+// ============================================================================
+
+describe('isZeroNightWindow', () => {
+  it('reports a same-day window as holding no night', () => {
+    expect(isZeroNightWindow('2024-07-15', '2024-07-15')).toBe(true);
+  });
+
+  it('reports an inverted window as holding no night', () => {
+    expect(isZeroNightWindow('2024-07-16', '2024-07-15')).toBe(true);
+  });
+
+  it('reports a window of one night or more as holding nights', () => {
+    expect(isZeroNightWindow('2024-07-15', '2024-07-16')).toBe(false);
+    expect(isZeroNightWindow('2024-07-15', '2024-07-22')).toBe(false);
+  });
+
+  // A blank bound is "we do not know when this is", which is not the same
+  // answer as "there is no night in it" and must not be dressed up as one.
+  it('says nothing about a window with a bound missing', () => {
+    expect(isZeroNightWindow('', '2024-07-15')).toBe(false);
+    expect(isZeroNightWindow('2024-07-15', undefined)).toBe(false);
+    expect(isZeroNightWindow(undefined, undefined)).toBe(false);
   });
 });
 
