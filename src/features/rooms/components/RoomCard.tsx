@@ -16,7 +16,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
+import { ChevronDown, Copy, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
 import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
 
 import {
@@ -69,6 +69,11 @@ export interface RoomCardProps {
   readonly onEdit: (room: Room) => void;
   /** Callback when Delete is confirmed. Can be async. */
   readonly onDelete: (room: Room) => void | Promise<void>;
+  /**
+   * Callback when Duplicate is selected from the menu. Can be async.
+   * The menu item is left out when this is not given.
+   */
+  readonly onDuplicate?: (room: Room) => void | Promise<void>;
   /** Callback when the assignment button is clicked */
   readonly onClaim?: (room: Room) => void;
   /**
@@ -130,6 +135,7 @@ const RoomCard = memo(function RoomCard({
   onClick,
   onEdit,
   onDelete,
+  onDuplicate,
   onClaim,
   claimsForSelf = false,
   expandedContent,
@@ -219,6 +225,13 @@ const RoomCard = memo(function RoomCard({
     if (isDisabled) {return;}
     onEdit(room);
   }, [isDisabled, onEdit, room]),
+
+  /**
+   * Handles Duplicate menu item click.
+   */
+   handleDuplicateClick = useCallback(() => {
+    void onDuplicate?.(room);
+  }, [onDuplicate, room]),
 
   /**
    * Opens the delete confirmation dialog.
@@ -315,6 +328,12 @@ const RoomCard = memo(function RoomCard({
                 <Pencil className="mr-2 size-4" aria-hidden="true" />
                 {t('common.edit')}
               </DropdownMenuItem>
+              {onDuplicate && (
+                <DropdownMenuItem onSelect={handleDuplicateClick}>
+                  <Copy className="mr-2 size-4" aria-hidden="true" />
+                  {t('rooms.duplicate', 'Duplicate')}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 variant="destructive"
                 onSelect={handleDeleteClick}

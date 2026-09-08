@@ -9,7 +9,7 @@
  * - Shows real-time occupancy status based on today's date
  * - Add room action (FAB on mobile, header button on desktop)
  * - Empty state for trips with no rooms
- * - Edit/Delete actions via RoomCard dropdown menu
+ * - Edit/Duplicate/Delete actions via RoomCard dropdown menu
  * - Claim a room for the guest this browser is, or assign any guest to it
  * - Double-click a room name (either view) to open its edit dialog
  * - Drag-and-drop room assignments (timeline unassigned rows)
@@ -85,6 +85,7 @@ import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
 import { buildDayColumns } from '@/lib/utils/trip-days';
 import { notify } from '@/lib/notifications';
+import { captureUsage } from '@/lib/posthog';
 import { getPersonHeadcount } from '@/types';
 import type {
   ISODateString,
@@ -384,6 +385,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     isLoading: isRoomsLoading,
     error: roomsError,
     deleteRoom,
+    duplicateRoom,
   } = useRoomContext(),
    { assignments, getAssignmentsByRoom, createAssignment, updateAssignment } = useAssignmentContext(),
    { persons, getPersonById } = usePersonContext(),
@@ -771,6 +773,36 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       }
     },
     [deleteRoom, t, notifySuccess],
+  ),
+
+  /**
+   * Handles room duplicate action from dropdown menu.
+   *
+   * A copy of a room that is already right is faster than the dialog, so this
+   * makes the room and says which one it made rather than opening a form on it.
+   */
+   handleRoomDuplicate = useCallback(
+    async (room: Room) => {
+      if (isActionInProgressRef.current) {return;}
+      try {
+        const copy = await duplicateRoom(room.id);
+        notifySuccess(
+          t('rooms.duplicateSuccess', {
+            name: copy.name,
+            defaultValue: '{{name}} created',
+          }),
+        );
+        captureUsage('room_saved', {
+          operation: 'created',
+          capacity: copy.capacity,
+          count: 1,
+        });
+      } catch (error) {
+        console.error('Failed to duplicate room:', error);
+        notify.error(t('errors.saveFailed', 'Failed to save'));
+      }
+    },
+    [duplicateRoom, t, notifySuccess],
   ),
 
   /**
@@ -1286,6 +1318,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
                   onClick={handleRoomClick}
                   onEdit={handleRoomEdit}
                   onDelete={handleRoomDelete}
+                  onDuplicate={handleRoomDuplicate}
                   onClaim={handleClaimRoom}
                   claimsForSelf={selfPersonId !== undefined}
                   isDisabled={isActionInProgress}

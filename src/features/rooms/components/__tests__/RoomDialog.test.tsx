@@ -2,7 +2,17 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@/test/utils';
 import type { Room, RoomId } from '@/types';
 
-const mockCreateRoom = vi.fn().mockResolvedValue(undefined);
+const mockCreateRooms = vi
+  .fn()
+  .mockImplementation((data: { name: string }, count: number) =>
+    Promise.resolve(
+      Array.from({ length: count }, (_unused, index) => ({
+        ...data,
+        id: `new-${index}`,
+        name: count > 1 ? `${data.name} ${index + 1}` : data.name,
+      })),
+    ),
+  );
 const mockUpdateRoom = vi.fn().mockResolvedValue(undefined);
 const mockSuccessToast = vi.fn();
 
@@ -19,7 +29,7 @@ const mockRooms: Room[] = [
 vi.mock('@/contexts/RoomContext', () => ({
   useRoomContext: () => ({
     rooms: mockRooms,
-    createRoom: mockCreateRoom,
+    createRooms: mockCreateRooms,
     updateRoom: mockUpdateRoom,
   }),
 }));
@@ -41,7 +51,8 @@ vi.mock('@/features/rooms/components/RoomForm', () => ({
     <div data-testid="room-form">
       {room ? <span data-testid="edit-mode">{room.name}</span> : <span data-testid="create-mode">New</span>}
       <button data-testid="cancel-btn" onClick={onCancel}>Cancel</button>
-      <button data-testid="submit-btn" onClick={() => onSubmit({ name: 'Test', capacity: 2 })}>Submit</button>
+      <button data-testid="submit-btn" onClick={() => onSubmit({ name: 'Test', capacity: 2, count: 1 })}>Submit</button>
+      <button data-testid="submit-three-btn" onClick={() => onSubmit({ name: 'Double bed', capacity: 2, count: 3 })}>Submit three</button>
       <button data-testid="dirty-btn" onClick={() => onDirtyChange?.(true)}>Mark Dirty</button>
     </div>
   ),
@@ -105,7 +116,7 @@ describe('RoomDialog', () => {
   // New tests for improved coverage
   // ===========================================================================
 
-  it('calls createRoom and closes dialog on submit in create mode', async () => {
+  it('calls createRooms for one room and closes dialog on submit in create mode', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
@@ -115,9 +126,31 @@ describe('RoomDialog', () => {
     );
     await user.click(screen.getByTestId('submit-btn'));
     await waitFor(() => {
-      expect(mockCreateRoom).toHaveBeenCalled();
+      expect(mockCreateRooms).toHaveBeenCalledWith(
+        { name: 'Test', capacity: 2 },
+        1,
+      );
     });
     expect(mockSuccessToast).toHaveBeenCalledWith('rooms.createSuccess');
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('passes the room count through, and confirms how many were created', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <RoomDialog open onOpenChange={onOpenChange} />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByTestId('submit-three-btn'));
+    await waitFor(() => {
+      expect(mockCreateRooms).toHaveBeenCalledWith(
+        { name: 'Double bed', capacity: 2 },
+        3,
+      );
+    });
+    expect(mockSuccessToast).toHaveBeenCalledWith('rooms.createSuccessMany');
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 

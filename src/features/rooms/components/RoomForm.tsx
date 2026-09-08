@@ -25,8 +25,10 @@ import { NumberStepper } from '@/components/ui/number-stepper';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RoomIconPicker } from '@/components/shared/RoomIconPicker';
+import { buildBulkRoomNames } from '@/features/rooms/utils/room-naming';
+import { MAX_ROOMS_PER_SAVE } from '@/lib/db';
 import { cn } from '@/lib/utils';
-import type { Room, RoomFormData, RoomIcon } from '@/types';
+import type { Room, RoomFormSubmission, RoomIcon } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -39,7 +41,7 @@ interface RoomFormProps {
   /** Existing room for edit mode. If undefined, form is in create mode. */
   readonly room?: Room;
   /** Callback when form is successfully submitted with validated data. */
-  readonly onSubmit: (data: RoomFormData) => Promise<void>;
+  readonly onSubmit: (data: RoomFormSubmission) => Promise<void>;
   /** Callback when cancel button is clicked. */
   readonly onCancel: () => void;
   /** Callback when form dirty state changes (for unsaved changes guard). */
@@ -52,6 +54,7 @@ interface RoomFormProps {
 interface FormErrors {
   name?: string;
   capacity?: string;
+  count?: string;
 }
 
 // ============================================================================
@@ -68,6 +71,16 @@ const DEFAULT_CAPACITY = 1;
  */
 const MIN_CAPACITY = 1;
 
+/**
+ * How many rooms one save creates by default.
+ */
+const DEFAULT_COUNT = 1;
+
+/**
+ * Minimum number of rooms one save creates.
+ */
+const MIN_COUNT = 1;
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -77,6 +90,8 @@ const MIN_CAPACITY = 1;
  *
  * Features:
  * - Controlled form inputs for name, capacity, and description
+ * - Create mode also asks how many identical rooms to make, and previews the
+ *   names they would take
  * - Validation on blur (name) and submit (all fields)
  * - Edit mode pre-fills existing room data
  * - Loading state during submission
@@ -119,6 +134,11 @@ const RoomForm = memo(function RoomForm({
   const [capacity, setCapacity] = useState<number>(room?.capacity ?? DEFAULT_CAPACITY);
   const [description, setDescription] = useState(room?.description ?? '');
   const [icon, setIcon] = useState<RoomIcon | undefined>(room?.icon);
+  // How many identical rooms to create. Create mode only: editing one room and
+  // asking "how many?" would mean something else entirely.
+  const [count, setCount] = useState<number>(DEFAULT_COUNT);
+
+  const isCreateMode = room === undefined;
 
   // Validation errors
   const [errors, setErrors] = useState<FormErrors>({});
@@ -131,6 +151,7 @@ const RoomForm = memo(function RoomForm({
     setCapacity(room?.capacity ?? DEFAULT_CAPACITY);
     setDescription(room?.description ?? '');
     setIcon(room?.icon);
+    setCount(DEFAULT_COUNT);
     setErrors({});
   }
 
@@ -140,8 +161,9 @@ const RoomForm = memo(function RoomForm({
       name !== (room?.name ?? '') ||
       capacity !== (room?.capacity ?? DEFAULT_CAPACITY) ||
       description !== (room?.description ?? '') ||
-      icon !== room?.icon,
-    [name, capacity, description, icon, room],
+      icon !== room?.icon ||
+      count !== DEFAULT_COUNT,
+    [name, capacity, description, icon, count, room],
   );
 
   // Notify parent of dirty state changes
@@ -181,6 +203,27 @@ const RoomForm = memo(function RoomForm({
   );
 
   /**
+   * Validates how many rooms the save asks for.
+   */
+  const validateCount = useCallback(
+    (value: number): string | undefined => {
+      if (
+        !Number.isInteger(value) ||
+        value < MIN_COUNT ||
+        value > MAX_ROOMS_PER_SAVE
+      ) {
+        return t('validation.roomCountRange', {
+          min: MIN_COUNT,
+          max: MAX_ROOMS_PER_SAVE,
+          defaultValue: `Enter a number from ${MIN_COUNT} to ${MAX_ROOMS_PER_SAVE}`,
+        });
+      }
+      return undefined;
+    },
+    [t],
+  );
+
+  /**
    * Validates all form fields.
    * Returns true if valid, false otherwise.
    */
@@ -199,9 +242,25 @@ const RoomForm = memo(function RoomForm({
       newErrors.capacity = capacityError;
     }
 
+    // Validate the room count (create mode only)
+    if (isCreateMode) {
+      const countError = validateCount(count);
+      if (countError) {
+        newErrors.count = countError;
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [name, capacity, validateName, validateCapacity]);
+  }, [
+    name,
+    capacity,
+    count,
+    isCreateMode,
+    validateName,
+    validateCapacity,
+    validateCount,
+  ]);
 
   // ============================================================================
   // Event Handlers
@@ -274,9 +333,41 @@ const RoomForm = memo(function RoomForm({
   }, []);
 
   /**
+   * Takes a new room count from the stepper.
+   */
+  const handleCountChange = useCallback((next: number) => {
+    setCount(next);
+    setErrors((prev) => (prev.count ? { ...prev, count: undefined } : prev));
+  }, []);
+
+  /**
+   * Handles room count blur for validation.
+   */
+  const handleCountBlur = useCallback(() => {
+    const error = validateCount(count);
+    if (error) {
+      setErrors((prev) => ({ ...prev, count: error }));
+    }
+  }, [count, validateCount]);
+
+  /**
+   * The names this save would give the rooms, shown while the count is above
+   * one so the numbering is not a surprise after the save.
+   */
+  const namePreview = useMemo((): string | undefined => {
+    const trimmed = name.trim();
+    if (!isCreateMode || count < 2 || !trimmed) {
+      return undefined;
+    }
+
+    const names = buildBulkRoomNames(trimmed, count, []);
+    return `${names[0] ?? ''} … ${names.at(-1) ?? ''}`;
+  }, [isCreateMode, count, name]);
+
+  /**
    * Submission handler via useFormSubmission hook.
    */
-  const { isSubmitting, submitError, handleSubmit: doSubmit } = useFormSubmission<RoomFormData>(
+  const { isSubmitting, submitError, handleSubmit: doSubmit } = useFormSubmission<RoomFormSubmission>(
     onSubmit,
   );
 
@@ -296,12 +387,22 @@ const RoomForm = memo(function RoomForm({
           capacity,
           description: description.trim() || undefined,
           icon,
+          count: isCreateMode ? count : DEFAULT_COUNT,
         });
       } catch {
         // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, doSubmit, name, capacity, description, icon],
+    [
+      validateForm,
+      doSubmit,
+      name,
+      capacity,
+      description,
+      icon,
+      count,
+      isCreateMode,
+    ],
   );
 
   // ============================================================================
@@ -377,6 +478,51 @@ const RoomForm = memo(function RoomForm({
           </p>
         )}
       </div>
+
+      {/* How Many Rooms — create mode only */}
+      {isCreateMode && (
+        <div className="space-y-2">
+          <Label htmlFor="room-count">{t('rooms.count')}</Label>
+          <NumberStepper
+            id="room-count"
+            value={count}
+            onValueChange={handleCountChange}
+            onBlur={handleCountBlur}
+            min={MIN_COUNT}
+            max={MAX_ROOMS_PER_SAVE}
+            decrementLabel={t('rooms.countDecrease', 'One room fewer')}
+            incrementLabel={t('rooms.countIncrease', 'One room more')}
+            aria-invalid={Boolean(errors.count)}
+            aria-describedby={
+              errors.count
+                ? 'room-count-error'
+                : namePreview
+                  ? 'room-count-preview'
+                  : undefined
+            }
+            disabled={isSubmitting}
+            className={cn(errors.count && 'border-destructive')}
+          />
+          {errors.count ? (
+            <p
+              id="room-count-error"
+              className="text-sm text-destructive"
+              role="alert"
+            >
+              {errors.count}
+            </p>
+          ) : (
+            namePreview && (
+              <p id="room-count-preview" className="text-sm text-muted-foreground">
+                {t('rooms.countPreview', {
+                  names: namePreview,
+                  defaultValue: 'Creates {{names}}',
+                })}
+              </p>
+            )
+          )}
+        </div>
+      )}
 
       {/* Description Field */}
       <div className="space-y-2">
