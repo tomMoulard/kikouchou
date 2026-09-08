@@ -234,7 +234,7 @@ describe('RoomCard', () => {
     expect(onEdit).not.toHaveBeenCalled();
   });
 
-  it('shows claim button when onClaim is provided and spots available', () => {
+  it('shows the assignment button when onClaim is provided and spots available', () => {
     render(
       <RoomCard
         room={mockRoom}
@@ -248,7 +248,29 @@ describe('RoomCard', () => {
       />,
       { withProviders: false },
     );
+    expect(screen.getByText('rooms.assignGuest')).toBeInTheDocument();
+  });
+
+  // The button opens a dialog with a guest selector listing everyone, so
+  // "Claim this room" only tells the truth for a browser that has become one
+  // of the guests. For a host arranging the trip it is somebody else's room.
+  it('offers to claim the room only when the browser is one of the guests', () => {
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onClaim={vi.fn()}
+        claimsForSelf
+      />,
+      { withProviders: false },
+    );
     expect(screen.getByText('rooms.claimRoom')).toBeInTheDocument();
+    expect(screen.queryByText('rooms.assignGuest')).not.toBeInTheDocument();
   });
 
   it('renders expanded content when isExpanded and expandedContent are provided', () => {
@@ -315,7 +337,7 @@ describe('RoomCard', () => {
       />,
       { withProviders: false },
     );
-    expect(screen.queryByText('rooms.claimRoom')).not.toBeInTheDocument();
+    expect(screen.queryByText('rooms.assignGuest')).not.toBeInTheDocument();
   });
 
   it('does not show claim button when room is full even if onClaim provided', () => {
@@ -332,7 +354,7 @@ describe('RoomCard', () => {
       />,
       { withProviders: false },
     );
-    expect(screen.queryByText('rooms.claimRoom')).not.toBeInTheDocument();
+    expect(screen.queryByText('rooms.assignGuest')).not.toBeInTheDocument();
   });
 
   it('calls onClaim when claim button is clicked', async () => {
@@ -352,7 +374,7 @@ describe('RoomCard', () => {
       />,
       { withProviders: false },
     );
-    await user.click(screen.getByText('rooms.claimRoom'));
+    await user.click(screen.getByText('rooms.assignGuest'));
     expect(onClaim).toHaveBeenCalledWith(mockRoom);
   });
 
