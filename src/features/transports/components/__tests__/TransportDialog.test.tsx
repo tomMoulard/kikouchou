@@ -37,6 +37,17 @@ vi.mock('@/contexts/PersonContext', () => ({
   }),
 }));
 
+vi.mock('@/contexts/TripContext', () => ({
+  useTripContext: () => ({
+    currentTrip: {
+      id: 'trip1',
+      name: 'Summer',
+      startDate: '2026-07-15',
+      endDate: '2026-07-22',
+    },
+  }),
+}));
+
 vi.mock('@/hooks', () => ({
   useOfflineAwareToast: () => ({
     successToast: vi.fn(),
@@ -45,16 +56,19 @@ vi.mock('@/hooks', () => ({
 }));
 
 vi.mock('@/features/transports/components/TransportForm', () => ({
-  TransportForm: ({ transport, onCancel, onSubmit, onDirtyChange, defaultType }: {
+  TransportForm: ({ transport, onCancel, onSubmit, onDirtyChange, defaultType, tripStartDate, tripEndDate }: {
     transport?: Transport;
     onCancel: () => void;
     onSubmit: (data: unknown) => Promise<void>;
     onDirtyChange?: (dirty: boolean) => void;
     defaultType?: string;
+    tripStartDate?: string;
+    tripEndDate?: string;
   }) => (
     <div data-testid="transport-form">
       {transport ? <span data-testid="edit-mode">{transport.location}</span> : <span data-testid="create-mode">New</span>}
       {defaultType && <span data-testid="default-type">{defaultType}</span>}
+      <span data-testid="trip-dates">{`${tripStartDate ?? ''}/${tripEndDate ?? ''}`}</span>
       <button data-testid="cancel-btn" onClick={onCancel}>Cancel</button>
       <button data-testid="submit-btn" onClick={() => void onSubmit({ type: 'arrival', location: 'Test', datetime: '2026-07-15T10:00:00Z', personId: 'p1', needsPickup: false }).catch(() => {})}>Submit</button>
       <button data-testid="dirty-btn" onClick={() => onDirtyChange?.(true)}>Mark Dirty</button>
@@ -138,6 +152,16 @@ describe('TransportDialog', () => {
       { withProviders: false },
     );
     expect(screen.getByTestId('default-type')).toHaveTextContent('departure');
+  });
+
+  it('hands the form the trip dates, so it can prefill the day', () => {
+    // Without these the form opened on an empty date and the user had to go
+    // and look up dates the dialog already had.
+    render(
+      <TransportDialog open onOpenChange={vi.fn()} />,
+      { withProviders: false },
+    );
+    expect(screen.getByTestId('trip-dates')).toHaveTextContent('2026-07-15/2026-07-22');
   });
 
   it('does not pass defaultType in edit mode', () => {

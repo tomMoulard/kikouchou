@@ -24,7 +24,10 @@
     "menu": "Menu",
     "openMenu": "Open menu",
     "optional": "optional",
-    "comingSoon": "Coming soon"
+    "comingSoon": "Coming soon",
+    "date": "Date",
+    "time": "Time",
+    "pickDate": "Pick a date"
   },
   "nav": {
     "calendar": "Calendar",
@@ -417,6 +420,7 @@
     "noOtherPersons": "No other persons available",
     "notes": "Notes",
     "notesPlaceholder": "Additional information...",
+    "details": "Details",
     "deleteConfirm": "Are you sure you want to delete this transport?",
     "deleteConfirmTitle": "Delete transport?",
     "deleteSuccess": "Transport deleted successfully",

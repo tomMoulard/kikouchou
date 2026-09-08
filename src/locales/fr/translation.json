@@ -24,7 +24,10 @@
     "menu": "Menu",
     "openMenu": "Ouvrir le menu",
     "optional": "facultatif",
-    "comingSoon": "Bientôt disponible"
+    "comingSoon": "Bientôt disponible",
+    "date": "Date",
+    "time": "Heure",
+    "pickDate": "Choisir une date"
   },
   "nav": {
     "calendar": "Calendrier",
@@ -417,6 +420,7 @@
     "noOtherPersons": "Aucune autre personne disponible",
     "notes": "Notes",
     "notesPlaceholder": "Informations complémentaires...",
+    "details": "Détails",
     "deleteConfirm": "Voulez-vous vraiment supprimer ce transport ?",
     "deleteConfirmTitle": "Supprimer le transport ?",
     "deleteSuccess": "Transport supprimé avec succès",

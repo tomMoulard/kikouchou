@@ -1140,25 +1140,50 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // Find datetime input
-    const datetimeInput = dialog.locator('input[type="datetime-local"]');
-    const hasDatetimeInput = await datetimeInput.isVisible().catch(() => false);
+    // The date and time control: a calendar button next to a time input. The
+    // bare `datetime-local` this replaces rendered in the browser's locale,
+    // not the app's.
+    const timeInput = dialog.locator('input[type="time"]');
+    await expect(timeInput).toBeVisible();
 
-    if (hasDatetimeInput) {
-      // Enter a specific time
-      const testDatetime = `${fixtureDate(2)}T14:30`;
-      await datetimeInput.fill(testDatetime);
+    await timeInput.fill('14:30');
+    expect(await timeInput.inputValue()).toBe('14:30');
 
-      // The form should show the entered time
-      const inputValue = await datetimeInput.inputValue();
-      expect(inputValue).toContain('14:30');
-    }
+    // The day comes from the trip itself, so the field is never empty
+    const dateButton = dialog.locator('#transport-datetime');
+    await expect(dateButton).not.toHaveText(/pick a date|choisir une date/i);
 
     // Close dialog
     const cancelBtn = dialog.getByRole('button', { name: /cancel|annuler/i });
     if (await cancelBtn.isVisible().catch(() => false)) {
       await cancelBtn.click();
     }
+  });
+
+  test('save stays reachable in a short window', async ({ page }) => {
+    // The form is nine fields tall. On a 900px window Cancel and Save sat
+    // below the fold with nothing on screen saying they were there.
+    await page.setViewportSize({ width: 1280, height: 700 });
+
+    await createTestPerson(page, tripId, TEST_DATA.person.name);
+    await page.goto(`/trips/${tripId}/transports`);
+    await page.waitForLoadState('load');
+    await waitForRoute(page);
+
+    const addButton = page.getByRole('button', { name: /new transport|nouveau transport/i });
+    const fabButton = page.locator('button[aria-label*="transport" i]');
+    if (await addButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await addButton.click();
+    } else if (await fabButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await fabButton.first().click();
+    } else {
+      test.skip(true, 'No add-transport control on this layout');
+    }
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    await expect(dialog.getByRole('button', { name: /^save$|^enregistrer$/i })).toBeInViewport();
   });
 });
 

@@ -67,6 +67,8 @@ export type { ColorPickerProps } from './ColorPicker';
 
 export { DateRangePicker } from './DateRangePicker';
 export type { DateRangePickerProps, DateRange } from './DateRangePicker';
+export { DateTimePicker } from './DateTimePicker';
+export type { DateTimePickerProps } from './DateTimePicker';
 
 export { LocationPicker } from './LocationPicker';
 export type { LocationPickerProps, Coordinates } from './LocationPicker';

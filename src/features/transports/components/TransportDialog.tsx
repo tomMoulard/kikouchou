@@ -25,6 +25,7 @@ import {
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { useTripContext } from '@/contexts/TripContext';
 import { TransportForm } from '@/features/transports/components/TransportForm';
 import { captureUsage } from '@/lib/posthog';
 import type { Transport, TransportFormData, TransportId, TransportType } from '@/types';
@@ -90,6 +91,7 @@ const TransportDialog = memo(function TransportDialog({
   const { t } = useTranslation();
   const { transports, createTransport, updateTransport } = useTransportContext();
   const { persons } = usePersonContext();
+  const { currentTrip } = useTripContext();
   const { successToast } = useOfflineAwareToast();
 
   // Dirty-state tracking for close guard
@@ -255,6 +257,8 @@ const TransportDialog = memo(function TransportDialog({
             transport={transport}
             persons={persons}
             defaultType={isEditMode ? undefined : defaultType}
+            tripStartDate={currentTrip?.startDate}
+            tripEndDate={currentTrip?.endDate}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             onDirtyChange={setIsDirty}
