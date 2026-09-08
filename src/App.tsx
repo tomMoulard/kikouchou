@@ -11,6 +11,7 @@ import { RouterProvider } from 'react-router-dom';
 
 import { AppProviders } from '@/contexts/AppProviders';
 import { Toaster } from '@/components/ui/sonner';
+import { StatusAnnouncer } from '@/components/shared/StatusAnnouncer';
 import { InstallPrompt, OfflineIndicator } from '@/components/pwa';
 import { applyStoredTheme, THEME_STORAGE_KEY } from '@/lib/theme';
 import { router } from '@/router';
@@ -52,7 +53,8 @@ applyStoredTheme();
  * - ThemeProvider: light / dark / system theme, written as a class on `<html>`
  * - AppProviders: Trip, Room, Person, Assignment, Transport contexts
  * - RouterProvider: React Router with configured routes
- * - Toaster: Toast notifications via Sonner
+ * - Toaster: error and warning toasts via Sonner
+ * - StatusAnnouncer: the live region that speaks OS-notified confirmations
  * - InstallPrompt: PWA install prompt
  * - OfflineIndicator: Network status indicator
  *
@@ -98,20 +100,29 @@ function App(): ReactElement {
       {/*
         Global chrome, deliberately outside AppProviders.
 
-        None of the three reads a trip context — they use `useTheme`,
-        `useInstallPrompt` and `useOnlineStatus`, all app-global. Inside the
-        provider tree they were remounted whenever `YjsTripSync` swapped the
-        element at its position, which it does on the no-trip -> trip
-        transition. A remounted `Toaster` resubscribes to sonner's store, and
-        sonner only forwards toasts published *after* a subscription, so the
-        "Trip created successfully" toast — published moments before the first
-        trip is selected — was in the store but never rendered. Measured:
-        `toast.getToasts()` returned 1 while the document held no
-        `[data-sonner-toaster]` at all.
+        None of the four reads a trip context — they use `useTheme`,
+        `useInstallPrompt`, `useOnlineStatus` and a module-level subscription,
+        all app-global. Inside the provider tree they were remounted whenever
+        `YjsTripSync` swapped the element at its position, which it does on the
+        no-trip -> trip transition. A remounted `Toaster` resubscribes to
+        sonner's store, and sonner only forwards toasts published *after* a
+        subscription, so the "Trip created successfully" toast — published
+        moments before the first trip is selected — was in the store but never
+        rendered. Measured: `toast.getToasts()` returned 1 while the document
+        held no `[data-sonner-toaster]` at all.
+
+        That confirmation is an OS notification now and no longer passes
+        through here at all, but the remount hazard is unchanged for every
+        error that does.
       */}
       {/*
-        `mobileOffset` lifts toasts clear of the other two things anchored to
-        the bottom of a phone screen.
+        The toaster carries errors and warnings only. Confirmations moved to
+        the operating system (`src/lib/notifications/notify.ts`) because they
+        arrive in bursts — three room creations, one per imported guest — and
+        each one was a card over the content.
+
+        `mobileOffset` lifts what is left clear of the other two things
+        anchored to the bottom of a phone screen.
 
         A toast is interactive — it has a close button — so wherever it lands it
         takes taps for the several seconds it is up. At `bottom-center` with no
@@ -133,6 +144,13 @@ function App(): ReactElement {
         richColors
         closeButton
       />
+      {/*
+        The screen-reader half of a confirmation. An OS notification is outside
+        the document, so without this region a screen reader would never hear
+        "Room created successfully" — the toast that used to carry it announced
+        itself.
+      */}
+      <StatusAnnouncer />
       <InstallPrompt />
       <OfflineIndicator />
     </ThemeProvider>
