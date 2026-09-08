@@ -24,6 +24,10 @@ import type { Person, PersonId, Room, RoomAssignment, Transport } from '@/types'
 /**
  * The setup steps, in the order they are worked through.
  *
+ * Every step a trip can have. A given trip may show fewer — see
+ * {@link buildTripSetupChecklist} — so read the count off the checklist rather
+ * than off this list.
+ *
  * A union built from a `const` array rather than an enum — `erasableSyntaxOnly`
  * forbids enums — so the render order and the type come from one declaration.
  */
@@ -55,11 +59,16 @@ export interface TripSetupStep {
  * The whole checklist, plus the progress figures its header shows.
  */
 export interface TripSetupChecklist {
-  /** Every step, in {@link TRIP_SETUP_STEP_KEYS} order. */
+  /**
+   * The steps this trip has, in {@link TRIP_SETUP_STEP_KEYS} order.
+   *
+   * A step that cannot apply to the trip is absent, so a caller renders and
+   * counts what it is given rather than the whole key list.
+   */
   readonly steps: readonly TripSetupStep[];
   /** How many steps are done. */
   readonly doneCount: number;
-  /** How many steps there are, so a caller never hardcodes it. */
+  /** How many steps this trip has, so a caller never hardcodes it. */
   readonly stepCount: number;
   /** True when every step is done and the calendar has nothing left to wait for. */
   readonly isComplete: boolean;
@@ -74,6 +83,15 @@ export interface TripSetupChecklistInput {
   readonly rooms: readonly Room[];
   readonly assignments: readonly RoomAssignment[];
   readonly arrivals: readonly Transport[];
+  /**
+   * True when the trip's dates are known and enclose no night — a start and an
+   * end on the same day.
+   *
+   * Required rather than optional, because the answer decides whether a step
+   * appears at all: a call site that forgot it would quietly put the step back
+   * that this field exists to remove. Read it from `isZeroNightWindow`.
+   */
+  readonly tripHasNoNights: boolean;
 }
 
 // ============================================================================
@@ -84,8 +102,10 @@ export interface TripSetupChecklistInput {
  * Works out which trip-setup steps are done and how far along the rest are.
  *
  * The "assignments" step completes only when **every** guest has a room: a
- * guest with nowhere to sleep is the thing this list exists to surface. The
- * "arrivals" step completes at the first arrival, because a host who drives
+ * guest with nowhere to sleep is the thing this list exists to surface. It is
+ * left out altogether on a trip with no nights, where there is no bed to put
+ * anybody in: nothing can book a stay of zero nights, so the step sat there at
+ * "Nobody has a room yet" for ever. The "arrivals" step completes at the first arrival, because a host who drives
  * their own guests in never books travel for all of them and a step that can
  * never tick off is worse than no step.
  *
@@ -99,6 +119,7 @@ export interface TripSetupChecklistInput {
  *   rooms: [attic],
  *   assignments: [aliceInAttic],
  *   arrivals: [],
+ *   tripHasNoNights: false,
  * });
  * // checklist.doneCount === 2  (guests, rooms)
  * // checklist.steps[2] === { key: 'assignments', count: 1, total: 2, isDone: false }
@@ -107,7 +128,7 @@ export interface TripSetupChecklistInput {
 export function buildTripSetupChecklist(
   input: TripSetupChecklistInput,
 ): TripSetupChecklist {
-  const { persons, rooms, assignments, arrivals } = input;
+  const { persons, rooms, assignments, arrivals, tripHasNoNights } = input;
 
   const assignedPersonIds = new Set<PersonId>();
   for (const assignment of assignments) {
@@ -136,12 +157,18 @@ export function buildTripSetupChecklist(
       count: rooms.length,
       isDone: rooms.length > 0,
     },
-    {
-      key: 'assignments',
-      count: assignedPeople,
-      total: totalPeople,
-      isDone: totalPeople > 0 && assignedPeople === totalPeople,
-    },
+    // Left out rather than marked done: a tick would claim the guests had been
+    // placed, and there was never anywhere to place them.
+    ...(tripHasNoNights
+      ? []
+      : [
+          {
+            key: 'assignments' as const,
+            count: assignedPeople,
+            total: totalPeople,
+            isDone: totalPeople > 0 && assignedPeople === totalPeople,
+          },
+        ]),
     {
       key: 'arrivals',
       count: arrivals.length,

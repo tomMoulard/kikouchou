@@ -33,7 +33,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify } from '@/hooks';
 import { parseISO } from 'date-fns';
-import { DoorOpen, Plus, Sparkles } from 'lucide-react';
+import { BedDouble, DoorOpen, Plus, Sparkles } from 'lucide-react';
 import {
   DndContext,
   type DragEndEvent,
@@ -84,6 +84,7 @@ import {
   calculatePeakOccupancy,
   createHeadcountResolver,
   isDateInStayRange,
+  isZeroNightWindow,
 } from '@/features/rooms/utils/capacity-utils';
 import { createRoomDragAnnouncements } from '@/features/rooms/utils/dnd-announcements';
 import { inferGuestParties } from '@/features/rooms/utils/guest-parties';
@@ -441,6 +442,19 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     
     return result;
   }, [persons, arrivals, departures, assignments, currentTrip?.startDate, currentTrip?.endDate]),
+
+  /*
+    A trip whose start and end fall on the same day holds no night. Nobody
+    sleeps here, so no guest needs a bed and none can be given one: every
+    "needs a room" answer is empty, which is why the timeline listed nobody and
+    the suggest button went away. The page says so now, and the cards drop
+    their assignment button — a stay of zero nights is not bookable.
+
+    A trip with no dates at all is a different answer, "we do not know when
+    this is", and `isZeroNightWindow` leaves it alone: those guests may still
+    have stay dates of their own.
+  */
+   tripHasNoNights = isZeroNightWindow(currentTrip?.startDate, currentTrip?.endDate),
 
   // The frame's own day-axis builder, so the width decision counts exactly the
   // columns the timeline will draw.
@@ -875,7 +889,10 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       return;
     }
 
-    const allAssigned = persons.length > 0 && unassignedGuests.length === 0;
+    // "Everyone has a room" has to mean rooms were given out. On a trip with no
+    // nights nobody needed one, so the same empty list is not good news.
+    const allAssigned =
+      persons.length > 0 && unassignedGuests.length === 0 && !tripHasNoNights;
     if (!allAssigned) {
       return;
     }
@@ -900,7 +917,15 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       notifySuccess(t('rooms.allGuestsAssigned', 'All guests have rooms assigned'));
       hasNotifiedAllAssignedRef.current = true;
     }
-  }, [currentTrip?.id, persons.length, notifySuccess, t, tripIdFromUrl, unassignedGuests.length]);
+  }, [
+    currentTrip?.id,
+    persons.length,
+    notifySuccess,
+    t,
+    tripHasNoNights,
+    tripIdFromUrl,
+    unassignedGuests.length,
+  ]);
 
   // ============================================================================
   // Render: Loading State
@@ -1049,6 +1074,22 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           }
         />
 
+      {/*
+        Why both views are showing rooms and no guests. It stands down as soon
+        as somebody does need a bed — a guest whose own stay dates outlast the
+        trip's single day still appears in the timeline, and telling them they
+        need nothing would be the same lie the other way round.
+      */}
+      {tripHasNoNights && unassignedGuests.length === 0 && (
+        <p
+          role="status"
+          className="mb-4 flex items-start gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground"
+        >
+          <BedDouble className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          {t('rooms.noNights', 'No nights on this trip, so nobody needs a bed')}
+        </p>
+      )}
+
       {/* Date range filter for room availability (cards view only) */}
       {currentView === 'card' && rooms.length > 0 && currentTrip && (
         <div className="mb-4">
@@ -1091,7 +1132,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
                   onEdit={handleRoomEdit}
                   onDelete={handleRoomDelete}
                   onDuplicate={handleRoomDuplicate}
-                  onClaim={handleClaimRoom}
+                  {...(tripHasNoNights ? {} : { onClaim: handleClaimRoom })}
                   claimsForSelf={selfPersonId !== undefined}
                   isDisabled={isActionInProgress}
                   isExpanded={expandedRoomId === room.id}

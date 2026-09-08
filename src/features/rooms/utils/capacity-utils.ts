@@ -144,6 +144,40 @@ export function listStayNights(startDate: string, endDate: string): readonly str
 }
 
 /**
+ * True when a window is known and holds no night at all.
+ *
+ * The zero-night window is a real trip, not a data error: a host who sets the
+ * start and the end to one day is planning a day out, and nobody sleeps there.
+ * Every "who still needs a bed" answer is empty for such a trip, so the screens
+ * that ask have to say why instead of drawing a blank.
+ *
+ * A missing bound answers `false`. "We do not know when this is" is a different
+ * answer from "there is no night in it", and a trip with no dates yet still has
+ * guests whose own stay dates hold nights.
+ *
+ * @param startDate - Check-in date (ISO YYYY-MM-DD), or nothing
+ * @param endDate - Check-out date (ISO YYYY-MM-DD), or nothing
+ * @returns True when both bounds are given and enclose no night
+ *
+ * @example
+ * ```typescript
+ * isZeroNightWindow('2026-07-01', '2026-07-01'); // true
+ * isZeroNightWindow('2026-07-01', '2026-07-02'); // false
+ * isZeroNightWindow(undefined, undefined);       // false
+ * ```
+ */
+export function isZeroNightWindow(
+  startDate: string | undefined,
+  endDate: string | undefined,
+): boolean {
+  if (!startDate || !endDate) {
+    return false;
+  }
+
+  return listStayNights(startDate, endDate).length === 0;
+}
+
+/**
  * Tells whether two stays claim at least one night in common.
  *
  * Uses the nights model, so back-to-back stays do not overlap: a guest checking

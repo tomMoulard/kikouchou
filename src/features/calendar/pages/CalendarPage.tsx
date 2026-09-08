@@ -60,6 +60,7 @@ import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ViewSwitcher } from '@/components/ui/view-switcher';
 import { AssignmentFormDialog } from '@/features/rooms/components/RoomAssignmentSection';
+import { isZeroNightWindow } from '@/features/rooms/utils/capacity-utils';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { localDayKeyOfInstant } from '@/lib/utils/trip-days';
 import { getActivityCategoryColor } from '@/types';
@@ -237,9 +238,17 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   // How far the trip is from having anything to draw. A freshly saved trip
   // arrives here with its guest rows and nothing else, so "nothing scheduled
   // yet" was describing the trip rather than the month.
+  // A same-day trip holds no night, so it has no beds to fill and the room
+  // step is dropped rather than left at a count nothing can raise.
+  const tripHasNoNights = isZeroNightWindow(
+    currentTrip?.startDate,
+    currentTrip?.endDate,
+  );
+
   const setupChecklist = useMemo(
-    () => buildTripSetupChecklist({ persons, rooms, assignments, arrivals }),
-    [persons, rooms, assignments, arrivals],
+    () =>
+      buildTripSetupChecklist({ persons, rooms, assignments, arrivals, tripHasNoNights }),
+    [persons, rooms, assignments, arrivals, tripHasNoNights],
   );
 
   /*
