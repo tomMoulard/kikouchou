@@ -32,6 +32,12 @@ vi.mock('@/features/auth/AuthContext', () => ({
   useAuth: () => ({ user: mockUser() }),
 }));
 
+const mockWriteGuestIdentity = vi.fn<(...args: unknown[]) => boolean>(() => true);
+
+vi.mock('@/lib/sharing/guest-identity', () => ({
+  writeGuestIdentity: (...args: unknown[]) => mockWriteGuestIdentity(...args),
+}));
+
 const mockErrorToast = vi.fn();
 
 vi.mock('sonner', () => ({ toast: { error: (...args: unknown[]) => mockErrorToast(...args) } }));
@@ -57,7 +63,7 @@ vi.mock('@/features/trips/components/TripForm', () => ({
     onCancel: () => void;
     onImportSourceChange?: (id: string | null) => void;
     onGuestsChange?: (
-      guests: readonly { name: string; color?: string }[],
+      guests: readonly { name: string; color?: string; isSelf?: boolean }[],
     ) => void;
     currentUserName?: string;
   }) => {
@@ -69,6 +75,9 @@ vi.mock('@/features/trips/components/TripForm', () => ({
         <button data-testid="import-source-btn" onClick={() => onImportSourceChange?.('source-trip-id')}>Set Import</button>
         <button data-testid="clear-import-btn" onClick={() => onImportSourceChange?.(null)}>Clear Import</button>
         <button data-testid="guests-btn" onClick={() => onGuestsChange?.([{ name: 'Tom' }, { name: 'Marie' }])}>Set Guests</button>
+        {/* What the form really reports: the badged "You" row first, carrying
+            the marker, then the guests typed under it. */}
+        <button data-testid="self-guest-btn" onClick={() => onGuestsChange?.([{ name: 'Tom', isSelf: true }, { name: 'Marie' }])}>Set Guests With Self</button>
         {/* A guest that came from a saved group: it carries a colour, so the
             page creates it with that colour rather than an assigned one. */}
         <button data-testid="imported-guests-btn" onClick={() => onGuestsChange?.([{ name: 'Alice', color: '#3b82f6' }])}>Set Imported Guests</button>
@@ -82,10 +91,11 @@ import { TripCreatePage } from '../TripCreatePage';
 describe('TripCreatePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCreateTrip.mockResolvedValue({ id: 'new-trip-1' });
+    mockCreateTrip.mockResolvedValue({ id: 'new-trip-1', shareId: 'share-1' });
     mockCloneRoomsToTrip.mockResolvedValue(undefined);
     mockCreatePersonWithAutoColor.mockResolvedValue(undefined);
     mockUser.mockReturnValue(null);
+    mockWriteGuestIdentity.mockReturnValue(true);
   });
 
   it('renders the create page with form', () => {
@@ -180,6 +190,64 @@ describe('TripCreatePage', () => {
       color: '#3b82f6',
     });
     expect(mockCreatePersonWithAutoColor).not.toHaveBeenCalled();
+  });
+
+  /*
+    The "You" row is the whole reason the form asks for a name it already knows.
+    Until this, nothing wrote the identity down: the trip was created, the person
+    existed, and settings still read "Nobody in particular" — so claiming a room,
+    signing up for an activity and offering a ride all acted for nobody until the
+    user found the identity picker in settings and chose themselves by hand.
+  */
+  it('becomes the person created from the "You" row', async () => {
+    mockCreatePersonWithAutoColor
+      .mockResolvedValueOnce({ id: 'person-tom', name: 'Tom' })
+      .mockResolvedValueOnce({ id: 'person-marie', name: 'Marie' });
+
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<TripCreatePage />, { withProviders: false });
+
+    await user.click(screen.getByTestId('self-guest-btn'));
+    await user.click(screen.getByTestId('submit-btn'));
+
+    expect(mockWriteGuestIdentity).toHaveBeenCalledWith('share-1', {
+      personId: 'person-tom',
+      tripId: 'new-trip-1',
+    });
+  });
+
+  it('stays nobody in particular when the user cleared their own row', async () => {
+    // A host arranging a trip they are not on: the form reports guests with no
+    // "You" among them, and this browser must not be one of them.
+    mockCreatePersonWithAutoColor.mockResolvedValue({ id: 'person-marie', name: 'Marie' });
+
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<TripCreatePage />, { withProviders: false });
+
+    await user.click(screen.getByTestId('guests-btn'));
+    await user.click(screen.getByTestId('submit-btn'));
+
+    expect(mockWriteGuestIdentity).not.toHaveBeenCalled();
+  });
+
+  it('keeps the trip and warns when the identity cannot be stored', async () => {
+    // Private browsing, or a full quota. The trip and its guests are already
+    // saved, so this is the same warning shape as a failed guest: never a
+    // reason to strand the user on the form.
+    mockWriteGuestIdentity.mockReturnValue(false);
+    mockCreatePersonWithAutoColor.mockResolvedValue({ id: 'person-tom', name: 'Tom' });
+
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<TripCreatePage />, { withProviders: false });
+
+    await user.click(screen.getByTestId('self-guest-btn'));
+    await user.click(screen.getByTestId('submit-btn'));
+
+    expect(mockErrorToast).toHaveBeenCalledWith('sharing.identityStorageFailed');
+    expect(mockNavigate).toHaveBeenCalledWith('/trips/new-trip-1/calendar');
   });
 
   it('adds no guests when the form reported none', async () => {
