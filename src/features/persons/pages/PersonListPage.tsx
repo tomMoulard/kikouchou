@@ -710,10 +710,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   if (isLoading) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader
-          title={t('persons.title')}
-          backLink={tripIdFromUrl ? `/trips/${tripIdFromUrl}/calendar` : '/trips'}
-        />
+        <PageHeader title={t('persons.title')} />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <LoadingState variant="inline" size="lg" />
         </div>
@@ -754,10 +751,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   if (personsError) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader
-          title={t('persons.title')}
-          backLink={`/trips/${tripIdFromUrl}/calendar`}
-        />
+        <PageHeader title={t('persons.title')} />
         <ErrorDisplay
           error={personsError}
           onRetry={() => window.location.reload()}
@@ -774,10 +768,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   if (persons.length === 0) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader
-          title={t('persons.title')}
-          backLink={`/trips/${tripIdFromUrl}/calendar`}
-        />
+        <PageHeader title={t('persons.title')} />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <EmptyState
             icon={Users}
@@ -821,7 +812,6 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
     <div className="container max-w-4xl py-6 md:py-8">
       <PageHeader
         title={t('persons.title')}
-        backLink={`/trips/${tripIdFromUrl}/calendar`}
         action={headerAction}
       />
 

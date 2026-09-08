@@ -123,7 +123,7 @@ const TripSummaryPage = memo(function TripSummaryPage(): ReactElement {
   if (isLoading) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader title={t('summary.title')} backLink={backLink} />
+        <PageHeader title={t('summary.title')} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
           <LoadingState variant="inline" size="lg" />
         </div>
@@ -138,7 +138,7 @@ const TripSummaryPage = memo(function TripSummaryPage(): ReactElement {
   if (readError) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader title={t('summary.title')} backLink={backLink} />
+        <PageHeader title={t('summary.title')} />
         <ErrorDisplay error={readError} onRetry={handleRetry} onBack={handleBack} />
       </div>
     );
@@ -174,7 +174,7 @@ const TripSummaryPage = memo(function TripSummaryPage(): ReactElement {
   if (tripError) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader title={t('summary.title')} backLink={backLink} />
+        <PageHeader title={t('summary.title')} />
         <ErrorDisplay error={tripError} onRetry={handleRetry} onBack={handleBack} />
       </div>
     );
@@ -192,7 +192,6 @@ const TripSummaryPage = memo(function TripSummaryPage(): ReactElement {
         <PageHeader
           title={t('summary.title')}
           description={t('summary.description')}
-          backLink={backLink}
           action={
             <Button onClick={handlePrint}>
               <Printer className="mr-2 size-4" aria-hidden="true" />
