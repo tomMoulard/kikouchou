@@ -264,7 +264,14 @@
       "moveTrigger": "Move {{name}} to another room",
       "assignHeading": "Assign to…",
       "moveHeading": "Move to…"
-    }
+    },
+    "count": "How many rooms",
+    "countDecrease": "One room fewer",
+    "countIncrease": "One room more",
+    "countPreview": "Creates {{names}}",
+    "createSuccessMany": "{{count}} rooms created",
+    "duplicate": "Duplicate",
+    "duplicateSuccess": "{{name}} created"
   },
   "persons": {
     "title": "Guests",
@@ -949,7 +956,8 @@
       "updateActivity": "Updated activity {{title}} ({{fields}})",
       "removeActivity": "Removed activity: {{title}}",
       "joinActivity": "{{person}} joined {{title}}",
-      "leaveActivity": "{{person}} left {{title}}"
+      "leaveActivity": "{{person}} left {{title}}",
+      "addRooms": "Added {{count}} rooms: {{name}} ({{capacity}} guests max)"
     },
     "initializingCachedLoader": "Initializing cached model…",
     "loadingCachedModelFiles": "Loading cached model files…"
@@ -1074,7 +1082,8 @@
   "validation": {
     "invalidDate": "Invalid date",
     "capacityMin": "Minimum {{min}} bed",
-    "endDateBeforeStart": "End date must be on or after start date"
+    "endDateBeforeStart": "End date must be on or after start date",
+    "roomCountRange": "Enter a number from {{min}} to {{max}}"
   },
   "errors": {
     "generic": "An error occurred",

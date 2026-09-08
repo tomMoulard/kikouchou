@@ -144,6 +144,47 @@ describe('RoomCard', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it('calls onDuplicate when the duplicate menu item is clicked', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onDuplicate = vi.fn();
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+        onDuplicate={onDuplicate}
+      />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByLabelText('common.openMenu'));
+    await user.click(screen.getByText('rooms.duplicate'));
+    expect(onDuplicate).toHaveBeenCalledWith(mockRoom);
+  });
+
+  it('leaves the duplicate menu item out when no handler is given', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={0}
+        availableSpots={4}
+        isFull={false}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    await user.click(screen.getByLabelText('common.openMenu'));
+    expect(screen.queryByText('rooms.duplicate')).not.toBeInTheDocument();
+  });
+
   it('calls onEdit when edit menu item is clicked', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();

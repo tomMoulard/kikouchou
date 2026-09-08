@@ -264,7 +264,14 @@
       "moveTrigger": "Déplacer {{name}} vers une autre chambre",
       "assignHeading": "Attribuer à…",
       "moveHeading": "Déplacer vers…"
-    }
+    },
+    "count": "Combien de chambres",
+    "countDecrease": "Une chambre en moins",
+    "countIncrease": "Une chambre en plus",
+    "countPreview": "Crée {{names}}",
+    "createSuccessMany": "{{count}} chambres créées",
+    "duplicate": "Dupliquer",
+    "duplicateSuccess": "{{name}} créée"
   },
   "persons": {
     "title": "Participants",
@@ -949,7 +956,8 @@
       "updateActivity": "Activité {{title}} mise à jour ({{fields}})",
       "removeActivity": "Activité supprimée : {{title}}",
       "joinActivity": "{{person}} participe à {{title}}",
-      "leaveActivity": "{{person}} ne participe plus à {{title}}"
+      "leaveActivity": "{{person}} ne participe plus à {{title}}",
+      "addRooms": "{{count}} chambres ajoutées : {{name}} ({{capacity}} pers. max)"
     },
     "initializingCachedLoader": "Initialisation du modèle en cache…",
     "loadingCachedModelFiles": "Chargement des fichiers du modèle depuis le cache…"
@@ -1074,7 +1082,8 @@
   "validation": {
     "invalidDate": "Date invalide",
     "capacityMin": "Minimum {{min}} lit",
-    "endDateBeforeStart": "La date de fin doit être identique ou postérieure à la date de début"
+    "endDateBeforeStart": "La date de fin doit être identique ou postérieure à la date de début",
+    "roomCountRange": "Entrez un nombre de {{min}} à {{max}}"
   },
   "errors": {
     "generic": "Une erreur est survenue",
