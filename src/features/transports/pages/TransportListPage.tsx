@@ -1528,10 +1528,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   if (isLoading) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader
-          title={t('transports.title')}
-          backLink={tripIdFromUrl ? `/trips/${tripIdFromUrl}/calendar` : '/trips'}
-        />
+        <PageHeader title={t('transports.title')} />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <LoadingState variant="inline" size="lg" />
         </div>
@@ -1572,10 +1569,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   if (transportsError) {
     return (
       <div className="container max-w-4xl py-6 md:py-8">
-        <PageHeader
-          title={t('transports.title')}
-          backLink={`/trips/${tripIdFromUrl}/calendar`}
-        />
+        <PageHeader title={t('transports.title')} />
         <ErrorDisplay
           error={transportsError}
           onRetry={() => window.location.reload()}
@@ -1593,7 +1587,6 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     <div className="container max-w-4xl py-6 md:py-8">
       <PageHeader
         title={t('transports.title')}
-        backLink={`/trips/${tripIdFromUrl}/calendar`}
         action={headerAction}
       />
 

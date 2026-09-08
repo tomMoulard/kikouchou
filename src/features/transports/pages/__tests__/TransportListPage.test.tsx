@@ -360,12 +360,9 @@ describe('TransportListPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders back link', () => {
+  it('renders no back link: the sidebar and the bottom bar both reach the calendar', () => {
     render(<TransportListPage />, { withProviders: false });
-    // Named, not "the only link on the page": the scope filter adds one of its
-    // own pointing at Settings when nobody has said who they are.
-    const backLink = screen.getByRole('link', { name: 'common.back' });
-    expect(backLink).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /common\.back/i })).not.toBeInTheDocument();
   });
 
   it('renders add transport button', () => {
