@@ -12,6 +12,7 @@
  * - Edit/Delete actions via RoomCard dropdown menu
  * - Double-click a room name (either view) to open its edit dialog
  * - Drag-and-drop room assignments (timeline unassigned rows)
+ * - Room menu on each timeline chip, for assignment without a pointer
  *
  * @module features/rooms/pages/RoomListPage
  * @see TripListPage.tsx for reference implementation pattern
@@ -36,6 +37,7 @@ import {
   DndContext,
   type DragEndEvent,
   DragOverlay,
+  KeyboardSensor,
   MouseSensor,
   TouchSensor,
   useSensor,
@@ -484,7 +486,12 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   // Date locale for formatting
    dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]),
 
-  // DnD sensors - require a minimum drag distance before activating
+  // DnD sensors - require a minimum drag distance before activating.
+  //
+  // The keyboard sensor is not a nicety: the chips take focus and announce
+  // themselves as draggable, so without it Space and the arrow keys promise a
+  // move and deliver nothing. The chips' room menus are the shorter path, and
+  // this makes the announced one true as well.
    sensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: {
@@ -497,6 +504,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         tolerance: 5, // 5px movement tolerance
       },
     }),
+    useSensor(KeyboardSensor),
   );
 
   // Drop `?new=1` once it has done its job, so closing the dialog and reloading
@@ -775,6 +783,62 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   }, []),
 
   /**
+   * Houses a guest in a room.
+   *
+   * The drop handler's own work, factored out because the chips' room menus
+   * make the same assignment without a pointer — and a second copy of it would
+   * be a second chance to disagree with the drop.
+   */
+   assignGuestToRoom = useCallback(
+    (
+      guest: {
+        readonly person: Person;
+        readonly startDate: string;
+        readonly endDate: string;
+      },
+      roomId: RoomId,
+    ) => {
+      void (async () => {
+        try {
+          await createAssignment({
+            roomId,
+            personId: guest.person.id,
+            startDate: guest.startDate as ISODateString,
+            endDate: guest.endDate as ISODateString,
+          });
+          successToast(t('assignments.createSuccess'));
+        } catch (error) {
+          console.error('Failed to create room assignment:', error);
+          toast.error(t('errors.saveFailed'));
+        }
+      })();
+    },
+    [createAssignment, successToast, t],
+  ),
+
+  /**
+   * Moves an existing stay to another room.
+   */
+   moveAssignmentToRoom = useCallback(
+    (assignment: RoomAssignment, roomId: RoomId) => {
+      if (assignment.roomId === roomId) {
+        return;
+      }
+
+      void (async () => {
+        try {
+          await updateAssignment(assignment.id, { roomId });
+          successToast(t('assignments.updateSuccess'));
+        } catch (error) {
+          console.error('Failed to move assignment:', error);
+          toast.error(t('errors.saveFailed'));
+        }
+      })();
+    },
+    [successToast, t, updateAssignment],
+  ),
+
+  /**
    * Handles start of drag operation.
    */
    handleDragStart = useCallback((event: DragStartEvent) => {
@@ -816,20 +880,14 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     // Case 1: Guest -> Room (existing flow)
     if (guestData?.person && roomData?.roomId) {
       if (currentView === 'timeline') {
-        void (async () => {
-          try {
-            await createAssignment({
-              roomId: roomData.roomId,
-              personId: guestData.person.id,
-              startDate: guestData.startDate as import('@/types').ISODateString,
-              endDate: guestData.endDate as import('@/types').ISODateString,
-            });
-            successToast(t('assignments.createSuccess'));
-          } catch (error) {
-            console.error('Failed to create assignment from timeline drag:', error);
-            toast.error(t('errors.saveFailed'));
-          }
-        })();
+        assignGuestToRoom(
+          {
+            person: guestData.person,
+            startDate: guestData.startDate,
+            endDate: guestData.endDate,
+          },
+          roomData.roomId,
+        );
         return;
       }
 
@@ -846,16 +904,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     
     // Case 2: Assignment -> Room (move)
     if (draggedAssignmentData?.assignment && roomData?.roomId) {
-      const assignment = draggedAssignmentData.assignment;
-      void (async () => {
-        try {
-          await updateAssignment(assignment.id, { roomId: roomData.roomId });
-          successToast(t('assignments.updateSuccess'));
-        } catch (error) {
-          console.error('Failed to move assignment:', error);
-          toast.error(t('errors.saveFailed'));
-        }
-      })();
+      moveAssignmentToRoom(draggedAssignmentData.assignment, roomData.roomId);
       return;
     }
 
@@ -878,7 +927,15 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         }
       })();
     }
-  }, [assignments, createAssignment, currentView, successToast, t, updateAssignment]),
+  }, [
+    assignGuestToRoom,
+    assignments,
+    currentView,
+    moveAssignmentToRoom,
+    successToast,
+    t,
+    updateAssignment,
+  ]),
 
   /**
    * Handles drag cancel.
@@ -1215,6 +1272,8 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           }}
           todayKey={todayStr as ISODateString}
           onEditRoom={handleRoomEdit}
+          onAssignGuestToRoom={assignGuestToRoom}
+          onMoveAssignmentToRoom={moveAssignmentToRoom}
         />
       )}
 

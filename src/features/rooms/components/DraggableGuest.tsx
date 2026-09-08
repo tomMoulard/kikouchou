@@ -5,13 +5,19 @@
  * @module features/rooms/components/DraggableGuest
  */
 
-import { type CSSProperties, type ReactElement, memo } from 'react';
+import { type CSSProperties, type PointerEvent, type ReactElement, memo } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { PersonBadge } from '@/components/shared/PersonBadge';
-import type { Person } from '@/types';
+import {
+  RoomPickerMenu,
+  type RoomPickerOption,
+} from '@/features/rooms/components/RoomPickerMenu';
+import { useRoomPickerMenu } from '@/features/rooms/hooks/useRoomPickerMenu';
+import type { Person, RoomId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -58,6 +64,16 @@ export interface DraggableGuestProps {
   readonly className?: string;
   /** Whether drag is disabled */
   readonly disabled?: boolean;
+  /**
+   * Rooms the guest can be sent to without a drag.
+   *
+   * With {@link DraggableGuestProps.onAssignRoom}, these become a menu on the
+   * chip: the path a keyboard, a screen reader and a tap all have, where a
+   * drag is the one a mouse has.
+   */
+  readonly assignableRooms?: readonly RoomPickerOption[];
+  /** Called with the room picked from the menu */
+  readonly onAssignRoom?: (roomId: RoomId) => void;
 }
 
 // ============================================================================
@@ -68,7 +84,8 @@ export interface DraggableGuestProps {
  * DraggableGuest provides a draggable person badge for room assignment.
  *
  * When dragged and dropped on a DroppableRoom, it triggers the assignment
- * dialog with the person and their stay dates pre-filled.
+ * dialog with the person and their stay dates pre-filled. The same assignment
+ * is available from the chip's room menu, which needs no pointer.
  *
  * @example
  * ```tsx
@@ -90,7 +107,11 @@ const DraggableGuest = memo(function DraggableGuest(props: DraggableGuestProps):
     style: positionStyle,
     className,
     disabled = false,
+    assignableRooms,
+    onAssignRoom,
   } = props;
+
+  const { t } = useTranslation();
 
   // Create unique ID for this draggable.
   //
@@ -111,6 +132,10 @@ const DraggableGuest = memo(function DraggableGuest(props: DraggableGuestProps):
     disabled,
   });
 
+  const menuRooms = disabled ? undefined : assignableRooms;
+  const hasMenu = onAssignRoom !== undefined && (menuRooms?.length ?? 0) > 0;
+  const { isOpen, setIsOpen, tapHandlers } = useRoomPickerMenu(hasMenu);
+
   // Apply transform style for drag movement
   const style: CSSProperties | undefined =
     transform || positionStyle
@@ -120,10 +145,48 @@ const DraggableGuest = memo(function DraggableGuest(props: DraggableGuestProps):
         }
       : undefined;
 
+  const menu =
+    onAssignRoom !== undefined && menuRooms !== undefined && menuRooms.length > 0 ? (
+      <RoomPickerMenu
+        triggerLabel={t('rooms.assignMenu.trigger', {
+          name: person.name,
+          defaultValue: 'Assign {{name}} to a room',
+        })}
+        heading={t('rooms.assignMenu.assignHeading', 'Assign to…')}
+        rooms={menuRooms}
+        onSelectRoom={onAssignRoom}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+      />
+    ) : null;
+
+  // The handle is a sibling of the menu trigger rather than its parent: nesting
+  // a button inside this `role="button"` node would hide it from a screen
+  // reader, and a press on it would read as the start of a drag.
+  //
+  // `onPointerDown` is merged rather than spread over: dnd-kit's own pointer
+  // sensor listens on that very prop, and replacing it would leave the chip
+  // undraggable.
+  const handleProps = {
+    ...listeners,
+    onPointerDown: (event: PointerEvent<HTMLElement>) => {
+      listeners?.onPointerDown?.(event);
+      tapHandlers.onPointerDown(event);
+    },
+    onClick: tapHandlers.onClick,
+  };
+
+  const handleClassName = cn(
+    'flex min-w-0 flex-1 items-center self-stretch touch-none select-none',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+    isDragging && 'cursor-grabbing',
+    !isDragging && !disabled && 'cursor-grab active:cursor-grabbing',
+    disabled && 'cursor-not-allowed',
+  );
+
   if (bar) {
     return (
       <div
-        ref={setNodeRef}
         style={{
           ...style,
           // Dashed outline in the guest's own colour over a wash of it, rather
@@ -137,48 +200,52 @@ const DraggableGuest = memo(function DraggableGuest(props: DraggableGuestProps):
           borderColor: person.color,
           backgroundColor: `${person.color}26`,
         }}
-        {...listeners}
-        {...attributes}
         className={cn(
-          'absolute flex items-center rounded-md px-2 text-xs touch-none select-none',
+          'absolute flex items-center gap-1 rounded-md pl-2 pr-0.5 text-xs',
           'border-2 border-dashed text-foreground',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           'transition-opacity hover:opacity-90',
-          isDragging && 'opacity-60 cursor-grabbing z-50',
-          !isDragging && !disabled && 'cursor-grab active:cursor-grabbing',
-          disabled && 'cursor-not-allowed opacity-50',
+          isDragging && 'opacity-60 z-50',
+          disabled && 'opacity-50',
           className,
         )}
         title={person.name}
-        aria-label={person.name}
         data-unhoused="true"
       >
-        <span className="truncate">{person.name}</span>
+        <div
+          ref={setNodeRef}
+          {...attributes}
+          {...handleProps}
+          className={handleClassName}
+          aria-label={person.name}
+        >
+          <span className="truncate">{person.name}</span>
+        </div>
+        {menu}
       </div>
     );
   }
 
   return (
     <div
-      ref={setNodeRef}
       style={style}
-      {...listeners}
-      {...attributes}
       className={cn(
-        // Base styles
-        'inline-flex touch-none select-none',
-        // Dragging state
-        isDragging && 'opacity-50 cursor-grabbing z-50',
-        // Not dragging state
-        !isDragging && !disabled && 'cursor-grab active:cursor-grabbing',
-        // Disabled state
-        disabled && 'cursor-not-allowed opacity-50',
+        'inline-flex items-center gap-1',
+        isDragging && 'opacity-50 z-50',
+        disabled && 'opacity-50',
         className,
       )}
       title={person.name}
-      aria-label={person.name}
     >
-      <PersonBadge person={person} size={size} />
+      <div
+        ref={setNodeRef}
+        {...attributes}
+        {...handleProps}
+        className={handleClassName}
+        aria-label={person.name}
+      >
+        <PersonBadge person={person} size={size} />
+      </div>
+      {menu}
     </div>
   );
 });

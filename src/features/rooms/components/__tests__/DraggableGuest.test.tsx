@@ -35,6 +35,22 @@ vi.mock('@/components/shared/PersonBadge', () => ({
   ),
 }));
 
+/**
+ * The bar drawn around a chip's drag handle.
+ *
+ * The handle carries the drag and the accessible name; the bar around it
+ * carries the shape and the position, and the menu trigger is the handle's
+ * sibling inside it — a button nested in the handle's own `role="button"`
+ * would not be reliably reachable.
+ */
+function barAround(handle: HTMLElement): HTMLElement {
+  const bar = handle.closest('[data-unhoused="true"]');
+  if (!(bar instanceof HTMLElement)) {
+    throw new Error('the drag handle is not inside an unhoused bar');
+  }
+  return bar;
+}
+
 const person: Person = {
   id: 'p1' as PersonId,
   tripId: 'trip-1' as TripId,
@@ -69,9 +85,8 @@ describe('DraggableGuest', () => {
         <DraggableGuest person={person} startDate="2026-07-01" endDate="2026-07-05" bar />,
       );
 
-      const bar = screen.getByRole('button', { name: 'Marc' });
+      const bar = barAround(screen.getByRole('button', { name: 'Marc' }));
       expect(bar).toHaveClass('border-dashed');
-      expect(bar).toHaveAttribute('data-unhoused', 'true');
     });
 
     it('keeps the guest colour on the outline rather than filling with it', () => {
@@ -79,7 +94,7 @@ describe('DraggableGuest', () => {
         <DraggableGuest person={person} startDate="2026-07-01" endDate="2026-07-05" bar />,
       );
 
-      const bar = screen.getByRole('button', { name: 'Marc' });
+      const bar = barAround(screen.getByRole('button', { name: 'Marc' }));
       expect(bar.style.borderColor).not.toBe('');
       // A wash, not the flat colour — a filled bar would read as booked.
       expect(bar.style.backgroundColor).not.toBe('rgb(236, 72, 153)');
@@ -96,7 +111,7 @@ describe('DraggableGuest', () => {
         />,
       );
 
-      const bar = screen.getByRole('button', { name: 'Marc' });
+      const bar = barAround(screen.getByRole('button', { name: 'Marc' }));
       expect(bar.style.left).toBe('10px');
       expect(bar.style.width).toBe('120px');
     });

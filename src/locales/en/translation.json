@@ -252,7 +252,13 @@
     "autoAssignPartial_one": "{{count}} segment could not be placed due to capacity limits",
     "autoAssignPartial_other": "{{count}} segments could not be placed due to capacity limits",
     "autoAssignNoSolution": "No available room slot found for these guests.",
-    "autoAssignFailed": "Could not optimize room assignments."
+    "autoAssignFailed": "Could not optimize room assignments.",
+    "assignMenu": {
+      "trigger": "Assign {{name}} to a room",
+      "moveTrigger": "Move {{name}} to another room",
+      "assignHeading": "Assign to…",
+      "moveHeading": "Move to…"
+    }
   },
   "persons": {
     "title": "Guests",

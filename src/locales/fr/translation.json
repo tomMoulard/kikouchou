@@ -252,7 +252,13 @@
     "autoAssignPartial_one": "{{count}} segment n'a pas pu être placé (capacité atteinte)",
     "autoAssignPartial_other": "{{count}} segments n'ont pas pu être placés (capacité atteinte)",
     "autoAssignNoSolution": "Aucun créneau disponible trouvé pour ces invités.",
-    "autoAssignFailed": "Impossible d'optimiser les attributions."
+    "autoAssignFailed": "Impossible d'optimiser les attributions.",
+    "assignMenu": {
+      "trigger": "Attribuer une chambre à {{name}}",
+      "moveTrigger": "Déplacer {{name}} vers une autre chambre",
+      "assignHeading": "Attribuer à…",
+      "moveHeading": "Déplacer vers…"
+    }
   },
   "persons": {
     "title": "Participants",
