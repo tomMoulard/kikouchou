@@ -26,6 +26,12 @@ export { RoomListPage } from './pages/RoomListPage';
 // Components
 // ============================================================================
 
+export { AllocationSuggestionDialog } from './components/AllocationSuggestionDialog';
+export type {
+  AllocationSuggestionDialogProps,
+  ConfirmedStay,
+} from './components/AllocationSuggestionDialog';
+
 export { RoomForm } from './components/RoomForm';
 export type { RoomFormProps } from './components/RoomForm';
 
@@ -44,3 +50,17 @@ export type { RoomAssignmentSectionProps } from './components/RoomAssignmentSect
 
 export { roomRoutes } from './routes';
 export type { RoomListParams } from './routes';
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
+export { planRoomAllocation } from './utils/allocation-planner';
+export type {
+  AllocationPlanInput,
+  GuestNeedingRoom,
+  SuggestedStay,
+} from './utils/allocation-planner';
+
+export { inferGuestParties } from './utils/guest-parties';
+export type { GuestPartyInput, PartyKeyByPerson } from './utils/guest-parties';

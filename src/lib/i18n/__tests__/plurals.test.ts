@@ -111,18 +111,16 @@ const PLURAL_CASES: readonly PluralCase[] = [
     fr: ['0 participant', '1 participant', '2 participants'],
   },
   {
-    // Was "{{count}} room allocation(s) optimized automatically".
-    key: 'rooms.autoAssignSuccess',
-    en: [
-      '0 room allocations optimized automatically',
-      '1 room allocation optimized automatically',
-      '2 room allocations optimized automatically',
-    ],
-    fr: [
-      '0 attribution optimisée automatiquement',
-      '1 attribution optimisée automatiquement',
-      '2 attributions optimisées automatiquement',
-    ],
+    // The toast after a suggested allocation is applied.
+    key: 'rooms.suggest.applied',
+    en: ['0 stays saved', '1 stay saved', '2 stays saved'],
+    fr: ['0 séjour enregistré', '1 séjour enregistré', '2 séjours enregistrés'],
+  },
+  {
+    // The review dialog's own count, on the button that writes the rows.
+    key: 'rooms.suggest.apply',
+    en: ['Apply 0 stays', 'Apply 1 stay', 'Apply 2 stays'],
+    fr: ['Valider 0 séjour', 'Valider 1 séjour', 'Valider 2 séjours'],
   },
   {
     key: 'sharing.sync.conflictCount',
@@ -171,7 +169,8 @@ const CONVERTED_KEYS: readonly string[] = [
   'sharing.sync.autoApplyCount',
   'sharing.sync.warningCount',
   'sharing.sync.mergeSuccess',
-  'rooms.autoAssignPartial',
+  'rooms.suggest.leftOut',
+  'rooms.suggest.nights',
   'sharing.p2p.syncingWithPeers',
   ...PLURAL_CASES.map((testCase) => testCase.key),
 ];

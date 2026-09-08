@@ -1112,6 +1112,96 @@ test.describe('Room Assignment Flow', () => {
     await expect(page.locator('#room-capacity')).toHaveValue(TEST_DATA.room.capacity);
   });
 
+  // --------------------------------------------------------------------------
+  // "Suggest an allocation": the whole board in one review
+  // --------------------------------------------------------------------------
+  test('suggests an allocation, keeps a party together, and writes only on apply', async ({
+    page,
+  }) => {
+    tripId = await createTestTrip(page);
+
+    // A double and a single. Alice and Bob step off the same train, so the
+    // double is the room that keeps them together; the single would split them.
+    await createRoomViaDB(
+      page,
+      tripId,
+      {
+        name: TEST_DATA.room.name,
+        capacity: parseInt(TEST_DATA.room.capacity, 10),
+        description: TEST_DATA.room.description,
+      },
+      0,
+    );
+    await createRoomViaDB(
+      page,
+      tripId,
+      {
+        name: TEST_DATA.room2.name,
+        capacity: parseInt(TEST_DATA.room2.capacity, 10),
+        description: TEST_DATA.room2.description,
+      },
+      1,
+    );
+
+    const aliceId = await createPersonViaDB(page, tripId, { name: TEST_DATA.person.name });
+    const bobId = await createPersonViaDB(page, tripId, { name: TEST_DATA.person2.name });
+
+    for (const personId of [aliceId, bobId]) {
+      await seedTransport(page, {
+        tripId,
+        personId,
+        type: 'arrival',
+        datetime: `${TEST_DATA.assignment.startDate}T10:00:00Z`,
+        location: 'Gare de Lyon',
+      });
+      await seedTransport(page, {
+        tripId,
+        personId,
+        type: 'departure',
+        datetime: `${TEST_DATA.assignment.endDate}T18:00:00Z`,
+        location: 'Gare de Lyon',
+      });
+    }
+
+    await navigateToRooms(page, tripId, 'card');
+
+    await page
+      .getByRole('button', { name: /suggest an allocation|proposer une répartition/i })
+      .click();
+
+    const review = page.getByRole('dialog');
+    await expect(review).toBeVisible();
+    // Both guests are listed, and named as one party.
+    // Exact, because the party line and each row's own label also spell the
+    // name out: "Travelling together: …" and "Room for …".
+    await expect(
+      review.getByText(TEST_DATA.person.name, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      review.getByText(TEST_DATA.person2.name, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      review.getByText(/travelling together|voyagent ensemble/i),
+    ).toBeVisible();
+
+    // A review that writes as you read it is not a review.
+    expect(await getTripAssignmentsFromDB(page, tripId)).toHaveLength(0);
+
+    await review
+      .getByRole('button', { name: /^(apply|valider)/i })
+      .click();
+    await expect(review).toBeHidden();
+
+    const stays = await getTripAssignmentsFromDB(page, tripId);
+    expect(stays).toHaveLength(2);
+    // One room for the pair, and it is the one with two beds.
+    expect(new Set(stays.map((stay) => stay.roomId)).size).toBe(1);
+    for (const stay of stays) {
+      expect(stay.startDate).toBe(TEST_DATA.assignment.startDate);
+      expect(stay.endDate).toBe(TEST_DATA.assignment.endDate);
+    }
+  });
+
   test('double-clicking a room name in the timeline opens its edit dialog', async ({ page }) => {
     tripId = await createTestTrip(page);
     await createRoomViaDB(page, tripId, {

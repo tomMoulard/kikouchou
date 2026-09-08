@@ -8393,7 +8393,30 @@ These features are **NOT** part of the MVP but are documented for future referen
 4. **Money Splitting** - Tricount-like expense tracking
 5. **Task Management** - Chores and shopping assignments
 6. **E-ink Display Mode** - High contrast mode for Kindle browsers
-7. **AI Room Optimization** - Suggest optimal room assignments
+7. **Room allocation suggestion** - **done**, see
+   `src/features/rooms/utils/allocation-planner.ts` and
+   `AllocationSuggestionDialog`. "Suggest an allocation" fills every night no
+   guest has a bed for, and the reader reviews it before anything is written.
+   - Not AI, and deliberately so. The planner is a local heuristic: capacity is
+     never exceeded, a party goes in one room when one is big enough, and
+     between two rooms that fit the one left with less slack wins. It runs
+     offline in a millisecond and gives the same answer twice, neither of which
+     a model on the user's own GPU would have done.
+   - The button used to be gated on an on-device assistant model being cached,
+     which hid a feature that never needed one from nearly every reader. The
+     gate is gone: the button appears whenever a guest still needs a room.
+   - "Groups together" reads what the trip already records, because nothing on a
+     guest states it - `Person` carries no group id, since importing a guest
+     group copies its members and keeps no link back. `guest-parties.ts`
+     therefore unions guests who already share a room on some night, and guests
+     who arrive at the same time and place. Departures are not a signal: a
+     shared taxi to the airport says nothing about who wanted to sleep
+     together. A couple under one name needs none of this - one row with
+     `headcount: 2` occupies one room by construction.
+   - Nothing is written until Apply. Each row's room can be changed or dropped,
+     a stay no room fits is named rather than silently missing, and the capacity
+     warning is a warning: putting four people in a double is the host's
+     decision to make, not the planner's.
 8. **Export to PDF** - Print-friendly trip summary
 9. **Import from Calendar** - Import dates from iCal/Google Calendar
 10. **Weather Integration** - Show weather forecast for trip location

@@ -19,7 +19,6 @@ const mockUpdateAssignment = vi.fn().mockResolvedValue(undefined);
 const mockGetAssignmentsByRoom = vi.fn(() => []);
 const mockSuccessToast = vi.fn();
 const mockSetSearchParams = vi.fn();
-let originalCaches: typeof globalThis.caches;
 
 const mockTrip: Trip = {
   id: 'trip-1' as Trip['id'],
@@ -183,6 +182,52 @@ vi.mock('@/features/rooms/components/RoomAssignmentSection', () => ({
   RoomAssignmentSection: () => <div data-testid="room-assignment-section" />,
 }));
 
+// The review dialog has its own tests; here it stands for the hand-off — what
+// the page proposed, and what it writes when the reader says yes.
+vi.mock('@/features/rooms/components/AllocationSuggestionDialog', () => ({
+  AllocationSuggestionDialog: ({
+    open,
+    stays,
+    onApply,
+  }: {
+    open: boolean;
+    stays: readonly {
+      personId: string;
+      roomId: string | null;
+      startDate: string;
+      endDate: string;
+    }[];
+    onApply: (
+      stays: readonly {
+        personId: string;
+        roomId: string;
+        startDate: string;
+        endDate: string;
+      }[],
+    ) => Promise<void>;
+  }) =>
+    open ? (
+      <div data-testid="allocation-suggestion-dialog" data-stays={JSON.stringify(stays)}>
+        <button
+          type="button"
+          aria-label="apply-suggestion"
+          onClick={() => {
+            void onApply(
+              stays
+                .filter((stay) => stay.roomId !== null)
+                .map((stay) => ({
+                  personId: stay.personId,
+                  roomId: stay.roomId as string,
+                  startDate: stay.startDate,
+                  endDate: stay.endDate,
+                })),
+            );
+          }}
+        />
+      </div>
+    ) : null,
+}));
+
 vi.mock('@/features/rooms/components/QuickAssignmentDialog', () => ({
   QuickAssignmentDialog: ({
     open,
@@ -332,30 +377,12 @@ function resetMocks() {
   } as unknown as ReturnType<typeof useTransportContext>);
 }
 
-function mockAssistantModelCacheAvailable(): void {
-  Object.defineProperty(globalThis, 'caches', {
-    value: {
-      open: vi.fn().mockResolvedValue({
-        keys: vi.fn().mockResolvedValue([
-          new Request('https://example.test/onnx-community%2Fgemma-4-E2B-it-ONNX'),
-        ]),
-      }),
-      delete: vi.fn().mockResolvedValue(true),
-      has: vi.fn().mockResolvedValue(false),
-      keys: vi.fn().mockResolvedValue([]),
-      match: vi.fn().mockResolvedValue(undefined),
-    },
-    configurable: true,
-  });
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
 
 describe('RoomListPage', () => {
   beforeEach(() => {
-    originalCaches = globalThis.caches;
     vi.clearAllMocks();
     // Spy on localStorage to prevent the "all assigned" notification guard
     // from leaking between tests (the component writes to localStorage).
@@ -365,10 +392,6 @@ describe('RoomListPage', () => {
   });
 
   afterEach(() => {
-    Object.defineProperty(globalThis, 'caches', {
-      value: originalCaches,
-      configurable: true,
-    });
     vi.restoreAllMocks();
   });
 
@@ -567,7 +590,7 @@ describe('RoomListPage', () => {
   });
 
   // ===========================================================================
-  // Auto-assign button (shown when guests are unassigned and model is cached)
+  // "Suggest an allocation" (shown whenever a guest still needs a room)
   // ===========================================================================
 
   it('does not show the unassigned guests warning card', () => {
@@ -575,18 +598,62 @@ describe('RoomListPage', () => {
     expect(screen.queryByText(/rooms\.unassignedGuests/)).not.toBeInTheDocument();
   });
 
-  it('shows optimize button when unassigned guests exist and assistant model is cached', async () => {
-    mockAssistantModelCacheAvailable();
+  // The button used to appear only for a reader who already had an on-device
+  // assistant model cached, which was nearly nobody — and the planner is a
+  // plain local heuristic that never asked for a model in the first place.
+  it('shows the suggest button whenever a guest needs a room', async () => {
     render(<RoomListPage />, { withProviders: false });
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: 'rooms.autoAssignButton' }),
+        screen.getByRole('button', { name: 'rooms.suggest.button' }),
       ).toBeInTheDocument();
     });
   });
 
-  it('derives unassigned guests from transports when no stay dates (optimize button)', async () => {
-    mockAssistantModelCacheAvailable();
+  it('reviews the allocation before writing any of it', async () => {
+    const { user } = render(<RoomListPage />, { withProviders: false });
+
+    await user.click(screen.getByRole('button', { name: 'rooms.suggest.button' }));
+
+    const dialog = await screen.findByTestId('allocation-suggestion-dialog');
+    expect(JSON.parse(dialog.getAttribute('data-stays') ?? '[]')).toEqual([
+      {
+        personId: 'person-1',
+        roomId: 'room-1',
+        startDate: '2026-07-02',
+        endDate: '2026-07-08',
+        nights: [
+          '2026-07-02',
+          '2026-07-03',
+          '2026-07-04',
+          '2026-07-05',
+          '2026-07-06',
+          '2026-07-07',
+        ],
+        partyKey: 'person-1',
+      },
+    ]);
+    expect(mockCreateAssignment).not.toHaveBeenCalled();
+  });
+
+  it('writes the reviewed allocation when the reader applies it', async () => {
+    const { user } = render(<RoomListPage />, { withProviders: false });
+
+    await user.click(screen.getByRole('button', { name: 'rooms.suggest.button' }));
+    await user.click(await screen.findByLabelText('apply-suggestion'));
+
+    await waitFor(() => {
+      expect(mockCreateAssignment).toHaveBeenCalledWith({
+        roomId: 'room-1',
+        personId: 'person-1',
+        startDate: '2026-07-02',
+        endDate: '2026-07-08',
+      });
+    });
+    expect(mockSuccessToast).toHaveBeenCalledWith('rooms.suggest.applied');
+  });
+
+  it('derives unassigned guests from transports when no stay dates', async () => {
     vi.mocked(usePersonContext).mockReturnValue({
       persons: [mockPerson2],
       isLoading: false,
@@ -603,12 +670,12 @@ describe('RoomListPage', () => {
     render(<RoomListPage />, { withProviders: false });
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: 'rooms.autoAssignButton' }),
+        screen.getByRole('button', { name: 'rooms.suggest.button' }),
       ).toBeInTheDocument();
     });
   });
 
-  it('keeps one continuous auto-assignment across DST fallback nights', async () => {
+  it('keeps one continuous suggested stay across DST fallback nights', async () => {
     const originalTimezone = process.env.TZ;
     const dstGuest: Person = {
       ...mockPerson,
@@ -619,7 +686,6 @@ describe('RoomListPage', () => {
     };
 
     process.env.TZ = 'Europe/Paris';
-    mockAssistantModelCacheAvailable();
     vi.mocked(usePersonContext).mockReturnValue({
       persons: [dstGuest],
       isLoading: false,
@@ -634,13 +700,14 @@ describe('RoomListPage', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole('button', { name: 'rooms.autoAssignButton' }),
+          screen.getByRole('button', { name: 'rooms.suggest.button' }),
         ).toBeInTheDocument();
       });
 
       await user.click(
-        screen.getByRole('button', { name: 'rooms.autoAssignButton' }),
+        screen.getByRole('button', { name: 'rooms.suggest.button' }),
       );
+      await user.click(await screen.findByLabelText('apply-suggestion'));
 
       await waitFor(() => {
         expect(mockCreateAssignment).toHaveBeenCalledTimes(1);
@@ -657,8 +724,7 @@ describe('RoomListPage', () => {
     }
   });
 
-  it('does not show optimize button when all guests are assigned', async () => {
-    mockAssistantModelCacheAvailable();
+  it('does not show the suggest button when all guests are assigned', async () => {
     vi.mocked(useAssignmentContext).mockReturnValue({
       assignments: [mockAssignment],
       isLoading: false,
@@ -670,13 +736,12 @@ describe('RoomListPage', () => {
     render(<RoomListPage />, { withProviders: false });
     await waitFor(() => {
       expect(
-        screen.queryByRole('button', { name: 'rooms.autoAssignButton' }),
+        screen.queryByRole('button', { name: 'rooms.suggest.button' }),
       ).not.toBeInTheDocument();
     });
   });
 
-  it('does not show optimize button when no persons', async () => {
-    mockAssistantModelCacheAvailable();
+  it('does not show the suggest button when no persons', async () => {
     vi.mocked(usePersonContext).mockReturnValue({
       persons: [],
       isLoading: false,
@@ -693,7 +758,7 @@ describe('RoomListPage', () => {
     render(<RoomListPage />, { withProviders: false });
     await waitFor(() => {
       expect(
-        screen.queryByRole('button', { name: 'rooms.autoAssignButton' }),
+        screen.queryByRole('button', { name: 'rooms.suggest.button' }),
       ).not.toBeInTheDocument();
     });
   });
@@ -888,7 +953,6 @@ describe('RoomListPage', () => {
   // room on no night at all, so they never reached this list and the page
   // offered no way to give them a bed — one of three guests, silently absent.
   it('treats a person with no dates or transports as needing a room for the trip', async () => {
-    mockAssistantModelCacheAvailable();
     const personNoDates: Person = {
       id: 'person-no-dates' as Person['id'],
       tripId: 'trip-1' as Person['tripId'],
@@ -913,7 +977,7 @@ describe('RoomListPage', () => {
     render(<RoomListPage />, { withProviders: false });
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'rooms.autoAssignButton' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'rooms.suggest.button' })).toBeInTheDocument();
     });
   });
 
@@ -1014,8 +1078,7 @@ describe('RoomListPage', () => {
     expect(screen.getByText('rooms.title')).toBeInTheDocument();
   });
 
-  it('shows optimize button for unassigned guests with stay dates in card view', async () => {
-    mockAssistantModelCacheAvailable();
+  it('shows the suggest button for unassigned guests with stay dates in card view', async () => {
     const personWithDates: Person = {
       id: 'person-3' as Person['id'],
       tripId: 'trip-1' as Person['tripId'],
@@ -1043,7 +1106,7 @@ describe('RoomListPage', () => {
     expect(screen.queryByText(/rooms\.unassignedGuests/)).not.toBeInTheDocument();
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: 'rooms.autoAssignButton' }),
+        screen.getByRole('button', { name: 'rooms.suggest.button' }),
       ).toBeInTheDocument();
     });
   });
