@@ -1,5 +1,6 @@
 /**
- * @fileoverview The single answer to “is this guest here on this night?”.
+ * @fileoverview The single answer to “is this guest here?”, asked of a night or
+ * of a day.
  *
  * A guest is on site when their stay window covers the night — from explicit
  * stay dates, or failing that from their arrival/departure transports — **or**
@@ -8,8 +9,19 @@
  * guest is unmistakably there. Leaving them out made the sidebar's “guests
  * tonight” list disagree with the calendar's headcount for the same night.
  *
- * Aligns with the check-in / check-out model used for rooms
- * (`isDateInStayRange`): check-in inclusive, check-out exclusive.
+ * Two questions are asked of those same records, and they are not the same
+ * question:
+ *
+ * - `isGuestOnSiteOnDate` — does the guest sleep here on this night? Check-in
+ *   inclusive, check-out exclusive, matching the rooms model
+ *   (`isDateInStayRange`). Beds and “guests tonight” read this.
+ * - `isGuestOnSiteDuringDay` — is the guest here at some point on this day?
+ *   Both ends included. Meal planning reads this, because a guest who leaves on
+ *   the 13th has breakfast on the 13th.
+ *
+ * They differ on the check-out day alone. Pick by what the answer feeds: a bed
+ * that can be given to somebody else that night, or a person who is in the
+ * house that morning.
  *
  * @module features/persons/utils/guest-presence
  */
@@ -188,9 +200,10 @@ function isWithinStayWindow(
  * True if the guest sleeps on `dateKey`, from either their stay window
  * (explicit dates or transports) or a room assignment covering that night.
  *
- * This is the app's one definition of presence. The sidebar's “guests tonight”
- * list and the calendar's per-day headcounts both read it, so they always name
- * the same people.
+ * This is the app's definition of a *night* on site. The sidebar's “guests
+ * tonight” list reads it, and so does every question about beds. To ask who is
+ * in the house on a given day — the departure morning included — use
+ * {@link isGuestOnSiteDuringDay}.
  *
  * @example
  * ```typescript
@@ -218,7 +231,68 @@ export function isGuestOnSiteOnDate(args: GuestPresenceQuery): boolean {
 }
 
 /**
- * Guests on site on the given calendar day, sorted by existing `persons` order (typically by name).
+ * True if `dateKey` falls between a check-in and a check-out, both days
+ * included.
+ *
+ * The day counterpart of `isDateInStayRange`, which ends at the check-out
+ * because nobody sleeps that night. Day keys sort lexicographically, so string
+ * comparison is the date comparison.
+ */
+function isDateInStayDays(
+  startDate: string,
+  endDate: string,
+  dateKey: string,
+): boolean {
+  if (!startDate || !endDate || startDate > endDate) {
+    return false;
+  }
+  return startDate <= dateKey && dateKey <= endDate;
+}
+
+/**
+ * True if the guest is in the house at any point during `dateKey` — from their
+ * stay window (explicit dates or transports) or from a room assignment.
+ *
+ * The same records as {@link isGuestOnSiteOnDate}, read as days rather than
+ * nights, so the two differ on exactly one day of a stay: the check-out. A
+ * guest booked 11 → 13 sleeps on the 11th and the 12th, and is on site on the
+ * 11th, the 12th and the 13th. They eat breakfast there and someone drives them
+ * to the station, which is why the headcounts that plan meals read this and the
+ * room maths do not.
+ *
+ * A guest who arrives and leaves on one day sleeps nowhere and is on site that
+ * day. That is the other case the night rule cannot express.
+ *
+ * @example
+ * ```typescript
+ * // A stay of two nights, and the morning after the second one.
+ * isGuestOnSiteDuringDay({
+ *   person,
+ *   arrivals: [],
+ *   departures: [],
+ *   assignments: [],
+ *   tripWindow: { startDate: '2026-09-11', endDate: '2026-09-13' },
+ *   dateKey: '2026-09-13',
+ * }); // true
+ * ```
+ */
+export function isGuestOnSiteDuringDay(args: GuestPresenceQuery): boolean {
+  const { person, arrivals, departures, assignments, tripWindow, dateKey } = args;
+
+  const { arrival, departure } = resolveGuestStayWindow(person, arrivals, departures, tripWindow);
+  if (arrival && departure && isDateInStayDays(arrival, departure, dateKey)) {
+    return true;
+  }
+
+  return assignments.some(
+    (a) => a.personId === person.id && isDateInStayDays(a.startDate, a.endDate, dateKey),
+  );
+}
+
+/**
+ * Guests sleeping on the given night, sorted by existing `persons` order
+ * (typically by name). The night rule, so a guest who leaves that morning is
+ * not on the list.
  */
 export function listGuestsOnSiteOnDate(args: {
   readonly persons: readonly Person[];

@@ -38,6 +38,7 @@ export type { PersonDialogProps } from './components/PersonDialog';
 export {
   buildGuestIdsByTripDateMap,
   deriveGuestStayDateBounds,
+  isGuestOnSiteDuringDay,
   isGuestOnSiteOnDate,
   listGuestsOnSiteOnDate,
   resolveGuestStayWindow,
