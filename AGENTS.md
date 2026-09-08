@@ -37,6 +37,12 @@ npx playwright test --project=production             # Offline + PWA (production
 npx playwright test e2e/trip-lifecycle.spec.ts       # Single file
 npx playwright test -g "user can create a new trip"  # Single test
 
+# The same specs as a regression check on the deployed app (see below)
+bun run test:e2e:live                                # app.kikouchou.app, both live projects
+PW_LIVE=1 npx playwright test --project=live         # Everything but offline/PWA
+PW_LIVE=1 npx playwright test --project=live-pwa     # Offline + PWA, real service worker
+PW_LIVE=1 PW_LIVE_URL=https://staging.example npx playwright test   # Another deploy
+
 # Supabase (local stack: Docker required)
 bunx supabase start           # Postgres + auth + realtime + studio on :54321-54323
 bunx supabase stop            # Ten containers; stop them when you are done
@@ -55,6 +61,22 @@ tsc -b                        # The ONLY form that checks anything (see below)
 > auto-update cannot change a result. Reach for `test:e2e:chrome` when
 > `playwright install` has not run locally — the scripts used to force it, which
 > meant CI downloaded a Chromium it then ignored.
+
+> **`PW_LIVE=1` points the suite at the deployed app** and starts no local
+> server. The app is local-first, so most specs seed IndexedDB and drive the UI,
+> and that runs against any origin. Four specs are excluded, because they assert
+> the environment and not the app. `analytics-privacy` and `sharing` describe a
+> build with blank `VITE_*` keys. `trip-sharing-sync` needs the Supabase stub in
+> place of the real project. `performance` compares against loopback thresholds.
+> Chromium also starts with `--host-resolver-rules`, which maps every PostHog
+> host, `events.kikouchou.app`, Nominatim and the tile CDNs to `0.0.0.0`. The
+> deployed bundle carries a real project key, and one request there is one
+> Person. The map hosts go the way `support/external-services` sends them: a
+> real geocoder answers the trip form with a popover that eats the click on a
+> date. The Supabase host stays reachable: no live spec signs in, and every
+> write needs a session.
+> Without `PW_LIVE=1` the live projects do not exist, so `--project=live` fails
+> instead of running.
 
 > **`tsc --noEmit` type-checks ZERO files in this repo.** The root
 > `tsconfig.json` is a solution file (`"files": []` + `references`), and project
