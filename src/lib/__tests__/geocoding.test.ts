@@ -36,6 +36,29 @@ const stationResult = {
 };
 
 /**
+ * Nominatim returns this town twice for the query `Annecy`, once as the
+ * administrative boundary and once as the place node, with the same
+ * `display_name` and slightly different coordinates.
+ */
+const annecyResult = {
+  place_id: 10,
+  display_name: 'Annecy, Haute-Savoie, France',
+  lat: '45.8992',
+  lon: '6.1294',
+  type: 'town',
+  class: 'place',
+};
+
+const annecyBoundaryResult = {
+  ...annecyResult,
+  place_id: 11,
+  lat: '45.9161',
+  lon: '6.1397',
+  type: 'administrative',
+  class: 'boundary',
+};
+
+/**
  * Builds a fetch mock resolving to the given Nominatim payload.
  */
 function mockFetchResolving(payload: unknown): ReturnType<typeof vi.fn> {
@@ -132,11 +155,39 @@ describe('searchPlaces', () => {
     expect(places[0]).toEqual({
       id: '1',
       label: 'Paris, Île-de-France, Metropolitan France',
-      fullName: 'Paris, Île-de-France, Metropolitan France, France',
+      detail: 'France',
       typeLabel: 'City',
       coordinates: { lat: 48.8566, lon: 2.3522 },
     });
     expect(places[1]?.typeLabel).toBe('Station');
+  });
+
+  it('leaves the detail empty when the label already holds the whole name', async () => {
+    mockFetchResolving([annecyResult]);
+
+    const places = await searchPlaces('Annecy');
+
+    // The label and the detail render as two lines, one above the other, so a
+    // detail that repeats the label prints the same words twice.
+    expect(places[0]?.label).toBe('Annecy, Haute-Savoie, France');
+    expect(places[0]?.detail).toBe('');
+  });
+
+  it('collapses results that carry the same place name', async () => {
+    mockFetchResolving([annecyResult, annecyBoundaryResult]);
+
+    const places = await searchPlaces('Annecy');
+
+    expect(places).toHaveLength(1);
+    expect(places[0]?.id).toBe('10');
+  });
+
+  it('keeps filling the limit after collapsing a duplicate', async () => {
+    mockFetchResolving([annecyResult, annecyBoundaryResult, parisResult]);
+
+    const places = await searchPlaces('Annecy', { limit: 2 });
+
+    expect(places.map((place) => place.id)).toEqual(['10', '1']);
   });
 
   it('falls back to the Nominatim class for an unmapped type', async () => {
