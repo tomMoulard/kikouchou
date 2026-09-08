@@ -1311,9 +1311,60 @@ describe('TripForm Guest List', () => {
 
     await waitFor(() => {
       expect(onGuestsChange).toHaveBeenLastCalledWith([
-        { name: 'Tom' },
+        { name: 'Tom', isSelf: true },
         { name: 'Marie' },
       ]);
+    });
+  });
+
+  it('marks the "You" row as the person this browser is', async () => {
+    const user = userEvent.setup();
+    const onGuestsChange = vi.fn();
+
+    // The page turns this marker into the trip's guest identity, so the badge
+    // and the name mean something past the form. Only the first row carries it:
+    // a guest typed underneath is somebody else.
+    render(
+      <TripForm
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        currentUserName="Tom"
+        onGuestsChange={onGuestsChange}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
+    await user.type(guestInputs()[1]!, 'Marie');
+
+    await waitFor(() => {
+      expect(onGuestsChange).toHaveBeenLastCalledWith([
+        { name: 'Tom', isSelf: true },
+        { name: 'Marie' },
+      ]);
+    });
+  });
+
+  it('marks nobody when the user clears their own row', async () => {
+    const user = userEvent.setup();
+    const onGuestsChange = vi.fn();
+
+    // A host who is not travelling. The row below is a guest, not them, so it
+    // must not inherit the marker when the "You" row drops out of the list.
+    render(
+      <TripForm
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        currentUserName="Tom"
+        onGuestsChange={onGuestsChange}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /trips\.addGuest/i }));
+    await user.type(guestInputs()[1]!, 'Marie');
+    await user.clear(guestInputs()[0]!);
+
+    await waitFor(() => {
+      expect(onGuestsChange).toHaveBeenLastCalledWith([{ name: 'Marie' }]);
     });
   });
 
@@ -1334,7 +1385,7 @@ describe('TripForm Guest List', () => {
       />,
     );
 
-    expect(onGuestsChange).toHaveBeenLastCalledWith([{ name: 'Tom' }]);
+    expect(onGuestsChange).toHaveBeenLastCalledWith([{ name: 'Tom', isSelf: true }]);
   });
 
   it('submits with an empty guest list', async () => {
@@ -1502,7 +1553,7 @@ describe('TripForm addGuests', () => {
     // a name-only merge would have thrown them away at the door.
     await waitFor(() => {
       expect(onGuestsChange).toHaveBeenLastCalledWith([
-        { name: 'Tom' },
+        { name: 'Tom', isSelf: true },
         {
           sourceMemberId: 'member-1',
           name: 'Tom + Léa',
@@ -1543,7 +1594,7 @@ describe('TripForm addGuests', () => {
 
     await waitFor(() => {
       expect(onGuestsChange).toHaveBeenLastCalledWith([
-        { name: 'Tom' },
+        { name: 'Tom', isSelf: true },
         expect.objectContaining({ name: 'Tom & Léa' }),
       ]);
     });
