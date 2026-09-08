@@ -27,7 +27,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify } from '@/hooks';
 import { type Locale, format, parseISO } from 'date-fns';
@@ -638,6 +638,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   const { t, i18n } = useTranslation(),
    navigate = useNavigate(),
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
+   [searchParams, setSearchParams] = useSearchParams(),
 
   // Context hooks
    { notifySuccess } = useOfflineAwareNotify(),
@@ -657,8 +658,13 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // Local state
    [transportToDelete, setTransportToDelete] = useState<TransportId | null>(null),
 
-  // Dialog state for create/edit transport
-   [isDialogOpen, setIsDialogOpen] = useState(false),
+  // Dialog state for create/edit transport.
+  //
+  // `?new=1` opens it on the first render rather than through an effect — it is
+  // how the calendar's setup checklist sends people here for a trip's first
+  // arrival, and a mount-then-open would flash the empty list first. Same flag,
+  // same shape as the guests and rooms pages.
+   [isDialogOpen, setIsDialogOpen] = useState(() => searchParams.get('new') !== null),
    [editingTransportId, setEditingTransportId] = useState<TransportId | undefined>(undefined),
    [defaultTransportType, setDefaultTransportType] = useState<TransportType>('arrival'),
 
@@ -728,6 +734,23 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     () => selectPickupsNeedingDriver(upcomingPickups).length > 0,
     [upcomingPickups],
   );
+
+  // Drop `?new=1` once it has done its job, so closing the dialog and reloading
+  // — or coming back through history — does not pop it open again.
+  useEffect(() => {
+    if (searchParams.get('new') === null) {
+      return;
+    }
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('new');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
 
   // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
   useEffect(() => {
