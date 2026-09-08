@@ -381,7 +381,23 @@
     "openInRooms": "Ouvrir la page chambres pour modifier",
     "quickAssign": "Attribuer une chambre",
     "quickAssignDescription": "Confirmez les dates pour cette attribution de chambre.",
-    "dropHere": "Déposer ici"
+    "dropHere": "Déposer ici",
+    "dragAnnouncements": {
+      "pickedUp": "{{guest}} saisi.",
+      "overRoom": "{{guest}} est au-dessus de {{room}}, {{spots}}",
+      "overSwap": "{{guest}} est au-dessus de {{target}} dans {{room}}. Déposez pour échanger leurs chambres.",
+      "overNothing": "{{guest}} n'est au-dessus d'aucune chambre.",
+      "dropped": "{{guest}} déplacé vers {{room}}, {{spots}}",
+      "droppedPending": "{{guest}} déposé sur {{room}}. Confirmez les dates pour terminer l'attribution.",
+      "swapped": "{{guest}} a échangé de chambre avec {{target}}. {{guest}} est maintenant dans {{room}}.",
+      "notMoved": "{{guest}} n'a pas été déplacé.",
+      "cancelled": "Déplacement de {{guest}} annulé. {{guest}} n'a pas été déplacé.",
+      "spotsLeft_one": "1 place restante.",
+      "spotsLeft_other": "{{count}} places restantes.",
+      "roomFull": "aucune place restante.",
+      "unknownGuest": "un participant",
+      "unknownRoom": "une chambre sans nom"
+    }
   },
   "transports": {
     "title": "Transports",

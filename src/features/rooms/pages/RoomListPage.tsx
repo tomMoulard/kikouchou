@@ -79,6 +79,7 @@ import {
   listStayNights,
   type HeadcountResolver,
 } from '@/features/rooms/utils/capacity-utils';
+import { createRoomDragAnnouncements } from '@/features/rooms/utils/dnd-announcements';
 import { calculateUnassignedDates } from '@/features/rooms/utils/unassigned-guests';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
 import { buildDayColumns } from '@/lib/utils/trip-days';
@@ -946,6 +947,33 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   }, []),
 
   /**
+   * What a screen reader hears during a drag.
+   *
+   * dnd-kit's default announcements are built from the ids it was handed, so a
+   * drop used to read as "Draggable item guest-FH7oeUECm-… was dropped over
+   * droppable area room-orvCHpZ2fFihDg9IxNikQ". These speak the same facts the
+   * board shows: the guest, the room, and the spots left in it.
+   */
+   dragAnnouncements = useMemo(
+    () =>
+      createRoomDragAnnouncements({
+        t,
+        rooms: roomsWithOccupancy.map(({ room, availableSpots }) => ({
+          id: room.id,
+          name: room.name,
+          availableSpots,
+        })),
+        assignments,
+        personNameOf: (personId) => getPersonById(personId)?.name,
+        headcountOf,
+        // The cards view opens the quick-assign dialog instead of writing the
+        // assignment, so nothing has moved yet when the drop lands there.
+        confirmsBeforeAssigning: currentView !== 'timeline',
+      }),
+    [assignments, currentView, getPersonById, headcountOf, roomsWithOccupancy, t],
+  ),
+
+  /**
    * Handles quick assignment dialog close.
    */
    handleQuickAssignDialogClose = useCallback((open: boolean) => {
@@ -1142,6 +1170,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   return (
     <DndContext
       sensors={sensors}
+      accessibility={{ announcements: dragAnnouncements }}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}

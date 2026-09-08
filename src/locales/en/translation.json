@@ -381,7 +381,23 @@
     "openInRooms": "Open rooms to edit",
     "quickAssign": "Assign to room",
     "quickAssignDescription": "Confirm the dates for this room assignment.",
-    "dropHere": "Drop here"
+    "dropHere": "Drop here",
+    "dragAnnouncements": {
+      "pickedUp": "Picked up {{guest}}.",
+      "overRoom": "{{guest}} is over {{room}}, {{spots}}",
+      "overSwap": "{{guest}} is over {{target}} in {{room}}. Drop to swap their rooms.",
+      "overNothing": "{{guest}} is not over a room.",
+      "dropped": "{{guest}} moved to {{room}}, {{spots}}",
+      "droppedPending": "{{guest}} dropped on {{room}}. Confirm the dates to finish the assignment.",
+      "swapped": "{{guest}} swapped rooms with {{target}}. {{guest}} is now in {{room}}.",
+      "notMoved": "{{guest}} was not moved.",
+      "cancelled": "Dragging {{guest}} was cancelled. {{guest}} was not moved.",
+      "spotsLeft_one": "1 spot left.",
+      "spotsLeft_other": "{{count}} spots left.",
+      "roomFull": "no spots left.",
+      "unknownGuest": "a guest",
+      "unknownRoom": "an unnamed room"
+    }
   },
   "transports": {
     "title": "Transport",
