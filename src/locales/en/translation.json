@@ -65,8 +65,7 @@
     "syncPending_one": "{{count}} change not sent yet",
     "syncPending_other": "{{count}} changes not sent yet",
     "syncStatusRegion": "Sync status",
-    "guestGroups": "Groups",
-    "summary": "Summary"
+    "guestGroups": "Groups"
   },
   "analytics": {
     "tripTitle": "Trip analytics",
@@ -1082,7 +1081,9 @@
     "guestIdentityNoGuests": "This trip has no guests yet. Add yourself to the guest list first.",
     "guestIdentityOpenGuests": "Open guests",
     "guestIdentityMissing": "The guest you picked is no longer on this trip. Choose again.",
-    "guestIdentityHint": "Kept on this device only. It decides whose sign-ups and travel the trip pages offer to change."
+    "guestIdentityHint": "Kept on this device only. It decides whose sign-ups and travel the trip pages offer to change.",
+    "printSummary": "Print the trip summary",
+    "printSummaryNoTrip": "Open a trip to print its summary."
   },
   "confirm": {
     "deleteTrip": "Delete this trip?",
