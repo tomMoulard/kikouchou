@@ -351,10 +351,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
   if (isLoading) {
     return (
       <div className="container max-w-5xl py-6 md:py-8">
-        <PageHeader
-          title={t('activities.title')}
-          backLink={tripIdFromUrl ? `/trips/${tripIdFromUrl}/calendar` : '/trips'}
-        />
+        <PageHeader title={t('activities.title')} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
           <LoadingState variant="inline" size="lg" />
         </div>
@@ -395,10 +392,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
   if (activitiesError) {
     return (
       <div className="container max-w-5xl py-6 md:py-8">
-        <PageHeader
-          title={t('activities.title')}
-          backLink={`/trips/${tripIdFromUrl}/calendar`}
-        />
+        <PageHeader title={t('activities.title')} />
         <ErrorDisplay
           error={activitiesError}
           onRetry={() => window.location.reload()}
@@ -419,7 +413,6 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
       <PageHeader
         title={t('activities.title')}
         description={currentTrip.name}
-        backLink={`/trips/${tripIdFromUrl}/calendar`}
         action={headerAction}
       />
 

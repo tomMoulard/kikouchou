@@ -306,10 +306,9 @@ describe('PersonListPage', () => {
     expect(screen.getByText('persons.empty')).toBeInTheDocument();
   });
 
-  it('renders back link', () => {
+  it('renders no back link: the sidebar and the bottom bar both reach the calendar', () => {
     render(<PersonListPage />, { withProviders: false });
-    const backLink = screen.getByRole('link');
-    expect(backLink).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /common\.back/i })).not.toBeInTheDocument();
   });
 
   it('renders loading when persons are loading', () => {
@@ -422,7 +421,6 @@ describe('PersonListPage', () => {
   it('renders no phone link for a guest without a number', () => {
     render(<PersonListPage />, { withProviders: false });
 
-    // Filtered rather than queried bare: the page also carries a back link.
     const telLinks = screen
       .queryAllByRole('link')
       .filter((link) => link.getAttribute('href')?.startsWith('tel:'));

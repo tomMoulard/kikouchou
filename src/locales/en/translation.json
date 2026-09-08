@@ -144,6 +144,16 @@
     "addGuest": "Add guest",
     "removeGuest": "Remove guest {{number}}",
     "guestsCreateFailed": "Trip created but some guests could not be added",
+    "rooms": "Rooms",
+    "roomsHint": "Name each room and say how many beds it has. You can add rooms later.",
+    "roomNamePlaceholder": "e.g. Double bed",
+    "roomNumberLabel": "Room {{number}}",
+    "roomBedsLabel": "Beds in room {{number}}",
+    "roomBedsDecrease": "Remove a bed from room {{number}}",
+    "roomBedsIncrease": "Add a bed to room {{number}}",
+    "addRoom": "Add room",
+    "removeRoom": "Remove room {{number}}",
+    "roomsCreateFailed": "Trip created but some rooms could not be added",
     "deleteConfirm": "Are you sure you want to delete this trip? This action cannot be undone.",
     "empty": "No trips yet",
     "emptyDescription": "Plan your next getaway — create a trip and invite your friends!",
@@ -266,10 +276,6 @@
       "assignHeading": "Assign to…",
       "moveHeading": "Move to…"
     },
-    "count": "How many rooms",
-    "countDecrease": "One room fewer",
-    "countIncrease": "One room more",
-    "countPreview": "Creates {{names}}",
     "createSuccessMany": "{{count}} rooms created",
     "duplicate": "Duplicate",
     "duplicateSuccess": "{{name}} created",
@@ -1173,8 +1179,7 @@
   "validation": {
     "invalidDate": "Invalid date",
     "capacityMin": "Minimum {{min}} bed",
-    "endDateBeforeStart": "End date must be on or after start date",
-    "roomCountRange": "Enter a number from {{min}} to {{max}}"
+    "endDateBeforeStart": "End date must be on or after start date"
   },
   "errors": {
     "generic": "An error occurred",
