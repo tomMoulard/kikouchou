@@ -1218,4 +1218,68 @@ describe('RoomListPage', () => {
       );
     });
   });
+  // ===========================================================================
+  // A trip with no nights
+  // ===========================================================================
+
+  /*
+    Start and end on the same day: nobody sleeps on this trip, so no guest
+    needs a bed. The page used to say none of that. The timeline listed no
+    guests, "Suggest an allocation" was gone, and the cards still offered a
+    room to claim — the opposite answer, off the same dates.
+  */
+  describe('a trip with no nights', () => {
+    const sameDayTrip: Trip = {
+      ...mockTrip,
+      startDate: '2026-07-01' as Trip['startDate'],
+      endDate: '2026-07-01' as Trip['endDate'],
+    };
+
+    beforeEach(() => {
+      vi.mocked(useTripContext).mockReturnValue({
+        currentTrip: sameDayTrip,
+        isLoading: false,
+        error: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        trips: [sameDayTrip],
+        checkConnection: vi.fn(),
+      });
+      // A guest with no stay dates of their own, which is what a same-day trip
+      // leaves everybody as: their window is the trip's, and it holds no night.
+      vi.mocked(usePersonContext).mockReturnValue({
+        persons: [mockPerson2],
+        isLoading: false,
+        error: null,
+        getPersonById: vi.fn(() => mockPerson2),
+      } as unknown as ReturnType<typeof usePersonContext>);
+    });
+
+    it('says nobody needs a bed, in the cards view', () => {
+      render(<RoomListPage />, { withProviders: false });
+
+      expect(screen.getByText('rooms.noNights')).toBeInTheDocument();
+    });
+
+    it('says nobody needs a bed, in the timeline view', () => {
+      currentSearchParams = new URLSearchParams('view=timeline');
+      render(<RoomListPage />, { withProviders: false });
+
+      expect(screen.getByText('rooms.noNights')).toBeInTheDocument();
+    });
+
+    it('offers no room to claim, since a claim would cover no night', () => {
+      storedGuestPersonId = 'person-2';
+      render(<RoomListPage />, { withProviders: false });
+
+      expect(screen.queryByText('rooms.claimRoom')).not.toBeInTheDocument();
+      expect(screen.queryByText('rooms.assignGuest')).not.toBeInTheDocument();
+    });
+
+    it('keeps the notice out of a trip that does have nights', () => {
+      resetMocks();
+      render(<RoomListPage />, { withProviders: false });
+
+      expect(screen.queryByText('rooms.noNights')).not.toBeInTheDocument();
+    });
+  });
 });

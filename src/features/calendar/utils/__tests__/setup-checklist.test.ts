@@ -98,6 +98,7 @@ describe('buildTripSetupChecklist', () => {
       rooms: [],
       assignments: [],
       arrivals: [],
+      tripHasNoNights: false,
     });
 
     expect(checklist.steps.map((s) => s.key)).toEqual([...TRIP_SETUP_STEP_KEYS]);
@@ -113,6 +114,7 @@ describe('buildTripSetupChecklist', () => {
       rooms: [],
       assignments: [],
       arrivals: [],
+      tripHasNoNights: false,
     });
 
     expect(step(checklist, 'guests')).toMatchObject({ count: 1, isDone: true });
@@ -126,6 +128,7 @@ describe('buildTripSetupChecklist', () => {
       rooms: [],
       assignments: [],
       arrivals: [],
+      tripHasNoNights: false,
     });
 
     expect(step(checklist, 'guests').count).toBe(5);
@@ -138,6 +141,7 @@ describe('buildTripSetupChecklist', () => {
       rooms: [makeRoom('room-1')],
       assignments: [makeAssignment({ id: 'a1', personId: 'p1' })],
       arrivals: [],
+      tripHasNoNights: false,
     });
 
     expect(step(checklist, 'assignments')).toMatchObject({
@@ -156,6 +160,7 @@ describe('buildTripSetupChecklist', () => {
         makeAssignment({ id: 'a2', personId: 'p1' }),
       ],
       arrivals: [],
+      tripHasNoNights: false,
     });
 
     expect(step(checklist, 'assignments')).toMatchObject({
@@ -171,6 +176,7 @@ describe('buildTripSetupChecklist', () => {
       rooms: [makeRoom('room-1')],
       assignments: [makeAssignment({ id: 'a1', personId: 'deleted' })],
       arrivals: [],
+      tripHasNoNights: false,
     });
 
     expect(step(checklist, 'assignments')).toMatchObject({ count: 0, isDone: false });
@@ -182,6 +188,7 @@ describe('buildTripSetupChecklist', () => {
       rooms: [makeRoom('room-1')],
       assignments: [makeAssignment({ id: 'a1', personId: 'p1' })],
       arrivals: [makeArrival('t1', 'p1')],
+      tripHasNoNights: false,
     });
 
     expect(step(checklist, 'assignments').isDone).toBe(false);
@@ -194,6 +201,7 @@ describe('buildTripSetupChecklist', () => {
       rooms: [makeRoom('room-1')],
       assignments: [],
       arrivals: [],
+      tripHasNoNights: false,
     });
 
     // 0 of 0 is not "everybody has a room", it is "there is nobody yet".
@@ -210,9 +218,41 @@ describe('buildTripSetupChecklist', () => {
       rooms: [],
       assignments: [],
       arrivals: [makeArrival('t1', 'p1')],
+      tripHasNoNights: false,
     });
 
     expect(step(checklist, 'arrivals')).toMatchObject({ count: 1, isDone: true });
+  });
+
+  // A trip that starts and ends on the same day holds no night, so nobody
+  // sleeps there and there is no bed to put anybody in. The step used to stay
+  // on the list at "Nobody has a room yet" for ever: the rooms page offers no
+  // way to place a guest for zero nights, so it could never be ticked off.
+  it('drops the room step on a trip with no nights', () => {
+    const checklist = buildTripSetupChecklist({
+      persons: [makePerson({ id: 'p1' })],
+      rooms: [makeRoom('room-1')],
+      assignments: [],
+      arrivals: [],
+      tripHasNoNights: true,
+    });
+
+    expect(checklist.steps.map((s) => s.key)).toEqual(['guests', 'rooms', 'arrivals']);
+    expect(checklist.stepCount).toBe(3);
+    expect(checklist.doneCount).toBe(2);
+    expect(checklist.isComplete).toBe(false);
+  });
+
+  it('completes a nightless trip on guests, rooms and travel alone', () => {
+    const checklist = buildTripSetupChecklist({
+      persons: [makePerson({ id: 'p1' })],
+      rooms: [makeRoom('room-1')],
+      assignments: [],
+      arrivals: [makeArrival('t1', 'p1')],
+      tripHasNoNights: true,
+    });
+
+    expect(checklist.isComplete).toBe(true);
   });
 
   it('is complete once every guest has a room and travel is booked', () => {
@@ -221,6 +261,7 @@ describe('buildTripSetupChecklist', () => {
       rooms: [makeRoom('room-1')],
       assignments: [makeAssignment({ id: 'a1', personId: 'p1' })],
       arrivals: [makeArrival('t1', 'p1')],
+      tripHasNoNights: false,
     });
 
     expect(checklist.doneCount).toBe(checklist.stepCount);
@@ -240,7 +281,7 @@ describe('shouldShowTripSetupChecklist', () => {
   it('stays on screen once guests have rooms but nobody has travel yet', () => {
     expect(
       shouldShowTripSetupChecklist({
-        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals: [] }),
+        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals: [], tripHasNoNights: false }),
         arrivals: [],
         departures: [],
       }),
@@ -252,7 +293,7 @@ describe('shouldShowTripSetupChecklist', () => {
 
     expect(
       shouldShowTripSetupChecklist({
-        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals }),
+        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals, tripHasNoNights: false }),
         arrivals,
         departures: [],
       }),
@@ -264,7 +305,7 @@ describe('shouldShowTripSetupChecklist', () => {
 
     expect(
       shouldShowTripSetupChecklist({
-        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals: [] }),
+        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals: [], tripHasNoNights: false }),
         arrivals: [],
         departures,
       }),
