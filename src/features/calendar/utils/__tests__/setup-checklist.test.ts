@@ -22,6 +22,7 @@ import type {
 
 import {
   buildTripSetupChecklist,
+  shouldShowTripSetupChecklist,
   TRIP_SETUP_STEP_KEYS,
   type TripSetupChecklist,
   type TripSetupStepKey,
@@ -224,5 +225,49 @@ describe('buildTripSetupChecklist', () => {
 
     expect(checklist.doneCount).toBe(checklist.stepCount);
     expect(checklist.isComplete).toBe(true);
+  });
+});
+
+// ============================================================================
+// shouldShowTripSetupChecklist
+// ============================================================================
+
+describe('shouldShowTripSetupChecklist', () => {
+  const persons = [makePerson({ id: 'p1' })];
+  const rooms = [makeRoom('room-1')];
+  const assignments = [makeAssignment({ id: 'a1', personId: 'p1' })];
+
+  it('stays on screen once guests have rooms but nobody has travel yet', () => {
+    expect(
+      shouldShowTripSetupChecklist({
+        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals: [] }),
+        arrivals: [],
+        departures: [],
+      }),
+    ).toBe(true);
+  });
+
+  it('goes away at the first arrival', () => {
+    const arrivals = [makeArrival('t1', 'p1')];
+
+    expect(
+      shouldShowTripSetupChecklist({
+        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals }),
+        arrivals,
+        departures: [],
+      }),
+    ).toBe(false);
+  });
+
+  it('goes away on a departure alone, for a host who only drives people home', () => {
+    const departures = [{ ...makeArrival('t2', 'p1'), type: 'departure' as const }];
+
+    expect(
+      shouldShowTripSetupChecklist({
+        checklist: buildTripSetupChecklist({ persons, rooms, assignments, arrivals: [] }),
+        arrivals: [],
+        departures,
+      }),
+    ).toBe(false);
   });
 });
