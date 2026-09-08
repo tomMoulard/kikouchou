@@ -364,6 +364,32 @@ A phone screen has three things anchored to its bottom edge — the nav bar
 new down there has to clear all of them, and the check is a hit test at the
 element's own centre rather than a look at the screenshot.
 
+Positioning was only half the answer. Confirmations arrive in bursts — three
+room creations, one per imported guest — and three cards clear of the FAB are
+still three cards over the content. They now leave the page for the operating
+system (`src/lib/notifications/notify.ts`), and only errors and warnings are
+left on that bottom edge.
+
+### A confirmation the OS owns can be refused, and it says nothing to a screen reader
+
+Two things follow from moving confirmations out of the document, and both are
+silent failures.
+
+Permission. `Notification` is missing in some browsers, denied by choice, and
+on iOS granted only to an *installed* PWA. So a confirmation is best-effort:
+`showOsNotification` reports whether it landed, and nobody treats a `false` as
+an error. Anything the user must actually read — a failed save, guests dropped
+from a group — therefore stays an in-page toast, where no permission can
+swallow it. Do not "simplify" an error onto the OS route.
+
+Announcement. An OS notification is outside the document, so a screen reader
+never sees it; the toast it replaced carried its own `role="status"`.
+`StatusAnnouncer` in `src/App.tsx` is the live region that took that job over,
+and `notify` announces *before* it tries to deliver, so a denied permission
+costs the visible confirmation and not the spoken one. A live region only
+speaks text that changed, which is why the region blanks itself for a frame
+first — two rooms created in a row send the same string twice.
+
 ### Quality gates must actually run
 
 A gate that silently passes is worse than no gate. Two did:
@@ -635,7 +661,12 @@ laid over a user-chosen colour where neither `--foreground` nor `--background` a
 
 - Async handlers: `try/catch/finally`; reset loading state in `finally`.
 - Log with context: `console.error('Failed to save trip:', error)`.
-- User feedback: `toast.success(t('…'))` / `toast.error(t('…'))` via `sonner`.
+- User feedback: `notify.success(t('…'))` / `notify.error(t('…'))` from
+  `@/lib/notifications`. Never import `toast` from `sonner` at a call site —
+  the facade is what decides where a message goes: a confirmation to an OS
+  notification, an error or warning to an in-page toast. For anything written
+  to the database, prefer `useOfflineAwareNotify`'s `notifySuccess`, which says
+  "Saved on this device" when there is no connection.
 - `ErrorBoundary` wraps every route in `router.tsx`.
 - Validation: **Zod schemas** in `src/lib/validation/schemas.ts`; parse at form submit / DB write boundaries.
 

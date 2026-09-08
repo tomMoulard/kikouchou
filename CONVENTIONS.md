@@ -678,21 +678,44 @@ The `ErrorBoundary` component:
 - Provides retry functionality
 - Shows detailed error info in development mode
 
-### Toast Notifications for User Feedback
+### Notifications for User Feedback
 
-Use the `sonner` toast library for transient user feedback:
+Use the `notify` facade for all transient user feedback. It decides where a
+message goes, and the two destinations are not interchangeable:
+
+- **`notify.success` / `notify.info`** — an operating system notification.
+  Confirmations arrive in bursts and used to stack up as cards over the
+  content, so they left the page. They can be refused: a user who denies
+  notification permission sees nothing.
+- **`notify.error` / `notify.warning`** — an in-page `sonner` toast. News the
+  user has to read must not depend on a permission, so it never takes the OS
+  route.
 
 ```typescript
-import { toast } from 'sonner';
+import { notify } from '@/lib/notifications';
 
 async function handleDelete() {
   try {
     await deleteTrip(tripId);
-    toast.success(t('trips.deleted'));
+    notify.success(t('trips.deleted'));
   } catch (error) {
-    toast.error(t('errors.deleteFailed'));
+    notify.error(t('errors.deleteFailed'));
   }
 }
+```
+
+Never import `toast` from `sonner` at a call site — `src/lib/notifications` is
+the only place that does.
+
+For anything written to the database, use the offline-aware hook instead of a
+raw confirmation. It says "Saved on this device" when there is no connection,
+rather than implying the change reached the rest of the trip:
+
+```typescript
+import { useOfflineAwareNotify } from '@/hooks';
+
+const { notifySuccess } = useOfflineAwareNotify();
+notifySuccess(t('rooms.createSuccess', 'Room created successfully'));
 ```
 
 ---

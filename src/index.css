@@ -227,7 +227,7 @@
  *   5rem  - 8.5rem       the FAB, `size-14` at `bottom-nav-safe` (`sm:hidden`)
  *   9rem  - 12.5rem      a second FAB, on a non-empty `/trips` only
  *                       (`bottom-fab-safe`)
- *   9rem                 toasts (App.tsx's `mobileOffset`)
+ *   9rem                 error toasts (App.tsx's `mobileOffset`)
  *   9.5rem               the first pixel a page's own content may occupy
  *
  * Every number below is that table. Do not spell one out at a call site: the
