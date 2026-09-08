@@ -47,6 +47,16 @@ vi.mock('@/components/shared/LocationPicker', () => ({
 
 import { TransportForm } from '../TransportForm';
 
+/**
+ * Mode, number, driver and notes live behind the "Details" heading now, so a
+ * test that wants one of them has to open it first.
+ */
+async function openDetails(): Promise<void> {
+  const { userEvent } = await import('@testing-library/user-event');
+  const user = userEvent.setup();
+  await user.click(screen.getByText('transports.details'));
+}
+
 describe('TransportForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,13 +79,18 @@ describe('TransportForm', () => {
     expect(screen.getByText('assignments.person')).toBeInTheDocument();
   });
 
-  it('renders datetime, location, and mode fields', () => {
+  it('renders datetime, location, and mode fields', async () => {
     render(
       <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { withProviders: false },
     );
-    expect(screen.getByLabelText(/transports.datetime/)).toBeInTheDocument();
+    expect(screen.getByText('transports.datetime')).toBeInTheDocument();
+    expect(screen.getByLabelText('common.date')).toBeInTheDocument();
+    expect(screen.getByLabelText('common.time')).toBeInTheDocument();
     expect(screen.getAllByTestId('location-picker')).toHaveLength(2);
+    // The mode lives in the folded section, not on the first screen
+    expect(screen.queryByText('transports.mode')).not.toBeInTheDocument();
+    await openDetails();
     expect(screen.getByText('transports.mode')).toBeInTheDocument();
   });
 
@@ -176,11 +191,12 @@ describe('TransportForm', () => {
     expect(mainLocationInput).toHaveValue('CDG Airport');
   });
 
-  it('renders notes field', () => {
+  it('renders notes field', async () => {
     render(
       <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { withProviders: false },
     );
+    await openDetails();
     expect(screen.getByLabelText(/transports\.notes/)).toBeInTheDocument();
   });
 
@@ -210,11 +226,12 @@ describe('TransportForm', () => {
     expect(screen.getByLabelText('transports.arrival')).not.toBeChecked();
   });
 
-  it('renders transport number input field', () => {
+  it('renders transport number input field', async () => {
     render(
       <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { withProviders: false },
     );
+    await openDetails();
     expect(screen.getByLabelText(/transports\.number/)).toBeInTheDocument();
   });
 
@@ -225,6 +242,7 @@ describe('TransportForm', () => {
       <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { withProviders: false },
     );
+    await openDetails();
     const numberInput = screen.getByLabelText(/transports\.number/);
     await user.type(numberInput, 'TGV 1234');
     expect(numberInput).toHaveValue('TGV 1234');
@@ -237,6 +255,7 @@ describe('TransportForm', () => {
       <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { withProviders: false },
     );
+    await openDetails();
     const notesField = screen.getByLabelText(/transports\.notes/);
     await user.type(notesField, 'Bringing luggage');
     expect(notesField).toHaveValue('Bringing luggage');
@@ -272,11 +291,12 @@ describe('TransportForm', () => {
     );
   });
 
-  it('renders driver select section', () => {
+  it('renders driver select section', async () => {
     render(
       <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { withProviders: false },
     );
+    await openDetails();
     expect(screen.getByText('transports.driver')).toBeInTheDocument();
   });
 
@@ -352,16 +372,65 @@ describe('TransportForm', () => {
     expect(numberInput).toHaveValue('TGV 9876');
   });
 
-  it('allows typing in datetime field', async () => {
+  it('takes a time typed into the time field', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     render(
-      <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <TransportForm
+        persons={mockPersons}
+        tripStartDate="2027-07-15"
+        tripEndDate="2027-07-22"
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
       { withProviders: false },
     );
-    const datetimeInput = screen.getByLabelText(/transports.datetime/);
-    await user.type(datetimeInput, '2027-07-15T14:00');
-    expect(datetimeInput).toHaveValue('2027-07-15T14:00');
+    const timeInput = screen.getByLabelText('common.time');
+    await user.clear(timeInput);
+    await user.type(timeInput, '14:00');
+    expect(timeInput).toHaveValue('14:00');
+  });
+
+  it('starts a new arrival on the first day of the trip, a departure on the last', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(
+      <TransportForm
+        persons={mockPersons}
+        tripStartDate="2027-07-15"
+        tripEndDate="2027-07-22"
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    // The dialog knows the trip's dates, so the day is filled in already
+    expect(screen.getByLabelText('common.date')).toHaveTextContent('July 15th, 2027');
+
+    await user.click(screen.getByLabelText('transports.departure'));
+    expect(screen.getByLabelText('common.date')).toHaveTextContent('July 22nd, 2027');
+  });
+
+  it('keeps the day the user set when the type changes afterwards', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(
+      <TransportForm
+        persons={mockPersons}
+        tripStartDate="2027-07-15"
+        tripEndDate="2027-07-22"
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    // Setting the time is setting the datetime: the suggestion stops here
+    const timeInput = screen.getByLabelText('common.time');
+    await user.clear(timeInput);
+    await user.type(timeInput, '08:30');
+
+    await user.click(screen.getByLabelText('transports.departure'));
+    expect(screen.getByLabelText('common.date')).toHaveTextContent('July 15th, 2027');
   });
 
   it('submits form with valid data in edit mode (pre-filled)', async () => {
@@ -404,10 +473,10 @@ describe('TransportForm', () => {
       <TransportForm persons={mockPersons} onSubmit={vi.fn()} onCancel={vi.fn()} />,
       { withProviders: false },
     );
-    const datetimeInput = screen.getByLabelText(/transports.datetime/);
-    expect(datetimeInput).toHaveAttribute('aria-invalid', 'false');
+    const timeInput = screen.getByLabelText('common.time');
+    expect(timeInput).toHaveAttribute('aria-invalid', 'false');
 
-    await user.click(datetimeInput);
+    await user.click(timeInput);
     await user.tab();
 
     // Blur is the only thing that has run, so the datetime error is the only
@@ -415,8 +484,8 @@ describe('TransportForm', () => {
     const error = screen.getByRole('alert');
     expect(error).toHaveTextContent('common.required');
     expect(error).toHaveAttribute('id', 'transport-datetime-error');
-    expect(datetimeInput).toHaveAttribute('aria-invalid', 'true');
-    expect(datetimeInput).toHaveAttribute(
+    expect(timeInput).toHaveAttribute('aria-invalid', 'true');
+    expect(timeInput).toHaveAttribute(
       'aria-describedby',
       'transport-datetime-error',
     );
@@ -432,14 +501,14 @@ describe('TransportForm', () => {
     // Submitting an empty form flags person, datetime and location at once
     await user.click(screen.getByText('common.save'));
     expect(screen.getAllByRole('alert')).toHaveLength(3);
-    const datetimeInput = screen.getByLabelText(/transports.datetime/);
-    expect(datetimeInput).toHaveAttribute('aria-invalid', 'true');
+    const timeInput = screen.getByLabelText('common.time');
+    expect(timeInput).toHaveAttribute('aria-invalid', 'true');
 
-    await user.type(datetimeInput, '2027-07-15T14:00');
+    await user.type(timeInput, '14:00');
 
     // Only this field's error clears; the untouched ones stay flagged
-    expect(datetimeInput).toHaveAttribute('aria-invalid', 'false');
-    expect(datetimeInput).not.toHaveAttribute('aria-describedby');
+    expect(timeInput).toHaveAttribute('aria-invalid', 'false');
+    expect(timeInput).not.toHaveAttribute('aria-describedby');
     expect(
       document.getElementById('transport-datetime-error'),
     ).not.toBeInTheDocument();
@@ -478,7 +547,7 @@ describe('TransportForm', () => {
     );
   });
 
-  it('shows no other persons message when only one person exists', () => {
+  it('shows no other persons message when only one person exists', async () => {
     const singlePerson = [mockPersons[0]!];
     const transport = {
       id: 't1' as import('@/types').Transport['id'],
@@ -498,6 +567,7 @@ describe('TransportForm', () => {
       />,
       { withProviders: false },
     );
+    await openDetails();
     // Driver section should show "no other persons" message since selected person is filtered out
     expect(screen.getByText(/transports\.noOtherPersons/)).toBeInTheDocument();
   });
@@ -563,8 +633,8 @@ describe('TransportForm', () => {
       { withProviders: false },
     );
     // Should render without error - datetime should be empty due to invalid parsing
-    const datetimeInput = screen.getByLabelText(/transports.datetime/);
-    expect(datetimeInput).toHaveValue('');
+    expect(screen.getByLabelText('common.date')).toHaveTextContent('common.pickDate');
+    expect(screen.getByLabelText('common.time')).toHaveValue('');
   });
 
   it('renders edit mode with "other" transport mode', () => {

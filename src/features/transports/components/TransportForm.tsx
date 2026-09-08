@@ -18,6 +18,9 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useFormSubmission } from '@/hooks';
 
+import { ChevronDown } from 'lucide-react';
+
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,6 +33,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { DateTimePicker } from '@/components/shared/DateTimePicker';
 import { LocationPicker, type Coordinates } from '@/components/shared/LocationPicker';
 import {
   formatDatetimeLocal,
@@ -58,6 +62,10 @@ interface TransportFormProps {
   readonly persons: readonly Person[];
   /** Default transport type for create mode (from URL param). */
   readonly defaultType?: TransportType;
+  /** First day of the trip (`YYYY-MM-DD`), used to prefill an arrival. */
+  readonly tripStartDate?: string;
+  /** Last day of the trip (`YYYY-MM-DD`), used to prefill a departure. */
+  readonly tripEndDate?: string;
   /** Callback when form is successfully submitted with validated data. */
   readonly onSubmit: (data: TransportFormData) => Promise<void>;
   /** Callback when cancel button is clicked. */
@@ -129,18 +137,29 @@ function toLocalDatetimeMidday(date: string | undefined): string {
 /**
  * Creates initial form state from a transport or defaults.
  *
+ * The datetime of a new transport starts on the day the trip itself starts or
+ * ends, whichever matches the type. The dialog knows the trip, so an empty
+ * field asking the user to find that date again was work the form could do.
+ *
  * @param transport - Existing transport for edit mode
  * @param defaultType - Default type for create mode
+ * @param tripStartDate - First day of the trip (`YYYY-MM-DD`)
+ * @param tripEndDate - Last day of the trip (`YYYY-MM-DD`)
  * @returns Initial form state
  */
 function getInitialFormState(
   transport?: Transport,
   defaultType?: TransportType,
+  tripStartDate?: string,
+  tripEndDate?: string,
 ): FormState {
+  const type = transport?.type ?? defaultType ?? 'arrival';
   return {
     personId: transport?.personId ?? '',
-    type: transport?.type ?? defaultType ?? 'arrival',
-    datetime: transport?.datetime ? formatDatetimeLocal(transport.datetime) : '',
+    type,
+    datetime: transport?.datetime
+      ? formatDatetimeLocal(transport.datetime)
+      : toLocalDatetimeMidday(type === 'arrival' ? tripStartDate : tripEndDate),
     startLocation: transport?.startLocation ?? '',
     startCoordinates: transport?.startCoordinates,
     location: transport?.location ?? '',
@@ -214,6 +233,8 @@ const TransportForm = memo(function TransportForm({
   transport,
   persons,
   defaultType,
+  tripStartDate,
+  tripEndDate,
   onSubmit,
   onCancel,
   onDirtyChange,
@@ -226,7 +247,24 @@ const TransportForm = memo(function TransportForm({
 
   // Form field values
   const [formState, setFormState] = useState<FormState>(() =>
-    getInitialFormState(transport, defaultType),
+    getInitialFormState(transport, defaultType, tripStartDate, tripEndDate),
+  );
+
+  // Whether the user has set the datetime themselves. Until they have, the
+  // form keeps moving it to whatever the chosen person and type imply.
+  const [isDatetimeTouched, setIsDatetimeTouched] = useState(false);
+
+  // Whether the optional "Details" section is expanded. Open from the start in
+  // edit mode when it already holds something, so nothing hides behind a
+  // heading the user has no reason to click.
+  const [isDetailsOpen, setIsDetailsOpen] = useState(
+    () =>
+      Boolean(
+        transport?.transportMode ??
+          transport?.transportNumber ??
+          transport?.driverId ??
+          transport?.notes,
+      ),
   );
 
   // Validation errors
@@ -234,9 +272,9 @@ const TransportForm = memo(function TransportForm({
 
   // Compute initial values for dirty comparison
   const initialFormState = useMemo(
-    () => getInitialFormState(transport, defaultType),
+    () => getInitialFormState(transport, defaultType, tripStartDate, tripEndDate),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Only recompute on transport.id change
-    [transport?.id, defaultType],
+    [transport?.id, defaultType, tripStartDate, tripEndDate],
   );
 
   // Compute dirty state
@@ -291,39 +329,34 @@ const TransportForm = memo(function TransportForm({
 
   // Sync form state when transport prop changes (for edit mode navigation)
   useEffect(() => {
-    setFormState(getInitialFormState(transport, defaultType));
+    setFormState(getInitialFormState(transport, defaultType, tripStartDate, tripEndDate));
     setErrors({});
+    setIsDatetimeTouched(false);
   }, [transport?.id, defaultType]); // eslint-disable-line react-hooks/exhaustive-deps -- Only sync on transport.id change
 
-  // Prefill datetime when creating a new transport and a person is selected.
-  // Uses person's stayStartDate/stayEndDate as the best available "arrival to house" date hint.
-  useEffect(() => {
-    // Edit mode: never override existing value
-    if (transport) {
-      return;
-    }
-    // Only prefill if datetime is still empty
-    if (formState.datetime) {
-      return;
-    }
-    if (!formState.personId) {
-      return;
-    }
-
+  /**
+   * The day a new transport starts out on: the chosen person's own stay dates
+   * when they have them, the trip's own dates otherwise, picked by type.
+   */
+  const suggestedDatetime = useMemo((): string => {
     const person = persons.find((p) => p.id === formState.personId);
-    if (!person) {
+    const personDate =
+      formState.type === 'arrival' ? person?.stayStartDate : person?.stayEndDate;
+    const tripDate = formState.type === 'arrival' ? tripStartDate : tripEndDate;
+    return toLocalDatetimeMidday(personDate ?? tripDate);
+  }, [formState.personId, formState.type, persons, tripStartDate, tripEndDate]);
+
+  // Follow the suggestion while the user has not set a datetime of their own.
+  // Switching Arrival to Departure moves the day with it; touching the control
+  // once stops the form from moving it again.
+  useEffect(() => {
+    if (transport || isDatetimeTouched || !suggestedDatetime) {
       return;
     }
-
-    const date =
-      formState.type === 'arrival' ? person.stayStartDate : person.stayEndDate;
-    const prefill = toLocalDatetimeMidday(date);
-    if (!prefill) {
-      return;
-    }
-
-    setFormState((prev) => (prev.datetime ? prev : { ...prev, datetime: prefill }));
-  }, [formState.datetime, formState.personId, formState.type, persons, transport]);
+    setFormState((prev) =>
+      prev.datetime === suggestedDatetime ? prev : { ...prev, datetime: suggestedDatetime },
+    );
+  }, [suggestedDatetime, isDatetimeTouched, transport]);
 
   // Clear driver if it matches the newly selected person
   useEffect(() => {
@@ -441,13 +474,13 @@ const TransportForm = memo(function TransportForm({
   );
 
   /**
-   * Handles datetime input change.
+   * Handles a change from the date and time picker.
    */
   const handleDatetimeChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const {value} = e.target;
+    (value: string) => {
+      setIsDatetimeTouched(true);
       setFormState((prev) => ({ ...prev, datetime: value }));
-      // Clear error when user types
+      // Clear error when user picks a value
       setErrors((prev) => (prev.datetime ? { ...prev, datetime: undefined } : prev));
     },
     [],
@@ -499,6 +532,13 @@ const TransportForm = memo(function TransportForm({
     },
     [],
   );
+
+  /**
+   * Toggles the optional "Details" section.
+   */
+  const handleToggleDetails = useCallback(() => {
+    setIsDetailsOpen((prev) => !prev);
+  }, []);
 
   /**
    * Submission handler via useFormSubmission hook.
@@ -638,21 +678,21 @@ const TransportForm = memo(function TransportForm({
       </div>
 
       {/* Datetime Field */}
-      <div className="space-y-2">
-        <Label htmlFor="transport-datetime">
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium leading-none">
           {t('transports.datetime')}
           <span className="text-destructive ml-1" aria-hidden="true">*</span>
-        </Label>
-        <Input
+        </legend>
+        <DateTimePicker
           id="transport-datetime"
-          type="datetime-local"
           value={formState.datetime}
           onChange={handleDatetimeChange}
           onBlur={handleDatetimeBlur}
-          aria-invalid={Boolean(errors.datetime)}
+          hasError={Boolean(errors.datetime)}
           aria-describedby={errors.datetime ? 'transport-datetime-error' : undefined}
           disabled={isSubmitting}
-          className="w-full sm:w-auto"
+          dateLabel={t('common.date', 'Date')}
+          timeLabel={t('common.time', 'Time')}
         />
         {errors.datetime && (
           <p
@@ -663,7 +703,7 @@ const TransportForm = memo(function TransportForm({
             {errors.datetime}
           </p>
         )}
-      </div>
+      </fieldset>
 
       {/* Optional starting place (map: route from start to main location) */}
       <div className="space-y-2">
@@ -715,87 +755,113 @@ const TransportForm = memo(function TransportForm({
         )}
       </div>
 
-      {/* Transport Mode Select */}
-      <div className="space-y-2">
-        <Label htmlFor="transport-mode">{t('transports.mode')}</Label>
-        <Select
-          value={formState.transportMode || NO_SELECTION}
-          onValueChange={handleTransportModeChange}
-          disabled={isSubmitting}
+      {/* Optional details, folded away: mode, number, driver and notes are
+          rarely known when the transport is first written down. */}
+      <div className="rounded-md border">
+        <button
+          type="button"
+          onClick={handleToggleDetails}
+          aria-expanded={isDetailsOpen}
+          aria-controls="transport-details"
+          className={cn(
+            'flex w-full items-center justify-between gap-2 px-3 py-2 text-sm font-medium',
+            'rounded-md hover:bg-accent/60 transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          )}
         >
-          <SelectTrigger id="transport-mode" className="w-full">
-            <SelectValue placeholder={t('transports.mode')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NO_SELECTION}>—</SelectItem>
-            {TRANSPORT_MODES.map((mode) => (
-              <SelectItem key={mode} value={mode}>
-                {t(`transports.modes.${mode}`)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+          <span>{t('transports.details', 'Details')}</span>
+          <ChevronDown
+            className={cn('size-4 shrink-0 transition-transform', isDetailsOpen && 'rotate-180')}
+            aria-hidden="true"
+          />
+        </button>
 
-      {/* Transport Number Field */}
-      <div className="space-y-2">
-        <Label htmlFor="transport-number">{t('transports.number')}</Label>
-        <Input
-          id="transport-number"
-          type="text"
-          inputMode="text"
-          value={formState.transportNumber}
-          onChange={handleTransportNumberChange}
-          placeholder={t('transports.numberPlaceholder')}
-          disabled={isSubmitting}
-        />
-      </div>
+        {isDetailsOpen && (
+          <div id="transport-details" className="space-y-6 border-t px-3 py-3">
+            {/* Transport Mode Select */}
+            <div className="space-y-2">
+              <Label htmlFor="transport-mode">{t('transports.mode')}</Label>
+              <Select
+                value={formState.transportMode || NO_SELECTION}
+                onValueChange={handleTransportModeChange}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger id="transport-mode" className="w-full">
+                  <SelectValue placeholder={t('transports.mode')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_SELECTION}>—</SelectItem>
+                  {TRANSPORT_MODES.map((mode) => (
+                    <SelectItem key={mode} value={mode}>
+                      {t(`transports.modes.${mode}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-      {/* Driver Select */}
-      <div className="space-y-2">
-        <Label htmlFor="transport-driver">{t('transports.driver')}</Label>
-        <Select
-          value={formState.driverId || NO_SELECTION}
-          onValueChange={handleDriverChange}
-          disabled={isSubmitting || driverOptions.length === 0}
-        >
-          <SelectTrigger id="transport-driver" className="w-full">
-            <SelectValue placeholder={t('transports.driverPlaceholder')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NO_SELECTION}>—</SelectItem>
-            {driverOptions.map((person) => (
-              <SelectItem key={person.id} value={person.id}>
-                <div className="flex items-center gap-2">
-                  <div
-                    className="size-3 rounded-full shrink-0"
-                    style={{ backgroundColor: person.color }}
-                    aria-hidden="true"
-                  />
-                  {person.name}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {driverOptions.length === 0 && formState.personId && (
-          <p className="text-sm text-muted-foreground">
-            {t('transports.noOtherPersons', { defaultValue: 'No other persons available' })}
-          </p>
+            {/* Transport Number Field */}
+            <div className="space-y-2">
+              <Label htmlFor="transport-number">{t('transports.number')}</Label>
+              <Input
+                id="transport-number"
+                type="text"
+                inputMode="text"
+                value={formState.transportNumber}
+                onChange={handleTransportNumberChange}
+                placeholder={t('transports.numberPlaceholder')}
+                disabled={isSubmitting}
+              />
+            </div>
+
+            {/* Driver Select */}
+            <div className="space-y-2">
+              <Label htmlFor="transport-driver">{t('transports.driver')}</Label>
+              <Select
+                value={formState.driverId || NO_SELECTION}
+                onValueChange={handleDriverChange}
+                disabled={isSubmitting || driverOptions.length === 0}
+              >
+                <SelectTrigger id="transport-driver" className="w-full">
+                  <SelectValue placeholder={t('transports.driverPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_SELECTION}>—</SelectItem>
+                  {driverOptions.map((person) => (
+                    <SelectItem key={person.id} value={person.id}>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="size-3 rounded-full shrink-0"
+                          style={{ backgroundColor: person.color }}
+                          aria-hidden="true"
+                        />
+                        {person.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {driverOptions.length === 0 && formState.personId && (
+                <p className="text-sm text-muted-foreground">
+                  {t('transports.noOtherPersons', { defaultValue: 'No other persons available' })}
+                </p>
+              )}
+            </div>
+
+            {/* Notes Field */}
+            <div className="space-y-2">
+              <Label htmlFor="transport-notes">{t('transports.notes')}</Label>
+              <Textarea
+                id="transport-notes"
+                value={formState.notes}
+                onChange={handleNotesChange}
+                placeholder={t('transports.notesPlaceholder')}
+                disabled={isSubmitting}
+                rows={3}
+              />
+            </div>
+          </div>
         )}
-      </div>
-
-      {/* Notes Field */}
-      <div className="space-y-2">
-        <Label htmlFor="transport-notes">{t('transports.notes')}</Label>
-        <Textarea
-          id="transport-notes"
-          value={formState.notes}
-          onChange={handleNotesChange}
-          placeholder={t('transports.notesPlaceholder')}
-          disabled={isSubmitting}
-          rows={3}
-        />
       </div>
 
       {/* Submission Error */}
@@ -808,8 +874,10 @@ const TransportForm = memo(function TransportForm({
         </div>
       )}
 
-      {/* Action Buttons */}
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      {/* Action Buttons. Sticky against the bottom of the dialog's scroll area:
+          the form is nine fields tall, and on a short window Save used to sit
+          below the fold with nothing saying it was there. */}
+      <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2 border-t bg-background pt-4 pb-1 sm:flex-row sm:justify-end">
         <Button
           type="button"
           variant="outline"

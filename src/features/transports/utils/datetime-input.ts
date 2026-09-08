@@ -2,8 +2,10 @@
  * @fileoverview The two conversions between a `datetime-local` input and the
  * stored instant a transport carries.
  *
- * `TransportForm` owns the only `datetime-local` input in the transports
- * feature, and these were private to it. They live here now for one reason:
+ * `TransportForm` no longer renders a native `datetime-local` input — its
+ * `DateTimePicker` builds the same `YYYY-MM-DDTHH:mm` string out of a calendar
+ * and a time field — but that string is still what these two convert, and the
+ * form is still their only caller. They live here for one reason:
  * `TransportDatetime.test.ts` — the BUG-2 timezone regression guard — used to
  * keep private *copies* of both and assert those, so the round trip could be
  * broken in the form without a single assertion going red. A guard that
