@@ -44,6 +44,42 @@ const SCANNER_CONFIG = {
   // No aspectRatio: avoid track constraints fighting layout; we letterbox via CSS.
 } as const;
 
+/** Upper bound on how long we wait for the camera video to report playback. */
+const VIDEO_PLAYBACK_TIMEOUT_MS = 3000;
+
+/**
+ * html5-qrcode calls `video.play()` and throws the returned promise away. If the
+ * element leaves the document while playback is still starting, the browser
+ * rejects that promise with an unhandled
+ * `AbortError: The play() request was interrupted because the media was removed
+ * from the document`. Waiting for playback to settle means teardown only ever
+ * detaches a video whose play() has already resolved.
+ */
+function waitForVideoPlayback(region: HTMLElement): Promise<void> {
+  const video = region.querySelector('video');
+  if (!video) return Promise.resolve();
+  if (!video.paused && video.readyState >= 2) return Promise.resolve();
+
+  return new Promise<void>((resolve) => {
+    let settled = false;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      video.removeEventListener('playing', finish);
+      video.removeEventListener('error', finish);
+      video.removeEventListener('abort', finish);
+      resolve();
+    };
+
+    const timer = window.setTimeout(finish, VIDEO_PLAYBACK_TIMEOUT_MS);
+    video.addEventListener('playing', finish);
+    video.addEventListener('error', finish);
+    video.addEventListener('abort', finish);
+  });
+}
+
 /** html5-qrcode sets video width to parent.clientWidth in px; override after layout. */
 function patchScannerVideo(region: HTMLElement): void {
   const video = region.querySelector('video');
@@ -72,6 +108,8 @@ export const QRScanner = memo(function QRScanner({
   const containerRef = useRef<HTMLDivElement>(null);
   const html5QrCodeRef = useRef<InstanceType<typeof import('html5-qrcode').Html5Qrcode> | null>(null);
   const startingRef = useRef(false);
+  const startPromiseRef = useRef<Promise<void> | null>(null);
+  const scannerElRef = useRef<HTMLDivElement | null>(null);
   const disposedRef = useRef(false);
   const [isStarted, setIsStarted] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -87,6 +125,18 @@ export const QRScanner = memo(function QRScanner({
   }, []);
 
   const stopScanner = useCallback(async () => {
+    // Let an in-flight start finish first. It only resolves once the camera
+    // video is playing, so removing the video below cannot abort a pending
+    // play() request.
+    const pendingStart = startPromiseRef.current;
+    if (pendingStart) {
+      try {
+        await pendingStart;
+      } catch {
+        // startScanner reports its own failures.
+      }
+    }
+
     startingRef.current = false;
     const scanner = html5QrCodeRef.current;
     if (scanner) {
@@ -100,17 +150,16 @@ export const QRScanner = memo(function QRScanner({
       html5QrCodeRef.current = null;
     }
 
-    // Imperatively wipe the library-owned container so React never
-    // encounters orphaned DOM nodes it didn't create.
-    const scannerEl = containerRef.current?.querySelector(`#${scannerRegionId}`);
-    if (scannerEl) {
-      scannerEl.innerHTML = '';
-    }
+    // Remove the library-owned container ourselves so React never encounters
+    // orphaned DOM nodes it did not create. A parked region (see the cleanup in
+    // the start/stop effect) is removed here too, now that playback has settled.
+    scannerElRef.current?.remove();
+    scannerElRef.current = null;
 
     if (isMountedRef.current) {
       setIsStarted(false);
     }
-  }, [scannerRegionId]);
+  }, []);
 
   const startScanner = useCallback(async () => {
     if (!containerRef.current || disposedRef.current) return;
@@ -138,6 +187,7 @@ export const QRScanner = memo(function QRScanner({
         scannerEl.style.overflow = 'hidden';
         containerRef.current.appendChild(scannerEl);
       }
+      scannerElRef.current = scannerEl;
 
       const scanner = new Html5Qrcode(scannerRegionId);
       html5QrCodeRef.current = scanner;
@@ -154,6 +204,10 @@ export const QRScanner = memo(function QRScanner({
           // Ignore scan failures (expected while finding QR)
         },
       );
+
+      // The library dropped the play() promise; wait for playback so teardown
+      // never detaches a video that is still starting.
+      await waitForVideoPlayback(scannerEl);
 
       if (isMountedRef.current && !disposedRef.current) {
         setIsStarted(true);
@@ -180,7 +234,15 @@ export const QRScanner = memo(function QRScanner({
       await stopScanner();
       if (disposedRef.current) return;
       if (active && !showPaste) {
-        await startScanner();
+        const started = startScanner();
+        startPromiseRef.current = started;
+        try {
+          await started;
+        } finally {
+          if (startPromiseRef.current === started) {
+            startPromiseRef.current = null;
+          }
+        }
       }
     }
 
@@ -188,6 +250,25 @@ export const QRScanner = memo(function QRScanner({
 
     return () => {
       disposedRef.current = true;
+      // React removes our container synchronously on unmount, which would take
+      // the camera video out of the document and abort a play() that is still
+      // starting. Move the region to <body> first, in this same task, so the
+      // video stays in the document; stopScanner removes it once playback has
+      // settled. Chrome only aborts play() for an element that is still
+      // detached when it processes the removal.
+      const parked = scannerElRef.current;
+      if (parked) {
+        parked.removeAttribute('id');
+        parked.style.position = 'absolute';
+        parked.style.left = '-9999px';
+        parked.style.top = '0';
+        parked.style.width = '1px';
+        parked.style.height = '1px';
+        parked.style.overflow = 'hidden';
+        parked.style.opacity = '0';
+        parked.style.pointerEvents = 'none';
+        document.body.appendChild(parked);
+      }
       void stopScanner();
     };
   }, [active, showPaste, startScanner, stopScanner]);
