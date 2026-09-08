@@ -158,3 +158,43 @@ export function buildTripSetupChecklist(
     isComplete: doneCount === steps.length,
   };
 }
+
+/**
+ * What the visibility rule is decided from.
+ */
+export interface TripSetupChecklistVisibilityInput {
+  /** The checklist itself, so a finished trip never shows one. */
+  readonly checklist: TripSetupChecklist;
+  /** The trip's arrivals. */
+  readonly arrivals: readonly Transport[];
+  /** The trip's departures. */
+  readonly departures: readonly Transport[];
+}
+
+/**
+ * Whether the calendar hands the user the checklist rather than letting the
+ * calendar speak for itself.
+ *
+ * Travel is the one thing that ends it. The rule used to be "anything at all
+ * is scheduled", which counted room assignments — so the list vanished the
+ * moment the first guest got a bed, taking the remaining steps with it and
+ * leaving a calendar with nothing on it but stay bars. Travel is the last
+ * step, it is the one the calendar can actually draw a day around, and once a
+ * leg exists the user has plainly found the transport screen and does not need
+ * to be pointed at it.
+ *
+ * @param input - The checklist and the trip's travel
+ * @returns True while the checklist should be on screen
+ *
+ * @example
+ * ```typescript
+ * shouldShowTripSetupChecklist({ checklist, arrivals: [], departures: [] }); // true
+ * ```
+ */
+export function shouldShowTripSetupChecklist(
+  input: TripSetupChecklistVisibilityInput,
+): boolean {
+  const { checklist, arrivals, departures } = input;
+
+  return !checklist.isComplete && arrivals.length === 0 && departures.length === 0;
+}

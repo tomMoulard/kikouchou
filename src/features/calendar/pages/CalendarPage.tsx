@@ -117,7 +117,7 @@ import {
   getContrastTextColor,
 } from '../utils/calendar-utils';
 import { buildDailyHeadcounts } from '../utils/headcount-utils';
-import { buildTripSetupChecklist } from '../utils/setup-checklist';
+import { buildTripSetupChecklist, shouldShowTripSetupChecklist } from '../utils/setup-checklist';
 
 // ============================================================================
 // Constants
@@ -238,21 +238,18 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   /*
     Whether to hand the user the checklist instead of an empty calendar.
 
-    "Nothing scheduled" is asked of the whole trip here, not of the month on
-    screen and not of the timeline's rows. The timeline draws a full-trip stay
-    bar for a guest who never gave dates of their own, so a brand new trip's
-    rows are *not* empty — which is exactly how it came to show guest bars over
-    no rooms and no travel, with nothing to click. Once something real is
-    scheduled the calendar can speak for itself, and an empty month is then a
-    month the user scrolled to rather than a trip missing its rooms.
+    The question is asked of the whole trip, not of the month on screen and not
+    of the timeline's rows: the timeline draws a full-trip stay bar for a guest
+    who never gave dates of their own, so a brand new trip's rows are *not*
+    empty — which is how it came to show guest bars over no rooms and no
+    travel, with nothing to click. The rule itself lives in
+    `shouldShowTripSetupChecklist`, next to the checklist it hides.
   */
-  const hasScheduledContent =
-    assignments.length > 0 ||
-    arrivals.length > 0 ||
-    departures.length > 0 ||
-    activities.length > 0;
-
-  const showSetupChecklist = !setupChecklist.isComplete && !hasScheduledContent;
+  const showSetupChecklist = shouldShowTripSetupChecklist({
+    checklist: setupChecklist,
+    arrivals,
+    departures,
+  });
 
   // The frame's own day-axis builder, so the width decision counts exactly the
   // columns the timeline will draw.

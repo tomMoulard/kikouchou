@@ -62,6 +62,7 @@ export {
 
 export {
   buildTripSetupChecklist,
+  shouldShowTripSetupChecklist,
   TRIP_SETUP_STEP_KEYS,
   type TripSetupChecklist as TripSetupChecklistModel,
   type TripSetupStep,
