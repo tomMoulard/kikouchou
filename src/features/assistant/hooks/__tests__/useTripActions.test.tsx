@@ -18,7 +18,10 @@ import { db } from '@/lib/db/database';
 import { createActivity } from '@/lib/db/repositories/activity-repository';
 import { createGuestGroup } from '@/lib/db/repositories/guest-group-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
-import { createRoom } from '@/lib/db/repositories/room-repository';
+import {
+  MAX_ROOMS_PER_SAVE,
+  createRoom,
+} from '@/lib/db/repositories/room-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { hexColor, isoDate, waitForTripDoc } from '@/test/utils';
 import type { Activity, ISODateTimeString, PersonId, TripId } from '@/types';
@@ -826,5 +829,81 @@ describe('useTripActions — guest groups', () => {
 
     expect(outcome.count).toBe(0);
     expect(await db.persons.count()).toBe(0);
+  });
+});
+
+describe('useTripActions — rooms', () => {
+  async function roomNamesOf(tripId: TripId): Promise<string[]> {
+    const rooms = await db.rooms
+      .where('[tripId+order]')
+      .between([tripId, 0], [tripId, Infinity])
+      .toArray();
+    return rooms.map((room) => room.name);
+  }
+
+  it('adds one room when the block carries no count', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addRoom',
+        data: { name: 'The Cozy Den', capacity: 2 },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    expect(await roomNamesOf(tripId)).toEqual(['The Cozy Den']);
+  });
+
+  it('adds as many rooms as the block asks for, numbered', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addRoom',
+        data: { name: 'Double bed', capacity: 2, count: 3 },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    expect(await roomNamesOf(tripId)).toEqual([
+      'Double bed 1',
+      'Double bed 2',
+      'Double bed 3',
+    ]);
+  });
+
+  it('pulls an absurd count back to the per-save limit', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addRoom',
+        data: { name: 'Bunk', capacity: 1, count: 5000 },
+      }),
+    );
+
+    expect(await roomNamesOf(tripId)).toHaveLength(MAX_ROOMS_PER_SAVE);
+  });
+
+  it('rounds a fractional count rather than refusing the block', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addRoom',
+        data: { name: 'Attic', capacity: 1, count: 2.4 },
+      }),
+    );
+
+    expect(await roomNamesOf(tripId)).toEqual(['Attic 1', 'Attic 2']);
   });
 });

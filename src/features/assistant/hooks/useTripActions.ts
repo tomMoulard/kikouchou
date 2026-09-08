@@ -20,10 +20,11 @@ import { useOfflineAwareNotify } from '@/hooks';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import {
+  MAX_ROOMS_PER_SAVE,
   createActivity,
   createAssignment,
   createPerson,
-  createRoom,
+  createRooms,
   createTransport,
   createTrip,
   deleteActivityWithOwnershipCheck,
@@ -161,6 +162,27 @@ function parseActionBlocks(response: string): LLMAction[] {
   }
 
   return actions;
+}
+
+// ============================================================================
+// Room Helpers
+// ============================================================================
+
+/**
+ * Reads how many rooms an `addRoom` action asks for.
+ *
+ * The value comes from the model, so it is bounded rather than trusted: a
+ * missing or unusable one means one room, and anything outside the per-save
+ * range is pulled back into it.
+ *
+ * @param raw - The `count` value from the parsed action data
+ * @returns A whole number of rooms, from 1 to `MAX_ROOMS_PER_SAVE`
+ */
+function clampRoomCount(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return 1;
+  }
+  return Math.min(Math.max(Math.round(raw), 1), MAX_ROOMS_PER_SAVE);
 }
 
 // ============================================================================
@@ -509,20 +531,43 @@ export function useTripActions(): UseTripActionsReturn {
                 notify.error(t('assistant.noTripForAction'));
                 break;
               }
-              const d = action.data as Record<string, unknown>;
-              await createRoom(tid, {
-                name: d.name as string,
-                capacity: d.capacity as number,
-                description: d.description as string | undefined,
-              });
-              notifySuccess(t('rooms.createSuccess'));
+              const d = action.data as Record<string, unknown>,
+
+              // The schema types `count` but bounds nothing, and the model is
+              // as untrusted here as any other writer: a stray 5000 would be
+              // 5000 rooms. Clamp rather than refuse, so "add three doubles"
+              // still lands when the model spells the three oddly.
+               count = clampRoomCount(d.count),
+
+               created = await createRooms(
+                tid,
+                {
+                  name: d.name as string,
+                  capacity: d.capacity as number,
+                  description: d.description as string | undefined,
+                },
+                count,
+              );
+              notifySuccess(
+                created.length > 1
+                  ? t('rooms.createSuccessMany', { count: created.length })
+                  : t('rooms.createSuccess'),
+              );
               executedCount++;
               summaries.push(
-                t('assistant.actionDetails.addRoom', {
-                  name: d.name as string,
-                  capacity: String(d.capacity),
-                  defaultValue: 'Added room: {{name}} ({{capacity}} guests max)',
-                }),
+                created.length > 1
+                  ? t('assistant.actionDetails.addRooms', {
+                      count: created.length,
+                      name: d.name as string,
+                      capacity: String(d.capacity),
+                      defaultValue:
+                        'Added {{count}} rooms: {{name}} ({{capacity}} guests max)',
+                    })
+                  : t('assistant.actionDetails.addRoom', {
+                      name: d.name as string,
+                      capacity: String(d.capacity),
+                      defaultValue: 'Added room: {{name}} ({{capacity}} guests max)',
+                    }),
               );
               break;
             }
