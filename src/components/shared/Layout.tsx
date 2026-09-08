@@ -32,7 +32,6 @@ import {
   Menu,
   MoreHorizontal,
   PartyPopper,
-  Printer,
   Settings,
   Sparkles,
   Users,
@@ -109,7 +108,6 @@ const TRIP_NAV_ITEMS: readonly NavItem[] = [
   { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
   { labelKey: 'nav.activities', pathSuffix: 'activities', icon: PartyPopper, requiresTrip: true },
   { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: BarChart2, requiresTrip: true },
-  { labelKey: 'nav.summary', pathSuffix: 'summary', icon: Printer, requiresTrip: true },
 ] as const;
 
 /**
@@ -154,7 +152,6 @@ const ASSISTANT_NAV_ITEM: NavItem = {
 const MOBILE_SECONDARY_TRIP_PATHS: readonly string[] = [
   'activities',
   'analytics',
-  'summary',
 ];
 
 /**

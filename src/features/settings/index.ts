@@ -10,6 +10,7 @@
 // ============================================================================
 
 export { GuestIdentitySelector } from './components/GuestIdentitySelector';
+export { PrintSummaryCard } from './components/PrintSummaryCard';
 export { ThemeSelector } from './components/ThemeSelector';
 
 // ============================================================================

@@ -65,8 +65,7 @@
     "syncPending_one": "{{count}} modification pas encore envoyée",
     "syncPending_other": "{{count}} modifications pas encore envoyées",
     "syncStatusRegion": "État de la synchronisation",
-    "guestGroups": "Groupes",
-    "summary": "Récapitulatif"
+    "guestGroups": "Groupes"
   },
   "analytics": {
     "tripTitle": "Analyses du voyage",
@@ -1082,7 +1081,9 @@
     "guestIdentityNoGuests": "Ce voyage n'a encore aucun participant. Ajoutez-vous d'abord à la liste.",
     "guestIdentityOpenGuests": "Ouvrir les participants",
     "guestIdentityMissing": "Le participant que vous aviez choisi ne fait plus partie du voyage. Choisissez à nouveau.",
-    "guestIdentityHint": "Conservé sur cet appareil uniquement. Détermine les inscriptions et les trajets que les pages du voyage vous proposent de modifier."
+    "guestIdentityHint": "Conservé sur cet appareil uniquement. Détermine les inscriptions et les trajets que les pages du voyage vous proposent de modifier.",
+    "printSummary": "Imprimer le récapitulatif",
+    "printSummaryNoTrip": "Ouvrez un voyage pour imprimer son récapitulatif."
   },
   "confirm": {
     "deleteTrip": "Supprimer ce voyage ?",

@@ -34,6 +34,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { AccountSection } from '@/features/auth/components/AccountSection';
 import { GuestIdentitySelector } from '@/features/settings/components/GuestIdentitySelector';
+import { PrintSummaryCard } from '@/features/settings/components/PrintSummaryCard';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
 import { TripForm } from '@/features/trips/components/TripForm';
 import { useTripContext } from '@/contexts/TripContext';
@@ -489,6 +490,7 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
  * Features:
  * - Current trip: edit or delete, with loading, error and empty states
  * - Guest identity: which guest this browser is on the current trip
+ * - Trip summary: opens the printable one-page sheet
  * - Account: sign in with Google, sign out
  * - Language selector (French/English)
  * - Theme selector (light/dark/system)
@@ -524,6 +526,11 @@ function SettingsPageComponent(): ReactElement {
         {/* Which guest this browser is — directly under the trip it belongs to,
             because the answer is per trip and means nothing without one. */}
         <GuestIdentitySelector />
+
+        {/* The printable sheet, reached from here rather than from a
+            navigation entry of its own: printing is an occasional action, not
+            a section of the trip. */}
+        <PrintSummaryCard />
 
         {/* Account Section */}
         <AccountCard />
