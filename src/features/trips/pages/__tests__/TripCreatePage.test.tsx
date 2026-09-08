@@ -13,6 +13,7 @@ const mockSetCurrentTrip = vi.fn().mockResolvedValue(undefined);
 const mockCloneRoomsToTrip = vi.fn().mockResolvedValue(undefined);
 const mockCreatePersonWithAutoColor = vi.fn().mockResolvedValue(undefined);
 const mockCreatePerson = vi.fn().mockResolvedValue(undefined);
+const mockCreateRoom = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@/lib/db', () => ({
   createTrip: (...args: unknown[]) => mockCreateTrip(...args),
@@ -20,6 +21,7 @@ vi.mock('@/lib/db', () => ({
   cloneRoomsToTrip: (...args: unknown[]) => mockCloneRoomsToTrip(...args),
   createPersonWithAutoColor: (...args: unknown[]) => mockCreatePersonWithAutoColor(...args),
   createPerson: (...args: unknown[]) => mockCreatePerson(...args),
+  createRoom: (...args: unknown[]) => mockCreateRoom(...args),
 }));
 
 // The page renders without AppProviders here, and `useAuth` throws outside its
@@ -58,13 +60,14 @@ vi.mock('@/hooks', () => ({
 const lastCurrentUserName = vi.fn();
 
 vi.mock('@/features/trips/components/TripForm', () => ({
-  TripForm: ({ onSubmit, onCancel, onImportSourceChange, onGuestsChange, currentUserName }: {
+  TripForm: ({ onSubmit, onCancel, onImportSourceChange, onGuestsChange, onRoomsChange, currentUserName }: {
     onSubmit: (data: unknown) => Promise<void>;
     onCancel: () => void;
     onImportSourceChange?: (id: string | null) => void;
     onGuestsChange?: (
       guests: readonly { name: string; color?: string; isSelf?: boolean }[],
     ) => void;
+    onRoomsChange?: (rooms: readonly { name: string; capacity: number }[]) => void;
     currentUserName?: string;
   }) => {
     lastCurrentUserName(currentUserName);
@@ -80,6 +83,8 @@ vi.mock('@/features/trips/components/TripForm', () => ({
         <button data-testid="self-guest-btn" onClick={() => onGuestsChange?.([{ name: 'Tom', isSelf: true }, { name: 'Marie' }])}>Set Guests With Self</button>
         {/* A guest that came from a saved group: it carries a colour, so the
             page creates it with that colour rather than an assigned one. */}
+        {/* The room list the form's create-mode fieldset reports. */}
+        <button data-testid="rooms-btn" onClick={() => onRoomsChange?.([{ name: 'Double bed', capacity: 2 }, { name: 'Attic', capacity: 1 }])}>Set Rooms</button>
         <button data-testid="imported-guests-btn" onClick={() => onGuestsChange?.([{ name: 'Alice', color: '#3b82f6' }])}>Set Imported Guests</button>
       </div>
     );
@@ -94,6 +99,7 @@ describe('TripCreatePage', () => {
     mockCreateTrip.mockResolvedValue({ id: 'new-trip-1', shareId: 'share-1' });
     mockCloneRoomsToTrip.mockResolvedValue(undefined);
     mockCreatePersonWithAutoColor.mockResolvedValue(undefined);
+    mockCreateRoom.mockResolvedValue(undefined);
     mockUser.mockReturnValue(null);
     mockWriteGuestIdentity.mockReturnValue(true);
   });
@@ -277,6 +283,51 @@ describe('TripCreatePage', () => {
 
     expect(mockErrorToast).toHaveBeenCalledWith('trips.guestsCreateFailed');
     expect(mockSetCurrentTrip).toHaveBeenCalledWith('new-trip-1');
+    expect(mockNavigate).toHaveBeenCalledWith('/trips/new-trip-1/calendar');
+    consoleSpy.mockRestore();
+  });
+
+  it('adds the rooms the form collected, in list order', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<TripCreatePage />, { withProviders: false });
+
+    await user.click(screen.getByTestId('rooms-btn'));
+    await user.click(screen.getByTestId('submit-btn'));
+
+    expect(mockCreateRoom.mock.calls).toEqual([
+      ['new-trip-1', { name: 'Double bed', capacity: 2 }],
+      ['new-trip-1', { name: 'Attic', capacity: 1 }],
+    ]);
+    expect(mockNavigate).toHaveBeenCalledWith('/trips/new-trip-1/calendar');
+  });
+
+  it('adds no rooms when the form reported none', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<TripCreatePage />, { withProviders: false });
+
+    await user.click(screen.getByTestId('submit-btn'));
+
+    expect(mockCreateRoom).not.toHaveBeenCalled();
+  });
+
+  it('keeps the trip and warns when a room cannot be added', async () => {
+    // Same shape as the failed guest above: the trip is already saved, and the
+    // Rooms page can take whatever did not land.
+    mockCreateRoom
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('Room failed'));
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<TripCreatePage />, { withProviders: false });
+
+    await user.click(screen.getByTestId('rooms-btn'));
+    await user.click(screen.getByTestId('submit-btn'));
+
+    expect(mockErrorToast).toHaveBeenCalledWith('trips.roomsCreateFailed');
     expect(mockNavigate).toHaveBeenCalledWith('/trips/new-trip-1/calendar');
     consoleSpy.mockRestore();
   });

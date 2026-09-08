@@ -26,7 +26,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { useRoomContext } from '@/contexts/RoomContext';
 import { RoomForm } from '@/features/rooms/components/RoomForm';
 import { captureUsage } from '@/lib/posthog';
-import type { Room, RoomFormSubmission, RoomId } from '@/types';
+import type { Room, RoomFormData, RoomId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -53,7 +53,7 @@ export interface RoomDialogProps {
  *
  * Features:
  * - Dual mode: Create (roomId undefined) and Edit (roomId provided)
- * - Create mode saves as many identical rooms as the form's count asks for
+ * - Create mode saves one room
  * - Integrates RoomForm for form handling
  * - Confirms success as an OS notification, reports errors as a toast
  * - Handles async operations with loading states
@@ -83,7 +83,7 @@ const RoomDialog = memo(function RoomDialog({
   onOpenChange,
 }: RoomDialogProps) {
   const { t } = useTranslation();
-  const { rooms, createRooms, updateRoom } = useRoomContext();
+  const { rooms, createRoom, updateRoom } = useRoomContext();
   const { notifySuccess } = useOfflineAwareNotify();
 
   // Dirty-state tracking for close guard
@@ -140,30 +140,23 @@ const RoomDialog = memo(function RoomDialog({
    * its own submission state via useFormSubmission hook.
    */
   const handleSubmit = useCallback(
-    async ({ count, ...data }: RoomFormSubmission) => {
+    async (data: RoomFormData) => {
       if (isEditMode && roomId) {
         await updateRoom(roomId, data);
         notifySuccess(t('rooms.updateSuccess', 'Room updated successfully'));
         captureUsage('room_saved', { operation: 'updated', capacity: data.capacity });
       } else {
-        const created = await createRooms(data, count);
-        notifySuccess(
-          created.length > 1
-            ? t('rooms.createSuccessMany', {
-                count: created.length,
-                defaultValue: '{{count}} rooms created',
-              })
-            : t('rooms.createSuccess', 'Room created successfully'),
-        );
+        await createRoom(data);
+        notifySuccess(t('rooms.createSuccess', 'Room created successfully'));
         captureUsage('room_saved', {
           operation: 'created',
           capacity: data.capacity,
-          count: created.length,
+          count: 1,
         });
       }
       onOpenChange(false);
     },
-    [isEditMode, roomId, updateRoom, createRooms, t, onOpenChange, notifySuccess],
+    [isEditMode, roomId, updateRoom, createRoom, t, onOpenChange, notifySuccess],
   );
 
   /**

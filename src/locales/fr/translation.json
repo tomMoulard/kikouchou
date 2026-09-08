@@ -136,6 +136,16 @@
     "addGuest": "Ajouter un invité",
     "removeGuest": "Retirer l'invité {{number}}",
     "guestsCreateFailed": "Voyage créé mais certains invités n'ont pas pu être ajoutés",
+    "rooms": "Chambres",
+    "roomsHint": "Nommez chaque chambre et indiquez son nombre de lits. Vous pourrez en ajouter plus tard.",
+    "roomNamePlaceholder": "Ex : Lit double",
+    "roomNumberLabel": "Chambre {{number}}",
+    "roomBedsLabel": "Lits dans la chambre {{number}}",
+    "roomBedsDecrease": "Retirer un lit de la chambre {{number}}",
+    "roomBedsIncrease": "Ajouter un lit à la chambre {{number}}",
+    "addRoom": "Ajouter une chambre",
+    "removeRoom": "Retirer la chambre {{number}}",
+    "roomsCreateFailed": "Voyage créé mais certaines chambres n'ont pas pu être ajoutées",
     "deleteConfirm": "Voulez-vous vraiment supprimer ce voyage ? Cette action est irréversible.",
     "empty": "Aucun voyage pour l'instant",
     "emptyDescription": "Organisez votre prochaine escapade — créez un voyage et invitez vos amis !",
@@ -258,10 +268,6 @@
       "assignHeading": "Attribuer à…",
       "moveHeading": "Déplacer vers…"
     },
-    "count": "Combien de chambres",
-    "countDecrease": "Une chambre en moins",
-    "countIncrease": "Une chambre en plus",
-    "countPreview": "Crée {{names}}",
     "createSuccessMany": "{{count}} chambres créées",
     "duplicate": "Dupliquer",
     "duplicateSuccess": "{{name}} créée",
@@ -1113,8 +1119,7 @@
   "validation": {
     "invalidDate": "Date invalide",
     "capacityMin": "Minimum {{min}} lit",
-    "endDateBeforeStart": "La date de fin doit être identique ou postérieure à la date de début",
-    "roomCountRange": "Entrez un nombre de {{min}} à {{max}}"
+    "endDateBeforeStart": "La date de fin doit être identique ou postérieure à la date de début"
   },
   "errors": {
     "generic": "Une erreur est survenue",
