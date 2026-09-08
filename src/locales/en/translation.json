@@ -111,7 +111,8 @@
     "tripsMapSummary_one": "1 trip on the map",
     "tripsMapSummary_other": "{{count}} trips on the map",
     "tripsMapUnpinned_one": "1 trip without a map pin",
-    "tripsMapUnpinned_other": "{{count}} trips without a map pin"
+    "tripsMapUnpinned_other": "{{count}} trips without a map pin",
+    "pickupsNeedingDriverHint": "Open the run sheet"
   },
   "trips": {
     "title": "My trips",
@@ -478,7 +479,25 @@
     "backToList": "Back to list",
     "mappedCount_one": "{{count}} transport on the map",
     "mappedCount_other": "{{count}} transports on the map",
-    "mapAriaLabel": "Map showing transport locations"
+    "mapAriaLabel": "Map showing transport locations",
+    "runSheet": "Run sheet",
+    "runSheetDescription": "Every arrival and departure, day by day. A flagged line still needs a driver.",
+    "runSheetFilterLabel": "Run sheet filter",
+    "runSheetFilterAll": "Everything",
+    "runSheetFilterMine": "Mine",
+    "runSheetSummary_one": "{{count}} leg",
+    "runSheetSummary_other": "{{count}} legs",
+    "runSheetNeedsDriverSummary_one": "{{count}} still needs a driver",
+    "runSheetNeedsDriverSummary_other": "{{count}} still need a driver",
+    "runSheetEmpty": "Nothing on the run sheet yet",
+    "runSheetEmptyDescription": "Add an arrival or a departure and it takes its place on this sheet.",
+    "runSheetAllCovered": "Every pickup has a driver",
+    "youDrive": "You drive",
+    "yoursFlag": "Yours",
+    "myRides": "Your rides",
+    "myRidesEmpty": "Nothing ahead for you: no ride to drive and no travel of your own.",
+    "myRidesDriving": "You drive",
+    "myRidesTravel": "Your own travel"
   },
   "activities": {
     "title": "Activities",

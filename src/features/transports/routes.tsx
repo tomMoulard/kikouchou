@@ -34,6 +34,16 @@ const TransportMapPage = lazy(() =>
   })),
 );
 
+/**
+ * Lazy-loaded TransportRunSheetPage component.
+ * Uses React.lazy for code splitting and optimal bundle size.
+ */
+const TransportRunSheetPage = lazy(() =>
+  import('./pages/TransportRunSheetPage').then((module) => ({
+    default: module.TransportRunSheetPage,
+  })),
+);
+
 // ============================================================================
 // Route Definitions
 // ============================================================================
@@ -44,6 +54,8 @@ const TransportMapPage = lazy(() =>
  * Routes:
  * - `/trips/:tripId/transports` - Transport list page with tabs for arrivals/departures
  * - `/trips/:tripId/transports/map` - Transport map view showing all locations
+ * - `/trips/:tripId/transports/runsheet` - Dated run sheet of every leg;
+ *   `?filter=needsDriver` narrows it to the pickups that still need a driver
  *
  * @example
  * ```tsx
@@ -64,5 +76,9 @@ export const transportRoutes: RouteObject[] = [
   {
     path: 'trips/:tripId/transports/map',
     element: withSuspense(TransportMapPage),
+  },
+  {
+    path: 'trips/:tripId/transports/runsheet',
+    element: withSuspense(TransportRunSheetPage),
   },
 ];

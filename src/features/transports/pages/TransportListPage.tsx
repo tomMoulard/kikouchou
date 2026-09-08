@@ -30,12 +30,13 @@ import {
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify } from '@/hooks';
-import { type Locale, format, parseISO } from 'date-fns';
+import type { Locale } from 'date-fns';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
   ChevronDown,
   ChevronRight,
+  ClipboardList,
   Clock,
   Edit,
   History,
@@ -73,17 +74,23 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
-import { formatFullDate } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { getTransportModeIcon } from '@/lib/utils/transport-icons';
+import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { notify } from '@/lib/notifications';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
+import { MyRides } from '@/features/transports/components/MyRides';
 import {
   isTransportUpcoming,
   selectPickupsNeedingDriver,
-  sortTransportsByInstant,
 } from '@/features/transports/utils/pickup-utils';
+import { isDrivenBy, isMyTransport } from '@/features/transports/utils/my-transports';
+import {
+  countGroupedTransports,
+  groupTransportsByDate,
+  type TransportDateGroup,
+} from '@/features/transports/utils/transport-grouping';
 import type { Person, PersonId, Transport, TransportId, TransportType } from '@/types';
 
 // ============================================================================
@@ -110,18 +117,10 @@ interface TransportCardProps {
   readonly isActionsDisabled?: boolean;
   /** Whether this transport is in the past */
   readonly isPast?: boolean;
-}
-
-/**
- * A group of transports for a single date.
- */
-interface DateGroup {
-  /** Date key (YYYY-MM-DD format) */
-  readonly dateKey: string;
-  /** Formatted date for display */
-  readonly displayDate: string;
-  /** Transports for this date, sorted by time */
-  readonly transports: readonly Transport[];
+  /** Whether the reader travels on this leg or drives it */
+  readonly isMine?: boolean;
+  /** Whether the reader is the driver of this leg */
+  readonly isDriving?: boolean;
 }
 
 /**
@@ -129,9 +128,9 @@ interface DateGroup {
  */
 interface TransportListProps {
   /** Array of date groups for upcoming transports */
-  readonly upcomingDateGroups: readonly DateGroup[];
+  readonly upcomingDateGroups: readonly TransportDateGroup[];
   /** Array of date groups for past transports */
-  readonly pastDateGroups: readonly DateGroup[];
+  readonly pastDateGroups: readonly TransportDateGroup[];
   /** Total count of past transports */
   readonly pastCount: number;
   /** Map of person ID to Person object */
@@ -150,67 +149,8 @@ interface TransportListProps {
   readonly emptyDescription: string;
   /** Whether actions are disabled */
   readonly isActionsDisabled?: boolean;
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Extracts the date key (YYYY-MM-DD) from a datetime string.
- *
- * @param datetime - ISO datetime string
- * @returns Date key string or empty string on error
- */
-function getDateKey(datetime: string): string {
-  try {
-    const parsedDate = parseISO(datetime);
-    if (isNaN(parsedDate.getTime())) {return '';}
-    return format(parsedDate, 'yyyy-MM-dd');
-  } catch {
-    return '';
-  }
-}
-
-/**
- * Groups transports by date, sorted chronologically.
- *
- * @param transports - Array of transports to group
- * @param locale - date-fns locale for date formatting
- * @returns Array of date groups, each containing transports for that date
- */
-function groupTransportsByDate(
-  transports: readonly Transport[],
-  locale: Locale,
-): DateGroup[] {
-  // Create a map of date key to transports
-  const groupsMap = new Map<string, Transport[]>();
-  
-  for (const transport of transports) {
-    const dateKey = getDateKey(transport.datetime);
-    if (!dateKey) {continue;}
-    
-    const existing = groupsMap.get(dateKey);
-    if (existing) {
-      existing.push(transport);
-    } else {
-      groupsMap.set(dateKey, [transport]);
-    }
-  }
-  
-  // Convert to array and sort by date key (chronological). Date keys are all
-  // `yyyy-MM-dd`, so comparing them as strings is sound; the transports inside a
-  // day are ordered by instant, because their datetimes may carry different UTC
-  // offsets and would then sort by wall clock rather than by when they happen.
-  const groups: DateGroup[] = Array.from(groupsMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([dateKey, transports]) => ({
-      dateKey,
-      displayDate: formatFullDate(dateKey, locale),
-      transports: sortTransportsByInstant(transports),
-    }));
-  
-  return groups;
+  /** The guest this browser is, when it said so */
+  readonly currentPersonId?: PersonId;
 }
 
 // ============================================================================
@@ -229,6 +169,8 @@ const TransportCard = memo(function TransportCard({
   dateLocale,
   isActionsDisabled = false,
   isPast = false,
+  isMine = false,
+  isDriving = false,
 }: TransportCardProps): ReactElement {
   const { t } = useTranslation(),
 
@@ -286,8 +228,13 @@ const TransportCard = memo(function TransportCard({
     if (driver) {
       parts.push(`${t('transports.driver')}: ${driver.name}`);
     }
+    if (isDriving) {
+      parts.push(t('transports.youDrive', 'You drive'));
+    } else if (isMine) {
+      parts.push(t('transports.yoursFlag', 'Yours'));
+    }
     return parts.filter(Boolean).join(', ');
-  }, [transport, person, driver, date, time, t, showNeedsPickupBadge]);
+  }, [transport, person, driver, date, time, t, showNeedsPickupBadge, isMine, isDriving]);
 
   return (
     <Card
@@ -301,6 +248,9 @@ const TransportCard = memo(function TransportCard({
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         // Past transport styling - dimmed appearance
         isPast && 'opacity-60',
+        // The reader's own legs carry a rail down the left edge, so they can
+        // be found in a grid of everybody's without reading every name.
+        isMine && 'border-l-4 border-l-primary',
       )}
     >
       <CardHeader className="pb-2">
@@ -319,6 +269,14 @@ const TransportCard = memo(function TransportCard({
             ) : (
               <Badge variant="secondary" className="text-muted-foreground">
                 {t('common.unknown')}
+              </Badge>
+            )}
+            {/* Whose leg this is, from the reader's side */}
+            {isMine && (
+              <Badge variant="secondary" className="shrink-0">
+                {isDriving
+                  ? t('transports.youDrive', 'You drive')
+                  : t('transports.yoursFlag', 'Yours')}
               </Badge>
             )}
             {/* Smart pickup indicator: show "needs pickup" only when no driver assigned */}
@@ -431,7 +389,7 @@ const TransportCard = memo(function TransportCard({
  */
 interface DateGroupSectionProps {
   /** The date group to render */
-  readonly group: DateGroup;
+  readonly group: TransportDateGroup;
   /** Map of person ID to Person object */
   readonly personsMap: Map<PersonId, Person>;
   /** Callback when edit is clicked */
@@ -444,6 +402,8 @@ interface DateGroupSectionProps {
   readonly isActionsDisabled?: boolean;
   /** Whether transports in this group are past */
   readonly isPast?: boolean;
+  /** The guest this browser is, when it said so */
+  readonly currentPersonId?: PersonId;
 }
 
 /**
@@ -457,6 +417,7 @@ const DateGroupSection = memo(function DateGroupSection({
   dateLocale,
   isActionsDisabled = false,
   isPast = false,
+  currentPersonId,
 }: DateGroupSectionProps): ReactElement {
   return (
     <section key={group.dateKey} aria-labelledby={`date-header-${group.dateKey}`}>
@@ -495,6 +456,8 @@ const DateGroupSection = memo(function DateGroupSection({
               dateLocale={dateLocale}
               isActionsDisabled={isActionsDisabled}
               isPast={isPast}
+              isMine={isMyTransport(transport, currentPersonId)}
+              isDriving={isDrivenBy(transport, currentPersonId)}
             />
           </div>
         );
@@ -524,6 +487,7 @@ const TransportList = memo(function TransportList({
   emptyTitle,
   emptyDescription,
   isActionsDisabled = false,
+  currentPersonId,
 }: TransportListProps): ReactElement {
   const { t } = useTranslation();
   
@@ -566,6 +530,7 @@ const TransportList = memo(function TransportList({
           dateLocale={dateLocale}
           isActionsDisabled={isActionsDisabled}
           isPast={false}
+          currentPersonId={currentPersonId}
         />
       ))}
 
@@ -610,6 +575,7 @@ const TransportList = memo(function TransportList({
                   dateLocale={dateLocale}
                   isActionsDisabled={isActionsDisabled}
                   isPast={true}
+                  currentPersonId={currentPersonId}
                 />
               ))}
             </div>
@@ -689,6 +655,11 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // Combine arrivals and departures into a single list
    allTransports = useMemo(() => [...arrivals, ...departures], [arrivals, departures]),
 
+  // The guest this browser identified as when it opened a share link, if any.
+  // The trip's owner has no stored identity: they plan for everybody, so no
+  // row on this page is more theirs than another.
+   currentPersonId = useMemo(() => getTripGuestPersonId(currentTrip), [currentTrip]),
+
   // Separate upcoming and past transports against the context's single
   // reference instant, so this split and the pickup alerts agree — and so the
   // list ages on the same minute tick instead of only when something else
@@ -723,10 +694,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // Count what the accordion actually renders: `groupTransportsByDate` drops
   // rows whose datetime cannot be parsed, so counting `pastTransports` promised
   // more entries than the section could show.
-   pastCount = useMemo(
-    () => pastDateGroups.reduce((total, group) => total + group.transports.length, 0),
-    [pastDateGroups],
-  ),
+   pastCount = useMemo(() => countGroupedTransports(pastDateGroups), [pastDateGroups]),
 
   // Amber pickup alerts only when at least one upcoming pickup still needs a
   // driver — same selection the panel counts and the analytics badge reports.
@@ -842,6 +810,13 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   }, [navigate, tripIdFromUrl]),
 
   /**
+   * Handles navigation to the run sheet.
+   */
+   handleOpenRunSheet = useCallback(() => {
+    navigate(`/trips/${tripIdFromUrl}/transports/runsheet`);
+  }, [navigate, tripIdFromUrl]),
+
+  /**
    * Handles dialog close - resets editing state.
    */
    handleDialogOpenChange = useCallback((open: boolean) => {
@@ -858,6 +833,10 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
    headerAction = useMemo(
     () => (
       <div className="hidden sm:flex items-center gap-2">
+        <Button variant="outline" onClick={handleOpenRunSheet}>
+          <ClipboardList className="size-4 mr-2" aria-hidden="true" />
+          {t('transports.runSheet', 'Run sheet')}
+        </Button>
         <Button variant="outline" onClick={handleOpenMap}>
           <MapIcon className="size-4 mr-2" aria-hidden="true" />
           {t('transports.mapView', 'Map view')}
@@ -868,7 +847,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         </Button>
       </div>
     ),
-    [handleAddTransport, handleOpenMap, t],
+    [handleAddTransport, handleOpenMap, handleOpenRunSheet, t],
   );
 
   // ============================================================================
@@ -979,6 +958,9 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         </div>
       )}
 
+      {/* What the reader themself has to do, when this browser is somebody */}
+      <MyRides className="mb-6" />
+
       {/* Pickup alerts section - only when a driver is still needed */}
       {hasUnassignedUpcomingPickup && (
         <div
@@ -990,6 +972,15 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
           <UpcomingPickups />
         </div>
       )}
+
+      {/* The run sheet is the day-of view, and the phone header has no room
+          for it: this is how it is reached on mobile. */}
+      <div className="mb-6 sm:hidden">
+        <Button variant="outline" className="w-full" onClick={handleOpenRunSheet}>
+          <ClipboardList className="size-4 mr-2" aria-hidden="true" />
+          {t('transports.runSheet', 'Run sheet')}
+        </Button>
+      </div>
 
       {/* Single chronological list grouped by date with collapsible past section */}
       <TransportList
@@ -1003,6 +994,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         listLabel={t('transports.title')}
         emptyTitle={t('transports.empty')}
         emptyDescription={t('transports.emptyDescription')}
+        currentPersonId={currentPersonId}
       />
 
       {/* Floating Action Button for mobile */}

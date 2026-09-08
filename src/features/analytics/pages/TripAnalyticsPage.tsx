@@ -96,6 +96,12 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
 
   const backLink = tripIdFromUrl ? `/trips/${tripIdFromUrl}/calendar` : '/trips';
 
+  // The screen that lists what "pickups needing a driver" counts, already
+  // narrowed to those legs.
+  const runSheetHref = tripIdFromUrl
+    ? `/trips/${tripIdFromUrl}/transports/runsheet?filter=needsDriver`
+    : '/trips';
+
   // `useLiveQuery` keeps its previous result while a changed dependency
   // re-subscribes, so straight after a trip switch `result` still describes the
   // trip we just left. `TripStats` carries the id it was read for precisely so
@@ -284,9 +290,13 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
           ].join(HINT_SEPARATOR)}
           testId="stat-transports"
         />
+        {/* The one figure on this page with something to do about it: the run
+            sheet lists the very legs this counts. */}
         <StatCard
           label={t('analytics.pickupsNeedingDriver')}
           value={stats.pickupsNeedingDriver}
+          hint={t('analytics.pickupsNeedingDriverHint', 'Open the run sheet')}
+          href={runSheetHref}
           testId="stat-pickups"
         />
       </div>
