@@ -501,12 +501,17 @@ describe('CalendarPage', () => {
       cell.getAttribute('aria-describedby')?.endsWith('-summary'),
     );
 
-    // Only cells with an accessibility summary carry their key in the DOM, and
-    // in this fixture that is all of them. Assert the coverage too, so a future
-    // fixture that drops a cell's summary fails here instead of silently
-    // shrinking what this test checks.
+    // Only cells with an accessibility summary carry their key in the DOM, so
+    // name the cells that have none. In this fixture there is exactly one: 10
+    // April, the day the trip ends. It is inside the trip and inside the month,
+    // and the last night was the 9th, so nobody is left on site to count and the
+    // cell has nothing to announce. Assert that, so a future fixture that drops
+    // another cell's summary fails here instead of silently shrinking what this
+    // test checks.
+    const unsummarized = allCells.filter((cell) => !cell.getAttribute('aria-describedby'));
     expect(allCells.length).toBeGreaterThan(0);
-    expect(cells).toHaveLength(allCells.length);
+    expect(unsummarized.map((cell) => cell.querySelector('span')?.textContent)).toEqual(['10']);
+    expect(cells).toHaveLength(allCells.length - 1);
 
     for (const cell of cells) {
       const dateKey = cell.getAttribute('aria-describedby')!.replace('-summary', '');
