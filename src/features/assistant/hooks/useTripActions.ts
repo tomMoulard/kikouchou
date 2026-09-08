@@ -10,14 +10,13 @@
 
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 
 import {
   toActivityInstant,
   toAllDayActivityInstant,
 } from '@/features/activities/utils/activity-utils';
 
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import {
@@ -47,6 +46,7 @@ import {
   updateTrip,
 } from '@/lib/db';
 import { ActivityFormDataSchema } from '@/lib/validation/schemas';
+import { notify } from '@/lib/notifications';
 import {
   getDefaultPersonColor,
   type Activity,
@@ -261,7 +261,7 @@ export function useTripActions(): UseTripActionsReturn {
   // Every write the assistant performs lands in IndexedDB exactly like a write
   // made by hand, so it confirms the same way: offline it says "Saved on this
   // device" rather than claiming a success the network never saw.
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   const executeActions = useCallback(
     async (response: string): Promise<ActionExecutionResult> => {
@@ -311,7 +311,7 @@ export function useTripActions(): UseTripActionsReturn {
               });
               activeTripId = trip.id;
               await setCurrentTrip(trip.id);
-              successToast(t('trips.created'));
+              notifySuccess(t('trips.created'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.createTrip', { name: trip.name }),
@@ -323,16 +323,16 @@ export function useTripActions(): UseTripActionsReturn {
               const rawId = action.data.tripId as string;
               const trip = await getTripById(rawId as TripId);
               if (!trip) {
-                toast.error(t('assistant.selectTripNotFound'));
+                notify.error(t('assistant.selectTripNotFound'));
                 break;
               }
               activeTripId = trip.id;
               await setCurrentTrip(trip.id);
-              // Deliberately a raw toast: switching trips changes which trip
+              // Deliberately a raw confirmation: switching trips changes which trip
               // the rest of the batch touches, so the name has to stay on
               // screen. "Saved on this device" would drop the one fact that
               // matters, and the selection never leaves this device anyway.
-              toast.success(
+              notify.success(
                 t('assistant.tripSwitched', { name: trip.name }),
               );
               executedCount++;
@@ -345,7 +345,7 @@ export function useTripActions(): UseTripActionsReturn {
             case 'updateTrip': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const d = action.data as Record<string, unknown>;
@@ -381,7 +381,7 @@ export function useTripActions(): UseTripActionsReturn {
                 ...(d.endDate !== undefined && { endDate: d.endDate as ISODateString }),
                 ...(d.description !== undefined && { description: d.description as string }),
               });
-              successToast(t('trips.updated'));
+              notifySuccess(t('trips.updated'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.updateTrip', {
@@ -395,7 +395,7 @@ export function useTripActions(): UseTripActionsReturn {
             case 'addGuest': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const d = action.data as Record<string, unknown>;
@@ -419,7 +419,7 @@ export function useTripActions(): UseTripActionsReturn {
                 ...(d.notes !== undefined && { notes: d.notes as string }),
               });
               guestIdCache.delete(tid);
-              successToast(t('persons.createSuccess'));
+              notifySuccess(t('persons.createSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.addGuest', {
@@ -433,7 +433,7 @@ export function useTripActions(): UseTripActionsReturn {
             case 'importGuestGroup': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
 
@@ -446,7 +446,7 @@ export function useTripActions(): UseTripActionsReturn {
               // of letting the repository throw a message written for a
               // developer.
               if (!group) {
-                toast.error(
+                notify.error(
                   t('assistant.guestGroupNotFound', {
                     defaultValue: 'No saved group with that id',
                   }),
@@ -470,7 +470,7 @@ export function useTripActions(): UseTripActionsReturn {
               );
 
               guestIdCache.delete(tid);
-              successToast(t('persons.createSuccess'));
+              notifySuccess(t('persons.createSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.importGuestGroup', {
@@ -485,14 +485,14 @@ export function useTripActions(): UseTripActionsReturn {
             case 'removeGuest': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const pid = action.data.personId as PersonId;
               const guest = await getPersonById(pid);
               await deletePersonWithOwnershipCheck(pid, tid);
               guestIdCache.delete(tid);
-              successToast(t('persons.deleteSuccess'));
+              notifySuccess(t('persons.deleteSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.removeGuest', {
@@ -506,7 +506,7 @@ export function useTripActions(): UseTripActionsReturn {
             case 'addRoom': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const d = action.data as Record<string, unknown>;
@@ -515,7 +515,7 @@ export function useTripActions(): UseTripActionsReturn {
                 capacity: d.capacity as number,
                 description: d.description as string | undefined,
               });
-              successToast(t('rooms.createSuccess'));
+              notifySuccess(t('rooms.createSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.addRoom', {
@@ -530,13 +530,13 @@ export function useTripActions(): UseTripActionsReturn {
             case 'removeRoom': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const rid = action.data.roomId as RoomId;
               const room = await getRoomById(rid);
               await deleteRoomWithOwnershipCheck(rid, tid);
-              successToast(t('rooms.deleteSuccess'));
+              notifySuccess(t('rooms.deleteSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.removeRoom', {
@@ -550,7 +550,7 @@ export function useTripActions(): UseTripActionsReturn {
             case 'assignRoom': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const d = action.data as Record<string, unknown>;
@@ -560,12 +560,12 @@ export function useTripActions(): UseTripActionsReturn {
               // stale id from the model would be stored as a permanent orphan.
               const assignPerson = await getPersonById(d.personId as PersonId);
               if (!assignPerson || assignPerson.tripId !== tid) {
-                toast.error(t('assistant.guestNotFound'));
+                notify.error(t('assistant.guestNotFound'));
                 break;
               }
               const assignRoomTarget = await getRoomById(d.roomId as RoomId);
               if (!assignRoomTarget || assignRoomTarget.tripId !== tid) {
-                toast.error(t('assistant.roomNotFound'));
+                notify.error(t('assistant.roomNotFound'));
                 break;
               }
 
@@ -575,7 +575,7 @@ export function useTripActions(): UseTripActionsReturn {
                 startDate: d.startDate as ISODateString,
                 endDate: d.endDate as ISODateString,
               });
-              successToast(t('assignments.createSuccess'));
+              notifySuccess(t('assignments.createSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.assignRoom', {
@@ -593,7 +593,7 @@ export function useTripActions(): UseTripActionsReturn {
             case 'removeAssignment': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const aid = action.data.assignmentId as RoomAssignmentId;
@@ -605,7 +605,7 @@ export function useTripActions(): UseTripActionsReturn {
                 ? await getRoomById(assignment.roomId)
                 : undefined;
               await deleteAssignmentWithOwnershipCheck(aid, tid);
-              successToast(t('assignments.deleteSuccess'));
+              notifySuccess(t('assignments.deleteSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.removeAssignment', {
@@ -620,7 +620,7 @@ export function useTripActions(): UseTripActionsReturn {
             case 'addTransport': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const d = action.data as Record<string, unknown>;
@@ -629,7 +629,7 @@ export function useTripActions(): UseTripActionsReturn {
               // personId, so verify it belongs to the trip being written to.
               const transportPerson = await getPersonById(d.personId as PersonId);
               if (!transportPerson || transportPerson.tripId !== tid) {
-                toast.error(t('assistant.guestNotFound'));
+                notify.error(t('assistant.guestNotFound'));
                 break;
               }
 
@@ -642,7 +642,7 @@ export function useTripActions(): UseTripActionsReturn {
                 transportNumber: d.transportNumber as string | undefined,
                 needsPickup: (d.needsPickup as boolean | undefined) ?? false,
               });
-              successToast(t('transports.createSuccess'));
+              notifySuccess(t('transports.createSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.addTransport', {
@@ -659,13 +659,13 @@ export function useTripActions(): UseTripActionsReturn {
             case 'removeTransport': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const transportId = action.data.transportId as TransportId;
               const tr = await getTransportById(transportId);
               await deleteTransportWithOwnershipCheck(transportId, tid);
-              successToast(t('transports.deleteSuccess'));
+              notifySuccess(t('transports.deleteSuccess'));
               executedCount++;
               const label = tr
                 ? `${tr.type} · ${tr.location}`
@@ -682,7 +682,7 @@ export function useTripActions(): UseTripActionsReturn {
             case 'addActivity': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const d = action.data as Record<string, unknown>;
@@ -695,7 +695,7 @@ export function useTripActions(): UseTripActionsReturn {
                 'start',
               );
               if (!startDatetime) {
-                toast.error(t('assistant.invalidActivity'));
+                notify.error(t('assistant.invalidActivity'));
                 break;
               }
               // All-day spans need a real end instant, or they read as "over"
@@ -733,12 +733,12 @@ export function useTripActions(): UseTripActionsReturn {
                   '[AI Assistant] Rejected addActivity:',
                   validation.error.issues,
                 );
-                toast.error(t('assistant.invalidActivity'));
+                notify.error(t('assistant.invalidActivity'));
                 break;
               }
 
               await createActivity(tid, formData);
-              successToast(t('activities.createSuccess'));
+              notifySuccess(t('activities.createSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.addActivity', {
@@ -752,14 +752,14 @@ export function useTripActions(): UseTripActionsReturn {
             case 'updateActivity': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const d = action.data as Record<string, unknown>;
               const aid = d.activityId as ActivityId;
               const existing = await getActivityById(aid);
               if (!existing || existing.tripId !== tid) {
-                toast.error(t('assistant.activityNotFound'));
+                notify.error(t('assistant.activityNotFound'));
                 break;
               }
 
@@ -785,7 +785,7 @@ export function useTripActions(): UseTripActionsReturn {
                   )
                 : undefined;
               if (wantsStart && !nextStart) {
-                toast.error(t('assistant.invalidActivity'));
+                notify.error(t('assistant.invalidActivity'));
                 break;
               }
               const nextEnd = wantsEnd
@@ -833,12 +833,12 @@ export function useTripActions(): UseTripActionsReturn {
                   '[AI Assistant] Rejected updateActivity:',
                   mergedValidation.error.issues,
                 );
-                toast.error(t('assistant.invalidActivity'));
+                notify.error(t('assistant.invalidActivity'));
                 break;
               }
 
               await updateActivityWithOwnershipCheck(aid, tid, patch);
-              successToast(t('activities.updateSuccess'));
+              notifySuccess(t('activities.updateSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.updateActivity', {
@@ -853,17 +853,17 @@ export function useTripActions(): UseTripActionsReturn {
             case 'removeActivity': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const aid = action.data.activityId as ActivityId;
               const activity = await getActivityById(aid);
               if (!activity || activity.tripId !== tid) {
-                toast.error(t('assistant.activityNotFound'));
+                notify.error(t('assistant.activityNotFound'));
                 break;
               }
               await deleteActivityWithOwnershipCheck(aid, tid);
-              successToast(t('activities.deleteSuccess'));
+              notifySuccess(t('activities.deleteSuccess'));
               executedCount++;
               summaries.push(
                 t('assistant.actionDetails.removeActivity', {
@@ -878,7 +878,7 @@ export function useTripActions(): UseTripActionsReturn {
             case 'leaveActivity': {
               const tid = activeTripId;
               if (!tid) {
-                toast.error(t('assistant.noTripForAction'));
+                notify.error(t('assistant.noTripForAction'));
                 break;
               }
               const joining = action.action === 'joinActivity';
@@ -887,7 +887,7 @@ export function useTripActions(): UseTripActionsReturn {
 
               const activity = await getActivityById(aid);
               if (!activity || activity.tripId !== tid) {
-                toast.error(t('assistant.activityNotFound'));
+                notify.error(t('assistant.activityNotFound'));
                 break;
               }
 
@@ -895,7 +895,7 @@ export function useTripActions(): UseTripActionsReturn {
               // model invented would otherwise be written as a participant.
               const person = await getPersonById(pid);
               if (!person || person.tripId !== tid) {
-                toast.error(t('assistant.guestNotFound'));
+                notify.error(t('assistant.guestNotFound'));
                 break;
               }
 
@@ -911,7 +911,7 @@ export function useTripActions(): UseTripActionsReturn {
                 break;
               }
 
-              successToast(t('activities.participationUpdated'));
+              notifySuccess(t('activities.participationUpdated'));
               executedCount++;
               summaries.push(
                 t(
@@ -935,7 +935,7 @@ export function useTripActions(): UseTripActionsReturn {
           }
         } catch (err) {
           console.error('[AI Assistant] Failed to execute action:', action, err);
-          toast.error(
+          notify.error(
             `Failed to execute action: ${err instanceof Error ? err.message : 'Unknown error'}`,
           );
         }
@@ -943,7 +943,7 @@ export function useTripActions(): UseTripActionsReturn {
 
       return { count: executedCount, summaries };
     },
-    [currentTrip, successToast, t],
+    [currentTrip, notifySuccess, t],
   );
 
   return { executeActions };

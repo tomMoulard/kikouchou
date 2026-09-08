@@ -33,8 +33,8 @@ vi.mock('@/contexts/AssignmentContext', () => ({
 }));
 
 vi.mock('@/hooks', () => ({
-  useOfflineAwareToast: () => ({
-    successToast: mockSuccessToast,
+  useOfflineAwareNotify: () => ({
+    notifySuccess: mockSuccessToast,
     errorToast: vi.fn(),
   }),
 }));

@@ -39,13 +39,13 @@ import type {
 // Boundary mocks
 // ============================================================================
 
-const mockToastSuccess = vi.fn();
-const mockToastError = vi.fn();
+const mockNotifySuccess = vi.fn();
+const mockNotifyError = vi.fn();
 
-vi.mock('sonner', () => ({
-  toast: {
-    success: (...args: unknown[]) => mockToastSuccess(...args),
-    error: (...args: unknown[]) => mockToastError(...args),
+vi.mock('@/lib/notifications', () => ({
+  notify: {
+    success: (...args: unknown[]) => mockNotifySuccess(...args),
+    error: (...args: unknown[]) => mockNotifyError(...args),
   },
 }));
 
@@ -293,7 +293,7 @@ describe('ImportTripQrDialog', () => {
       await scan('Ab3-dEf_1');
 
       await waitFor(() => {
-        expect(mockToastError).toHaveBeenCalledWith('trips.importQrInvalid');
+        expect(mockNotifyError).toHaveBeenCalledWith('trips.importQrInvalid');
       });
       expect(mockNavigate).not.toHaveBeenCalled();
     });
@@ -355,7 +355,7 @@ describe('ImportTripQrDialog', () => {
       expect(assignments[0]?.roomId).toBe(rooms[0]?.id);
 
       expect(onOpenChange).toHaveBeenCalledWith(false);
-      expect(mockToastSuccess).toHaveBeenCalledWith('trips.importQrMergeSuccess');
+      expect(mockNotifySuccess).toHaveBeenCalledWith('trips.importQrMergeSuccess');
       expect(
         mockCapture.mock.calls.filter(([event]) => event === 'trip_imported'),
       ).toEqual([['trip_imported', { conflict_count: 0 }]]);
@@ -463,7 +463,7 @@ describe('ImportTripQrDialog', () => {
       await scan('!!!definitely-not-a-changeset!!!');
 
       await waitFor(() => {
-        expect(mockToastError).toHaveBeenCalledWith('trips.importQrInvalid');
+        expect(mockNotifyError).toHaveBeenCalledWith('trips.importQrInvalid');
       });
       expect(mockNavigate).not.toHaveBeenCalled();
       expect(await db.trips.count()).toBe(0);
@@ -476,7 +476,7 @@ describe('ImportTripQrDialog', () => {
       await scan(encodeChangeset(makeChangeset()));
 
       await waitFor(() => {
-        expect(mockToastError).toHaveBeenCalledWith('trips.importQrSnapshotRequired');
+        expect(mockNotifyError).toHaveBeenCalledWith('trips.importQrSnapshotRequired');
       });
       expect(mockNavigate).not.toHaveBeenCalled();
       expect(await db.trips.count()).toBe(0);
@@ -490,9 +490,9 @@ describe('ImportTripQrDialog', () => {
       await scan(encodeChangeset(makeChangeset()));
 
       await waitFor(() => {
-        expect(mockToastError).toHaveBeenCalledWith('trips.importQrMergeFailed');
+        expect(mockNotifyError).toHaveBeenCalledWith('trips.importQrMergeFailed');
       });
-      expect(mockToastError).not.toHaveBeenCalledWith('trips.importQrSnapshotRequired');
+      expect(mockNotifyError).not.toHaveBeenCalledWith('trips.importQrSnapshotRequired');
       expect(mockNavigate).not.toHaveBeenCalled();
       // The spy exists to keep the expected failure out of the test output; it
       // is asserted so it is not merely a silencer.

@@ -28,8 +28,7 @@ import {
 } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import {
   addMonths,
   eachDayOfInterval,
@@ -102,6 +101,7 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
 import { buildDayColumns } from '@/lib/utils/trip-days';
+import { notify } from '@/lib/notifications';
 
 // Import types and utilities
 import type {
@@ -145,7 +145,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   // Context hooks
   const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
@@ -861,32 +861,32 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     if (selectedEvent.type === 'assignment') {
       try {
         await deleteAssignment(selectedEvent.assignment.id);
-        successToast(t('assignments.deleteSuccess', 'Assignment deleted'));
+        notifySuccess(t('assignments.deleteSuccess', 'Assignment deleted'));
       } catch (error) {
         console.error('Failed to delete assignment:', error);
-        toast.error(t('errors.deleteFailed', 'Failed to delete'));
+        notify.error(t('errors.deleteFailed', 'Failed to delete'));
         throw error;
       }
     } else if (selectedEvent.type === 'transport') {
       try {
         await deleteTransport(selectedEvent.transport.id);
-        successToast(t('calendar.transportDeleted', 'Transport deleted successfully'));
+        notifySuccess(t('calendar.transportDeleted', 'Transport deleted successfully'));
       } catch (error) {
         console.error('Failed to delete transport:', error);
-        toast.error(t('errors.deleteFailed', 'Failed to delete'));
+        notify.error(t('errors.deleteFailed', 'Failed to delete'));
         throw error;
       }
     } else if (selectedEvent.type === 'activity') {
       try {
         await deleteActivity(selectedEvent.activity.id);
-        successToast(t('activities.deleteSuccess'));
+        notifySuccess(t('activities.deleteSuccess'));
       } catch (error) {
         console.error('Failed to delete activity:', error);
-        toast.error(t('errors.deleteFailed', 'Failed to delete'));
+        notify.error(t('errors.deleteFailed', 'Failed to delete'));
         throw error;
       }
     }
-  }, [selectedEvent, deleteAssignment, deleteTransport, deleteActivity, t, successToast]);
+  }, [selectedEvent, deleteAssignment, deleteTransport, deleteActivity, t, notifySuccess]);
 
   const handleTransportDialogClose = useCallback((open: boolean) => {
     setIsTransportDialogOpen(open);
@@ -922,7 +922,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
 
       try {
         await updateAssignment(editingAssignment.id, data);
-        successToast(t('assignments.updateSuccess', 'Assignment updated successfully'));
+        notifySuccess(t('assignments.updateSuccess', 'Assignment updated successfully'));
         setIsAssignmentDialogOpen(false);
         setEditingAssignment(undefined);
       } catch (error) {
@@ -930,7 +930,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         throw error;
       }
     },
-    [editingAssignment, successToast, t, updateAssignment],
+    [editingAssignment, notifySuccess, t, updateAssignment],
   );
 
   const handleDayRef = useCallback(

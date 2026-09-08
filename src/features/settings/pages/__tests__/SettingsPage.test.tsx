@@ -97,23 +97,23 @@ vi.mock('@/lib/i18n', () => ({
   isLanguageSupported: (value: string) => MOCK_SUPPORTED_LANGUAGES.includes(value),
 }));
 
-// The language card deliberately uses the raw sonner toast rather than the
+// The language card deliberately uses the raw notification rather than the
 // offline-aware one, so both have to be observable to tell them apart.
-const mockToastSuccess = vi.fn();
-const mockToastError = vi.fn();
+const mockNotifySuccess = vi.fn();
+const mockNotifyError = vi.fn();
 
-vi.mock('sonner', () => ({
-  toast: {
-    success: (...args: unknown[]) => mockToastSuccess(...args),
-    error: (...args: unknown[]) => mockToastError(...args),
+vi.mock('@/lib/notifications', () => ({
+  notify: {
+    success: (...args: unknown[]) => mockNotifySuccess(...args),
+    error: (...args: unknown[]) => mockNotifyError(...args),
   },
 }));
 
 const mockSuccessToast = vi.fn();
 
 vi.mock('@/hooks', () => ({
-  useOfflineAwareToast: () => ({
-    successToast: mockSuccessToast,
+  useOfflineAwareNotify: () => ({
+    notifySuccess: mockSuccessToast,
     errorToast: vi.fn(),
   }),
 }));
@@ -584,7 +584,7 @@ describe('SettingsPage', () => {
       // A raw toast on purpose: the language lives in localStorage and never
       // syncs, so the offline-aware "saved on this device" wording would be a
       // lie about a device-local preference.
-      expect(mockToastSuccess).toHaveBeenCalledWith('settings.languageChanged');
+      expect(mockNotifySuccess).toHaveBeenCalledWith('settings.languageChanged');
       expect(mockSuccessToast).not.toHaveBeenCalled();
     });
 
@@ -599,7 +599,7 @@ describe('SettingsPage', () => {
       // Radix does not fire `onValueChange` for the value already selected, so
       // re-picking English must not reload i18n or pop a toast.
       expect(mockChangeLanguage).not.toHaveBeenCalled();
-      expect(mockToastSuccess).not.toHaveBeenCalled();
+      expect(mockNotifySuccess).not.toHaveBeenCalled();
     });
   });
 

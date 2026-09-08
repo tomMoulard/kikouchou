@@ -51,7 +51,7 @@ vi.mock('@/hooks', () => ({
     reset: vi.fn(),
     skipNextBlock: vi.fn(),
   }),
-  useOfflineAwareToast: () => ({ successToast: mockSuccessToast }),
+  useOfflineAwareNotify: () => ({ notifySuccess: mockSuccessToast }),
 }));
 
 // Mock TripForm to avoid deep component tree

@@ -13,7 +13,6 @@
 
 import { type MouseEvent, type ReactElement, memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 import { Plus, Trash2, Users } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -22,10 +21,11 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import { GuestGroupDialog } from '@/features/guest-groups/components/GuestGroupDialog';
 import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
 import { cn } from '@/lib/utils';
+import { notify } from '@/lib/notifications';
 import { getPersonHeadcount } from '@/types';
 import type { GuestGroup, GuestGroupId } from '@/types';
 
@@ -153,7 +153,7 @@ const GuestGroupCard = memo(function GuestGroupCard({
 const GuestGroupListPage = memo(function GuestGroupListPage(): ReactElement {
   const { t } = useTranslation();
   const { groups, isLoading, deleteGroup } = useGuestGroups();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   const [editingId, setEditingId] = useState<GuestGroupId | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -197,14 +197,14 @@ const GuestGroupListPage = memo(function GuestGroupListPage(): ReactElement {
 
     try {
       await deleteGroup(pendingDeleteId);
-      successToast(t('guestGroups.deleteSuccess', 'Group deleted'));
+      notifySuccess(t('guestGroups.deleteSuccess', 'Group deleted'));
     } catch (error) {
       console.error('Failed to delete guest group:', error);
-      toast.error(t('errors.deleteFailed', 'Failed to delete'));
+      notify.error(t('errors.deleteFailed', 'Failed to delete'));
     } finally {
       setPendingDeleteId(null);
     }
-  }, [deleteGroup, pendingDeleteId, successToast, t]);
+  }, [deleteGroup, pendingDeleteId, notifySuccess, t]);
 
   const handleDeleteOpenChange = useCallback((open: boolean) => {
     if (!open) {

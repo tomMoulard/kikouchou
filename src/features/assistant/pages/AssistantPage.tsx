@@ -19,7 +19,6 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { nanoid } from 'nanoid';
-import { toast } from 'sonner';
 import {
   Bot,
   Check,
@@ -85,6 +84,7 @@ import {
   isAssistantModelId,
 } from '../models';
 import posthog, { captureUsage } from '@/lib/posthog';
+import { notify } from '@/lib/notifications';
 import type { AssistantModelId } from '@/types';
 
 // ============================================================================
@@ -1087,8 +1087,8 @@ function AssistantPageComponent(): ReactElement {
 
     const droppedIds = new Set(dropped.map((prompt) => prompt.messageId));
     setMessages((prev) => prev.filter((msg) => !droppedIds.has(msg.id)));
-    // Deliberately a raw toast: the queue lives in memory, nothing was saved.
-    toast.success(t('assistant.queueCleared', { count: dropped.length }));
+    // Deliberately a raw confirmation: the queue lives in memory, nothing was saved.
+    notify.success(t('assistant.queueCleared', { count: dropped.length }));
   }, [t]);
 
   const handleClearConversation = useCallback(() => {
@@ -1102,8 +1102,8 @@ function AssistantPageComponent(): ReactElement {
     clearAssistantChatStorage();
     // A cleared transcript is a new conversation for AI observability too.
     sessionIdRef.current = getOrCreateAssistantSessionId();
-    // Deliberately a raw toast: this erases local chat state, it saves nothing.
-    toast.success(t('assistant.conversationCleared'));
+    // Deliberately a raw confirmation: this erases local chat state, it saves nothing.
+    notify.success(t('assistant.conversationCleared'));
   }, [interrupt, t]);
 
   const handleModelChange = useCallback(
@@ -1121,10 +1121,10 @@ function AssistantPageComponent(): ReactElement {
           await unload();
         }
         await updateSettings({ assistantModelId: value });
-        // Deliberately a raw toast: the chosen model is a device preference
+        // Deliberately a raw confirmation: the chosen model is a device preference
         // that never syncs, so "Saved on this device" adds nothing while
         // dropping the model name the user needs to see.
-        toast.success(
+        notify.success(
           t('assistant.modelChanged', {
             model: t(
               getAssistantModelPreset(value).nameKey,
@@ -1136,7 +1136,7 @@ function AssistantPageComponent(): ReactElement {
       } catch (changeError) {
         console.error('Failed to update assistant model:', changeError);
         setSelectedModelId(previousModelId);
-        toast.error(
+        notify.error(
           t(
             'assistant.modelChangeFailed',
             'Could not switch the assistant model. Please try again.',

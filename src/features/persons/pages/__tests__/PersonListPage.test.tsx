@@ -93,8 +93,8 @@ vi.mock('react-router-dom', async () => {
 });
 
 vi.mock('@/hooks', () => ({
-  useOfflineAwareToast: () => ({
-    successToast: mockSuccessToast,
+  useOfflineAwareNotify: () => ({
+    notifySuccess: mockSuccessToast,
     errorToast: vi.fn(),
   }),
 }));

@@ -7,7 +7,7 @@
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 
 import {
   Dialog,
@@ -51,7 +51,7 @@ export interface ActivityDialogProps {
  * Features:
  * - Dual mode: create (no activityId) and edit (activityId provided)
  * - Guards against losing unsaved edits when closing
- * - Success/error toasts, offline-aware
+ * - Success confirmation (offline-aware) and error toast
  * - Closes automatically on successful submission
  *
  * @param props - Component props
@@ -71,7 +71,7 @@ const ActivityDialog = memo(function ActivityDialog({
   const { t } = useTranslation();
   const { activities, createActivity, updateActivity } = useActivityContext();
   const { persons } = usePersonContext();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   const [isDirty, setIsDirty] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -104,7 +104,7 @@ const ActivityDialog = memo(function ActivityDialog({
     async (data: ActivityFormData) => {
       if (activityId) {
         await updateActivity(activityId, data);
-        successToast(t('activities.updateSuccess'));
+        notifySuccess(t('activities.updateSuccess'));
         captureUsage('activity_saved', {
           operation: 'updated',
           category: data.category,
@@ -113,7 +113,7 @@ const ActivityDialog = memo(function ActivityDialog({
         });
       } else {
         await createActivity(data);
-        successToast(t('activities.createSuccess'));
+        notifySuccess(t('activities.createSuccess'));
         captureUsage('activity_saved', {
           operation: 'created',
           category: data.category,
@@ -123,7 +123,7 @@ const ActivityDialog = memo(function ActivityDialog({
       }
       onOpenChange(false);
     },
-    [activityId, updateActivity, createActivity, t, onOpenChange, successToast],
+    [activityId, updateActivity, createActivity, t, onOpenChange, notifySuccess],
   );
 
   const handleCancel = useCallback(() => {

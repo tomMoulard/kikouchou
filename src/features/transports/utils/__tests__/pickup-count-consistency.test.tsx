@@ -50,7 +50,7 @@ vi.mock('@/contexts/PersonContext', () => ({
 }));
 
 vi.mock('@/hooks', () => ({
-  useOfflineAwareToast: vi.fn(() => ({ successToast: vi.fn() })),
+  useOfflineAwareNotify: vi.fn(() => ({ notifySuccess: vi.fn() })),
 }));
 
 vi.mock('react-i18next', () => ({

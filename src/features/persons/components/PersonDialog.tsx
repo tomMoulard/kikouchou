@@ -14,7 +14,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 
 import {
   Dialog,
@@ -56,7 +56,7 @@ export interface PersonDialogProps {
  * Features:
  * - Dual mode: Create (personId undefined) and Edit (personId provided)
  * - Integrates PersonForm for form handling
- * - Shows success/error toasts via sonner
+ * - Confirms success as an OS notification, reports errors as a toast
  * - Handles async operations with loading states
  * - Prevents state updates on unmounted component
  * - Closes automatically on successful submission
@@ -86,7 +86,7 @@ const PersonDialog = memo(function PersonDialog({
   const { t } = useTranslation();
   const { persons, createPerson, updatePerson } = usePersonContext();
   const { getAssignmentsByPerson, updateAssignment } = useAssignmentContext();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   // Dirty-state tracking for close guard
   const [isDirty, setIsDirty] = useState(false);
@@ -165,7 +165,7 @@ const PersonDialog = memo(function PersonDialog({
           }
         }
 
-        successToast(t('persons.updateSuccess', 'Participant updated successfully'));
+        notifySuccess(t('persons.updateSuccess', 'Participant updated successfully'));
         captureUsage('person_saved', {
           operation: 'updated',
           headcount: data.headcount,
@@ -173,7 +173,7 @@ const PersonDialog = memo(function PersonDialog({
         });
       } else {
         await createPerson(data);
-        successToast(t('persons.createSuccess', 'Participant added successfully'));
+        notifySuccess(t('persons.createSuccess', 'Participant added successfully'));
         captureUsage('person_saved', {
           operation: 'created',
           headcount: data.headcount,
@@ -189,7 +189,7 @@ const PersonDialog = memo(function PersonDialog({
       onOpenChange,
       person,
       personId,
-      successToast,
+      notifySuccess,
       t,
       updateAssignment,
       updatePerson,

@@ -12,6 +12,7 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { fixtureDate } from './support/fixture-dates';
+import { expectOsNotification, recordOsNotifications } from './support/os-notifications';
 import { addTripGuests, fillTripOrganiser, ORGANISER_NAME } from './support/trip-form';
 
 // ============================================================================
@@ -453,6 +454,11 @@ test.describe('Trip Lifecycle', () => {
   // ============================================================================
 
   test('creates a new trip from empty state', async ({ page }) => {
+    // The creation is confirmed by an OS notification, which is not in the
+    // DOM. Install the recorder before the first navigation, while
+    // `window.Notification` can still be replaced.
+    await recordOsNotifications(page);
+
     // Navigate to the trips page
     await page.goto('/trips');
 
@@ -482,8 +488,12 @@ test.describe('Trip Lifecycle', () => {
     // The app navigates to /trips/:id/calendar after creation
     await expectCalendarPage(page, TEST_TRIP.name);
 
-    // Verify success toast appears
-    await expect(page.getByText(/trip created successfully/i)).toBeVisible();
+    // Verify the confirmation reached the operating system
+    await expectOsNotification(page, /trip created successfully/i);
+
+    // …and that it did not land on the page as a card over the content, which
+    // is the defect that moved it to the OS in the first place.
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
 
     const tripId = tripIdFromCalendarUrl(page);
 

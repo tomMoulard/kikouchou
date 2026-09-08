@@ -205,7 +205,7 @@ vi.mock('@/hooks', () => ({
     handleSubmit: onSubmit,
     clearError: vi.fn(),
   }),
-  useOfflineAwareToast: () => ({ successToast: vi.fn(), errorToast: vi.fn() }),
+  useOfflineAwareNotify: () => ({ notifySuccess: vi.fn(), errorToast: vi.fn() }),
 }));
 
 // ============================================================================

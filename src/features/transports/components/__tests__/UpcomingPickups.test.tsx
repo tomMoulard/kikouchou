@@ -106,8 +106,8 @@ vi.mock('@/hooks', () => ({
     handleSubmit: vi.fn(),
     clearError: vi.fn(),
   })),
-  useOfflineAwareToast: vi.fn(() => ({
-    successToast: vi.fn(),
+  useOfflineAwareNotify: vi.fn(() => ({
+    notifySuccess: vi.fn(),
   })),
 }));
 
@@ -618,10 +618,10 @@ describe('UpcomingPickups', () => {
     const mockSuccessToast = vi.fn();
     const { useTransportContext } = await import('@/contexts/TransportContext');
     const { usePersonContext } = await import('@/contexts/PersonContext');
-    const { useOfflineAwareToast } = await import('@/hooks');
+    const { useOfflineAwareNotify } = await import('@/hooks');
 
-    vi.mocked(useOfflineAwareToast).mockReturnValue({
-      successToast: mockSuccessToast,
+    vi.mocked(useOfflineAwareNotify).mockReturnValue({
+      notifySuccess: mockSuccessToast,
     } as never);
 
     vi.mocked(usePersonContext).mockReturnValue({

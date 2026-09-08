@@ -18,9 +18,8 @@ import {
   useState,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useFormSubmission, useOfflineAwareToast } from '@/hooks';
+import { useFormSubmission, useOfflineAwareNotify } from '@/hooks';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 import { type Locale, isValid, parseISO } from 'date-fns';
 import {
   AlertTriangle,
@@ -67,6 +66,7 @@ import {
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatDateRange } from '@/lib/utils/date-format';
+import { notify } from '@/lib/notifications';
 import type {
   ISODateString,
   Person,
@@ -762,7 +762,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
   onAssignmentChange,
 }: RoomAssignmentSectionProps): ReactElement {
   const { t, i18n } = useTranslation();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
   const { currentTrip } = useTripContext();
   const { persons, isLoading: isPersonsLoading, getPersonById } = usePersonContext();
   const { rooms } = useRoomContext();
@@ -789,7 +789,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
 
   // Manual isMountedRef is intentionally maintained here (not replaced by useFormSubmission)
   // because handleFormSubmit and handleConfirmDelete manage their own async lifecycle
-  // (setIsOperationPending, toast, onAssignmentChange) outside the useFormSubmission pattern.
+  // (setIsOperationPending, notify, onAssignmentChange) outside the useFormSubmission pattern.
   // The sub-component AssignmentFormDialog uses useFormSubmission for its own submission.
   const isMountedRef = useRef(true);
 
@@ -937,17 +937,17 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
       try {
         if (editingAssignment) {
           await updateAssignment(editingAssignment.id, data);
-          successToast(t('assignments.updateSuccess'));
+          notifySuccess(t('assignments.updateSuccess'));
         } else {
           await createAssignment(data);
-          successToast(t('assignments.createSuccess'));
+          notifySuccess(t('assignments.createSuccess'));
         }
 
         if (isMountedRef.current) {
           onAssignmentChange?.();
         }
       } catch (error) {
-        toast.error(t('errors.saveFailed'));
+        notify.error(t('errors.saveFailed'));
         throw error;
       } finally {
         if (isMountedRef.current) {
@@ -955,7 +955,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
         }
       }
     },
-    [editingAssignment, updateAssignment, createAssignment, onAssignmentChange, t, successToast],
+    [editingAssignment, updateAssignment, createAssignment, onAssignmentChange, t, notifySuccess],
   );
 
   /**
@@ -969,14 +969,14 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
 
     try {
       await deleteAssignment(deletingAssignment.id);
-      successToast(t('assignments.deleteSuccess'));
+      notifySuccess(t('assignments.deleteSuccess'));
 
       if (isMountedRef.current) {
         setDeletingAssignment(undefined);
         onAssignmentChange?.();
       }
     } catch (error) {
-      toast.error(t('errors.deleteFailed'));
+      notify.error(t('errors.deleteFailed'));
       // Re-throw to let ConfirmDialog handle error state (keeps dialog open for retry)
       throw error;
     } finally {
@@ -984,7 +984,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
         setIsOperationPending(false);
       }
     }
-  }, [deletingAssignment, deleteAssignment, onAssignmentChange, t, successToast]);
+  }, [deletingAssignment, deleteAssignment, onAssignmentChange, t, notifySuccess]);
 
   /**
    * Closes the delete confirmation dialog.

@@ -15,8 +15,7 @@ import {
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
-import { useOfflineAwareToast, useUnsavedChanges } from '@/hooks';
+import { useOfflineAwareNotify, useUnsavedChanges } from '@/hooks';
 import { Trash2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -31,6 +30,7 @@ import { useTripContext } from '@/contexts/TripContext';
 
 import { deleteTrip, getTripById, updateTrip } from '@/lib/db';
 import posthog, { captureUsage } from '@/lib/posthog';
+import { notify } from '@/lib/notifications';
 import type { Trip, TripFormData, TripId } from '@/types';
 
 // ============================================================================
@@ -45,7 +45,7 @@ import type { Trip, TripFormData, TripId } from '@/types';
  * - Handles loading, error, and success states
  * - Uses TripForm component in edit mode
  * - Supports trip deletion with confirmation dialog
- * - Shows toast notifications on success/error
+ * - Confirms success as an OS notification, reports errors as a toast
  * - Prevents double-submission and memory leaks
  *
  * @returns The trip edit page element with form or loading/error state
@@ -61,7 +61,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   const { t } = useTranslation();
   const { tripId } = useParams<{ tripId: string }>();
   const { currentTrip, setCurrentTrip } = useTripContext();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   // ============================================================================
   // State
@@ -195,12 +195,12 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
       skipNextBlock();
 
       // Offline-aware, like every other entity.
-      successToast(t('trips.updated', 'Trip updated successfully'));
+      notifySuccess(t('trips.updated', 'Trip updated successfully'));
 
       // Navigate to the trip's calendar
       navigate(`/trips/${tripId}/calendar`);
     },
-    [tripId, navigate, skipNextBlock, successToast, t],
+    [tripId, navigate, skipNextBlock, notifySuccess, t],
   );
 
   /**
@@ -236,7 +236,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
         }
       }
 
-      successToast(t('trips.deleted', 'Trip deleted successfully'));
+      notifySuccess(t('trips.deleted', 'Trip deleted successfully'));
       posthog?.capture('trip_deleted');
 
       skipNextBlock();
@@ -246,9 +246,9 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
       // Log error for debugging
       console.error('Failed to delete trip:', error);
 
-      // Only show toast if component is still mounted
+      // Only report the failure if the component is still mounted
       if (isMountedRef.current) {
-        toast.error(
+        notify.error(
           t('errors.deleteFailed', 'Failed to delete. Please try again.'),
         );
       }
@@ -258,7 +258,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
     } finally {
       isDeletingRef.current = false;
     }
-  }, [currentTrip?.id, navigate, setCurrentTrip, skipNextBlock, successToast, t, tripId]);
+  }, [currentTrip?.id, navigate, setCurrentTrip, skipNextBlock, notifySuccess, t, tripId]);
 
   /**
    * Handles opening the delete confirmation dialog.

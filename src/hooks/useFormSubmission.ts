@@ -61,7 +61,7 @@ interface UseFormSubmissionReturn<T> {
  * const { isSubmitting, submitError, handleSubmit, clearError } = useFormSubmission<PersonFormData>(
  *   async (data) => {
  *     await createPerson(data);
- *     toast.success(t('persons.created'));
+ *     notify.success(t('persons.created'));
  *     navigate('/persons');
  *   },
  *   { errorKey: 'errors.personSaveFailed' }

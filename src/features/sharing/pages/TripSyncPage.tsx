@@ -20,7 +20,6 @@ import {
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 import {
   AlertTriangle,
   Bed,
@@ -45,7 +44,7 @@ import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { QRScanner } from '@/components/shared/QRScanner';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 
 import { getTripById } from '@/lib/db';
 import {
@@ -61,6 +60,7 @@ import type {
   MergeResult,
 } from '@/lib/sharing';
 import { cn } from '@/lib/utils';
+import { notify } from '@/lib/notifications';
 import type { Trip, TripId } from '@/types';
 
 import { TripSyncExportPanel } from '../components/TripSyncExportPanel';
@@ -238,7 +238,7 @@ interface MergeReviewProps {
 const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: MergeReviewProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   const [conflictResolutions, setConflictResolutions] = useState<Map<string, ConflictResolution>>(
     () => new Map(),
@@ -279,7 +279,7 @@ const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: 
       const totalApplied = result.roomsUpserted + result.personsUpserted +
         result.assignmentsUpserted + result.transportsUpserted + result.conflictsAccepted;
 
-      successToast(
+      notifySuccess(
         t('sharing.sync.mergeSuccess', 'Merged {{count}} changes successfully', {
           count: totalApplied,
         }),
@@ -288,12 +288,12 @@ const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: 
       navigate(`/trips/${tripId}/calendar`);
     } catch (error) {
       console.error('Failed to apply merge:', error);
-      toast.error(t('sharing.sync.mergeError', 'Failed to apply changes'));
+      notify.error(t('sharing.sync.mergeError', 'Failed to apply changes'));
     } finally {
       isSubmittingRef.current = false;
       setIsApplying(false);
     }
-  }, [mergeResult, allConflictsResolved, conflictResolutions, navigate, successToast, tripId, t]);
+  }, [mergeResult, allConflictsResolved, conflictResolutions, navigate, notifySuccess, tripId, t]);
 
   const { summary, autoApply, conflicts, warnings } = mergeResult;
   const hasChanges = summary.additions > 0 || summary.autoUpdates > 0 || summary.conflicts > 0;

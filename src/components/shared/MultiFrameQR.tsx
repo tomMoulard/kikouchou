@@ -12,8 +12,8 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { Check, ClipboardCopy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { statusVariants } from '@/components/ui/status.variants';
-import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { notify } from '@/lib/notifications';
 
 // ============================================================================
 // Type Definitions
@@ -55,9 +55,9 @@ export const MultiFrameQR = memo(function MultiFrameQR({
     try {
       await navigator.clipboard.writeText(rawPayload);
       setCopied(true);
-      // Deliberately a raw toast, not the offline-aware one: nothing was
+      // Deliberately a raw confirmation, not the offline-aware one: nothing was
       // written to the database, so "Saved on this device" would be a lie.
-      toast.success(t('sharing.sync.copiedToClipboard', 'Copied to clipboard'));
+      notify.success(t('sharing.sync.copiedToClipboard', 'Copied to clipboard'));
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Fallback for older browsers
@@ -71,10 +71,10 @@ export const MultiFrameQR = memo(function MultiFrameQR({
         document.execCommand('copy');
         document.body.removeChild(textarea);
         setCopied(true);
-        toast.success(t('sharing.sync.copiedToClipboard', 'Copied to clipboard'));
+        notify.success(t('sharing.sync.copiedToClipboard', 'Copied to clipboard'));
         setTimeout(() => setCopied(false), 2000);
       } catch {
-        toast.error(t('sharing.sync.copyFailed', 'Failed to copy'));
+        notify.error(t('sharing.sync.copyFailed', 'Failed to copy'));
       }
     }
   }, [rawPayload, t]);

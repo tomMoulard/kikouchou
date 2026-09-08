@@ -29,8 +29,7 @@ import {
 } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import { type Locale, format, parseISO } from 'date-fns';
 import {
   ArrowDownToLine,
@@ -77,6 +76,7 @@ import { cn } from '@/lib/utils';
 import { formatFullDate } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { getTransportModeIcon } from '@/lib/utils/transport-icons';
+import { notify } from '@/lib/notifications';
 import { TransportDialog } from '@/features/transports/components/TransportDialog';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
 import {
@@ -640,7 +640,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
 
   // Context hooks
-   { successToast } = useOfflineAwareToast(),
+   { notifySuccess } = useOfflineAwareNotify(),
 
    { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
    { persons, isLoading: isPersonsLoading } = usePersonContext(),
@@ -777,14 +777,14 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     try {
       await deleteTransport(transportToDelete);
       setTransportToDelete(null);
-      successToast(t('transports.deleteSuccess', 'Transport deleted successfully'));
+      notifySuccess(t('transports.deleteSuccess', 'Transport deleted successfully'));
     } catch (error) {
-      // Log for debugging, show user-friendly error via toast
+      // Log for debugging, show a user-friendly error as a toast
       console.error('Failed to delete transport:', error);
-      toast.error(t('errors.deleteFailed', 'Failed to delete'));
+      notify.error(t('errors.deleteFailed', 'Failed to delete'));
       throw error; // Re-throw to keep dialog open for retry
     }
-  }, [transportToDelete, deleteTransport, t, successToast]),
+  }, [transportToDelete, deleteTransport, t, notifySuccess]),
 
   /**
    * Closes delete confirmation dialog.

@@ -15,7 +15,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useFormSubmission, useOfflineAwareToast } from '@/hooks';
+import { useFormSubmission, useOfflineAwareNotify } from '@/hooks';
 import { parseISO } from 'date-fns';
 
 import { AlertTriangle, Loader2 } from 'lucide-react';
@@ -118,7 +118,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
   } = props;
 
   const { t } = useTranslation();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
   const { currentTrip } = useTripContext();
   const { rooms } = useRoomContext();
   const { persons } = usePersonContext();
@@ -313,7 +313,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     async (data) => {
       await createAssignment(data);
       if (isMountedRef.current) {
-        successToast(t('assignments.createSuccess', 'Assignment created successfully'));
+        notifySuccess(t('assignments.createSuccess', 'Assignment created successfully'));
         onOpenChange(false);
       }
     },

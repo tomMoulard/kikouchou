@@ -20,7 +20,6 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Calendar, MapPin, Palmtree, SearchX } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Button } from '@/components/ui/button';
@@ -36,6 +35,7 @@ import { getTripByShareId, setCurrentTrip } from '@/lib/db';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatDateRange } from '@/lib/utils/date-format';
+import { notify } from '@/lib/notifications';
 import type { ShareId, Trip } from '@/types';
 
 // ============================================================================
@@ -304,7 +304,7 @@ export const ShareImportPage = memo(function ShareImportPage(): ReactElement {
       console.error('Failed to start onboarding:', error);
 
       if (isMountedRef.current) {
-        toast.error(
+        notify.error(
           t('sharing.viewError', 'Failed to open the trip. Please try again.'),
         );
       }

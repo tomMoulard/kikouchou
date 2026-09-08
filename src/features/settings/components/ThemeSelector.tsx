@@ -53,7 +53,7 @@ const THEME_ICONS: Record<ThemePreference, LucideIcon> = {
  *
  * The choice is persisted by `next-themes` (see `App.tsx`) and takes effect
  * immediately, so — unlike the language selector next to it — there is no
- * confirmation toast: the whole screen changing colour is the confirmation.
+ * confirmation notification: the whole screen changing colour is the confirmation.
  *
  * @returns The theme preference card
  */

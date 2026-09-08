@@ -15,7 +15,6 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, X } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -29,6 +28,7 @@ import {
   useInstallPrompt,
 } from '@/hooks/useInstallPrompt';
 import { cn } from '@/lib/utils';
+import { notify } from '@/lib/notifications';
 
 // ============================================================================
 // Constants
@@ -221,7 +221,7 @@ export const InstallPrompt = memo(function InstallPrompt({
    *
    * `isInstalled` is true from the very first render whenever the app is
    * *opened* as an app — that is what `(display-mode: standalone)` means — so
-   * the success toast below cannot key off its value alone without
+   * the success confirmation below cannot key off its value alone without
    * congratulating the visitor on every single launch.
    */
    wasInstalledOnMountRef = useRef<boolean>(isInstalled);
@@ -265,13 +265,13 @@ export const InstallPrompt = memo(function InstallPrompt({
   }, [canInstall, isDismissed, installIntent]);
 
   /**
-   * Show success toast when app is installed.
+   * Confirm the install once the app is installed.
    */
   useEffect(() => {
     if (isInstalled && !wasInstalledOnMountRef.current && !isDismissed) {
-      // Deliberately a raw toast: installing the app is not a data write, so
+      // Deliberately a raw confirmation: installing the app is not a data write, so
       // the offline-aware "Saved on this device" wording does not apply.
-      toast.success(t('pwa.installSuccess', 'App installed successfully!'));
+      notify.success(t('pwa.installSuccess', 'App installed successfully!'));
       // Use timeout to avoid synchronous setState in effect
       const timer = setTimeout(() => {
         setIsDismissed(true);
@@ -298,10 +298,10 @@ export const InstallPrompt = memo(function InstallPrompt({
     // carries `via_prompt` for the ones this button produced. Capturing in
     // both places counted the same install twice.
 
-    // Success toast is handled in the effect when isInstalled becomes true
+    // The confirmation is handled in the effect when isInstalled becomes true
     // Show error feedback if installation failed and app is not installed
     if (!success && !isInstalled) {
-      toast.error(t('pwa.installFailed', 'Installation failed. Please try again.'));
+      notify.error(t('pwa.installFailed', 'Installation failed. Please try again.'));
     }
   }, [install, isInstalled, t]),
 

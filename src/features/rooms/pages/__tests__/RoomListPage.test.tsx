@@ -162,8 +162,8 @@ vi.mock('@/contexts/TransportContext', () => ({
 }));
 
 vi.mock('@/hooks', () => ({
-  useOfflineAwareToast: () => ({
-    successToast: mockSuccessToast,
+  useOfflineAwareNotify: () => ({
+    notifySuccess: mockSuccessToast,
     errorToast: vi.fn(),
   }),
   useToday: () => ({ today: new Date(2026, 6, 5) }),

@@ -19,7 +19,6 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Check, Palmtree, SearchX } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Button } from '@/components/ui/button';
@@ -38,6 +37,7 @@ import {
   getTripByShareId,
 } from '@/lib/db';
 import { cn } from '@/lib/utils';
+import { notify } from '@/lib/notifications';
 import type { Person, PersonId, ShareId, Trip, TripId } from '@/types';
 
 // ============================================================================
@@ -251,7 +251,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
       }
     } catch (error) {
       console.error('Failed to create person:', error);
-      if (isMountedRef.current) toast.error(t('errors.saveFailed', 'Failed to save'));
+      if (isMountedRef.current) notify.error(t('errors.saveFailed', 'Failed to save'));
     } finally {
       isSubmittingRef.current = false;
       if (isMountedRef.current) setIsAdding(false);
@@ -276,7 +276,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
         // Non-fatal: wizard can still proceed, but returning-guest detection
         // in Story 2.1 won't work for this session.
         console.warn('Failed to save guest identity to localStorage');
-        toast.error(t('sharing.identityStorageFailed', 'Could not save your identity. You may need to re-select on your next visit.'));
+        notify.error(t('sharing.identityStorageFailed', 'Could not save your identity. You may need to re-select on your next visit.'));
       }
 
       if (isMountedRef.current) {

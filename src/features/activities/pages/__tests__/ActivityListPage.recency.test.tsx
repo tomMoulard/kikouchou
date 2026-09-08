@@ -98,8 +98,8 @@ vi.mock('@/contexts/PersonContext', () => ({
 }));
 
 vi.mock('@/hooks', () => ({
-  useOfflineAwareToast: () => ({
-    successToast: vi.fn(),
+  useOfflineAwareNotify: () => ({
+    notifySuccess: vi.fn(),
     errorToast: vi.fn(),
   }),
 }));

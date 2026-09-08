@@ -126,7 +126,7 @@ export function getTripGuestPersonId(
  * @example
  * ```typescript
  * if (!writeGuestIdentity(trip.shareId, { personId, tripId: trip.id })) {
- *   toast.error(t('sharing.identityStorageFailed'));
+ *   notify.error(t('sharing.identityStorageFailed'));
  * }
  * ```
  */
