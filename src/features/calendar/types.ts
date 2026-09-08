@@ -262,4 +262,13 @@ export interface CalendarTimelineProps {
   readonly onAddGuests?: () => void;
   /** Same, for rooms. */
   readonly onAddRooms?: () => void;
+  /**
+   * Suppresses the timeline's own "nothing scheduled yet" state.
+   *
+   * For a caller that is already showing something better under the frame —
+   * `CalendarPage` draws the trip-setup checklist there, which says which part
+   * of the trip is missing rather than only that the calendar is empty. Two
+   * empty states stacked is the failure this exists to avoid.
+   */
+  readonly hideEmptyState?: boolean;
 }

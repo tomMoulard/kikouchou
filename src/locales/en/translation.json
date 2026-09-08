@@ -604,7 +604,39 @@
       "guestHeadcount_one": "Counts as {{count}} person",
       "guestHeadcount_other": "Counts as {{count}} people"
     },
-    "viewActivityDetails": "View activity {{title}} ({{category}}), {{participants}} participants"
+    "viewActivityDetails": "View activity {{title}} ({{category}}), {{participants}} participants",
+    "setup": {
+      "title": "Set this trip up",
+      "description": "The calendar fills in as you work through these steps.",
+      "progress": "{{done}} of {{total}} done",
+      "progressLabel": "Trip setup progress",
+      "stepDone": "done",
+      "guests": {
+        "title": "Add guests",
+        "countZero": "Nobody on the list yet",
+        "count_one": "{{count}} person on the list",
+        "count_other": "{{count}} people on the list"
+      },
+      "rooms": {
+        "title": "Add rooms",
+        "countZero": "No rooms yet",
+        "count_one": "{{count}} room",
+        "count_other": "{{count}} rooms"
+      },
+      "assignments": {
+        "title": "Put guests in rooms",
+        "action": "Assign rooms",
+        "countZero": "Nobody has a room yet",
+        "count": "{{placed}} of {{total}} with a room"
+      },
+      "arrivals": {
+        "title": "Add arrivals",
+        "action": "New arrival",
+        "countZero": "No arrivals yet",
+        "count_one": "{{count}} arrival",
+        "count_other": "{{count}} arrivals"
+      }
+    }
   },
   "sharing": {
     "title": "Share trip",

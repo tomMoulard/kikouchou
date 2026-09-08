@@ -122,6 +122,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
   );
 
   const showEmptyState =
+    props.hideEmptyState !== true &&
     props.assignments.length === 0 &&
     props.arrivals.length === 0 &&
     props.departures.length === 0 &&
@@ -202,7 +203,9 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
           its two buttons belong anyway.
 
           Same EmptyState, copy and icon as the month view's, so switching
-          views does not change how "nothing here yet" is presented. */}
+          views does not change how "nothing here yet" is presented. A caller
+          with something better to say under the frame passes
+          `hideEmptyState` and draws it itself. */}
       <EmptyState
         icon={CalendarIcon}
         title={t('calendar.noAssignmentsTitle', 'Nothing scheduled yet')}

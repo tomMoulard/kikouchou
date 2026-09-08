@@ -43,6 +43,7 @@ export {
   TransportIndicator,
   CalendarTimeline,
   CalendarTimelineRow,
+  TripSetupChecklist,
 } from './components';
 
 // ============================================================================
@@ -58,6 +59,14 @@ export {
   EMPTY_TRANSPORTS,
   MAX_VISIBLE_EVENT_SLOTS,
 } from './utils/calendar-utils';
+
+export {
+  buildTripSetupChecklist,
+  TRIP_SETUP_STEP_KEYS,
+  type TripSetupChecklist as TripSetupChecklistModel,
+  type TripSetupStep,
+  type TripSetupStepKey,
+} from './utils/setup-checklist';
 
 // ============================================================================
 // Routes

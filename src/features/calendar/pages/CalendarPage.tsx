@@ -82,6 +82,7 @@ import {
   EventDetailDialog,
   CalendarTimeline,
   CALENDAR_TIMELINE_LABEL_COLUMN_WIDTH_PX,
+  TripSetupChecklist,
   type ActivityEventData,
   type AssignmentEventData,
   type TransportEventData,
@@ -116,6 +117,7 @@ import {
   getContrastTextColor,
 } from '../utils/calendar-utils';
 import { buildDailyHeadcounts } from '../utils/headcount-utils';
+import { buildTripSetupChecklist } from '../utils/setup-checklist';
 
 // ============================================================================
 // Constants
@@ -213,6 +215,44 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   const handleAddRooms = useCallback(() => {
     navigate(`/trips/${tripIdFromUrl}/rooms?new=1`);
   }, [navigate, tripIdFromUrl]);
+
+  // Putting a guest in a room happens on the rooms page itself — the guest
+  // list and the drop targets are both there — so this one wants the page, not
+  // a create form.
+  const handleAssignRooms = useCallback(() => {
+    navigate(`/trips/${tripIdFromUrl}/rooms`);
+  }, [navigate, tripIdFromUrl]);
+
+  const handleAddArrivals = useCallback(() => {
+    navigate(`/trips/${tripIdFromUrl}/transports?new=1`);
+  }, [navigate, tripIdFromUrl]);
+
+  // How far the trip is from having anything to draw. A freshly saved trip
+  // arrives here with its guest rows and nothing else, so "nothing scheduled
+  // yet" was describing the trip rather than the month.
+  const setupChecklist = useMemo(
+    () => buildTripSetupChecklist({ persons, rooms, assignments, arrivals }),
+    [persons, rooms, assignments, arrivals],
+  );
+
+  /*
+    Whether to hand the user the checklist instead of an empty calendar.
+
+    "Nothing scheduled" is asked of the whole trip here, not of the month on
+    screen and not of the timeline's rows. The timeline draws a full-trip stay
+    bar for a guest who never gave dates of their own, so a brand new trip's
+    rows are *not* empty — which is exactly how it came to show guest bars over
+    no rooms and no travel, with nothing to click. Once something real is
+    scheduled the calendar can speak for itself, and an empty month is then a
+    month the user scrolled to rather than a trip missing its rooms.
+  */
+  const hasScheduledContent =
+    assignments.length > 0 ||
+    arrivals.length > 0 ||
+    departures.length > 0 ||
+    activities.length > 0;
+
+  const showSetupChecklist = !setupChecklist.isComplete && !hasScheduledContent;
 
   // The frame's own day-axis builder, so the width decision counts exactly the
   // columns the timeline will draw.
@@ -1203,13 +1243,26 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           onActivityClick={handleActivityClick}
           onAddGuests={handleAddGuests}
           onAddRooms={handleAddRooms}
+          hideEmptyState={showSetupChecklist}
         />
       )}
 
-      {/* Empty state when nothing is scheduled. Same component, same copy and
-          same icon as the timeline view's empty state, so switching views does
-          not change how "nothing here yet" is presented. */}
-      {currentView === 'card' && !hasVisibleCalendarItems && (
+      {/* The checklist sits under whichever view is on screen, so switching
+          views does not change what the trip is told to do next. The plain
+          empty state stays for the other empty case: a set-up trip whose month
+          happens to hold nothing. */}
+      {showSetupChecklist && (
+        <TripSetupChecklist
+          className="mt-6"
+          checklist={setupChecklist}
+          onAddGuests={handleAddGuests}
+          onAddRooms={handleAddRooms}
+          onAssignRooms={handleAssignRooms}
+          onAddArrivals={handleAddArrivals}
+        />
+      )}
+
+      {currentView === 'card' && !hasVisibleCalendarItems && !showSetupChecklist && (
         <EmptyState
           className="mt-6"
           icon={CalendarIcon}

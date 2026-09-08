@@ -604,7 +604,39 @@
       "guestHeadcount_one": "Compte pour {{count}} personne",
       "guestHeadcount_other": "Compte pour {{count}} personnes"
     },
-    "viewActivityDetails": "Voir l'activité {{title}} ({{category}}), {{participants}} participants"
+    "viewActivityDetails": "Voir l'activité {{title}} ({{category}}), {{participants}} participants",
+    "setup": {
+      "title": "Configurez ce séjour",
+      "description": "Le calendrier se remplit à mesure que vous suivez ces étapes.",
+      "progress": "{{done}} sur {{total}} terminées",
+      "progressLabel": "Progression de la configuration du séjour",
+      "stepDone": "terminé",
+      "guests": {
+        "title": "Ajouter des invités",
+        "countZero": "Personne dans la liste pour le moment",
+        "count_one": "{{count}} personne dans la liste",
+        "count_other": "{{count}} personnes dans la liste"
+      },
+      "rooms": {
+        "title": "Ajouter des chambres",
+        "countZero": "Aucune chambre pour le moment",
+        "count_one": "{{count}} chambre",
+        "count_other": "{{count}} chambres"
+      },
+      "assignments": {
+        "title": "Installer les invités dans les chambres",
+        "action": "Attribuer les chambres",
+        "countZero": "Personne n'a encore de chambre",
+        "count": "{{placed}} sur {{total}} avec une chambre"
+      },
+      "arrivals": {
+        "title": "Ajouter des arrivées",
+        "action": "Nouvelle arrivée",
+        "countZero": "Aucune arrivée pour le moment",
+        "count_one": "{{count}} arrivée",
+        "count_other": "{{count}} arrivées"
+      }
+    }
   },
   "sharing": {
     "title": "Partager le voyage",

@@ -309,14 +309,17 @@ describe('CalendarPage', () => {
     expect(screen.getByText('Test Trip')).toBeInTheDocument();
   });
 
-  it('renders calendar with no assignments shows empty message in card view', async () => {
+  /**
+   * Empties everything the calendar can draw, so `hasVisibleCalendarItems` is
+   * false and one of the two empty states has to render.
+   */
+  function clearScheduledItems(): void {
     mockUseAssignmentContext.mockReturnValue({
       assignments: [],
       isLoading: false,
       error: null,
       deleteAssignment: vi.fn(),
     });
-    // Also clear transports and activities so hasVisibleCalendarItems is false
     mockUseTransportContext.mockReturnValue({
       arrivals: [],
       departures: [],
@@ -330,9 +333,74 @@ describe('CalendarPage', () => {
       error: null,
       deleteActivity: vi.fn().mockResolvedValue(undefined),
     });
+  }
+
+  /*
+    Regression: this is the state a trip is saved in — a guest list and nothing
+    else — and the timeline view it lands on is the one that showed no next
+    step at all. The guest gets an inferred full-trip stay bar, so the
+    timeline's own "nothing scheduled" never fired and the screen was simply
+    blank below the guest rows.
+  */
+  it('offers the setup checklist on the view a new trip lands on', () => {
+    clearScheduledItems();
+
+    renderCalendarPage();
+
+    expect(screen.getByText('calendar.setup.title')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'calendar.setup.assignments.action' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'calendar.setup.arrivals.action' }),
+    ).toBeInTheDocument();
+    // One "nothing here" message, not two.
+    expect(screen.queryByText('calendar.noAssignmentsTitle')).not.toBeInTheDocument();
+  });
+
+  it('keeps the setup checklist in the month view', async () => {
+    clearScheduledItems();
+
     const { user } = renderCalendarPage();
     // Switch to month/card view
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
+    expect(screen.getByText('calendar.setup.title')).toBeInTheDocument();
+    expect(screen.queryByText('calendar.noAssignmentsTitle')).not.toBeInTheDocument();
+  });
+
+  it('keeps the plain empty state on an empty month of a trip that is set up', async () => {
+    // Set up, but everything it holds falls outside the month on screen — so
+    // this is a month the user navigated to, not a trip missing its rooms.
+    mockUseAssignmentContext.mockReturnValue({
+      assignments: [
+        {
+          ...mockAssignment,
+          startDate: '2027-01-02' as RoomAssignment['startDate'],
+          endDate: '2027-01-08' as RoomAssignment['endDate'],
+        },
+      ],
+      isLoading: false,
+      error: null,
+      deleteAssignment: vi.fn(),
+    });
+    mockUseTransportContext.mockReturnValue({
+      arrivals: [{ ...mockArrival, datetime: '2027-01-02T14:00:00' as Transport['datetime'] }],
+      departures: [],
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn().mockResolvedValue(undefined),
+    });
+    mockUseActivityContext.mockReturnValue({
+      activities: [],
+      isLoading: false,
+      error: null,
+      deleteActivity: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const { user } = renderCalendarPage();
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
     expect(screen.getByText('calendar.noAssignments')).toBeInTheDocument();
     // The same EmptyState the timeline view uses, so switching views does not
     // change how "nothing here yet" is presented.
@@ -340,6 +408,7 @@ describe('CalendarPage', () => {
     const status = screen.getByRole('status');
     expect(status).toHaveAttribute('aria-live', 'polite');
     expect(status).toHaveTextContent('calendar.noAssignmentsTitle');
+    expect(screen.queryByText('calendar.setup.title')).not.toBeInTheDocument();
   });
 
   it('syncs current trip from URL when context does not match', () => {
