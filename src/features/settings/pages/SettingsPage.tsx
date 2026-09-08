@@ -9,8 +9,7 @@ import { type ReactElement, memo, useCallback, useEffect, useRef, useState } fro
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Globe, Info, Luggage, Trash2, UserRound } from 'lucide-react';
-import { toast } from 'sonner';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -41,6 +40,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db';
 import { deleteTrip, updateTrip } from '@/lib/db';
 import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, isLanguageSupported } from '@/lib/i18n';
+import { notify } from '@/lib/notifications';
 import { formatAppVersion } from '@/lib/utils/app-version';
 import type { TripFormData } from '@/types';
 
@@ -78,10 +78,10 @@ const LanguageSelector = memo(function LanguageSelector(): ReactElement {
     // doing nothing.
     if (isLanguageSupported(value)) {
       void changeLanguage(value);
-      // Deliberately a raw toast: the language lives in localStorage and never
+      // Deliberately a raw confirmation: the language lives in localStorage and never
       // syncs, so the offline-aware "Saved on this device" wording adds
       // nothing. That helper is for writes to shared trip data.
-      toast.success(t('settings.languageChanged', 'Language changed'));
+      notify.success(t('settings.languageChanged', 'Language changed'));
     }
   }, [t]);
 
@@ -193,7 +193,7 @@ const AboutSection = memo(function AboutSection(): ReactElement {
  */
 const DataSection = memo(function DataSection(): ReactElement {
   const { t } = useTranslation(),
-   { successToast: dataSuccessToast } = useOfflineAwareToast(),
+   { notifySuccess: dataSuccessToast } = useOfflineAwareNotify(),
    [showClearDialog, setShowClearDialog] = useState(false),
    [isClearing, setIsClearing] = useState(false),
 
@@ -212,7 +212,7 @@ const DataSection = memo(function DataSection(): ReactElement {
       window.location.href = import.meta.env.BASE_URL + 'trips';
     } catch (error) {
       console.error('Failed to clear data:', error);
-      toast.error(t('settings.clearDataFailed', 'Failed to clear data. Please try again.'));
+      notify.error(t('settings.clearDataFailed', 'Failed to clear data. Please try again.'));
     } finally {
       setIsClearing(false);
     }
@@ -289,7 +289,7 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
   const navigate = useNavigate();
   const { currentTrip, setCurrentTrip, trips, isLoading, error, checkConnection } =
     useTripContext();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -315,9 +315,9 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
       if (!currentTrip) return;
       await updateTrip(currentTrip.id, data);
       setIsDirty(false);
-      successToast(t('trips.updated', 'Trip updated successfully'));
+      notifySuccess(t('trips.updated', 'Trip updated successfully'));
     },
-    [currentTrip, successToast, t],
+    [currentTrip, notifySuccess, t],
   );
 
   const handleCancel = useCallback(() => {
@@ -337,17 +337,17 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
       } catch (clearErr) {
         console.error('Failed to clear current trip after delete:', clearErr);
       }
-      successToast(t('trips.deleted', 'Trip deleted successfully'));
+      notifySuccess(t('trips.deleted', 'Trip deleted successfully'));
       navigate('/trips', { replace: true });
     } catch (deleteError) {
       console.error('Failed to delete trip:', deleteError);
       if (isMountedRef.current) {
-        toast.error(t('errors.deleteFailed', 'Failed to delete. Please try again.'));
+        notify.error(t('errors.deleteFailed', 'Failed to delete. Please try again.'));
       }
     } finally {
       isDeletingRef.current = false;
     }
-  }, [currentTrip, navigate, setCurrentTrip, successToast, t]);
+  }, [currentTrip, navigate, setCurrentTrip, notifySuccess, t]);
 
   const handleOpenDeleteDialog = useCallback(() => {
     setIsDeleteDialogOpen(true);

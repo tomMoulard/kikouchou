@@ -124,16 +124,16 @@ vi.mock('@/contexts/PersonContext', () => ({
   usePersonContext: vi.fn(),
 }));
 
-const mockToastSuccess = vi.fn();
-const mockToastError = vi.fn();
+const mockNotifySuccess = vi.fn();
+const mockNotifyError = vi.fn();
 
-// The card deliberately uses the raw sonner toast rather than the offline-aware
-// one — the identity never leaves this device — so the raw one is what is
-// observed here.
-vi.mock('sonner', () => ({
-  toast: {
-    success: (...args: unknown[]) => mockToastSuccess(...args),
-    error: (...args: unknown[]) => mockToastError(...args),
+// The card deliberately uses the raw notification rather than the
+// offline-aware one — the identity never leaves this device — so the raw one
+// is what is observed here.
+vi.mock('@/lib/notifications', () => ({
+  notify: {
+    success: (...args: unknown[]) => mockNotifySuccess(...args),
+    error: (...args: unknown[]) => mockNotifyError(...args),
   },
 }));
 
@@ -224,7 +224,7 @@ describe('GuestIdentitySelector', () => {
       personId: paul.id,
       tripId: mockTrip.id,
     });
-    expect(mockToastSuccess).toHaveBeenCalledWith('settings.guestIdentityChanged');
+    expect(mockNotifySuccess).toHaveBeenCalledWith('settings.guestIdentityChanged');
     expect(screen.getByText('settings.guestIdentityCurrent')).toBeInTheDocument();
   });
 
@@ -239,7 +239,7 @@ describe('GuestIdentitySelector', () => {
     // parses, so every other reader would go on believing this browser is
     // somebody.
     expect(entries.has(SHARE_KEY)).toBe(false);
-    expect(mockToastSuccess).toHaveBeenCalledWith('settings.guestIdentityCleared');
+    expect(mockNotifySuccess).toHaveBeenCalledWith('settings.guestIdentityCleared');
     expect(screen.queryByText('settings.guestIdentityCurrent')).not.toBeInTheDocument();
   });
 
@@ -250,8 +250,8 @@ describe('GuestIdentitySelector', () => {
     await choose('Paul');
 
     expect(entries.has(SHARE_KEY)).toBe(false);
-    expect(mockToastError).toHaveBeenCalledWith('sharing.identityStorageFailed');
-    expect(mockToastSuccess).not.toHaveBeenCalled();
+    expect(mockNotifyError).toHaveBeenCalledWith('sharing.identityStorageFailed');
+    expect(mockNotifySuccess).not.toHaveBeenCalled();
     // The picker must not claim a choice that was never persisted.
     expect(screen.queryByText('settings.guestIdentityCurrent')).not.toBeInTheDocument();
   });

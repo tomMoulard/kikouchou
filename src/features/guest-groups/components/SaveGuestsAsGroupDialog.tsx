@@ -31,7 +31,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
 import { captureUsage } from '@/lib/posthog';
 import { MAX_GUEST_GROUP_MEMBERS, getPersonHeadcount } from '@/types';
@@ -80,7 +80,7 @@ const SaveGuestsAsGroupDialog = memo(function SaveGuestsAsGroupDialog({
 }: SaveGuestsAsGroupDialogProps) {
   const { t } = useTranslation();
   const { createGroupFromPersons } = useGuestGroups();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   const [name, setName] = useState(defaultName ?? '');
   const [selectedIds, setSelectedIds] = useState<readonly PersonId[]>([]);
@@ -160,7 +160,7 @@ const SaveGuestsAsGroupDialog = memo(function SaveGuestsAsGroupDialog({
     setIsSaving(true);
     try {
       await createGroupFromPersons(name.trim(), selected);
-      successToast(t('guestGroups.createSuccess', 'Group created'));
+      notifySuccess(t('guestGroups.createSuccess', 'Group created'));
       captureUsage('guest_group_saved', {
         operation: 'created',
         member_count: selected.length,
@@ -173,7 +173,7 @@ const SaveGuestsAsGroupDialog = memo(function SaveGuestsAsGroupDialog({
     } finally {
       setIsSaving(false);
     }
-  }, [createGroupFromPersons, isSaving, name, onOpenChange, selected, successToast, t]);
+  }, [createGroupFromPersons, isSaving, name, onOpenChange, selected, notifySuccess, t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Trip Create Page for creating new vacation trips.
- * Provides a form interface to create trips with navigation and toast feedback.
+ * Provides a form interface to create trips, with navigation and user feedback.
  *
  * @module features/trips/pages/TripCreatePage
  */
@@ -8,9 +8,8 @@
 import { type ReactElement, memo, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 import { UsersRound } from 'lucide-react';
-import { useOfflineAwareToast, useUnsavedChanges } from '@/hooks';
+import { useOfflineAwareNotify, useUnsavedChanges } from '@/hooks';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
@@ -35,6 +34,7 @@ import {
   createPersonWithAutoColor,
 } from '@/lib/db';
 import { captureUsage } from '@/lib/posthog';
+import { notify } from '@/lib/notifications';
 import { writeGuestIdentity } from '@/lib/sharing/guest-identity';
 import type { PersonId, TripFormData, TripId } from '@/types';
 
@@ -47,7 +47,7 @@ import type { PersonId, TripFormData, TripId } from '@/types';
  *
  * Features:
  * - Uses TripForm component for form UI and validation
- * - Shows toast notifications on success/error
+ * - Confirms success as an OS notification, reports errors as a toast
  * - Navigates to trip calendar on successful creation
  * - Prevents double-submission during async operations
  * - Handles unmount during async operations to prevent memory leaks
@@ -63,7 +63,7 @@ import type { PersonId, TripFormData, TripId } from '@/types';
 export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
   const { user } = useAuth();
 
   /**
@@ -175,7 +175,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
         } catch (error) {
           console.error('Failed to clone rooms from import source:', error);
           // Trip is created — show warning but don't block navigation
-          toast.error(t('trips.importRoomsFailed', 'Trip created but room import failed'));
+          notify.error(t('trips.importRoomsFailed', 'Trip created but room import failed'));
         }
       }
 
@@ -224,7 +224,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
       // The trip exists either way, so a failed guest is a warning rather than
       // a rolled-back creation — the same call the room import above makes.
       if (addedGuestCount < guests.length) {
-        toast.error(t('trips.guestsCreateFailed', 'Trip created but some guests could not be added'));
+        notify.error(t('trips.guestsCreateFailed', 'Trip created but some guests could not be added'));
       }
 
       /*
@@ -249,7 +249,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
           personId: selfPersonId,
           tripId: newTrip.id,
         })) {
-          toast.error(
+          notify.error(
             t(
               'sharing.identityStorageFailed',
               'Could not save your identity. You may need to re-select on your next visit.',
@@ -274,17 +274,17 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
       skipNextBlock();
 
       // Offline-aware, like every other entity: a trip created on a train is
-      // saved on this device and not yet anywhere else, and the toast says so.
+      // saved on this device and not yet anywhere else, and the confirmation says so.
       if (didImportRooms) {
-        successToast(t('trips.createdWithImport', 'Trip created with rooms imported'));
+        notifySuccess(t('trips.createdWithImport', 'Trip created with rooms imported'));
       } else if (!importSourceRef.current) {
-        successToast(t('trips.created', 'Trip created successfully'));
+        notifySuccess(t('trips.created', 'Trip created successfully'));
       }
 
       // Navigate to the new trip's calendar
       navigate(`/trips/${newTrip.id}/calendar`);
     },
-    [navigate, skipNextBlock, successToast, t],
+    [navigate, skipNextBlock, notifySuccess, t],
   );
 
   // ============================================================================

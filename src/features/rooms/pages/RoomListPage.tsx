@@ -29,8 +29,7 @@ import {
 } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import { addDays, parseISO } from 'date-fns';
 import { DoorOpen, Plus, Sparkles } from 'lucide-react';
 import {
@@ -83,6 +82,7 @@ import { createRoomDragAnnouncements } from '@/features/rooms/utils/dnd-announce
 import { calculateUnassignedDates } from '@/features/rooms/utils/unassigned-guests';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
 import { buildDayColumns } from '@/lib/utils/trip-days';
+import { notify } from '@/lib/notifications';
 import { getPersonHeadcount } from '@/types';
 import type {
   ISODateString,
@@ -373,7 +373,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
    [searchParams, setSearchParams] = useSearchParams(),
 
   // Context hooks
-   { successToast } = useOfflineAwareToast(),
+   { notifySuccess } = useOfflineAwareNotify(),
 
    { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
    {
@@ -659,7 +659,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       );
 
       if (plans.length === 0) {
-        toast.error(
+        notify.error(
           t(
             'rooms.autoAssignNoSolution',
             'No available room slot found for these guests.',
@@ -679,7 +679,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         createdCount += 1;
       }
 
-      successToast(
+      notifySuccess(
         t('rooms.autoAssignSuccess', {
           count: createdCount,
           defaultValue: '{{count}} room allocation(s) optimized automatically',
@@ -687,7 +687,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       );
 
       if (unplacedSegments > 0) {
-        toast.error(
+        notify.error(
           t('rooms.autoAssignPartial', {
             count: unplacedSegments,
             defaultValue:
@@ -697,7 +697,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       }
     } catch (error) {
       console.error('Failed to optimize room assignments:', error);
-      toast.error(
+      notify.error(
         t(
           'rooms.autoAssignFailed',
           'Could not optimize room assignments.',
@@ -712,7 +712,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     headcountOf,
     isOptimizingAssignments,
     rooms,
-    successToast,
+    notifySuccess,
     t,
     unassignedGuests,
   ]),
@@ -748,14 +748,14 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     async (room: Room) => {
       try {
         await deleteRoom(room.id);
-        successToast(t('rooms.deleteSuccess', 'Room deleted successfully'));
+        notifySuccess(t('rooms.deleteSuccess', 'Room deleted successfully'));
       } catch (error) {
         console.error('Failed to delete room:', error);
-        toast.error(t('errors.deleteFailed', 'Failed to delete room'));
+        notify.error(t('errors.deleteFailed', 'Failed to delete room'));
         throw error; // Re-throw to keep ConfirmDialog open for retry
       }
     },
-    [deleteRoom, t, successToast],
+    [deleteRoom, t, notifySuccess],
   ),
 
   /**
@@ -807,14 +807,14 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             startDate: guest.startDate as ISODateString,
             endDate: guest.endDate as ISODateString,
           });
-          successToast(t('assignments.createSuccess'));
+          notifySuccess(t('assignments.createSuccess'));
         } catch (error) {
           console.error('Failed to create room assignment:', error);
-          toast.error(t('errors.saveFailed'));
+          notify.error(t('errors.saveFailed'));
         }
       })();
     },
-    [createAssignment, successToast, t],
+    [createAssignment, notifySuccess, t],
   ),
 
   /**
@@ -829,14 +829,14 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
       void (async () => {
         try {
           await updateAssignment(assignment.id, { roomId });
-          successToast(t('assignments.updateSuccess'));
+          notifySuccess(t('assignments.updateSuccess'));
         } catch (error) {
           console.error('Failed to move assignment:', error);
-          toast.error(t('errors.saveFailed'));
+          notify.error(t('errors.saveFailed'));
         }
       })();
     },
-    [successToast, t, updateAssignment],
+    [notifySuccess, t, updateAssignment],
   ),
 
   /**
@@ -921,10 +921,10 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             updateAssignment(a.id, { roomId: b.roomId }),
             updateAssignment(b.id, { roomId: a.roomId }),
           ]);
-          successToast(t('rooms.swapSuccess', 'Rooms swapped'));
+          notifySuccess(t('rooms.swapSuccess', 'Rooms swapped'));
         } catch (error) {
           console.error('Failed to swap assignments:', error);
-          toast.error(t('errors.saveFailed'));
+          notify.error(t('errors.saveFailed'));
         }
       })();
     }
@@ -933,7 +933,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     assignments,
     currentView,
     moveAssignmentToRoom,
-    successToast,
+    notifySuccess,
     t,
     updateAssignment,
   ]),
@@ -1006,7 +1006,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         headcountOf,
       );
       if (peak >= room.capacity) {
-        toast.error(t('rooms.roomJustFilled'));
+        notify.error(t('rooms.roomJustFilled'));
         return;
       }
     }
@@ -1056,15 +1056,15 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         return;
       }
 
-      successToast(t('rooms.allGuestsAssigned', 'All guests have rooms assigned'));
+      notifySuccess(t('rooms.allGuestsAssigned', 'All guests have rooms assigned'));
       localStorage.setItem(storageKey, '1');
       hasNotifiedAllAssignedRef.current = true;
     } catch {
       // If storage is unavailable (private mode), still avoid spamming within the session.
-      successToast(t('rooms.allGuestsAssigned', 'All guests have rooms assigned'));
+      notifySuccess(t('rooms.allGuestsAssigned', 'All guests have rooms assigned'));
       hasNotifiedAllAssignedRef.current = true;
     }
-  }, [currentTrip?.id, persons.length, successToast, t, tripIdFromUrl, unassignedGuests.length]);
+  }, [currentTrip?.id, persons.length, notifySuccess, t, tripIdFromUrl, unassignedGuests.length]);
 
   // ============================================================================
   // Render: Loading State

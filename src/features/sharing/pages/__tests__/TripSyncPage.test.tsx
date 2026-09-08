@@ -48,8 +48,10 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+// The page talks to the notification facade, not to sonner: a success
+// confirmation is an OS notification now, an error is still a toast.
+vi.mock('@/lib/notifications', () => ({
+  notify: { success: vi.fn(), error: vi.fn() },
 }));
 
 const mockGetTripById = vi.fn().mockResolvedValue(mockTrip);
@@ -371,7 +373,7 @@ describe('TripSyncPage', () => {
 
   it('applies merge and navigates on success', async () => {
     const { decodeChangeset, computeMerge, applyMerge } = await import('@/lib/sharing');
-    const { toast } = await import('sonner');
+    const { notify } = await import('@/lib/notifications');
 
     vi.mocked(decodeChangeset).mockReturnValue({
       tripId: 'trip-1',
@@ -417,13 +419,13 @@ describe('TripSyncPage', () => {
     await waitFor(() => {
       expect(vi.mocked(applyMerge)).toHaveBeenCalled();
     });
-    expect(vi.mocked(toast.success)).toHaveBeenCalled();
+    expect(vi.mocked(notify.success)).toHaveBeenCalled();
     expect(mockNavigate).toHaveBeenCalledWith('/trips/trip-1/calendar');
   });
 
   it('shows apply error toast on merge failure', async () => {
     const { decodeChangeset, computeMerge, applyMerge } = await import('@/lib/sharing');
-    const { toast } = await import('sonner');
+    const { notify } = await import('@/lib/notifications');
 
     vi.mocked(decodeChangeset).mockReturnValue({
       tripId: 'trip-1',
@@ -460,7 +462,7 @@ describe('TripSyncPage', () => {
     await user.click(screen.getByText('sharing.sync.applyMerge'));
 
     await waitFor(() => {
-      expect(vi.mocked(toast.error)).toHaveBeenCalled();
+      expect(vi.mocked(notify.error)).toHaveBeenCalled();
     });
   });
 

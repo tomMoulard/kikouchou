@@ -13,7 +13,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 
 import {
   Dialog,
@@ -54,7 +54,7 @@ export interface RoomDialogProps {
  * Features:
  * - Dual mode: Create (roomId undefined) and Edit (roomId provided)
  * - Integrates RoomForm for form handling
- * - Shows success/error toasts via sonner
+ * - Confirms success as an OS notification, reports errors as a toast
  * - Handles async operations with loading states
  * - Prevents state updates on unmounted component
  * - Closes automatically on successful submission
@@ -83,7 +83,7 @@ const RoomDialog = memo(function RoomDialog({
 }: RoomDialogProps) {
   const { t } = useTranslation();
   const { rooms, createRoom, updateRoom } = useRoomContext();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   // Dirty-state tracking for close guard
   const [isDirty, setIsDirty] = useState(false);
@@ -142,16 +142,16 @@ const RoomDialog = memo(function RoomDialog({
     async (data: RoomFormData) => {
       if (isEditMode && roomId) {
         await updateRoom(roomId, data);
-        successToast(t('rooms.updateSuccess', 'Room updated successfully'));
+        notifySuccess(t('rooms.updateSuccess', 'Room updated successfully'));
         captureUsage('room_saved', { operation: 'updated', capacity: data.capacity });
       } else {
         await createRoom(data);
-        successToast(t('rooms.createSuccess', 'Room created successfully'));
+        notifySuccess(t('rooms.createSuccess', 'Room created successfully'));
         captureUsage('room_saved', { operation: 'created', capacity: data.capacity });
       }
       onOpenChange(false);
     },
-    [isEditMode, roomId, updateRoom, createRoom, t, onOpenChange, successToast],
+    [isEditMode, roomId, updateRoom, createRoom, t, onOpenChange, notifySuccess],
   );
 
   /**

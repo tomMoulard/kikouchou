@@ -18,7 +18,6 @@ import { type ReactElement, memo, useCallback, useEffect, useState } from 'react
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { UserCheck } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -45,6 +44,8 @@ import {
   writeGuestIdentity,
 } from '@/lib/sharing/guest-identity';
 import type { PersonId } from '@/types';
+import { notify } from '@/lib/notifications';
+
 
 // ============================================================================
 // Constants
@@ -101,7 +102,7 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
 
       if (value === NO_IDENTITY_VALUE) {
         if (!clearGuestIdentity(currentTrip.shareId)) {
-          toast.error(
+          notify.error(
             t(
               'sharing.identityStorageFailed',
               'Could not save your identity. You may need to re-select on your next visit.',
@@ -110,10 +111,10 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
           return;
         }
         setPersonId(undefined);
-        // Deliberately a raw toast rather than the offline-aware one: this
+        // Deliberately a raw confirmation rather than the offline-aware one: this
         // lives in localStorage and never syncs, so "Saved on this device" is
         // the only thing it could ever mean. Same call as the language card's.
-        toast.success(t('settings.guestIdentityCleared', 'You are nobody in particular now'));
+        notify.success(t('settings.guestIdentityCleared', 'You are nobody in particular now'));
         return;
       }
 
@@ -128,7 +129,7 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
           tripId: currentTrip.id,
         })
       ) {
-        toast.error(
+        notify.error(
           t(
             'sharing.identityStorageFailed',
             'Could not save your identity. You may need to re-select on your next visit.',
@@ -138,7 +139,7 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
       }
 
       setPersonId(person.id);
-      toast.success(
+      notify.success(
         t('settings.guestIdentityChanged', 'You are {{name}} on this trip', {
           name: person.name,
         }),

@@ -27,11 +27,10 @@ import {
 } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 import type { Locale } from 'date-fns';
 import { CalendarDays, ChevronDown, ChevronRight, History, Plus } from 'lucide-react';
 
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import { useToday } from '@/hooks/useToday';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -47,6 +46,7 @@ import { toLocalISODateString } from '@/lib/db/utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { cn } from '@/lib/utils';
+import { notify } from '@/lib/notifications';
 import type { Activity, ActivityId, ISODateString, Person, PersonId } from '@/types';
 
 import { ActivityCard } from '../components/ActivityCard';
@@ -147,7 +147,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
   const navigate = useNavigate();
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
   const { today } = useToday();
 
   const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
@@ -280,13 +280,13 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
     try {
       await deleteActivity(activityToDelete);
       setActivityToDelete(null);
-      successToast(t('activities.deleteSuccess'));
+      notifySuccess(t('activities.deleteSuccess'));
     } catch (error) {
       console.error('Failed to delete activity:', error);
-      toast.error(t('errors.deleteFailed', 'Failed to delete'));
+      notify.error(t('errors.deleteFailed', 'Failed to delete'));
       throw error; // Keep the dialog open so the user can retry
     }
-  }, [activityToDelete, deleteActivity, t, successToast]);
+  }, [activityToDelete, deleteActivity, t, notifySuccess]);
 
   const handleCancelDelete = useCallback((open: boolean) => {
     if (!open) {
@@ -302,14 +302,14 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
 
       void setParticipation(activityId, currentPersonId, joining)
         .then(() => {
-          successToast(joining ? t('activities.joined') : t('activities.left'));
+          notifySuccess(joining ? t('activities.joined') : t('activities.left'));
         })
         .catch((error: unknown) => {
           console.error('Failed to update participation:', error);
-          toast.error(t('activities.errors.participationFailed'));
+          notify.error(t('activities.errors.participationFailed'));
         });
     },
-    [currentPersonId, setParticipation, successToast, t],
+    [currentPersonId, setParticipation, notifySuccess, t],
   );
 
   const handleDialogOpenChange = useCallback((open: boolean) => {

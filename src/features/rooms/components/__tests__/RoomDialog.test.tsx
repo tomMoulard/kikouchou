@@ -25,8 +25,8 @@ vi.mock('@/contexts/RoomContext', () => ({
 }));
 
 vi.mock('@/hooks', () => ({
-  useOfflineAwareToast: () => ({
-    successToast: mockSuccessToast,
+  useOfflineAwareNotify: () => ({
+    notifySuccess: mockSuccessToast,
     errorToast: vi.fn(),
   }),
 }));

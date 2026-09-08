@@ -27,7 +27,6 @@ import {
 } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 import { type Locale, format, parseISO } from 'date-fns';
 import {
   ArrowDownRight,
@@ -45,7 +44,7 @@ import { useRoomContext } from '@/contexts/RoomContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
@@ -69,6 +68,7 @@ import {
   type GuestGroupSelection,
 } from '@/features/guest-groups';
 import { captureUsage } from '@/lib/posthog';
+import { notify } from '@/lib/notifications';
 import { getPersonHeadcount } from '@/types';
 import type { Person, PersonId, TransportMode } from '@/types';
 
@@ -419,7 +419,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
    navigate = useNavigate(),
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
    [searchParams, setSearchParams] = useSearchParams(),
-   { successToast } = useOfflineAwareToast(),
+   { notifySuccess } = useOfflineAwareNotify(),
 
   // Context hooks
    { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
@@ -600,14 +600,14 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
     }
     try {
       await deletePerson(deletingPersonId);
-      successToast(t('persons.deleteSuccess', 'Guest removed successfully'));
+      notifySuccess(t('persons.deleteSuccess', 'Guest removed successfully'));
       setDeletingPersonId(undefined);
     } catch (error) {
       console.error('Failed to delete person:', error);
-      toast.error(t('errors.deleteFailed', 'Failed to delete'));
+      notify.error(t('errors.deleteFailed', 'Failed to delete'));
       throw error;
     }
-  }, [deletePerson, deletingPersonId, successToast, t]),
+  }, [deletePerson, deletingPersonId, notifySuccess, t]),
 
   // ============================================================================
   // Guest Groups
@@ -647,7 +647,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
           skippedCount += result.skippedMemberIds.length;
         }
 
-        successToast(
+        notifySuccess(
           t('guestGroups.importSuccess', '{{count}} guests added', {
             count: addedCount,
           }),
@@ -656,7 +656,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
         // Somebody edited a group between opening the picker and confirming it.
         // Nothing is broken, but fewer people arrived than were ticked.
         if (skippedCount > 0) {
-          toast.warning(
+          notify.warning(
             t('guestGroups.importSkipped', '{{count}} people were no longer in the group', {
               count: skippedCount,
             }),
@@ -671,11 +671,11 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
         });
       } catch (error) {
         console.error('Failed to import guest groups:', error);
-        toast.error(t('guestGroups.importFailed', "Could not add the group's guests"));
+        notify.error(t('guestGroups.importFailed', "Could not add the group's guests"));
         throw error;
       }
     },
-    [currentTrip, importMembers, successToast, t],
+    [currentTrip, importMembers, notifySuccess, t],
   ),
 
   // ============================================================================

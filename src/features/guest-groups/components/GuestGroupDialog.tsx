@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import { GuestGroupForm } from '@/features/guest-groups/components/GuestGroupForm';
 import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
 import { captureUsage } from '@/lib/posthog';
@@ -57,7 +57,7 @@ const GuestGroupDialog = memo(function GuestGroupDialog({
 }: GuestGroupDialogProps) {
   const { t } = useTranslation();
   const { createGroup, updateGroup } = useGuestGroups();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   const [isDirty, setIsDirty] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -77,10 +77,10 @@ const GuestGroupDialog = memo(function GuestGroupDialog({
     async (data: GuestGroupFormData) => {
       if (isEditMode) {
         await updateGroup(group.id, data);
-        successToast(t('guestGroups.updateSuccess', 'Group updated'));
+        notifySuccess(t('guestGroups.updateSuccess', 'Group updated'));
       } else {
         await createGroup(data);
-        successToast(t('guestGroups.createSuccess', 'Group created'));
+        notifySuccess(t('guestGroups.createSuccess', 'Group created'));
       }
 
       // Counts only: who is in somebody's family is not analytics data.
@@ -91,7 +91,7 @@ const GuestGroupDialog = memo(function GuestGroupDialog({
 
       onOpenChange(false);
     },
-    [createGroup, group, isEditMode, onOpenChange, successToast, t, updateGroup],
+    [createGroup, group, isEditMode, onOpenChange, notifySuccess, t, updateGroup],
   );
 
   const handleCancel = useCallback(() => {

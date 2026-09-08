@@ -115,7 +115,7 @@ vi.mock('@/contexts/ActivityContext', () => ({
 }));
 
 vi.mock('@/hooks', () => ({
-  useOfflineAwareToast: () => ({ successToast: vi.fn() }),
+  useOfflineAwareNotify: () => ({ notifySuccess: vi.fn() }),
 }));
 
 // Local midnight, exactly what `useToday` returns in production (`startOfDay`).

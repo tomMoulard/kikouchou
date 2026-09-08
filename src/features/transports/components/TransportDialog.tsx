@@ -13,7 +13,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 
 import {
   Dialog,
@@ -60,7 +60,7 @@ export interface TransportDialogProps {
  * - Integrates TransportForm for form handling
  * - Passes persons array from PersonContext to TransportForm
  * - Supports optional defaultType prop for pre-selecting transport type in create mode
- * - Shows success/error toasts via sonner
+ * - Confirms success as an OS notification, reports errors as a toast
  * - Handles async operations with loading states
  * - Prevents state updates on unmounted component
  * - Closes automatically on successful submission
@@ -92,7 +92,7 @@ const TransportDialog = memo(function TransportDialog({
   const { transports, createTransport, updateTransport } = useTransportContext();
   const { persons } = usePersonContext();
   const { currentTrip } = useTripContext();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   // Dirty-state tracking for close guard
   const [isDirty, setIsDirty] = useState(false);
@@ -153,7 +153,7 @@ const TransportDialog = memo(function TransportDialog({
       if (transportId) {
         // Edit mode - update existing transport
         await updateTransport(transportId, data);
-        successToast(t('transports.updateSuccess', 'Transport updated successfully'));
+        notifySuccess(t('transports.updateSuccess', 'Transport updated successfully'));
         captureUsage('transport_saved', {
           operation: 'updated',
           transport_type: data.type,
@@ -163,7 +163,7 @@ const TransportDialog = memo(function TransportDialog({
       } else {
         // Create mode - create new transport
         await createTransport(data);
-        successToast(t('transports.createSuccess', 'Transport created successfully'));
+        notifySuccess(t('transports.createSuccess', 'Transport created successfully'));
         captureUsage('transport_saved', {
           operation: 'created',
           transport_type: data.type,
@@ -174,7 +174,7 @@ const TransportDialog = memo(function TransportDialog({
       // Always close dialog on success, regardless of mount state
       onOpenChange(false);
     },
-    [transportId, updateTransport, createTransport, t, onOpenChange, successToast],
+    [transportId, updateTransport, createTransport, t, onOpenChange, notifySuccess],
   );
 
   /**

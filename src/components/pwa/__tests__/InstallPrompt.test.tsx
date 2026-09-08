@@ -21,8 +21,11 @@ vi.mock('@/hooks/useInstallPrompt', () => ({
   }),
 }));
 
-vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+// The component talks to the notification facade, not to sonner: a success
+// confirmation is an OS notification now, an error is still a toast, and the
+// split lives in `src/lib/notifications/notify.ts`.
+vi.mock('@/lib/notifications', () => ({
+  notify: { success: vi.fn(), error: vi.fn() },
 }));
 
 import { InstallPrompt } from '../InstallPrompt';
@@ -131,8 +134,8 @@ describe('InstallPrompt', () => {
     expect(mockInstall).toHaveBeenCalled();
   });
 
-  it('shows error toast when install fails', async () => {
-    const { toast } = await import('sonner');
+  it('shows an error toast when install fails', async () => {
+    const { notify } = await import('@/lib/notifications');
     mockCanInstall.mockReturnValue(true);
     mockInstall.mockResolvedValue(false);
     mockIsInstalled.mockReturnValue(false);
@@ -141,7 +144,7 @@ describe('InstallPrompt', () => {
     const installBtns = screen.getAllByText('pwa.install');
     const installBtn = installBtns.find(el => el.closest('button'))!;
     await act(async () => { installBtn.click(); });
-    expect(vi.mocked(toast.error)).toHaveBeenCalled();
+    expect(vi.mocked(notify.error)).toHaveBeenCalled();
   });
 
   it('dismisses prompt when dismiss button is clicked', async () => {
@@ -373,7 +376,7 @@ describe('InstallPrompt', () => {
     });
 
     it('renders nothing at all when the app is already installed', async () => {
-      const { toast } = await import('sonner');
+      const { notify } = await import('@/lib/notifications');
       mockCanInstall.mockReturnValue(false);
       mockIsInstalled.mockReturnValue(true);
       mockInstallIntent.mockReturnValue(true);
@@ -385,12 +388,12 @@ describe('InstallPrompt', () => {
       // Nothing is left to ask for, so neither the steps…
       expect(container.innerHTML).toBe('');
       /*
-        …nor the success toast, which belongs to an install that happened here.
+        …nor the confirmation, which belongs to an install that happened here.
         `isInstalled` is true from the first render whenever the app is *opened*
         as an app — `matchMedia('(display-mode: standalone)')` — so firing on
         that alone congratulated the visitor on every single launch.
       */
-      expect(vi.mocked(toast.success)).not.toHaveBeenCalled();
+      expect(vi.mocked(notify.success)).not.toHaveBeenCalled();
     });
   });
 });

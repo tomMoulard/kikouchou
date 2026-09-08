@@ -15,8 +15,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { type Locale, format, formatDistanceToNow, isToday, isTomorrow, parseISO } from 'date-fns';
-import { toast } from 'sonner';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -51,6 +50,7 @@ import { useTransportContext } from '@/contexts/TransportContext';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatTransportDatetime } from '@/lib/utils/datetime-format';
+import { notify } from '@/lib/notifications';
 import {
   DEFAULT_TIME_WINDOW_MINUTES,
   groupPickupsByProximity,
@@ -453,7 +453,7 @@ const UpcomingPickups = memo(function UpcomingPickups({
   const { t, i18n } = useTranslation();
   const { upcomingPickups, updateTransport } = useTransportContext();
   const { persons } = usePersonContext();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
 
   // Dialog state
   const [driverDialogOpen, setDriverDialogOpen] = useState(false);
@@ -518,7 +518,7 @@ const UpcomingPickups = memo(function UpcomingPickups({
 
         await updateTransport(transportId, { driverId });
 
-        successToast(t('pickups.volunteerSuccess'));
+        notifySuccess(t('pickups.volunteerSuccess'));
 
         // Show driver name briefly, then remove from resolving
         setTimeout(() => {
@@ -530,7 +530,7 @@ const UpcomingPickups = memo(function UpcomingPickups({
         }, 2000);
       } catch (error) {
         console.error('Failed to assign driver:', error);
-        toast.error(t('errors.saveFailed'));
+        notify.error(t('errors.saveFailed'));
         setResolvingMap((prev) => {
           const next = new Map(prev);
           next.delete(transportId);
@@ -538,7 +538,7 @@ const UpcomingPickups = memo(function UpcomingPickups({
         });
       }
     },
-    [updateTransport, personsMap, t, successToast],
+    [updateTransport, personsMap, t, notifySuccess],
   );
 
   // No unassigned upcoming pickups (including "all covered" and empty)

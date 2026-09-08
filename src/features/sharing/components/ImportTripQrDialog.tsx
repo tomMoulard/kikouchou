@@ -7,7 +7,6 @@
 import { type ReactElement, memo, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 
 import { QRScanner } from '@/components/shared/QRScanner';
 import {
@@ -17,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { useOfflineAwareToast } from '@/hooks';
+import { useOfflineAwareNotify } from '@/hooks';
 import { captureUsage } from '@/lib/posthog';
 import {
   applyMerge,
@@ -32,6 +31,7 @@ import {
 import type { AppChangeset, MergeResult } from '@/lib/sharing';
 
 import { extractInviteToken } from '@/lib/sync/invites';
+import { notify } from '@/lib/notifications';
 import {
   extractP2pTripInviteFromScannedPayload,
   extractShareIdFromScannedPayload,
@@ -56,7 +56,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
 }: ImportTripQrDialogProps): ReactElement {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { successToast } = useOfflineAwareToast();
+  const { notifySuccess } = useOfflineAwareNotify();
   const handledRef = useRef(false);
   const framesRef = useRef<Map<number, string>>(new Map());
   /**
@@ -84,7 +84,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
         try {
           raw = decodeChangeset(encoded);
         } catch {
-          toast.error(
+          notify.error(
             t('trips.importQrInvalid', 'This QR code or link is not a valid trip share.'),
           );
           return;
@@ -97,7 +97,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
         };
         await applyMerge(resolved);
         captureUsage('trip_imported', { conflict_count: merge.conflicts.length });
-        successToast(
+        notifySuccess(
           t('trips.importQrMergeSuccess', 'Trip data imported and merged successfully.'),
         );
         onOpenChange(false);
@@ -107,7 +107,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
           error instanceof ImportChangesetError &&
           error.code === IMPORT_SNAPSHOT_REQUIRED
         ) {
-          toast.error(
+          notify.error(
             t(
               'trips.importQrSnapshotRequired',
               'This export is missing trip details. Share the trip again from the trips page on the source device, then scan the new QR.',
@@ -116,7 +116,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
           return;
         }
         console.error('Failed to import trip sync payload:', error);
-        toast.error(
+        notify.error(
           t(
             'trips.importQrMergeFailed',
             'Could not import this trip data. Try again or use Share on the trips page.',
@@ -128,7 +128,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
         framesRef.current.clear();
       }
     },
-    [navigate, onOpenChange, successToast, t],
+    [navigate, onOpenChange, notifySuccess, t],
   );
 
   const handleScan = useCallback(
@@ -205,7 +205,7 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
         </DialogHeader>
         <QRScanner
           onScan={handleScan}
-          onError={(message) => toast.error(message)}
+          onError={(message) => notify.error(message)}
           active={open && !isImporting}
           className="mt-2"
         />

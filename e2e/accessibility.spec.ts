@@ -152,25 +152,6 @@ async function analyzeA11y(
 }
 
 /**
- * Sonner's own toast markup, left out of the two room scans.
- *
- * The rooms page fires one success toast on a trip's first visit, so it is up
- * while axe runs. Its rich-colours success pair is sonner's, not this app's,
- * and it misses AA by a hair: `#008a2e` on `#ecfdf3` measures **4.25:1**
- * where normal-size text needs 4.5:1.
- *
- * TODO(unit-18): give the toaster a success colour from this app's palette
- * — the repo has no `--success` token, and inventing one is a colour-system
- * decision. `emerald-800` on sonner's success background measures 7.3:1.
- * Delete this constant and its two call sites once that lands.
- *
- * Scoped to the toast subtree rather than disabling `color-contrast` for the
- * whole page: every other rule still runs on the toast's page, and contrast
- * is still enforced on the room cards themselves.
- */
-const SONNER_TOAST_SUBTREE = '[data-sonner-toast]';
-
-/**
  * Formats violations for readable error output.
  *
  * @param violations - Array of axe-core violations
@@ -400,7 +381,7 @@ test.describe('Page Accessibility', () => {
     // "nothing rendered".
     await expect(page.getByText(TEST_DATA.room.name).first()).toBeVisible();
 
-    const violations = await analyzeA11y(page, [], [SONNER_TOAST_SUBTREE]);
+    const violations = await analyzeA11y(page);
 
     if (violations.length > 0) {
       console.log('Room list page violations:\n', formatViolations(violations));
@@ -430,7 +411,7 @@ test.describe('Page Accessibility', () => {
       page.getByRole('button', { name: new RegExp(TEST_DATA.room.name) }),
     ).toBeVisible();
 
-    const violations = await analyzeA11y(page, [], [SONNER_TOAST_SUBTREE]);
+    const violations = await analyzeA11y(page);
 
     if (violations.length > 0) {
       console.log('Room cards view violations:\n', formatViolations(violations));
