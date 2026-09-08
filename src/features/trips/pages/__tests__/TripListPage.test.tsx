@@ -185,6 +185,51 @@ describe('TripListPage', () => {
     expect(screen.getByText('trips.empty')).toBeInTheDocument();
   });
 
+  it('floats the create action, not the QR scanner, before a trip exists', () => {
+    vi.mocked(useTripContext).mockReturnValue({
+      trips: [],
+      isLoading: false,
+      error: null,
+      currentTrip: null,
+      setCurrentTrip: mockSetCurrentTrip,
+      checkConnection: mockCheckConnection,
+    });
+    render(<TripListPage />, { withProviders: false });
+
+    // `fixed` is what makes a button the floating one, which is the whole
+    // point of the fix: the create action holds that slot on first run.
+    const floating = screen
+      .getAllByRole('button')
+      .filter((button) => button.classList.contains('fixed'));
+    expect(floating).toHaveLength(1);
+    expect(floating[0]).toHaveAccessibleName('trips.new');
+
+    // And the QR scanner is still reachable, from the empty state rather than
+    // from a second unlabelled circle.
+    expect(
+      screen.getAllByRole('button', { name: 'trips.importFromQr' }),
+    ).not.toHaveLength(0);
+  });
+
+  it('opens the import dialog from the empty state QR action', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    vi.mocked(useTripContext).mockReturnValue({
+      trips: [],
+      isLoading: false,
+      error: null,
+      currentTrip: null,
+      setCurrentTrip: mockSetCurrentTrip,
+      checkConnection: mockCheckConnection,
+    });
+    render(<TripListPage />, { withProviders: false });
+
+    await user.click(
+      screen.getAllByRole('button', { name: 'trips.importFromQr' })[0]!,
+    );
+    expect(screen.getByTestId('import-qr-dialog')).toBeInTheDocument();
+  });
+
   it('navigates to create page on new trip button click', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();

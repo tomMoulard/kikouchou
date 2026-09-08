@@ -242,6 +242,41 @@ const TripListPage = memo(function TripListPage() {
   );
 
   /**
+   * The first-run FAB: "New trip", labelled, and the only floating control on
+   * the screen.
+   *
+   * Before a trip exists the QR scanner was the one eye-catching thing on the
+   * page — a round, unlabelled button floating over an empty list, next to four
+   * dead nav items — while the only action worth taking sat as a plain button
+   * in the middle of the page. So the create action takes the floating slot and
+   * QR import moves into the empty state as the secondary of the two.
+   *
+   * Extended rather than icon-only, because the complaint about the QR button
+   * applies here too: a bare `+` over an empty page says nothing. The trip list
+   * keeps its icon-only FAB, where the cards behind it supply the context this
+   * page has none of.
+   */
+  const newTripFab = useMemo(
+    () => (
+      <Button
+        type="button"
+        onClick={handleCreateClick}
+        size="lg"
+        className={cn(
+          'fixed bottom-nav-safe right-4 z-10',
+          'h-14 rounded-full px-6 shadow-lg',
+          'sm:hidden',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        )}
+      >
+        <Plus className="size-6 mr-2" aria-hidden="true" />
+        {t('trips.new')}
+      </Button>
+    ),
+    [handleCreateClick, t],
+  );
+
+  /**
    * Nothing to keep online any more.
    *
    * A second Yjs binding used to be mounted here so a trip stayed connected
@@ -257,12 +292,13 @@ const TripListPage = memo(function TripListPage() {
   if (isLoading) {
     return (
       <>
-        <div className="flex flex-col pb-second-fab">
+        {/* No FAB: nothing is known yet, so there is no action to float over a
+            spinner. The header keeps both actions on wider screens. */}
+        <div className="flex flex-col">
           <PageHeader title={t('trips.title')} action={headerAction} />
           <div className="flex items-center justify-center py-20">
             <LoadingState variant="inline" size="lg" />
           </div>
-          {importQrFab}
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
       </>
@@ -276,12 +312,14 @@ const TripListPage = memo(function TripListPage() {
   if (error) {
     return (
       <>
-        <div className="flex flex-col pb-second-fab">
+        {/* Same: retrying is the action here, and it is already in the body. A
+            floating button over a failure is one more control that does not
+            address it. */}
+        <div className="flex flex-col">
           <PageHeader title={t('trips.title')} action={headerAction} />
           <div className="py-8">
             <ErrorDisplay error={error} onRetry={handleRetry} />
           </div>
-          {importQrFab}
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
       </>
@@ -295,7 +333,9 @@ const TripListPage = memo(function TripListPage() {
   if (trips.length === 0) {
     return (
       <>
-        <div className="flex flex-col pb-second-fab">
+        {/* One FAB only, so `<main>`'s own `pb-bottom-stack` is the whole
+            clearance and `pb-second-fab` would be padding under nothing. */}
+        <div className="flex flex-col">
           <PageHeader title={t('trips.title')} action={headerAction} />
           <div className="flex items-center justify-center py-16 sm:py-24">
             <EmptyState
@@ -306,13 +346,21 @@ const TripListPage = memo(function TripListPage() {
                 label: t('trips.new'),
                 onClick: handleCreateClick,
               }}
+              /* Where the QR scanner lands once it gives up the floating slot:
+                 named, next to the action it is an alternative to, and second
+                 of the two. Joining someone else's trip is the rarer of the two
+                 ways in, and it was the only one this screen made obvious. */
+              secondaryAction={{
+                label: t('trips.importFromQr'),
+                onClick: openImportQr,
+              }}
             />
           </div>
           {/* Load-bearing here specifically: joining on a phone and then opening
               a laptop leaves this device with no local trips at all, and without
               this the laptop offers no way into the trip. */}
           <RemoteTripsSection localTripCount={0} />
-          {importQrFab}
+          {newTripFab}
         </div>
         <ImportTripQrDialog open={importQrOpen} onOpenChange={setImportQrOpen} />
       </>

@@ -225,7 +225,8 @@
  *   0                   the safe-area inset itself (0 on a phone without one)
  *   0     - 4rem  (64px) the mobile nav bar, `h-16` (Layout.tsx, `md:hidden`)
  *   5rem  - 8.5rem       the FAB, `size-14` at `bottom-nav-safe` (`sm:hidden`)
- *   9rem  - 12.5rem      a second FAB, on `/trips` only (`bottom-fab-safe`)
+ *   9rem  - 12.5rem      a second FAB, on a non-empty `/trips` only
+ *                       (`bottom-fab-safe`)
  *   9rem                 toasts (App.tsx's `mobileOffset`)
  *   9.5rem               the first pixel a page's own content may occupy
  *
@@ -317,9 +318,13 @@
 /**
  * The extra clearance a page owes when it stacks a *second* FAB.
  *
- * `pb-bottom-stack` on `<main>` clears one FAB (top edge 8.5rem); `/trips` puts
- * a QR-import button above the create button, whose top edge is 12.5rem. This
- * is the 4rem difference, applied inside `<main>` so the two paddings add.
+ * `pb-bottom-stack` on `<main>` clears one FAB (top edge 8.5rem); `/trips`
+ * puts a QR-import button above the create button, whose top edge is 12.5rem.
+ * This is the 4rem difference, applied inside `<main>` so the two paddings add.
+ *
+ * Only once `/trips` has trips on it. An empty list floats the create button
+ * alone and QR import sits in the empty state, so that branch takes the plain
+ * `pb-bottom-stack` and this utility would pad under nothing.
  */
 @utility pb-second-fab {
   padding-bottom: 4rem;
