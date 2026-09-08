@@ -65,7 +65,8 @@
     "syncPending_one": "{{count}} modification pas encore envoyée",
     "syncPending_other": "{{count}} modifications pas encore envoyées",
     "syncStatusRegion": "État de la synchronisation",
-    "guestGroups": "Groupes"
+    "guestGroups": "Groupes",
+    "summary": "Récapitulatif"
   },
   "analytics": {
     "tripTitle": "Analyses du voyage",
@@ -638,6 +639,26 @@
         "count_other": "{{count}} arrivées"
       }
     }
+  },
+  "summary": {
+    "title": "Récapitulatif du séjour",
+    "description": "Une page à coller sur le frigo : qui dort où, qui arrive quand, qui conduit.",
+    "print": "Imprimer",
+    "headcount_one": "{{count}} personne attendue",
+    "headcount_other": "{{count}} personnes attendues",
+    "headcountSuffix_one": "({{count}} personne)",
+    "headcountSuffix_other": "({{count}} personnes)",
+    "rooms": "Qui dort où",
+    "noRooms": "Aucune chambre pour l'instant",
+    "roomEmpty": "Personne pour l'instant",
+    "guestsWithoutRoom": "Toujours sans lit : {{names}}",
+    "travel": "Arrivées et départs",
+    "noTravel": "Aucun trajet pour l'instant",
+    "driver": "Conducteur : {{name}}",
+    "driverMissing": "Conducteur : personne pour l'instant",
+    "guests": "Invités",
+    "noGuests": "Aucun invité pour l'instant",
+    "printedOn": "Imprimé le {{date}}"
   },
   "sharing": {
     "title": "Partager le voyage",
