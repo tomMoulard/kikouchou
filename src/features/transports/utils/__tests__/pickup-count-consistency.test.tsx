@@ -23,6 +23,8 @@ import { db } from '@/lib/db/database';
 import type {
   ISODateTimeString,
   PersonId,
+  Ride,
+  RideId,
   Transport,
   TransportId,
   TripId,
@@ -47,6 +49,14 @@ vi.mock('@/contexts/TransportContext', () => ({
 
 vi.mock('@/contexts/PersonContext', () => ({
   usePersonContext: vi.fn(() => ({ persons: [] })),
+}));
+
+// The panel now asks the rides too, because a leg sitting in a car somebody
+// volunteered for is not unassigned even though the leg carries no `driverId`.
+// Stubbed empty here so the three answers are still compared over the same
+// pre-ride base set this file was written to guard.
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: vi.fn(() => ({ rides: [] })),
 }));
 
 vi.mock('@/hooks', () => ({
@@ -140,10 +150,10 @@ describe('pickup count consistency across views', () => {
     ).length;
 
     // 2. The alert panel's visibility gate (TransportListPage).
-    const listGateShowsPanel = selectPickupsNeedingDriver(upcomingPickups).length > 0;
+    const listGateShowsPanel = selectPickupsNeedingDriver(upcomingPickups, []).length > 0;
 
     // 3. The count and the cards inside the panel (UpcomingPickups).
-    const selected = selectPickupsNeedingDriver(upcomingPickups);
+    const selected = selectPickupsNeedingDriver(upcomingPickups, []);
     const groupedCount = groupPickupsByProximity(selected).reduce(
       (sum, group) => sum + group.pickups.length,
       0,
@@ -228,7 +238,7 @@ describe('pickup count consistency across views', () => {
     const analyticsCount = upcomingPickups.filter(
       (tr) => tr.needsPickup && !tr.driverId,
     ).length;
-    const listGateShowsPanel = selectPickupsNeedingDriver(upcomingPickups).length > 0;
+    const listGateShowsPanel = selectPickupsNeedingDriver(upcomingPickups, []).length > 0;
 
     expect(analyticsCount).toBe(0);
     expect(listGateShowsPanel).toBe(false);
@@ -279,7 +289,7 @@ describe('pickup count consistency across views', () => {
 
     // 2/3. The panel's count and its visibility gate on the transport list.
     const upcomingPickups = deriveUpcomingPickups(transports, nowMs);
-    const selected = selectPickupsNeedingDriver(upcomingPickups);
+    const selected = selectPickupsNeedingDriver(upcomingPickups, []);
     const groupedCount = groupPickupsByProximity(selected).reduce(
       (sum, group) => sum + group.pickups.length,
       0,
@@ -289,6 +299,57 @@ describe('pickup count consistency across views', () => {
     expect(selected).toHaveLength(stats.pickupsNeedingDriver);
     expect(groupedCount).toBe(stats.pickupsNeedingDriver);
     expect(selected.length > 0).toBe(true);
+  });
+
+  it('agrees that a leg in a driven ride needs nobody, through the real read', async () => {
+    // The case every other test in this file stubs away by passing `[]` for the
+    // rides. Since the selector became ride-aware, the analytics badge reads
+    // rides out of Dexie while the panel reads them from `RideContext` — two
+    // sources for one answer, which is exactly the shape of disagreement this
+    // file exists to catch. Nothing here re-types the predicate; both sides run
+    // the same selector over the same rides.
+    const nowMs = Date.now(),
+      now = new Date(nowMs).toISOString() as ISODateTimeString;
+
+    const covered = makePickup({
+        id: 't-in-a-car',
+        datetime: new Date(nowMs + 30 * MINUTE_MS).toISOString(),
+        rideId: 'r-1' as RideId,
+      }),
+      stranded = makePickup({
+        id: 't-still-waiting',
+        datetime: new Date(nowMs + 35 * MINUTE_MS).toISOString(),
+      });
+
+    const rides: Ride[] = [
+      {
+        id: 'r-1' as RideId,
+        tripId: 'trip-1' as TripId,
+        direction: 'pickup',
+        meetDatetime: new Date(nowMs + 30 * MINUTE_MS).toISOString(),
+        location: 'Gare de Vannes',
+        driverId: 'driver-1' as PersonId,
+      },
+    ];
+
+    await db.transports.bulkPut([covered, stranded]);
+    await db.rides.bulkPut(rides);
+
+    // 1. The analytics badge, through the read the page actually calls — which
+    //    loads the rides itself.
+    const stats = await loadTripStats('trip-1' as TripId, now);
+
+    // 2/3. The panel's gate and its cards, over the rides the context publishes.
+    const upcomingPickups = deriveUpcomingPickups([covered, stranded], nowMs),
+      selected = selectPickupsNeedingDriver(upcomingPickups, rides),
+      groupedCount = groupPickupsByProximity(selected).reduce(
+        (sum, group) => sum + group.pickups.length,
+        0,
+      );
+
+    expect(stats.pickupsNeedingDriver).toBe(1);
+    expect(selected.map((transport) => transport.id)).toEqual(['t-still-waiting']);
+    expect(groupedCount).toBe(stats.pickupsNeedingDriver);
   });
 
   it('agrees on a pickup stored with a UTC offset instead of Z', () => {
@@ -310,7 +371,7 @@ describe('pickup count consistency across views', () => {
     const upcomingPickups = deriveUpcomingPickups(transports, nowMs);
 
     expect(upcomingPickups).toHaveLength(0);
-    expect(selectPickupsNeedingDriver(upcomingPickups)).toHaveLength(0);
+    expect(selectPickupsNeedingDriver(upcomingPickups, [])).toHaveLength(0);
     expect(
       upcomingPickups.filter((tr) => tr.needsPickup && !tr.driverId),
     ).toHaveLength(0);

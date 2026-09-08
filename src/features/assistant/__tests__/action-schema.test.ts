@@ -104,6 +104,16 @@ describe('action-schema', () => {
       expect(result).not.toBeNull();
       expect(result?.data.phone).toBeUndefined();
     });
+
+    it('accepts a child seat kind', () => {
+      const result = validateAction({
+        action: 'addGuest',
+        data: { name: 'Lila', childSeat: 'booster' },
+      });
+
+      expect(result).not.toBeNull();
+      expect(result?.data.childSeat).toBe('booster');
+    });
   });
 
   describe('validateAction — string[] fields', () => {
@@ -201,6 +211,13 @@ describe('action-schema', () => {
  *
  * Adding an action is expected to eat into it. Rewriting the section to fit
  * again is the right response to hitting the ceiling; raising it is not.
+ *
+ * Seven ride and car actions arrived with 12 characters of headroom left, so
+ * the section was rewritten rather than the number: every label lost the words
+ * its action name already said, and roughly half the catalogue — every action
+ * carrying nothing but ids — is now one line each under a single shared example
+ * instead of a three-line block apiece. The whole catalogue fits in less than
+ * two thirds of it used to.
  */
 const MAX_ACTION_PROMPT_CHARS = 3700;
 
@@ -239,6 +256,32 @@ describe('action-schema prompt budget', () => {
         }
       }
     }
+  });
+
+  it('spends one line, not one block, on an action that carries only ids', () => {
+    const lines = generateActionPrompt();
+
+    // `removeRoom` and friends differ only in their name and their id field.
+    // A block each spent ~100 characters restating an envelope and a label the
+    // action name already gives.
+    const compact = lines.filter((line) => line.includes('removeRoom roomId'));
+    expect(compact).toHaveLength(1);
+    expect(compact[0]).toContain('joinRide transportId+rideId');
+    expect(compact[0]).toContain('leaveActivity activityId+personId');
+
+    // …and no example of its own, which is where the saving comes from.
+    expect(
+      lines.filter((line) => line.includes('"action":"removeRoom"')),
+    ).toHaveLength(0);
+  });
+
+  it('still shows the envelope those compact lines are wrapped in', () => {
+    const prompt = generateActionPrompt().join('\n');
+
+    // The one thing the compact list cannot say for itself. Without a JSON
+    // example beside it the model has only field names to copy, and a payload
+    // with no `"action"` key is dropped by `validateAction` in silence.
+    expect(prompt).toContain('"action":"selectTrip","data":{"tripId"');
   });
 
   it('spells out each enum once, however many actions share it', () => {
@@ -306,6 +349,173 @@ describe('action-schema — importGuestGroup', () => {
 
     expect(result).toBeNull();
     warn.mockRestore();
+  });
+});
+
+// ============================================================================
+// Rides and cars
+// ============================================================================
+
+describe('action-schema — rides', () => {
+  it('offers every ride and car mutation to the LLM', () => {
+    const names = ACTION_SCHEMAS.map((schema) => schema.action);
+
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'addRide',
+        'updateRide',
+        'removeRide',
+        'addVehicle',
+        'joinRide',
+        'leaveRide',
+      ]),
+    );
+  });
+
+  it('documents them in the generated prompt', () => {
+    const prompt = generateActionPrompt().join('\n');
+
+    for (const name of [
+      'addRide',
+      'updateRide',
+      'removeRide',
+      'addVehicle',
+      'joinRide',
+      'leaveRide',
+    ]) {
+      expect(prompt).toContain(name);
+    }
+    // Without the directions spelled out the model guesses "pickUp"/"toAirport"
+    // and `validateAction` throws the block away.
+    expect(prompt).toContain('pickup | dropoff');
+    expect(prompt).toContain('rearFacing | forwardFacing | booster');
+  });
+
+  it('accepts a minimal ride', () => {
+    const result = validateAction({
+      action: 'addRide',
+      data: {
+        direction: 'pickup',
+        meetDatetime: '2026-04-20T15:00:00',
+        location: 'Lyon Part-Dieu',
+      },
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.data.direction).toBe('pickup');
+  });
+
+  it('rejects a direction outside the enum', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    expect(
+      validateAction({
+        action: 'addRide',
+        data: {
+          direction: 'toTheAirport',
+          meetDatetime: '2026-04-20T15:00:00',
+          location: 'Lyon Part-Dieu',
+        },
+      }),
+    ).toBeNull();
+
+    warn.mockRestore();
+  });
+
+  it('rejects a ride with no meeting point', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    expect(
+      validateAction({
+        action: 'addRide',
+        data: { direction: 'pickup', meetDatetime: '2026-04-20T15:00:00' },
+      }),
+    ).toBeNull();
+
+    warn.mockRestore();
+  });
+
+  it('coerces a lead time the model sent as a string', () => {
+    const result = validateAction({
+      action: 'addRide',
+      data: {
+        direction: 'dropoff',
+        meetDatetime: '2026-04-20T15:00:00',
+        location: 'Airport',
+        leadTimeMinutes: '45',
+      },
+    });
+
+    expect(result?.data.leadTimeMinutes).toBe(45);
+  });
+
+  it('takes the child seats a car carries as a list', () => {
+    const result = validateAction({
+      action: 'addVehicle',
+      data: { name: 'Hired Espace', childSeats: ['booster', 'booster'] },
+    });
+
+    // One entry per seat, so the repeat is the point rather than a duplicate.
+    expect(result?.data.childSeats).toEqual(['booster', 'booster']);
+  });
+
+  it('drops a child seat kind outside the enum, keeping the rest', () => {
+    const result = validateAction({
+      action: 'addVehicle',
+      data: { name: 'Kangoo', childSeats: ['booster', 'siège auto'] },
+    });
+
+    // An enum on a list filters rather than refuses: refusing would throw the
+    // whole car away over one word, and a rejected action is dropped in
+    // silence. The `string[]` branch used to `continue` past the enum check
+    // altogether, so this field was documented but never enforced.
+    expect(result).not.toBeNull();
+    expect(result?.data.childSeats).toEqual(['booster']);
+  });
+
+  it('lets the car be corrected by removing and re-adding it', () => {
+    expect(ACTION_SCHEMAS.map((schema) => schema.action)).toContain(
+      'removeVehicle',
+    );
+    expect(
+      validateAction({ action: 'removeVehicle', data: { vehicleId: 'v1' } }),
+    ).not.toBeNull();
+  });
+
+  it('lets a pickup entered as a dropoff be corrected in place', () => {
+    // Without `direction` on updateRide the only fix is removeRide + addRide,
+    // and removing a ride detaches every passenger.
+    const result = validateAction({
+      action: 'updateRide',
+      data: { rideId: 'r1', direction: 'dropoff' },
+    });
+
+    expect(result?.data.direction).toBe('dropoff');
+  });
+
+  it('needs both ids to put a leg in a car', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    expect(
+      validateAction({
+        action: 'joinRide',
+        data: { transportId: 'trans1', rideId: 'ride1' },
+      }),
+    ).not.toBeNull();
+    expect(
+      validateAction({ action: 'joinRide', data: { transportId: 'trans1' } }),
+    ).toBeNull();
+
+    warn.mockRestore();
+  });
+
+  it('takes the leg alone to get out of a car', () => {
+    const result = validateAction({
+      action: 'leaveRide',
+      data: { transportId: 'trans1' },
+    });
+
+    expect(result).not.toBeNull();
   });
 });
 

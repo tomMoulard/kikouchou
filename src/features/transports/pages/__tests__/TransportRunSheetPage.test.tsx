@@ -128,6 +128,13 @@ vi.mock('@/contexts/TransportContext', () => ({
   useTransportContext: vi.fn(),
 }));
 
+// The sheet asks the rides whether a pickup is covered. No rides here: every
+// case in this file is about legs, and a leg with no car is exactly the one
+// the sheet flags.
+vi.mock('@/contexts/RideContext', () => ({
+  useRideContext: () => ({ rides: [], vehicles: [] }),
+}));
+
 vi.mock('@/lib/sharing/guest-identity', () => ({
   getTripGuestPersonId: vi.fn(() => undefined),
 }));

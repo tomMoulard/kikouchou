@@ -27,6 +27,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { usePersonContext } from '@/contexts/PersonContext';
+import { useRideContext } from '@/contexts/RideContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { getDateLocale } from '@/lib/i18n/date-locale';
@@ -242,6 +243,9 @@ const TransportRunSheetPage = memo(function TransportRunSheetPage(): ReactElemen
 
   const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
+  // A pickup counts as covered once its car has a driver, so this selection
+  // needs the trip's rides as well as its legs.
+  const { rides } = useRideContext();
   const {
     transports,
     upcomingPickups,
@@ -286,8 +290,8 @@ const TransportRunSheetPage = memo(function TransportRunSheetPage(): ReactElemen
    * `?filter=needsDriver` lists exactly the number that was clicked.
    */
   const pickupsNeedingDriver = useMemo(
-    () => selectPickupsNeedingDriver(upcomingPickups),
-    [upcomingPickups],
+    () => selectPickupsNeedingDriver(upcomingPickups, rides),
+    [upcomingPickups, rides],
   );
 
   const myTransports = useMemo(

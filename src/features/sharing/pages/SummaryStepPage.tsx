@@ -46,6 +46,7 @@ import {
   getTripByShareId,
   setCurrentTrip,
 } from '@/lib/db';
+import { getGuestIdentityStorageKey } from '@/lib/sharing/guest-identity';
 import { createBaselineForGuest } from '@/lib/sharing';
 import { cn } from '@/lib/utils';
 import type {
@@ -56,6 +57,7 @@ import type {
   Transport,
   Trip,
 } from '@/types';
+import { TransportPlanBadges } from '../components/TransportPlanBadges';
 import { formatDatetime, getTransportIcon } from '../components/transport-display-helpers';
 
 // ============================================================================
@@ -73,12 +75,6 @@ type SummaryStepParams = {
 // ============================================================================
 // Constants
 // ============================================================================
-
-/**
- * Returns the localStorage key used to persist guest identity.
- */
-const getGuestStorageKey = (shareId: string): string =>
-  `kikouchou_guest_${shareId}`;
 
 /**
  * Returns the localStorage key for wizard completion flag.
@@ -154,7 +150,7 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
   useEffect(() => {
     if (!shareId) return;
 
-    const stored = localStorage.getItem(getGuestStorageKey(shareId));
+    const stored = localStorage.getItem(getGuestIdentityStorageKey(shareId));
     if (!stored) {
       navigate(`/share/${shareId}/identity`, { replace: true });
       return;
@@ -192,7 +188,7 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
 
         // Cross-validate stored identity tripId
         if (storedTripIdRef.current !== undefined && storedTripIdRef.current !== tripData.id) {
-          try { localStorage.removeItem(getGuestStorageKey(shareId)); } catch { /* non-fatal */ }
+          try { localStorage.removeItem(getGuestIdentityStorageKey(shareId)); } catch { /* non-fatal */ }
           navigate(`/share/${shareId}/identity`, { replace: true });
           return;
         }
@@ -400,7 +396,10 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
                 {transports.length > 0 ? (
                   <div className="space-y-1">
                     {transports.map((tr) => (
-                      <div key={tr.id} className="flex items-center gap-2 text-sm text-foreground">
+                      <div
+                        key={tr.id}
+                        className="flex flex-wrap items-center gap-2 text-sm text-foreground"
+                      >
                         {getTransportIcon(tr.transportMode, t)}
                         <span>
                           {tr.type === 'arrival'
@@ -411,11 +410,14 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
                         {tr.location && (
                           <span className="text-muted-foreground">{tr.location}</span>
                         )}
-                        {tr.needsPickup && (
-                          <span className="rounded bg-warning-surface px-1.5 py-0.5 text-xs text-warning-on-surface">
-                            {t('sharing.transportNeedsPickupBadge', 'Needs pickup')}
-                          </span>
-                        )}
+                        {/* The same badges the transport step showed, from the
+                            same component: this is the last screen before the
+                            guest enters the trip, so it is where "I'll be
+                            driving" has to be visible enough to correct. */}
+                        <TransportPlanBadges
+                          transport={tr}
+                          guestPersonId={guestPersonId}
+                        />
                       </div>
                     ))}
                   </div>

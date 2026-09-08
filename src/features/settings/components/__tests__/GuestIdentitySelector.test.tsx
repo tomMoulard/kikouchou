@@ -127,6 +127,23 @@ vi.mock('@/contexts/PersonContext', () => ({
 const mockNotifySuccess = vi.fn();
 const mockNotifyError = vi.fn();
 
+// The card writes the explicit choice as well as the share key, and the real
+// hook reaches `AuthProvider` and Dexie for the two lower-precedence sources.
+// Mocked to the setter alone: what this file asserts is that the card calls it,
+// not what `resolveTripIdentity` does with the answer, which is covered in
+// lib/identity/__tests__.
+const mockSetMyPersonId = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('@/hooks/useTripIdentity', () => ({
+  useTripIdentity: () => ({
+    myPersonId: undefined,
+    source: undefined,
+    isResolved: true,
+    setMyPersonId: mockSetMyPersonId,
+  }),
+}));
+
+
 // The card deliberately uses the raw notification rather than the
 // offline-aware one — the identity never leaves this device — so the raw one
 // is what is observed here.
@@ -226,6 +243,13 @@ describe('GuestIdentitySelector', () => {
     });
     expect(mockNotifySuccess).toHaveBeenCalledWith('settings.guestIdentityChanged');
     expect(screen.getByText('settings.guestIdentityCurrent')).toBeInTheDocument();
+
+    // And the explicit choice, which outranks the share key in
+    // `resolveTripIdentity`. Writing only the key would leave an earlier
+    // explicit answer in force, and the card would look as though it had
+    // done nothing — the transport views read the resolved answer, not this
+    // store.
+    expect(mockSetMyPersonId).toHaveBeenCalledWith(paul.id);
   });
 
   it('removes the key when the user is nobody in particular', async () => {
@@ -241,6 +265,10 @@ describe('GuestIdentitySelector', () => {
     expect(entries.has(SHARE_KEY)).toBe(false);
     expect(mockNotifySuccess).toHaveBeenCalledWith('settings.guestIdentityCleared');
     expect(screen.queryByText('settings.guestIdentityCurrent')).not.toBeInTheDocument();
+
+    // Cleared on both sides, or the higher-precedence store would go on naming
+    // a guest this card has just said is nobody.
+    expect(mockSetMyPersonId).toHaveBeenCalledWith(undefined);
   });
 
   it('warns instead of saving when storage refuses the write', async () => {
@@ -254,6 +282,10 @@ describe('GuestIdentitySelector', () => {
     expect(mockNotifySuccess).not.toHaveBeenCalled();
     // The picker must not claim a choice that was never persisted.
     expect(screen.queryByText('settings.guestIdentityCurrent')).not.toBeInTheDocument();
+    // Nor half-persist it. A refused share-key write that still set the
+    // explicit answer would leave the two stores disagreeing, with the one the
+    // transport views read holding a guest the card refused to show.
+    expect(mockSetMyPersonId).not.toHaveBeenCalled();
   });
 
   it('says so when the stored guest is no longer on the trip', () => {

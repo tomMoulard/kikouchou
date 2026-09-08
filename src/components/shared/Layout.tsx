@@ -105,6 +105,9 @@ const TRIP_NAV_ITEMS: readonly NavItem[] = [
   { labelKey: 'nav.calendar', pathSuffix: 'calendar', icon: Calendar, requiresTrip: true },
   { labelKey: 'nav.rooms', pathSuffix: 'rooms', icon: Home, requiresTrip: true },
   { labelKey: 'nav.persons', pathSuffix: 'persons', icon: Users, requiresTrip: true },
+  // The trip's cars are deliberately absent: they hang off the transport list
+  // (`/transports/vehicles`), because a car is only ever entered in order to be
+  // picked on a ride and nobody navigates to one for its own sake.
   { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
   { labelKey: 'nav.activities', pathSuffix: 'activities', icon: PartyPopper, requiresTrip: true },
   { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: BarChart2, requiresTrip: true },

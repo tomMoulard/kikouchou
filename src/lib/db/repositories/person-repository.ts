@@ -8,7 +8,12 @@
  */
 
 import { db } from '@/lib/db/database';
-import { MAX_LENGTHS, sanitizeOptionalText, sanitizePersonData } from '@/lib/db/sanitize';
+import {
+  MAX_LENGTHS,
+  normalizeChildSeat,
+  sanitizeOptionalText,
+  sanitizePersonData,
+} from '@/lib/db/sanitize';
 import { createPersonId } from '@/lib/db/utils';
 import type { Person, PersonFormData, PersonId, TripId } from '@/types';
 import { getDefaultPersonColor, normalizePersonHeadcount } from '@/types';
@@ -157,6 +162,9 @@ export async function updatePerson(
   if (sanitizedData.headcount !== undefined) {
     sanitizedData.headcount = normalizePersonHeadcount(sanitizedData.headcount);
   }
+  if (sanitizedData.childSeat !== undefined) {
+    sanitizedData.childSeat = normalizeChildSeat(sanitizedData.childSeat);
+  }
   // Note: color field is not sanitized (it's a hex color, not free text)
 
   const updatedCount = await db.persons.update(id, sanitizedData);
@@ -191,7 +199,7 @@ export async function deletePerson(id: PersonId): Promise<void> {
   try {
     await db.transaction(
       'rw',
-      [db.persons, db.roomAssignments, db.transports, db.activities],
+      [db.persons, db.roomAssignments, db.transports, db.rides, db.vehicles, db.activities],
       async () => {
         // Delete related records in parallel
         await Promise.all([
@@ -206,6 +214,16 @@ export async function deletePerson(id: PersonId): Promise<void> {
             .where('driverId')
             .equals(id)
             .modify({ driverId: undefined }),
+
+          // Same, for the rides they were driving. The ride itself survives:
+          // the others still need to get to the station, and a ride with no
+          // driver is exactly the "needs somebody to volunteer" state.
+          db.rides.where('driverId').equals(id).modify({ driverId: undefined }),
+
+          // And for a car they owned. The car survives too — it is still parked
+          // outside and still seats five — but a dangling `ownerId` renders as
+          // a blank owner and makes the row unfilterable by owner forever.
+          db.vehicles.where('ownerId').equals(id).modify({ ownerId: undefined }),
 
           // Drop the guest from every activity they had joined or organized
           removePersonFromActivities(id),
@@ -308,6 +326,9 @@ export async function updatePersonWithOwnershipCheck(
     if (patch.headcount !== undefined) {
       patch.headcount = normalizePersonHeadcount(patch.headcount);
     }
+    if (patch.childSeat !== undefined) {
+      patch.childSeat = normalizeChildSeat(patch.childSeat);
+    }
 
     await db.persons.update(id, patch);
   });
@@ -333,7 +354,7 @@ export async function deletePersonWithOwnershipCheck(
 ): Promise<void> {
   await db.transaction(
     'rw',
-    [db.persons, db.roomAssignments, db.transports, db.activities],
+    [db.persons, db.roomAssignments, db.transports, db.rides, db.vehicles, db.activities],
     async () => {
       const person = await db.persons.get(id);
 
@@ -357,6 +378,16 @@ export async function deletePersonWithOwnershipCheck(
           .where('driverId')
           .equals(id)
           .modify({ driverId: undefined }),
+
+        // Same, for the rides they were driving. The ride itself survives:
+        // the others still need to get to the station, and a ride with no
+        // driver is exactly the "needs somebody to volunteer" state.
+        db.rides.where('driverId').equals(id).modify({ driverId: undefined }),
+
+        // And for a car they owned. The car survives too — it is still parked
+        // outside and still seats five — but a dangling `ownerId` renders as
+        // a blank owner and makes the row unfilterable by owner forever.
+        db.vehicles.where('ownerId').equals(id).modify({ ownerId: undefined }),
 
         // Drop the guest from every activity they had joined or organized
         removePersonFromActivities(id),

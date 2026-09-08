@@ -61,6 +61,11 @@ describe('MAX_LENGTHS constants', () => {
       'activityLocation',
       'activityNotes',
       'guestGroupName',
+      'vehicleName',
+      'vehicleLuggageNotes',
+      'vehicleNotes',
+      'rideLocation',
+      'rideNotes',
     ];
     expect(Object.keys(MAX_LENGTHS).sort()).toEqual(expectedKeys.sort());
   });
@@ -498,6 +503,26 @@ describe('sanitizePersonData', () => {
       notes: '   ',
     });
     expect(result.notes).toBeUndefined();
+  });
+
+  it('keeps a known child seat kind', () => {
+    expect(
+      sanitizePersonData({ name: 'Lila', color: '#ef4444', childSeat: 'booster' }).childSeat,
+    ).toBe('booster');
+  });
+
+  it('drops a child seat kind it does not know', () => {
+    // A guest also arrives from a QR changeset, from a peer's document and from
+    // the assistant's own JSON, none of which has ever seen a `<select>`.
+    expect(
+      sanitizePersonData({ name: 'Lila', color: '#ef4444', childSeat: 'hammock' }).childSeat,
+    ).toBeUndefined();
+  });
+
+  it('leaves an adult with no child seat', () => {
+    expect(
+      sanitizePersonData({ name: 'Tom', color: '#ef4444', childSeat: undefined }).childSeat,
+    ).toBeUndefined();
   });
 });
 

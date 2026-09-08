@@ -305,6 +305,35 @@ describe('bounding what the server sends', () => {
     expect((await db.guestGroups.get('group-1'))?.members[0]?.headcount).toBe(99);
   });
 
+  it('keeps a child seat kind this build knows', async () => {
+    const { client } = fakeClient([
+      serverRow({
+        members: [{ id: 'm1', name: 'Lila', color: '#22c55e', childSeat: 'booster' }],
+      }),
+    ]);
+
+    await syncGuestGroups(client, USER_ID);
+
+    expect((await db.guestGroups.get('group-1'))?.members[0]?.childSeat).toBe('booster');
+  });
+
+  it('drops a child seat kind it does not recognise, keeping the member', async () => {
+    // Enum membership rather than "it is a string": the value is rendered as a
+    // badge and copied straight onto an imported guest, so an invented kind
+    // would travel into the trip and out again through the next changeset.
+    const { client } = fakeClient([
+      serverRow({
+        members: [{ id: 'm1', name: 'Lila', color: '#22c55e', childSeat: 'hammock' }],
+      }),
+    ]);
+
+    await syncGuestGroups(client, USER_ID);
+
+    const stored = await db.guestGroups.get('group-1');
+    expect(stored?.members[0]?.name).toBe('Lila');
+    expect(stored?.members[0]?.childSeat).toBeUndefined();
+  });
+
   it('caps a member list longer than a group may hold', async () => {
     const { client } = fakeClient([
       serverRow({

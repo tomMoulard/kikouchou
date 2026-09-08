@@ -321,6 +321,9 @@ export async function deleteTrip(id: TripId): Promise<void> {
       db.persons,
       db.roomAssignments,
       db.transports,
+      db.rides,
+      db.vehicles,
+      db.rideNotices,
       db.activities,
       db.yjsUpdates,
       db.yjsOutbox,
@@ -333,6 +336,12 @@ export async function deleteTrip(id: TripId): Promise<void> {
       await Promise.all([
         db.roomAssignments.where('tripId').equals(id).delete(),
         db.transports.where('tripId').equals(id).delete(),
+        db.rides.where('tripId').equals(id).delete(),
+        db.vehicles.where('tripId').equals(id).delete(),
+        // Device-local, but still trip-scoped: left behind, a watermark would
+        // outlive the trip it describes and re-announce a leg change to a trip
+        // that no longer exists if the same ids ever came back over a re-join.
+        db.rideNotices.where('tripId').equals(id).delete(),
         db.persons.where('tripId').equals(id).delete(),
         db.rooms.where('tripId').equals(id).delete(),
         db.activities.where('tripId').equals(id).delete(),

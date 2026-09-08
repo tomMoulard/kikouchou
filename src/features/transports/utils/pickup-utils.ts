@@ -11,7 +11,7 @@
 
 import { parseISO } from 'date-fns';
 
-import type { Transport } from '@/types';
+import type { Ride, Transport } from '@/types';
 
 // ============================================================================
 // Constants
@@ -21,6 +21,38 @@ import type { Transport } from '@/types';
  * Default time window in minutes for grouping pickups at the same station.
  */
 export const DEFAULT_TIME_WINDOW_MINUTES = 60;
+
+// ============================================================================
+// Places
+// ============================================================================
+
+/**
+ * Folds a place name into the key two places are compared on.
+ *
+ * One definition, because two features now decide "is this the same place?":
+ * the proximity grouping below, which offers to put three legs in one car, and
+ * `RideForm`, which remembers how long the drive to that place took last time.
+ * A private copy in either is how the app comes to propose a shared car for a
+ * station it then refuses to remember — `getDateLocale` reached twelve copies
+ * in this repo before it was pulled back together.
+ *
+ * `location` is required by the `Transport` type, but nothing enforces that on
+ * a record arriving over Yjs from a peer, and one such row used to throw
+ * `Cannot read properties of undefined (reading 'trim')` straight into the
+ * error boundary — taking the whole transports page down rather than the one
+ * malformed pickup. An absent name folds to the empty key instead.
+ *
+ * @param location - A place name as stored, possibly absent
+ * @returns The trimmed, case-folded key
+ *
+ * @example
+ * ```typescript
+ * normaliseStation('  CDG Terminal 2 '); // 'cdg terminal 2'
+ * ```
+ */
+export function normaliseStation(location: string | undefined): string {
+  return (location ?? '').trim().toLowerCase();
+}
 
 // ============================================================================
 // Type Definitions
@@ -134,24 +166,100 @@ export function sortTransportsByInstant(
  * badge, the alert panel's visibility gate and the count inside the panel
  * disagree with one another.
  *
+ * A leg is covered when *somebody is actually driving it*, which since rides
+ * exist is three different arrangements:
+ *
+ * - it sits in a {@link Ride} that has a driver — the normal case;
+ * - it carries a legacy `driverId` of its own, from before rides existed;
+ * - it sits in a ride the driver is also a passenger on, which is still a
+ *   driver.
+ *
+ * A leg in a ride **without** a driver is not covered. Being put in a car
+ * nobody has volunteered to drive is precisely the state this list exists to
+ * surface, and treating the ride's existence as an answer would hide three
+ * people who still have no lift.
+ *
+ * `rides` is required rather than optional. An optional argument defaulting to
+ * an empty list is how a new call site silently regresses to pre-ride
+ * behaviour — it would report Guillaume's three passengers as unassigned, on
+ * one screen only, with nothing failing.
+ *
  * Rows whose datetime cannot be parsed are excluded, so every returned pickup
  * can be placed on a timeline by {@link groupPickupsByProximity} — the count
  * above the cards and the cards themselves therefore always match.
  *
  * @param upcomingPickups - The trip's upcoming pickups, from `TransportContext`
- * @returns Unassigned pickups, earliest first
+ * @param rides - The trip's rides, from `RideContext`
+ * @returns Pickups nobody is driving yet, earliest first
  */
 export function selectPickupsNeedingDriver(
   upcomingPickups: readonly Transport[],
+  rides: readonly Ride[],
 ): readonly Transport[] {
+  const drivenRideIds = collectDrivenRideIds(rides);
+
   return sortTransportsByInstant(
     upcomingPickups.filter(
       (transport) =>
         transport.needsPickup &&
-        !transport.driverId &&
+        !isLegCovered(transport, drivenRideIds) &&
         toTransportInstant(transport.datetime) !== null,
     ),
   );
+}
+
+/**
+ * Indexes the rides somebody has actually volunteered to drive.
+ *
+ * Built once and passed to {@link isLegCovered} rather than rebuilt per leg: a
+ * list page asks the question for every row it renders.
+ *
+ * @param rides - The trip's rides
+ * @returns The ids of the rides that have a driver
+ */
+export function collectDrivenRideIds(rides: readonly Ride[]): ReadonlySet<string> {
+  return new Set(
+    rides.filter((ride) => Boolean(ride.driverId)).map((ride) => ride.id as string),
+  );
+}
+
+/**
+ * Is somebody actually driving this leg?
+ *
+ * **The single definition.** It was briefly two: this selector knew that a ride
+ * with a driver covers its legs, while the badge on the transport card and the
+ * one in the map popup still asked the pre-ride question `needsPickup &&
+ * !driverId`. So one page contradicted itself — the amber "nobody is driving
+ * yet" panel disappeared once Guillaume volunteered, and Alice's own card went
+ * on telling her nobody was collecting her.
+ *
+ * Three arrangements count as covered, and the third is the one that is easy to
+ * miss: a ride the driver is also a passenger on is still a driven ride.
+ *
+ * A `rideId` naming a ride this device does not hold is **not** coverage. It
+ * happens on the QR-changeset path, where legs travel and rides do not yet, and
+ * treating an unresolvable id as "handled" would quietly drop somebody from the
+ * list of people who still need a lift.
+ *
+ * @param transport - The leg
+ * @param drivenRideIds - From {@link collectDrivenRideIds}
+ * @returns True when somebody is driving it
+ */
+export function isLegCovered(
+  transport: Transport,
+  drivenRideIds: ReadonlySet<string>,
+): boolean {
+  // Truthiness, not `!== undefined`. An empty-string `driverId` is what a form
+  // that cleared its select and a peer that serialised a blank both produce,
+  // and it means *nobody is driving* — reading it as a driver drops the leg out
+  // of the one list whose job is to surface people who still need a lift. The
+  // pre-ride check was `!transport.driverId`; narrowing it to `!== undefined`
+  // was a silent regression.
+  if (transport.driverId) {
+    return true;
+  }
+
+  return Boolean(transport.rideId) && drivenRideIds.has(transport.rideId!);
 }
 
 // ============================================================================
@@ -198,12 +306,8 @@ export function groupPickupsByProximity(
       continue;
     }
 
-    // `location` is required by the `Transport` type, but nothing enforces that
-    // on a record arriving over Yjs from a peer, and one such row used to throw
-    // `Cannot read properties of undefined (reading 'trim')` straight into the
-    // error boundary — taking the whole transports page down rather than the
-    // one malformed pickup. Group those under the empty station instead.
-    const normalizedStation = (pickup.location ?? '').trim().toLowerCase();
+    // Shared with `RideForm`'s destination memory — see `normaliseStation`.
+    const normalizedStation = normaliseStation(pickup.location);
 
     // Find an existing group that matches (within timeWindow of any pickup in the group)
     let matched = false;

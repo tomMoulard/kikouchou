@@ -120,7 +120,11 @@ const comparePersons = (a: Person, b: Person): boolean =>
   // How many real people the entry stands for. Listed because the comparator
   // must cover every mutable field — without it, editing a guest's headcount
   // left every headcount-derived total (meals, groceries) on the old number.
-  a.headcount === b.headcount;
+  a.headcount === b.headcount &&
+  // The child restraint they need in a car. Same rule, same reason: without it
+  // a guest gaining a booster never republishes, so every ride they are in goes
+  // on reporting no seat requirement until some unrelated field also changes.
+  a.childSeat === b.childSeat;
 
 /**
  * Compares two person arrays for equality based on IDs and mutable properties.

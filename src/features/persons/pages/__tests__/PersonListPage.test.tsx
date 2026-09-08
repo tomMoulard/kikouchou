@@ -429,6 +429,48 @@ describe('PersonListPage', () => {
     expect(telLinks).toHaveLength(0);
   });
 
+  it('badges a guest who needs a child seat with the kind they need', () => {
+    // The card is where a driver reads the roster before loading the car, so
+    // the kind is spelled out rather than reduced to "child".
+    vi.mocked(usePersonContext).mockReturnValue({
+      persons: [{ ...mockPerson, childSeat: 'booster' as const }],
+      isLoading: false,
+      error: null,
+      getPersonById: vi.fn(() => mockPerson),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: mockDeletePerson,
+    } as ReturnType<typeof usePersonContext>);
+    render(<PersonListPage />, { withProviders: false });
+
+    expect(screen.getByText('childSeats.booster')).toBeInTheDocument();
+  });
+
+  it('names the child seat in the card label a screen reader reads', () => {
+    vi.mocked(usePersonContext).mockReturnValue({
+      persons: [{ ...mockPerson, childSeat: 'rearFacing' as const }],
+      isLoading: false,
+      error: null,
+      getPersonById: vi.fn(() => mockPerson),
+      createPerson: vi.fn(),
+      updatePerson: vi.fn(),
+      deletePerson: mockDeletePerson,
+    } as ReturnType<typeof usePersonContext>);
+    render(<PersonListPage />, { withProviders: false });
+
+    expect(
+      screen.getByRole('button', { name: /childSeats\.label: childSeats\.rearFacing/ }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows no child seat badge for a guest who needs none', () => {
+    // Absence is the answer for every adult, so the majority of cards must stay
+    // exactly as they were.
+    render(<PersonListPage />, { withProviders: false });
+
+    expect(screen.queryByText(/^childSeats\./)).not.toBeInTheDocument();
+  });
+
   it('does not open the edit dialog when the phone link is tapped', async () => {
     // The whole card opens the editor; without stopPropagation the number is
     // impossible to dial.

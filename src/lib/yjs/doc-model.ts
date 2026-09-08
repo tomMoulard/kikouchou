@@ -46,6 +46,8 @@ export type DocCollectionName =
   | 'rooms'
   | 'roomAssignments'
   | 'transport'
+  | 'rides'
+  | 'vehicles'
   | 'activities';
 
 /** A trip entity as it travels through the document: plain fields, no `tripId`. */
@@ -80,11 +82,21 @@ const COLLECTION_ROOT: Readonly<Record<DocCollectionName, string>> = {
   rooms: 'roomsById',
   roomAssignments: 'roomAssignmentsById',
   transport: 'transportById',
+  rides: 'ridesById',
+  vehicles: 'vehiclesById',
   activities: 'activitiesById',
 };
 
-/** v1 root keys, read only by {@link migrateLegacyArrayCollections}. */
-const LEGACY_ARRAY_KEY: Readonly<Record<DocCollectionName, string>> = {
+/**
+ * v1 root keys, read only by {@link migrateLegacyArrayCollections}.
+ *
+ * Deliberately **partial**. `rides` and `vehicles` postdate v1, so no document
+ * anywhere holds a legacy array for them and inventing a key would have the
+ * migration call `doc.getArray()` on a name that means nothing — a root that
+ * exists only because a loop asked for it, waiting for a future reader to
+ * mistake it for evidence that v1 had rides.
+ */
+const LEGACY_ARRAY_KEY: Readonly<Partial<Record<DocCollectionName, string>>> = {
   guests: 'guests',
   rooms: 'rooms',
   roomAssignments: 'roomAssignments',
@@ -158,6 +170,16 @@ function compareRecords(
         String(right.datetime ?? ''),
       );
       return byDatetime === 0 ? byId : byDatetime;
+    }
+    case 'rides': {
+      const byMeet = String(left.meetDatetime ?? '').localeCompare(
+        String(right.meetDatetime ?? ''),
+      );
+      return byMeet === 0 ? byId : byMeet;
+    }
+    case 'vehicles': {
+      const byName = String(left.name ?? '').localeCompare(String(right.name ?? ''));
+      return byName === 0 ? byId : byName;
     }
     case 'activities': {
       const byStart = String(left.startDatetime ?? '').localeCompare(
@@ -365,7 +387,12 @@ export function migrateLegacyArrayCollections(doc: Y.Doc): boolean {
 
   Y.transact(doc, () => {
     for (const name of DOC_COLLECTION_NAMES) {
-      const legacy = doc.getArray(LEGACY_ARRAY_KEY[name]);
+      const legacyKey = LEGACY_ARRAY_KEY[name];
+      if (legacyKey === undefined) {
+        continue;
+      }
+
+      const legacy = doc.getArray(legacyKey);
       if (legacy.length === 0) {
         continue;
       }

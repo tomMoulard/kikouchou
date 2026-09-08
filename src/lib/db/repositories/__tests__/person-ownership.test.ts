@@ -16,7 +16,7 @@ import { createRoom } from '@/lib/db/repositories/room-repository';
 import { createAssignment } from '@/lib/db/repositories/assignment-repository';
 import { createTransport } from '@/lib/db/repositories/transport-repository';
 import { db } from '@/lib/db/database';
-import type { PersonId, TripId } from '@/types';
+import type { ChildSeatKind, PersonId, TripId } from '@/types';
 import { isoDate, hexColor } from '@/test/utils';
 
 // ============================================================================
@@ -63,6 +63,32 @@ describe('updatePersonWithOwnershipCheck', () => {
     await expect(
       updatePersonWithOwnershipCheck(person.id, tripId2, { name: 'x' })
     ).rejects.toThrow('does not belong to current trip');
+  });
+
+  it('stores a child seat kind it knows', async () => {
+    const tripId = await createTestTrip();
+    const person = await createPerson(tripId, { name: 'Lila', color: hexColor('#22c55e') });
+
+    await updatePersonWithOwnershipCheck(person.id, tripId, { childSeat: 'booster' });
+
+    expect((await getPersonById(person.id))?.childSeat).toBe('booster');
+  });
+
+  it('drops a child seat kind it does not know', async () => {
+    // This is the path the guest form takes, and also the one a non-form caller
+    // takes; only the second can name a kind that does not exist.
+    const tripId = await createTestTrip();
+    const person = await createPerson(tripId, {
+      name: 'Lila',
+      color: hexColor('#22c55e'),
+      childSeat: 'booster',
+    });
+
+    await updatePersonWithOwnershipCheck(person.id, tripId, {
+      childSeat: 'hammock' as ChildSeatKind,
+    });
+
+    expect((await getPersonById(person.id))?.childSeat).toBeUndefined();
   });
 });
 

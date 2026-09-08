@@ -25,6 +25,13 @@ import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ColorPicker, DEFAULT_COLORS } from '@/components/shared/ColorPicker';
 import { useFormSubmission } from '@/hooks';
@@ -32,13 +39,14 @@ import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toHexColor } from '@/lib/db/utils';
 import { pickRandomUnusedColor } from '@/lib/utils/guest-colors';
 import {
+  CHILD_SEAT_KINDS,
   MAX_GUEST_GROUP_MEMBERS,
   MAX_PERSON_HEADCOUNT,
   MIN_PERSON_HEADCOUNT,
   getPersonHeadcount,
   normalizePersonHeadcount,
 } from '@/types';
-import type { GuestGroup, GuestGroupFormData } from '@/types';
+import type { ChildSeatKind, GuestGroup, GuestGroupFormData } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -70,6 +78,8 @@ interface MemberDraft {
   headcount: string;
   notes: string;
   phone: string;
+  /** A {@link ChildSeatKind}, or {@link NO_CHILD_SEAT} for "none needed". */
+  childSeat: string;
 }
 
 interface FormErrors {
@@ -80,6 +90,13 @@ interface FormErrors {
 // ============================================================================
 // Constants
 // ============================================================================
+
+/**
+ * The value a child-seat select carries for "none needed" — Radix reserves the
+ * empty string for its placeholder, so absence needs a name. It is mapped back
+ * to `undefined` on submit, exactly as `PersonForm` does.
+ */
+const NO_CHILD_SEAT = 'none';
 
 // ============================================================================
 // Helper Functions
@@ -105,6 +122,7 @@ function emptyDraft(drafts: readonly MemberDraft[]): MemberDraft {
     headcount: String(MIN_PERSON_HEADCOUNT),
     notes: '',
     phone: '',
+    childSeat: NO_CHILD_SEAT,
   };
 }
 
@@ -121,6 +139,7 @@ function toDrafts(group: GuestGroup | undefined): MemberDraft[] {
     headcount: String(getPersonHeadcount(member)),
     notes: member.notes ?? '',
     phone: member.phone ?? '',
+    childSeat: member.childSeat ?? NO_CHILD_SEAT,
   }));
 }
 
@@ -134,6 +153,7 @@ function snapshot(name: string, drafts: readonly MemberDraft[]): string {
       normalizePersonHeadcount(Number.parseInt(draft.headcount, 10)),
       draft.notes.trim(),
       draft.phone.trim(),
+      draft.childSeat,
     ]),
   ]);
 }
@@ -266,6 +286,11 @@ const GuestGroupForm = memo(function GuestGroupForm({
               ...(headcount > MIN_PERSON_HEADCOUNT ? { headcount } : {}),
               ...(notes.length > 0 ? { notes } : {}),
               ...(phone.length > 0 ? { phone } : {}),
+              // Rebuilt from the draft, so a seat that is not read back here is
+              // a seat the next save deletes from a member who has one.
+              ...(draft.childSeat === NO_CHILD_SEAT
+                ? {}
+                : { childSeat: draft.childSeat as ChildSeatKind }),
             };
           }),
         });
@@ -412,6 +437,35 @@ const GuestGroupForm = memo(function GuestGroupForm({
                   placeholder={t('persons.phonePlaceholder', '+33 6 12 34 56 78')}
                   disabled={isSubmitting}
                 />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor={`guest-group-child-seat-${draft.key}`} className="sr-only">
+                  {t('childSeats.label')}
+                </Label>
+                <Select
+                  value={draft.childSeat}
+                  onValueChange={(value) =>
+                    handleMemberChange(draft.key, { childSeat: value })
+                  }
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger
+                    id={`guest-group-child-seat-${draft.key}`}
+                    className="w-full"
+                    aria-label={t('childSeats.label')}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_CHILD_SEAT}>{t('childSeats.none')}</SelectItem>
+                    {CHILD_SEAT_KINDS.map((kind) => (
+                      <SelectItem key={kind} value={kind}>
+                        {t(`childSeats.${kind}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1">

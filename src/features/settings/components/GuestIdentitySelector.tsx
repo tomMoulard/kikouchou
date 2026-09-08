@@ -38,6 +38,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTripContext } from '@/contexts/TripContext';
+import { useTripIdentity } from '@/hooks/useTripIdentity';
 import {
   clearGuestIdentity,
   getTripGuestPersonId,
@@ -80,6 +81,13 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
   const navigate = useNavigate();
   const { currentTrip } = useTripContext();
   const { persons, isLoading } = usePersonContext();
+  // The explicit choice, which outranks the share-link store in
+  // `resolveTripIdentity`. Written alongside it rather than instead of it: the
+  // share key is what a guest arriving by link already carries and what the
+  // onboarding wizard writes, while this is the one the transport views read
+  // through `useTripIdentity`. Writing only the share key would leave a
+  // previous explicit answer in force and make this card look broken.
+  const { setMyPersonId } = useTripIdentity();
 
   const [personId, setPersonId] = useState<PersonId | undefined>(() =>
     getTripGuestPersonId(currentTrip),
@@ -111,6 +119,9 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
           return;
         }
         setPersonId(undefined);
+        // Clears the explicit answer too, or the higher-precedence store would
+        // keep naming a guest this card has just said is nobody.
+        void setMyPersonId(undefined);
         // Deliberately a raw confirmation rather than the offline-aware one: this
         // lives in localStorage and never syncs, so "Saved on this device" is
         // the only thing it could ever mean. Same call as the language card's.
@@ -139,13 +150,14 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
       }
 
       setPersonId(person.id);
+      void setMyPersonId(person.id);
       notify.success(
         t('settings.guestIdentityChanged', 'You are {{name}} on this trip', {
           name: person.name,
         }),
       );
     },
-    [currentTrip, persons, t],
+    [currentTrip, persons, setMyPersonId, t],
   );
 
   const handleOpenGuests = useCallback((): void => {

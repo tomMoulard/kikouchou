@@ -15,8 +15,16 @@
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
-import { MAX_LENGTHS, sanitizeOptionalText } from '@/lib/db/sanitize';
+import {
+  MAX_LENGTHS,
+  normalizeChildSeats,
+  normalizeLeadTimeMinutes,
+  normalizeSeatCount,
+  sanitizeOptionalText,
+  sanitizeText,
+} from '@/lib/db/sanitize';
 import { isGuestPhoneSharingEnabled } from '@/lib/flags';
+import { hasValidCoordinates } from '@/lib/geocoding';
 import { toSharedGuest } from '@/lib/sharing/guest-privacy';
 import i18n from '@/lib/i18n';
 import {
@@ -32,7 +40,9 @@ import {
 } from './doc-model';
 import type {
   Activity,
+  ChildSeatKind,
   Person,
+  Ride,
   Room,
   RoomAssignment,
   ShareId,
@@ -40,7 +50,9 @@ import type {
   Trip,
   TripId,
   UnixTimestamp,
+  Vehicle,
 } from '@/types';
+import { CHILD_SEAT_KINDS, RIDE_DIRECTIONS } from '@/types';
 
 const COMPACTION_THRESHOLD = 100;
 
@@ -214,6 +226,18 @@ function buildGuestRecord(
 ): Person {
   const person = { ...guest, tripId } as Person;
 
+  // A seat kind this build does not recognise is dropped rather than stored.
+  // It reaches `tallyRequiredChildSeats`, which indexes a tally by it, so an
+  // unknown value becomes a `NaN` under a bogus key and a newer peer's seat
+  // kind would render as "NaN hoverboard" on the ride card. Dropping it costs
+  // one badge; keeping it corrupts the tally for the whole car.
+  if (
+    person.childSeat !== undefined &&
+    !(CHILD_SEAT_KINDS as readonly unknown[]).includes(person.childSeat)
+  ) {
+    delete person.childSeat;
+  }
+
   if (person.phone !== undefined) {
     const boundedPhone = sanitizeOptionalText(person.phone, MAX_LENGTHS.personPhone);
     if (boundedPhone === undefined) {
@@ -240,6 +264,181 @@ function buildGuestRecord(
   }
 
   return person;
+}
+
+/**
+ * Coerces a peer-supplied value to a string before anything calls `.trim()`.
+ *
+ * `sanitizeText` and `sanitizeOptionalText` are written for form data, where a
+ * string is a type guarantee. The document is not form data: a peer, an older
+ * build or a newer one can put a number under `notes`, and `value.trim is not a
+ * function` thrown inside the projection's transaction rolls back the whole
+ * trip — every guest, room, assignment, transport, ride and vehicle — and the
+ * catch swallows it. The trip then silently stops receiving remote changes for
+ * as long as that one field survives.
+ *
+ * AGENTS.md states the rule this restores: drop an invalid record individually,
+ * never let one bad item abort a transaction that carries the rest.
+ */
+function boundedString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+/** {@link boundedString} for an optional field: a non-string reads as absent. */
+function optionalBoundedText(value: unknown, maxLength: number): string | undefined {
+  return typeof value === 'string'
+    ? sanitizeOptionalText(value, maxLength)
+    : undefined;
+}
+
+/**
+ * Keeps a peer-supplied pin only when it is somewhere on Earth.
+ *
+ * Delegates to `hasValidCoordinates`, which is what the trips map already
+ * filters with — rather than a fourth hand-rolled `typeof` pair, and rather
+ * than the looser `!isNaN` shape, which lets `null`, `Infinity` and a lat of
+ * 500 through. Those do not merely draw a wrong pin: they poison the centroid
+ * the map centres on and the bounds it fits, so one bad row pushes every real
+ * pin off the screen.
+ */
+function boundedCoordinates(
+  value: unknown,
+): { readonly lat: number; readonly lon: number } | undefined {
+  const candidate = value as
+    | { readonly lat?: unknown; readonly lon?: unknown }
+    | undefined;
+
+  return hasValidCoordinates(candidate)
+    ? { lat: candidate.lat, lon: candidate.lon }
+    : undefined;
+}
+
+/**
+ * Projects one leg out of the document, bounding what the log carried.
+ *
+ * Transports were the last collection still cast straight out of the document —
+ * `{ ...transport, tripId } as Transport` — while guests, rides and vehicles
+ * were each bounded. The cast is not free: `pickup-utils` already documents a
+ * row arriving with no `location` and throwing
+ * `Cannot read properties of undefined (reading 'trim')` straight into the error
+ * boundary, taking the whole transports page down rather than the one bad row.
+ * Anything that parses `datetime` fails the same way, and more surfaces parse it
+ * every time this feature grows.
+ *
+ * `datetime` decides the record's fate rather than being repaired: it is the
+ * second component of `[tripId+datetime]`, the index every transport read uses,
+ * so a non-string one is filed outside the range those reads scan — invisible to
+ * the app *and* to this projection's own delete-candidate query, which means
+ * nothing could ever remove it either.
+ *
+ * @param transport - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row, or undefined when it could never be read back
+ */
+function buildTransportRecord(
+  transport: SharedRecord,
+  tripId: TripId,
+): Transport | undefined {
+  const row = { ...transport, tripId } as Transport;
+
+  if (typeof row.datetime !== 'string' || row.datetime.length === 0) {
+    return undefined;
+  }
+
+  row.location = sanitizeText(
+    boundedString(row.location),
+    MAX_LENGTHS.transportLocation,
+  );
+  row.startLocation = optionalBoundedText(
+    row.startLocation,
+    MAX_LENGTHS.transportLocation,
+  );
+  row.transportNumber = optionalBoundedText(
+    row.transportNumber,
+    MAX_LENGTHS.transportNumber,
+  );
+  row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.transportNotes);
+  row.coordinates = boundedCoordinates(row.coordinates);
+  row.startCoordinates = boundedCoordinates(row.startCoordinates);
+
+  return row;
+}
+
+/**
+ * Projects one ride out of the document, bounding what the log carried.
+ *
+ * A ride arrives from another member's device and has passed no form of ours.
+ * Two fields do real damage unbounded, so both are pinned here at the trust
+ * boundary rather than at the components that read them:
+ *
+ * - `leadTimeMinutes` is subtracted from an instant to produce a "leave now"
+ *   time. A peer sending 10^9 puts that alert nineteen centuries in the past,
+ *   where it is permanently due and permanently on screen.
+ * - `direction` drives an icon and a phrase lookup. An unknown value from a
+ *   newer peer falls back to `pickup` rather than rendering an empty pill.
+ *
+ * @param ride - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row ready for Dexie
+ */
+function buildRideRecord(ride: SharedRecord, tripId: TripId): Ride | undefined {
+  const row = { ...ride, tripId } as Ride;
+
+  // `meetDatetime` is the second component of `[tripId+meetDatetime]`, the index
+  // every ride read in the app uses. A non-string one is not merely wrong data:
+  // IndexedDB files it outside the range those reads scan, so the row becomes
+  // invisible to the context, the repository, the analytics read *and* to
+  // `syncDocToDexie`'s own delete-candidate query — which means nothing can ever
+  // remove it either. Drop the record instead of storing an unreachable one.
+  if (typeof row.meetDatetime !== 'string' || row.meetDatetime.length === 0) {
+    return undefined;
+  }
+
+  row.location = sanitizeText(boundedString(row.location), MAX_LENGTHS.rideLocation);
+  row.leadTimeMinutes = normalizeLeadTimeMinutes(row.leadTimeMinutes);
+  row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.rideNotes);
+  row.coordinates = boundedCoordinates(row.coordinates);
+
+  if (!RIDE_DIRECTIONS.includes(row.direction)) {
+    row.direction = 'pickup';
+  }
+
+  return row;
+}
+
+/**
+ * Projects one vehicle out of the document, bounding what the log carried.
+ *
+ * `seatCount` and `childSeats` are the fields that matter. A seat count is
+ * compared against a headcount and rendered; a child-seat list is rendered one
+ * badge per entry, so an unbounded array from a peer is a rendering bomb rather
+ * than merely wrong data — the shape of the `capacity` bug this codebase
+ * already paid for once, where `Array.from({length: capacity})` killed the tab.
+ *
+ * @param vehicle - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row ready for Dexie
+ */
+function buildVehicleRecord(vehicle: SharedRecord, tripId: TripId): Vehicle {
+  const row = { ...vehicle, tripId } as Vehicle;
+
+  row.name = sanitizeText(boundedString(row.name), MAX_LENGTHS.vehicleName);
+  row.seatCount = normalizeSeatCount(row.seatCount);
+  row.luggageNotes = optionalBoundedText(
+    row.luggageNotes,
+    MAX_LENGTHS.vehicleLuggageNotes,
+  );
+  row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.vehicleNotes);
+
+  row.childSeats = Array.isArray(row.childSeats)
+    ? normalizeChildSeats(
+        row.childSeats.filter((kind): kind is ChildSeatKind =>
+          (CHILD_SEAT_KINDS as readonly unknown[]).includes(kind),
+        ),
+      )
+    : undefined;
+
+  return row;
 }
 
 async function replaceTripScopedRows<T extends { id: string; tripId: TripId }>(
@@ -411,7 +610,16 @@ export async function syncDocToDexie(
   try {
     await db.transaction(
       'rw',
-      [db.trips, db.persons, db.rooms, db.roomAssignments, db.transports, db.activities],
+      [
+        db.trips,
+        db.persons,
+        db.rooms,
+        db.roomAssignments,
+        db.transports,
+        db.rides,
+        db.vehicles,
+        db.activities,
+      ],
       async () => {
         await db.trips.put(nextTrip);
 
@@ -427,6 +635,14 @@ export async function syncDocToDexie(
         const currentTransport = await db.transports
           .where('[tripId+datetime]')
           .between([tripId, ''], [tripId, '\uffff'])
+          .toArray();
+        const currentRides = await db.rides
+          .where('[tripId+meetDatetime]')
+          .between([tripId, ''], [tripId, '\uffff'])
+          .toArray();
+        const currentVehicles = await db.vehicles
+          .where('tripId')
+          .equals(tripId)
           .toArray();
         const currentActivities = await db.activities
           .where('[tripId+startDatetime]')
@@ -447,8 +663,14 @@ export async function syncDocToDexie(
         const nextAssignments = readCollection(doc, 'roomAssignments').map(
           (assignment) => ({ ...assignment, tripId } as RoomAssignment),
         );
-        const nextTransport = readCollection(doc, 'transport').map(
-          (transport) => ({ ...transport, tripId } as Transport),
+        const nextTransport = readCollection(doc, 'transport')
+          .map((transport) => buildTransportRecord(transport, tripId))
+          .filter((transport): transport is Transport => transport !== undefined);
+        const nextRides = readCollection(doc, 'rides')
+          .map((ride) => buildRideRecord(ride, tripId))
+          .filter((ride): ride is Ride => ride !== undefined);
+        const nextVehicles = readCollection(doc, 'vehicles').map((vehicle) =>
+          buildVehicleRecord(vehicle, tripId),
         );
         const nextActivities = readCollection(doc, 'activities').map(
           (activity) => ({ ...activity, tripId } as Activity),
@@ -479,6 +701,18 @@ export async function syncDocToDexie(
           (ids) => db.transports.bulkDelete([...ids]),
         );
         await replaceTripScopedRows(
+          currentRides,
+          nextRides,
+          (rows) => db.rides.bulkPut(rows),
+          (ids) => db.rides.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
+          currentVehicles,
+          nextVehicles,
+          (rows) => db.vehicles.bulkPut(rows),
+          (ids) => db.vehicles.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
           currentActivities,
           nextActivities,
           (rows) => db.activities.bulkPut(rows),
@@ -500,26 +734,32 @@ export async function syncDocToDexie(
 export const applyDocToDexie = syncDocToDexie;
 
 export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<void> {
-  const [trip, guests, rooms, assignments, transport, activities] = await Promise.all([
-    db.trips.get(tripId),
-    db.persons.where('tripId').equals(tripId).toArray(),
-    db.rooms
-      .where('[tripId+order]')
-      .between([tripId, -Infinity], [tripId, Infinity])
-      .toArray(),
-    db.roomAssignments
-      .where('[tripId+startDate]')
-      .between([tripId, ''], [tripId, '\uffff'])
-      .toArray(),
-    db.transports
-      .where('[tripId+datetime]')
-      .between([tripId, ''], [tripId, '\uffff'])
-      .toArray(),
-    db.activities
-      .where('[tripId+startDatetime]')
-      .between([tripId, ''], [tripId, '\uffff'])
-      .toArray(),
-  ]);
+  const [trip, guests, rooms, assignments, transport, rides, vehicles, activities] =
+    await Promise.all([
+      db.trips.get(tripId),
+      db.persons.where('tripId').equals(tripId).toArray(),
+      db.rooms
+        .where('[tripId+order]')
+        .between([tripId, -Infinity], [tripId, Infinity])
+        .toArray(),
+      db.roomAssignments
+        .where('[tripId+startDate]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+      db.transports
+        .where('[tripId+datetime]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+      db.rides
+        .where('[tripId+meetDatetime]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+      db.vehicles.where('tripId').equals(tripId).toArray(),
+      db.activities
+        .where('[tripId+startDatetime]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+    ]);
 
   if (!trip) {
     return;
@@ -556,6 +796,8 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
       ['rooms', rooms],
       ['roomAssignments', assignments],
       ['transport', transport],
+      ['rides', rides],
+      ['vehicles', vehicles],
       ['activities', activities],
     ];
 

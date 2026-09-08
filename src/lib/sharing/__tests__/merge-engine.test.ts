@@ -17,6 +17,7 @@ import type {
   Room,
   RoomAssignment,
   RoomAssignmentId,
+  Ride,
   RoomId,
   Transport,
   TransportId,
@@ -31,12 +32,17 @@ const mockHostPersons: Person[] = [];
 const mockHostAssignments: RoomAssignment[] = [];
 const mockHostTransports: Transport[] = [];
 const mockHostRooms: Room[] = [];
+const mockHostRides: Ride[] = [];
 
 vi.mock('@/lib/db', () => ({
   getPersonsByTripId: vi.fn(async () => mockHostPersons),
   getAssignmentsByTripId: vi.fn(async () => mockHostAssignments),
   getTransportsByTripId: vi.fn(async () => mockHostTransports),
   getRoomsByTripId: vi.fn(async () => mockHostRooms),
+  // Rides do not travel in a changeset, but the host's own decide whether an
+  // incoming `rideId` still resolves — "the host put you in this car" against
+  // "that car is gone".
+  getRidesByTripId: vi.fn(async () => mockHostRides),
 }));
 
 // ============================================================================

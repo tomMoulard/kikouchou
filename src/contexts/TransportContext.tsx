@@ -22,6 +22,10 @@ import {
   isTransportUpcoming,
   sortTransportsByInstant,
 } from '@/features/transports/utils/pickup-utils';
+// Imported from the module rather than the `@/hooks` barrel: that barrel also
+// re-exports `useTripIdentity`, which imports this file's siblings, and a
+// context reaching for it would close the import cycle.
+import { useNowMs } from '@/hooks/useNowMs';
 import { useTripContext } from '@/contexts/TripContext';
 import {
   areArraysEqual,
@@ -168,6 +172,11 @@ const compareTransports = (a: Transport, b: Transport): boolean =>
   a.personId === b.personId &&
   a.needsPickup === b.needsPickup &&
   a.driverId === b.driverId &&
+  // Membership. Missing from this list, joining or leaving a car would never
+  // reach the UI — the ride card would keep the old passenger list until some
+  // unrelated field on the leg happened to change too, which is exactly the
+  // bug the three map fields below record.
+  a.rideId === b.rideId &&
   a.location === b.location &&
   a.transportMode === b.transportMode &&
   a.transportNumber === b.transportNumber &&
@@ -319,39 +328,13 @@ export function TransportProvider({
   // State to hold stable transports (replacing ref for render-safe access)
    [transports, setTransports] = useState<Transport[]>([]),
 
-  // CR-3: The one reference instant for past-vs-upcoming, refreshed every minute
-  // so the pickup alerts and the transport list age without a reload. Held as
-  // epoch milliseconds rather than an ISO string: comparing ISO strings only
-  // works while every stored datetime shares one exact formatting, and nothing
-  // guarantees that for rows arriving over Yjs.
-   [nowMs, setNowMs] = useState<number>(() => Date.now());
-
-  // CR-3: Refresh the reference instant every minute to keep upcomingPickups
-  // accurate, and again whenever the app comes back to the foreground: a
-  // backgrounded PWA has its timers throttled or frozen, so without this a user
-  // returning after lunch would see pickups that are hours past still listed as
-  // upcoming until the next tick landed.
-  useEffect(() => {
-    const REFRESH_INTERVAL_MS = 60_000; // 1 minute
-    const intervalId = setInterval(() => {
-      setNowMs(Date.now());
-    }, REFRESH_INTERVAL_MS);
-
-    const handleResume = (): void => {
-      if (document.visibilityState === 'visible') {
-        setNowMs(Date.now());
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleResume);
-    window.addEventListener('focus', handleResume);
-
-    return () => {
-      clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', handleResume);
-      window.removeEventListener('focus', handleResume);
-    };
-  }, []);
+  // CR-3: The one reference instant for past-vs-upcoming, refreshed every
+  // minute and on resume so the pickup alerts, the transport list and the
+  // driver's departure banner age together without a reload. The mechanism
+  // lives in `useNowMs`, which is the only implementation of it — a second
+  // interval on a second offset is how three views came to disagree about
+  // "now" in the first place, one layer down.
+   nowMs = useNowMs();
 
   // Clear refs, state, and error when trip changes to prevent stale cross-trip data
   useEffect(() => {
