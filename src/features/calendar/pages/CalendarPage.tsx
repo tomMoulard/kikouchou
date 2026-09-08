@@ -283,7 +283,19 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     [rooms],
   );
 
-  // Trip date boundaries for visual indicators
+  // Trip date boundaries for visual indicators.
+  //
+  // A trip runs in *days*, both ends included: "11 - 13 Sep" means the guests
+  // arrive on the 11th and leave on the 13th, so all three days are on the trip
+  // and there are two nights between them. That is the rule the sidebar label
+  // (`formatDateRange`) and the timeline day axis (`buildTripDayColumns`)
+  // already state, so the month grid states it too.
+  //
+  // Room assignments keep the *nights* rule underneath - a stay booked
+  // 11 -> 13 covers the nights of the 11th and the 12th - which is why the last
+  // assignment bar ends a day before the trip does. The departure day carries no
+  // bed, but it is still a day of the trip: it holds the departure runs, and
+  // greying it out as "Outside the trip dates" hid them.
   const tripBoundaries = useMemo(() => {
     if (!currentTrip) {
       return null;
@@ -293,12 +305,10 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     if (!isValid(start) || !isValid(end)) {
       return null;
     }
-    // Use the same "nights" model as room assignments: last visible night is endDate - 1.
-    const lastNight = subDays(end, 1);
-    if (lastNight < start) {
+    if (end < start) {
       return null;
     }
-    return { start, end: lastNight };
+    return { start, end };
   }, [currentTrip]);
 
   // Generate calendar days for the current month view
