@@ -139,6 +139,21 @@ interface TripFormProps {
  */
 export interface NewTripGuest {
   readonly name: string;
+  /**
+   * Set on the badged "You" row, and only on it.
+   *
+   * The row asks the user for their own name, so the person it creates is who
+   * this browser is on the new trip — the create page stores that as the trip's
+   * guest identity. Without the marker the page would have to guess, and the
+   * two candidates both fail: list position says nothing once a cleared "You"
+   * row drops out of the reported list, and matching the account name is wrong
+   * for anyone who types something else into the row.
+   *
+   * A row the user cleared is not reported at all, so no guest carries this and
+   * the browser stays nobody in particular. That is the right answer for a host
+   * arranging a trip they are not on.
+   */
+  readonly isSelf?: boolean;
   readonly color?: HexColor;
   readonly headcount?: number;
   readonly notes?: string;
@@ -423,7 +438,13 @@ const TripForm = memo(function TripForm({
   const guestsToCreate = useMemo(
     (): readonly NewTripGuest[] =>
       resolvedGuests
-        .map((guest) => ({ ...guest.imported, name: guest.name.trim() }))
+        .map((guest, index) => ({
+          ...guest.imported,
+          name: guest.name.trim(),
+          // Index into `resolvedGuests`, before the blanks go: the first row is
+          // the "You" row wherever the trimming leaves it in the reported list.
+          ...(index === 0 ? { isSelf: true } : {}),
+        }))
         .filter((guest) => guest.name !== ''),
     [resolvedGuests],
   );

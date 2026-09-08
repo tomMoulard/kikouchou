@@ -35,7 +35,8 @@ import {
   createPersonWithAutoColor,
 } from '@/lib/db';
 import { captureUsage } from '@/lib/posthog';
-import type { TripFormData, TripId } from '@/types';
+import { writeGuestIdentity } from '@/lib/sharing/guest-identity';
+import type { PersonId, TripFormData, TripId } from '@/types';
 
 // ============================================================================
 // Component
@@ -193,12 +194,14 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
       */
       const guests = guestsRef.current;
       let addedGuestCount = 0,
-        importedGuestCount = 0;
+        importedGuestCount = 0,
+        selfPersonId: PersonId | undefined;
 
       for (const guest of guests) {
         try {
+          let person;
           if (guest.color) {
-            await createPerson(newTrip.id, {
+            person = await createPerson(newTrip.id, {
               name: guest.name,
               color: guest.color,
               ...(guest.headcount === undefined ? {} : { headcount: guest.headcount }),
@@ -207,7 +210,10 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
             });
             importedGuestCount += 1;
           } else {
-            await createPersonWithAutoColor(newTrip.id, guest.name);
+            person = await createPersonWithAutoColor(newTrip.id, guest.name);
+          }
+          if (guest.isSelf) {
+            selfPersonId = person?.id;
           }
           addedGuestCount += 1;
         } catch (error) {
@@ -219,6 +225,37 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
       // a rolled-back creation — the same call the room import above makes.
       if (addedGuestCount < guests.length) {
         toast.error(t('trips.guestsCreateFailed', 'Trip created but some guests could not be added'));
+      }
+
+      /*
+        Become the person the "You" row created.
+
+        The form asks for the user's own name and badges the row "You", so the
+        answer to "who is this browser" is already on screen — and until this,
+        nothing wrote it down. Settings read "Nobody in particular" on a trip
+        the user had just created and put their own name at the top of, and
+        claiming a room, joining an activity and offering a ride all acted for
+        nobody until they found the identity picker and chose themselves.
+
+        Nothing to store when the user cleared the row: a host arranging a trip
+        they are not on is nobody in particular, and that is the right answer.
+      */
+      if (selfPersonId) {
+        // The trip and its guests are saved by now, so a storage refusal —
+        // private browsing, a full quota — is a warning like the failed guest
+        // above, not a reason to strand the user on the form. Same message the
+        // settings picker shows, because it is the same failure.
+        if (!writeGuestIdentity(newTrip.shareId, {
+          personId: selfPersonId,
+          tripId: newTrip.id,
+        })) {
+          toast.error(
+            t(
+              'sharing.identityStorageFailed',
+              'Could not save your identity. You may need to re-select on your next visit.',
+            ),
+          );
+        }
       }
 
       // Set the new trip as the current trip so CalendarPage can display it
