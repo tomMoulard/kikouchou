@@ -186,12 +186,64 @@ vi.mock('@/features/rooms/components/QuickAssignmentDialog', () => ({
   ),
 }));
 
+// The chips live inside the timeline, so the page's side of the pointer-free
+// path is these two callbacks: the stub exposes each as a button.
 vi.mock('@/features/rooms/components/RoomOccupancyTimeline', () => ({
-  RoomOccupancyTimeline: () => <div data-testid="room-occupancy-timeline" />,
+  RoomOccupancyTimeline: ({
+    onAssignGuestToRoom,
+    onMoveAssignmentToRoom,
+  }: {
+    onAssignGuestToRoom?: (
+      guest: { person: Person; startDate: string; endDate: string },
+      roomId: string,
+    ) => void;
+    onMoveAssignmentToRoom?: (assignment: RoomAssignment, roomId: string) => void;
+  }) => (
+    <div data-testid="room-occupancy-timeline">
+      <button
+        type="button"
+        aria-label="assign-from-chip"
+        onClick={() =>
+          onAssignGuestToRoom?.(
+            { person: mockPerson, startDate: '2026-07-02', endDate: '2026-07-08' },
+            'room-1',
+          )
+        }
+      />
+      <button
+        type="button"
+        aria-label="move-from-pill"
+        onClick={() => onMoveAssignmentToRoom?.(mockAssignment, 'room-2')}
+      />
+    </div>
+  ),
   // The page reserves the same width the frame does when deciding whether the
   // reading-width cap still fits, so the stub has to carry it too.
   ROOM_TIMELINE_LABEL_COLUMN_WIDTH_PX: 140,
 }));
+
+// Everything but the sensor list is left to the real dnd-kit; the list is the
+// page's own decision about which inputs can move a chip.
+vi.mock('@dnd-kit/core', async () => {
+  const actual = await vi.importActual<typeof import('@dnd-kit/core')>('@dnd-kit/core');
+  return {
+    ...actual,
+    DndContext: ({
+      children,
+      sensors,
+    }: {
+      children: React.ReactNode;
+      sensors?: readonly { sensor: { name: string } }[];
+    }) => (
+      <div
+        data-testid="dnd-context"
+        data-sensors={(sensors ?? []).map((entry) => entry.sensor.name).join(',')}
+      >
+        {children}
+      </div>
+    ),
+  };
+});
 
 vi.mock('@/features/rooms/components/DraggableGuest', () => ({
   DraggableGuest: ({ person }: { person: Person }) => (
@@ -985,5 +1037,53 @@ describe('RoomListPage', () => {
     currentSearchParams = new URLSearchParams('view=card');
     render(<RoomListPage />, { withProviders: false });
     expect(screen.getByText('rooms.title')).toBeInTheDocument();
+  });
+
+  // ===========================================================================
+  // Assigning a room without a pointer
+  // ===========================================================================
+
+  describe('room assignment without a drag', () => {
+    // A mouse sensor and a touch sensor were the whole list, so Space and the
+    // arrow keys moved nothing: room assignment had no keyboard path at all.
+    it('registers a keyboard sensor beside the pointer ones', () => {
+      render(<RoomListPage />, { withProviders: false });
+
+      const sensors = screen.getByTestId('dnd-context').getAttribute('data-sensors');
+      expect(sensors).toContain('KeyboardSensor');
+      expect(sensors).toContain('MouseSensor');
+      expect(sensors).toContain('TouchSensor');
+    });
+
+    it('creates the assignment a guest chip menu asks for', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      currentSearchParams = new URLSearchParams('view=timeline');
+      render(<RoomListPage />, { withProviders: false });
+
+      await user.click(screen.getByLabelText('assign-from-chip'));
+
+      await waitFor(() => {
+        expect(mockCreateAssignment).toHaveBeenCalledWith({
+          roomId: 'room-1',
+          personId: 'person-1',
+          startDate: '2026-07-02',
+          endDate: '2026-07-08',
+        });
+      });
+    });
+
+    it('moves the assignment an occupied pill menu asks for', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      currentSearchParams = new URLSearchParams('view=timeline');
+      render(<RoomListPage />, { withProviders: false });
+
+      await user.click(screen.getByLabelText('move-from-pill'));
+
+      await waitFor(() => {
+        expect(mockUpdateAssignment).toHaveBeenCalledWith('a-1', { roomId: 'room-2' });
+      });
+    });
   });
 });

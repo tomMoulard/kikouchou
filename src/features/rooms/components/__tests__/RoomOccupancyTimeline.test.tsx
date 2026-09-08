@@ -64,6 +64,8 @@ vi.mock('@/features/rooms/components/DroppableRoom', () => ({
   ),
 }));
 
+// The menu the chip offers is the pointer-free way to house a guest, so the
+// stub keeps the rooms it was handed and a way to pick one.
 vi.mock('@/features/rooms/components/DraggableGuest', () => ({
   DraggableGuest: ({
     person,
@@ -71,12 +73,16 @@ vi.mock('@/features/rooms/components/DraggableGuest', () => ({
     endDate,
     bar,
     style,
+    assignableRooms,
+    onAssignRoom,
   }: {
     person: Person;
     startDate: string;
     endDate: string;
     bar?: boolean;
     style?: { left?: string | number; width?: string | number; top?: string | number };
+    assignableRooms?: readonly { id: string; name: string; availableSpots: number }[];
+    onAssignRoom?: (roomId: string) => void;
   }) => (
     <span
       data-testid="draggable-guest"
@@ -85,8 +91,19 @@ vi.mock('@/features/rooms/components/DraggableGuest', () => ({
       data-bar={bar ? 'true' : 'false'}
       data-left={String(style?.left ?? '')}
       data-top={String(style?.top ?? '')}
+      data-rooms={(assignableRooms ?? [])
+        .map((room) => `${room.id}:${room.name}:${room.availableSpots}`)
+        .join('|')}
     >
       {person.name}
+      {(assignableRooms ?? []).map((room) => (
+        <button
+          key={room.id}
+          type="button"
+          aria-label={`assign ${person.name} to ${room.id}`}
+          onClick={() => onAssignRoom?.(room.id)}
+        />
+      ))}
     </span>
   ),
 }));
@@ -98,18 +115,33 @@ vi.mock('@/features/rooms/components/DraggableRoomAssignment', () => ({
     label,
     accessibilityLabel,
     style,
+    assignableRooms,
+    onAssignRoom,
   }: {
     label: string;
     accessibilityLabel?: string;
     style?: React.CSSProperties;
+    assignableRooms?: readonly { id: string; name: string; availableSpots: number }[];
+    onAssignRoom?: (roomId: string) => void;
   }) => (
     <span
       data-testid="draggable-assignment"
       aria-label={accessibilityLabel ?? label}
       data-left={String(style?.left ?? '')}
       data-width={String(style?.width ?? '')}
+      data-rooms={(assignableRooms ?? [])
+        .map((room) => `${room.id}:${room.name}:${room.availableSpots}`)
+        .join('|')}
     >
       {label}
+      {(assignableRooms ?? []).map((room) => (
+        <button
+          key={room.id}
+          type="button"
+          aria-label={`move ${label} to ${room.id}`}
+          onClick={() => onAssignRoom?.(room.id)}
+        />
+      ))}
     </span>
   ),
 }));
@@ -692,5 +724,102 @@ describe('RoomOccupancyTimeline', () => {
       />,
     );
     expect(screen.queryByTestId('draggable-guest')).not.toBeInTheDocument();
+  });
+
+  // The chips are where a guest meets a room in this view, and a drag was the
+  // only way to put the one in the other — no keyboard, no tap, nothing for a
+  // screen reader to do.
+  describe('assigning without a drag', () => {
+    const atticRoom: Room = {
+      id: 'room-2' as Room['id'],
+      tripId: 'trip-1' as Room['tripId'],
+      name: 'Attic',
+      capacity: 1,
+      order: 1,
+    };
+
+    const bob: Person = {
+      ...mockPerson,
+      id: 'p2' as Person['id'],
+      name: 'Bob',
+    };
+
+    const unassignedBob = [
+      {
+        person: bob,
+        startDate: '2026-07-03',
+        endDate: '2026-07-07',
+      },
+    ];
+
+    it('offers every room on a guest chip, with the beds each one has left', () => {
+      render(
+        <RoomOccupancyTimeline
+          {...defaultProps}
+          rooms={[mockRoom, atticRoom]}
+          assignments={[mockAssignment]}
+          unassignedGuests={unassignedBob}
+        />,
+      );
+
+      expect(screen.getByTestId('draggable-guest')).toHaveAttribute(
+        'data-rooms',
+        'room-1:Main Bedroom:1|room-2:Attic:1',
+      );
+    });
+
+    it('houses the guest in the room chosen from the chip', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const onAssignGuestToRoom = vi.fn();
+      render(
+        <RoomOccupancyTimeline
+          {...defaultProps}
+          rooms={[mockRoom, atticRoom]}
+          unassignedGuests={unassignedBob}
+          onAssignGuestToRoom={onAssignGuestToRoom}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('assign Bob to room-2'));
+
+      expect(onAssignGuestToRoom).toHaveBeenCalledWith(
+        { person: bob, startDate: '2026-07-03', endDate: '2026-07-07' },
+        'room-2',
+      );
+    });
+
+    it('offers the other rooms on an assigned pill, never the one it is in', () => {
+      render(
+        <RoomOccupancyTimeline
+          {...defaultProps}
+          rooms={[mockRoom, atticRoom]}
+          assignments={[mockAssignment]}
+        />,
+      );
+
+      expect(screen.getByTestId('draggable-assignment')).toHaveAttribute(
+        'data-rooms',
+        'room-2:Attic:1',
+      );
+    });
+
+    it('moves the assignment to the room chosen from the pill', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const onMoveAssignmentToRoom = vi.fn();
+      render(
+        <RoomOccupancyTimeline
+          {...defaultProps}
+          rooms={[mockRoom, atticRoom]}
+          assignments={[mockAssignment]}
+          onMoveAssignmentToRoom={onMoveAssignmentToRoom}
+        />,
+      );
+
+      await user.click(screen.getByLabelText('move Alice to room-2'));
+
+      expect(onMoveAssignmentToRoom).toHaveBeenCalledWith(mockAssignment, 'room-2');
+    });
   });
 });
