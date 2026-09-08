@@ -78,6 +78,14 @@ export interface QuickAssignmentDialogProps {
   readonly person: Person | null;
   /** The target room (from drop) */
   readonly roomId: RoomId | null;
+  /**
+   * The guest the selector starts on, when no {@link person} is given.
+   *
+   * The claim flow's own answer to "who is this browser": with it the dialog
+   * opens on that guest and one press finishes the claim, and without it the
+   * selector starts empty because there is nobody to claim the room for.
+   */
+  readonly suggestedPersonId?: PersonId;
   /** Pre-filled start date (from unassigned dates) */
   readonly suggestedStartDate?: string;
   /** Pre-filled end date (from unassigned dates) */
@@ -113,6 +121,7 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     onOpenChange,
     person,
     roomId,
+    suggestedPersonId,
     suggestedStartDate,
     suggestedEndDate,
   } = props;
@@ -180,14 +189,15 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
 
   // State-based sync: initialize form when dialog opens (render-time, no effect needed)
   const [prevInitKey, setPrevInitKey] = useState<string | null>(null);
-  const initKey = open && roomId ? `${roomId}-${person?.id ?? ''}-${suggestedStartDate ?? ''}-${suggestedEndDate ?? ''}` : null;
+  const initKey = open && roomId ? `${roomId}-${person?.id ?? ''}-${suggestedPersonId ?? ''}-${suggestedStartDate ?? ''}-${suggestedEndDate ?? ''}` : null;
   if (initKey !== null && prevInitKey !== initKey) {
     setPrevInitKey(initKey);
-    // Pre-fill person if provided (drag-drop flow)
+    // Pre-fill person if provided (drag-drop flow), else the guest this
+    // browser has become (claim flow), else nobody.
     if (person) {
       setSelectedPersonId(person.id);
     } else {
-      setSelectedPersonId('');
+      setSelectedPersonId(suggestedPersonId ?? '');
     }
     // Pre-fill dates from suggested dates
     if (suggestedStartDate && suggestedEndDate) {
@@ -216,8 +226,10 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
 
   // Compute dirty state: has user changed anything from the pre-filled values?
   const isDirty = useMemo(() => {
-    // Person changed from pre-filled (drag-drop flow) or selected in claim flow
-    const initialPersonId = person?.id ?? '';
+    // Person changed from the one the dialog opened on — the dropped guest, or
+    // the guest this browser is. Opening on one is not the user choosing it,
+    // so it must not count as a change to discard.
+    const initialPersonId = person?.id ?? suggestedPersonId ?? '';
     if (selectedPersonId !== initialPersonId) {return true;}
 
     // Date range changed from suggested dates
@@ -236,7 +248,14 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     }
 
     return false;
-  }, [selectedPersonId, dateRange, person, suggestedStartDate, suggestedEndDate]);
+  }, [
+    selectedPersonId,
+    dateRange,
+    person,
+    suggestedPersonId,
+    suggestedStartDate,
+    suggestedEndDate,
+  ]);
 
   // Compute capacity warning synchronously (derived state, no effect needed)
   const computedCapacityWarning = useMemo(() => {
@@ -385,7 +404,9 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
             <DialogTitle>
               {person
                 ? t('assignments.quickAssign', 'Assign to room')
-                : t('rooms.claimRoom')}
+                : suggestedPersonId
+                  ? t('rooms.claimRoom')
+                  : t('rooms.assignGuest', 'Assign a guest')}
             </DialogTitle>
             <DialogDescription>
               {t(

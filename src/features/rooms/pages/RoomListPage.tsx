@@ -10,6 +10,7 @@
  * - Add room action (FAB on mobile, header button on desktop)
  * - Empty state for trips with no rooms
  * - Edit/Delete actions via RoomCard dropdown menu
+ * - Claim a room for the guest this browser is, or assign any guest to it
  * - Double-click a room name (either view) to open its edit dialog
  * - Drag-and-drop room assignments (timeline unassigned rows)
  * - Room menu on each timeline chip, for assignment without a pointer
@@ -80,6 +81,7 @@ import {
 } from '@/features/rooms/utils/capacity-utils';
 import { createRoomDragAnnouncements } from '@/features/rooms/utils/dnd-announcements';
 import { calculateUnassignedDates } from '@/features/rooms/utils/unassigned-guests';
+import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
 import { buildDayColumns } from '@/lib/utils/trip-days';
 import { notify } from '@/lib/notifications';
@@ -87,6 +89,7 @@ import { getPersonHeadcount } from '@/types';
 import type {
   ISODateString,
   Person,
+  PersonId,
   Room,
   RoomAssignment,
   RoomId,
@@ -421,6 +424,18 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
      startDate: '',
      endDate: '',
    }),
+
+  /**
+   * The guest this browser has become, if any.
+   *
+   * A trip's own host has no stored identity: they arrange rooms for other
+   * people, so there is nobody for them to claim a room for and the button
+   * says what it does instead.
+   */
+   selfPersonId = useMemo(
+    (): PersonId | undefined => getTripGuestPersonId(currentTrip),
+    [currentTrip],
+  ),
 
   currentView = useMemo(() => {
     const raw = searchParams.get('view');
@@ -1272,6 +1287,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
                   onEdit={handleRoomEdit}
                   onDelete={handleRoomDelete}
                   onClaim={handleClaimRoom}
+                  claimsForSelf={selfPersonId !== undefined}
                   isDisabled={isActionInProgress}
                   isExpanded={expandedRoomId === room.id}
                   expandedContent={
@@ -1334,6 +1350,9 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         onOpenChange={handleQuickAssignDialogClose}
         person={quickAssignData.person}
         roomId={quickAssignData.roomId}
+        {...(quickAssignData.person === null && selfPersonId !== undefined
+          ? { suggestedPersonId: selfPersonId }
+          : {})}
         suggestedStartDate={quickAssignData.startDate}
         suggestedEndDate={quickAssignData.endDate}
       />

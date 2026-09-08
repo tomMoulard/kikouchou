@@ -69,8 +69,17 @@ export interface RoomCardProps {
   readonly onEdit: (room: Room) => void;
   /** Callback when Delete is confirmed. Can be async. */
   readonly onDelete: (room: Room) => void | Promise<void>;
-  /** Callback when "Claim this room" is clicked */
+  /** Callback when the assignment button is clicked */
   readonly onClaim?: (room: Room) => void;
+  /**
+   * Whether {@link RoomCardProps.onClaim} acts for the person using the app.
+   *
+   * The button opens a dialog with a guest selector listing everyone, so
+   * "Claim this room" only tells the truth when this browser has become one of
+   * the guests and the dialog opens on them. For a host arranging the trip it
+   * is an assignment, and the label says so.
+   */
+  readonly claimsForSelf?: boolean;
   /** Content to render when expanded (typically RoomAssignmentSection) */
   readonly expandedContent?: ReactNode;
 }
@@ -122,6 +131,7 @@ const RoomCard = memo(function RoomCard({
   onEdit,
   onDelete,
   onClaim,
+  claimsForSelf = false,
   expandedContent,
 }: RoomCardProps) {
   const { t } = useTranslation(),
@@ -394,7 +404,7 @@ const RoomCard = memo(function RoomCard({
             </div>
           )}
 
-          {/* Claim this room button */}
+          {/* Claim / assign button */}
           {availableSpots > 0 && onClaim && (
             <Button
               variant="default"
@@ -408,7 +418,9 @@ const RoomCard = memo(function RoomCard({
                 onClaim(room);
               }}
             >
-              {t('rooms.claimRoom')}
+              {claimsForSelf
+                ? t('rooms.claimRoom')
+                : t('rooms.assignGuest', 'Assign a guest')}
             </Button>
           )}
         </CardContent>

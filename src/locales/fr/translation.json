@@ -220,6 +220,7 @@
     "spotsOpen_other": "{{count}} places libres",
     "full": "Complet",
     "claimRoom": "Choisir cette chambre",
+    "assignGuest": "Attribuer à un participant",
     "roomJustFilled": "Cette chambre vient de se remplir ! Essayez-en une autre",
     "allRoomsFull": "Toutes les chambres sont complètes pour ces dates",
     "capacityWarning": "Cette chambre risque d'être surchargée pour certaines de ces dates",
