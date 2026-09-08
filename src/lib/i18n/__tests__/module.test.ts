@@ -52,6 +52,7 @@ import i18n, {
   isI18nInitialized,
   isLanguageSupported,
 } from '@/lib/i18n';
+import type { Language } from '@/types';
 
 // ============================================================================
 // Tests
@@ -176,6 +177,30 @@ describe('the shipped i18n module', () => {
       } finally {
         i18n.isInitialized = true;
       }
+    });
+  });
+
+  describe('the document language', () => {
+    // `index.html` ships `<html lang="en">` and nothing used to touch it, so a
+    // French UI told every assistive technology it was English: a screen reader
+    // read French names in an English voice, hyphenation used English rules,
+    // and the browser offered to translate French into French. The share
+    // preview service already answers `<html lang="fr">` for a French invite,
+    // so the app disagreed with its own link cards.
+
+    it('states the language the interface is actually in', async () => {
+      await changeLanguage('en');
+      expect(document.documentElement.lang).toBe('en');
+
+      await changeLanguage('fr');
+      expect(document.documentElement.lang).toBe('fr');
+    });
+
+    it('states a supported language even when the active tag is not one', async () => {
+      // `supportedLngs` normalises `de` to the French fallback, and the
+      // attribute must name the prose on screen rather than the tag asked for.
+      await changeLanguage('de' as Language);
+      expect(document.documentElement.lang).toBe('fr');
     });
   });
 
