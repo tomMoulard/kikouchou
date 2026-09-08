@@ -1,13 +1,15 @@
 /**
- * @fileoverview E2E cover for the empty calendar's hand-off to guests and rooms.
+ * @fileoverview E2E cover for the empty calendar's hand-off to guests, rooms
+ * and travel.
  *
- * An empty calendar offers "Add guests" and "Add rooms", and each has to land
- * on a create form rather than on another empty list. The `?new=1` flag behind
- * that has its two halves in different features — the calendar builds the URL,
- * the list pages read it and then drop it — so a unit test on either side can
- * stay green while the hand-off itself is broken. This is the test that fails
- * when the two disagree, and the only place the "reload does not reopen it"
- * promise can be checked at all, since it is a claim about real history.
+ * A trip that is not set up yet gets a checklist instead of the calendar, and
+ * each of its buttons has to land on a create form rather than on another empty
+ * list. The `?new=1` flag behind that has its two halves in different features
+ * — the calendar builds the URL, the list pages read it and then drop it — so a
+ * unit test on either side can stay green while the hand-off itself is broken.
+ * This is the test that fails when the two disagree, and the only place the
+ * "reload does not reopen it" promise can be checked at all, since it is a
+ * claim about real history.
  *
  * @module e2e/empty-calendar-handoff
  */
@@ -25,22 +27,25 @@ import { seedTrip } from './support/seed';
 /**
  * Both locales, because the suite runs against whichever the browser asks for.
  *
- * Matched against the dialog's *heading*, not its text: the description below
- * the title says "…to create a new room", so a text match resolves to two
- * elements and trips strict mode.
+ * The checklist's buttons are named after the form each one opens, so the same
+ * pattern matches the button on the calendar and the heading of the dialog it
+ * lands on. Matched against the dialog's *heading*, not its text: the
+ * description below the title says "…to create a new room", so a text match
+ * resolves to two elements and trips strict mode.
  */
 const LABELS = {
-  addGuests: /add guests|ajouter des invités/i,
-  addRooms: /add rooms|ajouter des chambres/i,
   newGuest: /new guest|nouveau participant/i,
   newRoom: /new room|nouvelle chambre/i,
+  newArrival: /new arrival|nouvelle arrivée/i,
+  newTransport: /new transport|nouveau transport/i,
+  setupTitle: /set this trip up|configurez ce séjour/i,
 } as const;
 
 /**
  * Seeds a trip with nothing in it and opens its calendar.
  *
- * Nothing in it is the point: the empty state renders only when the trip has
- * no assignments, transports or activities to show.
+ * Nothing in it is the point: no guests, no rooms and nothing scheduled is
+ * exactly the state a trip is saved in, and the state the checklist is for.
  */
 async function openEmptyCalendar(page: Page): Promise<string> {
   const { tripId } = await seedTrip(page, {
@@ -60,24 +65,47 @@ async function openEmptyCalendar(page: Page): Promise<string> {
 // ============================================================================
 
 test.describe('empty calendar hand-off', () => {
-  test('"Add guests" opens the guest form, not the guest list', async ({ page }) => {
+  test('an unfinished trip gets the setup checklist', async ({ page }) => {
+    await openEmptyCalendar(page);
+
+    await expect(page.getByText(LABELS.setupTitle)).toBeVisible();
+    // Nothing done yet, so every step still asks for something.
+    await expect(page.getByRole('progressbar')).toBeVisible();
+  });
+
+  test('"New guest" opens the guest form, not the guest list', async ({ page }) => {
     const tripId = await openEmptyCalendar(page);
 
-    await page.getByRole('button', { name: LABELS.addGuests }).click();
+    await page.getByRole('button', { name: LABELS.newGuest }).click();
 
     await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/persons`));
     // The form itself, open on arrival. Landing on an empty list with the
     // dialog shut is the failure this whole mechanism exists to avoid.
-    await expect(page.getByRole('dialog').getByRole('heading', { name: LABELS.newGuest })).toBeVisible();
+    await expect(
+      page.getByRole('dialog').getByRole('heading', { name: LABELS.newGuest }),
+    ).toBeVisible();
   });
 
-  test('"Add rooms" opens the room form', async ({ page }) => {
+  test('"New room" opens the room form', async ({ page }) => {
     const tripId = await openEmptyCalendar(page);
 
-    await page.getByRole('button', { name: LABELS.addRooms }).click();
+    await page.getByRole('button', { name: LABELS.newRoom }).click();
 
     await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/rooms`));
-    await expect(page.getByRole('dialog').getByRole('heading', { name: LABELS.newRoom })).toBeVisible();
+    await expect(
+      page.getByRole('dialog').getByRole('heading', { name: LABELS.newRoom }),
+    ).toBeVisible();
+  });
+
+  test('"New arrival" opens the travel form', async ({ page }) => {
+    const tripId = await openEmptyCalendar(page);
+
+    await page.getByRole('button', { name: LABELS.newArrival }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/trips/${tripId}/transports`));
+    await expect(
+      page.getByRole('dialog').getByRole('heading', { name: LABELS.newTransport }),
+    ).toBeVisible();
   });
 
   test('the flag is spent on arrival, so a reload does not reopen the form', async ({
@@ -85,11 +113,24 @@ test.describe('empty calendar hand-off', () => {
   }) => {
     await openEmptyCalendar(page);
 
-    await page.getByRole('button', { name: LABELS.addGuests }).click();
+    await page.getByRole('button', { name: LABELS.newGuest }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 
     // Dropped from the URL as soon as it has done its job.
+    await expect(page).not.toHaveURL(/[?&]new=/);
+
+    await page.reload();
+    await waitForRoute(page);
+
+    await expect(page.getByRole('dialog')).toBeHidden();
+  });
+
+  test('the same is true of the travel form', async ({ page }) => {
+    await openEmptyCalendar(page);
+
+    await page.getByRole('button', { name: LABELS.newArrival }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page).not.toHaveURL(/[?&]new=/);
 
     await page.reload();
@@ -103,7 +144,7 @@ test.describe('empty calendar hand-off', () => {
   }) => {
     const tripId = await openEmptyCalendar(page);
 
-    await page.getByRole('button', { name: LABELS.addRooms }).click();
+    await page.getByRole('button', { name: LABELS.newRoom }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
 
     // `replace: true` is what makes this work: the entry that carried `?new=1`

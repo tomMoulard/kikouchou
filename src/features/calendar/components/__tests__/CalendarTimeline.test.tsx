@@ -216,6 +216,15 @@ describe('CalendarTimeline', () => {
     }
   });
 
+  // `CalendarPage` draws the trip-setup checklist under the frame instead, and
+  // two stacked empty states is what this flag exists to avoid.
+  it('drops its own empty state when the caller asks it to', () => {
+    render(<CalendarTimeline {...defaultProps} persons={[]} hideEmptyState />);
+    expect(screen.queryByText('Nothing scheduled yet')).not.toBeInTheDocument();
+    // The frame itself still renders — the flag hides the message, not the view.
+    expect(screen.getByRole('region', { name: 'Timeline calendar' })).toBeInTheDocument();
+  });
+
   it('keeps the empty state text-only when no handlers are given', () => {
     render(<CalendarTimeline {...defaultProps} persons={[]} />);
     expect(screen.getByText('Nothing scheduled yet')).toBeInTheDocument();

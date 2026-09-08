@@ -16,6 +16,10 @@ export {
 } from './CalendarTimeline';
 export { CalendarTimelineRow } from './CalendarTimelineRow';
 export {
+  TripSetupChecklist,
+  type TripSetupChecklistProps,
+} from './TripSetupChecklist';
+export {
   EventDetailDialog,
   type ActivityEventData,
   type AssignmentEventData,
