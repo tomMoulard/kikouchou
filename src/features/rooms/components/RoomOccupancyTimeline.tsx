@@ -15,9 +15,10 @@ import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
 import { cn } from '@/lib/utils';
 import { timelineAssignmentBarStyle, TIMELINE_LANE_HEIGHT_PX } from '@/lib/utils/timeline-bar-geometry';
 import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
-import type { ISODateString, Person, Room, RoomAssignment, Transport, Trip } from '@/types';
+import type { ISODateString, Person, Room, RoomAssignment, RoomId, Transport, Trip } from '@/types';
 import { DroppableRoom } from '@/features/rooms/components/DroppableRoom';
 import { DraggableGuest } from '@/features/rooms/components/DraggableGuest';
+import type { RoomPickerOption } from '@/features/rooms/components/RoomPickerMenu';
 import { DraggableRoomAssignment } from '@/features/rooms/components/DraggableRoomAssignment';
 import { DroppableAssignment } from '@/features/rooms/components/DroppableAssignment';
 import { buildRoomTimelineModel } from '@/features/rooms/utils/room-timeline-utils';
@@ -135,6 +136,19 @@ export interface RoomOccupancyTimelineProps {
    * reach the dialog.
    */
   readonly onEditRoom?: (room: Room) => void;
+  /**
+   * Houses a guest from the chip's own room menu.
+   *
+   * The drop handler does the same thing, and it is the only one a mouse can
+   * reach: without this the chips have no keyboard, screen reader or tap path
+   * into a room.
+   */
+  readonly onAssignGuestToRoom?: (
+    guest: { readonly person: Person; readonly startDate: string; readonly endDate: string },
+    roomId: RoomId,
+  ) => void;
+  /** Moves an existing stay to another room, from the pill's own menu. */
+  readonly onMoveAssignmentToRoom?: (assignment: RoomAssignment, roomId: RoomId) => void;
 }
 
 const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
@@ -149,6 +163,8 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
   range,
   todayKey,
   onEditRoom,
+  onAssignGuestToRoom,
+  onMoveAssignmentToRoom,
 }: RoomOccupancyTimelineProps): ReactElement {
   const { t } = useTranslation();
 
@@ -179,6 +195,23 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
     () =>
       calculatePeakOccupancyByRoom(assignments, range.startDate, range.endDate, headcountOf),
     [assignments, range.startDate, range.endDate, headcountOf],
+  );
+
+  // Every room with the beds it has left over the window on screen, for the
+  // chips' own menus. A full room stays on the list, marked as full: a drop on
+  // one is allowed and warned about afterwards, so the menu must not be
+  // stricter than the drag.
+  const roomOptions = useMemo(
+    (): readonly RoomPickerOption[] =>
+      rooms.map((room) => ({
+        id: room.id,
+        name: room.name,
+        availableSpots: Math.max(
+          0,
+          room.capacity - (peakOccupancyByRoom.get(room.id) ?? 0),
+        ),
+      })),
+    [rooms, peakOccupancyByRoom],
   );
 
   const dayCount = model.days.length;
@@ -291,6 +324,20 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                         startDate={lane.startDate}
                         endDate={lane.endDate}
                         bar
+                        assignableRooms={roomOptions}
+                        onAssignRoom={
+                          onAssignGuestToRoom
+                            ? (roomId) =>
+                                onAssignGuestToRoom(
+                                  {
+                                    person: lane.person,
+                                    startDate: lane.startDate,
+                                    endDate: lane.endDate,
+                                  },
+                                  roomId,
+                                )
+                            : undefined
+                        }
                         style={timelineAssignmentBarStyle(lane, {
                           dayCount,
                           useFractionalColumns,
@@ -480,6 +527,16 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                                 color={item.color}
                                 accessibilityLabel={accessibilityLabel}
                                 style={barStyle}
+                                // The room it is already in is not a move.
+                                assignableRooms={roomOptions.filter(
+                                  (option) => option.id !== row.room.id,
+                                )}
+                                onAssignRoom={
+                                  onMoveAssignmentToRoom
+                                    ? (roomId) =>
+                                        onMoveAssignmentToRoom(item.assignment, roomId)
+                                    : undefined
+                                }
                               />
                             </DroppableAssignment>
                           );
