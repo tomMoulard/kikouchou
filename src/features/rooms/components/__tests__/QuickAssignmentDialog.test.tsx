@@ -171,6 +171,8 @@ describe('QuickAssignmentDialog', () => {
     expect(screen.getByText('Main Bedroom')).toBeInTheDocument();
   });
 
+  // The selector lists every guest, so this is an assignment, not a claim —
+  // there is nobody for a browser with no identity to claim the room for.
   it('renders dialog with person selector when person is null (claim flow)', () => {
     render(
       <QuickAssignmentDialog
@@ -181,8 +183,79 @@ describe('QuickAssignmentDialog', () => {
       />,
     );
 
-    expect(screen.getByText('rooms.claimRoom')).toBeInTheDocument();
+    expect(screen.getByText('rooms.assignGuest')).toBeInTheDocument();
     expect(screen.getByLabelText('assignments.person')).toBeInTheDocument();
+  });
+
+  // "Claim this room" acted for nobody: the browser knows which guest it is,
+  // and the dialog still opened on an empty selector.
+  it('starts on the guest this browser has become', () => {
+    render(
+      <QuickAssignmentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        person={null}
+        roomId={'room-1' as RoomId}
+        suggestedPersonId={'p1' as PersonId}
+        suggestedStartDate="2026-07-02"
+        suggestedEndDate="2026-07-08"
+      />,
+    );
+
+    expect(screen.getByLabelText('assignments.person')).toHaveTextContent('Alice');
+    expect(screen.getByText('rooms.claimRoom')).toBeInTheDocument();
+  });
+
+  it('creates the assignment for that guest without another choice', async () => {
+    const user = userEvent.setup();
+    render(
+      <QuickAssignmentDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        person={null}
+        roomId={'room-1' as RoomId}
+        suggestedPersonId={'p1' as PersonId}
+        suggestedStartDate="2026-07-02"
+        suggestedEndDate="2026-07-08"
+      />,
+    );
+
+    const add = screen.getByRole('button', { name: 'common.add' });
+    await waitFor(() => {
+      expect(add).toBeEnabled();
+    });
+    await user.click(add);
+
+    await waitFor(() => {
+      expect(mockCreateAssignment).toHaveBeenCalledWith({
+        roomId: 'room-1',
+        personId: 'p1',
+        startDate: '2026-07-02',
+        endDate: '2026-07-08',
+      });
+    });
+  });
+
+  // Opening the dialog on a guest is not the user having chosen one, so
+  // closing it must not ask whether to discard anything.
+  it('closes without a discard prompt when nothing was touched', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <QuickAssignmentDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        person={null}
+        roomId={'room-1' as RoomId}
+        suggestedPersonId={'p1' as PersonId}
+        suggestedStartDate="2026-07-02"
+        suggestedEndDate="2026-07-08"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'common.cancel' }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
   it('renders room name in read-only field', () => {

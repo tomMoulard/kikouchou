@@ -98,6 +98,9 @@ const mockDeparture: Transport = {
 
 let currentSearchParams = new URLSearchParams('view=card');
 
+/** The guest this browser is, as the sharing identity store would report it. */
+let storedGuestPersonId: string | undefined = undefined;
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
@@ -181,9 +184,26 @@ vi.mock('@/features/rooms/components/RoomAssignmentSection', () => ({
 }));
 
 vi.mock('@/features/rooms/components/QuickAssignmentDialog', () => ({
-  QuickAssignmentDialog: ({ open }: { open: boolean }) => (
-    open ? <div data-testid="quick-assignment-dialog" /> : null
+  QuickAssignmentDialog: ({
+    open,
+    suggestedPersonId,
+  }: {
+    open: boolean;
+    suggestedPersonId?: string;
+  }) => (
+    open ? (
+      <div
+        data-testid="quick-assignment-dialog"
+        data-suggested-person={suggestedPersonId ?? ''}
+      />
+    ) : null
   ),
+}));
+
+// Which guest this browser has become, if any — the answer the claim flow acts
+// for.
+vi.mock('@/lib/sharing/guest-identity', () => ({
+  getTripGuestPersonId: () => storedGuestPersonId,
 }));
 
 // The chips live inside the timeline, so the page's side of the pointer-free
@@ -270,6 +290,7 @@ import { useTransportContext } from '@/contexts/TransportContext';
 
 function resetMocks() {
   currentSearchParams = new URLSearchParams('view=card');
+  storedGuestPersonId = undefined;
 
   vi.mocked(useTripContext).mockReturnValue({
     currentTrip: mockTrip,
@@ -1084,6 +1105,55 @@ describe('RoomListPage', () => {
       await waitFor(() => {
         expect(mockUpdateAssignment).toHaveBeenCalledWith('a-1', { roomId: 'room-2' });
       });
+    });
+  });
+
+  // ===========================================================================
+  // Claiming a room
+  // ===========================================================================
+
+  describe('the cards view assignment button', () => {
+    // The button opened a dialog with a guest selector listing everyone, so
+    // "Claim this room" described a claim it never made.
+    it('offers to assign a guest when the browser is nobody in particular', () => {
+      render(<RoomListPage />, { withProviders: false });
+
+      expect(screen.getByText('rooms.assignGuest')).toBeInTheDocument();
+      expect(screen.queryByText('rooms.claimRoom')).not.toBeInTheDocument();
+    });
+
+    it('offers to claim the room for the guest this browser has become', () => {
+      storedGuestPersonId = 'person-1';
+      render(<RoomListPage />, { withProviders: false });
+
+      expect(screen.getByText('rooms.claimRoom')).toBeInTheDocument();
+    });
+
+    it('opens the dialog on that guest, so a claim is one more press', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      storedGuestPersonId = 'person-1';
+      render(<RoomListPage />, { withProviders: false });
+
+      await user.click(screen.getByText('rooms.claimRoom'));
+
+      expect(screen.getByTestId('quick-assignment-dialog')).toHaveAttribute(
+        'data-suggested-person',
+        'person-1',
+      );
+    });
+
+    it('opens the dialog on nobody when the browser is nobody', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<RoomListPage />, { withProviders: false });
+
+      await user.click(screen.getByText('rooms.assignGuest'));
+
+      expect(screen.getByTestId('quick-assignment-dialog')).toHaveAttribute(
+        'data-suggested-person',
+        '',
+      );
     });
   });
 });
