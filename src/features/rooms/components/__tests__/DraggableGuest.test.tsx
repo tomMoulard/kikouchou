@@ -5,9 +5,10 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { DraggableGuest } from '../DraggableGuest';
-import type { HexColor, Person, PersonId, TripId } from '@/types';
+import type { HexColor, Person, PersonId, RoomId, TripId } from '@/types';
 
 // dnd-kit needs a DndContext; the drag mechanics are not what these assert.
 // `attributes` mirrors what the real hook puts on the node — the pill is a
@@ -106,6 +107,90 @@ describe('DraggableGuest', () => {
       );
 
       expect(screen.queryByTestId('person-badge')).not.toBeInTheDocument();
+    });
+  });
+
+  // A drag is the only way to house a guest today, which leaves out every
+  // keyboard and every screen reader. The menu is the pointer-free path, and a
+  // tap has to reach it too.
+  describe('room menu', () => {
+    const rooms = [
+      { id: 'r1' as RoomId, name: 'Master', availableSpots: 2 },
+      { id: 'r2' as RoomId, name: 'Attic', availableSpots: 0 },
+    ];
+
+    it('houses the guest in the room picked from the menu', async () => {
+      const user = userEvent.setup();
+      const onAssignRoom = vi.fn();
+      render(
+        <DraggableGuest
+          person={person}
+          startDate="2026-07-01"
+          endDate="2026-07-05"
+          bar
+          assignableRooms={rooms}
+          onAssignRoom={onAssignRoom}
+        />,
+      );
+
+      await user.click(
+        screen.getByRole('button', { name: 'rooms.assignMenu.trigger' }),
+      );
+      await user.click(screen.getByRole('menuitem', { name: /Master/ }));
+
+      expect(onAssignRoom).toHaveBeenCalledWith('r1');
+    });
+
+    it('opens the same menu when the bar itself is tapped', async () => {
+      const user = userEvent.setup();
+      render(
+        <DraggableGuest
+          person={person}
+          startDate="2026-07-01"
+          endDate="2026-07-05"
+          bar
+          assignableRooms={rooms}
+          onAssignRoom={vi.fn()}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Marc' }));
+
+      expect(screen.getByRole('menuitem', { name: /Master/ })).toBeInTheDocument();
+    });
+
+    // A drop on a full room is allowed and warned about afterwards, so the menu
+    // must not be stricter than the drag it replaces.
+    it('offers a full room, marked as full', async () => {
+      const user = userEvent.setup();
+      render(
+        <DraggableGuest
+          person={person}
+          startDate="2026-07-01"
+          endDate="2026-07-05"
+          bar
+          assignableRooms={rooms}
+          onAssignRoom={vi.fn()}
+        />,
+      );
+
+      await user.click(
+        screen.getByRole('button', { name: 'rooms.assignMenu.trigger' }),
+      );
+      const attic = screen.getByRole('menuitem', { name: /Attic/ });
+
+      expect(attic).toHaveTextContent('rooms.full');
+      expect(attic).not.toHaveAttribute('data-disabled');
+    });
+
+    it('shows no menu when there is no room to offer', () => {
+      render(
+        <DraggableGuest person={person} startDate="2026-07-01" endDate="2026-07-05" bar />,
+      );
+
+      expect(
+        screen.queryByRole('button', { name: 'rooms.assignMenu.trigger' }),
+      ).not.toBeInTheDocument();
     });
   });
 });
