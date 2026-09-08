@@ -220,6 +220,7 @@
     "spotsOpen_other": "{{count}} spots open",
     "full": "Full",
     "claimRoom": "Claim this room",
+    "assignGuest": "Assign a guest",
     "roomJustFilled": "This room just filled up! Try another one",
     "allRoomsFull": "All rooms are full for these dates",
     "capacityWarning": "This room may be over capacity for some of these dates",
