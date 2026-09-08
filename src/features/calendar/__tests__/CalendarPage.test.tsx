@@ -146,6 +146,17 @@ function renderCalendarPage(tripId = 'trip-1') {
   );
 }
 
+/**
+ * The screen-reader summary of one month cell, found by its day key.
+ *
+ * `CalendarDay` points a cell at its own summary with `aria-describedby`, so the
+ * key names the element to read. Returns an empty string when the day has
+ * nothing to announce.
+ */
+function summaryOf(dayKey: string): string {
+  return document.getElementById(`${dayKey}-summary`)?.textContent ?? '';
+}
+
 function setDefaultMocks() {
   mockUseTripContext.mockReturnValue({
     currentTrip: mockTrip,
@@ -786,7 +797,34 @@ describe('CalendarPage', () => {
     expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
   });
 
-  it('handles trip with same start and end date (lastNight < start)', async () => {
+  it('keeps the departure day inside the trip, and the day after outside it', async () => {
+    // A trip written 11 - 13 September means the guests arrive on the 11th and
+    // leave on the 13th: three days, two nights. The month grid used to end the
+    // trip on the last night (the 12th), so the departure morning - the one
+    // that carries the station runs - was greyed out and announced as "Outside
+    // the trip dates", while the sidebar label still said 11 - 13.
+    mockUseTripContext.mockReturnValue({
+      currentTrip: {
+        ...mockTrip,
+        startDate: '2026-09-11' as Trip['startDate'],
+        endDate: '2026-09-13' as Trip['endDate'],
+      },
+      isLoading: false,
+      setCurrentTrip: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const { user } = renderCalendarPage();
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
+    expect(summaryOf('2026-09-11')).not.toContain('calendar.outsideTripDates');
+    expect(summaryOf('2026-09-12')).not.toContain('calendar.outsideTripDates');
+    expect(summaryOf('2026-09-13')).not.toContain('calendar.outsideTripDates');
+    expect(summaryOf('2026-09-14')).toContain('calendar.outsideTripDates');
+    expect(summaryOf('2026-09-10')).toContain('calendar.outsideTripDates');
+  });
+
+  it('treats a trip that starts and ends on one day as one day inside the trip', async () => {
+    // Zero nights is still a day on site, so the day itself is in the trip.
     mockUseTripContext.mockReturnValue({
       currentTrip: {
         ...mockTrip,
@@ -798,7 +836,27 @@ describe('CalendarPage', () => {
     });
     const { user } = renderCalendarPage();
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
     expect(screen.getByRole('grid', { name: 'calendar.monthView' })).toBeInTheDocument();
+    expect(summaryOf('2026-04-05')).not.toContain('calendar.outsideTripDates');
+    expect(summaryOf('2026-04-06')).toContain('calendar.outsideTripDates');
+  });
+
+  it('marks every day outside the trip when the trip dates are inverted', async () => {
+    mockUseTripContext.mockReturnValue({
+      currentTrip: {
+        ...mockTrip,
+        startDate: '2026-04-10' as Trip['startDate'],
+        endDate: '2026-04-05' as Trip['endDate'],
+      },
+      isLoading: false,
+      setCurrentTrip: vi.fn().mockResolvedValue(undefined),
+    });
+    const { user } = renderCalendarPage();
+    await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
+
+    expect(summaryOf('2026-04-05')).toContain('calendar.outsideTripDates');
+    expect(summaryOf('2026-04-10')).toContain('calendar.outsideTripDates');
   });
 
   // ============================================================================
