@@ -65,7 +65,8 @@
     "syncPending_one": "{{count}} change not sent yet",
     "syncPending_other": "{{count}} changes not sent yet",
     "syncStatusRegion": "Sync status",
-    "guestGroups": "Groups"
+    "guestGroups": "Groups",
+    "summary": "Summary"
   },
   "analytics": {
     "tripTitle": "Trip analytics",
@@ -638,6 +639,26 @@
         "count_other": "{{count}} arrivals"
       }
     }
+  },
+  "summary": {
+    "title": "Trip summary",
+    "description": "One page for the fridge door: who sleeps where, who arrives when, who drives.",
+    "print": "Print",
+    "headcount_one": "{{count}} person expected",
+    "headcount_other": "{{count}} people expected",
+    "headcountSuffix_one": "({{count}} person)",
+    "headcountSuffix_other": "({{count}} people)",
+    "rooms": "Who sleeps where",
+    "noRooms": "No rooms yet",
+    "roomEmpty": "Nobody yet",
+    "guestsWithoutRoom": "Still without a bed: {{names}}",
+    "travel": "Arrivals and departures",
+    "noTravel": "No travel plans yet",
+    "driver": "Driver: {{name}}",
+    "driverMissing": "Driver: nobody yet",
+    "guests": "Guests",
+    "noGuests": "No guests yet",
+    "printedOn": "Printed on {{date}}"
   },
   "sharing": {
     "title": "Share trip",

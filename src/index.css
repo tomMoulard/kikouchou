@@ -395,3 +395,44 @@
 .leaflet-container {
   isolation: isolate;
 }
+
+/*
+ * Paper.
+ *
+ * `print:hidden` on the header, the sidebar and the bottom bar removes the
+ * navigation from a printed page, but `<main>` still carries the offsets it
+ * needs *on screen* to sit beside the sidebar and above the bottom bar
+ * (`md:ml-60`, `pb-bottom-stack`). Both are media-query utilities, so a
+ * `print:` utility beside them would win or lose on stylesheet order rather
+ * than on intent — hence the reset here, where the page box is also the only
+ * thing that can set its own margins.
+ *
+ * The trip summary (`/trips/:tripId/summary`) is the page written for this,
+ * but nothing here is specific to it: every page prints better without a
+ * sidebar's worth of empty left margin.
+ */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  /*
+   * Ink on paper is dark on white whatever the screen was set to. Printing
+   * from dark mode otherwise puts the theme's pale text on the white of the
+   * sheet. Overriding the four tokens the printable surfaces use is enough,
+   * and it keeps every component on its theme tokens rather than sprouting a
+   * `print:text-black` at each call site.
+   */
+  :root,
+  .dark {
+    --background: white;
+    --foreground: black;
+    --muted-foreground: oklch(0.45 0 0);
+    --border: oklch(0.8 0 0);
+  }
+
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

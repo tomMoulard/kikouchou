@@ -32,6 +32,7 @@ import {
   Menu,
   MoreHorizontal,
   PartyPopper,
+  Printer,
   Settings,
   Sparkles,
   Users,
@@ -108,6 +109,7 @@ const TRIP_NAV_ITEMS: readonly NavItem[] = [
   { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
   { labelKey: 'nav.activities', pathSuffix: 'activities', icon: PartyPopper, requiresTrip: true },
   { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: BarChart2, requiresTrip: true },
+  { labelKey: 'nav.summary', pathSuffix: 'summary', icon: Printer, requiresTrip: true },
 ] as const;
 
 /**
@@ -152,6 +154,7 @@ const ASSISTANT_NAV_ITEM: NavItem = {
 const MOBILE_SECONDARY_TRIP_PATHS: readonly string[] = [
   'activities',
   'analytics',
+  'summary',
 ];
 
 /**
@@ -219,7 +222,7 @@ const Header = memo(function Header({
   const { t } = useTranslation();
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background px-4 md:px-6">
+    <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background px-4 md:px-6 print:hidden">
       {/* Mobile menu button - only visible on mobile */}
       {onMenuClick && (
         <Button
@@ -313,7 +316,7 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
         OS owns. See "The mobile bottom edge" in `src/index.css`.
       */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background pb-safe md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background pb-safe md:hidden print:hidden"
         aria-label={t('nav.mobileMain', 'Mobile navigation')}
       >
         <ul className="flex h-16 items-center justify-around">
@@ -832,6 +835,8 @@ const DesktopSidebar = memo(function DesktopSidebar({
         // browser chrome showing the sidebar overflowed by exactly the chrome's
         // height and its bottom links scrolled out of reach.
         'fixed left-0 top-14 z-30 hidden h-[calc(100dvh-3.5rem)] flex-col border-r bg-background transition-all duration-300 md:flex',
+        // Paper gets the page, not the navigation.
+        'print:hidden',
         isCollapsed ? 'w-16' : 'w-60',
       )}
       aria-label={t('nav.main', 'Main navigation')}

@@ -34,6 +34,7 @@ import { activityRoutes } from '@/features/activities/routes';
 import { joinRoutes, sharingRoutes, sharingSyncRoutes } from '@/features/sharing/routes';
 import { assistantRoutes } from '@/features/assistant/routes';
 import { analyticsRoutes } from '@/features/analytics/routes';
+import { summaryRoutes } from '@/features/summary/routes';
 import { authRoutes } from '@/features/auth/routes';
 
 // ============================================================================
@@ -240,6 +241,9 @@ export const appRoutes: RouteObject = {
     // Trip + global analytics
     ...analyticsRoutes,
 
+    // Printable one-page trip summary
+    ...summaryRoutes,
+
     // Settings route
     settingsRoute,
 
@@ -293,6 +297,7 @@ const publicRoutes: RouteObject = {
  *   - `/trips/:tripId/transports` - Transport management
  *   - `/trips/:tripId/activities` - Shared activity agenda
  *   - `/trips/:tripId/analytics` - Trip analytics
+ *   - `/trips/:tripId/summary` - Printable one-page trip summary
  *   - `/analytics` - Analytics across all trips
  *   - `/groups` - Reusable guest groups, imported into any trip
  *   - `/settings` - App settings
@@ -342,4 +347,5 @@ export type { CalendarParams } from '@/features/calendar/routes';
 export type { RoomListParams } from '@/features/rooms/routes';
 export type { PersonListParams } from '@/features/persons/routes';
 export type { AnalyticsParams } from '@/features/analytics/routes';
+export type { SummaryParams } from '@/features/summary/routes';
 export type { ActivityListParams } from '@/features/activities/routes';
