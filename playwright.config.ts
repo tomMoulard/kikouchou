@@ -1,11 +1,17 @@
 import { createHash } from 'node:crypto';
 
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/test';
 
 /**
  * Playwright configuration for Kikouchou E2E tests.
  * @see https://playwright.dev/docs/test-configuration
  */
+
+/**
+ * The `projects` entry shape, so the two sets of them below are checked where
+ * they are written rather than only where they are handed to `defineConfig`.
+ */
+type Projects = NonNullable<PlaywrightTestConfig['projects']>;
 
 /**
  * Which Chromium build to drive.
@@ -130,6 +136,264 @@ const PRODUCTION_BUILD_SPECS_PATTERN =
 const DEV_SERVER_IGNORE_PATTERN =
   /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts|trip-sharing-sync\.spec\.ts/;
 
+/**
+ * The projects that drive this checkout, on the servers started below.
+ *
+ * Named as a constant rather than written inline because a live run replaces
+ * the whole set - see {@link LIVE_PROJECTS}.
+ */
+const LOCAL_PROJECTS: Projects = [
+  {
+    name: 'chromium',
+    use: { ...devices['Desktop Chrome'] },
+    /**
+     * Three specs belong to projects of their own and must not also run here.
+     *
+     * Offline and PWA behaviour cannot be observed against the dev server at
+     * all — see the `production` project. The sharing journey needs
+     * `VITE_SUPABASE_*` pointing at the stub host, which this project
+     * deliberately does not have; running it here failed every one of its
+     * tests against a server with no backend configured.
+     */
+    testIgnore: DEV_SERVER_IGNORE_PATTERN,
+  },
+  {
+    name: 'Mobile Chrome',
+    use: { ...devices['Pixel 5'] },
+    testIgnore: DEV_SERVER_IGNORE_PATTERN,
+  },
+  {
+    /**
+     * The offline and PWA contracts, against the production build.
+     *
+     * These tests cannot run on the dev server, and running them there was
+     * silently testing nothing. Three reasons, all measured:
+     *
+     *   - vite-plugin-pwa registers no service worker in dev, so a reload with
+     *     the network off fails with ERR_INTERNET_DISCONNECTED rather than
+     *     being served from the precache;
+     *   - route chunks are lazy, so navigating to a page whose chunk has not
+     *     loaded yet needs the network — offline that fails too;
+     *   - the manifest and the workbox precache are build outputs. On the dev
+     *     server `/manifest.webmanifest` falls through to the SPA handler and
+     *     comes back as `text/html`, so every assertion in `pwa.spec.ts` that
+     *     parsed it died on `Unexpected token '<'`.
+     *
+     * All three are exactly what the service worker exists to solve, so the
+     * only honest way to assert these rules is to serve the built output.
+     */
+    name: 'production',
+    use: {
+      ...devices['Desktop Chrome'],
+      baseURL: PREVIEW_URL,
+    },
+    testMatch: PRODUCTION_BUILD_SPECS_PATTERN,
+    /**
+     * Serial, unlike every other project here.
+     *
+     * Each test installs a service worker and precaches ~2.5 MB in its own
+     * context. Six of those at once against one preview server contends badly
+     * enough to make clicks miss their 10 s timeout: the same test passed alone
+     * in 1.6 s and failed in parallel at 11.5 s. That is a property of the
+     * environment, not of the tests, so it is fixed here rather than by
+     * inflating every timeout in the spec.
+     */
+    fullyParallel: false,
+  },
+
+  {
+    /**
+     * The server-backed sharing journey.
+     *
+     * Its own dev server because it needs `VITE_SUPABASE_*` pointing at a host
+     * that resolves nowhere, which `e2e/support/supabase-stub` then intercepts.
+     * The other projects must not have a backend configured at all — they
+     * assert local-only behaviour.
+     */
+    name: 'sync',
+    use: {
+      ...devices['Desktop Chrome'],
+      baseURL: SYNC_URL,
+    },
+    testMatch: /trip-sharing-sync\.spec\.ts/,
+    /**
+     * Serial. Several tests drive two browser contexts against one stub, and
+     * the stub is a single in-process object — parallel workers would share
+     * nothing but the port and interleave their assertions on `counts`.
+     */
+    fullyParallel: false,
+  },
+];
+
+/**
+ * Whether this run points at the deployed app instead of this checkout.
+ *
+ * `PW_LIVE=1` swaps {@link LOCAL_PROJECTS} and all three local servers for the
+ * two `live*` projects below, so one run drives a checkout or drives the
+ * deployment, never a mixture. Unset, the live projects do not exist at all,
+ * and that is the point: `--project=live` then fails with "project not found"
+ * rather than quietly sending a full suite at real users.
+ */
+const LIVE = ((): boolean => {
+  const requested = process.env.PW_LIVE;
+  if (requested === undefined || requested === '') {
+    return false;
+  }
+  if (requested === '1') {
+    return true;
+  }
+  // Loud rather than silently ignored, as with PW_CHANNEL and PW_PORT_BASE
+  // above. `PW_LIVE=0` reading as "yes, live" is not a mistake anyone should be
+  // able to make even once.
+  throw new Error(`PW_LIVE must be '1' or unset, got '${requested}'`);
+})();
+
+/**
+ * Where a live run points. Overridable so the same subset can be aimed at a
+ * preview deployment or a staging host.
+ */
+const LIVE_URL = process.env.PW_LIVE_URL ?? 'https://app.kikouchou.app';
+
+/**
+ * The specs a live run must not pick up, each for a reason no amount of
+ * configuration can fix.
+ *
+ *   - `analytics-privacy.spec.ts` asserts that *nothing* reaches PostHog. That
+ *     is a statement about a build with `VITE_POSTHOG_KEY` blank; the deployed
+ *     build carries a real key, so the app there is supposed to try.
+ *   - `sharing.spec.ts` asserts the share dialog explains that no sync server
+ *     is configured. The deployment has one, so the assertion is inverted there.
+ *   - `trip-sharing-sync.spec.ts` signs in and writes trips, guests and
+ *     previews through the backend. Against the deployment those writes would
+ *     land in the real Supabase project instead of `support/supabase-stub`.
+ *   - `performance.spec.ts` compares durations against thresholds calibrated on
+ *     a loopback dev server. Over the public internet those numbers measure the
+ *     tester's link, not the app.
+ */
+const LIVE_EXCLUDED_SPECS_PATTERN =
+  /analytics-privacy\.spec\.ts|sharing\.spec\.ts|trip-sharing-sync\.spec\.ts|performance\.spec\.ts/;
+
+/**
+ * Every host the deployed build sends analytics to: PostHog's own domains and
+ * `events.kikouchou.app`, the reverse proxy `VITE_POSTHOG_HOST` names.
+ */
+const ANALYTICS_HOSTS: readonly string[] = [
+  'posthog.com',
+  '*.posthog.com',
+  'posthog.io',
+  '*.posthog.io',
+  'events.kikouchou.app',
+];
+
+/**
+ * The map and geocoding hosts, blocked for the same reasons `support/external-
+ * services` stubs them: determinism and courtesy.
+ *
+ * `LocationPicker` debounces into a live Nominatim search, and the result
+ * popover renders over the trip form's date picker. Against a real Nominatim
+ * that is not theoretical - two `trip-lifecycle` tests failed their first
+ * attempt of the live run below on a `place:131528139` option intercepting the
+ * click on a day cell. The specs that own the map already stub these hosts
+ * per-page; the ones that only pass through the trip form do not, and cannot be
+ * made to without editing them.
+ *
+ * Courtesy is the other half: OpenStreetMap's usage policy does not want a test
+ * suite walking its tiles, and a live run is the one configuration where the
+ * requests would really arrive.
+ */
+const MAP_SERVICE_HOSTS: readonly string[] = [
+  'nominatim.openstreetmap.org',
+  '*.tile.openstreetmap.org',
+  'tile.openstreetmap.org',
+  '*.basemaps.cartocdn.com',
+];
+
+/**
+ * Chromium flags that leave a live run unable to reach any of the above.
+ *
+ * The analytics half is the one safety measure a live run cannot do without.
+ * The deployed bundle carries a real project key, and `src/lib/posthog.ts`
+ * counts only loopback hostnames as development - so on `app.kikouchou.app` the
+ * app initialises for real, and `person_profiles: 'always'` makes one request
+ * one Person. A suite that opens a few hundred fresh browser contexts would
+ * file a few hundred fake people against the real project, which is exactly the
+ * accident `analytics-privacy.spec.ts` exists to remember.
+ *
+ * Blocking at name resolution rather than with `page.route` is deliberate: it
+ * needs no cooperation from any spec, so a spec added later cannot forget to
+ * opt in. `0.0.0.0` is a route to nowhere, so the requests fail in the network
+ * stack, and `IGNORABLE_CONSOLE_ERROR` in `maps-integration.spec.ts` already
+ * discounts the `net::ERR_` lines that produces. A spec that stubs one of these
+ * hosts with `page.route` is unaffected either way, since routing is decided in
+ * the browser before anything is resolved.
+ *
+ * Not blocked, deliberately: the Supabase host. Leaving it reachable is what
+ * makes these runs a regression check on the deployment people actually use.
+ * No spec in this subset signs in, and every write the app makes needs an
+ * authenticated session, so there is nothing here that can change server state.
+ */
+const BLOCKED_HOST_ARGS: readonly string[] = [
+  `--host-resolver-rules=${[...ANALYTICS_HOSTS, ...MAP_SERVICE_HOSTS]
+    .map((host) => `MAP ${host} 0.0.0.0`)
+    .join(',')}`,
+];
+
+/**
+ * The live projects: the same specs, against {@link LIVE_URL}.
+ *
+ * The split mirrors the local one, and for the same reason the local one has it:
+ * the offline and PWA specs have to run serially, because each one precaches the
+ * whole app shell in its own context. Against the deployment they are worth more
+ * than they are locally, since the worker, the precache and the manifest are the
+ * deployed ones rather than a build made seconds earlier.
+ *
+ * Neither project blocks the service worker, and that was not the first answer.
+ * `serviceWorkers: 'block'` looks right for the `live` specs - they were written
+ * for a dev server, which registers none - but the deployed app registers one
+ * regardless, and workbox-window then logs `service worker registration failed:
+ * Cannot read properties of undefined (reading 'waiting')`. That is a console
+ * error, and `maps-integration.spec.ts` asserts there are none, so blocking the
+ * worker failed a test about maps for a reason that had nothing to do with the
+ * app. Measured with the worker left alone: that test passes, no other result
+ * changes, and the whole `live` project still runs in 3.3 minutes.
+ *
+ * Both carry their own timeouts. The shared ones are sized for loopback, where
+ * a navigation taking 15 s means something is broken; over the public internet
+ * it means the network is slow today.
+ */
+const LIVE_PROJECTS: Projects = [
+  {
+    name: 'live',
+    use: {
+      ...devices['Desktop Chrome'],
+      baseURL: LIVE_URL,
+      actionTimeout: 20_000,
+      navigationTimeout: 30_000,
+      launchOptions: { args: [...BLOCKED_HOST_ARGS] },
+    },
+    testIgnore: [LIVE_EXCLUDED_SPECS_PATTERN, PRODUCTION_BUILD_SPECS_PATTERN],
+    // One retry, unlike the local projects. A live run crosses a network that
+    // can drop a request for reasons that say nothing about the app, and a
+    // regression check nobody trusts gets switched off.
+    retries: 1,
+  },
+  {
+    name: 'live-pwa',
+    use: {
+      ...devices['Desktop Chrome'],
+      baseURL: LIVE_URL,
+      actionTimeout: 20_000,
+      navigationTimeout: 30_000,
+      launchOptions: { args: [...BLOCKED_HOST_ARGS] },
+    },
+    testMatch: PRODUCTION_BUILD_SPECS_PATTERN,
+    // Serial, for the reason the local `production` project is serial: every
+    // test here precaches the whole app shell in its own context.
+    fullyParallel: false,
+    retries: 1,
+  },
+];
+
 export default defineConfig({
   testDir: './e2e',
 
@@ -148,8 +412,16 @@ export default defineConfig({
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
 
-  /* Opt out of parallel tests on CI */
-  workers: process.env.CI ? 1 : undefined,
+  /**
+   * Opt out of parallel tests on CI, and cap a live run.
+   *
+   * The local default is half the machine's cores, which is the right answer
+   * for a dev server on loopback and the wrong one for the deployment: those
+   * workers would all be pointed at one small production host, and every
+   * timeout in the suite would then be measuring contention the app does not
+   * normally see. Four keeps a live run honest and takes about ten minutes.
+   */
+  workers: process.env.CI ? 1 : LIVE ? 4 : undefined,
 
   /* Reporter to use */
   reporter: [
@@ -179,88 +451,7 @@ export default defineConfig({
   },
 
   /* Configure projects for major browsers */
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-      /**
-       * Three specs belong to projects of their own and must not also run here.
-       *
-       * Offline and PWA behaviour cannot be observed against the dev server at
-       * all — see the `production` project. The sharing journey needs
-       * `VITE_SUPABASE_*` pointing at the stub host, which this project
-       * deliberately does not have; running it here failed every one of its
-       * tests against a server with no backend configured.
-       */
-      testIgnore: DEV_SERVER_IGNORE_PATTERN,
-    },
-    {
-      name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
-      testIgnore: DEV_SERVER_IGNORE_PATTERN,
-    },
-    {
-      /**
-       * The offline and PWA contracts, against the production build.
-       *
-       * These tests cannot run on the dev server, and running them there was
-       * silently testing nothing. Three reasons, all measured:
-       *
-       *   - vite-plugin-pwa registers no service worker in dev, so a reload with
-       *     the network off fails with ERR_INTERNET_DISCONNECTED rather than
-       *     being served from the precache;
-       *   - route chunks are lazy, so navigating to a page whose chunk has not
-       *     loaded yet needs the network — offline that fails too;
-       *   - the manifest and the workbox precache are build outputs. On the dev
-       *     server `/manifest.webmanifest` falls through to the SPA handler and
-       *     comes back as `text/html`, so every assertion in `pwa.spec.ts` that
-       *     parsed it died on `Unexpected token '<'`.
-       *
-       * All three are exactly what the service worker exists to solve, so the
-       * only honest way to assert these rules is to serve the built output.
-       */
-      name: 'production',
-      use: {
-        ...devices['Desktop Chrome'],
-        baseURL: PREVIEW_URL,
-      },
-      testMatch: PRODUCTION_BUILD_SPECS_PATTERN,
-      /**
-       * Serial, unlike every other project here.
-       *
-       * Each test installs a service worker and precaches ~2.5 MB in its own
-       * context. Six of those at once against one preview server contends badly
-       * enough to make clicks miss their 10 s timeout: the same test passed alone
-       * in 1.6 s and failed in parallel at 11.5 s. That is a property of the
-       * environment, not of the tests, so it is fixed here rather than by
-       * inflating every timeout in the spec.
-       */
-      fullyParallel: false,
-    },
-
-    {
-      /**
-       * The server-backed sharing journey.
-       *
-       * Its own dev server because it needs `VITE_SUPABASE_*` pointing at a host
-       * that resolves nowhere, which `e2e/support/supabase-stub` then intercepts.
-       * The other projects must not have a backend configured at all — they
-       * assert local-only behaviour.
-       */
-      name: 'sync',
-      use: {
-        ...devices['Desktop Chrome'],
-        baseURL: SYNC_URL,
-      },
-      testMatch: /trip-sharing-sync\.spec\.ts/,
-      /**
-       * Serial. Several tests drive two browser contexts against one stub, and
-       * the stub is a single in-process object — parallel workers would share
-       * nothing but the port and interleave their assertions on `counts`.
-       */
-      fullyParallel: false,
-    },
-  ],
+  projects: LIVE ? LIVE_PROJECTS : LOCAL_PROJECTS,
 
   /**
    * Servers started before the tests run, on the three ports derived from this
@@ -272,7 +463,7 @@ export default defineConfig({
    * whole timeout waiting for a server that is already up one port over. Fail
    * on the bind instead, and say which port.
    */
-  webServer: [
+  webServer: LIVE ? [] : [
     {
       /**
        * Production build for the `production` project: a real service worker and
