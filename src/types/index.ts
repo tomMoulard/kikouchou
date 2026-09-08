@@ -972,19 +972,6 @@ export interface RoomFormData {
 }
 
 /**
- * What one save of the room form carries: the room, and how many of it.
- *
- * A house with six identical doubles is one form and a count, so create mode
- * asks for both. Edit mode edits one room and always sends `1`.
- *
- * @see {@link RoomFormData}
- */
-export interface RoomFormSubmission extends RoomFormData {
-  /** How many identical rooms to create (minimum: 1) */
-  count: number;
-}
-
-/**
  * Data required to create or update a Person.
  * Excludes auto-generated fields (id, tripId).
  *

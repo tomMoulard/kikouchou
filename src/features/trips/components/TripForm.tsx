@@ -27,6 +27,7 @@ import { nanoid } from 'nanoid';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NumberStepper } from '@/components/ui/number-stepper';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -76,6 +77,25 @@ const NAME_MAX_LENGTH = MAX_LENGTHS.tripName;
  */
 const GUEST_NAME_MAX_LENGTH = MAX_LENGTHS.personName;
 
+/**
+ * Maximum characters for a room name — the room repository's own limit, for the
+ * same reason the fields above take theirs from there.
+ */
+const ROOM_NAME_MAX_LENGTH = MAX_LENGTHS.roomName;
+
+/**
+ * Beds a freshly added room row starts with.
+ *
+ * The same default the room dialog uses, so a room typed here and a room typed
+ * there begin as the same room.
+ */
+const DEFAULT_ROOM_CAPACITY = 1;
+
+/**
+ * Smallest bed count a room row accepts. A room with no bed houses nobody.
+ */
+const MIN_ROOM_CAPACITY = 1;
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -113,6 +133,15 @@ interface TripFormProps {
    * data out so the page can act on it once the trip exists.
    */
   readonly onGuestsChange?: (guests: readonly NewTripGuest[]) => void;
+  /**
+   * Callback when the create-mode room list changes, with the trimmed,
+   * non-empty rooms in list order.
+   *
+   * Rooms are no more a trip field than guests are — see `onGuestsChange` for
+   * why that matters — so they are reported out the same way and written by the
+   * page once the trip exists.
+   */
+  readonly onRoomsChange?: (rooms: readonly NewTripRoom[]) => void;
   /**
    * Handle for pushing guests into the list from outside — see
    * {@link TripFormHandle}.
@@ -158,6 +187,30 @@ export interface NewTripGuest {
   readonly headcount?: number;
   readonly notes?: string;
   readonly phone?: string;
+}
+
+/**
+ * A room the create form will turn into a `Room`.
+ *
+ * Name and beds only. Everything else a room can carry — an icon, a
+ * description — is a decision about one room, and this list exists to get a
+ * house full of them typed in one pass. The Rooms page edits the rest.
+ */
+export interface NewTripRoom {
+  readonly name: string;
+  readonly capacity: number;
+}
+
+/**
+ * One row of the create-mode room list.
+ */
+interface RoomRow {
+  /** React key, for the same reason `GuestRow` carries one. */
+  readonly id: string;
+  /** The raw field value; trimmed only on the way out. */
+  readonly name: string;
+  /** Beds in this room. */
+  readonly capacity: number;
 }
 
 /**
@@ -321,6 +374,7 @@ const TripForm = memo(function TripForm({
   onImportSourceChange,
   currentUserName,
   onGuestsChange,
+  onRoomsChange,
   ref,
   children,
 }: TripFormProps) {
@@ -374,6 +428,15 @@ const TripForm = memo(function TripForm({
   );
   const [guests, setGuests] = useState<readonly GuestRow[]>(buildInitialGuests);
   const [hasEditedFirstGuest, setHasEditedFirstGuest] = useState(false);
+  /*
+    Rooms start as an empty list rather than one blank row.
+
+    The guest list opens with a row because the organiser is usually on the
+    trip, so there is a name to prefill. Nobody's house comes with a room the
+    form can guess, and an empty row above "Add room" would only read as work
+    already begun.
+  */
+  const [rooms, setRooms] = useState<readonly RoomRow[]>([]);
 
   /*
     The first row follows the account until the user takes it over.
@@ -406,6 +469,13 @@ const TripForm = memo(function TripForm({
     return (resolvedGuests[0]?.name ?? '') !== (currentUserName ?? '');
   }, [isCreateMode, resolvedGuests, currentUserName]);
 
+  // A room row nobody has named is an abandoned "Add room" click, exactly as a
+  // blank guest row is. Neither arms the unsaved-changes guard.
+  const isRoomListDirty = useMemo(
+    () => isCreateMode && rooms.some((room) => room.name.trim() !== ''),
+    [isCreateMode, rooms],
+  );
+
   // Compute dirty state: any field differs from initial values. Coordinates
   // count: nudging the map pin is the only edit some trips need, and without
   // this the unsaved-changes guard would let it be navigated away silently.
@@ -417,7 +487,8 @@ const TripForm = memo(function TripForm({
       endDate !== initialValues.endDate ||
       description !== initialValues.description ||
       !isSameCoordinates(coordinates, initialValues.coordinates) ||
-      isGuestListDirty,
+      isGuestListDirty ||
+      isRoomListDirty,
     [
       name,
       location,
@@ -427,6 +498,7 @@ const TripForm = memo(function TripForm({
       coordinates,
       initialValues,
       isGuestListDirty,
+      isRoomListDirty,
     ],
   );
 
@@ -454,6 +526,22 @@ const TripForm = memo(function TripForm({
     onGuestsChange?.(guestsToCreate);
   }, [isCreateMode, guestsToCreate, onGuestsChange]);
 
+  // What the page will turn into Room records: trimmed, blanks dropped, in list
+  // order. The bed count rides along unchanged — the stepper only ever reports
+  // whole numbers at or above its minimum.
+  const roomsToCreate = useMemo(
+    (): readonly NewTripRoom[] =>
+      rooms
+        .map((room) => ({ name: room.name.trim(), capacity: room.capacity }))
+        .filter((room) => room.name !== ''),
+    [rooms],
+  );
+
+  useEffect(() => {
+    if (!isCreateMode) {return;}
+    onRoomsChange?.(roomsToCreate);
+  }, [isCreateMode, roomsToCreate, onRoomsChange]);
+
   // Notify parent of dirty state changes
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -476,6 +564,7 @@ const TripForm = memo(function TripForm({
     setImportSource(null);
     setGuests(buildInitialGuests());
     setHasEditedFirstGuest(false);
+    setRooms([]);
     setErrors({});
   }
 
@@ -503,6 +592,22 @@ const TripForm = memo(function TripForm({
     if (pendingId === null) {return;}
     pendingGuestFocusRef.current = null;
     guestInputsRef.current.get(pendingId)?.focus();
+  });
+
+  // ============================================================================
+  // Room List Focus
+  // ============================================================================
+
+  /** Live inputs, by row id — the guest list's arrangement, one list further. */
+  const roomInputsRef = useRef(new Map<string, HTMLInputElement>());
+  /** The row to focus once the render that adds or removes one has committed. */
+  const pendingRoomFocusRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const pendingId = pendingRoomFocusRef.current;
+    if (pendingId === null) {return;}
+    pendingRoomFocusRef.current = null;
+    roomInputsRef.current.get(pendingId)?.focus();
   });
 
   // Parse dates for Calendar component
@@ -759,6 +864,49 @@ const TripForm = memo(function TripForm({
     },
     [resolvedGuests],
   );
+
+  /**
+   * Handles a room name change, by row id.
+   */
+  const handleRoomNameChange = useCallback((id: string, value: string) => {
+    setRooms((prev) =>
+      prev.map((room) => (room.id === id ? { ...room, name: value } : room)),
+    );
+  }, []);
+
+  /**
+   * Handles a room bed count change, by row id.
+   */
+  const handleRoomCapacityChange = useCallback((id: string, value: number) => {
+    setRooms((prev) =>
+      prev.map((room) => (room.id === id ? { ...room, capacity: value } : room)),
+    );
+  }, []);
+
+  /**
+   * Appends an empty room row and puts the cursor in it.
+   */
+  const handleAddRoom = useCallback(() => {
+    const id = nanoid();
+    pendingRoomFocusRef.current = id;
+    setRooms((prev) => [
+      ...prev,
+      { id, name: '', capacity: DEFAULT_ROOM_CAPACITY },
+    ]);
+  }, []);
+
+  /**
+   * Removes a room row, moving focus to the row above it — or to the button
+   * that adds one, when the row removed was the first.
+   */
+  const handleRemoveRoom = useCallback((id: string) => {
+    setRooms((prev) => {
+      const index = prev.findIndex((room) => room.id === id);
+      if (index < 0) {return prev;}
+      pendingRoomFocusRef.current = prev[index - 1]?.id ?? null;
+      return prev.filter((room) => room.id !== id);
+    });
+  }, []);
 
   /**
    * Handles description textarea change.
@@ -1154,6 +1302,95 @@ const TripForm = memo(function TripForm({
             them across the form would make the second look unrelated.
           */}
           {children}
+        </fieldset>
+      )}
+
+      {/* Room List — create mode only, and for the same reason as the guests */}
+      {isCreateMode && (
+        // `disabled` on the fieldset reaches every control inside it, so
+        // submitting freezes the whole list at once — see the guest list above.
+        <fieldset className="space-y-2" disabled={isSubmitting}>
+          <legend className="mb-2 flex items-center text-sm leading-none font-medium">
+            {t('trips.rooms', 'Rooms')}
+            <span className="text-muted-foreground ml-1 text-xs font-normal">
+              ({t('common.optional', 'optional')})
+            </span>
+          </legend>
+
+          {/*
+            A house is typed once, here, rather than one room at a time through
+            the Rooms page dialog: six identical doubles are six rows and one
+            save. Only the name and the beds are asked for — an icon and a
+            description are decisions about one room, and the Rooms page is
+            where a room gets that kind of attention.
+          */}
+          <p id="trip-rooms-hint" className="text-xs text-muted-foreground">
+            {t('trips.roomsHint', 'Name each room and say how many beds it has. You can add rooms later.')}
+          </p>
+
+          <ul className="space-y-2">
+            {rooms.map((room, index) => {
+              const bedsId = `trip-room-beds-${room.id}`;
+              return (
+                <li key={room.id} className="flex items-center gap-2">
+                  <Input
+                    ref={(element) => {
+                      const inputs = roomInputsRef.current;
+                      if (element) {
+                        inputs.set(room.id, element);
+                      } else {
+                        inputs.delete(room.id);
+                      }
+                    }}
+                    type="text"
+                    value={room.name}
+                    onChange={(event) => handleRoomNameChange(room.id, event.target.value)}
+                    placeholder={t('trips.roomNamePlaceholder', 'e.g. Double bed')}
+                    maxLength={ROOM_NAME_MAX_LENGTH}
+                    aria-label={t('trips.roomNumberLabel', 'Room {{number}}', {
+                      number: index + 1,
+                    })}
+                    aria-describedby="trip-rooms-hint"
+                    className="min-w-0 flex-1"
+                  />
+                  <Label htmlFor={bedsId} className="sr-only">
+                    {t('trips.roomBedsLabel', 'Beds in room {{number}}', {
+                      number: index + 1,
+                    })}
+                  </Label>
+                  <NumberStepper
+                    id={bedsId}
+                    value={room.capacity}
+                    onValueChange={(value) => handleRoomCapacityChange(room.id, value)}
+                    min={MIN_ROOM_CAPACITY}
+                    decrementLabel={t('trips.roomBedsDecrease', 'Remove a bed from room {{number}}', {
+                      number: index + 1,
+                    })}
+                    incrementLabel={t('trips.roomBedsIncrease', 'Add a bed to room {{number}}', {
+                      number: index + 1,
+                    })}
+                    className="w-14"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveRoom(room.id)}
+                    aria-label={t('trips.removeRoom', 'Remove room {{number}}', {
+                      number: index + 1,
+                    })}
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+
+          <Button type="button" variant="outline" size="sm" onClick={handleAddRoom}>
+            <Plus className="size-4" aria-hidden="true" />
+            {t('trips.addRoom', 'Add room')}
+          </Button>
         </fieldset>
       )}
 

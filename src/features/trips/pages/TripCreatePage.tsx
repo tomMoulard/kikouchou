@@ -18,6 +18,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   TripForm,
   type NewTripGuest,
+  type NewTripRoom,
   type TripFormHandle,
 } from '@/features/trips/components/TripForm';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -32,6 +33,7 @@ import {
   cloneRoomsToTrip,
   createPerson,
   createPersonWithAutoColor,
+  createRoom,
 } from '@/lib/db';
 import { captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
@@ -83,6 +85,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const { isBlocked, proceed, reset, skipNextBlock } = useUnsavedChanges(isDirty);
   const importSourceRef = useRef<TripId | null>(null);
   const guestsRef = useRef<readonly NewTripGuest[]>([]);
+  const roomsRef = useRef<readonly NewTripRoom[]>([]);
 
   // ============================================================================
   // Guest Group Selection
@@ -146,6 +149,15 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
    */
   const handleGuestsChange = useCallback((guests: readonly NewTripGuest[]) => {
     guestsRef.current = guests;
+  }, []);
+
+  /**
+   * Tracks the room list TripForm is holding, for the same reasons as the
+   * guests above: rooms are not a trip field, and a ref keeps the keystrokes
+   * out of this page's render.
+   */
+  const handleRoomsChange = useCallback((rooms: readonly NewTripRoom[]) => {
+    roomsRef.current = rooms;
   }, []);
 
   // ============================================================================
@@ -228,6 +240,35 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
       }
 
       /*
+        Add the rooms the form collected, in list order.
+
+        Sequential like the guests, and for a related reason: `createRoom` reads
+        the trip's current rooms to place the new one last, so a `Promise.all`
+        would hand every room the same order value.
+
+        A room that fails is a warning rather than a rolled-back trip — the trip
+        and its guests are already saved, and the Rooms page can take the rest.
+      */
+      const rooms = roomsRef.current;
+      let addedRoomCount = 0;
+
+      for (const room of rooms) {
+        try {
+          await createRoom(newTrip.id, {
+            name: room.name,
+            capacity: room.capacity,
+          });
+          addedRoomCount += 1;
+        } catch (error) {
+          console.error('Failed to add room to new trip:', error);
+        }
+      }
+
+      if (addedRoomCount < rooms.length) {
+        notify.error(t('trips.roomsCreateFailed', 'Trip created but some rooms could not be added'));
+      }
+
+      /*
         Become the person the "You" row created.
 
         The form asks for the user's own name and badges the row "You", so the
@@ -265,6 +306,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
         imported_rooms: didImportRooms,
         guest_count: addedGuestCount,
         imported_guests: importedGuestCount,
+        room_count: addedRoomCount,
       });
 
       // Reset dirty state and skip blocker before navigation.
@@ -319,6 +361,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
             onImportSourceChange={handleImportSourceChange}
             currentUserName={currentUserName}
             onGuestsChange={handleGuestsChange}
+            onRoomsChange={handleRoomsChange}
           >
             {/*
               One button, and no queue beside it: whatever the picker returns
