@@ -271,3 +271,40 @@ export function summarizeRoomOccupancy(
     isOverCapacity: peakOccupancy > capacity,
   };
 }
+
+/**
+ * Counts, per room and per night, how many people are already booked in.
+ *
+ * The planner needs the whole grid rather than one room's peak, because it
+ * places a stay night by night and has to see the night that is tight rather
+ * than the average. It lives here so it reads the nights model through
+ * {@link listStayNights} like every other occupancy answer, and so the dialog
+ * that re-checks a room the reader picked by hand cannot disagree with the
+ * planner that proposed it.
+ *
+ * The returned maps are fresh, so a caller may add its own planned stays to
+ * them as it goes.
+ *
+ * @param assignments - Assignments across any number of rooms
+ * @param headcountOf - Resolves an assignment's guest to its headcount
+ * @returns People per night, keyed by room then by night; empty rooms absent
+ */
+export function buildNightlyOccupancyByRoom(
+  assignments: readonly RoomAssignment[],
+  headcountOf: HeadcountResolver,
+): Map<RoomId, Map<string, number>> {
+  const occupancyByRoom = new Map<RoomId, Map<string, number>>();
+
+  for (const assignment of assignments) {
+    let nights = occupancyByRoom.get(assignment.roomId);
+    if (!nights) {
+      nights = new Map<string, number>();
+      occupancyByRoom.set(assignment.roomId, nights);
+    }
+    for (const night of listStayNights(assignment.startDate, assignment.endDate)) {
+      nights.set(night, (nights.get(night) ?? 0) + headcountOf(assignment.personId));
+    }
+  }
+
+  return occupancyByRoom;
+}

@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 
 import type { ISODateString, PersonId, RoomAssignment, RoomAssignmentId, RoomId, TripId } from '@/types';
 import {
+  buildNightlyOccupancyByRoom,
   calculatePeakOccupancy,
   calculatePeakOccupancyByRoom,
   createHeadcountResolver,
@@ -347,5 +348,69 @@ describe('summarizeRoomOccupancy', () => {
     expect(summary.availableSpots).toBe(0);
     expect(summary.isFull).toBe(true);
     expect(summary.isOverCapacity).toBe(true);
+  });
+});
+
+// ============================================================================
+// buildNightlyOccupancyByRoom
+// ============================================================================
+
+describe('buildNightlyOccupancyByRoom', () => {
+  function inRoom(
+    roomId: string,
+    startDate: string,
+    endDate: string,
+    id: string,
+    personId: string,
+  ): RoomAssignment {
+    return { ...makeAssignment(startDate, endDate, id, personId), roomId: roomId as RoomId };
+  }
+
+  it('counts people per night, not rows, and skips the check-out day', () => {
+    const headcountOf = createHeadcountResolver([
+      { id: 'person-1' as PersonId, headcount: 2 },
+      { id: 'person-2' as PersonId },
+    ]);
+
+    const occupancy = buildNightlyOccupancyByRoom(
+      [
+        inRoom('room-a', '2024-07-15', '2024-07-17', 'a1', 'person-1'),
+        inRoom('room-a', '2024-07-16', '2024-07-17', 'a2', 'person-2'),
+      ],
+      headcountOf,
+    );
+
+    const nights = occupancy.get('room-a' as RoomId);
+    expect(nights?.get('2024-07-15')).toBe(2);
+    expect(nights?.get('2024-07-16')).toBe(3);
+    // The 17th is the check-out morning: nobody sleeps there.
+    expect(nights?.get('2024-07-17')).toBeUndefined();
+  });
+
+  it('omits a room nobody is booked into', () => {
+    const occupancy = buildNightlyOccupancyByRoom(
+      [inRoom('room-a', '2024-07-15', '2024-07-16', 'a1', 'person-1')],
+      ONE,
+    );
+
+    expect(occupancy.get('room-b' as RoomId)).toBeUndefined();
+  });
+
+  it('hands back maps the caller may add its own plans to', () => {
+    const occupancy = buildNightlyOccupancyByRoom(
+      [inRoom('room-a', '2024-07-15', '2024-07-16', 'a1', 'person-1')],
+      ONE,
+    );
+
+    occupancy.get('room-a' as RoomId)?.set('2024-07-16', 1);
+
+    expect(
+      buildNightlyOccupancyByRoom(
+        [inRoom('room-a', '2024-07-15', '2024-07-16', 'a1', 'person-1')],
+        ONE,
+      )
+        .get('room-a' as RoomId)
+        ?.get('2024-07-16'),
+    ).toBeUndefined();
   });
 });
