@@ -181,6 +181,64 @@ describe('LocationPicker', () => {
       expect(screen.getAllByRole('option')).toHaveLength(3);
     });
 
+    it('prints each suggestion name once, not twice', async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LocationPicker value="" onChange={mockOnChange} />);
+
+      const input = screen.getByRole('combobox');
+      await user.type(input, 'Paris');
+
+      await act(() => { vi.advanceTimersByTime(350); });
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      // A three-part display name fits the short label whole, so the secondary
+      // line used to repeat the first line word for word.
+      const [option] = screen.getAllByRole('option');
+      expect(option?.textContent).toBe('Paris, Île-de-France, FranceCity');
+    });
+
+    it('collapses two results that carry the same place name', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve([
+            {
+              place_id: 10,
+              display_name: 'Annecy, Haute-Savoie, France',
+              lat: '45.8992',
+              lon: '6.1294',
+              type: 'town',
+              class: 'place',
+            },
+            {
+              place_id: 11,
+              display_name: 'Annecy, Haute-Savoie, France',
+              lat: '45.9161',
+              lon: '6.1397',
+              type: 'administrative',
+              class: 'boundary',
+            },
+          ]),
+      });
+
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(<LocationPicker value="" onChange={mockOnChange} />);
+
+      const input = screen.getByRole('combobox');
+      await user.type(input, 'Annecy');
+
+      await act(() => { vi.advanceTimersByTime(350); });
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      expect(screen.getAllByRole('option')).toHaveLength(1);
+    });
+
     it('shows no results message when empty', async () => {
       fetchMock.mockResolvedValueOnce({
         ok: true,
