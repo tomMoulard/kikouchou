@@ -238,11 +238,47 @@ const resources: I18nResources = {
  * main();
  * ```
  */
+/**
+ * Mirrors the active language onto the `lang` attribute of `<html>`.
+ *
+ * `index.html` ships `lang="en"` and cannot know better: the language is
+ * decided at runtime by the detector. Leaving the attribute at that literal
+ * makes a French page claim to be English, and everything that trusts the
+ * attribute then gets it wrong — a screen reader reads French names with an
+ * English voice, hyphenation and quotation rules come from the wrong language,
+ * and the browser offers to translate French into French. `server/share-preview`
+ * already answers `lang="fr"` for a French invite, so the app used to disagree
+ * with its own link cards.
+ *
+ * The value is `getCurrentLanguage()` rather than the raw `i18n.language`: the
+ * attribute must name the prose actually on screen, and an unsupported tag is
+ * rendered in the French fallback.
+ *
+ * Guarded for a non-browser import (the Vitest `node` environment, a future
+ * prerender), where there is no document to annotate.
+ *
+ * @internal
+ */
+function syncDocumentLanguage(): void {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  document.documentElement.lang = getCurrentLanguage();
+}
+
+// Registered before `init()` so the language i18next settles on during
+// initialisation is caught too, whether it emits synchronously or not. The
+// `.then()` below repeats the call for the case where it emits neither.
+i18n.on('languageChanged', syncDocumentLanguage);
+
 export const i18nReady: Promise<void> = i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init(initOptions)
-  .then(() => undefined);
+  .then(() => {
+    syncDocumentLanguage();
+  });
 
 /**
  * Checks if i18n has been fully initialized.
