@@ -519,6 +519,27 @@ test.describe('Page Accessibility', () => {
   });
 
   // --------------------------------------------------------------------------
+  // Test 5b: Run sheet has no a11y violations
+  // --------------------------------------------------------------------------
+  test('transport run sheet has no a11y violations', async ({ page }) => {
+    await setColorScheme(page, 'light');
+    await page.goto('/');
+    const tripId = await setupTripWithData(page);
+
+    await page.goto(`/trips/${tripId}/transports/runsheet`);
+    await page.waitForLoadState('load');
+    await waitForLoading(page);
+
+    const violations = await analyzeA11y(page);
+
+    if (violations.length > 0) {
+      console.log('Run sheet violations:\n', formatViolations(violations));
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  // --------------------------------------------------------------------------
   // Test 6: Settings page has no a11y violations
   // --------------------------------------------------------------------------
   test('settings page has no a11y violations', async ({ page }) => {

@@ -145,9 +145,22 @@ vi.mock('@/features/transports/components/UpcomingPickups', () => ({
   UpcomingPickups: () => <div data-testid="upcoming-pickups" />,
 }));
 
+// The "Your rides" panel reads the whole transport list and this file's
+// context mocks only publish the arrivals and departures a case needs. It has
+// its own tests; here it stands in as a marker.
+vi.mock('@/features/transports/components/MyRides', () => ({
+  MyRides: () => <div data-testid="my-rides" />,
+}));
+
+// This browser is nobody unless a case says otherwise.
+vi.mock('@/lib/sharing/guest-identity', () => ({
+  getTripGuestPersonId: vi.fn(() => undefined),
+}));
+
 import { TransportListPage } from '../TransportListPage';
 import { useTripContext } from '@/contexts/TripContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { usePersonContext } from '@/contexts/PersonContext';
 
 // ============================================================================
@@ -721,5 +734,56 @@ describe('TransportListPage', () => {
     } as unknown as ReturnType<typeof useTransportContext>);
     render(<TransportListPage />, { withProviders: false });
     expect(screen.getByText('transports.needsPickup')).toBeInTheDocument();
+  });
+});
+
+// ============================================================================
+// The reader's own legs
+// ============================================================================
+
+describe('TransportListPage — the reader’s own legs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getTripGuestPersonId).mockReturnValue(undefined);
+  });
+
+  it('offers the run sheet from the header', () => {
+    render(<TransportListPage />, { withProviders: false });
+
+    expect(
+      screen.getAllByRole('button', { name: 'transports.runSheet' }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('marks nothing as the reader’s when this browser is nobody', () => {
+    render(<TransportListPage />, { withProviders: false });
+
+    expect(screen.queryByText('transports.yoursFlag')).not.toBeInTheDocument();
+    expect(screen.queryByText('transports.youDrive')).not.toBeInTheDocument();
+  });
+
+  it('marks the leg the identified guest travels on', () => {
+    vi.mocked(getTripGuestPersonId).mockReturnValue(mockPerson.id);
+
+    render(<TransportListPage />, { withProviders: false });
+
+    expect(screen.getByText('transports.yoursFlag')).toBeInTheDocument();
+  });
+
+  it('says which leg the identified guest drives', () => {
+    vi.mocked(getTripGuestPersonId).mockReturnValue('person-2' as Person['id']);
+    vi.mocked(useTransportContext).mockReturnValue({
+      arrivals: [{ ...mockArrival, needsPickup: true, driverId: 'person-2' as Person['id'] }],
+      departures: [],
+      upcomingPickups: [],
+      nowMs: Date.now(),
+      isLoading: false,
+      error: null,
+      deleteTransport: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ReturnType<typeof useTransportContext>);
+
+    render(<TransportListPage />, { withProviders: false });
+
+    expect(screen.getByText('transports.youDrive')).toBeInTheDocument();
   });
 });

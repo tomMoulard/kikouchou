@@ -111,7 +111,8 @@
     "tripsMapSummary_one": "1 voyage sur la carte",
     "tripsMapSummary_other": "{{count}} voyages sur la carte",
     "tripsMapUnpinned_one": "1 voyage sans point sur la carte",
-    "tripsMapUnpinned_other": "{{count}} voyages sans point sur la carte"
+    "tripsMapUnpinned_other": "{{count}} voyages sans point sur la carte",
+    "pickupsNeedingDriverHint": "Ouvrir la feuille de route"
   },
   "trips": {
     "title": "Mes voyages",
@@ -478,7 +479,25 @@
     "backToList": "Retour à la liste",
     "mappedCount_one": "{{count}} transport sur la carte",
     "mappedCount_other": "{{count}} transports sur la carte",
-    "mapAriaLabel": "Carte montrant les lieux de transport"
+    "mapAriaLabel": "Carte montrant les lieux de transport",
+    "runSheet": "Feuille de route",
+    "runSheetDescription": "Chaque arrivée et chaque départ, jour par jour. Une ligne signalée attend encore un conducteur.",
+    "runSheetFilterLabel": "Filtre de la feuille de route",
+    "runSheetFilterAll": "Tout",
+    "runSheetFilterMine": "Moi",
+    "runSheetSummary_one": "{{count}} trajet",
+    "runSheetSummary_other": "{{count}} trajets",
+    "runSheetNeedsDriverSummary_one": "{{count}} attend encore un conducteur",
+    "runSheetNeedsDriverSummary_other": "{{count}} attendent encore un conducteur",
+    "runSheetEmpty": "Rien sur la feuille de route pour le moment",
+    "runSheetEmptyDescription": "Ajoutez une arrivée ou un départ et il prend sa place sur cette feuille.",
+    "runSheetAllCovered": "Chaque trajet a un conducteur",
+    "youDrive": "Vous conduisez",
+    "yoursFlag": "À vous",
+    "myRides": "Vos trajets",
+    "myRidesEmpty": "Rien à venir pour vous : aucun trajet à conduire et aucun voyage à vous.",
+    "myRidesDriving": "Vous conduisez",
+    "myRidesTravel": "Vos propres voyages"
   },
   "activities": {
     "title": "Activités",

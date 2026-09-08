@@ -8,6 +8,7 @@
  */
 
 import { type ReactElement, memo } from 'react';
+import { Link } from 'react-router-dom';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,14 @@ export interface StatCardProps {
   readonly testId?: string;
   /** Extra classes for the card. */
   readonly className?: string;
+  /**
+   * Where the figure can be acted on, when such a screen exists.
+   *
+   * A count with nowhere to go is a fact the reader cannot use: "Pickups
+   * needing a driver: 3" was exactly that until the run sheet listed them.
+   * A card with a link becomes the way in.
+   */
+  readonly href?: string;
 }
 
 // ============================================================================
@@ -47,9 +56,15 @@ const StatCard = memo(function StatCard({
   hint,
   testId,
   className,
+  href,
 }: StatCardProps): ReactElement {
-  return (
-    <Card className={cn(className)}>
+  const card = (
+    <Card
+      className={cn(
+        href !== undefined && 'transition-colors hover:border-primary/40 hover:bg-muted/40',
+        className,
+      )}
+    >
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {label}
@@ -64,6 +79,19 @@ const StatCard = memo(function StatCard({
         )}
       </CardContent>
     </Card>
+  );
+
+  if (href === undefined) {
+    return card;
+  }
+
+  return (
+    <Link
+      to={href}
+      className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      {card}
+    </Link>
   );
 });
 

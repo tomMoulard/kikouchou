@@ -160,6 +160,25 @@ describe('TripAnalyticsPage', () => {
     });
   });
 
+  it('sends the pickup count to the run sheet that lists it', async () => {
+    await db.persons.bulkPut([person('p1', TRIP_A, 1)]);
+
+    render(<TripAnalyticsPage />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(screen.getByText('analytics.pickupsNeedingDriver')).toBeInTheDocument();
+    });
+
+    // The figure is only useful if it can be acted on: the card is the way in.
+    const link = screen
+      .getByText('analytics.pickupsNeedingDriver')
+      .closest('a');
+    expect(link).toHaveAttribute(
+      'href',
+      '/trips/trip-a/transports/runsheet?filter=needsDriver',
+    );
+  });
+
   it('shows an empty state rather than a wall of zeros', async () => {
     render(<TripAnalyticsPage />, { withProviders: false });
 
