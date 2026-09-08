@@ -14,6 +14,7 @@
  * - Double-click a room name (either view) to open its edit dialog
  * - Drag-and-drop room assignments (timeline unassigned rows)
  * - Room menu on each timeline chip, for assignment without a pointer
+ * - "Suggest an allocation": fills every unhoused night at once, for review
  *
  * @module features/rooms/pages/RoomListPage
  * @see TripListPage.tsx for reference implementation pattern
@@ -31,7 +32,7 @@ import {
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify } from '@/hooks';
-import { addDays, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
 import { DoorOpen, Plus, Sparkles } from 'lucide-react';
 import {
   DndContext,
@@ -60,7 +61,10 @@ import { Button } from '@/components/ui/button';
 import { ViewSwitcher } from '@/components/ui/view-switcher';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
-import { ASSISTANT_MODEL_PRESETS } from '@/features/assistant/models';
+import {
+  AllocationSuggestionDialog,
+  type ConfirmedStay,
+} from '@/features/rooms/components/AllocationSuggestionDialog';
 import { RoomCard } from '@/features/rooms/components/RoomCard';
 import { RoomDialog } from '@/features/rooms/components/RoomDialog';
 import { RoomAssignmentSection } from '@/features/rooms/components/RoomAssignmentSection';
@@ -73,13 +77,16 @@ import {
 } from '@/features/rooms/components/RoomOccupancyTimeline';
 import { type DateRange as PickerDateRange, DateRangePicker } from '@/components/shared/DateRangePicker';
 import {
+  planRoomAllocation,
+  type SuggestedStay,
+} from '@/features/rooms/utils/allocation-planner';
+import {
   calculatePeakOccupancy,
   createHeadcountResolver,
   isDateInStayRange,
-  listStayNights,
-  type HeadcountResolver,
 } from '@/features/rooms/utils/capacity-utils';
 import { createRoomDragAnnouncements } from '@/features/rooms/utils/dnd-announcements';
+import { inferGuestParties } from '@/features/rooms/utils/guest-parties';
 import { calculateUnassignedDates } from '@/features/rooms/utils/unassigned-guests';
 import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
@@ -132,24 +139,14 @@ interface UnassignedGuest {
   readonly unassignedDates: readonly string[];
 }
 
-interface DateSegment {
-  readonly startDate: string;
-  readonly endDate: string;
-  readonly dates: readonly string[];
-}
-
-interface RoomAssignmentPlan {
-  readonly personId: Person['id'];
-  readonly roomId: Room['id'];
-  readonly startDate: string;
-  readonly endDate: string;
-}
-
 // ============================================================================
 // Utility Functions
 // ============================================================================
 
-// isDateInStayRange and calculatePeakOccupancy imported from @/features/rooms/utils/capacity-utils
+// isDateInStayRange and calculatePeakOccupancy come from
+// `@/features/rooms/utils/capacity-utils`, and the allocation heuristic from
+// `@/features/rooms/utils/allocation-planner`: the page proposes and reviews,
+// it does not do the arithmetic.
 
 /**
  * Formats a Date object to ISO date string (YYYY-MM-DD).
@@ -163,197 +160,6 @@ function formatToISODate(date: Date): string {
    month = String(date.getMonth() + 1).padStart(2, '0'),
    day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
-
-async function hasAnyCachedAssistantModel(): Promise<boolean> {
-  if (typeof caches === 'undefined') {
-    return false;
-  }
-
-  try {
-    const cache = await caches.open(TRANSFORMERS_CACHE_NAME);
-    const keys = await cache.keys();
-
-    return ASSISTANT_MODEL_PRESETS.some((preset) => {
-      const encoded = preset.modelId.replace('/', '%2F');
-      return keys.some(
-        (req) => req.url.includes(encoded) || req.url.includes(preset.modelId),
-      );
-    });
-  } catch {
-    return false;
-  }
-}
-
-function splitIntoDateSegments(dates: readonly string[]): readonly DateSegment[] {
-  if (dates.length === 0) {
-    return [];
-  }
-
-  const sorted = [...dates].sort((a, b) => a.localeCompare(b));
-  const segments: DateSegment[] = [];
-  let currentStart = sorted[0]!;
-  let currentEnd = sorted[0]!;
-  let currentDates: string[] = [sorted[0]!];
-
-  for (let i = 1; i < sorted.length; i += 1) {
-    const next = sorted[i]!;
-    const expectedNext = formatToISODate(addDays(parseISO(currentEnd), 1));
-
-    if (next === expectedNext) {
-      currentEnd = next;
-      currentDates.push(next);
-      continue;
-    }
-
-    segments.push({
-      startDate: currentStart,
-      endDate: currentEnd,
-      dates: currentDates,
-    });
-    currentStart = next;
-    currentEnd = next;
-    currentDates = [next];
-  }
-
-  segments.push({
-    startDate: currentStart,
-    endDate: currentEnd,
-    dates: currentDates,
-  });
-
-  return segments;
-}
-
-function buildRoomDateOccupancy(
-  assignments: readonly RoomAssignment[],
-  headcountOf: HeadcountResolver,
-): Map<Room['id'], Map<string, number>> {
-  const occupancyByRoom = new Map<Room['id'], Map<string, number>>();
-
-  for (const assignment of assignments) {
-    let roomOccupancy = occupancyByRoom.get(assignment.roomId);
-    if (!roomOccupancy) {
-      roomOccupancy = new Map<string, number>();
-      occupancyByRoom.set(assignment.roomId, roomOccupancy);
-    }
-    // Nights model lives in capacity-utils; do not re-derive "endDate - 1" here.
-    for (const night of listStayNights(assignment.startDate, assignment.endDate)) {
-      roomOccupancy.set(
-        night,
-        (roomOccupancy.get(night) ?? 0) + headcountOf(assignment.personId),
-      );
-    }
-  }
-
-  return occupancyByRoom;
-}
-
-/**
- * Picks the room that best fits a guest's unassigned stretch of nights.
- *
- * `incomingHeadcount` is the number of people the guest stands for, not the
- * number of rows about to be written: planning a family of four as one bed is
- * how the optimizer used to overfill a double room.
- */
-function chooseRoomForSegment(
-  rooms: readonly Room[],
-  occupancyByRoom: Map<Room['id'], Map<string, number>>,
-  segment: DateSegment,
-  incomingHeadcount: number,
-): Room | undefined {
-  const candidates: Array<{
-    room: Room;
-    isCompletelyEmpty: boolean;
-    slackScore: number;
-  }> = [];
-
-  for (const room of rooms) {
-    if (room.capacity < incomingHeadcount) {
-      continue;
-    }
-    const roomOccupancy = occupancyByRoom.get(room.id) ?? new Map<string, number>();
-    const occupancies = segment.dates.map((date) => roomOccupancy.get(date) ?? 0);
-    if (occupancies.some((value) => value + incomingHeadcount > room.capacity)) {
-      continue;
-    }
-
-    const isCompletelyEmpty = occupancies.every((value) => value === 0);
-    const slackScore = occupancies.reduce(
-      (sum, value) => sum + (room.capacity - (value + incomingHeadcount)),
-      0,
-    );
-    candidates.push({
-      room,
-      isCompletelyEmpty,
-      slackScore,
-    });
-  }
-
-  candidates.sort((a, b) => {
-    if (a.isCompletelyEmpty !== b.isCompletelyEmpty) {
-      return a.isCompletelyEmpty ? -1 : 1;
-    }
-    if (a.slackScore !== b.slackScore) {
-      return a.slackScore - b.slackScore;
-    }
-    return a.room.order - b.room.order;
-  });
-
-  return candidates[0]?.room;
-}
-
-function planAutoAssignments(
-  guests: readonly UnassignedGuest[],
-  rooms: readonly Room[],
-  assignments: readonly RoomAssignment[],
-  headcountOf: HeadcountResolver,
-): {
-  readonly plans: readonly RoomAssignmentPlan[];
-  readonly unplacedSegments: number;
-} {
-  const occupancyByRoom = buildRoomDateOccupancy(assignments, headcountOf);
-  const plans: RoomAssignmentPlan[] = [];
-  let unplacedSegments = 0;
-
-  const guestsByConstraint = [...guests].sort(
-    (a, b) => b.unassignedDates.length - a.unassignedDates.length,
-  );
-
-  for (const guest of guestsByConstraint) {
-    // Count people, not rows: one guest entry can stand for a couple or a family.
-    const incomingHeadcount = headcountOf(guest.person.id);
-    const segments = splitIntoDateSegments(guest.unassignedDates);
-    for (const segment of segments) {
-      const room = chooseRoomForSegment(rooms, occupancyByRoom, segment, incomingHeadcount);
-      if (!room) {
-        unplacedSegments += 1;
-        continue;
-      }
-
-      let roomOccupancy = occupancyByRoom.get(room.id);
-      if (!roomOccupancy) {
-        roomOccupancy = new Map<string, number>();
-        occupancyByRoom.set(room.id, roomOccupancy);
-      }
-
-      for (const date of segment.dates) {
-        roomOccupancy.set(date, (roomOccupancy.get(date) ?? 0) + incomingHeadcount);
-      }
-
-      plans.push({
-        personId: guest.person.id,
-        roomId: room.id,
-        startDate: segment.startDate,
-        // Assignments store check-out day as exclusive endDate (not the last night).
-        endDate: formatToISODate(addDays(parseISO(segment.endDate), 1)),
-      });
-    }
-  }
-
-  return { plans, unplacedSegments };
 }
 
 // ============================================================================
@@ -394,8 +200,8 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   // Track if we're currently performing an action to prevent double-clicks
    isActionInProgressRef = useRef(false),
    [isActionInProgress] = useState(false),
-   [hasCachedAssistantModel, setHasCachedAssistantModel] = useState(false),
-   [isOptimizingAssignments, setIsOptimizingAssignments] = useState(false),
+   [suggestedStays, setSuggestedStays] = useState<readonly SuggestedStay[]>([]),
+   [isSuggestionOpen, setIsSuggestionOpen] = useState(false),
 
   // Date range filter for capacity calculation
    [selectedDateRange, setSelectedDateRange] = useState<PickerDateRange | undefined>(undefined),
@@ -552,10 +358,6 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     }
   }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
 
-  useEffect(() => {
-    void hasAnyCachedAssistantModel().then(setHasCachedAssistantModel);
-  }, []);
-
   // Validate tripId matches current trip
   const tripMismatch = useMemo(() => {
     if (!tripIdFromUrl || !currentTrip) {return false;}
@@ -658,81 +460,68 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
   // ============================================================================
 
   /**
-   * Auto-assigns missing room allocations using a local optimization heuristic.
-   * Visible only when at least one local assistant model is already cached.
+   * Fills the rooms in one go — as a proposal, not as a write.
+   *
+   * The planner is a plain local heuristic: no model, no network, no waiting,
+   * which is why the button is offered to everybody rather than only to a
+   * reader who happens to have an assistant model cached.
    */
-   handleOptimizeAssignments = useCallback(async () => {
-    if (isOptimizingAssignments || unassignedGuests.length === 0) {
+   handleSuggestAllocation = useCallback(() => {
+    if (unassignedGuests.length === 0) {
       return;
     }
-    setIsOptimizingAssignments(true);
 
-    try {
-      const { plans, unplacedSegments } = planAutoAssignments(
-        unassignedGuests,
-        rooms,
-        assignments,
-        headcountOf,
-      );
+    const partyOf = inferGuestParties({ persons, assignments, arrivals });
+    const stays = planRoomAllocation({
+      guests: unassignedGuests,
+      rooms,
+      assignments,
+      headcountOf,
+      partyOf,
+    });
 
-      if (plans.length === 0) {
-        notify.error(
-          t(
-            'rooms.autoAssignNoSolution',
-            'No available room slot found for these guests.',
-          ),
-        );
-        return;
-      }
-
-      let createdCount = 0;
-      for (const plan of plans) {
-        await createAssignment({
-          roomId: plan.roomId,
-          personId: plan.personId,
-          startDate: plan.startDate as ISODateString,
-          endDate: plan.endDate as ISODateString,
-        });
-        createdCount += 1;
-      }
-
-      notifySuccess(
-        t('rooms.autoAssignSuccess', {
-          count: createdCount,
-          defaultValue: '{{count}} room allocation(s) optimized automatically',
-        }),
-      );
-
-      if (unplacedSegments > 0) {
-        notify.error(
-          t('rooms.autoAssignPartial', {
-            count: unplacedSegments,
-            defaultValue:
-              '{{count}} segment(s) could not be placed due to capacity limits',
-          }),
-        );
-      }
-    } catch (error) {
-      console.error('Failed to optimize room assignments:', error);
-      notify.error(
-        t(
-          'rooms.autoAssignFailed',
-          'Could not optimize room assignments.',
-        ),
-      );
-    } finally {
-      setIsOptimizingAssignments(false);
+    if (stays.length === 0) {
+      notify.error(t('rooms.suggest.nothingToPlace'));
+      return;
     }
-  }, [
-    assignments,
-    createAssignment,
-    headcountOf,
-    isOptimizingAssignments,
-    rooms,
-    notifySuccess,
-    t,
-    unassignedGuests,
-  ]),
+
+    setSuggestedStays(stays);
+    setIsSuggestionOpen(true);
+  }, [arrivals, assignments, headcountOf, persons, rooms, t, unassignedGuests]),
+
+  /**
+   * Writes the allocation the reader agreed to, one assignment at a time.
+   *
+   * Each stay is its own row, so a failure halfway leaves the earlier ones in
+   * place: the notice reports what actually landed rather than what was asked
+   * for, and the error re-throws so the dialog stays open on what is left.
+   */
+   applySuggestedStays = useCallback(
+    async (stays: readonly ConfirmedStay[]) => {
+      let created = 0;
+
+      try {
+        for (const stay of stays) {
+          await createAssignment({
+            roomId: stay.roomId,
+            personId: stay.personId,
+            startDate: stay.startDate as ISODateString,
+            endDate: stay.endDate as ISODateString,
+          });
+          created += 1;
+        }
+      } catch (error) {
+        console.error('Failed to apply the suggested allocation:', error);
+        notify.error(t('rooms.suggest.failed'));
+        throw error;
+      } finally {
+        if (created > 0) {
+          notifySuccess(t('rooms.suggest.applied', { count: created }));
+        }
+      }
+    },
+    [createAssignment, notifySuccess, t],
+  ),
 
   /**
    * Handles room card click - toggles the expanded state to show/hide assignments.
@@ -1255,23 +1044,16 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           }
           action={
             <>
-              {persons.length > 0 &&
-                unassignedGuests.length > 0 &&
-                hasCachedAssistantModel && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      void handleOptimizeAssignments();
-                    }}
-                    disabled={isOptimizingAssignments}
-                  >
-                    <Sparkles className="mr-2 size-4" aria-hidden="true" />
-                    {isOptimizingAssignments
-                      ? t('rooms.autoAssignWorking', 'Optimizing...')
-                      : t('rooms.autoAssignButton', 'Optimize automatically')}
-                  </Button>
-                )}
+              {persons.length > 0 && unassignedGuests.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSuggestAllocation}
+                >
+                  <Sparkles className="mr-2 size-4" aria-hidden="true" />
+                  {t('rooms.suggest.button')}
+                </Button>
+              )}
               {headerAction}
             </>
           }
@@ -1375,6 +1157,17 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         roomId={editingRoomId}
         open={isDialogOpen}
         onOpenChange={handleDialogOpenChange}
+      />
+
+      {/* The suggested allocation, for review before anything is written */}
+      <AllocationSuggestionDialog
+        open={isSuggestionOpen}
+        onOpenChange={setIsSuggestionOpen}
+        stays={suggestedStays}
+        rooms={rooms}
+        persons={persons}
+        assignments={assignments}
+        onApply={applySuggestedStays}
       />
 
       {/* Quick Assignment Dialog (for drag-drop) */}

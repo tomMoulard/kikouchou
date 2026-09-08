@@ -251,14 +251,6 @@
       "baby": "Chambre enfant",
       "armchair": "Fauteuil"
     },
-    "autoAssignButton": "Optimiser automatiquement",
-    "autoAssignWorking": "Optimisation...",
-    "autoAssignSuccess_one": "{{count}} attribution optimisée automatiquement",
-    "autoAssignSuccess_other": "{{count}} attributions optimisées automatiquement",
-    "autoAssignPartial_one": "{{count}} segment n'a pas pu être placé (capacité atteinte)",
-    "autoAssignPartial_other": "{{count}} segments n'ont pas pu être placés (capacité atteinte)",
-    "autoAssignNoSolution": "Aucun créneau disponible trouvé pour ces invités.",
-    "autoAssignFailed": "Impossible d'optimiser les attributions.",
     "assignMenu": {
       "trigger": "Attribuer une chambre à {{name}}",
       "moveTrigger": "Déplacer {{name}} vers une autre chambre",
@@ -271,7 +263,27 @@
     "countPreview": "Crée {{names}}",
     "createSuccessMany": "{{count}} chambres créées",
     "duplicate": "Dupliquer",
-    "duplicateSuccess": "{{name}} créée"
+    "duplicateSuccess": "{{name}} créée",
+    "suggest": {
+      "button": "Proposer une répartition",
+      "title": "Répartition proposée",
+      "description": "Changez les chambres qui ne vous conviennent pas. Rien n'est enregistré avant de valider.",
+      "apply_one": "Valider {{count}} séjour",
+      "apply_other": "Valider {{count}} séjours",
+      "roomFor": "Chambre pour {{name}}",
+      "noRoom": "Pas de chambre pour l'instant",
+      "nights_one": "{{count}} nuit",
+      "nights_other": "{{count}} nuits",
+      "travelsTogether": "Voyagent ensemble : {{names}}",
+      "nothingFits": "Aucune chambre n'a de place ces nuits-là",
+      "overCapacity": "Cette chambre dépasse sa capacité certaines de ces nuits",
+      "nothingToPlace": "Chaque invité a déjà une chambre pour toutes ses nuits.",
+      "leftOut_one": "{{count}} séjour restera sans chambre",
+      "leftOut_other": "{{count}} séjours resteront sans chambre",
+      "applied_one": "{{count}} séjour enregistré",
+      "applied_other": "{{count}} séjours enregistrés",
+      "failed": "Impossible d'enregistrer la répartition."
+    }
   },
   "persons": {
     "title": "Participants",

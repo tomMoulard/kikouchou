@@ -251,14 +251,6 @@
       "baby": "Kids room",
       "armchair": "Lounge"
     },
-    "autoAssignButton": "Optimize automatically",
-    "autoAssignWorking": "Optimizing...",
-    "autoAssignSuccess_one": "{{count}} room allocation optimized automatically",
-    "autoAssignSuccess_other": "{{count}} room allocations optimized automatically",
-    "autoAssignPartial_one": "{{count}} segment could not be placed due to capacity limits",
-    "autoAssignPartial_other": "{{count}} segments could not be placed due to capacity limits",
-    "autoAssignNoSolution": "No available room slot found for these guests.",
-    "autoAssignFailed": "Could not optimize room assignments.",
     "assignMenu": {
       "trigger": "Assign {{name}} to a room",
       "moveTrigger": "Move {{name}} to another room",
@@ -271,7 +263,27 @@
     "countPreview": "Creates {{names}}",
     "createSuccessMany": "{{count}} rooms created",
     "duplicate": "Duplicate",
-    "duplicateSuccess": "{{name}} created"
+    "duplicateSuccess": "{{name}} created",
+    "suggest": {
+      "button": "Suggest an allocation",
+      "title": "Suggested allocation",
+      "description": "Change any room you disagree with. Nothing is saved until you apply.",
+      "apply_one": "Apply {{count}} stay",
+      "apply_other": "Apply {{count}} stays",
+      "roomFor": "Room for {{name}}",
+      "noRoom": "No room for now",
+      "nights_one": "{{count}} night",
+      "nights_other": "{{count}} nights",
+      "travelsTogether": "Travelling together: {{names}}",
+      "nothingFits": "No room has space on these nights",
+      "overCapacity": "This room goes over capacity on some of these nights",
+      "nothingToPlace": "Every guest already has a room for every night.",
+      "leftOut_one": "{{count}} stay will be left without a room",
+      "leftOut_other": "{{count}} stays will be left without a room",
+      "applied_one": "{{count}} stay saved",
+      "applied_other": "{{count}} stays saved",
+      "failed": "Could not save the allocation."
+    }
   },
   "persons": {
     "title": "Guests",
