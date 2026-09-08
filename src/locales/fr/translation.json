@@ -232,6 +232,7 @@
     "available": "Disponible",
     "unassignedGuests": "Invités sans chambre",
     "allGuestsAssigned": "Tous les invités ont une chambre",
+    "noNights": "Aucune nuit sur ce séjour, personne n'a besoin d'un lit",
     "needsRoom": "a besoin d'une chambre",
     "icon": "Icône de la chambre",
     "spotsTaken_one": "{{occupied}} sur {{count}} place prise",

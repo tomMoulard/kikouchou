@@ -232,6 +232,7 @@
     "available": "Available",
     "unassignedGuests": "Guests without rooms",
     "allGuestsAssigned": "All guests have rooms assigned",
+    "noNights": "No nights on this trip, so nobody needs a bed",
     "needsRoom": "needs room",
     "icon": "Room icon",
     "spotsTaken_one": "{{occupied}} of {{count}} spot taken",
