@@ -1,13 +1,19 @@
 /**
  * @fileoverview The screen an invite link lands on.
  *
- * Four things happen here, in order, and each has to be visible because any of
- * them can take a moment or fail: sign in, redeem the invite, download the trip,
- * then say which participant you are.
+ * Two ways in, and both end on the trip's calendar:
  *
- * The last step is the one that makes a shared trip legible — without it the
- * app knows an account joined but not *who* that is, so it cannot tell you whose
- * room assignment or train you are looking at.
+ * - **Signed out** — the trip is read through the token and lands on this
+ *   device read-only. The screen says whose trip this is, and asks which guest
+ *   the visitor is so the calendar can show their own room and travel. That
+ *   answer is device-local; nothing is written to the server. This is where a
+ *   wall used to stand — "Create an account so the others can see your room" —
+ *   and most invitees left rather than climb it.
+ * - **Signed in** — the account is put on the roster, the trip downloads, and
+ *   the same question is asked as a server-side claim, so two accounts cannot
+ *   both be Alice.
+ *
+ * Each step is visible because any of them can take a moment or fail.
  *
  * @module features/sharing/pages/JoinTripPage
  */
@@ -16,22 +22,28 @@ import { type ReactElement, useCallback, useEffect, useMemo, useState } from 're
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Check, Loader2, UserRound } from 'lucide-react';
+import { AlertTriangle, Calendar, Check, Loader2, MapPin, Palmtree, UserRound } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { onboardingSurface, statusVariants } from '@/components/ui/status.variants';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { useTripContext } from '@/contexts/TripContext';
 import posthog from '@/lib/posthog';
 import { db } from '@/lib/db/database';
 import { useAuth } from '@/features/auth/AuthContext';
-import { SignInDialog } from '@/features/auth/components/SignInDialog';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cacheClaimedPersonId } from '@/lib/identity/trip-identity';
+import { notify } from '@/lib/notifications';
+import { isRunningStandalone } from '@/lib/pwa/display-mode';
+import { getTripGuestPersonId, writeGuestIdentity } from '@/lib/sharing/guest-identity';
 import { claimParticipant, fetchClaimedParticipants } from '@/lib/sync/join-trip';
 import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
+import { cn } from '@/lib/utils';
+import { formatDateRange } from '@/lib/utils/date-format';
 import { useJoinTrip } from '../hooks/useJoinTrip';
-import type { PersonId, TripId } from '@/types';
+import type { PersonId, Trip, TripId } from '@/types';
 
 // ============================================================================
 // Constants
@@ -61,7 +73,7 @@ function JoinShell({ children }: { readonly children: ReactElement }): ReactElem
 }
 
 // ============================================================================
-// Identity step
+// Identity step — members
 // ============================================================================
 
 interface IdentityStepProps {
@@ -177,7 +189,7 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
         return;
       }
 
-      posthog?.capture('trip_identity_claimed');
+      posthog?.capture('trip_identity_claimed', { scope: 'account' });
 
       // Cache the confirmed claim locally. The server row stays authoritative,
       // but until this line existed the claim was written to Postgres and never
@@ -195,7 +207,7 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
     // Distinguished from claiming, because somebody entering a trip as nobody in
     // particular will not see their own room or travel — a quiet drop-off worth
     // measuring rather than guessing at.
-    posthog?.capture('trip_identity_skipped');
+    posthog?.capture('trip_identity_skipped', { scope: 'account' });
     void navigate(`/trips/${tripId}/calendar`);
   }, [navigate, tripId]);
 
@@ -330,6 +342,189 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
 }
 
 // ============================================================================
+// Welcome — viewers
+// ============================================================================
+
+interface ViewerWelcomeProps {
+  readonly trip: Trip;
+}
+
+/**
+ * The invite, for somebody with no account.
+ *
+ * Whose trip, when and where, then "which one are you?" — answered on this
+ * device only, through the same storage the share wizard uses, so the calendar
+ * can point at the visitor's own room and travel. A visitor who already
+ * answered on this device is sent straight in, like a returning guest of the
+ * share wizard.
+ *
+ * Styled like that wizard rather than like the account flow above: warm,
+ * because this is the first thing most people ever see of the app, and the
+ * tagline says what the app is when the page is not running as an installed
+ * app — an icon on a Home Screen has already said so.
+ */
+function ViewerWelcome({ trip }: ViewerWelcomeProps): ReactElement {
+  const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
+
+  const personsQuery = useLiveQuery(
+    () => db.persons.where('tripId').equals(trip.id).toArray(),
+    [trip.id],
+  );
+  const persons = useMemo(() => personsQuery ?? [], [personsQuery]);
+
+  const dateRange = useMemo(
+    () => formatDateRange(trip.startDate, trip.endDate, getDateLocale(i18n.language)),
+    [i18n.language, trip.endDate, trip.startDate],
+  );
+
+  const showTagline = !isRunningStandalone();
+
+  const openTrip = useCallback((): void => {
+    void navigate(`/trips/${trip.id}/calendar`);
+  }, [navigate, trip.id]);
+
+  // A returning viewer already said who they are; the wizard would ask again
+  // and the calendar is what they came back for.
+  useEffect(() => {
+    if (getTripGuestPersonId(trip) !== undefined) {
+      openTrip();
+    }
+  }, [openTrip, trip]);
+
+  const handlePick = useCallback(
+    (personId: PersonId): void => {
+      if (!writeGuestIdentity(trip.shareId, { personId, tripId: trip.id })) {
+        // The trip is on the device whatever storage says; the calendar just
+        // will not know whose room to point at until they pick again.
+        notify.error(
+          t(
+            'sharing.identityStorageFailed',
+            'Could not save your identity. You may need to re-select on your next visit.',
+          ),
+        );
+      }
+      posthog?.capture('trip_identity_claimed', { scope: 'device' });
+      openTrip();
+    },
+    [openTrip, t, trip.id, trip.shareId],
+  );
+
+  const skip = useCallback((): void => {
+    posthog?.capture('trip_identity_skipped', { scope: 'device' });
+    openTrip();
+  }, [openTrip]);
+
+  return (
+    <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+      <Card className="w-full max-w-md border-warning-border shadow-lg">
+        <CardHeader className="pb-4 pt-8 text-center">
+          <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-warning/20">
+            <Palmtree
+              className={cn('size-10', statusVariants({ tone: 'warning', emphasis: 'text' }))}
+              aria-hidden="true"
+            />
+          </div>
+
+          {showTagline ? (
+            <p className="mb-2 text-sm text-muted-foreground">
+              {t(
+                'sharing.join.welcomeTagline',
+                'Welcome to Kikouchou, the app for a house full of friends.',
+              )}
+            </p>
+          ) : null}
+
+          <CardTitle className="text-2xl font-bold text-warning-on-surface">
+            {t('sharing.join.welcomeTo', {
+              tripName: trip.name,
+              defaultValue: "You're invited to {{tripName}}",
+            })}
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent className="space-y-6 pb-8">
+          <div
+            className={cn(
+              'space-y-3 rounded-xl p-4',
+              statusVariants({ tone: 'warning', emphasis: 'surface' }),
+            )}
+          >
+            {trip.location ? (
+              <div className="flex items-center gap-3 text-sm text-foreground">
+                <MapPin className="size-4 shrink-0 text-warning-on-surface" aria-hidden="true" />
+                <span>{trip.location}</span>
+              </div>
+            ) : null}
+            <div className="flex items-center gap-3 text-sm text-foreground">
+              <Calendar className="size-4 shrink-0 text-warning-on-surface" aria-hidden="true" />
+              <span>{dateRange}</span>
+            </div>
+          </div>
+
+          <div className="space-y-1 text-center">
+            <p className="text-lg font-semibold text-foreground">
+              {t('sharing.join.whoAreYou', 'Which one are you?')}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {t(
+                'sharing.join.viewerHint',
+                'Pick your name and the trip shows your room and your travel. You can look at everything; changing anything needs a sign-in.',
+              )}
+            </p>
+          </div>
+
+          {persons.length === 0 ? (
+            <p className={cn('rounded-xl p-4 text-center text-sm', statusVariants({ tone: 'warning' }))}>
+              {t(
+                'sharing.join.noParticipantsHint',
+                "Either nobody has been added to this trip yet, or their details haven't reached this device. You can open the trip and carry on.",
+              )}
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {persons.map((person) => (
+                <li key={person.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handlePick(person.id);
+                    }}
+                    className={cn(
+                      'flex w-full min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border-2 p-4 text-left transition-colors',
+                      'border-warning-border bg-card hover:border-warning',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    )}
+                  >
+                    <span
+                      className="size-8 flex-shrink-0 rounded-full"
+                      style={{ backgroundColor: person.color }}
+                      aria-hidden="true"
+                    />
+                    <span className="flex-1 font-medium text-foreground">{person.name}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-11 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface dark:hover:bg-warning-surface dark:hover:text-warning-on-surface"
+            onClick={skip}
+          >
+            {persons.length === 0
+              ? t('sharing.join.lookAround', 'Have a look around')
+              : t('sharing.join.notListed', "I'm not on the list")}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ============================================================================
 // Page
 // ============================================================================
 
@@ -340,57 +535,23 @@ export function JoinTripPage(): ReactElement {
   const { setCurrentTrip, trips } = useTripContext();
 
   const { phase, retry } = useJoinTrip(token ?? null);
-  const [signInOpen, setSignInOpen] = useState(false);
 
   // Selecting the trip is what mounts the sync provider, which is what fills the
-  // participant list the identity step needs.
+  // participant list the identity step needs — and, for a viewer, what starts
+  // refreshing the copy.
   useEffect(() => {
-    if (phase.kind === 'joined') {
-      void setCurrentTrip(phase.kind === 'joined' ? phase.tripId : null);
+    if (phase.kind === 'joined' || phase.kind === 'viewing') {
+      void setCurrentTrip(phase.tripId);
     }
   }, [phase, setCurrentTrip]);
 
-  const joinedTrip = useMemo(
+  const landedTrip = useMemo(
     () =>
-      phase.kind === 'joined'
+      phase.kind === 'joined' || phase.kind === 'viewing'
         ? trips.find((candidate) => candidate.id === phase.tripId)
         : undefined,
     [phase, trips],
   );
-
-  if (phase.kind === 'needs-account') {
-    return (
-      <JoinShell>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
-              <UserRound className="size-6 text-primary" aria-hidden="true" />
-            </div>
-            <CardTitle className="text-lg">
-              {t('sharing.join.title', "You've been invited to a trip")}
-            </CardTitle>
-            <CardDescription>
-              {t(
-                'sharing.join.needsAccount',
-                'Create an account so the others can see your room and your travel times.',
-              )}
-            </CardDescription>
-          </div>
-          <Button onClick={() => setSignInOpen(true)}>
-            {t('auth.account.signInAction', 'Sign in')}
-          </Button>
-          <SignInDialog
-            open={signInOpen}
-            onOpenChange={setSignInOpen}
-            reason={t(
-              'sharing.join.signInReason',
-              'Sign in to join this trip and edit it with the others.',
-            )}
-          />
-        </div>
-      </JoinShell>
-    );
-  }
 
   if (phase.kind === 'joining') {
     return (
@@ -398,7 +559,7 @@ export function JoinTripPage(): ReactElement {
         <div className="flex flex-col items-center gap-3 text-center">
           <Loader2 className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
           <CardTitle className="text-lg">
-            {t('sharing.join.joining', 'Joining the trip…')}
+            {t('sharing.join.opening', 'Opening the trip…')}
           </CardTitle>
         </div>
       </JoinShell>
@@ -455,10 +616,28 @@ export function JoinTripPage(): ReactElement {
     );
   }
 
+  if (phase.kind === 'viewing') {
+    if (!landedTrip) {
+      // The row was just written; the live query behind `trips` has a tick to
+      // catch up.
+      return (
+        <JoinShell>
+          <div className="flex flex-col items-center gap-3 text-center">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" aria-hidden="true" />
+            <CardTitle className="text-lg">
+              {t('sharing.join.opening', 'Opening the trip…')}
+            </CardTitle>
+          </div>
+        </JoinShell>
+      );
+    }
+    return <ViewerWelcome trip={landedTrip} />;
+  }
+
   return (
     <JoinShell>
-      {joinedTrip?.remoteTripId ? (
-        <IdentityStep tripId={phase.tripId} remoteTripId={joinedTrip.remoteTripId} />
+      {landedTrip?.remoteTripId ? (
+        <IdentityStep tripId={phase.tripId} remoteTripId={landedTrip.remoteTripId} />
       ) : (
         <div className="flex flex-col items-center gap-3 text-center">
           <Check className="size-6 text-primary" aria-hidden="true" />

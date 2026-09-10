@@ -54,6 +54,8 @@ vi.mock('@/lib/sync/invites', () => ({
     invite: { token: 'tokentokent1' },
   })),
   isInviteUsable: vi.fn(() => true),
+  inviteOutlastsTrip: vi.fn(() => true),
+  inviteExpiryForTrip: vi.fn(() => new Date('2026-07-29T23:59:59.999Z')),
   // Kept in step with the real signature: the fourth argument is what decides
   // between the preview link and the direct one, and a mock that ignored it
   // would let the hook stop passing it without a single test noticing.
@@ -202,5 +204,50 @@ describe('useTripShareLink', () => {
         'trip-2',
       );
     });
+  });
+});
+
+// ============================================================================
+// Viewer trips and expiry
+// ============================================================================
+
+describe('useTripShareLink — a viewer trip', () => {
+  it('hands the viewer their own token, with no server work', async () => {
+    const trip = tripObject({ viewerToken: 'viewertoken12345', remoteTripId: 'remote-1' });
+    const { result } = renderHook(() => useTripShareLink(trip, true));
+
+    // Forwarding an invitation is what people do with one. The token already
+    // opens the trip for the next person, read-only, so the dialog shows it
+    // rather than asking a viewer for an account they do not need.
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({
+        kind: 'invite',
+        token: 'viewertoken12345',
+      });
+    });
+    expect(mockedEnsure).not.toHaveBeenCalled();
+    expect(mockedList).not.toHaveBeenCalled();
+    expect(mockedCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('useTripShareLink — how long a new link lives', () => {
+  it('mints a link that outlasts the trip rather than the old one-month default', async () => {
+    const trip = tripObject({ endDate: '2026-07-22' as ISODateString });
+    const { result } = renderHook(() => useTripShareLink(trip, true));
+
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('invite');
+    });
+
+    // A trip planned three months ahead used to outlive its own link, and
+    // every viewer reading it through the token lost their updates after a
+    // month. The expiry now follows the trip's last day.
+    expect(mockedCreate).toHaveBeenCalledWith(
+      expect.anything(),
+      'remote-1',
+      'user-1',
+      { expiresAt: new Date('2026-07-29T23:59:59.999Z') },
+    );
   });
 });
