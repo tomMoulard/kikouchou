@@ -13,6 +13,8 @@
 
 import { expect, test, type Page } from '@playwright/test';
 
+import { guestCards, roomCards } from './support/page-regions';
+
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -72,12 +74,15 @@ test.describe('the first-trip wizard', () => {
     await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 15_000 });
     await expect(page.getByText('Lake house').first()).toBeVisible();
 
-    // The guests and the room exist.
+    // The guests and the room exist. Each is read from the page's own list:
+    // the organiser's column beside these pages names them again.
     await page.getByRole('link', { name: /guests/i }).first().click();
-    await expect(page.getByText('Alice')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Bob')).toBeVisible();
-    await page.getByRole('link', { name: /rooms/i }).first().click();
-    await expect(page.getByText('Attic')).toBeVisible({ timeout: 15_000 });
+    await expect(guestCards(page).getByText('Alice')).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(guestCards(page).getByText('Bob')).toBeVisible();
+    await page.getByRole('link', { name: /^(rooms|chambres)$/i }).first().click();
+    await expect(roomCards(page).getByText('Attic')).toBeVisible({ timeout: 15_000 });
   });
 
   test('is only ever for the first trip on a device', async ({ page }) => {

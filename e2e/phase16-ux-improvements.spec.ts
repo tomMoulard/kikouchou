@@ -13,6 +13,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import { waitForRoute } from './support/routes';
+import { roomCards } from './support/page-regions';
 
 // ============================================================================
 // Database Helpers
@@ -1055,11 +1056,13 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     // compute what that timezone makes of the stored instant, which is the
     // claim under test.
     const expectedTime = localClockTime(TEST_DATA.transport.datetime);
-    // The transport's own card, not the "needs a driver" banner above the list
-    // — that one is a `role="article"` naming the same guest.
-    const transportCard = page
-      .locator('[role="article"][data-slot="card"]')
-      .filter({ hasText: TEST_DATA.person.name });
+    // The transport's own card, not the "needs a driver" banner above the
+    // list: that one is a `role="article"` too, and it now prints the guest's
+    // name in its body, so filtering on the text matches both. The label is
+    // what tells them apart — a leg's starts with its direction.
+    const transportCard = page.getByRole('article', {
+      name: new RegExp(`^(arrival|arrivée), ${TEST_DATA.person.name}`, 'i'),
+    });
 
     await expect(transportCard).toBeVisible({ timeout: 5000 });
     await expect(transportCard).toHaveAttribute(
@@ -1232,10 +1235,13 @@ test.describe('Room Assignment Drag-Drop', () => {
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
-    // Verify rooms are displayed
-    await expect(page.getByText('Single Room')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('Double Room')).toBeVisible();
-    await expect(page.getByText('Family Room')).toBeVisible();
+    // Verify rooms are displayed, in the page's own grid: the organiser's
+    // column beside it lists the same rooms and their occupancy.
+    await expect(roomCards(page).getByText('Single Room')).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(roomCards(page).getByText('Double Room')).toBeVisible();
+    await expect(roomCards(page).getByText('Family Room')).toBeVisible();
 
     // Look for icons (bed icons, room icons)
     const icons = page.locator('svg, [data-icon], .lucide');
