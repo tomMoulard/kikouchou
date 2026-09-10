@@ -351,6 +351,24 @@ The exit is `upgradeViewerTrip`: redeem the token, clear `viewerToken`, and the
 provider mounts on the same document. Its first reconcile finds nothing to send
 because the viewer path recorded the server's state vector after every read.
 
+### One install prompt, and the page an iPhone installs from
+
+`useInstallPrompt` captures the browser's one `beforeinstallprompt` and reports
+`appinstalled` to PostHog. It has one caller: `InstallPromptProvider` in
+`App`. Everything that offers the install — the banner, the nudge on a shared
+trip's calendar — reads `useInstallPromptState()`. A second `useInstallPrompt`
+would hold a second copy of the deferred prompt and count one install twice.
+
+An installed iPhone app has storage separate from Safari's, so it must open on
+a page that can fetch the trip again with nothing stored. The build emits
+`manifest-here.webmanifest`, the manifest without `start_url`, and the two
+pages a phone is sent to install from (`/join/:token`, `/t/:remoteTripId`)
+swap the document's manifest link to it through `useHereManifest()` while they
+are on screen. A page that installs itself must keep `id` and must not go on
+to the calendar while `installIntent` is set, or the Home Screen app opens on
+the wrong page. `installIntent` is also true *inside* the installed app when
+its start URL carried `?install=1`; guard with `!isInstalled`.
+
 ### A global entity syncs per account, not through the trip document
 
 The Yjs document is per trip, so nothing that outlives a trip can travel in it.
