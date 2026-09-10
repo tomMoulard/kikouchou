@@ -1,6 +1,6 @@
 # Invite first, reminders second: a review of the install-first plan
 
-Date: 2026-09-10. Status: proposal. Nothing is built.
+Date: 2026-09-10. Status: phases 0 to 4 built on two stacked branches, none pushed; see section 7.
 
 ## Summary
 
@@ -280,7 +280,17 @@ Phase 3 is built on the same branch, feat/install-nudge-and-handoff, after phase
 
 Deviations from the phase 3 text above, for the record: the reminders print no clock time, because the service does not know the house's time zone; a flag that does not exist in PostHog counts as on, so the reminders work before anybody creates one; the default send mode is direct, with the workflow as the opt-in; the workflow and the flags are not created in PostHog by this work, only defined.
 
-Not in phase 3, on purpose: the creation wizard (phase 4), and the manual iPhone and Android run, which needs a deployed service with a VAPID key.
+Phase 4 is built on the same branch, after phase 3:
+
+- useFeatureFlag: a PostHog flag as one boolean, undefined while PostHog answers, false without analytics, with a local override in localStorage (kikouchou-flag:<key> = on | off) for development and end-to-end tests.
+- createTripWithDetails: the trip, its guests, its rooms and the identity, in one call the form and the wizard share, so the two arms differ in their screens only. trip_created carries via: form or via: wizard.
+- TripCreateWizard on /trips/new for a device with no trip, behind the first-trip-wizard flag: name, dates, place, guests, rooms, done. Enter answers a question, Back goes back, everything after the dates can be skipped, progress dots, canvas-confetti loaded on demand and skipped under prefers-reduced-motion, the status region announces the creation, the done screen offers the calendar and the share dialog. Events: trip_wizard_started, trip_wizard_step.
+- The one-page form for everybody else, unchanged in behaviour.
+- The wizard end-to-end spec forces the flag through the override; the other specs keep creating trips through the form.
+
+Deviations from the phase 4 text above: the field groups of TripForm were not extracted, because the wizard reuses the shared pieces it needs (the date range picker, the place input) and the one-page form is untouched; the e2e helpers were not consolidated, because the form specs are unaffected by a flag that is off in their runs; the install nudge is not on the done screen, because a trip that lives only on this device has nothing to remind about.
+
+Not done, on purpose: the manual iPhone and Android run for reminders, which needs a deployed service with a VAPID key, and the PostHog objects themselves (the three reminder flags, the first-trip-wizard flag, the workflow), which are defined here and created in the PostHog project by hand or with the MCP.
 
 ## 8. Effort
 

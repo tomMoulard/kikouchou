@@ -371,6 +371,18 @@ The client half (`lib/notifications/push.ts`) asks for permission from a click
 and from nowhere else, and the reminder card renders only where a push can
 arrive; an iPhone's Safari tab gets the install nudge instead (`Layout`).
 
+### A feature flag is a three-state answer, and it can be forced locally
+
+`useFeatureFlag(key)` returns `undefined` while PostHog is asked, then `true`
+or `false`; without an analytics client it is `false` at once. A screen that
+swaps experiences on a flag waits on `undefined` rather than flashing the
+control arm. `localStorage['kikouchou-flag:<key>']` = `on` | `off` forces an
+arm without a PostHog project, which is how the e2e specs reach a flagged
+experience on servers that carry no key. The first-trip wizard
+(`first-trip-wizard`) is the one flag so far; a screen behind a flag keeps
+one code path for the writes — `createTripWithDetails` here — so the arms
+differ in what they show and not in what they save.
+
 ### One install prompt, and the page an iPhone installs from
 
 `useInstallPrompt` captures the browser's one `beforeinstallprompt` and reports
