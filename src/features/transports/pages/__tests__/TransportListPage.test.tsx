@@ -206,6 +206,12 @@ vi.mock('@/features/transports/components/DriverAlert', () => ({
   DriverAlert: () => <div data-testid="driver-alert" />,
 }));
 
+// And the calendar export beside it, which reads the same two. Its own file
+// covers what the file it writes contains.
+vi.mock('@/features/transports/components/AddRunsToCalendarButton', () => ({
+  AddRunsToCalendarButton: () => <div data-testid="add-runs-to-calendar" />,
+}));
+
 import { TransportListPage } from '../TransportListPage';
 import { useTripIdentity } from '@/hooks';
 import { useTripContext } from '@/contexts/TripContext';

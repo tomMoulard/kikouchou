@@ -566,6 +566,22 @@
     "myRidesEmpty": "Rien à venir pour vous : aucun trajet à conduire et aucun voyage à vous.",
     "myRidesDriving": "Vous conduisez",
     "myRidesTravel": "Vos propres voyages",
+    "calendar": {
+      "addRuns": "Ajouter mes trajets \u00e0 mon agenda",
+      "pickup": "R\u00e9cup\u00e9rer {{passengers}} \u00e0 {{location}}",
+      "pickupEmpty": "R\u00e9cup\u00e9ration \u00e0 {{location}}",
+      "dropoff": "D\u00e9poser {{passengers}} \u00e0 {{location}}",
+      "dropoffEmpty": "D\u00e9pose \u00e0 {{location}}",
+      "passengers": "Passagers : {{passengers}}",
+      "meetAt": "Sur place \u00e0 {{time}}",
+      "vehicle": "Voiture : {{vehicle}}",
+      "unknownPassenger": "Un participant",
+      "calendarName": "{{trip}} \u2014 vos trajets",
+      "downloaded_one": "Un trajet enregistr\u00e9 dans un fichier d\u2019agenda",
+      "downloaded_other": "{{count}} trajets enregistr\u00e9s dans un fichier d\u2019agenda",
+      "downloadedHint": "Ouvrez le fichier pour ajouter les trajets \u00e0 votre agenda. Son alarme sonne m\u00eame quand Kikouchou est ferm\u00e9.",
+      "failed": "Ce navigateur ne peut pas enregistrer le fichier. Ouvrez Kikouchou dans un autre navigateur pour exporter vos trajets."
+    },
     "scope": {
       "label": "Trajets à afficher",
       "hidden_one": "{{count}} autre trajet masqué",
@@ -1652,7 +1668,8 @@
     "enabling": "En attente de votre réponse…",
     "bestEffort": "Les alertes de trajet viennent de cet appareil : elles partent pendant que l\u2019application tourne ou vient d\u2019être utilisée. Les rappels du séjour viennent du serveur : activez-les depuis le calendrier d\u2019un séjour et ils vous parviennent même application fermée.",
     "deniedHint": "Votre navigateur bloque les notifications pour Kikouchou. L’application ne peut plus les demander — autorisez-les pour ce site dans les réglages de votre navigateur ou de votre système.",
-    "unsupportedHint": "Ce navigateur ne peut pas afficher de notifications. Sur iPhone, ajoutez d’abord Kikouchou à l’écran d’accueil. Les alertes trajets restent visibles dans l’application."
+    "unsupportedHint": "Ce navigateur ne peut pas afficher de notifications. Sur iPhone, ajoutez d’abord Kikouchou à l’écran d’accueil. Les alertes trajets restent visibles dans l’application.",
+    "calendarFallback": "Pour les trajets que vous conduisez, ouvrez la page transports d’un voyage et choisissez « Ajouter mes trajets à mon agenda ». L’agenda du téléphone sonne alors à l’heure, même quand Kikouchou est fermé."
   },
   "viewer": {
     "title": "Lecture seule",
