@@ -13,6 +13,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 import { fixtureDate } from './support/fixture-dates';
+import { roomCards } from './support/page-regions';
 import { waitForRoute } from './support/routes';
 import { seedRoom, seedTrip } from './support/seed';
 import { clearIndexedDB } from './support/storage';
@@ -101,9 +102,9 @@ test.describe('Rooms in bulk', () => {
     await page.goto(page.url().replace('/calendar', '/rooms?view=card'));
     await waitForRoute(page);
 
-    await expect(page.getByText('Double bed 1')).toBeVisible();
-    await expect(page.getByText('Double bed 2')).toBeVisible();
-    await expect(page.getByText('Attic')).toBeVisible();
+    await expect(roomCards(page).getByText('Double bed 1')).toBeVisible();
+    await expect(roomCards(page).getByText('Double bed 2')).toBeVisible();
+    await expect(roomCards(page).getByText('Attic')).toBeVisible();
   });
 
   test('drops a room row that was added and left empty', async ({ page }) => {
@@ -123,7 +124,7 @@ test.describe('Rooms in bulk', () => {
     await page.goto(page.url().replace('/calendar', '/rooms?view=card'));
     await waitForRoute(page);
 
-    await expect(page.getByText('Attic')).toBeVisible();
+    await expect(roomCards(page).getByText('Attic')).toBeVisible();
     await expect(
       page.getByRole('button', { name: /open menu|ouvrir le menu/iu }),
     ).toHaveCount(1);
@@ -156,7 +157,9 @@ test.describe('Rooms in bulk', () => {
       .getByRole('menuitem', { name: /^(duplicate|dupliquer)$/iu })
       .click();
 
-    await expect(page.getByText('Double bed 2')).toBeVisible();
-    await expect(page.getByText('Double bed', { exact: true })).toBeVisible();
+    await expect(roomCards(page).getByText('Double bed 2')).toBeVisible();
+    await expect(
+      roomCards(page).getByText('Double bed', { exact: true }),
+    ).toBeVisible();
   });
 });

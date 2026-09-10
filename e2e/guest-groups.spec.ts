@@ -13,6 +13,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { fixtureDate } from './support/fixture-dates';
+import { guestCards } from './support/page-regions';
 import { waitForRoute } from './support/routes';
 import { seedGuestGroup, seedTrip } from './support/seed';
 
@@ -115,9 +116,9 @@ test.describe('Guest groups', () => {
     await dialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
     await expect(dialog).toBeHidden();
 
-    await expect(page.getByText('Tom + Léa', { exact: true })).toBeVisible();
-    await expect(page.getByText('Alice', { exact: true })).toBeVisible();
-    await expect(page.getByText('Camille', { exact: true })).toHaveCount(0);
+    await expect(guestCards(page).getByText('Tom + Léa', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Alice', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Camille', { exact: true })).toHaveCount(0);
   });
 
   test('imported guests are ordinary guests, not references to the group', async ({
@@ -134,7 +135,7 @@ test.describe('Guest groups', () => {
     await importDialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
     await expect(importDialog).toBeHidden();
 
-    await expect(page.getByText('Alice', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Alice', { exact: true })).toBeVisible();
 
     // Deleting the group must not touch a guest already on the trip.
     await page.goto('/groups');
@@ -145,8 +146,8 @@ test.describe('Guest groups', () => {
     await page.goto(`/trips/${tripId}/persons`);
     await waitForRoute(page);
 
-    await expect(page.getByText('Alice', { exact: true })).toBeVisible();
-    await expect(page.getByText('Tom + Léa', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Alice', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Tom + Léa', { exact: true })).toBeVisible();
   });
 
   test("saves a trip's guests as a group for next time", async ({ page }) => {
@@ -160,7 +161,7 @@ test.describe('Guest groups', () => {
     const importDialog = page.getByRole('dialog');
     await importDialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
     await expect(importDialog).toBeHidden();
-    await expect(page.getByText('Alice', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Alice', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: /save as a group/i }).click();
     const saveDialog = page.getByRole('dialog');
@@ -191,7 +192,7 @@ test.describe('Guest groups', () => {
     await dialog.getByText('Alice', { exact: true }).click();
     await dialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
     await expect(dialog).toBeHidden();
-    await expect(page.getByText('Alice', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Alice', { exact: true })).toBeVisible();
 
     // …and then the neighbours, without losing the first.
     await page.getByRole('button', { name: /add from a group/i }).first().click();
@@ -201,8 +202,8 @@ test.describe('Guest groups', () => {
     await dialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
     await expect(dialog).toBeHidden();
 
-    await expect(page.getByText('Alice', { exact: true })).toBeVisible();
-    await expect(page.getByText('Dana', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Alice', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Dana', { exact: true })).toBeVisible();
   });
 
   test('takes people from two groups in a single pass', async ({ page }) => {
@@ -230,10 +231,10 @@ test.describe('Guest groups', () => {
     await dialog.getByRole('button', { name: /add \d+ (people|person)/i }).click();
     await expect(dialog).toBeHidden();
 
-    await expect(page.getByText('Tom + Léa', { exact: true })).toBeVisible();
-    await expect(page.getByText('Dana', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Tom + Léa', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Dana', { exact: true })).toBeVisible();
     // Only the two who were ticked.
-    await expect(page.getByText('Alice', { exact: true })).toHaveCount(0);
+    await expect(guestCards(page).getByText('Alice', { exact: true })).toHaveCount(0);
   });
 
   test('searches the groups instead of scrolling them', async ({ page }) => {
@@ -293,9 +294,9 @@ test.describe('Guest groups', () => {
     await page.goto(page.url().replace('/calendar', '/persons'));
     await waitForRoute(page);
 
-    await expect(page.getByText('Marie', { exact: true })).toBeVisible();
-    await expect(page.getByText('Tom + Léa', { exact: true })).toBeVisible();
-    await expect(page.getByText('Alice', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Marie', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Tom + Léa', { exact: true })).toBeVisible();
+    await expect(guestCards(page).getByText('Alice', { exact: true })).toBeVisible();
   });
 
   /*

@@ -19,6 +19,7 @@ import { dragOnto } from './support/drag';
 import { seedTransport } from './support/seed';
 import { clearIndexedDB } from './support/storage';
 import { fixtureDate } from './support/fixture-dates';
+import { guestCards, roomCards, timelineRows } from './support/page-regions';
 
 // ============================================================================
 // Database Helpers
@@ -489,8 +490,11 @@ async function createRoom(
   // Wait for dialog to close
   await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5000 });
 
-  // Verify room appears in the list
-  await expect(page.getByText(roomData.name)).toBeVisible({ timeout: 5000 });
+  // Verify room appears in the list, and in the page's own list: the
+  // organiser's column beside it names the same rooms.
+  await expect(roomCards(page).getByText(roomData.name)).toBeVisible({
+    timeout: 5000,
+  });
 }
 
 /**
@@ -517,8 +521,11 @@ async function createPerson(
   // Wait for dialog to close
   await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5000 });
 
-  // Verify person appears
-  await expect(page.getByText(personData.name)).toBeVisible({ timeout: 5000 });
+  // Verify person appears, in the page's own list: a guest with no bed is
+  // named in the organiser's column too.
+  await expect(guestCards(page).getByText(personData.name)).toBeVisible({
+    timeout: 5000,
+  });
 }
 
 /**
@@ -562,8 +569,9 @@ test.describe('Room Assignment Flow', () => {
     // Create the room
     await createRoom(page, TEST_DATA.room);
 
-    // Verify the room was created and is visible
-    await expect(page.getByText(TEST_DATA.room.name)).toBeVisible();
+    // Verify the room was created and is visible. Scoped to the grid: from
+    // `xl` up the organiser's column lists the same rooms beside it.
+    await expect(roomCards(page).getByText(TEST_DATA.room.name)).toBeVisible();
   });
 
   // --------------------------------------------------------------------------
@@ -578,8 +586,9 @@ test.describe('Room Assignment Flow', () => {
     // Create the person
     await createPerson(page, TEST_DATA.person);
 
-    // Verify the person was created
-    await expect(page.getByText(TEST_DATA.person.name)).toBeVisible();
+    // Verify the person was created. Scoped to the grid, as above: a guest
+    // with no bed is also named in the organiser's column.
+    await expect(guestCards(page).getByText(TEST_DATA.person.name)).toBeVisible();
   });
 
   // --------------------------------------------------------------------------
@@ -933,7 +942,10 @@ test.describe('Room Assignment Flow', () => {
     await expect(
       page.getByText(/no room assignments yet|aucune attribution/i),
     ).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText(uniquePersonName)).toBeHidden();
+    // Scoped to the room grid: a guest who has just lost their bed is exactly
+    // who the organiser's column lists under "still without a room", so the
+    // page-wide form of this assertion now fails on the panel doing its job.
+    await expect(roomCards(page).getByText(uniquePersonName)).toBeHidden();
 
     // And the row is gone from storage, not just from this render.
     expect(await getTripAssignmentsFromDB(page, tripId)).toEqual([]);
@@ -1171,7 +1183,7 @@ test.describe('Room Assignment Flow', () => {
 
     // The sticky label column: the only place the timeline prints a room name,
     // and the only element carrying a title that mentions it.
-    const roomLabel = page.getByTitle(new RegExp(TEST_DATA.room.name));
+    const roomLabel = timelineRows(page).getByTitle(new RegExp(TEST_DATA.room.name));
     await expect(roomLabel).toBeVisible();
     await roomLabel.dblclick();
 

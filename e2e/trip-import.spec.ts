@@ -176,7 +176,9 @@ async function createTrip(
  */
 async function addRooms(page: Page, roomNames: readonly string[]): Promise<void> {
   // Navigate to rooms page via the trip menu
-  await page.getByRole('link', { name: /rooms/i }).click();
+  // Named exactly: the organiser's column links to the same page under
+  // "open the rooms page", so a loose match now finds three links.
+  await page.getByRole('link', { name: /^(rooms|chambres)$/i }).click();
   await page.waitForURL(/\/rooms/);
 
   for (const roomName of roomNames) {
@@ -313,7 +315,9 @@ test.describe('Trip Import Feature', () => {
 
     // Step 6: Wait for navigation and go to rooms
     await page.waitForURL(/\/calendar/);
-    await page.getByRole('link', { name: /rooms/i }).click();
+    // Named exactly: the organiser's column links to the same page under
+  // "open the rooms page", so a loose match now finds three links.
+  await page.getByRole('link', { name: /^(rooms|chambres)$/i }).click();
     await page.waitForURL(/\/rooms/);
 
     // Step 7: Verify all rooms were cloned — every one of them, and nothing

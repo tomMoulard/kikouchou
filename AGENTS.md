@@ -825,6 +825,18 @@ import { render, screen, waitForDb, createTestTrip, isoDate } from '@/test/utils
 
 **E2E tests** — `e2e/{feature}.spec.ts`; use `@playwright/test`; `@axe-core/playwright` available for a11y checks.
 
+- **A trip page's names are not unique in the document.** From `xl` up, the
+  organiser's column sits beside the trip pages and repeats what they list: the
+  rooms and their occupancy, the guests with no bed, the guests who are not
+  level. `page.getByText('Attic')` then matches twice and fails on strict mode,
+  which says nothing about the room. Name the page's own list instead —
+  `e2e/support/page-regions.ts` holds `roomCards`, `guestCards` and
+  `timelineRows` — and the assertion gets more precise as well as greener.
+  Twenty-odd specs learned this at once.
+- A link named loosely has the same problem: the column links to `/rooms` under
+  "open the rooms page", so `getByRole('link', { name: /rooms/i })` finds three.
+  Anchor the name: `/^(rooms|chambres)$/i`.
+
 ---
 
 ## Accessibility
