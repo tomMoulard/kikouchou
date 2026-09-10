@@ -248,7 +248,7 @@ const GuestGroupListPage = memo(function GuestGroupListPage(): ReactElement {
           }}
         />
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {groups.map((group) => (
             <li key={group.id}>
               <GuestGroupCard

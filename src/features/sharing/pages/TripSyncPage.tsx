@@ -591,7 +591,7 @@ export const TripSyncPage = memo(function TripSyncPage(): ReactElement {
 
   if (isLoading) {
     return (
-      <div className="container max-w-2xl py-6 md:py-8">
+      <div className="container mx-auto max-w-2xl py-6 md:py-8">
         <PageHeader title={t('sharing.sync.pageTitle', 'Sync')} backLink="/trips" />
         <div className="flex justify-center">
           <LoadingState variant="inline" size="lg" />
@@ -602,7 +602,7 @@ export const TripSyncPage = memo(function TripSyncPage(): ReactElement {
 
   if (loadError) {
     return (
-      <div className="container max-w-2xl py-6 md:py-8">
+      <div className="container mx-auto max-w-2xl py-6 md:py-8">
         <PageHeader title={t('sharing.sync.pageTitle', 'Sync')} backLink="/trips" />
         <ErrorDisplay
           error={loadError}
@@ -616,7 +616,7 @@ export const TripSyncPage = memo(function TripSyncPage(): ReactElement {
 
   if (!trip || !tripId) {
     return (
-      <div className="container max-w-2xl py-6 md:py-8">
+      <div className="container mx-auto max-w-2xl py-6 md:py-8">
         <PageHeader title={t('sharing.sync.pageTitle', 'Sync')} backLink="/trips" />
         <EmptyState
           icon={Luggage}
@@ -635,7 +635,7 @@ export const TripSyncPage = memo(function TripSyncPage(): ReactElement {
   }
 
   return (
-    <div className="container max-w-2xl py-6 md:py-8">
+    <div className="container mx-auto max-w-2xl py-6 md:py-8">
       {/* Back goes to the trip list, the same target the loading, error and
           not-found states use. It used to point at /settings, which was both
           inconsistent with those states and wrong for a trip-scoped route. */}

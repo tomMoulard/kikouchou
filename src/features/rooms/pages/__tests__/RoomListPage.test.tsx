@@ -569,8 +569,10 @@ describe('RoomListPage', () => {
       currentSearchParams = new URLSearchParams('view=card');
       render(<RoomListPage />, { withProviders: false });
 
-      // Cards are a reading layout; only the day axis needs the extra width.
-      expect(pageOf()).toHaveClass('container', 'max-w-4xl');
+      // Cards are a card grid, capped so the rows stay readable and so the
+      // glance panel beside them has a column of its own; only the day axis
+      // takes the whole page.
+      expect(pageOf()).toHaveClass('container', 'max-w-6xl');
     });
   });
 

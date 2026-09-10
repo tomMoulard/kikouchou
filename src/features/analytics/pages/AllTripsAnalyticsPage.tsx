@@ -139,7 +139,7 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
 
   if (isTripsLoading || result === undefined || areStatsStale) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('analytics.allTripsTitle')} backLink="/trips" />
         <AnalyticsScopeSelector active="all" tripHref={tripScopeHref} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
@@ -155,7 +155,7 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
 
   if (tripsError ?? result.error) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('analytics.allTripsTitle')} backLink="/trips" />
         <AnalyticsScopeSelector active="all" tripHref={tripScopeHref} />
         <ErrorDisplay error={tripsError ?? result.error} onRetry={handleRetry} />
@@ -169,7 +169,7 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
 
   if (trips.length === 0) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('analytics.allTripsTitle')} backLink="/trips" />
         <AnalyticsScopeSelector active="all" tripHref={tripScopeHref} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
@@ -192,7 +192,7 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
   // ==========================================================================
 
   return (
-    <div className="container max-w-4xl py-6 md:py-8">
+    <div className="container max-w-6xl py-6 md:py-8">
       <PageHeader title={t('analytics.allTripsTitle')} backLink="/trips" />
 
       <AnalyticsScopeSelector active="all" tripHref={tripScopeHref} />
