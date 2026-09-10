@@ -508,10 +508,7 @@ mod tests {
     }
 
     /// One `Y.Map` per row, the way the app writes them, with typed fields.
-    fn doc_with(
-        transports: &[(&str, &[(&str, Any)])],
-        rides: &[(&str, &[(&str, Any)])],
-    ) -> Doc {
+    fn doc_with(transports: &[(&str, &[(&str, Any)])], rides: &[(&str, &[(&str, Any)])]) -> Doc {
         let doc = Doc::new();
         for (root, rows) in [(TRANSPORT_ROOT, transports), (RIDES_ROOT, rides)] {
             let map = doc.get_or_insert_map(root);
@@ -599,7 +596,11 @@ mod tests {
 
     #[test]
     fn skips_rows_without_a_readable_instant_and_absurd_lead_times() {
-        let broken = vec![("personId", s("alice")), ("type", s("arrival")), ("datetime", s("soon"))];
+        let broken = vec![
+            ("personId", s("alice")),
+            ("type", s("arrival")),
+            ("datetime", s("soon")),
+        ];
         let doc = doc_with(
             &[("t-1", &broken)],
             &[(
@@ -621,7 +622,9 @@ mod tests {
     fn the_trip_start_goes_out_on_the_eve_from_the_evening_hour() {
         let facts = read_trip_facts(None, &trip());
 
-        assert!(due_reminders(&facts, None, Language::En, &clock("2026-07-14T16:59:00Z")).is_empty());
+        assert!(
+            due_reminders(&facts, None, Language::En, &clock("2026-07-14T16:59:00Z")).is_empty()
+        );
 
         let due = due_reminders(&facts, None, Language::En, &clock("2026-07-14T17:00:00Z"));
         assert_eq!(due.len(), 1);
@@ -638,7 +641,9 @@ mod tests {
         let on_the_day = due_reminders(&facts, None, Language::Fr, &clock("2026-07-15T08:00:00Z"));
         assert_eq!(on_the_day[0].title, "Votre séjour commence aujourd'hui");
 
-        assert!(due_reminders(&facts, None, Language::Fr, &clock("2026-07-16T08:00:00Z")).is_empty());
+        assert!(
+            due_reminders(&facts, None, Language::Fr, &clock("2026-07-16T08:00:00Z")).is_empty()
+        );
     }
 
     #[test]
@@ -667,13 +672,22 @@ mod tests {
         let facts = read_trip_facts(Some(&doc), &trip());
 
         assert_eq!(
-            due_reminders(&facts, Some("alice"), Language::En, &clock("2026-07-16T09:00:00Z")).len(),
+            due_reminders(
+                &facts,
+                Some("alice"),
+                Language::En,
+                &clock("2026-07-16T09:00:00Z")
+            )
+            .len(),
             1
         );
-        assert!(
-            due_reminders(&facts, Some("alice"), Language::En, &clock("2026-07-16T15:00:00Z"))
-                .is_empty()
-        );
+        assert!(due_reminders(
+            &facts,
+            Some("alice"),
+            Language::En,
+            &clock("2026-07-16T15:00:00Z")
+        )
+        .is_empty());
     }
 
     #[test]
@@ -699,7 +713,10 @@ mod tests {
         assert_eq!(carol.len(), 1);
         assert_eq!(carol[0].kind, ReminderKind::Pickup);
         assert_eq!(carol[0].subject, "ride-1");
-        assert_eq!(carol[0].body, "Set off for the pickup at Rennes station in about 2 h 30.");
+        assert_eq!(
+            carol[0].body,
+            "Set off for the pickup at Rennes station in about 2 h 30."
+        );
 
         // Alice's meeting is 3h10 away: outside the window for one more tick.
         // (Her arrival later that day is due, and is a different reminder.)
@@ -737,10 +754,13 @@ mod tests {
         );
         let facts = read_trip_facts(Some(&doc), &trip());
 
-        assert!(
-            due_reminders(&facts, Some("carol"), Language::En, &clock("2026-07-17T14:01:00Z"))
-                .is_empty()
-        );
+        assert!(due_reminders(
+            &facts,
+            Some("carol"),
+            Language::En,
+            &clock("2026-07-17T14:01:00Z")
+        )
+        .is_empty());
     }
 
     #[test]
@@ -751,7 +771,12 @@ mod tests {
         let doc = doc_with(&[("t-alice", &alice)], &[]);
         let facts = read_trip_facts(Some(&doc), &trip());
 
-        let due = due_reminders(&facts, Some("alice"), Language::En, &clock("2026-07-15T08:00:00Z"));
+        let due = due_reminders(
+            &facts,
+            Some("alice"),
+            Language::En,
+            &clock("2026-07-15T08:00:00Z"),
+        );
 
         assert_eq!(
             due.iter().map(|r| r.kind).collect::<Vec<_>>(),
