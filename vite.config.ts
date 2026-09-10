@@ -4,7 +4,9 @@ import { defineConfig, type Plugin } from 'vite'
 import { minify as minifyHtmlSource } from 'html-minifier-terser'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { VitePWA } from 'vite-plugin-pwa'
+import { type ManifestOptions, VitePWA } from 'vite-plugin-pwa'
+
+import { HERE_MANIFEST_FILENAME, withoutStartUrl } from './src/lib/pwa/manifest-variants'
 
 // The app is served from the root of its own host — `app.kikouchou.app` on
 // GitHub Pages, `127.0.0.1` in dev and in the Playwright `production` project.
@@ -110,6 +112,83 @@ function manualChunks(id: string): string | undefined {
  * globs `dist` in its own `closeBundle`, which runs after this one, so without
  * that entry the same bytes would be precached twice under two names.
  */
+/**
+ * The web app manifest, as one object, because the build emits it twice.
+ *
+ * `VitePWA` writes it as `manifest.webmanifest`. `hereManifest` below writes
+ * the same object without `start_url` as `manifest-here.webmanifest`, which the
+ * invite page points at while it is on screen: a Home Screen app added from a
+ * page with no `start_url` opens on that page, and that is the only way an
+ * iPhone — whose installed app has storage separate from Safari's — opens on the
+ * invite it was installed from rather than on an empty app. See
+ * `src/lib/pwa/manifest-variants.ts`.
+ */
+const webAppManifest: Partial<ManifestOptions> = {
+  name: 'Kikouchou',
+  short_name: 'Kikouchou',
+  description: 'Organize your vacation house rooms and arrivals',
+  theme_color: '#0f172a',
+  background_color: '#ffffff',
+  display: 'standalone',
+  // The app's identity, and the one manifest field a browser is not
+  // allowed to guess twice. With no `id`, the computed identity falls
+  // back to `start_url` — so it moves the day `base` moves, and every
+  // installed copy of the app becomes a *different* app: a second icon
+  // rather than an update of the first. Pinned to `base` so it stays the
+  // same string `start_url` resolves against ('/' today, a subpath if
+  // that constant ever changes back), which is also the stable id a
+  // cross-origin `navigator.install()` from the landing page has to name.
+  id: base,
+  start_url: base,
+  // Explicit, because `hereManifest` drops `start_url` and a manifest with
+  // neither field derives its scope from the page it is read from: an app
+  // added from `/join/<token>` would be scoped to `/join/`, and every trip
+  // page would open outside it — in Safari, on an iPhone. `VitePWA` fills
+  // these two in for its own file; the second file has to carry them itself.
+  scope: base,
+  lang: 'en',
+  // A link tapped while the installed app is open lands in that window rather
+  // than opening a second one. Every window shares one IndexedDB, and a second
+  // one onto the same trip is a second Yjs session doing the same work.
+  launch_handler: { client_mode: 'navigate-existing' },
+  icons: [
+    {
+      src: 'icons/icon.svg',
+      sizes: 'any',
+      type: 'image/svg+xml',
+      purpose: 'any',
+    },
+    {
+      src: 'icons/icon-maskable.svg',
+      sizes: 'any',
+      type: 'image/svg+xml',
+      purpose: 'maskable',
+    },
+  ],
+}
+
+/**
+ * Emits the manifest a page installs *itself* from.
+ *
+ * An asset in `generateBundle` rather than a file written in `closeBundle`, so
+ * it exists by the time `VitePWA` globs `dist` for its precache — the file is a
+ * few hundred bytes and an installed app is exactly where it has to be readable
+ * offline.
+ */
+function hereManifest(): Plugin {
+  return {
+    name: 'kikouchou:here-manifest',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: HERE_MANIFEST_FILENAME,
+        source: JSON.stringify(withoutStartUrl(webAppManifest), null, 2),
+      })
+    },
+  }
+}
+
 function githubPagesSpaFallback(): Plugin {
   let outDir = 'dist'
 
@@ -175,6 +254,7 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     react(),
+    hereManifest(),
     VitePWA({
       registerType: 'autoUpdate',
       // Registered by `lib/pwa/register` instead of by the script this would
@@ -185,38 +265,9 @@ export default defineConfig({
       // once a new worker activates. See that module for the production bug.
       injectRegister: null,
       includeAssets: ['icons/*.svg', 'favicon.svg'],
-      manifest: {
-        name: 'Kikouchou',
-        short_name: 'Kikouchou',
-        description: 'Organize your vacation house rooms and arrivals',
-        theme_color: '#0f172a',
-        background_color: '#ffffff',
-        display: 'standalone',
-        // The app's identity, and the one manifest field a browser is not
-        // allowed to guess twice. With no `id`, the computed identity falls
-        // back to `start_url` — so it moves the day `base` moves, and every
-        // installed copy of the app becomes a *different* app: a second icon
-        // rather than an update of the first. Pinned to `base` so it stays the
-        // same string `start_url` resolves against ('/' today, a subpath if
-        // that constant ever changes back), which is also the stable id a
-        // cross-origin `navigator.install()` from the landing page has to name.
-        id: base,
-        start_url: base,
-        icons: [
-          {
-            src: 'icons/icon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any',
-          },
-          {
-            src: 'icons/icon-maskable.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'maskable',
-          },
-        ],
-      },
+      // Shared with `hereManifest`, which emits the same object without
+      // `start_url`; see `webAppManifest` above.
+      manifest: webAppManifest,
       workbox: {
         // The one hand-written line in an otherwise generated worker: a
         // `notificationclick` listener, so tapping a ride notification focuses
