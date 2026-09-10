@@ -248,6 +248,95 @@ describe('TripForm Room List', () => {
     expect(roomInputs().map((field) => field.value)).toEqual(['Cellar']);
   });
 
+  // The form asks for the beds, the guests and the dates, so it is the one
+  // place that can answer "does everybody have a bed?" without the user doing
+  // the sums themselves. The arithmetic itself is covered in
+  // `trip-size-summary.test.ts`; these cover when the line shows and how.
+  describe('beds / guests / nights line', () => {
+    /** The live summary, addressed through the region that announces it. */
+    function summaryLine(): HTMLElement | null {
+      return within(roomList()).queryByText(/trips\.sizeSummary/iu);
+    }
+
+    it('says nothing until there is a room to count', async () => {
+      const user = userEvent.setup();
+      render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />);
+
+      expect(summaryLine()).toBeNull();
+
+      // A row added and left unnamed is not a room, so it is not a total either.
+      await user.click(screen.getByRole('button', { name: /trips\.addRoom/iu }));
+      expect(summaryLine()).toBeNull();
+    });
+
+    it('appears as soon as a room is named, and announces its changes', async () => {
+      const user = userEvent.setup();
+      render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />);
+
+      await addRoom(user, 'Double bed');
+
+      const line = summaryLine();
+      expect(line).toBeInTheDocument();
+      expect(line).toHaveAttribute('aria-live', 'polite');
+    });
+
+    it('stays quiet in tone while the beds cover the guests', async () => {
+      const user = userEvent.setup();
+      render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />);
+
+      // One guest, one bed.
+      await addRoom(user, 'Double bed');
+
+      expect(summaryLine()).toHaveClass('text-muted-foreground');
+      expect(within(roomList()).queryByText(/trips\.bedsShortNote/iu)).toBeNull();
+    });
+
+    it('turns amber, and says so in words, when the beds run short', async () => {
+      const user = userEvent.setup();
+      render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />);
+
+      // Two guests, one bed. The token is named rather than spelled: a
+      // re-theme must not be able to take the warning colour away.
+      await user.click(screen.getByRole('button', { name: /trips\.addGuest/iu }));
+      await user.type(
+        within(screen.getByRole('group', { name: /trips\.guests/iu })).getAllByRole(
+          'textbox',
+        )[1]!,
+        'Marie',
+      );
+      await addRoom(user, 'Single bed');
+
+      await waitFor(() => {
+        expect(summaryLine()).toHaveClass('text-warning-on-surface');
+      });
+      expect(summaryLine()).toHaveTextContent(/trips\.bedsShortNote/iu);
+    });
+
+    it('goes back to quiet once a bed is added for everybody', async () => {
+      const user = userEvent.setup();
+      render(<TripForm onSubmit={vi.fn()} onCancel={vi.fn()} currentUserName="Tom" />);
+
+      await user.click(screen.getByRole('button', { name: /trips\.addGuest/iu }));
+      await user.type(
+        within(screen.getByRole('group', { name: /trips\.guests/iu })).getAllByRole(
+          'textbox',
+        )[1]!,
+        'Marie',
+      );
+      await addRoom(user, 'Double bed');
+
+      await user.click(
+        within(roomList()).getAllByRole('button', {
+          name: /trips\.roomBedsIncrease/iu,
+        })[0]!,
+      );
+
+      await waitFor(() => {
+        expect(summaryLine()).toHaveClass('text-muted-foreground');
+      });
+    });
+  });
+
   it('arms the unsaved-changes guard only once a room is named', async () => {
     const user = userEvent.setup();
     const onDirtyChange = vi.fn();

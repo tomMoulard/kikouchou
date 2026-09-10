@@ -43,6 +43,10 @@ import { cn } from '@/lib/utils';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toISODateStringFromString } from '@/lib/db/utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
+import {
+  formatTripSizeSummary,
+  summarizeTripSize,
+} from '@/features/trips/lib/trip-size-summary';
 import type { Coordinates } from '@/lib/geocoding';
 import {
   LocationAutocomplete,
@@ -554,6 +558,30 @@ const TripForm = memo(function TripForm({
     if (!isCreateMode) {return;}
     onRoomsChange?.(roomsToCreate);
   }, [isCreateMode, roomsToCreate, onRoomsChange]);
+
+  /*
+    The arithmetic the form used to leave to the user.
+
+    It asks for the beds, the guests and the dates, so it already knows whether
+    everybody has somewhere to sleep and how long for. Counting the same rows
+    the form will save keeps the line honest: a row added and left unnamed is
+    not a room yet, and it is not counted here either.
+  */
+  const sizeSummary = useMemo(
+    () =>
+      summarizeTripSize({
+        rooms: roomsToCreate,
+        guests: guestsToCreate,
+        startDate,
+        endDate,
+      }),
+    [roomsToCreate, guestsToCreate, startDate, endDate],
+  );
+
+  const sizeSummaryLine = useMemo(
+    () => formatTripSizeSummary(sizeSummary, t),
+    [sizeSummary, t],
+  );
 
   // Notify parent of dirty state changes
   useEffect(() => {
@@ -1441,6 +1469,29 @@ const TripForm = memo(function TripForm({
             <Plus className="size-4" aria-hidden="true" />
             {t('trips.addRoom', 'Add room')}
           </Button>
+
+          {/*
+            One live line of arithmetic, once there is a room to count. Amber
+            when the beds run short — with the shortfall also said in words,
+            because a colour is not an answer to anyone who cannot see it.
+
+            `aria-live` rather than a label: the numbers change under a stepper
+            the user is holding, and this is the only place the form reports
+            what those steps add up to.
+          */}
+          {sizeSummary.beds > 0 && (
+            <p
+              className={cn(
+                'text-xs',
+                sizeSummary.bedsShort
+                  ? 'text-warning-on-surface font-medium'
+                  : 'text-muted-foreground',
+              )}
+              aria-live="polite"
+            >
+              {sizeSummaryLine}
+            </p>
+          )}
         </fieldset>
       )}
 
