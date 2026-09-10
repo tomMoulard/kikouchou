@@ -177,6 +177,7 @@
     "importRoomsFailed": "Voyage créé mais l'import des chambres a échoué",
     "noMatchingLocations": "Aucun lieu correspondant",
     "importFromQr": "Importer via QR code",
+    "joinWithInvite": "Scanner ou coller une invitation",
     "importFromQrAria": "Importer un voyage partagé avec un QR code",
     "importFromQrTitle": "Importer un voyage partagé",
     "importFromQrDescription": "Scannez ou collez un lien d'invitation ou un QR de partage depuis la page des voyages. Même lien de partage ou même nom de voyage : fusion ; sinon un nouveau voyage est créé.",
@@ -947,7 +948,9 @@
       "welcomeTo": "Vous êtes invité à {{tripName}}",
       "viewerHint": "Choisissez votre nom et le séjour affiche votre chambre et vos trajets. Vous pouvez tout regarder ; pour modifier quoi que ce soit, il faut se connecter.",
       "opening": "Ouverture du séjour…",
-      "lookAround": "Jeter un œil"
+      "lookAround": "Jeter un œil",
+      "installHere": "Ajoutez Kikouchou à votre écran d'accueil depuis cette page : l'application s'ouvrira sur ce séjour.",
+      "openTrip": "Ouvrir le séjour"
     }
   },
   "assistant": {
@@ -1232,6 +1235,26 @@
     "savedLocally": "Enregistré sur cet appareil",
     "offlineDescription": "Vos modifications sont enregistrées localement et l'application fonctionne normalement",
     "connectionRestored": "Connexion rétablie"
+  },
+  "install": {
+    "nudge": {
+      "region": "Suggestion d'installation",
+      "title": "Recevez un rappel avant le séjour",
+      "description": "Installez Kikouchou sur votre téléphone : il pourra vous rappeler le début de {{tripName}}, votre arrivée et le prochain trajet à assurer.",
+      "showMe": "Montrez-moi comment"
+    }
+  },
+  "tripLink": {
+    "title": "Un séjour partagé avec vous",
+    "opening": "Ouverture du séjour…",
+    "signInNeeded": "Connectez-vous pour l'ouvrir. Si l'on vous a envoyé un lien d'invitation, scannez-le ou collez-le.",
+    "signIn": "Se connecter",
+    "signInReason": "Connectez-vous pour ouvrir le séjour visé par ce lien.",
+    "useInvite": "Scanner ou coller une invitation",
+    "invalid": "Ce lien de séjour n'est pas valide.",
+    "noBackend": "La synchronisation n'est pas configurée.",
+    "failed": "Impossible d'ouvrir le séjour",
+    "openTrip": "Ouvrir le séjour"
   },
   "dateRangePicker": {
     "placeholder": "Sélectionner une période",

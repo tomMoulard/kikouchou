@@ -32,7 +32,12 @@ import { guestGroupRoutes } from '@/features/guest-groups/routes';
 import { transportRoutes } from '@/features/transports/routes';
 import { vehicleRoutes } from '@/features/vehicles/routes';
 import { activityRoutes } from '@/features/activities/routes';
-import { joinRoutes, sharingRoutes, sharingSyncRoutes } from '@/features/sharing/routes';
+import {
+  joinRoutes,
+  sharingRoutes,
+  sharingSyncRoutes,
+  tripLinkRoutes,
+} from '@/features/sharing/routes';
 import { assistantRoutes } from '@/features/assistant/routes';
 import { analyticsRoutes } from '@/features/analytics/routes';
 import { summaryRoutes } from '@/features/summary/routes';
@@ -290,6 +295,7 @@ const publicRoutes: RouteObject = {
  *
  * Route Structure:
  * - `/join/:token` - Invite link: redeem, download the trip, pick who you are
+ * - `/t/:remoteTripId` - A trip's stable link: open, download, or ask to sign in
  * - `/share/:shareId` - Public sharing page (no navigation)
  * - `/` - Main app root (with navigation)
  *   - `/trips` - Trip list
@@ -317,6 +323,10 @@ export const routes: RouteObject[] = [
   // Invite links: /join/:token. Outside Layout — somebody arriving from a
   // message has no trip selected and no navigation to use yet.
   ...joinRoutes.map((route) => ({ ...route, errorElement: <ErrorPage /> })),
+
+  // A trip's stable address: /t/:remoteTripId. Outside Layout too — reminders
+  // and the iPhone install handoff open it on a device that may hold nothing.
+  ...tripLinkRoutes.map((route) => ({ ...route, errorElement: <ErrorPage /> })),
 
   // Main application routes (with Layout)
   appRoutes,
