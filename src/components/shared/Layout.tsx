@@ -36,6 +36,7 @@ import {
   Sparkles,
   Users,
   UsersRound,
+  Wallet,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -115,6 +116,7 @@ const TRIP_NAV_ITEMS: readonly NavItem[] = [
   { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
   { labelKey: 'nav.activities', pathSuffix: 'activities', icon: PartyPopper, requiresTrip: true },
   { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: BarChart2, requiresTrip: true },
+  { labelKey: 'nav.money', pathSuffix: 'money', icon: Wallet, requiresTrip: true },
 ] as const;
 
 /**
@@ -159,12 +161,13 @@ const ASSISTANT_NAV_ITEM: NavItem = {
 const MOBILE_SECONDARY_TRIP_PATHS: readonly string[] = [
   'activities',
   'analytics',
+  'money',
 ];
 
 /**
  * Primary mobile bottom nav items (max 5 for UX: 4 trip items + "More").
  * Calendar, Rooms, Guests and Transports are directly accessible.
- * Activities, Analytics, Trips, Settings are inside the "More" sheet.
+ * Activities, Analytics, Money, Trips, Settings are inside the "More" sheet.
  * Derived from canonical arrays to avoid duplication.
  */
 const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] = TRIP_NAV_ITEMS.filter(
