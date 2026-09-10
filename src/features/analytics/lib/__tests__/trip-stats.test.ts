@@ -324,6 +324,7 @@ describe('sumTripStats', () => {
       expenseCount: 0,
       spendTotal: 0,
       unsettledTotal: 0,
+      currency: '',
     });
   });
 });

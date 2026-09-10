@@ -171,6 +171,18 @@ export const expenseSplitModeSchema = z.enum(
 ) satisfies z.ZodType<ExpenseSplitMode>;
 
 /**
+ * Currency code validator: ISO 4217's three uppercase letters.
+ *
+ * The shape rather than a list of codes. The trip form offers a dozen, and a
+ * group spending in a currency it does not list should be able to store the
+ * code rather than be told it is invalid; what must not get through is a value
+ * `Intl.NumberFormat` throws on.
+ */
+export const currencyCodeSchema = z
+  .string()
+  .regex(/^[A-Z]{3}$/, 'Currency must be a three-letter ISO 4217 code');
+
+/**
  * Branded ID schema factory.
  * Creates a schema that accepts any non-empty string as a branded ID.
  */
@@ -233,6 +245,7 @@ export const TripFormDataSchema = z
       .max(1000, 'Description must be 1000 characters or less')
       .optional(),
     coordinates: coordinatesSchema.optional(),
+    currency: currencyCodeSchema.optional(),
   })
   .refine((data) => data.startDate <= data.endDate, {
     message: 'End date must be on or after start date',

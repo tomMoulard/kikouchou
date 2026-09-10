@@ -25,6 +25,7 @@ import { StatCard } from '@/features/analytics/components/StatCard';
 import { useMoneyFormat } from '@/features/money/hooks/useMoneyFormat';
 import { useAnalyticsClock } from '@/features/analytics/hooks/useAnalyticsClock';
 import {
+  MIXED_CURRENCIES,
   type TripStats,
   loadTripStats,
   readAnalytics,
@@ -46,8 +47,7 @@ const HINT_SEPARATOR = ' · ';
 // ============================================================================
 
 const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElement {
-  const { t } = useTranslation();
-  const formatMoney = useMoneyFormat();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const {
     trips,
@@ -91,6 +91,20 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
   }, [result]);
 
   const totals = useMemo(() => sumTripStats(result?.data ?? []), [result]);
+
+  // Trips can be kept in different currencies, and adding two of them gives a
+  // number in neither. The total is still shown — the reader asked for one —
+  // but it carries a symbol only while every trip agrees on which, and says so
+  // underneath when they do not.
+  const isMixedCurrency = totals.currency === MIXED_CURRENCIES;
+  const formatMoney = useMoneyFormat(isMixedCurrency ? undefined : totals.currency);
+  const formatTotal = (amount: number): string =>
+    isMixedCurrency
+      ? new Intl.NumberFormat(i18n.language, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(amount)
+      : formatMoney(amount);
 
   // `useLiveQuery` keeps its previous result while a changed dependency
   // re-subscribes, so just after a trip is added or removed the totals still
@@ -252,17 +266,23 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
             not spending. */}
         <StatCard
           label={t('analytics.totalSpend')}
-          value={formatMoney(totals.spendTotal)}
-          hint={t('analytics.spendTotalHint', { count: totals.expenseCount })}
+          value={formatTotal(totals.spendTotal)}
+          hint={
+            isMixedCurrency
+              ? t('analytics.mixedCurrencies')
+              : t('analytics.spendTotalHint', { count: totals.expenseCount })
+          }
           testId="stat-total-spend"
         />
         <StatCard
           label={t('analytics.totalUnsettled')}
-          value={formatMoney(totals.unsettledTotal)}
+          value={formatTotal(totals.unsettledTotal)}
           hint={
-            totals.unsettledTotal === 0
-              ? t('analytics.unsettledSettled')
-              : t('analytics.unsettledTotalHint')
+            isMixedCurrency
+              ? t('analytics.mixedCurrencies')
+              : totals.unsettledTotal === 0
+                ? t('analytics.unsettledSettled')
+                : t('analytics.unsettledTotalHint')
           }
           testId="stat-total-unsettled"
         />

@@ -32,6 +32,13 @@ import {
   RoomIconPicker,
   getRoomIconComponent,
 } from '@/components/shared/RoomIconPicker';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -53,7 +60,7 @@ import {
   ImportBadge,
   type TripImportData,
 } from '@/features/trips/components/LocationAutocomplete';
-import { DEFAULT_ROOM_ICON } from '@/types';
+import { DEFAULT_CURRENCY, DEFAULT_ROOM_ICON, SUPPORTED_CURRENCIES } from '@/types';
 import type { HexColor, RoomIcon, Trip, TripFormData, TripId } from '@/types';
 
 // ============================================================================
@@ -426,6 +433,7 @@ const TripForm = memo(function TripForm({
       endDate: trip?.endDate ?? '',
       description: trip?.description ?? '',
       coordinates: trip?.coordinates,
+      currency: trip?.currency ?? DEFAULT_CURRENCY,
     }),
     [trip],
   );
@@ -439,6 +447,7 @@ const TripForm = memo(function TripForm({
   const [coordinates, setCoordinates] = useState<Coordinates | undefined>(
     initialValues.coordinates,
   );
+  const [currency, setCurrency] = useState(initialValues.currency);
   const [guests, setGuests] = useState<readonly GuestRow[]>(buildInitialGuests);
   const [hasEditedFirstGuest, setHasEditedFirstGuest] = useState(false);
   /*
@@ -499,6 +508,7 @@ const TripForm = memo(function TripForm({
       startDate !== initialValues.startDate ||
       endDate !== initialValues.endDate ||
       description !== initialValues.description ||
+      currency !== initialValues.currency ||
       !isSameCoordinates(coordinates, initialValues.coordinates) ||
       isGuestListDirty ||
       isRoomListDirty,
@@ -508,6 +518,7 @@ const TripForm = memo(function TripForm({
       startDate,
       endDate,
       description,
+      currency,
       coordinates,
       initialValues,
       isGuestListDirty,
@@ -601,6 +612,7 @@ const TripForm = memo(function TripForm({
     setStartDate(trip?.startDate ?? '');
     setEndDate(trip?.endDate ?? '');
     setDescription(trip?.description ?? '');
+    setCurrency(trip?.currency ?? DEFAULT_CURRENCY);
     setCoordinates(trip?.coordinates);
     setImportSource(null);
     setGuests(buildInitialGuests());
@@ -1060,12 +1072,23 @@ const TripForm = memo(function TripForm({
           endDate: toISODateStringFromString(endDate),
           description: description.trim() || undefined,
           coordinates,
+          currency,
         });
       } catch {
         // Error handled by useFormSubmission hook (sets submitError)
       }
     },
-    [validateForm, doSubmit, name, location, startDate, endDate, description, coordinates],
+    [
+      validateForm,
+      doSubmit,
+      name,
+      location,
+      startDate,
+      endDate,
+      description,
+      coordinates,
+      currency,
+    ],
   );
 
   // ============================================================================
@@ -1144,6 +1167,26 @@ const TripForm = memo(function TripForm({
         <p className="text-xs text-muted-foreground text-right">
           {description.length}/{DESCRIPTION_MAX_LENGTH}
         </p>
+      </div>
+
+      {/* Currency — what the money page labels every amount with. One per
+          trip: a group renting one house pays for everything in one currency,
+          and asking per receipt would be a question with one answer. */}
+      <div className="space-y-2">
+        <Label htmlFor="trip-currency">{t('trips.currency')}</Label>
+        <Select value={currency} onValueChange={setCurrency} disabled={isSubmitting}>
+          <SelectTrigger id="trip-currency" className="w-full sm:w-48">
+            <SelectValue placeholder={t('trips.currency')} />
+          </SelectTrigger>
+          <SelectContent>
+            {SUPPORTED_CURRENCIES.map((code) => (
+              <SelectItem key={code} value={code}>
+                {t(`trips.currencies.${code}`, { defaultValue: code })}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">{t('trips.currencyHint')}</p>
       </div>
 
       {/* Date Fields - Side by side on larger screens */}

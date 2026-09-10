@@ -59,6 +59,7 @@ function renderForm(props: Partial<Parameters<typeof ExpenseForm>[0]> = {}) {
     <ExpenseForm
       persons={PERSONS}
       personNights={NIGHTS}
+      currency="EUR"
       defaultDate={'2026-07-16' as never}
       onSubmit={onSubmit}
       onCancel={onCancel}
@@ -101,9 +102,11 @@ describe('ExpenseForm', () => {
 
     await user.type(screen.getByLabelText(/money.expense.amount/), '100');
 
-    // Two guests, equally: 50.00 each, and the preview says so before saving.
+    // Two guests, equally: 50 each in the trip's currency, and the preview says
+    // so before anything is saved. Matched loosely because the separator and
+    // the symbol's side are the viewer's locale, not this test's business.
     await waitFor(() => {
-      expect(screen.getAllByText('50.00').length).toBe(2);
+      expect(screen.getAllByText(/50[.,]00/).length).toBe(2);
     });
   });
 

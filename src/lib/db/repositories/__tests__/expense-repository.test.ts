@@ -269,6 +269,25 @@ describe('expense-repository', () => {
     });
   });
 
+  describe('the trip currency', () => {
+    it('is stored on the trip, normalised, and read back', async () => {
+      const trip = await createTrip({
+        name: 'Swiss trip',
+        startDate: isoDate('2026-07-15'),
+        endDate: isoDate('2026-07-22'),
+        currency: 'chf',
+      });
+
+      expect((await db.trips.get(trip.id))?.currency).toBe('CHF');
+    });
+
+    it('is absent on a trip that did not choose one', async () => {
+      const tripId = await createTestTrip();
+
+      expect((await db.trips.get(tripId))?.currency).toBeUndefined();
+    });
+  });
+
   describe('cascades', () => {
     it('deletes the lines a departing guest paid', async () => {
       const tripId = await createTestTrip();

@@ -50,6 +50,7 @@ import {
   MAX_EXPENSE_AMOUNT,
 } from '@/types';
 import type {
+  CurrencyCode,
   Expense,
   ExpenseCategory,
   ExpenseFormData,
@@ -74,6 +75,8 @@ interface ExpenseFormProps {
   readonly persons: readonly Person[];
   /** Each guest's person nights, for the preview of a night split. */
   readonly personNights: PersonNightCounts;
+  /** The trip's currency, for the preview and the amount field. */
+  readonly currency: CurrencyCode | undefined;
   /** Day pre-selected in create mode (YYYY-MM-DD). */
   readonly defaultDate?: ISODateString;
   /** Guest pre-selected as the payer in create mode. */
@@ -227,6 +230,7 @@ const ExpenseForm = memo(function ExpenseForm({
   expense,
   persons,
   personNights,
+  currency,
   defaultDate,
   defaultPayerId,
   onSubmit,
@@ -234,7 +238,7 @@ const ExpenseForm = memo(function ExpenseForm({
   onDirtyChange,
 }: ExpenseFormProps) {
   const { t } = useTranslation();
-  const formatMoney = useMoneyFormat();
+  const formatMoney = useMoneyFormat(currency);
 
   const [formState, setFormState] = useState<FormState>(() =>
     getInitialFormState(expense, persons, defaultDate, defaultPayerId),

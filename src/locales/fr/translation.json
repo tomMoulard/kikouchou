@@ -134,7 +134,8 @@
     "unsettledTotalHint": "Le total des remboursements à faire",
     "unsettledSettled": "Tout le monde est à jour",
     "totalSpend": "Total dépensé",
-    "totalUnsettled": "Reste dû"
+    "totalUnsettled": "Reste dû",
+    "mixedCurrencies": "Ces séjours sont tenus dans des devises différentes"
   },
   "trips": {
     "title": "Mes voyages",
@@ -264,6 +265,22 @@
       "description": "Vous avez rejoint une maison organisée par quelqu'un d'autre. Créez votre propre séjour, partagez le lien, et vos amis répartissent les chambres et les trajets de la même façon.",
       "action": "Organiser mon séjour",
       "notNow": "Plus tard"
+    },
+    "currency": "Devise",
+    "currencyHint": "Ce avec quoi la page des comptes affiche chaque montant.",
+    "currencies": {
+      "EUR": "Euro (€)",
+      "USD": "Dollar américain ($)",
+      "GBP": "Livre sterling (£)",
+      "CHF": "Franc suisse (CHF)",
+      "CAD": "Dollar canadien (CA$)",
+      "SEK": "Couronne suédoise (kr)",
+      "NOK": "Couronne norvégienne (kr)",
+      "DKK": "Couronne danoise (kr)",
+      "PLN": "Złoty polonais (zł)",
+      "CZK": "Couronne tchèque (Kč)",
+      "MAD": "Dirham marocain (DH)",
+      "JPY": "Yen japonais (¥)"
     }
   },
   "rooms": {

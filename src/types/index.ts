@@ -245,6 +245,70 @@ export function getActivityCategoryColor(
 }
 
 /**
+ * The currency a trip is spent in, as an ISO 4217 code.
+ *
+ * One per trip, not one per line. A group renting a house in Brittany pays for
+ * everything in euros, and asking them which currency each receipt was in
+ * before they can type it would be a question with one answer every time. A
+ * trip that genuinely mixes currencies is a real thing and this does not model
+ * it: converting between them needs a rate, a rate needs a date and a source,
+ * and none of that belongs in a holiday-house planner.
+ */
+export type CurrencyCode = string;
+
+/**
+ * The currencies the trip form offers, in the order it offers them.
+ *
+ * Not every ISO 4217 code: a list of two hundred is a worse control than a list
+ * of a dozen, and the field is stored as a plain code, so a trip that needs one
+ * that is missing can still carry it. These are the currencies of the places
+ * this app is used from and travelled to.
+ */
+export const SUPPORTED_CURRENCIES: readonly CurrencyCode[] = [
+  'EUR',
+  'USD',
+  'GBP',
+  'CHF',
+  'CAD',
+  'SEK',
+  'NOK',
+  'DKK',
+  'PLN',
+  'CZK',
+  'MAD',
+  'JPY',
+] as const;
+
+/**
+ * Currency used by a trip that has not said otherwise.
+ *
+ * Deliberately a constant rather than a guess from the browser's locale: the
+ * trip is a shared record, so the currency has to be the same for every member
+ * whatever phone they open it on, and a guess made on one device would be
+ * pushed to the others as though the group had chosen it.
+ */
+export const DEFAULT_CURRENCY: CurrencyCode = 'EUR';
+
+/**
+ * Reads a stored or remote currency code, falling back to the default.
+ *
+ * The code goes straight into `Intl.NumberFormat`, which **throws** on a
+ * malformed one — a page rendering a peer's trip would go blank rather than
+ * show an odd currency. Three uppercase letters is the ISO 4217 shape, and
+ * anything else is not a currency this app can format.
+ *
+ * @param value - Raw code (stored row, form input, peer document)
+ * @returns A three-letter uppercase code
+ */
+export function normalizeCurrency(value: unknown): CurrencyCode {
+  if (typeof value !== 'string') {
+    return DEFAULT_CURRENCY;
+  }
+  const upper = value.trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(upper) ? upper : DEFAULT_CURRENCY;
+}
+
+/**
  * What one money line does to the group's accounts.
  *
  * The three kinds are one signed model rather than three code paths: an expense
@@ -490,6 +554,18 @@ export interface Trip extends Identifiable, WithTimestamps {
     readonly lat: number;
     readonly lon: number;
   };
+
+  /**
+   * Currency the trip's accounts are kept in, as an ISO 4217 code.
+   *
+   * Absent on every trip written before the money page had one, which reads as
+   * {@link DEFAULT_CURRENCY} rather than as "no currency": the amounts were
+   * already typed in whatever the group was spending, and the field names it
+   * rather than changing it.
+   *
+   * @example "EUR"
+   */
+  currency?: CurrencyCode;
 
   /**
    * Server-side `trips.id` once this trip has been uploaded.
@@ -1503,6 +1579,8 @@ export interface TripFormData {
   endDate: ISODateString;
   /** Optional description or notes for the trip */
   description?: string;
+  /** Currency the accounts are kept in (ISO 4217); defaults to EUR */
+  currency?: CurrencyCode;
   /** Optional GPS coordinates for the trip location */
   coordinates?: {
     readonly lat: number;
