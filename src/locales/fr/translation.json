@@ -280,6 +280,7 @@
     "unassignedGuests": "Invités sans chambre",
     "allGuestsAssigned": "Tous les invités ont une chambre",
     "noNights": "Aucune nuit sur ce séjour, personne n'a besoin d'un lit",
+    "dragHint": "Glissez une étiquette sur une chambre pour lui donner un lit",
     "needsRoom": "a besoin d'une chambre",
     "icon": "Icône de la chambre",
     "spotsTaken_one": "{{occupied}} sur {{count}} place prise",

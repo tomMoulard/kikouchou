@@ -34,7 +34,7 @@ import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify } from '@/hooks';
 import { useTripAccess } from '@/hooks/useTripAccess';
 import { parseISO } from 'date-fns';
-import { BedDouble, DoorOpen, Plus, Sparkles } from 'lucide-react';
+import { BedDouble, DoorOpen, GripHorizontal, Plus, Sparkles } from 'lucide-react';
 import {
   DndContext,
   type DragEndEvent,
@@ -1169,28 +1169,43 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           ))}
         </div>
       ) : (
-        <RoomOccupancyTimeline
-          trip={currentTrip}
-          rooms={sortedRoomsWithOccupancy.map((r) => r.room)}
-          assignments={assignments}
-          arrivals={arrivals}
-          departures={departures}
-          persons={persons}
-          unassignedGuests={unassignedGuests}
-          dateLocale={dateLocale}
-          range={{
-            startDate: currentTrip.startDate,
-            endDate: currentTrip.endDate,
-          }}
-          todayKey={todayStr as ISODateString}
-          {...(canEdit
-            ? {
-                onEditRoom: handleRoomEdit,
-                onAssignGuestToRoom: assignGuestToRoom,
-                onMoveAssignmentToRoom: moveAssignmentToRoom,
-              }
-            : {})}
-        />
+        <>
+          {/*
+            Nothing in a chip says it can be picked up, so the guests still
+            waiting for a bed are the moment to say it. It goes as soon as
+            everybody is housed, and stays away for a reader who cannot edit.
+          */}
+          {canEdit && unassignedGuests.length > 0 && (
+            <p
+              className="mb-4 flex items-start gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground"
+            >
+              <GripHorizontal className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              {t('rooms.dragHint', 'Drag a chip onto a room to give it a bed')}
+            </p>
+          )}
+          <RoomOccupancyTimeline
+            trip={currentTrip}
+            rooms={sortedRoomsWithOccupancy.map((r) => r.room)}
+            assignments={assignments}
+            arrivals={arrivals}
+            departures={departures}
+            persons={persons}
+            unassignedGuests={unassignedGuests}
+            dateLocale={dateLocale}
+            range={{
+              startDate: currentTrip.startDate,
+              endDate: currentTrip.endDate,
+            }}
+            todayKey={todayStr as ISODateString}
+            {...(canEdit
+              ? {
+                  onEditRoom: handleRoomEdit,
+                  onAssignGuestToRoom: assignGuestToRoom,
+                  onMoveAssignmentToRoom: moveAssignmentToRoom,
+                }
+              : {})}
+          />
+        </>
       )}
 
       {/* Floating Action Button for mobile */}
