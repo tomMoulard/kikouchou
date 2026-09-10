@@ -254,6 +254,10 @@ export type Database = {
         Args: { p_state: string; p_through_id: number; p_trip_id: string }
         Returns: number
       }
+      read_shared_trip: {
+        Args: { after_id?: number; invite_token: string }
+        Returns: Json
+      }
       redeem_invite: { Args: { invite_token: string }; Returns: string }
       revoke_invite: { Args: { invite_token: string }; Returns: undefined }
     }
