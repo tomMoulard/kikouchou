@@ -28,6 +28,7 @@ use yrs::updates::decoder::Decode as _;
 use yrs::{Doc, Transact as _, Update};
 
 use crate::config::Config;
+use crate::reminders::{ReminderKind, Subscription};
 use crate::trip_preview::{build_trip_preview, TripPreview, TripRow};
 
 // ============================================================================
@@ -89,6 +90,14 @@ struct UpdateJson {
     update: String,
 }
 
+/// One row of `reminder_log`, as the sender reads it back.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReminderLogRow {
+    pub kind: String,
+    pub subject: String,
+    pub sent_at: Option<String>,
+}
+
 /// Holds the HTTP client and the credentials for the life of the process.
 pub struct TripSource {
     client: Client,
@@ -115,6 +124,19 @@ const MAX_UPDATES: usize = 2000;
 // ============================================================================
 // Public API — pure parts
 // ============================================================================
+
+/// Whether a string is shaped like the `uuid` Postgres writes.
+///
+/// Every id this service interpolates into a PostgREST filter passes through
+/// here first, so a value from a webhook body can never carry `&select=` or a
+/// second filter into the query string.
+pub fn is_uuid_shaped(value: &str) -> bool {
+    value.len() == 36
+        && value.bytes().enumerate().all(|(index, byte)| match index {
+            8 | 13 | 18 | 23 => byte == b'-',
+            _ => byte.is_ascii_hexdigit(),
+        })
+}
 
 /// Whether a path segment could be a token at all.
 ///
@@ -191,14 +213,18 @@ impl TripSource {
         })
     }
 
-    /// One PostgREST GET, deserialised into a row list.
-    async fn get<T: for<'de> Deserialize<'de>>(&self, path_and_query: &str) -> Option<Vec<T>> {
-        let response = self
-            .client
-            .get(format!("{}/{path_and_query}", self.rest_url))
+    /// The headers every PostgREST call carries.
+    fn authed(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        request
             .header("apikey", &self.service_role_key)
             .header("authorization", format!("Bearer {}", self.service_role_key))
             .header("accept", "application/json")
+    }
+
+    /// One PostgREST GET, deserialised into a row list.
+    async fn get<T: for<'de> Deserialize<'de>>(&self, path_and_query: &str) -> Option<Vec<T>> {
+        let response = self
+            .authed(self.client.get(format!("{}/{path_and_query}", self.rest_url)))
             .send()
             .await
             .ok()?;
@@ -210,6 +236,36 @@ impl TripSource {
             return None;
         }
         response.json::<Vec<T>>().await.ok()
+    }
+
+    /// One PostgREST write with a JSON body, returning whether it landed.
+    async fn write(
+        &self,
+        method: reqwest::Method,
+        path_and_query: &str,
+        prefer: &str,
+        body: &serde_json::Value,
+    ) -> bool {
+        let response = self
+            .authed(
+                self.client
+                    .request(method, format!("{}/{path_and_query}", self.rest_url)),
+            )
+            .header("prefer", prefer)
+            .json(body)
+            .send()
+            .await;
+        match response {
+            Ok(response) if response.status().is_success() => true,
+            Ok(response) => {
+                eprintln!("supabase write failed with status {}", response.status());
+                false
+            }
+            Err(error) => {
+                eprintln!("supabase write failed: {error}");
+                false
+            }
+        }
     }
 
     /// Resolves a share token to the preview of the trip behind it.
@@ -260,8 +316,133 @@ impl TripSource {
         )))
     }
 
+    /// The `trips` row behind a server id, for the sender.
+    pub async fn load_trip_row(&self, trip_id: &str) -> Option<TripRow> {
+        if !is_uuid_shaped(trip_id) {
+            return None;
+        }
+        self.get::<TripJson>(&format!(
+            "trips?id=eq.{trip_id}&select=name,start_date,end_date&limit=1"
+        ))
+        .await?
+        .into_iter()
+        .next()
+        .map(|trip| TripRow {
+            name: trip.name,
+            start_date: trip.start_date,
+            end_date: trip.end_date,
+        })
+    }
+
+    /// Every push subscription there is, ordered by trip so the sender loads
+    /// each document once.
+    pub async fn list_subscriptions(&self) -> Option<Vec<Subscription>> {
+        self.get::<Subscription>(
+            "push_subscriptions\
+             ?select=id,trip_id,person_id,endpoint,p256dh,auth,locale,analytics_id\
+             &order=trip_id.asc,id.asc",
+        )
+        .await
+    }
+
+    /// One push subscription by id, for the webhook.
+    pub async fn load_subscription(&self, subscription_id: &str) -> Option<Subscription> {
+        if !is_uuid_shaped(subscription_id) {
+            return None;
+        }
+        self.get::<Subscription>(&format!(
+            "push_subscriptions?id=eq.{subscription_id}\
+             &select=id,trip_id,person_id,endpoint,p256dh,auth,locale,analytics_id&limit=1"
+        ))
+        .await?
+        .into_iter()
+        .next()
+    }
+
+    /// Drops a subscription the push service says is gone.
+    pub async fn delete_subscription(&self, subscription_id: &str) -> bool {
+        if !is_uuid_shaped(subscription_id) {
+            return false;
+        }
+        self.write(
+            reqwest::Method::DELETE,
+            &format!("push_subscriptions?id=eq.{subscription_id}"),
+            "return=minimal",
+            &serde_json::Value::Null,
+        )
+        .await
+    }
+
+    /// What has already been reported, and sent, for one subscription.
+    pub async fn reminder_log_for(&self, subscription_id: &str) -> Option<Vec<ReminderLogRow>> {
+        if !is_uuid_shaped(subscription_id) {
+            return None;
+        }
+        self.get::<ReminderLogRow>(&format!(
+            "reminder_log?subscription_id=eq.{subscription_id}&select=kind,subject,sent_at"
+        ))
+        .await
+    }
+
+    /// Records that a reminder came due. A row already there is left alone, so
+    /// two ticks racing on the same reminder cannot both think they were first.
+    pub async fn record_due(&self, subscription_id: &str, kind: ReminderKind, subject: &str) -> bool {
+        if !is_uuid_shaped(subscription_id) {
+            return false;
+        }
+        self.write(
+            reqwest::Method::POST,
+            "reminder_log?on_conflict=subscription_id,kind,subject",
+            "resolution=ignore-duplicates,return=minimal",
+            &serde_json::json!({
+                "subscription_id": subscription_id,
+                "kind": kind.as_str(),
+                "subject": subject,
+            }),
+        )
+        .await
+    }
+
+    /// Stamps a reminder as sent.
+    pub async fn mark_sent(
+        &self,
+        subscription_id: &str,
+        kind: ReminderKind,
+        subject: &str,
+        sent_at: OffsetDateTime,
+    ) -> bool {
+        if !is_uuid_shaped(subscription_id) {
+            return false;
+        }
+        let Ok(stamp) = sent_at.format(&Rfc3339) else {
+            return false;
+        };
+        // `subject` is a document id or an ISO date, both from this service's
+        // own reads, but the filter is percent-encoded all the same.
+        let encoded_subject: String = subject
+            .bytes()
+            .map(|byte| match byte {
+                b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'_' | b'.' => {
+                    (byte as char).to_string()
+                }
+                other => format!("%{other:02X}"),
+            })
+            .collect();
+        self.write(
+            reqwest::Method::PATCH,
+            &format!(
+                "reminder_log?subscription_id=eq.{subscription_id}\
+                 &kind=eq.{}&subject=eq.{encoded_subject}",
+                kind.as_str()
+            ),
+            "return=minimal",
+            &serde_json::json!({ "sent_at": stamp }),
+        )
+        .await
+    }
+
     /// The compacted snapshot plus every update after it, folded into one doc.
-    async fn load_document(&self, trip_id: &str) -> Option<Doc> {
+    pub async fn load_document(&self, trip_id: &str) -> Option<Doc> {
         let snapshot = self
             .get::<SnapshotJson>(&format!(
                 "trip_doc_snapshots?trip_id=eq.{trip_id}&select=state,through_id&limit=1"
@@ -306,6 +487,15 @@ mod tests {
 
     fn now() -> OffsetDateTime {
         OffsetDateTime::parse("2026-09-07T12:00:00Z", &Rfc3339).expect("a fixed instant")
+    }
+
+    #[test]
+    fn recognises_a_uuid_and_nothing_that_could_smuggle_a_filter() {
+        assert!(is_uuid_shaped("aaaaaaaa-0000-0000-0000-000000000001"));
+        assert!(is_uuid_shaped("00000000-0000-4000-8000-00000000000A"));
+        assert!(!is_uuid_shaped("aaaaaaaa-0000-0000-0000-00000000000"));
+        assert!(!is_uuid_shaped("aaaaaaaa-0000-0000-0000-000000000001&select=*"));
+        assert!(!is_uuid_shaped("aaaaaaaa00000000000000000000000000001"));
     }
 
     #[test]

@@ -55,6 +55,16 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?set SUPABASE_SERVICE_ROLE_KEY for the share preview}
       SHARE_ORIGIN: https://share.kikouchou.app
       APP_ORIGIN: https://app.kikouchou.app
+      # Trip reminders (server/share-preview/README.md, "Trip reminders").
+      # All optional: with no VAPID_PRIVATE_KEY the service sends nothing.
+      # Secrets come from the shell or the `.env` beside this file, never from
+      # a build arg.
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@kikouchou.app}
+      PUSH_WEBHOOK_SECRET: ${PUSH_WEBHOOK_SECRET:-}
+      PUSH_SEND_MODE: ${PUSH_SEND_MODE:-direct}
+      POSTHOG_KEY: ${POSTHOG_KEY:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-https://events.kikouchou.app}
     labels:
       - traefik.enable=true
       - traefik.http.routers.share.rule=Host(`share.kikouchou.app`)

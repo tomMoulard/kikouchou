@@ -42,6 +42,7 @@ read.
 | `/<token>` | A 302 to the language from `Accept-Language` |
 | `/healthz` | `ok`, with no database behind it |
 | `/robots.txt` | Permissive |
+| `POST /push/send` | Sends one trip reminder; see [Trip reminders](#trip-reminders) |
 | anything else | 404, with the English generic card |
 
 A 404 speaks the language its path named, so `/fr/<revoked token>` stays French
@@ -54,6 +55,47 @@ a link from a data centre: its `Accept-Language` says nothing about the group
 chat the card lands in. The person who shares the trip picks the language, and
 the app puts it in the link.
 
+## Trip reminders
+
+The same process sends the app's trip reminders over Web Push. Three kinds and
+no more: the trip starts tomorrow, your own arrival is tomorrow, a pickup you
+drive or ride in is due within the next hours. The rules live in
+`src/reminders.rs` and are pure functions of a trip document and a clock.
+
+How a reminder travels:
+
+1. A device turns reminders on from a trip's calendar. The app stores the push
+   subscription through `subscribe_trip_reminders()` (a viewer, by invite
+   token) or `subscribe_member_reminders()` (a member, by trip id). The
+   subscription lands in `push_subscriptions`.
+2. Every `REMINDER_INTERVAL_SECONDS`, the service loads every subscription,
+   rebuilds each trip's document once, and asks `reminders` what is due for
+   each subscriber. For each due reminder it asks PostHog's feature flags
+   whether the kind is on (`reminder-trip-start`, `reminder-own-arrival`,
+   `reminder-pickup`; a flag that does not exist counts as on), records a row
+   in `reminder_log`, and reports a `reminder_due` event to PostHog on the
+   subscribing browser's own person.
+3. In `direct` mode the service pushes at once. In `workflow` mode it waits for
+   a PostHog workflow to decide — delays, conditions, cohorts, A/B tests — and
+   call back `POST /push/send` with `{ "subscription_id", "kind", "subject" }`
+   and `Authorization: Bearer <PUSH_WEBHOOK_SECRET>`. The send recomputes the
+   reminder from the live document, so a ride deleted since the tick is
+   `not_due`, and sends once whatever the retries. Replies are JSON:
+   `sent`, `already_sent` and `not_due` are 200; `unknown_subscription` and
+   `gone` are 404; `failed` is 502.
+4. The payload is encrypted to the browser (RFC 8291) and signed with the
+   VAPID key (RFC 8292). A push service answering 404 or 410 means the browser
+   is gone, and the subscription is deleted. Every send is stamped in
+   `reminder_log` and reported as `reminder_sent`.
+
+The service never prints a clock time: it does not know the house's time zone.
+"Tomorrow" is decided on the UTC calendar from `REMINDER_EVE_HOUR_UTC` on, and
+a pickup is announced as a duration ("in about 2 h").
+
+Generate the key pair once with `node scripts/generate-vapid-keys.mjs`. The
+public half is the app's `VITE_VAPID_PUBLIC_KEY`; the private half is this
+service's `VAPID_PRIVATE_KEY` and goes nowhere else.
+
 ## Database privileges
 
 `service_role` bypasses Row-Level Security, which is not the same as being
@@ -62,6 +104,10 @@ granted the tables. It needs `SELECT` on `trips`, `trip_invites`,
 `42501 permission denied` and every live link renders as no longer valid. The
 grants are in
 `supabase/migrations/20260907190000_share_preview_service_role_reads.sql`.
+
+For reminders it also needs `SELECT, UPDATE, DELETE` on `push_subscriptions`
+and `SELECT, INSERT, UPDATE` on `reminder_log`, granted in
+`supabase/migrations/20260910120000_trip_reminders.sql`.
 
 ## Configuration
 
@@ -73,10 +119,20 @@ grants are in
 | `APP_ORIGIN` | no | `https://app.kikouchou.app` | Where a browser is sent |
 | `PORT` | no | `8080` | Listen port |
 | `CACHE_SECONDS` | no | `300` | How long a preview is kept |
+| `VAPID_PRIVATE_KEY` | no | | Turns reminders on. Base64url, from `scripts/generate-vapid-keys.mjs` |
+| `VAPID_SUBJECT` | no | `mailto:admin@kikouchou.app` | The VAPID `sub` claim |
+| `PUSH_WEBHOOK_SECRET` | no | | Opens `POST /push/send` to a caller presenting it |
+| `PUSH_SEND_MODE` | no | `direct` | `direct` sends at the tick; `workflow` waits for the webhook |
+| `POSTHOG_KEY` | no | | Project key, for `reminder_due`, `reminder_sent` and the flags |
+| `POSTHOG_HOST` | no | `https://eu.i.posthog.com` | PostHog ingestion host or proxy |
+| `REMINDER_INTERVAL_SECONDS` | no | `3600` | Seconds between two passes (at least 60) |
+| `REMINDER_EVE_HOUR_UTC` | no | `17` | UTC hour from which "tomorrow" reminders go out |
+| `REMINDER_PICKUP_WINDOW_MINUTES` | no | `180` | How far ahead a pickup is announced |
 
 **The service role key bypasses Row-Level Security.** Pass it at run time only.
 A build arg is readable with `docker history` by anyone who pulls the image.
-Nothing in this service logs it, echoes it, or puts it in a page.
+Nothing in this service logs it, echoes it, or puts it in a page. The same goes
+for `VAPID_PRIVATE_KEY` and `PUSH_WEBHOOK_SECRET`.
 
 ## Privacy
 
@@ -91,7 +147,7 @@ token cannot tell "revoked" from "never existed".
 ## Running it
 
 ```bash
-# Tests. 73 of them, none of which need a database or a network.
+# Tests. None of them need a database or a network.
 cargo test
 
 # Locally, against a real project.
