@@ -164,5 +164,4 @@ impl Config {
             reminder_pickup_window_minutes: number("REMINDER_PICKUP_WINDOW_MINUTES", 180u64)?,
         })
     }
-
 }

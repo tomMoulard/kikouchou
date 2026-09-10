@@ -147,7 +147,11 @@ async fn handle_push_send(
     request: Request,
 ) -> (u16, String, &'static str) {
     fn reply(status: u16, outcome: &'static str) -> (u16, String, &'static str) {
-        (status, serde_json::json!({ "outcome": outcome }).to_string(), outcome)
+        (
+            status,
+            serde_json::json!({ "outcome": outcome }).to_string(),
+            outcome,
+        )
     }
 
     let (Some(sender), Some(secret)) = (&app.sender, &app.config.push_webhook_secret) else {
@@ -166,8 +170,7 @@ async fn handle_push_send(
         return reply(401, "unauthorized");
     }
 
-    let Ok(body) = axum::body::to_bytes(request.into_body(), webhook::MAX_BODY_BYTES).await
-    else {
+    let Ok(body) = axum::body::to_bytes(request.into_body(), webhook::MAX_BODY_BYTES).await else {
         return reply(413, "body-too-large");
     };
     let send = match webhook::parse_send_request(&body) {
@@ -306,7 +309,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let source = Arc::new(TripSource::new(&config)?);
-    let posthog = PostHog::new(config.posthog_host.as_deref(), config.posthog_key.as_deref());
+    let posthog = PostHog::new(
+        config.posthog_host.as_deref(),
+        config.posthog_key.as_deref(),
+    );
     let sender = PushSender::new(&config, Arc::clone(&source), posthog).map(Arc::new);
 
     match (&sender, &config.push_webhook_secret) {

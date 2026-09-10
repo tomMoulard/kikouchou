@@ -224,7 +224,10 @@ impl TripSource {
     /// One PostgREST GET, deserialised into a row list.
     async fn get<T: for<'de> Deserialize<'de>>(&self, path_and_query: &str) -> Option<Vec<T>> {
         let response = self
-            .authed(self.client.get(format!("{}/{path_and_query}", self.rest_url)))
+            .authed(
+                self.client
+                    .get(format!("{}/{path_and_query}", self.rest_url)),
+            )
             .send()
             .await
             .ok()?;
@@ -386,7 +389,12 @@ impl TripSource {
 
     /// Records that a reminder came due. A row already there is left alone, so
     /// two ticks racing on the same reminder cannot both think they were first.
-    pub async fn record_due(&self, subscription_id: &str, kind: ReminderKind, subject: &str) -> bool {
+    pub async fn record_due(
+        &self,
+        subscription_id: &str,
+        kind: ReminderKind,
+        subject: &str,
+    ) -> bool {
         if !is_uuid_shaped(subscription_id) {
             return false;
         }
@@ -494,7 +502,9 @@ mod tests {
         assert!(is_uuid_shaped("aaaaaaaa-0000-0000-0000-000000000001"));
         assert!(is_uuid_shaped("00000000-0000-4000-8000-00000000000A"));
         assert!(!is_uuid_shaped("aaaaaaaa-0000-0000-0000-00000000000"));
-        assert!(!is_uuid_shaped("aaaaaaaa-0000-0000-0000-000000000001&select=*"));
+        assert!(!is_uuid_shaped(
+            "aaaaaaaa-0000-0000-0000-000000000001&select=*"
+        ));
         assert!(!is_uuid_shaped("aaaaaaaa00000000000000000000000000001"));
     }
 

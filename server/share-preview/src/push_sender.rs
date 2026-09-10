@@ -31,7 +31,9 @@ use web_push::{
 
 use crate::config::{Config, SendMode};
 use crate::posthog::PostHog;
-use crate::reminders::{due_reminders, read_trip_facts, Clock, DueReminder, ReminderKind, Subscription};
+use crate::reminders::{
+    due_reminders, read_trip_facts, Clock, DueReminder, ReminderKind, Subscription,
+};
 use crate::trip_source::TripSource;
 
 // ============================================================================

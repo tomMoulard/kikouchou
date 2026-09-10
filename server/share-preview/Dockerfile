@@ -12,6 +12,19 @@
 FROM rust:1.98-slim-bookworm AS build
 WORKDIR /build
 
+# The one C dependency in the tree. Reminders encrypt their payload with
+# `web-push`, which delegates to `ece`, and `ece` binds to real OpenSSL rather
+# than shipping its own crypto — its only backend does, and `web-push` takes it
+# with default features on, so there is no pure-Rust path to switch to. Without
+# these the build dies in `openssl-sys` with "requires the `pkg-config` utility
+# to find OpenSSL but `pkg-config` could not be found".
+#
+# Everything else here still speaks rustls: `reqwest` is built with
+# `rustls-tls`, so this is OpenSSL for payload encryption and not for TLS.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends pkg-config libssl-dev \
+ && rm -rf /var/lib/apt/lists/*
+
 # Dependencies first, against a stub `main.rs`, so editing this service's own
 # source does not recompile yrs, resvg and reqwest every time. The stub is then
 # replaced and only the last crate rebuilds.
@@ -32,8 +45,12 @@ FROM debian:bookworm-slim AS runtime
 # and a missing font renders as nothing rather than as a fallback. DejaVu is
 # also what `public/og-card.png` is rasterised with on the CI runner, so the
 # generic card and the per-trip one set type identically.
+# `libssl3` is the runtime half of the build stage's `libssl-dev`: the binary
+# links OpenSSL dynamically for reminder payload encryption, so without it the
+# container dies on start with a missing shared object. `ca-certificates`
+# happens to pull it in today; naming it means that staying true is not luck.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates fonts-dejavu-core \
+ && apt-get install -y --no-install-recommends ca-certificates fonts-dejavu-core libssl3 \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /build/target/release/share-preview /usr/local/bin/share-preview

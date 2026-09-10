@@ -60,18 +60,21 @@ pub fn authorized(authorization: Option<&str>, secret: &str) -> bool {
     let presented = presented.trim().as_bytes();
     let expected = secret.as_bytes();
 
+    // Every byte of the secret is read whatever the guess looks like, and a
+    // short guess is padded with zeros rather than ending the loop early: the
+    // work is a function of the secret's length alone.
     let mut difference = presented.len() ^ expected.len();
-    for index in 0..expected.len() {
-        let byte = presented.get(index).copied().unwrap_or(0);
-        difference |= usize::from(byte ^ expected[index]);
+    for (index, want) in expected.iter().enumerate() {
+        let got = presented.get(index).copied().unwrap_or(0);
+        difference |= usize::from(got ^ want);
     }
     !secret.is_empty() && difference == 0
 }
 
 /// Reads and checks a request body.
 pub fn parse_send_request(body: &[u8]) -> Result<SendRequest, &'static str> {
-    let parsed: SendRequestJson =
-        serde_json::from_slice(body).map_err(|_| "body must be JSON with subscription_id, kind and subject")?;
+    let parsed: SendRequestJson = serde_json::from_slice(body)
+        .map_err(|_| "body must be JSON with subscription_id, kind and subject")?;
     if !is_uuid_shaped(&parsed.subscription_id) {
         return Err("subscription_id must be a uuid");
     }
@@ -141,7 +144,10 @@ mod tests {
     #[test]
     fn refuses_what_could_not_be_a_request() {
         assert!(parse_send_request(b"not json").is_err());
-        assert!(parse_send_request(br#"{"subscription_id":"x","kind":"pickup","subject":"r"}"#).is_err());
+        assert!(
+            parse_send_request(br#"{"subscription_id":"x","kind":"pickup","subject":"r"}"#)
+                .is_err()
+        );
         assert!(parse_send_request(
             br#"{"subscription_id":"00000000-0000-4000-8000-000000000001","kind":"marketing","subject":"r"}"#
         )
