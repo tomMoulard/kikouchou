@@ -26,6 +26,9 @@ jobs:
     # `secrets` context is not available there, but `env` is.
     env:
       POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+      # The public half of the VAPID pair, for trip reminders. Lifted here for
+      # the same reason: the step below warns when it is missing.
+      VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -45,6 +48,15 @@ jobs:
 
       - name: Generate icons
         run: bun run generate-icons
+
+      # A missing key is not a failure — the app ships and simply never offers
+      # reminders, and every phone sees the install nudge instead. It is
+      # silent, though, and the VITE_SHARE_ORIGIN note below records what
+      # silent cost the last time a deploy went out without one of these.
+      - name: Warn when trip reminders are unconfigured
+        if: ${{ env.VAPID_PUBLIC_KEY == '' }}
+        run: |
+          echo "::warning title=No trip reminders::VAPID_PUBLIC_KEY is unset, so this build ships without Web Push reminders. Generate a pair with scripts/generate-vapid-keys.mjs and add the public half as a repository secret."
 
       - name: Build
         run: bun run build
@@ -72,6 +84,15 @@ jobs:
           # by design, and a missing secret would fail silently back to the old
           # link — which is exactly what happened on the first deploy of this.
           VITE_SHARE_ORIGIN: https://share.kikouchou.app
+          # Trip reminders over Web Push. The public half of the VAPID pair —
+          # public by design: every browser sends it to its push service and it
+          # ships in the bundle. The private half is the one that matters, and
+          # it lives only on the VPS as VAPID_PRIVATE_KEY, never here.
+          #
+          # Unset, `isPushSupported()` is false: the reminder card never
+          # renders and the calendar offers the install nudge instead. Nothing
+          # breaks, so the step above says so out loud.
+          VITE_VAPID_PUBLIC_KEY: ${{ env.VAPID_PUBLIC_KEY }}
 
       # Rewrites the built bundles in place to carry a chunk ID, then uploads
       # the .map files to PostHog and deletes them. It must run between the
