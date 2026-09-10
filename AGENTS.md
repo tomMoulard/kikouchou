@@ -351,6 +351,26 @@ The exit is `upgradeViewerTrip`: redeem the token, clear `viewerToken`, and the
 provider mounts on the same document. Its first reconcile finds nothing to send
 because the viewer path recorded the server's state vector after every read.
 
+### A reminder is sent once, and says nothing a stranger could use
+
+Trip reminders go out from `server/share-preview` (`push_sender.rs`) to the
+subscriptions in `push_subscriptions`. Three rules hold the feature together:
+
+- **`reminder_log` is the truth about what was sent.** A reminder is keyed
+  (subscription, kind, subject); the tick records it as due before reporting
+  it, and a send stamps `sent_at` before anything else happens. A webhook
+  retry, a second tick, a replayed event all find the row and stop.
+- **The text is computed from the live document at send time**, never from the
+  event that triggered the send. A ride moved or deleted after the tick is
+  `not_due`, not a push about where it used to be.
+- **No guest name, no endpoint, no key leaves the module.** A reminder names a
+  place and a duration. The endpoint is a capability to send to that phone: it
+  is never returned to a client and never put in an event.
+
+The client half (`lib/notifications/push.ts`) asks for permission from a click
+and from nowhere else, and the reminder card renders only where a push can
+arrive; an iPhone's Safari tab gets the install nudge instead (`Layout`).
+
 ### One install prompt, and the page an iPhone installs from
 
 `useInstallPrompt` captures the browser's one `beforeinstallprompt` and reports
@@ -530,16 +550,20 @@ call the REST API with that key.
   `publish_trip_snapshot` deletes from the append-only log, which clients hold no
   DELETE on. Each function checks `auth.uid()` and membership as its first act,
   because definer rights bypass the policies that would otherwise say no.
-- **`anon` holds EXECUTE on exactly one function, `read_shared_trip`, and no
-  privilege on any table.** It is the read-only door an invite link opens with no
+- **`anon` holds EXECUTE on three functions and no privilege on any table.**
+  `read_shared_trip` is the read-only door an invite link opens with no
   account: the token is the authorisation, checked the way `redeem_invite`
   checks it (revoked, expired, spent) with the same `hint` contract, and the
   call consumes no use and writes nothing. That makes an invite token a bearer
   *read* credential — decided on 2026-09-10, see
   `plans/2026-09-10-invite-first-and-reminders-v1.md` — so a link forwarded
-  outside the group reads guest names, stay dates and pickup places. Do not add
-  a second `anon` grant without deciding to; `supabase/tests/read_shared_trip_test.sql`
-  asserts every table is still closed to it.
+  outside the group reads guest names, stay dates and pickup places.
+  `subscribe_trip_reminders` applies the same token checks and stores a push
+  subscription for that trip; `unsubscribe_reminders` removes one by its
+  endpoint, which only its holder knows. Do not add another `anon` grant
+  without deciding to; `supabase/tests/read_shared_trip_test.sql` and
+  `supabase/tests/trip_reminders_test.sql` assert every table is still closed
+  to it.
 - **`RETURNING` is subject to the SELECT policy.** `.insert().select().single()`
   compiles to `INSERT … RETURNING`, so a row you may create but not read fails
   the insert. This broke trip creation: the owner's roster row comes from an
