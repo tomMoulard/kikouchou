@@ -16,6 +16,7 @@ import { AppProviders } from '@/contexts/AppProviders';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { createActivity } from '@/lib/db/repositories/activity-repository';
+import { createExpense } from '@/lib/db/repositories/expense-repository';
 import { createGuestGroup } from '@/lib/db/repositories/guest-group-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import {
@@ -29,9 +30,11 @@ import {
 import { createTransport } from '@/lib/db/repositories/transport-repository';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { createVehicle } from '@/lib/db/repositories/vehicle-repository';
+import { toLocalISODateString } from '@/lib/db/utils';
 import { hexColor, isoDate, waitForTripDoc } from '@/test/utils';
 import type {
   Activity,
+  Expense,
   ISODateTimeString,
   PersonId,
   Ride,
@@ -496,6 +499,285 @@ describe('useTripActions — activities', () => {
 // ============================================================================
 // Cross-trip foreign keys
 // ============================================================================
+
+describe('useTripActions — money', () => {
+  async function expensesOf(tripId: TripId): Promise<Expense[]> {
+    return db.expenses.where('tripId').equals(tripId).toArray();
+  }
+
+  /** A second guest, so a line has somebody to be split with. */
+  async function seedSecondGuest(tripId: TripId): Promise<PersonId> {
+    const person = await createPerson(tripId, {
+      name: 'Bruno',
+      color: hexColor('#3b82f6'),
+    });
+    return person.id;
+  }
+
+  it('adds a line, split between every guest by default', async () => {
+    const { tripId, personId } = await seedTrip();
+    const other = await seedSecondGuest(tripId);
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addExpense',
+        data: { title: 'Shopping', amount: 100, payerId: personId },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    const [expense] = await expensesOf(tripId);
+    expect(expense?.title).toBe('Shopping');
+    expect(expense?.amount).toBe(100);
+    expect(expense?.payerId).toBe(personId);
+    expect(expense?.splitMode).toBe('equal');
+    expect(expense?.splits.map((split) => split.personId).sort()).toEqual(
+      [personId, other].sort(),
+    );
+  });
+
+  it('splits by the parts it was given, guest by guest', async () => {
+    const { tripId, personId } = await seedTrip();
+    const other = await seedSecondGuest(tripId);
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addExpense',
+        data: {
+          title: 'Pizza',
+          amount: 60,
+          payerId: personId,
+          splitMode: 'shares',
+          beneficiaryIds: [personId, other],
+          shares: ['1', '5'],
+        },
+      }),
+    );
+
+    const [expense] = await expensesOf(tripId);
+    expect(expense?.splitMode).toBe('shares');
+    expect(expense?.splits).toEqual([
+      { personId, value: 1 },
+      { personId: other, value: 5 },
+    ]);
+  });
+
+  it('files a line with no day under today, which every read can find', async () => {
+    const { tripId, personId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addExpense',
+        data: { title: 'Bread', amount: 4, payerId: personId },
+      }),
+    );
+
+    const [expense] = await expensesOf(tripId);
+    expect(expense?.date).toBe(toLocalISODateString(new Date()));
+  });
+
+  it('records a transfer as the single share it is', async () => {
+    const { tripId, personId } = await seedTrip();
+    const other = await seedSecondGuest(tripId);
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addExpense',
+        data: {
+          title: 'Paying Alice back',
+          amount: 25,
+          payerId: other,
+          kind: 'transfer',
+          beneficiaryIds: [personId],
+        },
+      }),
+    );
+
+    const [expense] = await expensesOf(tripId);
+    expect(expense?.kind).toBe('transfer');
+    expect(expense?.splits).toEqual([{ personId, value: 25 }]);
+  });
+
+  it('refuses a line whose payer is not on this trip', async () => {
+    const { tripId } = await seedTrip();
+    const other = await createTrip({
+      name: 'Another trip',
+      startDate: isoDate('2024-09-01'),
+      endDate: isoDate('2024-09-05'),
+    });
+    const stranger = await createPerson(other.id, {
+      name: 'Stranger',
+      color: hexColor('#000000'),
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addExpense',
+        data: { title: 'Not mine', amount: 10, payerId: stranger.id },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await expensesOf(tripId)).toHaveLength(0);
+  });
+
+  it('drops a beneficiary the trip does not have rather than storing an orphan', async () => {
+    const { tripId, personId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addExpense',
+        data: {
+          title: 'Shopping',
+          amount: 40,
+          payerId: personId,
+          beneficiaryIds: [personId, 'made-up-guest'],
+        },
+      }),
+    );
+
+    const [expense] = await expensesOf(tripId);
+    expect(expense?.splits).toEqual([{ personId, value: 1 }]);
+  });
+
+  it('refuses an amount of zero', async () => {
+    const { tripId, personId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addExpense',
+        data: { title: 'Nothing', amount: 0, payerId: personId },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect(await expensesOf(tripId)).toHaveLength(0);
+  });
+
+  it('edits a line without touching what it was not asked about', async () => {
+    const { tripId, personId } = await seedTrip();
+    const other = await seedSecondGuest(tripId);
+    const created = await createExpense(tripId, {
+      kind: 'expense',
+      category: 'groceries',
+      title: 'Shopping',
+      date: isoDate('2024-07-16'),
+      amount: 100,
+      payerId: personId,
+      splitMode: 'equal',
+      splits: [
+        { personId, value: 1 },
+        { personId: other, value: 1 },
+      ],
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'updateExpense',
+        data: { expenseId: created.id, amount: 120 },
+      }),
+    );
+
+    expect(outcome.count).toBe(1);
+    const [expense] = await expensesOf(tripId);
+    expect(expense?.amount).toBe(120);
+    expect(expense?.title).toBe('Shopping');
+    expect(expense?.splits).toHaveLength(2);
+  });
+
+  it('refuses to edit a line belonging to another trip', async () => {
+    const { tripId, personId } = await seedTrip();
+    const other = await createTrip({
+      name: 'Another trip',
+      startDate: isoDate('2024-09-01'),
+      endDate: isoDate('2024-09-05'),
+    });
+    const theirGuest = await createPerson(other.id, {
+      name: 'Stranger',
+      color: hexColor('#000000'),
+    });
+    const theirs = await createExpense(other.id, {
+      kind: 'expense',
+      category: 'other',
+      title: 'Theirs',
+      date: isoDate('2024-09-02'),
+      amount: 10,
+      payerId: theirGuest.id,
+      splitMode: 'equal',
+      splits: [{ personId: theirGuest.id, value: 1 }],
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'updateExpense',
+        data: { expenseId: theirs.id, amount: 999 },
+      }),
+    );
+
+    expect(outcome.count).toBe(0);
+    expect((await db.expenses.get(theirs.id))?.amount).toBe(10);
+    expect(personId).toBeTruthy();
+  });
+
+  it('removes a line', async () => {
+    const { tripId, personId } = await seedTrip();
+    const created = await createExpense(tripId, {
+      kind: 'expense',
+      category: 'groceries',
+      title: 'Shopping',
+      date: isoDate('2024-07-16'),
+      amount: 100,
+      payerId: personId,
+      splitMode: 'equal',
+      splits: [{ personId, value: 1 }],
+    });
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({ action: 'removeExpense', data: { expenseId: created.id } }),
+    );
+
+    expect(outcome.count).toBe(1);
+    expect(await expensesOf(tripId)).toHaveLength(0);
+  });
+
+  it('reports the line it added, so the change list has something to show', async () => {
+    const { tripId, personId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    const outcome = await run(
+      result.current.actions.executeActions,
+      actionBlock({
+        action: 'addExpense',
+        data: { title: 'Shopping', amount: 42, payerId: personId },
+      }),
+    );
+
+    // The test harness answers `t()` with the key, so what is pinned here is
+    // that the line is reported at all and under which key — the wording itself
+    // lives in the locale files.
+    expect(outcome.summaries).toEqual(['assistant.actionDetails.addExpense']);
+  });
+});
 
 describe('useTripActions — cross-trip references', () => {
   it('refuses to assign a room to a guest from another trip', async () => {

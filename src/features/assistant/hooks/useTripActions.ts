@@ -25,6 +25,7 @@ import {
   MAX_ROOMS_PER_SAVE,
   createActivity,
   createAssignment,
+  createExpense,
   createPerson,
   createRide,
   createRooms,
@@ -33,6 +34,7 @@ import {
   createVehicle,
   deleteActivityWithOwnershipCheck,
   deleteAssignmentWithOwnershipCheck,
+  deleteExpenseWithOwnershipCheck,
   deletePersonWithOwnershipCheck,
   deleteRideWithOwnershipCheck,
   deleteRoomWithOwnershipCheck,
@@ -40,6 +42,7 @@ import {
   deleteVehicleWithOwnershipCheck,
   getActivityById,
   getAssignmentById,
+  getExpenseById,
   getGuestGroupById,
   getPersonById,
   getPersonsByTripId,
@@ -52,24 +55,35 @@ import {
   setActivityParticipation,
   setCurrentTrip,
   setTransportRide,
+  toLocalISODateString,
   updateActivityWithOwnershipCheck,
+  updateExpenseWithOwnershipCheck,
   updateRideWithOwnershipCheck,
   updateTrip,
 } from '@/lib/db';
 import { notify } from '@/lib/notifications';
 import {
   ActivityFormDataSchema,
+  ExpenseFormDataSchema,
   RideFormDataSchema,
   VehicleFormDataSchema,
 } from '@/lib/validation/schemas';
 import {
   CHILD_SEAT_KINDS,
+  DEFAULT_EXPENSE_CATEGORY,
+  EXPENSE_CATEGORIES,
   getDefaultPersonColor,
   type Activity,
   type ActivityCategory,
   type ActivityFormData,
   type ActivityId,
   type ChildSeatKind,
+  type Expense,
+  type ExpenseCategory,
+  type ExpenseFormData,
+  type ExpenseId,
+  type ExpenseSplit,
+  type ExpenseSplitMode,
   type GuestGroupId,
   type GuestGroupMemberId,
   type ISODateString,
@@ -235,6 +249,61 @@ function keepKnownGuestIds(
       typeof id === 'string' && knownGuestIds.has(id as PersonId),
   );
   return Array.from(new Set(kept));
+}
+
+/**
+ * Builds the share list of a money line from what an action carried.
+ *
+ * Three rules, in the order they matter:
+ *
+ * - a guest the trip does not have is dropped, never stored. The repository
+ *   checks the *line's* trip and nothing else, so an id the model carried over
+ *   from another trip — or invented — would become a permanent orphan in the
+ *   accounts and a balance nobody can settle;
+ * - no beneficiaries at all means everybody, which is what a group means when
+ *   they say "we split it" and what the form fills in by default;
+ * - `shares` line up with the guests by position, because that is the only
+ *   pairing a flat JSON list can express. A missing one counts as one part,
+ *   which is the weight `equal` uses anyway.
+ *
+ * @param rawIds - The `beneficiaryIds` field, whatever the model sent
+ * @param rawShares - The `shares` field, whatever the model sent
+ * @param knownGuestIds - The trip's guests
+ * @returns One share per guest, in the order the action listed them
+ */
+function buildExpenseSplits(
+  rawIds: unknown,
+  rawShares: unknown,
+  knownGuestIds: Set<PersonId>,
+): ExpenseSplit[] {
+  const requested = keepKnownGuestIds(rawIds, knownGuestIds);
+  const personIds = requested.length > 0 ? requested : [...knownGuestIds];
+
+  const shares = Array.isArray(rawShares) ? rawShares : [];
+
+  return personIds.map((personId, index) => {
+    const raw = shares[index];
+    const value = typeof raw === 'number' ? raw : Number(raw);
+    return {
+      personId,
+      value: Number.isFinite(value) && value >= 0 ? value : 1,
+    };
+  });
+}
+
+/**
+ * The category an action named, or the neutral one.
+ *
+ * A category drives an icon and nothing else, so an unknown value is worth
+ * dropping rather than refusing the whole line over.
+ *
+ * @param raw - The `category` field
+ * @returns A known category
+ */
+function expenseCategoryOf(raw: unknown): ExpenseCategory {
+  return (EXPENSE_CATEGORIES as readonly unknown[]).includes(raw)
+    ? (raw as ExpenseCategory)
+    : DEFAULT_EXPENSE_CATEGORY;
 }
 
 /**
@@ -1441,6 +1510,178 @@ export function useTripActions(): UseTripActionsReturn {
                       : '{{person}} left {{title}}',
                   },
                 ),
+              );
+              break;
+            }
+
+            case 'addExpense': {
+              const tid = activeTripId;
+              if (!tid) {
+                notify.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              const knownGuestIds = await guestIdsFor(tid);
+
+              const payerId = await tripPersonId(d.payerId, tid);
+              if (!payerId) {
+                notify.error(t('assistant.guestNotFound'));
+                break;
+              }
+
+              const kind = (d.kind as ExpenseFormData['kind'] | undefined) ?? 'expense';
+              const splits = buildExpenseSplits(
+                d.beneficiaryIds,
+                d.shares,
+                knownGuestIds,
+              );
+
+              const formData: ExpenseFormData = {
+                kind,
+                category: expenseCategoryOf(d.category),
+                title: String(d.title ?? ''),
+                // A receipt typed into a chat is nearly always today's, and a
+                // line with no day cannot be filed by the index every read uses.
+                date: ((d.date as ISODateString | undefined) ??
+                  toLocalISODateString(new Date())) as ISODateString,
+                amount: Number(d.amount),
+                payerId,
+                // A transfer is one guest paying another: there is nothing to
+                // divide, so the rule is not the model's to choose.
+                splitMode:
+                  kind === 'transfer'
+                    ? 'equal'
+                    : ((d.splitMode as ExpenseSplitMode | undefined) ?? 'equal'),
+                splits:
+                  kind === 'transfer'
+                    ? splits.slice(0, 1).map((split) => ({
+                        personId: split.personId,
+                        value: Number(d.amount),
+                      }))
+                    : splits,
+              };
+
+              const validation = ExpenseFormDataSchema.safeParse(formData);
+              if (!validation.success) {
+                console.warn(
+                  '[AI Assistant] Rejected addExpense:',
+                  validation.error.issues,
+                );
+                notify.error(t('assistant.invalidExpense'));
+                break;
+              }
+
+              await createExpense(tid, formData);
+              notifySuccess(t('money.expense.createSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.addExpense', {
+                  title: formData.title,
+                  amount: formData.amount,
+                  defaultValue: 'Added to the accounts: {{title}} ({{amount}})',
+                }),
+              );
+              break;
+            }
+
+            case 'updateExpense': {
+              const tid = activeTripId;
+              if (!tid) {
+                notify.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const d = action.data as Record<string, unknown>;
+              const eid = d.expenseId as ExpenseId;
+              const existing = await getExpenseById(eid);
+              if (!existing || existing.tripId !== tid) {
+                notify.error(t('assistant.expenseNotFound'));
+                break;
+              }
+
+              const knownGuestIds = await guestIdsFor(tid);
+
+              const payerId =
+                d.payerId === undefined
+                  ? existing.payerId
+                  : await tripPersonId(d.payerId, tid);
+              if (!payerId) {
+                notify.error(t('assistant.guestNotFound'));
+                break;
+              }
+
+              // The shares are re-derived whenever either half of them moves,
+              // because a rule and a list of weights only mean anything
+              // together: new parts against the old guests divide the wrong way.
+              const wantsSplits =
+                d.beneficiaryIds !== undefined || d.shares !== undefined;
+
+              const merged: ExpenseFormData = {
+                kind: existing.kind,
+                category: existing.category,
+                title: d.title === undefined ? existing.title : String(d.title),
+                date:
+                  d.date === undefined
+                    ? existing.date
+                    : (d.date as ISODateString),
+                amount: d.amount === undefined ? existing.amount : Number(d.amount),
+                payerId,
+                splitMode:
+                  d.splitMode === undefined
+                    ? existing.splitMode
+                    : (d.splitMode as ExpenseSplitMode),
+                splits: wantsSplits
+                  ? buildExpenseSplits(
+                      d.beneficiaryIds ??
+                        existing.splits.map((split) => split.personId),
+                      d.shares,
+                      knownGuestIds,
+                    )
+                  : [...existing.splits],
+              };
+
+              const validation = ExpenseFormDataSchema.safeParse(merged);
+              if (!validation.success) {
+                console.warn(
+                  '[AI Assistant] Rejected updateExpense:',
+                  validation.error.issues,
+                );
+                notify.error(t('assistant.invalidExpense'));
+                break;
+              }
+
+              await updateExpenseWithOwnershipCheck(eid, tid, merged);
+              notifySuccess(t('money.expense.updateSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.updateExpense', {
+                  title: merged.title,
+                  defaultValue: 'Edited in the accounts: {{title}}',
+                }),
+              );
+              break;
+            }
+
+            case 'removeExpense': {
+              const tid = activeTripId;
+              if (!tid) {
+                notify.error(t('assistant.noTripForAction'));
+                break;
+              }
+              const eid = action.data.expenseId as ExpenseId;
+              const expense: Expense | undefined = await getExpenseById(eid);
+              if (!expense || expense.tripId !== tid) {
+                notify.error(t('assistant.expenseNotFound'));
+                break;
+              }
+
+              await deleteExpenseWithOwnershipCheck(eid, tid);
+              notifySuccess(t('money.expense.deleteSuccess'));
+              executedCount++;
+              summaries.push(
+                t('assistant.actionDetails.removeExpense', {
+                  title: expense.title,
+                  defaultValue: 'Removed from the accounts: {{title}}',
+                }),
               );
               break;
             }
