@@ -246,6 +246,18 @@ export const NotificationSettings = memo(function NotificationSettings(): ReactE
           </p>
         )}
 
+        {/*
+          Shown in every state, because the limitation it answers holds in
+          every state: granted, denied, or a browser that cannot notify at
+          all. The calendar file needs no permission from anybody.
+        */}
+        <p className="text-sm text-muted-foreground">
+          {t(
+            'notifications.calendarFallback',
+            'For the runs you drive, open a trip’s transport page and choose “Add my runs to my calendar”. The phone’s own calendar then rings on time, with Kikouchou closed.',
+          )}
+        </p>
+
         {state === 'default' && (
           <Button
             onClick={handleEnableClick}

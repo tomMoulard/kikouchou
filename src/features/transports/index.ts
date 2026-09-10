@@ -44,6 +44,10 @@ export type { UpcomingPickupsProps } from './components/UpcomingPickups';
 export { MyRides } from './components/MyRides';
 export type { MyRidesProps } from './components/MyRides';
 
+// The driver's runs, handed to software that rings with this app closed.
+export { AddRunsToCalendarButton } from './components/AddRunsToCalendarButton';
+export type { AddRunsToCalendarButtonProps } from './components/AddRunsToCalendarButton';
+
 // The cars the app works out for itself, and the two ways to accept one.
 export { ProposedRuns } from './components/ProposedRuns';
 export type { ProposedRunsProps } from './components/ProposedRuns';

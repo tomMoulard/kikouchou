@@ -107,6 +107,7 @@ import { cn } from '@/lib/utils';
 import { formatFullDate } from '@/lib/utils/date-format';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { getTransportModeIcon } from '@/lib/utils/transport-icons';
+import { AddRunsToCalendarButton } from '@/features/transports/components/AddRunsToCalendarButton';
 import { DriverAlert } from '@/features/transports/components/DriverAlert';
 import {
   createHeadcountResolver,
@@ -1666,6 +1667,15 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       */}
       <RideChangeFeed className="mb-6" />
       <DriverAlert className="mb-6" />
+
+      {/*
+        Directly under the banner it answers. The banner is this device
+        talking, and this device can only talk while the app is open; the
+        button hands the same runs to the phone's own calendar, which rings
+        without us. It renders nothing unless this browser is a guest with
+        runs still ahead.
+      */}
+      <AddRunsToCalendarButton className="mb-6" />
 
       {/*
         The cars the app has worked out for itself, above the travel they were

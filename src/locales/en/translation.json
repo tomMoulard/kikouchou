@@ -566,6 +566,22 @@
     "myRidesEmpty": "Nothing ahead for you: no ride to drive and no travel of your own.",
     "myRidesDriving": "You drive",
     "myRidesTravel": "Your own travel",
+    "calendar": {
+      "addRuns": "Add my runs to my calendar",
+      "pickup": "Pick up {{passengers}} at {{location}}",
+      "pickupEmpty": "Pick-up at {{location}}",
+      "dropoff": "Drop off {{passengers}} at {{location}}",
+      "dropoffEmpty": "Drop-off at {{location}}",
+      "passengers": "Passengers: {{passengers}}",
+      "meetAt": "Be there at {{time}}",
+      "vehicle": "Car: {{vehicle}}",
+      "unknownPassenger": "A guest",
+      "calendarName": "{{trip}} \u2014 your runs",
+      "downloaded_one": "One run saved to a calendar file",
+      "downloaded_other": "{{count}} runs saved to a calendar file",
+      "downloadedHint": "Open the file to add the runs to your own calendar. Its alarm rings with Kikouchou closed.",
+      "failed": "This browser cannot save the file. Open Kikouchou in another browser to export your runs."
+    },
     "scope": {
       "label": "Whose transport to show",
       "hidden_one": "{{count}} other transport hidden",
@@ -1652,7 +1668,8 @@
     "enabling": "Waiting for your answer…",
     "bestEffort": "Ride alerts come from this device, so they are sent while the app is running or was used recently. Trip reminders come from the server: turn them on from a trip\u2019s calendar and they reach you with the app closed.",
     "deniedHint": "Your browser is blocking notifications for Kikouchou. The app cannot ask again — allow them for this site in your browser or system settings.",
-    "unsupportedHint": "This browser cannot show notifications. On an iPhone, add Kikouchou to the Home Screen first. Ride alerts still appear inside the app."
+    "unsupportedHint": "This browser cannot show notifications. On an iPhone, add Kikouchou to the Home Screen first. Ride alerts still appear inside the app.",
+    "calendarFallback": "For the runs you drive, open a trip\u2019s transport page and choose \u201cAdd my runs to my calendar\u201d. The phone\u2019s own calendar then rings on time, with Kikouchou closed."
   },
   "viewer": {
     "title": "Read-only",
