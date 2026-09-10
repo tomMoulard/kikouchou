@@ -93,19 +93,6 @@ jobs:
           # renders and the calendar offers the install nudge instead. Nothing
           # breaks, so the step above says so out loud.
           VITE_VAPID_PUBLIC_KEY: ${{ env.VAPID_PUBLIC_KEY }}
-          # The OAuth client IDs of the two sign-in providers. Public halves:
-          # a client ID travels in every authorize redirect. The matching
-          # secrets are deliberately absent here — the hosted Supabase project
-          # holds the only copy of each, and nothing in CI may write one.
-          #
-          # No VITE_ prefix, so Vite does not inline them and the bundle is
-          # unchanged: `bun run build` simply sees them in its environment.
-          # They are here for `supabase/config.toml`, whose `[auth.external.*]`
-          # blocks reference these exact names, so a step that resolves those
-          # references finds them already set. Rename them and that link
-          # breaks.
-          SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID: ${{ secrets.SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID }}
-          SUPABASE_AUTH_EXTERNAL_SPOTIFY_CLIENT_ID: ${{ secrets.SUPABASE_AUTH_EXTERNAL_SPOTIFY_CLIENT_ID }}
 
       # Rewrites the built bundles in place to carry a chunk ID, then uploads
       # the .map files to PostHog and deletes them. It must run between the
