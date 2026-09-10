@@ -323,6 +323,34 @@ adding a table to `deleteTrip`, decide which of the two it is — a table that
 should have been in the cascade leaks rows forever, and one that should not have
 been silently destroys data the user expected to keep.
 
+### A viewer trip is read, never written
+
+A trip opened from an invite link with no account is a **viewer trip**: the
+local row carries `viewerToken`, `useTripAccess()` answers `viewer`, and the
+document is the server's, replayed through `lib/sync/viewer` and refreshed by
+`useViewerSync`. Nothing on the device may write into that document:
+
+- `YjsSyncObserver` skips `populateDocFromDexie`, `syncTripMetaToDoc` and every
+  `syncDexieToDoc` for a viewer trip. The hazard is not cosmetic. A viewer's
+  Dexie rows are a projection taken at an earlier moment; written back as new
+  CRDT items they would rank ahead of whatever the members wrote since, and the
+  day the viewer signs in `reconcile()` would push them over everybody's copy.
+- `SupabaseTripSync` never mounts the two-way provider while `viewerToken` is
+  set, signed in or not. The account is not on the roster until the token is
+  redeemed, and a provider mounted early pushes the document at a log whose
+  insert policy refuses it.
+- Every write control hides behind `useTripAccess().canEdit` — the page
+  actions, the FABs, the card menus, drag, claims, the assistant's actions. A
+  control that slipped through is caught by the refresh, which projects the
+  server's document over Dexie whether or not anything new arrived.
+- `viewerToken` is device-local like `remoteTripId`: `buildTripRecord` carries
+  it across the projection, and the document never holds it. Dropping it there
+  would silently make a read-only trip editable on the first refresh.
+
+The exit is `upgradeViewerTrip`: redeem the token, clear `viewerToken`, and the
+provider mounts on the same document. Its first reconcile finds nothing to send
+because the viewer path recorded the server's state vector after every read.
+
 ### A global entity syncs per account, not through the trip document
 
 The Yjs document is per trip, so nothing that outlives a trip can travel in it.
@@ -484,6 +512,16 @@ call the REST API with that key.
   `publish_trip_snapshot` deletes from the append-only log, which clients hold no
   DELETE on. Each function checks `auth.uid()` and membership as its first act,
   because definer rights bypass the policies that would otherwise say no.
+- **`anon` holds EXECUTE on exactly one function, `read_shared_trip`, and no
+  privilege on any table.** It is the read-only door an invite link opens with no
+  account: the token is the authorisation, checked the way `redeem_invite`
+  checks it (revoked, expired, spent) with the same `hint` contract, and the
+  call consumes no use and writes nothing. That makes an invite token a bearer
+  *read* credential — decided on 2026-09-10, see
+  `plans/2026-09-10-invite-first-and-reminders-v1.md` — so a link forwarded
+  outside the group reads guest names, stay dates and pickup places. Do not add
+  a second `anon` grant without deciding to; `supabase/tests/read_shared_trip_test.sql`
+  asserts every table is still closed to it.
 - **`RETURNING` is subject to the SELECT policy.** `.insert().select().single()`
   compiles to `INSERT … RETURNING`, so a row you may create but not read fails
   the insert. This broke trip creation: the owner's roster row comes from an

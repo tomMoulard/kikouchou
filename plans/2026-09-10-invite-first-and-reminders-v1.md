@@ -246,7 +246,23 @@ If installed users return more after this, the gate question is worth reopening 
 - No Realtime channel for viewers. A pull on open and on focus is enough for a read-only page.
 - No change to the plaintext storage decision.
 
-## 7. Effort
+## 7. Status
+
+Updated as phases land. Each entry names the branch and what it contains.
+
+Phase 0 and phase 1 are built on the branch feat/invite-without-account, as one set of commits:
+
+- The display_mode super property and the trip_viewed usage action.
+- The read_shared_trip function, granted to anon and authenticated, with 22 pgTAP assertions.
+- The viewer trip: viewerToken on the trip row, lib/sync/viewer.ts, useViewerSync, the SupabaseTripSync branch, the YjsSyncObserver guard, the read-only badge, and the account sweep upgrade.
+- The invite link without an account: useJoinTrip reads as a viewer when signed out, JoinTripPage shows the welcome and the device-local identity pick, and the ViewerUnlockCard offers the sign-in on every trip page.
+- Read-only gating on the calendar, rooms, guests, transport, activities, cars and settings pages, in the card components, and in the assistant.
+- Invite expiry bound to the trip end date plus seven days, and a viewer's share dialog handing on the same link.
+- The e2e stub answers read_shared_trip, and trip-invite-anonymous.spec.ts drives the journey in the sync project.
+
+Not in phase 1, on purpose: the install nudge (phase 2), the iPhone handoff manifest (phase 2), and reminders (phase 3).
+
+## 8. Effort
 
 | Phase | Days |
 | --- | --- |
