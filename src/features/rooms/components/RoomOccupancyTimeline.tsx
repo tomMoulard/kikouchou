@@ -429,11 +429,16 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                           className="size-3.5 shrink-0 text-muted-foreground"
                           aria-hidden="true"
                         />
-                        {/* Truncates with the fold rather than disappearing at
-                            a threshold — see the note in CalendarTimelineRow. */}
-                        <span className="min-w-0 truncate text-sm font-medium">
-                          {row.room.name}
-                        </span>
+                        {/* Shortens as the column folds, then goes entirely
+                            once it reaches the floor. Two letters and an
+                            ellipsis name no room; the glyph beside it says
+                            more in the width that is left, and the row's
+                            `title` and `aria-label` still carry the name. */}
+                        {!labelsCollapsed && (
+                          <span className="min-w-0 truncate text-sm font-medium">
+                            {row.room.name}
+                          </span>
+                        )}
                         {occupancy.isOverCapacity && (
                           <span
                             className="inline-flex shrink-0 text-destructive"

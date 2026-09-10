@@ -228,8 +228,6 @@
     "importQrMergeFailed": "Impossible d'importer ces données. Réessayez ou utilisez Partager sur la page des voyages.",
     "shareTripAria": "Partager le voyage — lien et QR code",
     "placeSuggestions": "Lieux sur la carte",
-    "pinnedAt": "Épinglé à {{coordinates}}",
-    "adjustPin": "Ajuster",
     "removePin": "Retirer le point sur la carte",
     "view": {
       "ariaLabel": "Vue des voyages",
@@ -1330,7 +1328,6 @@
     "searchError": "La recherche a échoué. Veuillez réessayer.",
     "timeoutError": "La recherche a expiré. Veuillez réessayer.",
     "dragToAdjust": "Glissez le marqueur ou cliquez pour ajuster",
-    "confirmLocation": "Confirmer",
     "useTyped": "Utiliser « {{value}} »",
     "useTypedHint": "Conservé tel quel, sans position sur la carte"
   },

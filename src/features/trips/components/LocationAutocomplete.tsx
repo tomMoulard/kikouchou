@@ -4,8 +4,9 @@
  * Merges two suggestion sources behind one input:
  * - **previous trips** — selecting one imports its location, description,
  *   coordinates and rooms;
- * - **map places** (OpenStreetMap Nominatim) — selecting one opens a map with a
- *   draggable pin, and confirming stores the coordinates on the trip.
+ * - **map places** (OpenStreetMap Nominatim) — selecting one stores its
+ *   coordinates on the trip at once and shows a map whose pin can be dragged.
+ *   Each drag saves; there is no confirm step.
  *
  * Free text still works: typing without picking a suggestion keeps the trip
  * unpinned, and editing the text drops a pin that no longer matches it.
@@ -22,7 +23,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Import, Loader2, MapPin, Pencil, X } from 'lucide-react';
+import { Import, Loader2, MapPin, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,7 +39,7 @@ import {
   PopoverContent,
   PopoverAnchor,
 } from '@/components/ui/popover';
-import { LocationMapConfirm } from '@/components/shared/LocationMapConfirm';
+import { LocationMapPicker } from '@/components/shared/LocationMapPicker';
 import { cn } from '@/lib/utils';
 import { getTripsByLocation, getRoomsByTripId } from '@/lib/db';
 import {
@@ -46,7 +47,6 @@ import {
   GeocodingError,
   type Coordinates,
   type GeocodingPlace,
-  formatCoordinates,
   searchPlaces,
 } from '@/lib/geocoding';
 import type { Room, Trip, TripId } from '@/types';
@@ -86,7 +86,7 @@ interface LocationAutocompleteProps {
   readonly value: string;
   /** Coordinates currently pinned for this location, if any */
   readonly coordinates?: Coordinates;
-  /** Callback when the location changes (free text, or a confirmed map place) */
+  /** Callback when the location changes (free text, a picked place, or a dragged pin) */
   readonly onChange: (value: string, coordinates?: Coordinates) => void;
   /** Callback when a trip is selected for import */
   readonly onImportTrip: (data: TripImportData) => void;
@@ -98,14 +98,6 @@ interface LocationAutocompleteProps {
   readonly id?: string;
   /** ID of the trip being edited (to exclude from suggestions) */
   readonly excludeTripId?: TripId;
-}
-
-/**
- * A place awaiting confirmation on the map.
- */
-interface PendingSelection {
-  readonly displayName: string;
-  readonly coordinates: Coordinates;
 }
 
 // ============================================================================
@@ -137,7 +129,6 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
   // cleared on the next keystroke. Keeping "should it be open" derived from the
   // two result lists is what lets the sources land independently.
   const [isDismissed, setIsDismissed] = useState(true);
-  const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const tripSearchIdRef = useRef(0);
@@ -317,27 +308,21 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
   );
 
   /**
-   * Handles selecting a map place — opens the map for confirmation.
+   * Handles selecting a map place — saves it and opens the map to adjust it.
+   *
+   * The place is saved here rather than after a confirm step. Picking it from
+   * the list is the decision; the map that follows is for nudging the pin, and
+   * every nudge saves too.
    */
-  const handleSelectPlace = useCallback((place: GeocodingPlace) => {
-    setIsDismissed(true);
-    setSuggestions([]);
-    setPlaces([]);
-    setPendingSelection({
-      displayName: place.label,
-      coordinates: place.coordinates,
-    });
-  }, []);
-
-  /**
-   * Re-opens the map on the location already pinned, to nudge the marker.
-   */
-  const handleAdjustPin = useCallback(() => {
-    if (!coordinates) {
-      return;
-    }
-    setPendingSelection({ displayName: value, coordinates });
-  }, [coordinates, value]);
+  const handleSelectPlace = useCallback(
+    (place: GeocodingPlace) => {
+      setIsDismissed(true);
+      setSuggestions([]);
+      setPlaces([]);
+      onChange(place.label, place.coordinates);
+    },
+    [onChange],
+  );
 
   /**
    * Drops the pin but keeps the typed location name.
@@ -347,31 +332,17 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
   }, [onChange, value]);
 
   /**
-   * Moves the pending pin as the user drags the marker or clicks the map.
+   * Saves the new pin position as the user drags the marker or clicks the map.
+   *
+   * Straight to the parent, with no confirm step in between. Where the marker
+   * sits is the value.
    */
-  const handleCoordinatesChange = useCallback((next: Coordinates) => {
-    setPendingSelection((prev) => (prev ? { ...prev, coordinates: next } : null));
-  }, []);
-
-  /**
-   * Commits the pending place: name and coordinates go to the parent together.
-   */
-  const handleConfirmSelection = useCallback(() => {
-    if (!pendingSelection) {
-      return;
-    }
-    onChange(pendingSelection.displayName, pendingSelection.coordinates);
-    setPendingSelection(null);
-    inputRef.current?.focus();
-  }, [onChange, pendingSelection]);
-
-  /**
-   * Abandons the pending place, leaving the field as it was.
-   */
-  const handleCancelSelection = useCallback(() => {
-    setPendingSelection(null);
-    inputRef.current?.focus();
-  }, []);
+  const handleCoordinatesChange = useCallback(
+    (next: Coordinates) => {
+      onChange(value, next);
+    },
+    [onChange, value],
+  );
 
   /**
    * Handles popover open state — close on external click.
@@ -424,7 +395,7 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
               value={value}
               onChange={handleInputChange}
               placeholder={placeholder}
-              disabled={disabled || pendingSelection !== null}
+              disabled={disabled}
               autoComplete="off"
               role="combobox"
               aria-expanded={isOpen}
@@ -506,47 +477,21 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
         </PopoverContent>
       </Popover>
 
-      {/* Map confirmation for a place the user just picked */}
-      {pendingSelection && (
-        <LocationMapConfirm
-          coordinates={pendingSelection.coordinates}
-          locationName={pendingSelection.displayName}
+      {/*
+        One state, not two. The map used to appear only while a pick waited to
+        be confirmed, and a compact row stood in for it afterwards with an
+        "adjust pin" button to bring it back. With the confirm step gone there
+        is nothing to wait for: the pin is shown whenever the trip has one, and
+        dragging it saves. "Remove pin" sits above the map because the map has
+        no buttons of its own any more.
+      */}
+      {coordinates && (
+        <LocationMapPicker
+          coordinates={coordinates}
           onCoordinatesChange={handleCoordinatesChange}
-          onConfirm={handleConfirmSelection}
-          onCancel={handleCancelSelection}
+          onRemove={disabled ? undefined : handleRemovePin}
+          removeLabel={t('trips.removePin')}
         />
-      )}
-
-      {/* Standing pin for an already-located trip */}
-      {!pendingSelection && coordinates && (
-        <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
-          <MapPin className="size-4 shrink-0 text-primary" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-            {t('trips.pinnedAt', { coordinates: formatCoordinates(coordinates) })}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 shrink-0 px-2"
-            onClick={handleAdjustPin}
-            disabled={disabled}
-          >
-            <Pencil className="mr-1 size-3.5" aria-hidden="true" />
-            {t('trips.adjustPin')}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="size-7 shrink-0 p-0"
-            onClick={handleRemovePin}
-            disabled={disabled}
-            aria-label={t('trips.removePin')}
-          >
-            <X className="size-3.5" />
-          </Button>
-        </div>
       )}
     </div>
   );

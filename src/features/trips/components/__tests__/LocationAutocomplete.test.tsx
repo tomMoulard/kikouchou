@@ -358,36 +358,16 @@ describe('LocationAutocomplete Map Places', () => {
     onLocationChange.mockClear();
     await user.click(screen.getByText('Brest, Finistère, Bretagne'));
 
-    // The map panel is up and nothing has been committed yet.
-    expect(
-      await screen.findByRole('button', { name: /confirmLocation/i }),
-    ).toBeInTheDocument();
-    expect(onLocationChange).not.toHaveBeenCalled();
-  });
-
-  it('reports the place name and its coordinates once confirmed', async () => {
-    const user = userEvent.setup();
-    respondWithPlaces(mockPlaces);
-    const onLocationChange = vi.fn();
-
-    render(<StatefulWrapper onLocationChange={onLocationChange} />);
-
-    await user.type(screen.getByRole('combobox'), 'Bre');
-    await waitFor(() => {
-      expect(screen.getByText('Brest, Finistère, Bretagne')).toBeInTheDocument();
-    });
-    await user.click(screen.getByText('Brest, Finistère, Bretagne'));
-
-    onLocationChange.mockClear();
-    await user.click(await screen.findByRole('button', { name: /confirmLocation/i }));
-
+    // Picking the place is the decision: it is saved at once, and the map that
+    // follows is only for nudging the pin.
     expect(onLocationChange).toHaveBeenCalledWith('Brest, Finistère, Bretagne', {
       lat: 48.3904,
       lon: -4.4861,
     });
+    expect(await screen.findByTestId('location-map-picker')).toBeInTheDocument();
   });
 
-  it('leaves the field untouched when the map is cancelled', async () => {
+  it('offers no confirm or cancel button on the map', async () => {
     const user = userEvent.setup();
     respondWithPlaces(mockPlaces);
     const onLocationChange = vi.fn();
@@ -399,18 +379,13 @@ describe('LocationAutocomplete Map Places', () => {
       expect(screen.getByText('Brest, Finistère, Bretagne')).toBeInTheDocument();
     });
     await user.click(screen.getByText('Brest, Finistère, Bretagne'));
-    await screen.findByRole('button', { name: /confirmLocation/i });
 
-    onLocationChange.mockClear();
-    await user.click(screen.getByRole('button', { name: /common\.cancel/i }));
+    await screen.findByTestId('location-map-picker');
 
-    await waitFor(() => {
-      expect(
-        screen.queryByRole('button', { name: /confirmLocation/i }),
-      ).not.toBeInTheDocument();
-    });
-    expect(onLocationChange).not.toHaveBeenCalled();
-    expect(screen.getByRole('combobox')).toHaveValue('Bre');
+    expect(
+      screen.queryByRole('button', { name: /confirmLocation/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /common\.cancel/i })).not.toBeInTheDocument();
   });
 
   it('still shows trip suggestions when the geocoder fails', async () => {
@@ -435,7 +410,9 @@ describe('LocationAutocomplete Map Places', () => {
 // ============================================================================
 
 describe('LocationAutocomplete Existing Pin', () => {
-  it('shows the coordinates of an already-pinned trip', () => {
+  // A map, and nothing else. The panel used to print the latitude and
+  // longitude under it, which says less to a reader than the pin does.
+  it('shows the map for an already-pinned trip, without its coordinates', () => {
     render(
       <StatefulWrapper
         initialValue="Brest, Bretagne"
@@ -443,14 +420,15 @@ describe('LocationAutocomplete Existing Pin', () => {
       />,
     );
 
-    expect(screen.getByText(/trips\.pinnedAt/)).toBeInTheDocument();
+    expect(screen.getByTestId('location-map-picker')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /trips\.removePin/ })).toBeInTheDocument();
+    expect(screen.queryByText(/48\.390400/)).not.toBeInTheDocument();
   });
 
-  it('shows no pin row when the trip has only a free-text location', () => {
+  it('shows no map when the trip has only a free-text location', () => {
     render(<StatefulWrapper initialValue="Somewhere nice" />);
 
-    expect(screen.queryByText(/trips\.pinnedAt/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('location-map-picker')).not.toBeInTheDocument();
   });
 
   it('drops the pin but keeps the name when the pin is removed', async () => {
@@ -494,9 +472,9 @@ describe('LocationAutocomplete Existing Pin', () => {
     });
   });
 
-  it('re-opens the map on the current pin so it can be nudged', async () => {
-    const user = userEvent.setup();
-
+  // There is no "adjust pin" button any more, and nothing to press to get the
+  // map back: it is on screen for as long as the trip has a pin.
+  it('keeps the map on screen without an adjust step', () => {
     render(
       <StatefulWrapper
         initialValue="Brest, Bretagne"
@@ -504,12 +482,8 @@ describe('LocationAutocomplete Existing Pin', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', { name: /trips\.adjustPin/ }));
-
-    expect(
-      await screen.findByRole('button', { name: /confirmLocation/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('48.390400, -4.486100')).toBeInTheDocument();
+    expect(screen.getByTestId('location-map-picker')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /trips\.adjustPin/ })).not.toBeInTheDocument();
   });
 });
 

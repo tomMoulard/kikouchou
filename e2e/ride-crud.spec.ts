@@ -38,7 +38,6 @@ const LABELS = {
   newTransport: /^new transport$|^nouveau transport$/i,
   ride: /^ride$|^trajet$/i,
   guest: /participant|guest/i,
-  confirmLocation: /^confirm$|^confirmer$/i,
   editRide: /^edit ride$|^modifier le trajet$/i,
   cancelRide: /^cancel ride$|^annuler le trajet$/i,
   meetingPoint: /meeting point|point de rendez-vous/i,
@@ -164,8 +163,9 @@ async function pickMeetingPoint(page: Page, name: string): Promise<void> {
     .filter({ hasText: new RegExp(name, 'i') })
     .first()
     .click();
-  await page.getByRole('button', { name: LABELS.confirmLocation }).click();
-  await expect(page.getByRole('button', { name: LABELS.confirmLocation })).toHaveCount(0);
+  // Picking the result saves it. There is no confirm step: the map that
+  // appears is for dragging the pin, and each drag saves too.
+  await expect(page.getByTestId('location-map-picker')).toBeVisible();
 }
 
 /**

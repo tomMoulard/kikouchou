@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { installLocalStorageDouble } from '@/test/local-storage';
 import { getGuestIdentityStorageKey } from '@/lib/sharing/guest-identity';
+import { markTripOrganised } from '../usePlanOwnTripPrompt';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { usePlanOwnTripPrompt } from '../usePlanOwnTripPrompt';
 import type { PersonId, ShareId, Trip, TripId, UnixTimestamp } from '@/types';
@@ -65,6 +66,31 @@ function joinAsGuest(trip: Trip): void {
 describe('usePlanOwnTripPrompt', () => {
   beforeEach(() => {
     storage.clear();
+  });
+
+  // Filling the create form's "You" row writes the organiser an identity
+  // through the same key the share wizard uses, so their own trip looked
+  // exactly like a joined one and the trip list offered to teach them how to
+  // plan a trip.
+  describe('for somebody who organised the trip themselves', () => {
+    it('stays hidden once this browser has created a trip', () => {
+      const trip = makeTrip();
+      joinAsGuest(trip);
+      markTripOrganised();
+
+      const { result } = renderHook(() => usePlanOwnTripPrompt([trip]));
+
+      expect(result.current.isVisible).toBe(false);
+    });
+
+    it('still shows for a guest who has organised nothing', () => {
+      const trip = makeTrip();
+      joinAsGuest(trip);
+
+      const { result } = renderHook(() => usePlanOwnTripPrompt([trip]));
+
+      expect(result.current.isVisible).toBe(true);
+    });
   });
 
   afterEach(() => {

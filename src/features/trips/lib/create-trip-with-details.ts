@@ -24,6 +24,7 @@ import {
   setCurrentTrip,
 } from '@/lib/db';
 import { writeGuestIdentity } from '@/lib/sharing/guest-identity';
+import { markTripOrganised } from '@/features/trips/hooks/usePlanOwnTripPrompt';
 import type { PersonId, Trip, TripFormData, TripId } from '@/types';
 
 // ============================================================================
@@ -150,6 +151,12 @@ export async function createTripWithDetails(draft: TripDraft): Promise<TripCreat
   if (selfPersonId && !writeGuestIdentity(trip.shareId, { personId: selfPersonId, tripId: trip.id })) {
     warnings.push('identity');
   }
+
+  // Remembered separately from that identity, because the identity cannot tell
+  // an organiser from a guest: both are written through the same key. Without
+  // this, filling the "You" row made the organiser's own trip read as a joined
+  // one, and the trip list offered to teach them how to plan a trip.
+  markTripOrganised();
 
   // Selected now so the calendar can show it the moment the screen navigates.
   if (draft.selectAsCurrent !== false) {

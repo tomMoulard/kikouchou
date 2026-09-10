@@ -1,43 +1,50 @@
 /**
- * @fileoverview Map confirmation step for a picked location.
+ * @fileoverview Map pin editor for a picked location.
  * Shows the selected place on an OpenStreetMap tile layer with a draggable
- * marker so the user can nudge the pin before committing it.
+ * marker. Every move of the marker is reported at once: the pin is the value,
+ * not a proposal waiting for approval.
  *
  * Shared by every location field: `LocationPicker` (transports, activities)
  * and `LocationAutocomplete` (trips).
  *
- * @module components/shared/LocationMapConfirm
+ * @module components/shared/LocationMapPicker
  */
 
 import { type ReactElement, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, MapPin, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet';
 import { type LatLng, divIcon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { type Coordinates, formatCoordinates } from '@/lib/geocoding';
+import { type Coordinates } from '@/lib/geocoding';
 
 // ============================================================================
 // Type Definitions
 // ============================================================================
 
 /**
- * Props for the LocationMapConfirm component.
+ * Props for the LocationMapPicker component.
  */
-export interface LocationMapConfirmProps {
+export interface LocationMapPickerProps {
   /** Coordinates currently under the marker */
   readonly coordinates: Coordinates;
-  /** Place name displayed under the map */
-  readonly locationName: string;
-  /** Called whenever the marker moves (drag or map click) */
+  /**
+   * Called whenever the marker moves, by drag or by map click.
+   *
+   * Each call is the new value, not a proposal: the caller saves it. There is
+   * no confirm step to wait for, and nothing to undo if the caller ignores one.
+   */
   readonly onCoordinatesChange: (coordinates: Coordinates) => void;
-  /** Called when the user accepts the pin */
-  readonly onConfirm: () => void;
-  /** Called when the user backs out */
-  readonly onCancel: () => void;
+  /**
+   * Called to drop the pin entirely. Omit it where the field already has its
+   * own way to clear the location, and no button is drawn.
+   */
+  readonly onRemove?: () => void;
+  /** Accessible name for the remove button. Required when `onRemove` is given. */
+  readonly removeLabel?: string;
   /** Height of the map in pixels (default: 200) */
   readonly height?: number;
   /** Additional CSS classes for the container */
@@ -163,31 +170,32 @@ function MapClickHandler({ onMapClick }: MapClickHandlerProps): null {
 // ============================================================================
 
 /**
- * Map preview with a draggable marker for confirming a picked location.
+ * Map preview with a draggable marker for adjusting a picked location.
+ *
+ * The panel has no confirm or cancel button. Picking a place already told the
+ * form where the place is, so a second step to say so again bought nothing,
+ * and it lost the pin for anyone who dragged the marker and then closed the
+ * form. Where the pin sits is the answer, at every moment.
  *
  * @param props - Component props
- * @returns The map confirmation panel
+ * @returns The map panel
  *
  * @example
  * ```tsx
- * <LocationMapConfirm
- *   coordinates={pending.coordinates}
- *   locationName={pending.label}
- *   onCoordinatesChange={(c) => setPending((p) => p && { ...p, coordinates: c })}
- *   onConfirm={() => commit(pending)}
- *   onCancel={() => setPending(null)}
+ * <LocationMapPicker
+ *   coordinates={coordinates}
+ *   onCoordinatesChange={(c) => onChange(label, c)}
  * />
  * ```
  */
-export const LocationMapConfirm = memo(function LocationMapConfirm({
+export const LocationMapPicker = memo(function LocationMapPicker({
   coordinates,
-  locationName,
   onCoordinatesChange,
-  onConfirm,
-  onCancel,
+  onRemove,
+  removeLabel,
   height = DEFAULT_MAP_HEIGHT,
   className,
-}: LocationMapConfirmProps): ReactElement {
+}: LocationMapPickerProps): ReactElement {
   const { t } = useTranslation();
 
   const handlePositionChange = useCallback(
@@ -201,6 +209,7 @@ export const LocationMapConfirm = memo(function LocationMapConfirm({
 
   return (
     <div
+      data-testid="location-map-picker"
       className={cn(
         'mt-2 rounded-md border border-border overflow-hidden',
         className,
@@ -236,36 +245,27 @@ export const LocationMapConfirm = memo(function LocationMapConfirm({
             {t('locationPicker.dragToAdjust', 'Drag marker or click to adjust location')}
           </div>
         </div>
-      </div>
 
-      {/* Location info and actions */}
-      <div className="p-3 bg-muted/30 space-y-3">
-        <div className="flex items-start gap-2">
-          <MapPin className="size-4 shrink-0 text-primary mt-0.5" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium truncate">{locationName}</p>
-            <p className="text-xs text-muted-foreground">
-              {formatCoordinates(coordinates)}
-            </p>
+        {/*
+          The remove control sits on the map rather than in a strip below it.
+          The panel used to carry a footer naming the place and printing its
+          latitude and longitude; the name is already in the field above, and a
+          pair of decimals tells the reader less than the pin they can see.
+        */}
+        {onRemove && (
+          <div className="absolute bottom-2 right-2 z-[1000]">
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon-sm"
+              onClick={onRemove}
+              aria-label={removeLabel}
+              className="shadow-md"
+            >
+              <X className="size-3.5" aria-hidden="true" />
+            </Button>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onCancel}
-            className="flex-1"
-          >
-            <X className="size-4 mr-1" aria-hidden="true" />
-            {t('common.cancel')}
-          </Button>
-          <Button type="button" size="sm" onClick={onConfirm} className="flex-1">
-            <Check className="size-4 mr-1" aria-hidden="true" />
-            {t('locationPicker.confirmLocation', 'Confirm')}
-          </Button>
-        </div>
+        )}
       </div>
     </div>
   );
