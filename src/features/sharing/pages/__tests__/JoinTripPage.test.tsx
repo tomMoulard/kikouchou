@@ -25,6 +25,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
 import { fetchClaimedParticipants } from '@/lib/sync/join-trip';
 import type { SyncState } from '@/lib/sync/SupabaseYjsProvider';
+import { isRunningStandalone } from '@/lib/pwa/display-mode';
 import type { Person, PersonId, TripId } from '@/types';
 
 // ============================================================================
@@ -33,9 +34,32 @@ import type { Person, PersonId, TripId } from '@/types';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, fallback?: string | Record<string, unknown>) =>
-      typeof fallback === 'string' ? fallback : _key,
+    t: (_key: string, fallback?: string | Record<string, unknown>) => {
+      if (typeof fallback === 'string') {
+        return fallback;
+      }
+      // `t(key, { tripName, defaultValue })`: interpolate the default, so the
+      // welcome can be asserted by what it says rather than by its key.
+      const options = fallback ?? {};
+      const template = options.defaultValue;
+      if (typeof template !== 'string') {
+        return _key;
+      }
+      return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) =>
+        String(options[name] ?? ''),
+      );
+    },
+    i18n: { language: 'en' },
   }),
+}));
+
+// `lib/posthog` reads `readDisplayMode` from the same module at import time,
+// so the mock has to carry the whole surface or the app's analytics module
+// throws while this page is being imported.
+vi.mock('@/lib/pwa/display-mode', () => ({
+  STANDALONE_MEDIA_QUERY: '(display-mode: standalone)',
+  readDisplayMode: vi.fn(() => 'browser'),
+  isRunningStandalone: vi.fn(() => false),
 }));
 
 const navigate = vi.fn();
@@ -67,10 +91,33 @@ vi.mock('@/lib/sync/join-trip', () => ({
   fetchClaimedParticipants: vi.fn(async () => new Set<string>()),
 }));
 
+// A localStorage double: this environment ships none, and the viewer's answer
+// to "which one are you" is written through `window.localStorage`.
+const storedEntries = new Map<string, string>();
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  writable: true,
+  value: {
+    get length(): number {
+      return storedEntries.size;
+    },
+    clear: (): void => storedEntries.clear(),
+    getItem: (key: string): string | null => storedEntries.get(key) ?? null,
+    key: (index: number): string | null => [...storedEntries.keys()][index] ?? null,
+    removeItem: (key: string): void => {
+      storedEntries.delete(key);
+    },
+    setItem: (key: string, value: string): void => {
+      storedEntries.set(key, value);
+    },
+  } satisfies Storage,
+});
+
 const mockedUseJoinTrip = vi.mocked(useJoinTrip);
 const mockedUseSyncStatus = vi.mocked(useSyncStatus);
 const mockedFetchClaimed = vi.mocked(fetchClaimedParticipants);
 const mockedUseTripContext = vi.mocked(useTripContext);
+const mockedStandalone = vi.mocked(isRunningStandalone);
 
 const TRIP_ID = 'trip-local-1' as TripId;
 /** A trip the invitee already had open before following the invite link. */
@@ -247,5 +294,122 @@ describe('JoinTripPage identity step', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ============================================================================
+// Viewer welcome
+// ============================================================================
+
+const VIEWER_TRIP = {
+  id: TRIP_ID,
+  name: 'Brittany',
+  shareId: 'share-abc1',
+  startDate: '2026-07-15',
+  endDate: '2026-07-22',
+  location: 'Carnac',
+  remoteTripId: 'remote-1',
+  viewerToken: 'tokentokentoken1',
+};
+
+function viewing(): void {
+  mockedUseJoinTrip.mockReturnValue({
+    phase: { kind: 'viewing', tripId: TRIP_ID },
+    retry: vi.fn(),
+  } as never);
+  mockedUseTripContext.mockReturnValue({
+    setCurrentTrip: vi.fn(),
+    trips: [VIEWER_TRIP],
+  } as never);
+}
+
+describe('JoinTripPage for a viewer', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    mockedStandalone.mockReturnValue(false);
+    viewing();
+  });
+
+  it('says whose trip this is, and offers the guests to pick from', async () => {
+    await seedPersons(TRIP_ID, ['Alice', 'Bob']);
+
+    render(<JoinTripPage />);
+
+    expect(screen.getByText("You're invited to Brittany")).toBeInTheDocument();
+    expect(screen.getByText('Carnac')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /alice/i })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /bob/i })).toBeInTheDocument();
+    // No account is asked for anywhere on this screen.
+    expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
+  });
+
+  it('introduces the app when it is not running as an installed app', () => {
+    render(<JoinTripPage />);
+
+    expect(screen.getByText(/welcome to kikouchou/i)).toBeInTheDocument();
+  });
+
+  it('skips the introduction inside the installed app', () => {
+    mockedStandalone.mockReturnValue(true);
+
+    render(<JoinTripPage />);
+
+    // The icon on the Home Screen has already said what the app is.
+    expect(screen.queryByText(/welcome to kikouchou/i)).not.toBeInTheDocument();
+  });
+
+  it('remembers the pick on this device and opens the calendar', async () => {
+    await seedPersons(TRIP_ID, ['Alice', 'Bob']);
+    render(<JoinTripPage />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /alice/i })).toBeInTheDocument();
+    });
+
+    screen.getByRole('button', { name: /alice/i }).click();
+
+    // Device-local, through the same key the share wizard writes, so every
+    // "my travel" view reads it back — and nothing goes to the server.
+    expect(JSON.parse(localStorage.getItem('kikouchou_guest_share-abc1') ?? '{}')).toEqual({
+      personId: 'person-alice',
+      tripId: TRIP_ID,
+    });
+    expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
+  });
+
+  it('lets somebody not on the list in anyway', async () => {
+    await seedPersons(TRIP_ID, ['Alice']);
+    render(<JoinTripPage />);
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /alice/i })).toBeInTheDocument();
+    });
+
+    screen.getByRole('button', { name: /not on the list/i }).click();
+
+    expect(localStorage.getItem('kikouchou_guest_share-abc1')).toBeNull();
+    expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
+  });
+
+  it('sends a returning viewer straight to the calendar', async () => {
+    localStorage.setItem(
+      'kikouchou_guest_share-abc1',
+      JSON.stringify({ personId: 'person-alice', tripId: TRIP_ID }),
+    );
+
+    render(<JoinTripPage />);
+
+    // Asked once; the calendar is what a returning guest came back for.
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
+    });
+  });
+
+  it('offers a look around when the trip has nobody in it yet', async () => {
+    render(<JoinTripPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /have a look around/i })).toBeInTheDocument();
+    });
   });
 });

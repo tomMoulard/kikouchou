@@ -59,6 +59,7 @@ import { formatDateRange } from '@/lib/utils/date-format';
 import type { Trip } from '@/types';
 
 import { SyncStatusBadge } from './SyncStatusBadge';
+import { ViewerUnlockCard } from './ViewerUnlockCard';
 
 // ============================================================================
 // Type Definitions
@@ -974,6 +975,7 @@ const DesktopSidebar = memo(function DesktopSidebar({
 export function Layout({ children }: LayoutProps): React.ReactElement {
   const { t } = useTranslation(),
    { currentTrip } = useTripContext(),
+   location = useLocation(),
    [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false),
 
   // Memoize derived values to prevent unnecessary re-renders
@@ -983,7 +985,18 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
   // Memoize callback to maintain stable reference for DesktopSidebar
    toggleSidebar = useCallback(() => {
     setIsSidebarCollapsed((prev) => !prev);
-  }, [setIsSidebarCollapsed]);
+  }, [setIsSidebarCollapsed]),
+
+  /**
+   * Whether the page being shown is a read-only trip's.
+   *
+   * The card that explains read-only and offers the sign-in belongs on the
+   * trip's own pages — calendar, rooms, guests — and not on the trip list,
+   * where a viewer trip is one card among others, nor on Settings.
+   */
+   showViewerCard =
+    currentTrip?.viewerToken !== undefined &&
+    location.pathname.startsWith(`/trips/${currentTrip.id}`);
 
   return (
     // `min-h-svh`, not `min-h-screen` (`100vh`): on a phone `100vh` is the tall
@@ -1034,6 +1047,7 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
           'focus:outline-none',
         )}
       >
+        {showViewerCard ? <ViewerUnlockCard className="mb-4" /> : null}
         {children}
       </main>
 

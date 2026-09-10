@@ -30,6 +30,8 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import {
   buildInviteUrl,
   createInvite,
+  inviteExpiryForTrip,
+  inviteOutlastsTrip,
   isInviteUsable,
   listInvites,
 } from '@/lib/sync/invites';
@@ -90,6 +92,10 @@ export function useTripShareLink(
    */
   const tripId = trip?.id ?? null;
   const userId = user?.id ?? null;
+  /** The token a viewer trip is read through: the link to hand on, as is. */
+  const viewerToken = trip?.viewerToken ?? null;
+  /** The trip's last day, which is what decides how long a new link lives. */
+  const endDate = trip?.endDate ?? null;
 
   useEffect(() => {
     // Set on setup, not only in cleanup: StrictMode's dev-time
@@ -102,6 +108,21 @@ export function useTripShareLink(
 
   useEffect(() => {
     if (!enabled || tripId === null) {
+      return;
+    }
+
+    // A viewer holds the link already. Forwarding it is what people do with an
+    // invitation, and it costs no account and no server call — the same token
+    // opens the same trip for the next person, read-only, until it expires.
+    if (viewerToken !== null) {
+      setState({
+        kind: 'invite',
+        token: viewerToken,
+        url: buildInviteUrl(window.location.origin, import.meta.env.BASE_URL || '/', viewerToken, {
+          origin: import.meta.env.VITE_SHARE_ORIGIN ?? '',
+          language: getCurrentLanguage(),
+        }),
+      });
       return;
     }
 
@@ -186,9 +207,12 @@ export function useTripShareLink(
       }
 
       // Reuse a live invite before minting another, so opening the dialog
-      // repeatedly does not litter the trip with links.
-      const existing = (await listInvites(client, remote.remoteTripId)).find((invite) =>
-        isInviteUsable(invite),
+      // repeatedly does not litter the trip with links — but only one that will
+      // still work on the trip's last day. A link minted under the old
+      // one-month default can be live today and dead before the trip starts.
+      const existing = (await listInvites(client, remote.remoteTripId)).find(
+        (invite) =>
+          isInviteUsable(invite) && (endDate === null || inviteOutlastsTrip(invite, endDate)),
       );
       if (cancelled || !isMountedRef.current) {
         return;
@@ -196,7 +220,7 @@ export function useTripShareLink(
 
       const token = existing
         ? existing.token
-        : await mintToken(client, remote.remoteTripId, userId);
+        : await mintToken(client, remote.remoteTripId, userId, endDate);
       if (cancelled || !isMountedRef.current) {
         return;
       }
@@ -243,7 +267,7 @@ export function useTripShareLink(
     return () => {
       cancelled = true;
     };
-  }, [attempt, enabled, isAvailable, isResolved, tripId, userId]);
+  }, [attempt, enabled, endDate, isAvailable, isResolved, tripId, userId, viewerToken]);
 
   const refresh = useCallback(() => {
     setAttempt((current) => current + 1);
@@ -256,11 +280,23 @@ export function useTripShareLink(
 // Internals
 // ============================================================================
 
+/**
+ * Mints a link that lives until a week after the trip ends.
+ *
+ * Without an end date — a trip row that has not loaded — the invite keeps its
+ * own one-month default, which is the pre-existing behaviour and never worse.
+ */
 async function mintToken(
   client: Parameters<typeof createInvite>[0],
   remoteTripId: string,
   userId: string,
+  endDate: string | null,
 ): Promise<string | null> {
-  const created = await createInvite(client, remoteTripId, userId);
+  const created = await createInvite(
+    client,
+    remoteTripId,
+    userId,
+    endDate === null ? {} : { expiresAt: inviteExpiryForTrip(endDate) },
+  );
   return created.status === 'created' ? created.invite.token : null;
 }

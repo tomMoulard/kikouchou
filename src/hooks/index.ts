@@ -36,6 +36,14 @@ export {
 // Trip identity — which guest this device belongs to
 export { useTripIdentity, type UseTripIdentityResult } from './useTripIdentity';
 
+// Trip access — whether this device may edit the current trip
+export {
+  tripAccessOf,
+  useTripAccess,
+  type TripAccess,
+  type UseTripAccessResult,
+} from './useTripAccess';
+
 // Date/time utilities
 export { useToday, getMsUntilMidnight, type UseTodayResult } from './useToday';
 

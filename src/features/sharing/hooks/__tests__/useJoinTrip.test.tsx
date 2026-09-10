@@ -15,6 +15,7 @@ import { useAuth } from '@/features/auth/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { redeemInvite } from '@/lib/sync/invites';
 import { materialiseJoinedTrip } from '@/lib/sync/join-trip';
+import { materialiseViewerTrip } from '@/lib/sync/viewer';
 import { useJoinTrip } from '../useJoinTrip';
 import type { TripId } from '@/types';
 
@@ -26,11 +27,17 @@ vi.mock('@/features/auth/AuthContext', () => ({ useAuth: vi.fn() }));
 vi.mock('@/lib/supabase/client', () => ({ getSupabaseClient: vi.fn() }));
 vi.mock('@/lib/sync/invites', () => ({ redeemInvite: vi.fn() }));
 vi.mock('@/lib/sync/join-trip', () => ({ materialiseJoinedTrip: vi.fn() }));
+vi.mock('@/lib/sync/viewer', () => ({ materialiseViewerTrip: vi.fn() }));
+vi.mock('@/lib/posthog', () => ({
+  default: { capture: vi.fn() },
+  captureUsage: vi.fn(),
+}));
 
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedGetClient = vi.mocked(getSupabaseClient);
 const mockedRedeem = vi.mocked(redeemInvite);
 const mockedMaterialise = vi.mocked(materialiseJoinedTrip);
+const mockedView = vi.mocked(materialiseViewerTrip);
 
 const TOKEN = 'aBcDeFgHiJkL3456';
 const REMOTE_TRIP_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -76,6 +83,7 @@ beforeEach(() => {
   mockedGetClient.mockReset();
   mockedRedeem.mockReset();
   mockedMaterialise.mockReset();
+  mockedView.mockReset();
   mockedGetClient.mockResolvedValue({} as never);
 });
 
@@ -87,18 +95,67 @@ afterEach(() => {
 // Preconditions
 // ============================================================================
 
-describe('useJoinTrip — before redeeming', () => {
-  it('asks for an account when signed out', async () => {
+describe('useJoinTrip — signed out', () => {
+  it('reads the trip through the token instead of asking for an account', async () => {
     signedOut();
+    mockedView.mockResolvedValue({ status: 'viewing', tripId: 'local-1' as TripId });
+
+    const { result } = renderHook(() => useJoinTrip(TOKEN));
+
+    // The wall that used to stand here — "Create an account so the others can
+    // see your room" — lost three invitees out of four. Reading needs no
+    // account; only the first edit does.
+    await waitFor(() => {
+      expect(result.current.phase).toEqual({ kind: 'viewing', tripId: 'local-1' });
+    });
+    expect(mockedView).toHaveBeenCalledWith(expect.anything(), TOKEN);
+    // And nothing is redeemed: reading is not joining, and burns no use.
+    expect(mockedRedeem).not.toHaveBeenCalled();
+    expect(mockedMaterialise).not.toHaveBeenCalled();
+  });
+
+  it('opens a trip this device already holds as a member', async () => {
+    signedOut();
+    mockedView.mockResolvedValue({ status: 'member', tripId: 'local-1' as TripId });
+
+    const { result } = renderHook(() => useJoinTrip(TOKEN));
+
+    // Joined earlier with an account, signed out since: the trip is here, so it
+    // opens rather than being read a second time as a viewer.
+    await waitFor(() => {
+      expect(result.current.phase).toEqual({ kind: 'joined', tripId: 'local-1' });
+    });
+  });
+
+  it.each(['not-found', 'revoked', 'expired', 'exhausted'] as const)(
+    'surfaces %s as its own reason for a reader too',
+    async (status) => {
+      signedOut();
+      mockedView.mockResolvedValue({ status });
+
+      const { result } = renderHook(() => useJoinTrip(TOKEN));
+
+      // A dead link is dead for readers as well: the same four reasons, the
+      // same copy, whichever door the person came through.
+      await waitFor(() => {
+        expect(result.current.phase).toEqual({ kind: 'rejected', reason: status });
+      });
+    },
+  );
+
+  it('reports a read failure with its message', async () => {
+    signedOut();
+    mockedView.mockResolvedValue({ status: 'error', message: 'Failed to fetch' });
 
     const { result } = renderHook(() => useJoinTrip(TOKEN));
 
     await waitFor(() => {
-      expect(result.current.phase).toEqual({ kind: 'needs-account' });
+      expect(result.current.phase).toEqual({ kind: 'failed', message: 'Failed to fetch' });
     });
-    // And does not burn a use on the invite before there is an account to join.
-    expect(mockedRedeem).not.toHaveBeenCalled();
   });
+});
+
+describe('useJoinTrip — before redeeming', () => {
 
   it('waits rather than concluding while the session is unresolved', () => {
     unresolved();
@@ -183,16 +240,19 @@ describe('useJoinTrip — unusable invites', () => {
     },
   );
 
-  it('routes an unauthenticated RPC back to the sign-in screen', async () => {
+  it('reports a session that lapsed mid-join as a failure to retry', async () => {
     signedIn();
-    // The session expired between the page loading and the call.
+    // The session expired between the page loading and the call. There is no
+    // sign-in screen to route back to any more — a signed-out visitor reads the
+    // trip instead — so this says what happened and offers the retry.
     mockedRedeem.mockResolvedValue({ status: 'unauthenticated' });
 
     const { result } = renderHook(() => useJoinTrip(TOKEN));
 
     await waitFor(() => {
-      expect(result.current.phase).toEqual({ kind: 'needs-account' });
+      expect(result.current.phase).toMatchObject({ kind: 'failed' });
     });
+    expect(mockedMaterialise).not.toHaveBeenCalled();
   });
 });
 
