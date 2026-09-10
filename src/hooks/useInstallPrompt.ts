@@ -399,9 +399,11 @@ export function useInstallPrompt(): UseInstallPromptResult {
         property of this event rather than the thing that triggers it.
 
         One capture per install rests on this hook having one consumer:
-        `InstallPrompt`, which `App` mounts once. A second consumer would
-        register a second listener and count the install twice — deduplicate
-        here before adding one.
+        `InstallPromptProvider`, which `App` mounts once and which hands the
+        result to the banner and the nudge alike through
+        `contexts/InstallPromptContext`. A second consumer would register a
+        second listener and count the install twice — read the context, do
+        not call this hook.
       */
       posthog?.capture('pwa_install_completed', {
         // Whether the app's own Install button produced this, as against

@@ -10,14 +10,17 @@ const mockIsInstalled = vi.fn(() => false);
 const mockInstallIntent = vi.fn(() => false);
 const mockManualInstallPlatform = vi.fn((): ManualInstallPlatform => 'generic');
 
-vi.mock('@/hooks/useInstallPrompt', () => ({
-  useInstallPrompt: () => ({
+// The banner reads the app's one install prompt through the context, which is
+// where `useInstallPrompt` runs; the context is what gets doubled here.
+vi.mock('@/contexts/InstallPromptContext', () => ({
+  useInstallPromptState: () => ({
     canInstall: mockCanInstall(),
     install: mockInstall,
     isInstalling: mockIsInstalling(),
     isInstalled: mockIsInstalled(),
     installIntent: mockInstallIntent(),
     manualInstallPlatform: mockManualInstallPlatform(),
+    requestInstall: vi.fn(),
   }),
 }));
 
@@ -307,6 +310,33 @@ describe('InstallPrompt', () => {
       // flashing past on a page load nobody asked it to appear on; a visitor
       // who just tapped "Install on your phone" is watching for it.
       expect(screen.getByRole('region')).toBeInTheDocument();
+    });
+
+    it('answers a request raised after mount, dismissal notwithstanding', async () => {
+      // Dismissed this week, nothing requested on arrival: silent.
+      installMemoryStorage();
+      localStorage.setItem(DISMISSAL_KEY, String(Date.now() - 60_000));
+      mockCanInstall.mockReturnValue(false);
+      mockInstallIntent.mockReturnValue(false);
+      mockManualInstallPlatform.mockReturnValue('ios');
+
+      const { rerender } = render(<InstallPrompt className="before" />, {
+        withProviders: false,
+      });
+      await act(async () => { vi.advanceTimersByTime(1100); });
+      expect(screen.queryByRole('region')).not.toBeInTheDocument();
+
+      // The nudge on a shared trip's calendar raises the request through the
+      // context while the banner is already mounted: the steps come up at
+      // once, and the standing dismissal does not apply — the visitor asked.
+      // (A context change re-renders through `memo`; a mocked hook does not,
+      // so the prop changes to stand in for it.)
+      mockInstallIntent.mockReturnValue(true);
+      rerender(<InstallPrompt className="after" />);
+      await act(async () => { vi.advanceTimersByTime(0); });
+
+      expect(screen.getByRole('region')).toBeInTheDocument();
+      expect(screen.getByText('pwa.manualInstall.ios')).toBeInTheDocument();
     });
 
     it('shows the browser own steps when no beforeinstallprompt was captured', () => {
