@@ -94,6 +94,8 @@ export interface RoomAssignmentSectionProps {
   readonly className?: string;
   /** Callback fired after any assignment CRUD operation */
   readonly onAssignmentChange?: () => void;
+  /** A read-only trip: the list shows who sleeps here and offers no change. */
+  readonly readOnly?: boolean;
 }
 
 /**
@@ -107,6 +109,8 @@ interface AssignmentItemProps {
   readonly isDisabled: boolean;
   readonly onEdit: (assignment: RoomAssignment) => void;
   readonly onDelete: (assignment: RoomAssignment) => void;
+  /** Hides the edit and delete buttons on a read-only trip. */
+  readonly readOnly: boolean;
 }
 
 /**
@@ -162,6 +166,7 @@ const AssignmentItem = memo(function AssignmentItem({
   isDisabled,
   onEdit,
   onDelete,
+  readOnly,
 }: AssignmentItemProps): ReactElement {
   const { t } = useTranslation();
 
@@ -246,6 +251,7 @@ const AssignmentItem = memo(function AssignmentItem({
       </div>
 
       {/* Action buttons — the 44px mobile floor comes from the `icon` button size */}
+      {!readOnly && (
       <div className="flex items-center gap-1 shrink-0">
         <Button
           variant="ghost"
@@ -270,6 +276,7 @@ const AssignmentItem = memo(function AssignmentItem({
           <Trash2 className="size-4 md:size-3.5" aria-hidden="true" />
         </Button>
       </div>
+      )}
     </div>
   );
 });
@@ -758,6 +765,7 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
 export const RoomAssignmentSection = memo(function RoomAssignmentSection({
   roomId,
   variant = 'compact',
+  readOnly = false,
   className,
   onAssignmentChange,
 }: RoomAssignmentSectionProps): ReactElement {
@@ -1045,17 +1053,19 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
             </Badge>
           )}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 md:h-7 gap-1"
-          disabled={isDisabled || persons.length === 0}
-          onClick={handleAddClick}
-          aria-label={t('assignments.assign')}
-        >
-          <Plus className="size-4 md:size-3.5" aria-hidden="true" />
-          <span className="sr-only sm:not-sr-only">{t('common.add')}</span>
-        </Button>
+        {!readOnly && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 md:h-7 gap-1"
+            disabled={isDisabled || persons.length === 0}
+            onClick={handleAddClick}
+            aria-label={t('assignments.assign')}
+          >
+            <Plus className="size-4 md:size-3.5" aria-hidden="true" />
+            <span className="sr-only sm:not-sr-only">{t('common.add')}</span>
+          </Button>
+        )}
       </div>
 
       {/* Assignments list or empty state */}
@@ -1079,6 +1089,7 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
               isDisabled={isDisabled}
               onEdit={handleEditAssignment}
               onDelete={handleDeleteAssignment}
+              readOnly={readOnly}
             />
           ))}
 

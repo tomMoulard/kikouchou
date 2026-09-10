@@ -36,6 +36,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { VehicleDialog } from '@/features/vehicles/components/VehicleDialog';
 import { useOfflineAwareNotify } from '@/hooks';
+import { useTripAccess } from '@/hooks/useTripAccess';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useRideContext } from '@/contexts/RideContext';
 import { useTripContext } from '@/contexts/TripContext';
@@ -59,6 +60,8 @@ interface VehicleCardProps {
   readonly owner: Person | undefined;
   readonly onEdit: (vehicleId: VehicleId) => void;
   readonly onDelete: (vehicleId: VehicleId) => void;
+  /** A read-only trip: the car is described and cannot be opened or removed. */
+  readonly readOnly?: boolean;
 }
 
 // ============================================================================
@@ -96,6 +99,7 @@ const VehicleCard = memo(function VehicleCard({
   owner,
   onEdit,
   onDelete,
+  readOnly = false,
 }: VehicleCardProps): ReactElement {
   const { t } = useTranslation();
 
@@ -124,27 +128,38 @@ const VehicleCard = memo(function VehicleCard({
       )}
     >
       <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
-        <button
-          type="button"
-          onClick={handleEdit}
-          className="flex-1 text-left focus-visible:outline-none"
-          aria-label={t('vehicles.editNamed', { name: vehicle.name })}
-        >
-          <CardTitle className="text-base">{vehicle.name}</CardTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {owner ? owner.name : t('vehicles.noOwner')}
-          </p>
-        </button>
+        {readOnly ? (
+          <div className="flex-1 text-left">
+            <CardTitle className="text-base">{vehicle.name}</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {owner ? owner.name : t('vehicles.noOwner')}
+            </p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleEdit}
+            className="flex-1 text-left focus-visible:outline-none"
+            aria-label={t('vehicles.editNamed', { name: vehicle.name })}
+          >
+            <CardTitle className="text-base">{vehicle.name}</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {owner ? owner.name : t('vehicles.noOwner')}
+            </p>
+          </button>
+        )}
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={handleDelete}
-          aria-label={t('vehicles.deleteNamed', { name: vehicle.name })}
-        >
-          <Trash2 className="size-4" aria-hidden="true" />
-        </Button>
+        {!readOnly && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={handleDelete}
+            aria-label={t('vehicles.deleteNamed', { name: vehicle.name })}
+          >
+            <Trash2 className="size-4" aria-hidden="true" />
+          </Button>
+        )}
       </CardHeader>
 
       <CardContent className="flex flex-wrap items-center gap-2">
@@ -253,6 +268,8 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
   // ============================================================================
   // Event Handlers
   // ============================================================================
+
+  const { canEdit } = useTripAccess();
 
   const handleCreate = useCallback(() => {
     setEditingId(null);
@@ -371,7 +388,7 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
         description={t('vehicles.description')}
         backLink={`/trips/${tripIdFromUrl}/transports`}
         action={
-          vehicles.length > 0 ? (
+          vehicles.length > 0 && canEdit ? (
             <Button onClick={handleCreate}>
               <Plus className="mr-2 size-4" aria-hidden="true" />
               {t('vehicles.new')}
@@ -385,10 +402,14 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
           icon={Car}
           title={t('vehicles.noVehicles')}
           description={t('vehicles.emptyDescription')}
-          action={{
-            label: t('vehicles.new'),
-            onClick: handleCreate,
-          }}
+          {...(canEdit
+            ? {
+                action: {
+                  label: t('vehicles.new'),
+                  onClick: handleCreate,
+                },
+              }
+            : {})}
         />
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -403,6 +424,7 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
                 }
                 onEdit={handleEdit}
                 onDelete={handleRequestDelete}
+                readOnly={!canEdit}
               />
             </li>
           ))}

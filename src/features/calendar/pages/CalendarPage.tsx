@@ -29,6 +29,7 @@ import {
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify } from '@/hooks';
+import { useTripAccess } from '@/hooks/useTripAccess';
 import {
   addMonths,
   eachDayOfInterval,
@@ -155,6 +156,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { notifySuccess } = useOfflineAwareNotify();
+  const { canEdit } = useTripAccess();
 
   // Context hooks
   const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
@@ -261,11 +263,15 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     travel, with nothing to click. The rule itself lives in
     `shouldShowTripSetupChecklist`, next to the checklist it hides.
   */
-  const showSetupChecklist = shouldShowTripSetupChecklist({
-    checklist: setupChecklist,
-    arrivals,
-    departures,
-  });
+  // Never for a viewer: the checklist is a list of things to add, and a
+  // read-only copy has nothing to add them with.
+  const showSetupChecklist =
+    canEdit &&
+    shouldShowTripSetupChecklist({
+      checklist: setupChecklist,
+      arrivals,
+      departures,
+    });
 
   // The frame's own day-axis builder, so the width decision counts exactly the
   // columns the timeline will draw.
@@ -1308,8 +1314,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           onTransportClick={handleTransportClick}
           onActivityClick={handleActivityClick}
           rideForTransport={rideForTransport}
-          onAddGuests={handleAddGuests}
-          onAddRooms={handleAddRooms}
+          {...(canEdit ? { onAddGuests: handleAddGuests, onAddRooms: handleAddRooms } : {})}
           hideEmptyState={showSetupChecklist}
         />
       )}
@@ -1335,14 +1340,18 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
           icon={CalendarIcon}
           title={t('calendar.noAssignmentsTitle', 'Nothing scheduled yet')}
           description={t('calendar.noAssignments')}
-          action={{
-            label: t('calendar.addGuests', 'Add guests'),
-            onClick: handleAddGuests,
-          }}
-          secondaryAction={{
-            label: t('calendar.addRooms', 'Add rooms'),
-            onClick: handleAddRooms,
-          }}
+          {...(canEdit
+            ? {
+                action: {
+                  label: t('calendar.addGuests', 'Add guests'),
+                  onClick: handleAddGuests,
+                },
+                secondaryAction: {
+                  label: t('calendar.addRooms', 'Add rooms'),
+                  onClick: handleAddRooms,
+                },
+              }
+            : {})}
         />
       )}
 
@@ -1353,6 +1362,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         event={selectedEvent}
         onEdit={handleEventEdit}
         onDelete={handleEventDelete}
+        canEdit={canEdit}
       />
 
       {/* Transport Edit Dialog */}

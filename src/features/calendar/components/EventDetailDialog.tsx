@@ -135,6 +135,11 @@ export interface EventDetailDialogProps {
   readonly onEdit: () => void;
   /** Callback when delete is confirmed */
   readonly onDelete: () => Promise<void>;
+  /**
+   * Whether the footer offers edit and delete. Off for a read-only trip, where
+   * the dialog is the detail view and nothing more.
+   */
+  readonly canEdit?: boolean;
 }
 
 // ============================================================================
@@ -656,6 +661,7 @@ const EventDetailDialog = memo(function EventDetailDialog({
   event,
   onEdit,
   onDelete,
+  canEdit = true,
 }: EventDetailDialogProps) {
   const { t, i18n } = useTranslation();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -757,29 +763,33 @@ const EventDetailDialog = memo(function EventDetailDialog({
             )}
           </div>
 
-          <Separator />
+          {canEdit && (
+            <>
+              <Separator />
 
-          {/* Action Buttons */}
-          <DialogFooter className="flex-row gap-2 sm:justify-between">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleEditClick}
-              className="flex-1 sm:flex-none h-11 md:h-8"
-            >
-              <Pencil className="size-4 mr-2" aria-hidden="true" />
-              {t('common.edit')}
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDeleteClick}
-              className="flex-1 sm:flex-none h-11 md:h-8"
-            >
-              <Trash2 className="size-4 mr-2" aria-hidden="true" />
-              {t('common.delete')}
-            </Button>
-          </DialogFooter>
+              {/* Action Buttons */}
+              <DialogFooter className="flex-row gap-2 sm:justify-between">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleEditClick}
+                  className="flex-1 sm:flex-none h-11 md:h-8"
+                >
+                  <Pencil className="size-4 mr-2" aria-hidden="true" />
+                  {t('common.edit')}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDeleteClick}
+                  className="flex-1 sm:flex-none h-11 md:h-8"
+                >
+                  <Trash2 className="size-4 mr-2" aria-hidden="true" />
+                  {t('common.delete')}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

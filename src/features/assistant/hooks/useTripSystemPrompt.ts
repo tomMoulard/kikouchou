@@ -548,6 +548,12 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       currentTrip.remoteTripId
         ? '- Sharing: shared — everyone invited sees changes as they happen'
         : '- Sharing: private to this device — nobody else can see it until it is shared',
+      // A viewer trip is read from an invite link with no account; every action
+      // would fail, so the model is told not to offer one rather than left to
+      // find out.
+      ...(currentTrip.viewerToken !== undefined
+        ? ['- Access: read-only on this device (opened from an invite link, no account). Do not perform actions; say a sign-in is needed to change anything.']
+        : []),
       ...(currentTrip.description
         ? [`- Description: ${toPromptText(currentTrip.description)}`]
         : []),

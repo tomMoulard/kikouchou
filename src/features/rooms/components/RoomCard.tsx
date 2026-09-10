@@ -85,6 +85,14 @@ export interface RoomCardProps {
    * is an assignment, and the label says so.
    */
   readonly claimsForSelf?: boolean;
+  /**
+   * A read-only trip: no menu, no claim, no assignment controls.
+   *
+   * Hidden rather than disabled. A disabled menu on a card somebody cannot edit
+   * is a promise of a permission that does not exist; the card on the trip's
+   * pages says why, once, and the controls simply are not there.
+   */
+  readonly readOnly?: boolean;
   /** Content to render when expanded (typically RoomAssignmentSection) */
   readonly expandedContent?: ReactNode;
 }
@@ -138,6 +146,7 @@ const RoomCard = memo(function RoomCard({
   onDuplicate,
   onClaim,
   claimsForSelf = false,
+  readOnly = false,
   expandedContent,
 }: RoomCardProps) {
   const { t } = useTranslation(),
@@ -304,8 +313,10 @@ const RoomCard = memo(function RoomCard({
           />
         )}
 
-        {/* Dropdown Menu - positioned absolutely in top-right corner */}
-        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions -- The div has no behaviour of its own: the handlers only stop propagation so the full-card activation button underneath does not swallow a click meant for the menu. The interactive elements are the ones inside it. */}
+        {/* Dropdown Menu - positioned absolutely in top-right corner. Absent on
+            a read-only trip: there is nothing it could do. */}
+        {!readOnly && (
+        // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- The div has no behaviour of its own: the handlers only stop propagation so the full-card activation button underneath does not swallow a click meant for the menu. The interactive elements are the ones inside it.
         <div
           className="absolute top-2 right-2 z-20"
           onClick={handleMenuAreaClick}
@@ -344,6 +355,7 @@ const RoomCard = memo(function RoomCard({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        )}
 
         {/* Card Header - Room name and capacity badge */}
         <CardHeader className="pb-2 pr-12">
@@ -424,7 +436,7 @@ const RoomCard = memo(function RoomCard({
           )}
 
           {/* Claim / assign button */}
-          {availableSpots > 0 && onClaim && (
+          {availableSpots > 0 && onClaim && !readOnly && (
             <Button
               variant="default"
               size="sm"

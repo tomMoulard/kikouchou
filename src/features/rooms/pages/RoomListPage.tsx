@@ -32,6 +32,7 @@ import {
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify } from '@/hooks';
+import { useTripAccess } from '@/hooks/useTripAccess';
 import { parseISO } from 'date-fns';
 import { BedDouble, DoorOpen, Plus, Sparkles } from 'lucide-react';
 import {
@@ -185,6 +186,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
   // Context hooks
    { notifySuccess } = useOfflineAwareNotify(),
+   { canEdit } = useTripAccess(),
 
    { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
    {
@@ -998,10 +1000,14 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             icon={DoorOpen}
             title={t('rooms.empty')}
             description={t('rooms.emptyDescription')}
-            action={{
-              label: t('rooms.new'),
-              onClick: handleAddRoom,
-            }}
+            {...(canEdit
+              ? {
+                  action: {
+                    label: t('rooms.new'),
+                    onClick: handleAddRoom,
+                  },
+                }
+              : {})}
           />
         </div>
 
@@ -1021,7 +1027,9 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
   return (
     <DndContext
-      sensors={sensors}
+      // No sensors on a read-only trip: nothing can be dragged, so nothing
+      // announces itself as draggable.
+      sensors={canEdit ? sensors : []}
       accessibility={{ announcements: dragAnnouncements }}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
@@ -1058,19 +1066,21 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             />
           }
           action={
-            <>
-              {persons.length > 0 && unassignedGuests.length > 0 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleSuggestAllocation}
-                >
-                  <Sparkles className="mr-2 size-4" aria-hidden="true" />
-                  {t('rooms.suggest.button')}
-                </Button>
-              )}
-              {headerAction}
-            </>
+            canEdit ? (
+              <>
+                {persons.length > 0 && unassignedGuests.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSuggestAllocation}
+                  >
+                    <Sparkles className="mr-2 size-4" aria-hidden="true" />
+                    {t('rooms.suggest.button')}
+                  </Button>
+                )}
+                {headerAction}
+              </>
+            ) : undefined
           }
         />
 
@@ -1132,14 +1142,16 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
                   onEdit={handleRoomEdit}
                   onDelete={handleRoomDelete}
                   onDuplicate={handleRoomDuplicate}
-                  {...(tripHasNoNights ? {} : { onClaim: handleClaimRoom })}
+                  {...(tripHasNoNights || !canEdit ? {} : { onClaim: handleClaimRoom })}
                   claimsForSelf={selfPersonId !== undefined}
                   isDisabled={isActionInProgress}
+                  readOnly={!canEdit}
                   isExpanded={expandedRoomId === room.id}
                   expandedContent={
                     <RoomAssignmentSection
                       roomId={room.id}
                       variant="compact"
+                      readOnly={!canEdit}
                     />
                   }
                 />
@@ -1162,26 +1174,32 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             endDate: currentTrip.endDate,
           }}
           todayKey={todayStr as ISODateString}
-          onEditRoom={handleRoomEdit}
-          onAssignGuestToRoom={assignGuestToRoom}
-          onMoveAssignmentToRoom={moveAssignmentToRoom}
+          {...(canEdit
+            ? {
+                onEditRoom: handleRoomEdit,
+                onAssignGuestToRoom: assignGuestToRoom,
+                onMoveAssignmentToRoom: moveAssignmentToRoom,
+              }
+            : {})}
         />
       )}
 
       {/* Floating Action Button for mobile */}
-      <Button
-        onClick={handleAddRoom}
-        size="lg"
-        className={cn(
-          'fixed bottom-nav-safe right-4 z-10',
-          'size-14 rounded-full shadow-lg',
-          'sm:hidden',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        )}
-        aria-label={t('rooms.new')}
-      >
-        <Plus className="size-6" aria-hidden="true" />
-      </Button>
+      {canEdit && (
+        <Button
+          onClick={handleAddRoom}
+          size="lg"
+          className={cn(
+            'fixed bottom-nav-safe right-4 z-10',
+            'size-14 rounded-full shadow-lg',
+            'sm:hidden',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          )}
+          aria-label={t('rooms.new')}
+        >
+          <Plus className="size-6" aria-hidden="true" />
+        </Button>
+      )}
 
       {/* Room Create/Edit Dialog */}
       <RoomDialog

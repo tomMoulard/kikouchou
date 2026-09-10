@@ -31,6 +31,7 @@ import type { Locale } from 'date-fns';
 import { CalendarDays, ChevronDown, ChevronRight, History, Plus } from 'lucide-react';
 
 import { useOfflineAwareNotify, useTripIdentity } from '@/hooks';
+import { useTripAccess } from '@/hooks/useTripAccess';
 import { useToday } from '@/hooks/useToday';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -77,6 +78,8 @@ interface ActivityDateGroupSectionProps {
   readonly onEdit: (activityId: ActivityId) => void;
   readonly onDelete: (activityId: ActivityId) => void;
   readonly onToggleParticipation: (activityId: ActivityId, joining: boolean) => void;
+  /** A read-only trip: cards without menus or join buttons. */
+  readonly readOnly: boolean;
 }
 
 // ============================================================================
@@ -95,6 +98,7 @@ const ActivityDateGroupSection = memo(function ActivityDateGroupSection({
   onEdit,
   onDelete,
   onToggleParticipation,
+  readOnly,
 }: ActivityDateGroupSectionProps): ReactElement {
   return (
     <section aria-labelledby={`activity-date-header-${group.dateKey}`}>
@@ -120,6 +124,7 @@ const ActivityDateGroupSection = memo(function ActivityDateGroupSection({
               onEdit={onEdit}
               onDelete={onDelete}
               onToggleParticipation={onToggleParticipation}
+              readOnly={readOnly}
             />
           </div>
         ))}
@@ -206,6 +211,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
    * activity. `useTripIdentity` answers the question once, for every screen.
    */
   const { myPersonId: currentPersonId } = useTripIdentity();
+  const { canEdit } = useTripAccess();
 
   /**
    * Day a new activity starts on: today while the trip is running, its first
@@ -413,7 +419,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
       <PageHeader
         title={t('activities.title')}
         description={currentTrip.name}
-        action={headerAction}
+        action={canEdit ? headerAction : undefined}
       />
 
       <ViewSwitcher
@@ -437,10 +443,14 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
             icon={CalendarDays}
             title={t('activities.empty')}
             description={t('activities.emptyDescription')}
-            action={{
-              label: t('activities.new'),
-              onClick: handleAddActivity,
-            }}
+            {...(canEdit
+              ? {
+                  action: {
+                    label: t('activities.new'),
+                    onClick: handleAddActivity,
+                  },
+                }
+              : {})}
           />
         </div>
       ) : currentView === 'timeline' ? (
@@ -470,6 +480,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
               onEdit={handleEdit}
               onDelete={handleDeleteClick}
               onToggleParticipation={handleToggleParticipation}
+              readOnly={!canEdit}
             />
           ))}
 
@@ -514,6 +525,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
                       onEdit={handleEdit}
                       onDelete={handleDeleteClick}
                       onToggleParticipation={handleToggleParticipation}
+                      readOnly={!canEdit}
                     />
                   ))}
                 </div>
@@ -524,19 +536,21 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
       )}
 
       {/* Floating action button for mobile */}
-      <Button
-        onClick={handleAddActivity}
-        size="lg"
-        className={cn(
-          'fixed bottom-nav-safe right-4 z-10',
-          'size-14 rounded-full shadow-lg',
-          'sm:hidden',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        )}
-        aria-label={t('activities.new')}
-      >
-        <Plus className="size-6" aria-hidden="true" />
-      </Button>
+      {canEdit && (
+        <Button
+          onClick={handleAddActivity}
+          size="lg"
+          className={cn(
+            'fixed bottom-nav-safe right-4 z-10',
+            'size-14 rounded-full shadow-lg',
+            'sm:hidden',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          )}
+          aria-label={t('activities.new')}
+        >
+          <Plus className="size-6" aria-hidden="true" />
+        </Button>
+      )}
 
       {/* Delete confirmation */}
       <ConfirmDialog

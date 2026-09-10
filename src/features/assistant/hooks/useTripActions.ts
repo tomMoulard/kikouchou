@@ -17,6 +17,7 @@ import {
 } from '@/features/activities/utils/activity-utils';
 
 import { useOfflineAwareNotify } from '@/hooks';
+import { tripAccessOf } from '@/hooks/useTripAccess';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { toCanonicalDatetime } from '@/lib/db/transport-datetime';
@@ -357,6 +358,17 @@ export function useTripActions(): UseTripActionsReturn {
       const actions = parseActionBlocks(response);
 
       if (actions.length === 0) {
+        return { count: 0, summaries: [] };
+      }
+
+      // A viewer trip is the server's document, replayed and never written: an
+      // action the assistant performed on it would sit unsent on this device
+      // and be pushed over everybody's copy the day the viewer signs in. The
+      // system prompt says so too, so the model rarely gets this far.
+      if (currentTrip !== null && tripAccessOf(currentTrip) === 'viewer') {
+        notify.error(
+          t('assistant.readOnlyTrip', 'This trip is read-only on this device. Sign in to change it.'),
+        );
         return { count: 0, summaries: [] };
       }
 
