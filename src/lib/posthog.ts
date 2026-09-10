@@ -44,6 +44,8 @@
 
 import posthog from 'posthog-js';
 
+import { readDisplayMode } from '@/lib/pwa/display-mode';
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -119,6 +121,16 @@ const allowLocalhost = import.meta.env.VITE_POSTHOG_ALLOW_LOCALHOST === 'true';
  */
 const BASE_SUPER_PROPERTIES = {
   app_version: import.meta.env.VITE_APP_VERSION ?? 'dev',
+  /**
+   * `standalone` for an installed app, `browser` for a tab.
+   *
+   * The question this project most wants answered — do people who install
+   * come back more than people who do not? — was unanswerable before this
+   * property existed: `pwa_install_completed` says an install happened, and
+   * nothing said which of the later events came from the installed copy. Read
+   * once at init: a page does not change how it is displayed while loaded.
+   */
+  display_mode: readDisplayMode(),
 } as const;
 
 let posthogClient: typeof posthog | undefined;
@@ -283,6 +295,11 @@ export function resetAnalyticsIdentity(): void {
  *   join flow that `trip_joined` already counts.
  * - `pwa_install_completed` happens once per device, ever.
  * - `trip_deleted` is a deliberate action but it is cleanup, not use.
+ *
+ * `trip_viewed` is *in*, deliberately: an invitee opening a shared trip
+ * through its link, with no account, is the first value moment this app has
+ * for most of the people who ever reach it. Counting only members would say
+ * "nobody uses sharing" about a trip six guests read every day.
  */
 export type UsageAction =
   | 'activity_saved'
@@ -297,6 +314,7 @@ export type UsageAction =
   | 'trip_imported'
   | 'trip_joined'
   | 'trip_updated'
+  | 'trip_viewed'
   | 'vehicle_saved';
 
 /**

@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import posthog from '@/lib/posthog';
+import { STANDALONE_MEDIA_QUERY, isRunningStandalone } from '@/lib/pwa/display-mode';
 
 // ============================================================================
 // Type Definitions
@@ -113,43 +114,15 @@ export interface UseInstallPromptResult {
 // ============================================================================
 
 /**
- * Media query for detecting standalone display mode (installed PWA).
- */
-const STANDALONE_MEDIA_QUERY = '(display-mode: standalone)',
-
-/**
  * Query parameter carrying an install request from the landing page, and the
  * one value that counts as one: `https://app.kikouchou.app/?install=1`.
  */
- INSTALL_PARAM = 'install',
+const INSTALL_PARAM = 'install',
  INSTALL_PARAM_VALUE = '1';
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Checks if the app is running in standalone mode (installed PWA).
- *
- * @returns True if running as installed PWA
- */
-function isRunningStandalone(): boolean {
-  if (typeof window === 'undefined') {return false;}
-
-  // Check display-mode media query
-  if (window.matchMedia(STANDALONE_MEDIA_QUERY).matches) {
-    return true;
-  }
-
-  // Check iOS standalone mode
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- `navigator.standalone` is a non-standard iOS Safari property, absent from lib.dom.
-  const nav = navigator as any;
-  if (nav.standalone === true) {
-    return true;
-  }
-
-  return false;
-}
 
 /**
  * Reads the install request off the current URL.

@@ -170,7 +170,48 @@ describe('lib/posthog', () => {
 
     await importPosthog();
 
-    expect(mockRegister).toHaveBeenCalledWith({ app_version: 'main@abc1234' });
+    expect(mockRegister).toHaveBeenCalledWith(
+      expect.objectContaining({ app_version: 'main@abc1234' }),
+    );
+  });
+
+  it('registers how the page is displayed on every event', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+
+    await importPosthog();
+
+    // The test setup's `matchMedia` matches nothing, which is a browser tab.
+    // This property is what lets retention be split by installed and not:
+    // `pwa_install_completed` says an install happened, and until this nothing
+    // said which later events came from the installed copy.
+    expect(mockRegister).toHaveBeenCalledWith(
+      expect.objectContaining({ display_mode: 'browser' }),
+    );
+  });
+
+  it('reports standalone when the page runs as an installed app', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+    const matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({
+          matches: query === '(display-mode: standalone)',
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+
+    try {
+      await importPosthog();
+    } finally {
+      matchMedia.mockRestore();
+    }
+
+    expect(mockRegister).toHaveBeenCalledWith(
+      expect.objectContaining({ display_mode: 'standalone' }),
+    );
   });
 });
 
@@ -193,7 +234,9 @@ describe('resetAnalyticsIdentity', () => {
     // leave the rest of the session with no `app_version`, so every event after
     // a sign-out falls out of the breakdown the project is sliced by.
     expect(mockReset).toHaveBeenCalledTimes(1);
-    expect(mockRegister).toHaveBeenCalledWith({ app_version: 'main@abc1234' });
+    expect(mockRegister).toHaveBeenCalledWith(
+      expect.objectContaining({ app_version: 'main@abc1234', display_mode: 'browser' }),
+    );
     expect(mockReset.mock.invocationCallOrder[0]!).toBeLessThan(
       mockRegister.mock.invocationCallOrder[0]!,
     );
