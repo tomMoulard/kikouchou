@@ -59,6 +59,8 @@ import { cn } from '@/lib/utils';
 import { formatDateRange } from '@/lib/utils/date-format';
 import type { Trip } from '@/types';
 
+import { TripGlancePanel } from '@/features/summary/components/TripGlancePanel';
+
 import { SyncStatusBadge } from './SyncStatusBadge';
 import { ViewerUnlockCard } from './ViewerUnlockCard';
 import { ReminderCard } from './ReminderCard';
@@ -139,6 +141,42 @@ const SETTINGS_NAV_ITEM: NavItem = {
   icon: Settings,
   requiresTrip: false,
 };
+
+/**
+ * The trip pages that get the organiser's column beside them.
+ *
+ * An allowlist rather than "every trip page", because three of them already
+ * spend the whole width on purpose: the transport map, the run sheet and the
+ * analytics charts. Nothing here is wider than a reading column, so the free
+ * two thirds of a laptop are the panel's to take.
+ */
+const GLANCE_PATH_SUFFIXES: readonly string[] = [
+  'calendar',
+  'rooms',
+  'persons',
+  'transports',
+  'activities',
+  'money',
+  'edit',
+] as const;
+
+/**
+ * Whether this path is one of {@link GLANCE_PATH_SUFFIXES} for this trip.
+ *
+ * Matched on the whole remainder of the path, so `/transports` gets the panel
+ * while `/transports/map` and `/transports/vehicles` do not.
+ */
+function hasGlancePanel(pathname: string, tripId: string | null): boolean {
+  if (tripId === null) {
+    return false;
+  }
+  const prefix = `/trips/${tripId}/`;
+  if (!pathname.startsWith(prefix)) {
+    return false;
+  }
+  const suffix = pathname.slice(prefix.length).replace(/\/$/, '');
+  return GLANCE_PATH_SUFFIXES.includes(suffix);
+}
 
 /**
  * AI Assistant navigation item.
@@ -1016,7 +1054,16 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
    */
    showReminderOffer =
     currentTrip !== null && location.pathname === `/trips/${currentTrip.id}/calendar`,
-   canReceivePush = isPushSupported();
+   canReceivePush = isPushSupported(),
+
+  /**
+   * Whether the page beside the content gets the organiser's column.
+   *
+   * See {@link GLANCE_PATH_SUFFIXES}. The panel itself is hidden below `xl`,
+   * so this only decides whether the two-column wrapper is worth mounting at
+   * all — a phone renders `children` exactly as it did before.
+   */
+   showGlancePanel = hasGlancePanel(location.pathname, tripId);
 
   return (
     // `min-h-svh`, not `min-h-screen` (`100vh`): on a phone `100vh` is the tall
@@ -1074,7 +1121,26 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
         {showReminderOffer && !canReceivePush ? (
           <InstallNudgeCard trip={currentTrip} className="mb-4" />
         ) : null}
-        {children}
+        {/*
+          Two columns from `xl` up on the trip pages, one everywhere else.
+
+          The pages keep their own reading-width caps: they simply stop being
+          the only thing on a 1720px screen. `min-w-0` on the content column is
+          what lets a page's own horizontal scroller — the calendar timeline,
+          the wide tables — still shrink instead of pushing the panel off the
+          edge, and the panel sticks so it stays readable down a long list.
+        */}
+        {showGlancePanel && currentTrip !== null ? (
+          <div className="xl:flex xl:items-start xl:gap-6">
+            <div className="min-w-0 xl:flex-1">{children}</div>
+            <TripGlancePanel
+              trip={currentTrip}
+              className="hidden xl:sticky xl:top-6 xl:block xl:w-80 xl:shrink-0"
+            />
+          </div>
+        ) : (
+          children
+        )}
       </main>
 
       {/* Mobile bottom navigation */}
