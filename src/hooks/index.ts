@@ -49,3 +49,6 @@ export { useToday, getMsUntilMidnight, type UseTodayResult } from './useToday';
 
 // The app's minute clock — the one implementation of "now", refreshed on resume
 export { useNowMs, NOW_REFRESH_INTERVAL_MS } from './useNowMs';
+
+// Feature flags
+export { useFeatureFlag, readFlagOverride, FLAG_OVERRIDE_PREFIX } from './useFeatureFlag';
