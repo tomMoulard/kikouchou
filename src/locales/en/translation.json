@@ -152,6 +152,7 @@
     "roomBedsLabel": "Beds in room {{number}}",
     "roomBedsDecrease": "Remove a bed from room {{number}}",
     "roomBedsIncrease": "Add a bed to room {{number}}",
+    "roomIconLabel": "Icon for room {{number}}",
     "addRoom": "Add room",
     "removeRoom": "Remove room {{number}}",
     "roomsCreateFailed": "Trip created but some rooms could not be added",

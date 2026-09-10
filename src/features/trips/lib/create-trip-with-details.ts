@@ -135,7 +135,11 @@ export async function createTripWithDetails(draft: TripDraft): Promise<TripCreat
   let rooms = 0;
   for (const room of draft.rooms) {
     try {
-      await createRoom(trip.id, { name: room.name, capacity: room.capacity });
+      await createRoom(trip.id, {
+        name: room.name,
+        capacity: room.capacity,
+        icon: room.icon,
+      });
       rooms += 1;
     } catch (error) {
       console.error('Failed to add room to new trip:', error);

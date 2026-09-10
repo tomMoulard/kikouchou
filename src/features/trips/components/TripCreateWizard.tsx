@@ -37,6 +37,7 @@ import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { announceStatus } from '@/lib/notifications';
 import posthog, { captureUsage } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
+import { DEFAULT_ROOM_ICON } from '@/types';
 import type { ISODateString, Trip, TripFormData } from '@/types';
 import { LocationAutocomplete, type TripImportData } from './LocationAutocomplete';
 import type { NewTripGuest, NewTripRoom } from './TripForm';
@@ -317,6 +318,9 @@ export const TripCreateWizard = memo(function TripCreateWizard({
       {
         name: trimmed.slice(0, MAX_LENGTHS.roomName),
         capacity: Math.max(MIN_ROOM_CAPACITY, Math.round(roomCapacity) || MIN_ROOM_CAPACITY),
+        // The wizard asks for a name and a count only, so the room takes the
+        // same glyph a new row gets in the form.
+        icon: DEFAULT_ROOM_ICON,
       },
     ]);
     setRoomDraft('');

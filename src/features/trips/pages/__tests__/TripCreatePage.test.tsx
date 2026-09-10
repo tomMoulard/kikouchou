@@ -87,7 +87,7 @@ vi.mock('@/features/trips/components/TripForm', () => ({
     onGuestsChange?: (
       guests: readonly { name: string; color?: string; isSelf?: boolean }[],
     ) => void;
-    onRoomsChange?: (rooms: readonly { name: string; capacity: number }[]) => void;
+    onRoomsChange?: (rooms: readonly NewTripRoom[]) => void;
     currentUserName?: string;
   }) => {
     lastCurrentUserName(currentUserName);
@@ -104,13 +104,14 @@ vi.mock('@/features/trips/components/TripForm', () => ({
         {/* A guest that came from a saved group: it carries a colour, so the
             page creates it with that colour rather than an assigned one. */}
         {/* The room list the form's create-mode fieldset reports. */}
-        <button data-testid="rooms-btn" onClick={() => onRoomsChange?.([{ name: 'Double bed', capacity: 2 }, { name: 'Attic', capacity: 1 }])}>Set Rooms</button>
+        <button data-testid="rooms-btn" onClick={() => onRoomsChange?.([{ name: 'Double bed', capacity: 2, icon: 'bed-double' }, { name: 'Attic', capacity: 1, icon: 'tent' }])}>Set Rooms</button>
         <button data-testid="imported-guests-btn" onClick={() => onGuestsChange?.([{ name: 'Alice', color: '#3b82f6' }])}>Set Imported Guests</button>
       </div>
     );
   },
 }));
 
+import type { NewTripRoom } from '@/features/trips/components/TripForm';
 import { TripCreatePage } from '../TripCreatePage';
 
 describe('TripCreatePage', () => {
@@ -359,9 +360,11 @@ describe('TripCreatePage', () => {
     await user.click(screen.getByTestId('rooms-btn'));
     await user.click(screen.getByTestId('submit-btn'));
 
+    // The icon travels with the room. Chosen per row in the form, it would be
+    // lost here if creation only carried the name and the bed count.
     expect(mockCreateRoom.mock.calls).toEqual([
-      ['new-trip-1', { name: 'Double bed', capacity: 2 }],
-      ['new-trip-1', { name: 'Attic', capacity: 1 }],
+      ['new-trip-1', { name: 'Double bed', capacity: 2, icon: 'bed-double' }],
+      ['new-trip-1', { name: 'Attic', capacity: 1, icon: 'tent' }],
     ]);
     expect(mockNavigate).toHaveBeenCalledWith('/trips/new-trip-1/calendar');
   });

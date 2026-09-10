@@ -152,6 +152,7 @@
     "roomBedsLabel": "Lits dans la chambre {{number}}",
     "roomBedsDecrease": "Retirer un lit de la chambre {{number}}",
     "roomBedsIncrease": "Ajouter un lit à la chambre {{number}}",
+    "roomIconLabel": "Icône de la chambre {{number}}",
     "addRoom": "Ajouter une chambre",
     "removeRoom": "Retirer la chambre {{number}}",
     "roomsCreateFailed": "Voyage créé mais certaines chambres n'ont pas pu être ajoutées",
