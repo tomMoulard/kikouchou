@@ -18,6 +18,8 @@
  * @module features/analytics/lib/trip-stats
  */
 
+import { computeBalances } from '@/features/money/lib/balances';
+import { loadTripNightSplit } from '@/features/money/lib/night-split';
 import {
   isTransportUpcoming,
   selectPickupsNeedingDriver,
@@ -76,6 +78,24 @@ export interface TripStats {
    * recomputed here.
    */
   readonly pickupsNeedingDriver: number;
+  /** Money lines the trip holds — what `/trips/:tripId/money` lists. */
+  readonly expenseCount: number;
+  /**
+   * What the trip actually cost: every expense, less every income.
+   *
+   * Transfers are deliberately not in it. A guest paying another back moves
+   * money inside the group without the group spending anything, so counting it
+   * would make settling up look like spending.
+   */
+  readonly spendTotal: number;
+  /**
+   * How much is still owed, across everybody who owes anything.
+   *
+   * The sum of the positive balances, which is the same number as the sum of
+   * the negative ones: it is what the settling payments add up to, and it is
+   * zero exactly when the group is level.
+   */
+  readonly unsettledTotal: number;
 }
 
 /** {@link TripStats} summed across trips, for the all-trips page. */
@@ -128,8 +148,16 @@ export async function loadTripStats(
   tripId: TripId,
   now: ISODateTimeString,
 ): Promise<TripStats> {
-  const [persons, roomCount, assignmentCount, transports, rides, vehicles] =
-    await Promise.all([
+  const [
+    persons,
+    roomCount,
+    assignmentCount,
+    transports,
+    rides,
+    vehicles,
+    expenses,
+    nightSplit,
+  ] = await Promise.all([
       // Same compound ranges as PersonContext / RoomContext /
       // AssignmentContext / TransportContext, so the analytics totals match the
       // feature pages exactly.
@@ -158,7 +186,20 @@ export async function loadTripStats(
       // Read whole for the same reason: a journey's car is part of what
       // `resolveRides()` resolves, and the count falls out of the array.
       db.vehicles.where('tripId').equals(tripId).toArray(),
+      // Read whole rather than counted: what the trip cost and what is still
+      // owed both need the lines themselves.
+      db.expenses
+        .where('[tripId+date]')
+        .between([tripId, ''], [tripId, MAX_STRING_KEY])
+        .toArray(),
+      // A line split by nights needs the night counts to divide by, and that
+      // arithmetic lives in the money feature rather than being repeated here.
+      loadTripNightSplit(tripId),
     ]);
+
+  const personNights = new Map(
+    (nightSplit?.guests ?? []).map((guest) => [guest.personId, guest.personNights]),
+  );
 
   // "Count people, not rows" — a guest row can stand for several real people.
   let headcount = 0;
@@ -203,6 +244,25 @@ export async function loadTripStats(
   // to remove.
   const rideCount = resolveRides({ transports, rides, vehicles, persons }).length;
 
+  // Money. The kinds are signed the way the balances read them: an expense is
+  // what the trip cost, an income gives some of it back, and a transfer is the
+  // group moving its own money around.
+  let spendTotal = 0;
+  for (const expense of expenses) {
+    if (expense.kind === 'expense') {
+      spendTotal += Math.round(expense.amount * 100);
+    } else if (expense.kind === 'income') {
+      spendTotal -= Math.round(expense.amount * 100);
+    }
+  }
+
+  let unsettledCents = 0;
+  for (const balance of computeBalances(expenses, personNights)) {
+    if (balance.balance > 0) {
+      unsettledCents += Math.round(balance.balance * 100);
+    }
+  }
+
   return {
     tripId,
     guestCount: persons.length,
@@ -215,6 +275,9 @@ export async function loadTripStats(
     rideCount,
     vehicleCount: vehicles.length,
     pickupsNeedingDriver,
+    expenseCount: expenses.length,
+    spendTotal: spendTotal / 100,
+    unsettledTotal: unsettledCents / 100,
   };
 }
 
@@ -264,6 +327,15 @@ export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
       vehicleCount: totals.vehicleCount + row.vehicleCount,
       pickupsNeedingDriver:
         totals.pickupsNeedingDriver + row.pickupsNeedingDriver,
+      expenseCount: totals.expenseCount + row.expenseCount,
+      // Cents, then back: a page of trips summed as floats drifts, and the
+      // total is money the reader compares against their own arithmetic.
+      spendTotal:
+        (Math.round(totals.spendTotal * 100) + Math.round(row.spendTotal * 100)) / 100,
+      unsettledTotal:
+        (Math.round(totals.unsettledTotal * 100) +
+          Math.round(row.unsettledTotal * 100)) /
+        100,
     }),
     {
       guestCount: 0,
@@ -276,6 +348,9 @@ export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
       rideCount: 0,
       vehicleCount: 0,
       pickupsNeedingDriver: 0,
+      expenseCount: 0,
+      spendTotal: 0,
+      unsettledTotal: 0,
     },
   );
 }
@@ -290,6 +365,10 @@ export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
  * (`headcount` from the guest rows, `arrivalCount` / `departureCount` /
  * `pickupsNeedingDriver` from the transports), so a derived figure cannot be
  * non-zero while its source is zero and adding it here would say nothing.
+ *
+ * Money lines belong in it for the same reason as rides and cars: the deposit
+ * on the house is paid long before anybody has a train time, so a trip holding
+ * one expense and nothing else has something to show.
  *
  * Rides and vehicles belong in the list for the opposite reason: they are
  * genuinely independent. Cars are entered before anybody's train times are
@@ -306,6 +385,7 @@ export function isTripStatsEmpty(stats: TripStats): boolean {
     stats.assignmentCount === 0 &&
     stats.transportCount === 0 &&
     stats.rideCount === 0 &&
-    stats.vehicleCount === 0
+    stats.vehicleCount === 0 &&
+    stats.expenseCount === 0
   );
 }
