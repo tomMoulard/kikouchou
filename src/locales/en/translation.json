@@ -123,7 +123,18 @@
     "tripsMapSummary_other": "{{count}} trips on the map",
     "tripsMapUnpinned_one": "1 trip without a map pin",
     "tripsMapUnpinned_other": "{{count}} trips without a map pin",
-    "pickupsNeedingDriverHint": "Open the run sheet"
+    "pickupsNeedingDriverHint": "Open the run sheet",
+    "spendTotal": "Spent",
+    "spendTotalHint_one": "{{count}} line in the accounts",
+    "spendTotalHint_other": "{{count}} lines in the accounts",
+    "spendPerPerson": "Spent per person",
+    "spendPerPersonHint_one": "across {{count}} person",
+    "spendPerPersonHint_other": "across {{count}} people",
+    "unsettledTotal": "Still owed",
+    "unsettledTotalHint": "What the settling payments come to",
+    "unsettledSettled": "Everybody is level",
+    "totalSpend": "Total spent",
+    "totalUnsettled": "Still owed"
   },
   "trips": {
     "title": "My trips",
@@ -842,7 +853,108 @@
     "copyLine_one": "{{name}}: {{count}} person night",
     "copyLine_other": "{{name}}: {{count}} person nights",
     "copyLineWithAmount_one": "{{name}}: {{count}} person night, {{amount}}",
-    "copyLineWithAmount_other": "{{name}}: {{count}} person nights, {{amount}}"
+    "copyLineWithAmount_other": "{{name}}: {{count}} person nights, {{amount}}",
+    "view": {
+      "ariaLabel": "Money view",
+      "expenses": "Expenses",
+      "balances": "Settle up",
+      "nights": "Nights"
+    },
+    "expense": {
+      "new": "New line",
+      "newDescription": "What was spent, who paid it, and who it was for.",
+      "edit": "The line",
+      "editDescription": "Change what was spent, or how it is split.",
+      "delete": "Delete this line",
+      "deleteSuccess": "Line deleted",
+      "createSuccess": "Line added",
+      "updateSuccess": "Line saved",
+      "empty": "Nothing spent yet",
+      "emptyDescription": "Add what the group has paid for, and the app works out who owes whom.",
+      "title_field": "Title",
+      "titlePlaceholder": "Saturday shopping",
+      "category": "Category",
+      "categories": {
+        "lodging": "The house",
+        "groceries": "Groceries",
+        "meal": "Eating out",
+        "transport": "Travel",
+        "activity": "Outings",
+        "supplies": "Supplies",
+        "other": "Other"
+      },
+      "kind": "Kind of line",
+      "kinds": {
+        "expense": "Expense",
+        "income": "Money in",
+        "transfer": "Payment between guests"
+      },
+      "kindHints": {
+        "expense": "One guest paid, and the group owes them their share.",
+        "income": "One guest received money that belongs to the group.",
+        "transfer": "One guest paid another back."
+      },
+      "amount": "Amount",
+      "amountPlaceholder": "84.20",
+      "date": "Day",
+      "paidBy": "Paid by",
+      "receivedBy": "Received by",
+      "transferFrom": "From",
+      "transferTo": "To",
+      "splitMode": "Split",
+      "splitModes": {
+        "equal": "Equally",
+        "shares": "By parts",
+        "nights": "By nights",
+        "amounts": "By amount"
+      },
+      "splitModeHints": {
+        "equal": "One share each, for everybody picked below.",
+        "shares": "Give each guest their parts. Five parts against one pays five times as much.",
+        "nights": "Each guest pays for the nights they slept there.",
+        "amounts": "Type each guest's own figure. They must add up to the amount."
+      },
+      "beneficiaries": "Who it was for",
+      "beneficiariesDescription": "Pick the guests this line is split between.",
+      "everyone": "Everyone",
+      "nobody": "Nobody",
+      "amountFor": "Amount for {{name}}",
+      "sharesFor": "Parts for {{name}}",
+      "amountsTotal": "The amounts come to {{typed}} of {{amount}}.",
+      "description": "Notes",
+      "descriptionPlaceholder": "Two trolleys, the wine included",
+      "unknownGuest": "A guest who left",
+      "expenseSummary_one": "{{name}} paid, for {{count}} guest",
+      "expenseSummary_other": "{{name}} paid, for {{count}} guests",
+      "incomeSummary_one": "{{name}} received it, for {{count}} guest",
+      "incomeSummary_other": "{{name}} received it, for {{count}} guests",
+      "transferSummary": "{{from}} paid {{to}}",
+      "errors": {
+        "amountAboveZero": "Type an amount above zero",
+        "amountTooLarge": "The amount must be {{max}} or less",
+        "recipientRequired": "Pick the guest being paid",
+        "recipientIsPayer": "Pick a guest other than the payer",
+        "beneficiaryRequired": "Pick at least one guest this line is for",
+        "amountsDoNotAddUp": "The amounts must add up to the total",
+        "sharesRequired": "Give at least one guest a part above zero",
+        "noNightsToSplitBy": "None of these guests slept a night on this trip"
+      }
+    },
+    "balances": {
+      "title": "Balances",
+      "description": "What each guest put in, what their shares come to, and the payments that level them.",
+      "empty": "No line yet, so nobody owes anybody anything.",
+      "tableCaption": "Paid, owed and balance per guest",
+      "columnPaid": "Paid",
+      "columnOwed": "Owes",
+      "columnBalance": "Balance",
+      "settleTitle": "Payments to make",
+      "settled": "Everybody is level.",
+      "recordPayment": "Record it",
+      "paymentTitle": "{{from}} pays {{to}} back",
+      "paymentRecorded": "Payment recorded",
+      "paymentFailed": "Could not record the payment"
+    }
   },
   "glance": {
     "title": "At a glance",
@@ -874,6 +986,16 @@
       "more_one": "{{count}} more guest",
       "more_other": "{{count}} more guests",
       "openRooms": "Open the rooms page to assign beds"
+    },
+    "money": {
+      "title": "Where the money stands",
+      "openMoney": "Open the money page",
+      "empty": "Nothing spent yet.",
+      "settled": "Everybody is level.",
+      "moreGuests_one": "{{count}} more guest",
+      "moreGuests_other": "{{count}} more guests",
+      "payments_one": "{{count}} payment to make",
+      "payments_other": "{{count}} payments to make"
     }
   },
   "sharing": {
@@ -1299,7 +1421,9 @@
     "deleteActivity": "Delete this activity?",
     "deleteActivityDescription": "This activity will be removed from the trip agenda. This cannot be undone.",
     "deleteRide": "Cancel this ride?",
-    "deleteRideDescription": "The car journey is removed. Everyone in it keeps their own arrival or departure — they simply stop having a lift."
+    "deleteRideDescription": "The car journey is removed. Everyone in it keeps their own arrival or departure — they simply stop having a lift.",
+    "deleteExpense": "Delete this line?",
+    "deleteExpenseDescription": "This line will be removed from the trip's accounts, and every balance is worked out again. This cannot be undone."
   },
   "unsaved": {
     "title": "Unsaved changes",

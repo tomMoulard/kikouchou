@@ -123,7 +123,18 @@
     "tripsMapSummary_other": "{{count}} voyages sur la carte",
     "tripsMapUnpinned_one": "1 voyage sans point sur la carte",
     "tripsMapUnpinned_other": "{{count}} voyages sans point sur la carte",
-    "pickupsNeedingDriverHint": "Ouvrir la feuille de route"
+    "pickupsNeedingDriverHint": "Ouvrir la feuille de route",
+    "spendTotal": "Dépensé",
+    "spendTotalHint_one": "{{count}} ligne dans les comptes",
+    "spendTotalHint_other": "{{count}} lignes dans les comptes",
+    "spendPerPerson": "Dépensé par personne",
+    "spendPerPersonHint_one": "pour {{count}} personne",
+    "spendPerPersonHint_other": "pour {{count}} personnes",
+    "unsettledTotal": "Reste dû",
+    "unsettledTotalHint": "Le total des remboursements à faire",
+    "unsettledSettled": "Tout le monde est à jour",
+    "totalSpend": "Total dépensé",
+    "totalUnsettled": "Reste dû"
   },
   "trips": {
     "title": "Mes voyages",
@@ -842,7 +853,108 @@
     "copyLine_one": "{{name}} : {{count}} nuit par personne",
     "copyLine_other": "{{name}} : {{count}} nuits par personne",
     "copyLineWithAmount_one": "{{name}} : {{count}} nuit par personne, {{amount}}",
-    "copyLineWithAmount_other": "{{name}} : {{count}} nuits par personne, {{amount}}"
+    "copyLineWithAmount_other": "{{name}} : {{count}} nuits par personne, {{amount}}",
+    "view": {
+      "ariaLabel": "Vue des comptes",
+      "expenses": "Dépenses",
+      "balances": "Remboursements",
+      "nights": "Nuits"
+    },
+    "expense": {
+      "new": "Nouvelle ligne",
+      "newDescription": "Ce qui a été payé, par qui, et pour qui.",
+      "edit": "La ligne",
+      "editDescription": "Modifier le montant, ou la façon de le partager.",
+      "delete": "Supprimer cette ligne",
+      "deleteSuccess": "Ligne supprimée",
+      "createSuccess": "Ligne ajoutée",
+      "updateSuccess": "Ligne enregistrée",
+      "empty": "Rien de dépensé pour l'instant",
+      "emptyDescription": "Ajoutez ce que le groupe a payé, et l'application calcule qui doit quoi à qui.",
+      "title_field": "Intitulé",
+      "titlePlaceholder": "Courses du samedi",
+      "category": "Catégorie",
+      "categories": {
+        "lodging": "La maison",
+        "groceries": "Courses",
+        "meal": "Restaurant",
+        "transport": "Transport",
+        "activity": "Sorties",
+        "supplies": "Intendance",
+        "other": "Autre"
+      },
+      "kind": "Type de ligne",
+      "kinds": {
+        "expense": "Dépense",
+        "income": "Rentrée d'argent",
+        "transfer": "Remboursement entre invités"
+      },
+      "kindHints": {
+        "expense": "Un invité a payé, et le groupe lui doit sa part.",
+        "income": "Un invité a reçu de l'argent qui appartient au groupe.",
+        "transfer": "Un invité en a remboursé un autre."
+      },
+      "amount": "Montant",
+      "amountPlaceholder": "84,20",
+      "date": "Jour",
+      "paidBy": "Payé par",
+      "receivedBy": "Reçu par",
+      "transferFrom": "De",
+      "transferTo": "À",
+      "splitMode": "Partage",
+      "splitModes": {
+        "equal": "En parts égales",
+        "shares": "En parts",
+        "nights": "Au prorata des nuits",
+        "amounts": "Par montant"
+      },
+      "splitModeHints": {
+        "equal": "Une part chacun, pour les invités choisis ci-dessous.",
+        "shares": "Donnez ses parts à chaque invité. Cinq parts contre une paient cinq fois plus.",
+        "nights": "Chaque invité paie les nuits qu'il a dormi sur place.",
+        "amounts": "Saisissez le montant de chaque invité. Le total doit tomber juste."
+      },
+      "beneficiaries": "Pour qui",
+      "beneficiariesDescription": "Choisissez les invités entre qui partager cette ligne.",
+      "everyone": "Tout le monde",
+      "nobody": "Personne",
+      "amountFor": "Montant pour {{name}}",
+      "sharesFor": "Parts pour {{name}}",
+      "amountsTotal": "Les montants font {{typed}} sur {{amount}}.",
+      "description": "Notes",
+      "descriptionPlaceholder": "Deux caddies, le vin compris",
+      "unknownGuest": "Un invité parti",
+      "expenseSummary_one": "{{name}} a payé, pour {{count}} invité",
+      "expenseSummary_other": "{{name}} a payé, pour {{count}} invités",
+      "incomeSummary_one": "{{name}} l'a reçu, pour {{count}} invité",
+      "incomeSummary_other": "{{name}} l'a reçu, pour {{count}} invités",
+      "transferSummary": "{{from}} a remboursé {{to}}",
+      "errors": {
+        "amountAboveZero": "Saisissez un montant supérieur à zéro",
+        "amountTooLarge": "Le montant doit être inférieur ou égal à {{max}}",
+        "recipientRequired": "Choisissez l'invité remboursé",
+        "recipientIsPayer": "Choisissez un invité autre que le payeur",
+        "beneficiaryRequired": "Choisissez au moins un invité concerné",
+        "amountsDoNotAddUp": "Les montants doivent faire le total",
+        "sharesRequired": "Donnez au moins une part supérieure à zéro",
+        "noNightsToSplitBy": "Aucun de ces invités n'a dormi une nuit sur ce séjour"
+      }
+    },
+    "balances": {
+      "title": "Soldes",
+      "description": "Ce que chaque invité a avancé, ce que ses parts représentent, et les remboursements qui remettent tout à zéro.",
+      "empty": "Aucune ligne pour l'instant, donc personne ne doit rien à personne.",
+      "tableCaption": "Avancé, dû et solde par invité",
+      "columnPaid": "Avancé",
+      "columnOwed": "Doit",
+      "columnBalance": "Solde",
+      "settleTitle": "Remboursements à faire",
+      "settled": "Tout le monde est à jour.",
+      "recordPayment": "Enregistrer",
+      "paymentTitle": "{{from}} rembourse {{to}}",
+      "paymentRecorded": "Remboursement enregistré",
+      "paymentFailed": "Impossible d'enregistrer le remboursement"
+    }
   },
   "glance": {
     "title": "En un coup d’œil",
@@ -874,6 +986,16 @@
       "more_one": "{{count}} autre invité",
       "more_other": "{{count}} autres invités",
       "openRooms": "Ouvrir la page des chambres pour attribuer les lits"
+    },
+    "money": {
+      "title": "Où en sont les comptes",
+      "openMoney": "Ouvrir la page des comptes",
+      "empty": "Rien de dépensé pour l'instant.",
+      "settled": "Tout le monde est à jour.",
+      "moreGuests_one": "{{count}} autre invité",
+      "moreGuests_other": "{{count}} autres invités",
+      "payments_one": "{{count}} remboursement à faire",
+      "payments_other": "{{count}} remboursements à faire"
     }
   },
   "sharing": {
@@ -1299,7 +1421,9 @@
     "deleteActivity": "Supprimer l'activité ?",
     "deleteActivityDescription": "Cette activité sera retirée de l'agenda du voyage. Cette action est irréversible.",
     "deleteRide": "Annuler ce trajet ?",
-    "deleteRideDescription": "Le trajet en voiture est supprimé. Chaque passager garde son arrivée ou son départ — il n’a simplement plus de transport."
+    "deleteRideDescription": "Le trajet en voiture est supprimé. Chaque passager garde son arrivée ou son départ — il n’a simplement plus de transport.",
+    "deleteExpense": "Supprimer cette ligne ?",
+    "deleteExpenseDescription": "Cette ligne sera retirée des comptes du séjour, et tous les soldes seront recalculés. Cette action est irréversible."
   },
   "unsaved": {
     "title": "Modifications non enregistrées",

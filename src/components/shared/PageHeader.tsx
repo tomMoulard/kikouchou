@@ -28,6 +28,14 @@ interface PageHeaderProps {
   readonly action?: React.ReactNode;
   /** Optional control rendered on the same line as the title (e.g. a view switcher) */
   readonly titleAccessory?: React.ReactNode;
+  /**
+   * Optional handler for a click on the title itself.
+   *
+   * The title becomes a plain button when this is set — same text, same size,
+   * no button chrome — because a click handler on a heading is a control a
+   * keyboard cannot reach and a screen reader never announces.
+   */
+  readonly onTitleClick?: () => void;
   /** Optional URL for back navigation link */
   readonly backLink?: string;
   /** Additional CSS classes for the header container */
@@ -94,6 +102,7 @@ const PageHeader = memo(({
   description,
   action,
   titleAccessory,
+  onTitleClick,
   backLink,
   className,
 }: PageHeaderProps): React.ReactElement => {
@@ -125,7 +134,20 @@ const PageHeader = memo(({
         <div className="space-y-1">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-              {title}
+              {onTitleClick ? (
+                <button
+                  type="button"
+                  onClick={onTitleClick}
+                  className={cn(
+                    'rounded-sm text-left',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  )}
+                >
+                  {title}
+                </button>
+              ) : (
+                title
+              )}
             </h1>
             {titleAccessory}
           </div>
