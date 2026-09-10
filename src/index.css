@@ -436,3 +436,45 @@
     padding: 0 !important;
   }
 }
+
+/*
+ * The money page's easter egg: ten taps on the title and the emoji fall.
+ *
+ * Here rather than in the component because a keyframe animation has no utility
+ * form: the piece's own drift, spin and scale are drawn per piece and passed in
+ * as custom properties, and this is the rule that reads them.
+ *
+ * `MoneyConfetti` is not rendered at all under `prefers-reduced-motion`, so
+ * this never runs for a viewer who asked for stillness.
+ */
+@keyframes money-confetti-fall {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -10vh, 0) rotate(0deg) scale(var(--money-scale, 1));
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(var(--money-drift, 0), 110vh, 0)
+      rotate(var(--money-spin, 0deg)) scale(var(--money-scale, 1));
+  }
+}
+
+.money-confetti-piece {
+  position: absolute;
+  top: 0;
+  font-size: 1.75rem;
+  line-height: 1;
+  will-change: transform, opacity;
+  animation-name: money-confetti-fall;
+  animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+  animation-fill-mode: both;
+}
