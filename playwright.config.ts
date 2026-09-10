@@ -557,6 +557,10 @@ export default defineConfig({
         // would put a fake account in it. See the dev server above.
         VITE_POSTHOG_KEY: '',
         VITE_POSTHOG_HOST: '',
+        // A public VAPID key, so the reminder card exists. Any P-256 point
+        // will do: the stub's fake PushManager never sends anything anywhere.
+        VITE_VAPID_PUBLIC_KEY:
+          'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM',
       },
     },
   ],

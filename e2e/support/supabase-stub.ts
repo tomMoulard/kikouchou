@@ -128,6 +128,17 @@ interface UpdateRow {
   update: string;
 }
 
+/** `public.push_subscriptions`, as `subscribe_*_reminders()` writes it. */
+interface PushSubscriptionRow {
+  id: string;
+  trip_id: string;
+  user_id: string | null;
+  person_id: string | null;
+  endpoint: string;
+  locale: string;
+  analytics_id: string | null;
+}
+
 interface SnapshotRow {
   trip_id: string;
   state: string;
@@ -177,6 +188,7 @@ export class SupabaseStub {
   updates: UpdateRow[] = [];
   snapshots: SnapshotRow[] = [];
   guestGroups: GuestGroupRow[] = [];
+  pushSubscriptions: PushSubscriptionRow[] = [];
 
   /** Requests refused, so a test can simulate an outage without going offline. */
   offline = false;
@@ -202,11 +214,16 @@ export class SupabaseStub {
     redeems: 0,
     /** Reads through `read_shared_trip`, signed in or not. */
     sharedReads: 0,
+    /** Calls to either `subscribe_*_reminders` function. */
+    reminderSubscribes: 0,
+    /** Calls to `unsubscribe_reminders`. */
+    reminderUnsubscribes: 0,
   };
 
   private nextTrip = 1;
   private nextUpdateId = 1;
   private nextGuestGroup = 1000;
+  private nextSubscription = 5000;
 
   // --------------------------------------------------------------------------
   // Seeding
@@ -883,6 +900,16 @@ export class SupabaseStub {
       return;
     }
 
+    if (name === 'subscribe_trip_reminders' || name === 'subscribe_member_reminders') {
+      await this.subscribeReminders(route, name, invite, caller);
+      return;
+    }
+
+    if (name === 'unsubscribe_reminders') {
+      await this.unsubscribeReminders(route);
+      return;
+    }
+
     if (name === 'redeem_invite') {
       this.counts.redeems += 1;
 
@@ -943,6 +970,102 @@ export class SupabaseStub {
     }
 
     await this.fail(route, 404, `stub has no rpc ${name}`);
+  }
+
+  /**
+   * `subscribe_trip_reminders()` and `subscribe_member_reminders()`.
+   *
+   * The viewer door applies the invite's four refusals with the real hints and
+   * consumes no use; the member door wants a signed-in roster member. Both
+   * upsert on (trip, endpoint) and return the row id, the way the functions
+   * in `20260910120000_trip_reminders.sql` do. The endpoint and the keys never
+   * come back out: nothing in the app reads them, and nothing should.
+   */
+  private async subscribeReminders(
+    route: Route,
+    name: string,
+    invite: InviteRow | undefined,
+    caller: string,
+  ): Promise<void> {
+    this.counts.reminderSubscribes += 1;
+    const body = this.body<{
+      trip?: string;
+      subscription?: { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+      person_id?: string;
+      locale?: string;
+      analytics_id?: string;
+    }>(route);
+
+    let tripId: string;
+    if (name === 'subscribe_trip_reminders') {
+      if (!invite) {
+        await this.json(route, 400, { code: 'P0002', message: 'invite not found', hint: 'invite_not_found' });
+        return;
+      }
+      if (invite.revoked_at !== null) {
+        await this.json(route, 400, { code: 'P0001', message: 'invite revoked', hint: 'invite_revoked' });
+        return;
+      }
+      if (invite.expires_at !== null && new Date(invite.expires_at) <= new Date()) {
+        await this.json(route, 400, { code: 'P0001', message: 'invite expired', hint: 'invite_expired' });
+        return;
+      }
+      if (invite.max_uses !== null && invite.uses >= invite.max_uses) {
+        await this.json(route, 400, { code: 'P0001', message: 'invite has no uses left', hint: 'invite_exhausted' });
+        return;
+      }
+      tripId = invite.trip_id;
+    } else {
+      if (caller === 'anonymous') {
+        await this.json(route, 401, { code: '28000', message: 'not signed in', hint: 'unauthenticated' });
+        return;
+      }
+      tripId = body.trip ?? '';
+      if (!this.members.some((m) => m.trip_id === tripId && m.user_id === caller)) {
+        await this.json(route, 403, { code: '42501', message: 'not a member of this trip', hint: 'not_a_member' });
+        return;
+      }
+    }
+
+    const endpoint = body.subscription?.endpoint ?? '';
+    const p256dh = body.subscription?.keys?.p256dh ?? '';
+    const auth = body.subscription?.keys?.auth ?? '';
+    if (!endpoint.startsWith('https://') || p256dh.length < 40 || auth.length < 10) {
+      await this.json(route, 400, { code: '22023', message: 'subscription invalid', hint: 'subscription_invalid' });
+      return;
+    }
+
+    const existing = this.pushSubscriptions.find(
+      (row) => row.trip_id === tripId && row.endpoint === endpoint,
+    );
+    const row: PushSubscriptionRow = {
+      id: existing?.id ?? uuid(this.nextSubscription++),
+      trip_id: tripId,
+      user_id: caller === 'anonymous' ? (existing?.user_id ?? null) : caller,
+      person_id: body.person_id ?? null,
+      endpoint,
+      locale: body.locale ?? 'fr',
+      analytics_id: body.analytics_id ?? existing?.analytics_id ?? null,
+    };
+    if (existing) {
+      Object.assign(existing, row);
+    } else {
+      this.pushSubscriptions.push(row);
+    }
+    await this.json(route, 200, row.id);
+  }
+
+  /** `unsubscribe_reminders(endpoint, trip)`: the endpoint is the whole authorisation. */
+  private async unsubscribeReminders(route: Route): Promise<void> {
+    this.counts.reminderUnsubscribes += 1;
+    const body = this.body<{ endpoint?: string; trip?: string }>(route);
+    const before = this.pushSubscriptions.length;
+    this.pushSubscriptions = this.pushSubscriptions.filter(
+      (row) =>
+        row.endpoint !== body.endpoint ||
+        (body.trip !== undefined && row.trip_id !== body.trip),
+    );
+    await this.json(route, 200, before - this.pushSubscriptions.length);
   }
 
   /**
