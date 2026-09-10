@@ -85,6 +85,7 @@ vi.mock('@/contexts/TransportContext', () => ({
     arrivals: [],
     departures: [],
     upcomingPickups: [],
+    nowMs: fixedToday.getTime(),
     isLoading: false,
     error: null,
     createTransport: vi.fn(),
@@ -111,6 +112,20 @@ vi.mock('@/contexts/AssignmentContext', () => ({
   }),
 }));
 
+// Mock RoomContext — read by the glance panel beside the trip pages, and by
+// nothing else in the layout.
+vi.mock('@/contexts/RoomContext', () => ({
+  useRoomContext: () => ({
+    rooms: [],
+    isLoading: false,
+    error: null,
+    createRoom: vi.fn(),
+    updateRoom: vi.fn(),
+    deleteRoom: vi.fn(),
+    reorderRooms: vi.fn(),
+  }),
+}));
+
 // ============================================================================
 // Test Helpers
 // ============================================================================
@@ -121,6 +136,17 @@ vi.mock('@/contexts/AssignmentContext', () => ({
 function renderLayout(children: ReactNode = <div>Page Content</div>) {
   return render(
     <MemoryRouter>
+      <Layout>{children}</Layout>
+    </MemoryRouter>,
+  );
+}
+
+/**
+ * Renders Layout at one path, for the tests that depend on the route.
+ */
+function renderLayoutAt(path: string, children: ReactNode = <div>Page Content</div>) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
       <Layout>{children}</Layout>
     </MemoryRouter>,
   );
@@ -867,6 +893,60 @@ describe('Layout', () => {
 
       expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
       expect(link).not.toHaveAttribute('aria-describedby');
+    });
+  });
+
+  // ============================================================================
+  // The organiser's column
+  // ============================================================================
+
+  describe('Glance panel', () => {
+    /**
+     * The panel is `hidden xl:block`, so its absence from a narrow screen is a
+     * class rather than a missing element. What these tests pin is the other
+     * half: which routes mount it at all.
+     */
+    function getGlancePanel() {
+      return document.querySelector('aside[aria-label="glance.title"]');
+    }
+
+    beforeEach(() => {
+      mockUseTripContext.mockReturnValue({
+        currentTrip: mockTrip,
+        trips: [mockTrip],
+        isLoading: false,
+        error: null,
+        setCurrentTrip: vi.fn(),
+        checkConnection: vi.fn(),
+      });
+    });
+
+    it('sits beside the trip pages that leave the width spare', () => {
+      renderLayoutAt(`/trips/${mockTrip.id}/rooms`);
+
+      expect(getGlancePanel()).toBeInTheDocument();
+    });
+
+    it('stays away from the pages that spend the width themselves', () => {
+      renderLayoutAt(`/trips/${mockTrip.id}/transports/map`);
+
+      expect(getGlancePanel()).not.toBeInTheDocument();
+    });
+
+    it('stays away from the pages that belong to no single trip', () => {
+      renderLayoutAt('/trips');
+
+      expect(getGlancePanel()).not.toBeInTheDocument();
+    });
+
+    it('renders the page content beside it, not instead of it', () => {
+      renderLayoutAt(
+        `/trips/${mockTrip.id}/calendar`,
+        <div data-testid="test-content">Test Content</div>,
+      );
+
+      expect(screen.getByTestId('test-content')).toBeInTheDocument();
+      expect(getGlancePanel()).toBeInTheDocument();
     });
   });
 });

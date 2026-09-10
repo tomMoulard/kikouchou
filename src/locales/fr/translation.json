@@ -826,6 +826,38 @@
     "copyLineWithAmount_one": "{{name}} : {{count}} nuit par personne, {{amount}}",
     "copyLineWithAmount_other": "{{name}} : {{count}} nuits par personne, {{amount}}"
   },
+  "glance": {
+    "title": "En un coup d’œil",
+    "loading": "Chargement…",
+    "beds": {
+      "titleTonight": "Lits ce soir",
+      "titleFirstNight": "Lits la première nuit",
+      "tripOver": "La dernière nuit de ce séjour est passée",
+      "noRooms": "Aucune chambre pour l’instant. Ajoutez-en une pour attribuer des lits.",
+      "taken_one": "{{count}} lit occupé sur {{total}}",
+      "taken_other": "{{count}} lits occupés sur {{total}}",
+      "roomOccupancy": "{{occupancy}}/{{capacity}}",
+      "moreRooms_one": "{{count}} autre chambre",
+      "moreRooms_other": "{{count}} autres chambres",
+      "openRooms": "Ouvrir la page des chambres"
+    },
+    "arrivals": {
+      "title": "Prochaines arrivées",
+      "empty": "Plus aucune arrivée à attendre",
+      "more_one": "{{count}} autre arrivée",
+      "more_other": "{{count}} autres arrivées",
+      "openTransports": "Ouvrir la page des trajets"
+    },
+    "noRoom": {
+      "title": "Encore sans chambre",
+      "empty": "Tout le monde a un lit",
+      "nights_one": "{{count}} nuit",
+      "nights_other": "{{count}} nuits",
+      "more_one": "{{count}} autre invité",
+      "more_other": "{{count}} autres invités",
+      "openRooms": "Ouvrir la page des chambres pour attribuer les lits"
+    }
+  },
   "sharing": {
     "title": "Partager le voyage",
     "description": "Partagez ce lien avec vos amis pour qu'ils puissent voir le voyage",

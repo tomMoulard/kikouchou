@@ -20,6 +20,9 @@ export {
 export { SummarySheet } from './components/SummarySheet';
 export type { SummarySheetProps } from './components/SummarySheet';
 
+export { TripGlancePanel } from './components/TripGlancePanel';
+export type { TripGlancePanelProps } from './components/TripGlancePanel';
+
 // ============================================================================
 // Library
 // ============================================================================
@@ -32,6 +35,16 @@ export type {
   SummaryTravel,
   TripSummary,
 } from './lib/trip-summary';
+
+export { buildTripGlance } from './lib/trip-glance';
+export type {
+  GlanceArrival,
+  GlanceGuestWithoutRoom,
+  GlanceNight,
+  GlanceRoom,
+  TripGlance,
+  TripGlanceInput,
+} from './lib/trip-glance';
 
 // ============================================================================
 // Routes

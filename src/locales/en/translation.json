@@ -826,6 +826,38 @@
     "copyLineWithAmount_one": "{{name}}: {{count}} person night, {{amount}}",
     "copyLineWithAmount_other": "{{name}}: {{count}} person nights, {{amount}}"
   },
+  "glance": {
+    "title": "At a glance",
+    "loading": "Loading…",
+    "beds": {
+      "titleTonight": "Beds tonight",
+      "titleFirstNight": "Beds on the first night",
+      "tripOver": "This trip’s last night has passed",
+      "noRooms": "No rooms yet. Add one to hand out beds.",
+      "taken_one": "{{count}} of {{total}} beds taken",
+      "taken_other": "{{count}} of {{total}} beds taken",
+      "roomOccupancy": "{{occupancy}}/{{capacity}}",
+      "moreRooms_one": "{{count}} more room",
+      "moreRooms_other": "{{count}} more rooms",
+      "openRooms": "Open the rooms page"
+    },
+    "arrivals": {
+      "title": "Next arrivals",
+      "empty": "No arrival left to expect",
+      "more_one": "{{count}} more arrival",
+      "more_other": "{{count}} more arrivals",
+      "openTransports": "Open the transport page"
+    },
+    "noRoom": {
+      "title": "Still without a room",
+      "empty": "Everyone has a bed",
+      "nights_one": "{{count}} night",
+      "nights_other": "{{count}} nights",
+      "more_one": "{{count}} more guest",
+      "more_other": "{{count}} more guests",
+      "openRooms": "Open the rooms page to assign beds"
+    }
+  },
   "sharing": {
     "title": "Share trip",
     "description": "Share this link with your friends so they can view the trip",
