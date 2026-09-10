@@ -177,6 +177,7 @@
     "importRoomsFailed": "Trip created but room import failed",
     "noMatchingLocations": "No matching previous locations",
     "importFromQr": "Import from QR code",
+    "joinWithInvite": "Scan or paste an invite",
     "importFromQrAria": "Import a shared trip using a QR code",
     "importFromQrTitle": "Import a shared trip",
     "importFromQrDescription": "Scan or paste an invite link or a Share QR from the trips page. Matching share links or same trip name merge; otherwise a new trip is created.",
@@ -947,7 +948,9 @@
       "welcomeTo": "You're invited to {{tripName}}",
       "viewerHint": "Pick your name and the trip shows your room and your travel. You can look at everything; changing anything needs a sign-in.",
       "opening": "Opening the trip…",
-      "lookAround": "Have a look around"
+      "lookAround": "Have a look around",
+      "installHere": "Add Kikouchou to your Home Screen from this page, and the app opens on this trip.",
+      "openTrip": "Open the trip"
     }
   },
   "assistant": {
@@ -1232,6 +1235,26 @@
     "savedLocally": "Saved on this device",
     "offlineDescription": "Your changes are saved locally and the app works normally",
     "connectionRestored": "Connection restored"
+  },
+  "install": {
+    "nudge": {
+      "region": "Install suggestion",
+      "title": "Get a reminder before the trip",
+      "description": "Install Kikouchou on your phone and it can remind you before {{tripName}} starts, when you arrive, and when a pickup is due.",
+      "showMe": "Show me how"
+    }
+  },
+  "tripLink": {
+    "title": "A trip shared with you",
+    "opening": "Opening the trip…",
+    "signInNeeded": "Sign in to open it. If you were sent an invite link instead, scan or paste that.",
+    "signIn": "Sign in",
+    "signInReason": "Sign in to open the trip this link points at.",
+    "useInvite": "Scan or paste an invite",
+    "invalid": "This trip link isn't valid.",
+    "noBackend": "Sync is not configured.",
+    "failed": "Couldn't open the trip",
+    "openTrip": "Open the trip"
   },
   "dateRangePicker": {
     "placeholder": "Select date range",

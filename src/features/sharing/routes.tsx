@@ -82,6 +82,15 @@ const JoinTripPage = lazy(() =>
 );
 
 /**
+ * Lazy-loaded TripLinkPage — a trip's stable address, `/t/<remoteTripId>`.
+ */
+const TripLinkPage = lazy(() =>
+  import('./pages/TripLinkPage').then((module) => ({
+    default: module.TripLinkPage,
+  })),
+);
+
+/**
  * Lazy-loaded TripSyncPage component for unified export/import via QR codes.
  */
 const TripSyncPage = lazy(() =>
@@ -173,6 +182,21 @@ export const joinRoutes: RouteObject[] = [
   {
     path: 'join/:token',
     element: withSuspense(JoinTripPage),
+  },
+];
+
+/**
+ * Route for a trip's stable link: `/t/:remoteTripId`.
+ *
+ * Top-level and outside the app chrome like `/join`, for the same reason: it
+ * is opened from outside the app — a reminder, a Home Screen icon installed
+ * from it, a link pasted into a chat — by someone who may hold no copy of the
+ * trip yet.
+ */
+export const tripLinkRoutes: RouteObject[] = [
+  {
+    path: 't/:remoteTripId',
+    element: withSuspense(TripLinkPage),
   },
 ];
 
