@@ -9,10 +9,12 @@
  * `generateSW` produces, and rewriting that worker wholesale to add one
  * listener trades a real, tested gate for a nicety.
  *
- * The notification itself is posted from the page — `registration.showNotification()`
- * in `src/lib/notifications/notify.ts` — so nothing here creates one. A click
- * is the only half that has to live in the worker, because the page that posted
- * the notification may well be gone by the time the click arrives.
+ * The in-app confirmations are posted from the page — `registration.showNotification()`
+ * in `src/lib/notifications/notify.ts` — so the worker creates none of those. It
+ * does create one kind: a reminder pushed by the server (`push` below), which
+ * arrives when no page is open at all. A click has to live in the worker for
+ * the same reason, because the page that posted a notification may well be
+ * gone by the time the click arrives.
  *
  * Plain JS on purpose: `public/` is copied verbatim into `dist`, so nothing
  * compiles or bundles it. Keep it dependency-free and readable.
@@ -110,6 +112,48 @@ function resolveInsideApp(path) {
     return scope;
   }
 }
+
+/**
+ * A reminder arriving from the server, while the page may well be closed.
+ *
+ * The payload is JSON written by `server/share-preview`'s `push_sender`:
+ * `{ title, body, url, tag, kind }`. `url` is app-relative and is stored on
+ * the notification for the click handler below to resolve, the same way the
+ * page-posted notifications carry theirs. A payload that will not parse still
+ * shows *something*: a push the user opted into and never saw would be the one
+ * silent failure this feature cannot afford.
+ */
+/**
+ * The pushed JSON, or an empty object for a body that is not JSON.
+ *
+ * @param {PushEvent} event
+ * @returns {Record<string, unknown>}
+ */
+function readPushPayload(event) {
+  try {
+    const parsed = event.data ? event.data.json() : null;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+self.addEventListener('push', (event) => {
+  const payload = readPushPayload(event);
+
+  const title =
+    typeof payload.title === 'string' && payload.title !== '' ? payload.title : 'Kikouchou';
+  const options = {
+    body: typeof payload.body === 'string' ? payload.body : '',
+    icon: new URL('icons/icon.svg', self.registration.scope).href,
+    badge: new URL('icons/icon.svg', self.registration.scope).href,
+    // One notification per reminder: a retry replaces rather than stacks.
+    tag: typeof payload.tag === 'string' && payload.tag !== '' ? payload.tag : 'kikouchou-reminder',
+    data: { url: typeof payload.url === 'string' ? payload.url : DEFAULT_TARGET_PATH },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();

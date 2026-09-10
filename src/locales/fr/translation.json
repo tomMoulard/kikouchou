@@ -1256,6 +1256,22 @@
     "failed": "Impossible d'ouvrir le séjour",
     "openTrip": "Ouvrir le séjour"
   },
+  "reminders": {
+    "region": "Rappels du séjour",
+    "title": "Recevez un rappel avant le séjour",
+    "description": "{{tripName}} : un rappel la veille du début, avant votre arrivée, et avant un trajet dont vous faites partie. Rien d'autre.",
+    "enable": "Activer les rappels",
+    "enabling": "En attente de votre réponse…",
+    "enabled": "Les rappels sont activés pour ce séjour",
+    "blocked": "Votre navigateur bloque les notifications de Kikouchou. Autorisez-les dans les réglages du navigateur ou du système, puis réessayez.",
+    "signInFirst": "Connectez-vous d'abord, puis activez les rappels.",
+    "failed": "Impossible d'activer les rappels. Réessayez dans un instant.",
+    "settingsTitle": "Rappels du séjour",
+    "settingsOn": "Activés pour {{tripName}} sur cet appareil.",
+    "settingsOff": "Désactivés pour {{tripName}}. Activez-les depuis le calendrier du séjour.",
+    "settingsUnsupported": "Ce navigateur ne peut pas recevoir de rappels. Sur un iPhone, ajoutez d'abord Kikouchou à l'écran d'accueil.",
+    "turnOff": "Désactiver"
+  },
   "dateRangePicker": {
     "placeholder": "Sélectionner une période",
     "ariaLabel": "Sélecteur de période",
@@ -1519,7 +1535,7 @@
     },
     "enable": "Activer les alertes trajets",
     "enabling": "En attente de votre réponse…",
-    "bestEffort": "Kikouchou n’a pas de serveur : une alerte ne peut partir que si l’application tourne ou vient d’être utilisée. L’alerte dans l’application, elle, vous attend à chaque ouverture.",
+    "bestEffort": "Les alertes de trajet viennent de cet appareil : elles partent pendant que l\u2019application tourne ou vient d\u2019être utilisée. Les rappels du séjour viennent du serveur : activez-les depuis le calendrier d\u2019un séjour et ils vous parviennent même application fermée.",
     "deniedHint": "Votre navigateur bloque les notifications pour Kikouchou. L’application ne peut plus les demander — autorisez-les pour ce site dans les réglages de votre navigateur ou de votre système.",
     "unsupportedHint": "Ce navigateur ne peut pas afficher de notifications. Sur iPhone, ajoutez d’abord Kikouchou à l’écran d’accueil. Les alertes trajets restent visibles dans l’application."
   },

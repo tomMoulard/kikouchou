@@ -12,7 +12,7 @@
 
 import { type ReactElement, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bell } from 'lucide-react';
+import { Bell, BellRing } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,11 +23,19 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { useTripContext } from '@/contexts/TripContext';
 import {
   getNotificationState,
   requestNotificationPermission,
   type NotificationState,
 } from '@/lib/notifications';
+import {
+  disableTripReminders,
+  getReminderState,
+  type ReminderState,
+} from '@/lib/notifications/push';
+import posthog from '@/lib/posthog';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 // ============================================================================
 // Constants
@@ -69,8 +77,18 @@ const STATE_BADGE_VARIANTS: Record<
  */
 export const NotificationSettings = memo(function NotificationSettings(): ReactElement {
   const { t } = useTranslation(),
+    { currentTrip } = useTripContext(),
     [state, setState] = useState<NotificationState>(getNotificationState),
     [isAsking, setIsAsking] = useState(false),
+    /**
+     * The server-sent reminders for the trip on screen. Read on every render
+     * because it is a cheap storage read, and the card that turns them on
+     * lives on another page.
+     */
+    reminderState: ReminderState | null =
+      currentTrip !== null ? getReminderState(currentTrip.id) : null,
+    [isTurningOff, setIsTurningOff] = useState(false),
+    [turnedOffTripId, setTurnedOffTripId] = useState<string | null>(null),
     isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -118,6 +136,32 @@ export const NotificationSettings = memo(function NotificationSettings(): ReactE
   const handleEnableClick = useCallback((): void => {
     void handleEnable();
   }, [handleEnable]);
+
+  const handleTurnOffReminders = useCallback(async (): Promise<void> => {
+    if (currentTrip === null) {
+      return;
+    }
+    setIsTurningOff(true);
+    try {
+      const client = await getSupabaseClient();
+      if (client) {
+        await disableTripReminders(client, currentTrip.id);
+        posthog?.capture('reminders_disabled', {
+          trip_access: currentTrip.viewerToken !== undefined ? 'viewer' : 'member',
+        });
+      }
+    } finally {
+      if (isMountedRef.current) {
+        // The storage record is gone; this re-render is what reads it back.
+        setTurnedOffTripId(currentTrip.id);
+        setIsTurningOff(false);
+      }
+    }
+  }, [currentTrip]);
+
+  /** Effective state: a turn-off this render already knows about wins. */
+  const effectiveReminderState: ReminderState | null =
+    reminderState === 'on' && turnedOffTripId === currentTrip?.id ? 'off' : reminderState;
 
   return (
     <Card>
@@ -213,6 +257,46 @@ export const NotificationSettings = memo(function NotificationSettings(): ReactE
               ? t('notifications.enabling', 'Waiting for your answer…')
               : t('notifications.enable', 'Turn on ride alerts')}
           </Button>
+        )}
+
+        {currentTrip !== null && effectiveReminderState !== null && (
+          <div
+            className="space-y-2 border-t pt-4"
+            data-testid="trip-reminders-settings"
+          >
+            <div className="flex items-center gap-2">
+              <BellRing className="size-4 text-primary" aria-hidden="true" />
+              <p className="text-sm font-medium">
+                {t('reminders.settingsTitle', 'Trip reminders')}
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {effectiveReminderState === 'on'
+                ? t('reminders.settingsOn', {
+                    tripName: currentTrip.name,
+                    defaultValue: 'On for {{tripName}} on this device.',
+                  })
+                : effectiveReminderState === 'unsupported'
+                  ? t(
+                      'reminders.settingsUnsupported',
+                      'This browser cannot receive reminders. On an iPhone, add Kikouchou to the Home Screen first.',
+                    )
+                  : t('reminders.settingsOff', {
+                      tripName: currentTrip.name,
+                      defaultValue: "Off for {{tripName}}. Turn them on from the trip's calendar.",
+                    })}
+            </p>
+            {effectiveReminderState === 'on' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleTurnOffReminders()}
+                disabled={isTurningOff}
+              >
+                {t('reminders.turnOff', 'Turn off')}
+              </Button>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>
