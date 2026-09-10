@@ -1328,7 +1328,10 @@
       "addVehicle": "Added car: {{name}}",
       "removeVehicle": "Removed car: {{name}} (its rides keep their times)",
       "joinRide": "{{person}} rides to {{location}}",
-      "leaveRide": "{{person}} left the car for {{location}}"
+      "leaveRide": "{{person}} left the car for {{location}}",
+      "addExpense": "Added to the accounts: {{title}} ({{amount}})",
+      "updateExpense": "Edited in the accounts: {{title}}",
+      "removeExpense": "Removed from the accounts: {{title}}"
     },
     "initializingCachedLoader": "Initializing cached model…",
     "loadingCachedModelFiles": "Loading cached model files…",
@@ -1337,7 +1340,9 @@
     "transportNotFound": "That arrival or departure was not found.",
     "invalidRide": "Those ride details are invalid, nothing was saved.",
     "invalidVehicle": "Those car details are invalid, nothing was saved.",
-    "readOnlyTrip": "This trip is read-only on this device. Sign in to change it."
+    "readOnlyTrip": "This trip is read-only on this device. Sign in to change it.",
+    "expenseNotFound": "I could not find that line in the accounts.",
+    "invalidExpense": "I could not add that line: something in it does not add up."
   },
   "auth": {
     "account": {

@@ -755,7 +755,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     // Money (the trip's accounts)
     const expenses = money?.expenses ?? [];
     if (expenses.length > 0) {
-      parts.push('', '## Money (the trip accounts, amounts in the trip currency)');
+      parts.push('', `## Money (the trip accounts, in ${money?.currency ?? ''})`);
       for (const expense of expenses) {
         parts.push(formatExpenseLine(expense, personsById));
       }

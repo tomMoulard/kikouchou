@@ -1328,7 +1328,10 @@
       "addVehicle": "Voiture ajoutée : {{name}}",
       "removeVehicle": "Voiture supprimée : {{name}} (ses trajets gardent leurs horaires)",
       "joinRide": "{{person}} monte dans la voiture pour {{location}}",
-      "leaveRide": "{{person}} ne monte plus dans la voiture pour {{location}}"
+      "leaveRide": "{{person}} ne monte plus dans la voiture pour {{location}}",
+      "addExpense": "Ajouté aux comptes : {{title}} ({{amount}})",
+      "updateExpense": "Modifié dans les comptes : {{title}}",
+      "removeExpense": "Retiré des comptes : {{title}}"
     },
     "initializingCachedLoader": "Initialisation du modèle en cache…",
     "loadingCachedModelFiles": "Chargement des fichiers du modèle depuis le cache…",
@@ -1337,7 +1340,9 @@
     "transportNotFound": "Cette arrivée ou ce départ est introuvable.",
     "invalidRide": "Ces informations de trajet sont invalides, rien n'a été enregistré.",
     "invalidVehicle": "Ces informations de voiture sont invalides, rien n'a été enregistré.",
-    "readOnlyTrip": "Ce séjour est en lecture seule sur cet appareil. Connectez-vous pour le modifier."
+    "readOnlyTrip": "Ce séjour est en lecture seule sur cet appareil. Connectez-vous pour le modifier.",
+    "expenseNotFound": "Je n'ai pas trouvé cette ligne dans les comptes.",
+    "invalidExpense": "Je n'ai pas pu ajouter cette ligne : quelque chose ne tombe pas juste."
   },
   "auth": {
     "account": {

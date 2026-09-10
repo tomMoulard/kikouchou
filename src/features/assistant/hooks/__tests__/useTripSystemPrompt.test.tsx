@@ -513,12 +513,19 @@ describe('useTripSystemPrompt', () => {
    * linear in prompt length: `gemma-3-1b`'s ONNX export has no
    * `num_logits_to_keep` input, so it materialises `prompt_tokens × 262144`
    * logits and hands them back to the CPU in one buffer. At ~3.6 chars per
-   * token this budget keeps the floor near 1000 tokens, roughly half a
-   * gibibyte of readback, instead of the ~1.9 GiB that failed with
-   * "Failed to allocate memory for buffer mapping".
+   * token this budget keeps the floor around 1500 tokens, roughly 780 MiB of
+   * readback, against the ~1.9 GiB that failed with "Failed to allocate memory
+   * for buffer mapping".
+   *
+   * It was 5000 until the money actions landed. Most of the floor is the action
+   * catalogue, so a new entity that the assistant can both read and change is
+   * paid for here as well as there; the alternative was an assistant that can
+   * answer "who owes Marie?" and not write the answer down. The number is a
+   * ceiling, not a target: it sits a little above what the prompt costs today,
+   * so the next section still has to earn its place.
    */
   it('keeps the trip-independent floor within its prompt budget', async () => {
-    const MAX_FLOOR_CHARS = 5000;
+    const MAX_FLOOR_CHARS = 5600;
 
     const { tripId } = await seedTrip();
     const result = await renderWithTrip(tripId);

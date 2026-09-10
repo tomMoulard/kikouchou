@@ -8,7 +8,13 @@
  * @module features/assistant/action-schema
  */
 
-import { ACTIVITY_CATEGORIES, CHILD_SEAT_KINDS, RIDE_DIRECTIONS } from '@/types';
+import {
+  ACTIVITY_CATEGORIES,
+  CHILD_SEAT_KINDS,
+  EXPENSE_KINDS,
+  EXPENSE_SPLIT_MODES,
+  RIDE_DIRECTIONS,
+} from '@/types';
 
 // ============================================================================
 // Schema Primitive Types
@@ -775,6 +781,136 @@ export const ACTION_SCHEMAS: readonly ActionDef[] = [
         required: true,
         description: 'Guest ID',
         example: '<guest id>',
+      },
+    },
+  },
+  // ---- Money ---------------------------------------------------------------
+  {
+    action: 'addExpense',
+    label: 'Add a line to the accounts',
+    fields: {
+      title: {
+        type: 'string',
+        required: true,
+        description: 'What the money was for',
+        example: 'Shopping',
+      },
+      amount: {
+        type: 'number',
+        required: true,
+        description: 'Amount, above zero',
+        example: 84.2,
+      },
+      payerId: {
+        type: 'string',
+        required: true,
+        description: 'Guest who paid',
+        example: '<guest id>',
+      },
+      beneficiaryIds: {
+        type: 'string[]',
+        required: false,
+        description: 'Guests it was for; everybody when omitted',
+        example: ['<guest id>'],
+      },
+      splitMode: {
+        type: 'string',
+        required: false,
+        description: 'How to divide it',
+        example: 'equal',
+        enum: EXPENSE_SPLIT_MODES,
+      },
+      shares: {
+        type: 'string[]',
+        required: false,
+        description: 'One number per guest above, for shares or amounts',
+        example: ['1', '5'],
+      },
+      kind: {
+        type: 'string',
+        required: false,
+        description: 'A transfer pays one guest back',
+        example: 'expense',
+        enum: EXPENSE_KINDS,
+      },
+      category: {
+        type: 'string',
+        required: false,
+        description: 'Kind of spending',
+        example: 'groceries',
+      },
+      date: {
+        type: 'string',
+        required: false,
+        description: 'Day paid (YYYY-MM-DD), today when omitted',
+        example: '2026-04-20',
+      },
+    },
+  },
+  {
+    action: 'updateExpense',
+    label: 'Edit a line, never creates one',
+    fields: {
+      expenseId: {
+        type: 'string',
+        required: true,
+        description: 'Expense ID',
+        example: '<expense id>',
+      },
+      title: {
+        type: 'string',
+        required: false,
+        description: 'New title',
+        example: 'Shopping',
+      },
+      amount: {
+        type: 'number',
+        required: false,
+        description: 'New amount',
+        example: 84.2,
+      },
+      payerId: {
+        type: 'string',
+        required: false,
+        description: 'Guest who paid',
+        example: '<guest id>',
+      },
+      beneficiaryIds: {
+        type: 'string[]',
+        required: false,
+        description: 'Guests it is for',
+        example: ['<guest id>'],
+      },
+      splitMode: {
+        type: 'string',
+        required: false,
+        description: 'How to divide it',
+        example: 'equal',
+        enum: EXPENSE_SPLIT_MODES,
+      },
+      shares: {
+        type: 'string[]',
+        required: false,
+        description: 'One number per guest above',
+        example: ['1', '5'],
+      },
+      date: {
+        type: 'string',
+        required: false,
+        description: 'Day paid (YYYY-MM-DD)',
+        example: '2026-04-20',
+      },
+    },
+  },
+  {
+    action: 'removeExpense',
+    label: 'Remove a line from the accounts',
+    fields: {
+      expenseId: {
+        type: 'string',
+        required: true,
+        description: 'Expense ID (from the money list)',
+        example: '<expense id>',
       },
     },
   },
