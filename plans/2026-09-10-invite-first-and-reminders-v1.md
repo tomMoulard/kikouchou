@@ -270,7 +270,17 @@ Phase 2 is built on the branch feat/install-nudge-and-handoff, stacked on the fi
 - launch_handler navigate-existing on the manifest.
 - The trips empty state names its second action "Scan or paste an invite".
 
-Not in phase 2, on purpose: reminders (phase 3) and the creation wizard (phase 4).
+Phase 3 is built on the same branch, feat/install-nudge-and-handoff, after phase 2:
+
+- The database: push_subscriptions and reminder_log, RLS on, revoked from both client roles, the service role granted what the sender runs; subscribe_trip_reminders (viewer, by token, same refusals as read_shared_trip), subscribe_member_reminders (member, by trip id) and unsubscribe_reminders (by endpoint); 24 pgTAP assertions.
+- The sender, in server/share-preview: reminders.rs (the three rules, pure), posthog.rs (capture and flags), push_sender.rs (the tick, the webhook send, encryption and VAPID through the web-push crate, the HTTP round trip through reqwest), webhook.rs (constant-time secret, body validation), POST /push/send in main.rs, and the hourly task. Configuration in the README; a workflow definition in posthog/reminder-workflow.json.
+- The client: lib/notifications/push.ts (enable, disable, state), the push listener in public/sw-notifications.js, ReminderCard on the calendar route where a push can arrive (the install nudge stands there otherwise), the reminders block in the settings notification card, the VITE_VAPID_PUBLIC_KEY variable and scripts/generate-vapid-keys.mjs.
+- Events: reminder_card_shown, reminders_enable_result, reminder_card_dismissed, reminders_disabled on the client; reminder_due, reminder_sent, reminder_subscription_gone from the server, on the same person when the browser passed its distinct id.
+- The e2e stub answers the three functions, and the anonymous invite spec turns reminders on and off through the card and the settings page.
+
+Deviations from the phase 3 text above, for the record: the reminders print no clock time, because the service does not know the house's time zone; a flag that does not exist in PostHog counts as on, so the reminders work before anybody creates one; the default send mode is direct, with the workflow as the opt-in; the workflow and the flags are not created in PostHog by this work, only defined.
+
+Not in phase 3, on purpose: the creation wizard (phase 4), and the manual iPhone and Android run, which needs a deployed service with a VAPID key.
 
 ## 8. Effort
 
