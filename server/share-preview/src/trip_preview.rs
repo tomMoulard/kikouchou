@@ -69,6 +69,7 @@ pub struct TripRow {
 // ============================================================================
 
 /// Root map keys, mirroring `COLLECTION_ROOT` in `src/lib/yjs/doc-model.ts`.
+/// The transport and ride roots live in `reminders`.
 const GUESTS_ROOT: &str = "guestsById";
 const ROOMS_ROOT: &str = "roomsById";
 const ASSIGNMENTS_ROOT: &str = "roomAssignmentsById";

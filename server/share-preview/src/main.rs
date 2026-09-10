@@ -13,9 +13,13 @@ mod config;
 mod dates;
 mod i18n;
 mod page;
+mod posthog;
+mod push_sender;
+mod reminders;
 mod router;
 mod trip_preview;
 mod trip_source;
+mod webhook;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -31,6 +35,8 @@ use crate::card_image::rasterise_card;
 use crate::card_svg::render_card_svg;
 use crate::config::Config;
 use crate::i18n::Language;
+use crate::posthog::PostHog;
+use crate::push_sender::PushSender;
 use crate::router::{route, Backend};
 use crate::trip_preview::TripPreview;
 use crate::trip_source::{LoadResult, TripSource};
@@ -49,11 +55,16 @@ const MAX_CACHED: usize = 500;
 // ============================================================================
 
 struct App {
-    source: TripSource,
+    source: Arc<TripSource>,
     trips: TtlCache<LoadResult>,
     cards: TtlCache<Vec<u8>>,
     config: Config,
+    /// `None` without a VAPID key: `/push/send` then does not exist.
+    sender: Option<Arc<PushSender>>,
 }
+
+/// The path a PostHog workflow calls back on.
+const PUSH_SEND_PATH: &str = "/push/send";
 
 impl Backend for App {
     async fn load_trip(&self, token: &str) -> LoadResult {
@@ -129,10 +140,74 @@ fn log_line(method: &str, path: &str, status: u16, started_at: Instant, outcome:
     );
 }
 
+/// Answers `POST /push/send`. Every reply is a small JSON object.
+async fn handle_push_send(
+    app: &App,
+    method: &str,
+    request: Request,
+) -> (u16, String, &'static str) {
+    fn reply(status: u16, outcome: &'static str) -> (u16, String, &'static str) {
+        (status, serde_json::json!({ "outcome": outcome }).to_string(), outcome)
+    }
+
+    let (Some(sender), Some(secret)) = (&app.sender, &app.config.push_webhook_secret) else {
+        return reply(404, "reminders-not-configured");
+    };
+    if method != "POST" {
+        return reply(405, "method-not-allowed");
+    }
+
+    let authorization = request
+        .headers()
+        .get("authorization")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned);
+    if !webhook::authorized(authorization.as_deref(), secret) {
+        return reply(401, "unauthorized");
+    }
+
+    let Ok(body) = axum::body::to_bytes(request.into_body(), webhook::MAX_BODY_BYTES).await
+    else {
+        return reply(413, "body-too-large");
+    };
+    let send = match webhook::parse_send_request(&body) {
+        Ok(send) => send,
+        Err(reason) => {
+            return (
+                400,
+                serde_json::json!({ "outcome": "bad-request", "error": reason }).to_string(),
+                "bad-request",
+            )
+        }
+    };
+
+    let outcome = sender
+        .send_by_id(
+            &send.subscription_id,
+            send.kind,
+            &send.subject,
+            OffsetDateTime::now_utc(),
+        )
+        .await;
+    reply(webhook::status_for(outcome), outcome.as_str())
+}
+
 async fn handle(State(app): State<Arc<App>>, request: Request) -> Response {
     let started_at = Instant::now();
     let method = request.method().as_str().to_owned();
     let path = request.uri().path().to_owned();
+
+    if path == PUSH_SEND_PATH {
+        let (status, body, outcome) = handle_push_send(app.as_ref(), &method, request).await;
+        log_line(&method, &path, status, started_at, outcome);
+        return Response::builder()
+            .status(StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR))
+            .header("content-type", "application/json")
+            .header("cache-control", "no-store")
+            .body(body.into())
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+    }
+
     let accept_language = request
         .headers()
         .get("accept-language")
@@ -230,11 +305,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.share_origin, config.app_origin
     );
 
+    let source = Arc::new(TripSource::new(&config)?);
+    let posthog = PostHog::new(config.posthog_host.as_deref(), config.posthog_key.as_deref());
+    let sender = PushSender::new(&config, Arc::clone(&source), posthog).map(Arc::new);
+
+    match (&sender, &config.push_webhook_secret) {
+        (Some(_), Some(_)) => println!(
+            "reminders on: {:?} mode, a pass every {}s, /push/send open",
+            config.push_send_mode, config.reminder_interval_secs
+        ),
+        (Some(_), None) => println!(
+            "reminders on: {:?} mode, a pass every {}s, /push/send closed (no PUSH_WEBHOOK_SECRET)",
+            config.push_send_mode, config.reminder_interval_secs
+        ),
+        (None, _) => println!("reminders off (no VAPID_PRIVATE_KEY)"),
+    }
+
+    if let Some(sender) = sender.clone() {
+        let every = std::time::Duration::from_secs(config.reminder_interval_secs);
+        tokio::spawn(async move {
+            // The first tick fires at once, so a restart never skips an hour.
+            let mut interval = tokio::time::interval(every);
+            loop {
+                interval.tick().await;
+                sender.tick(OffsetDateTime::now_utc()).await;
+            }
+        });
+    }
+
     let app = Arc::new(App {
-        source: TripSource::new(&config)?,
+        source,
         trips: TtlCache::new(config.cache_seconds, MAX_CACHED),
         cards: TtlCache::new(config.cache_seconds, MAX_CACHED),
         config,
+        sender,
     });
 
     let service = axum::Router::new().fallback(handle).with_state(app);

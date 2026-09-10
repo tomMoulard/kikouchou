@@ -330,6 +330,15 @@ mod tests {
             share_origin: "https://share.kikouchou.app".to_owned(),
             app_origin: "https://app.kikouchou.app".to_owned(),
             cache_seconds: 300,
+            posthog_host: None,
+            posthog_key: None,
+            vapid_private_key: None,
+            vapid_subject: "mailto:admin@kikouchou.app".to_owned(),
+            push_webhook_secret: None,
+            push_send_mode: crate::config::SendMode::Direct,
+            reminder_interval_secs: 3600,
+            reminder_eve_hour_utc: 17,
+            reminder_pickup_window_minutes: 180,
         }
     }
 
