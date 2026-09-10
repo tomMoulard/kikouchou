@@ -84,6 +84,88 @@ export type Database = {
         }
         Relationships: []
       }
+      push_subscriptions: {
+        Row: {
+          analytics_id: string | null
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          last_seen_at: string
+          locale: string
+          p256dh: string
+          person_id: string | null
+          trip_id: string
+          user_id: string | null
+        }
+        Insert: {
+          analytics_id?: string | null
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          last_seen_at?: string
+          locale?: string
+          p256dh: string
+          person_id?: string | null
+          trip_id: string
+          user_id?: string | null
+        }
+        Update: {
+          analytics_id?: string | null
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          last_seen_at?: string
+          locale?: string
+          p256dh?: string
+          person_id?: string | null
+          trip_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reminder_log: {
+        Row: {
+          due_reported_at: string
+          kind: string
+          sent_at: string | null
+          subject: string
+          subscription_id: string
+        }
+        Insert: {
+          due_reported_at?: string
+          kind: string
+          sent_at?: string | null
+          subject: string
+          subscription_id: string
+        }
+        Update: {
+          due_reported_at?: string
+          kind?: string
+          sent_at?: string | null
+          subject?: string
+          subscription_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reminder_log_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "push_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trip_doc_snapshots: {
         Row: {
           state: string
@@ -260,6 +342,17 @@ export type Database = {
       }
       redeem_invite: { Args: { invite_token: string }; Returns: string }
       revoke_invite: { Args: { invite_token: string }; Returns: undefined }
+      store_push_subscription: {
+        Args: {
+          p_analytics_id: string
+          p_locale: string
+          p_person_id: string
+          p_subscription: Json
+          p_trip_id: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       subscribe_member_reminders: {
         Args: {
           analytics_id?: string
@@ -278,6 +371,10 @@ export type Database = {
           person_id?: string
           subscription: Json
         }
+        Returns: string
+      }
+      trip_behind_live_invite: {
+        Args: { invite_token: string }
         Returns: string
       }
       unsubscribe_reminders: {
