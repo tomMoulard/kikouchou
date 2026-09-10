@@ -9,11 +9,29 @@
  * @module features/settings/components/__tests__/NotificationSettings.test
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { act, render, screen, userEvent, waitFor } from '@/test/utils';
 
 import { NotificationSettings } from '../NotificationSettings';
+import { useTripContext } from '@/contexts/TripContext';
+import { disableTripReminders, getReminderState } from '@/lib/notifications/push';
+
+// The card now also reports the server-sent reminders for the trip on screen.
+vi.mock('@/contexts/TripContext', () => ({ useTripContext: vi.fn() }));
+vi.mock('@/lib/notifications/push', () => ({
+  getReminderState: vi.fn(() => 'unsupported'),
+  disableTripReminders: vi.fn(async () => true),
+}));
+vi.mock('@/lib/supabase/client', () => ({
+  getSupabaseClient: vi.fn(async () => ({}) as never),
+}));
+
+const mockedUseTripContext = vi.mocked(useTripContext);
+const mockedReminderState = vi.mocked(getReminderState);
+const mockedDisable = vi.mocked(disableTripReminders);
+
+const SHARED_TRIP = { id: 'trip-1', name: 'Brittany', viewerToken: 'tokentokentoken1' };
 
 // ============================================================================
 // Helpers
@@ -39,6 +57,12 @@ function installNotification(stub: NotificationStub): NotificationStub {
 // ============================================================================
 
 describe('NotificationSettings', () => {
+  beforeEach(() => {
+    mockedUseTripContext.mockReturnValue({ currentTrip: null } as never);
+    mockedReminderState.mockReturnValue('unsupported');
+    mockedDisable.mockClear();
+  });
+
   afterEach(() => {
     Reflect.deleteProperty(globalThis, 'Notification');
     vi.restoreAllMocks();
@@ -132,6 +156,47 @@ describe('NotificationSettings', () => {
     expect(
       screen.queryByRole('button', { name: /notifications\.enable/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it('says nothing about trip reminders when no trip is on screen', () => {
+    installNotification({ permission: 'granted' });
+
+    render(<NotificationSettings />, { withProviders: false });
+
+    expect(screen.queryByTestId('trip-reminders-settings')).not.toBeInTheDocument();
+  });
+
+  it('reports the reminders as on for the trip on screen, and turns them off', async () => {
+    installNotification({ permission: 'granted' });
+    mockedUseTripContext.mockReturnValue({ currentTrip: SHARED_TRIP } as never);
+    mockedReminderState.mockReturnValue('on');
+    const user = userEvent.setup();
+
+    render(<NotificationSettings />, { withProviders: false });
+
+    const block = screen.getByTestId('trip-reminders-settings');
+    expect(block).toHaveTextContent('reminders.settingsOn');
+
+    await user.click(screen.getByRole('button', { name: /reminders\.turnOff/ }));
+
+    await waitFor(() => {
+      expect(mockedDisable).toHaveBeenCalledWith(expect.anything(), 'trip-1');
+    });
+    // The storage record is gone; the block reads back as off without a reload.
+    expect(block).toHaveTextContent('reminders.settingsOff');
+    expect(screen.queryByRole('button', { name: /reminders\.turnOff/ })).not.toBeInTheDocument();
+  });
+
+  it('points an unsupported browser at the Home Screen for reminders', () => {
+    mockedUseTripContext.mockReturnValue({ currentTrip: SHARED_TRIP } as never);
+    mockedReminderState.mockReturnValue('unsupported');
+
+    render(<NotificationSettings />, { withProviders: false });
+
+    expect(screen.getByTestId('trip-reminders-settings')).toHaveTextContent(
+      'reminders.settingsUnsupported',
+    );
+    expect(screen.queryByRole('button', { name: /reminders\.turnOff/ })).not.toBeInTheDocument();
   });
 
   it('re-reads the permission when the tab comes back', async () => {

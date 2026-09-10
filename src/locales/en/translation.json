@@ -1256,6 +1256,22 @@
     "failed": "Couldn't open the trip",
     "openTrip": "Open the trip"
   },
+  "reminders": {
+    "region": "Trip reminders",
+    "title": "Get a reminder before the trip",
+    "description": "{{tripName}}: a nudge the evening before it starts, before your own arrival, and before a pickup you are part of. Nothing else.",
+    "enable": "Turn on reminders",
+    "enabling": "Waiting for your answer…",
+    "enabled": "Reminders are on for this trip",
+    "blocked": "Your browser is blocking notifications for Kikouchou. Allow them in your browser or system settings, then try again.",
+    "signInFirst": "Sign in first, then turn reminders on.",
+    "failed": "Reminders could not be turned on. Try again in a moment.",
+    "settingsTitle": "Trip reminders",
+    "settingsOn": "On for {{tripName}} on this device.",
+    "settingsOff": "Off for {{tripName}}. Turn them on from the trip's calendar.",
+    "settingsUnsupported": "This browser cannot receive reminders. On an iPhone, add Kikouchou to the Home Screen first.",
+    "turnOff": "Turn off"
+  },
   "dateRangePicker": {
     "placeholder": "Select date range",
     "ariaLabel": "Date range picker",
@@ -1519,7 +1535,7 @@
     },
     "enable": "Turn on ride alerts",
     "enabling": "Waiting for your answer…",
-    "bestEffort": "Kikouchou has no server, so an alert can only be sent while the app is running or recently used. The alert inside the app is always there when you open it.",
+    "bestEffort": "Ride alerts come from this device, so they are sent while the app is running or was used recently. Trip reminders come from the server: turn them on from a trip\u2019s calendar and they reach you with the app closed.",
     "deniedHint": "Your browser is blocking notifications for Kikouchou. The app cannot ask again — allow them for this site in your browser or system settings.",
     "unsupportedHint": "This browser cannot show notifications. On an iPhone, add Kikouchou to the Home Screen first. Ride alerts still appear inside the app."
   },

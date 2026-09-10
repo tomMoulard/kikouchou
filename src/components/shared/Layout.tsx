@@ -60,7 +60,9 @@ import type { Trip } from '@/types';
 
 import { SyncStatusBadge } from './SyncStatusBadge';
 import { ViewerUnlockCard } from './ViewerUnlockCard';
+import { ReminderCard } from './ReminderCard';
 import { InstallNudgeCard } from '@/components/pwa/InstallNudgeCard';
+import { isPushSupported } from '@/lib/notifications/push';
 
 // ============================================================================
 // Type Definitions
@@ -1000,15 +1002,18 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
     location.pathname.startsWith(`/trips/${currentTrip.id}`),
 
   /**
-   * Whether this is the one page that may suggest installing the app.
+   * Whether this is the one page that may offer reminders.
    *
    * The calendar is where an invite lands and where the dates worth a reminder
-   * are, so the suggestion sits there and nowhere else. The card itself decides
-   * the rest — phone, browser tab, a trip that is actually shared, not
-   * dismissed — so a laptop or the installed app renders nothing here.
+   * are, so the offer sits there and nowhere else. Which card makes it depends
+   * on the browser: one that can receive a push gets the reminder card; an
+   * iPhone's Safari tab, which cannot, gets the install nudge, because the
+   * Home Screen app is what makes reminders possible there. Each card decides
+   * the rest — a trip that is actually shared, not dismissed, not already on.
    */
-   showInstallNudge =
-    currentTrip !== null && location.pathname === `/trips/${currentTrip.id}/calendar`;
+   showReminderOffer =
+    currentTrip !== null && location.pathname === `/trips/${currentTrip.id}/calendar`,
+   canReceivePush = isPushSupported();
 
   return (
     // `min-h-svh`, not `min-h-screen` (`100vh`): on a phone `100vh` is the tall
@@ -1060,7 +1065,12 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
         )}
       >
         {showViewerCard ? <ViewerUnlockCard className="mb-4" /> : null}
-        {showInstallNudge ? <InstallNudgeCard trip={currentTrip} className="mb-4" /> : null}
+        {showReminderOffer && canReceivePush ? (
+          <ReminderCard trip={currentTrip} className="mb-4" />
+        ) : null}
+        {showReminderOffer && !canReceivePush ? (
+          <InstallNudgeCard trip={currentTrip} className="mb-4" />
+        ) : null}
         {children}
       </main>
 
