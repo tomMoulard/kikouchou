@@ -886,6 +886,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
       <TransportScopeFilter
         scope={scope}
         canFilter={canFilterScope}
+        tripId={tripIdFromUrl ?? null}
         hiddenCount={hiddenCount}
         onScopeChange={setScope}
       />

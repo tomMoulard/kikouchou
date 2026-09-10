@@ -25,6 +25,7 @@ describe('TransportScopeFilter', () => {
       <TransportScopeFilter
         scope="mine"
         canFilter={true}
+        tripId="trip-1"
         hiddenCount={0}
         onScopeChange={vi.fn()}
       />,
@@ -50,6 +51,7 @@ describe('TransportScopeFilter', () => {
       <TransportScopeFilter
         scope="mine"
         canFilter={true}
+        tripId="trip-1"
         hiddenCount={2}
         onScopeChange={onScopeChange}
       />,
@@ -67,6 +69,7 @@ describe('TransportScopeFilter', () => {
       <TransportScopeFilter
         scope="mine"
         canFilter={true}
+        tripId="trip-1"
         hiddenCount={3}
         onScopeChange={onScopeChange}
       />,
@@ -90,6 +93,7 @@ describe('TransportScopeFilter', () => {
       <TransportScopeFilter
         scope="all"
         canFilter={true}
+        tripId="trip-1"
         hiddenCount={4}
         onScopeChange={vi.fn()}
       />,
@@ -104,13 +108,14 @@ describe('TransportScopeFilter', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('points at Settings instead of a control nobody can use', () => {
+  it("points at the trip's settings instead of a control nobody can use", () => {
     // No identity means no filtering, so there is no switch to offer — only
     // the one action that would make one possible.
     render(
       <TransportScopeFilter
         scope="all"
         canFilter={false}
+        tripId="trip-1"
         hiddenCount={0}
         onScopeChange={vi.fn()}
       />,
@@ -120,6 +125,6 @@ describe('TransportScopeFilter', () => {
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: 'transports.scope.chooseIdentity' }),
-    ).toHaveAttribute('href', '/settings');
+    ).toHaveAttribute('href', '/trips/trip-1/edit');
   });
 });

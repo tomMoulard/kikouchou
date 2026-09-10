@@ -1,16 +1,16 @@
 /**
- * @fileoverview "Print the trip summary" card for the settings page.
+ * @fileoverview "Print the trip summary" card for the trip settings page.
  *
  * The printable sheet used to have its own entry in the main navigation, next
  * to the calendar and the rooms. It does not belong there: it is not a place
  * you go to plan, it is a thing you do once, the morning everybody leaves.
- * One button in the settings is the whole feature, and the sidebar gets a slot
- * back.
+ * One button in the trip settings is the whole feature, and the sidebar gets a
+ * slot back.
  *
  * The route still exists and still carries the sheet — this only changes how
  * it is reached.
  *
- * @module features/settings/components/PrintSummaryCard
+ * @module features/trips/components/PrintSummaryCard
  */
 
 import { type ReactElement, memo, useCallback } from 'react';
@@ -36,8 +36,8 @@ import { useTripContext } from '@/contexts/TripContext';
  * Lets the user open the printable one-page summary of the current trip.
  *
  * With no trip selected the button is disabled rather than hidden: a card that
- * appears and disappears with the trip makes the settings page jump, and a
- * disabled button says the feature exists and what it needs.
+ * appears and disappears with the trip makes the page jump, and a disabled
+ * button says the feature exists and what it needs.
  *
  * @returns The print-summary card
  */

@@ -72,7 +72,7 @@ const TripListPage = lazy(() =>
  * Routes:
  * - `/trips` - Trip list page (view all trips)
  * - `/trips/new` - Trip creation page
- * - `/trips/:tripId/edit` - Trip edit page
+ * - `/trips/:tripId/edit` - Trip settings page (name, dates, guest identity, delete)
  *
  * @example
  * ```tsx

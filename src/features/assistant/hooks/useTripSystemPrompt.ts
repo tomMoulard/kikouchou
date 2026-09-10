@@ -508,7 +508,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     }
 
     // The guest this browser identified as — picked in the share wizard or on
-    // the settings page, and stored per share key rather than in the trip, so
+    // the trip settings page, and stored per share key rather than in the trip, so
     // it is undefined for an owner who never followed their own link.
     const selfGuestId = getTripGuestPersonId(currentTrip);
     const selfGuest = persons.find((person) => person.id === selfGuestId);
@@ -557,7 +557,8 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       ...(currentTrip.description
         ? [`- Description: ${toPromptText(currentTrip.description)}`]
         : []),
-      // Who this device is, chosen in the share wizard or on the settings page.
+      // Who this device is, chosen in the share wizard or on the trip settings
+      // page.
       // Stated either way rather than only when known: told nothing, the model
       // picks a guest out of the roster and answers "your room is the attic"
       // about somebody else. The negative line is what stops the guess, and it

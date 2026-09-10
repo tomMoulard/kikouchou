@@ -292,6 +292,7 @@ describe('Layout', () => {
         'nav.persons',
         'nav.transports',
         'nav.tripAnalytics',
+        'nav.tripSettings',
       ]) {
         const link = within(sidebar as HTMLElement).getByText(key).closest('a');
         expect(link).toHaveAttribute('aria-disabled', 'true');
@@ -461,6 +462,19 @@ describe('Layout', () => {
 
       const analyticsLink = within(sidebar as HTMLElement).getByText('nav.tripAnalytics').closest('a');
       expect(analyticsLink).toHaveAttribute('href', '/trips/trip-123/analytics');
+
+      // The trip's own settings, and the app's, side by side: two entries for
+      // two different things. The trip's name, its dates and deleting it used
+      // to be reachable only through `/settings`, which is the confusion this
+      // entry exists to end.
+      const tripSettingsLink = within(sidebar as HTMLElement)
+        .getByText('nav.tripSettings')
+        .closest('a');
+      expect(tripSettingsLink).toHaveAttribute('href', '/trips/trip-123/edit');
+      expect(within(sidebar as HTMLElement).getByText('nav.settings').closest('a')).toHaveAttribute(
+        'href',
+        '/settings',
+      );
     });
 
     it('My Trips link has correct href', () => {

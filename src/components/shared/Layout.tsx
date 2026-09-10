@@ -33,6 +33,7 @@ import {
   MoreHorizontal,
   PartyPopper,
   Settings,
+  Settings2,
   Sparkles,
   Users,
   UsersRound,
@@ -119,6 +120,11 @@ const TRIP_NAV_ITEMS: readonly NavItem[] = [
   { labelKey: 'nav.activities', pathSuffix: 'activities', icon: PartyPopper, requiresTrip: true },
   { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: BarChart2, requiresTrip: true },
   { labelKey: 'nav.money', pathSuffix: 'money', icon: Wallet, requiresTrip: true },
+  // The trip's own settings — its name, its dates, who you are on it, and
+  // deleting it. `nav.settings` below is the app's: the language, the theme,
+  // the account. Two entries because they are two different things, and the
+  // trip's used to be reachable only through the app's.
+  { labelKey: 'nav.tripSettings', pathSuffix: 'edit', icon: Settings2, requiresTrip: true },
 ] as const;
 
 /**
@@ -200,12 +206,14 @@ const MOBILE_SECONDARY_TRIP_PATHS: readonly string[] = [
   'activities',
   'analytics',
   'money',
+  'edit',
 ];
 
 /**
  * Primary mobile bottom nav items (max 5 for UX: 4 trip items + "More").
  * Calendar, Rooms, Guests and Transports are directly accessible.
- * Activities, Analytics, Money, Trips, Settings are inside the "More" sheet.
+ * Activities, Analytics, Money, Trip settings, Trips, Settings are inside the
+ * "More" sheet.
  * Derived from canonical arrays to avoid duplication.
  */
 const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] = TRIP_NAV_ITEMS.filter(

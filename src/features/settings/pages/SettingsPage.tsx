@@ -2,15 +2,21 @@
  * @fileoverview Settings page for app configuration.
  * Allows users to change language and theme, view app info, and clear data.
  *
+ * App settings only. The trip used to be edited here too — its name and dates
+ * in a form, a "Delete this trip" button, the guest identity card and the print
+ * button, all beside the language and the theme. That mixed two jobs on one
+ * page: a preference belongs to this device, a trip belongs to the group that
+ * is going on it. The trip's own settings page (`/trips/:tripId/edit`) owns all
+ * of that now. "Clear all data" stays here, because it empties the device
+ * rather than one trip.
+ *
  * @module features/settings/pages/SettingsPage
  */
 
-import { type ReactElement, memo, useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { type ReactElement, memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Eye, Globe, Info, Luggage, Trash2, UserRound } from 'lucide-react';
+import { Globe, Info, Trash2, UserRound } from 'lucide-react';
 import { useOfflineAwareNotify } from '@/hooks';
-import { useTripAccess } from '@/hooks/useTripAccess';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -29,23 +35,14 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { EmptyState } from '@/components/shared/EmptyState';
-import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
-import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { AccountSection } from '@/features/auth/components/AccountSection';
-import { GuestIdentitySelector } from '@/features/settings/components/GuestIdentitySelector';
 import { NotificationSettings } from '@/features/settings/components/NotificationSettings';
-import { PrintSummaryCard } from '@/features/settings/components/PrintSummaryCard';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
-import { TripForm } from '@/features/trips/components/TripForm';
-import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db';
-import { deleteTrip, updateTrip } from '@/lib/db';
 import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, isLanguageSupported } from '@/lib/i18n';
 import { notify } from '@/lib/notifications';
 import { formatAppVersion } from '@/lib/utils/app-version';
-import type { TripFormData } from '@/types';
 
 // ============================================================================
 // Constants
@@ -273,246 +270,6 @@ const DataSection = memo(function DataSection(): ReactElement {
   );
 });
 
-/**
- * Current trip section component.
- * Displays the current trip edit form and delete option.
- *
- * The card is always mounted so the section has the same four states as every
- * other page in the app: loading while IndexedDB resolves, an error with a
- * retry, an empty state when no trip is selected, and the form itself. It used
- * to render `null` for all three non-form cases, which meant a cold open of
- * /settings showed a hole where the trip card would land.
- *
- * Only the trip card waits — account, language, about and data management
- * render immediately, because none of them depends on the trip query (and the
- * account panel must never wait on auth; see AuthContext's docblock).
- */
-const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { currentTrip, setCurrentTrip, trips, isLoading, error, checkConnection } =
-    useTripContext();
-  const { notifySuccess } = useOfflineAwareNotify();
-  const { canEdit } = useTripAccess();
-
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
-  const isDeletingRef = useRef(false);
-  const isMountedRef = useRef(true);
-
-  useEffect(() => {
-    // Set on setup, not only in cleanup: StrictMode's dev-time
-    // mount -> cleanup -> mount cycle would otherwise latch this false
-    // forever, silently turning every guarded setState into a no-op.
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  const handleDirtyChange = useCallback((dirty: boolean) => {
-    setIsDirty(dirty);
-  }, []);
-
-  const handleSubmit = useCallback(
-    async (data: TripFormData): Promise<void> => {
-      if (!currentTrip) return;
-      await updateTrip(currentTrip.id, data);
-      setIsDirty(false);
-      notifySuccess(t('trips.updated', 'Trip updated successfully'));
-    },
-    [currentTrip, notifySuccess, t],
-  );
-
-  const handleCancel = useCallback(() => {
-    setIsDirty(false);
-  }, []);
-
-  const handleDelete = useCallback(async (): Promise<void> => {
-    if (isDeletingRef.current || !currentTrip) return;
-    isDeletingRef.current = true;
-
-    const tripIdToDelete = currentTrip.id;
-
-    try {
-      await deleteTrip(tripIdToDelete);
-      try {
-        await setCurrentTrip(null);
-      } catch (clearErr) {
-        console.error('Failed to clear current trip after delete:', clearErr);
-      }
-      notifySuccess(t('trips.deleted', 'Trip deleted successfully'));
-      navigate('/trips', { replace: true });
-    } catch (deleteError) {
-      console.error('Failed to delete trip:', deleteError);
-      if (isMountedRef.current) {
-        notify.error(t('errors.deleteFailed', 'Failed to delete. Please try again.'));
-      }
-    } finally {
-      isDeletingRef.current = false;
-    }
-  }, [currentTrip, navigate, setCurrentTrip, notifySuccess, t]);
-
-  const handleOpenDeleteDialog = useCallback(() => {
-    setIsDeleteDialogOpen(true);
-  }, []);
-
-  const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
-    setIsDeleteDialogOpen(open);
-  }, []);
-
-  // `checkConnection` re-throws after storing the error on the context, so the
-  // rejection has to be swallowed here — `void` alone would surface it as an
-  // unhandled rejection. Same shape as TripListPage's retry.
-  const handleRetry = useCallback(async (): Promise<void> => {
-    try {
-      await checkConnection();
-    } catch {
-      // Error is captured in context and rendered by ErrorDisplay.
-    }
-  }, [checkConnection]);
-
-  const handleRetryClick = useCallback(() => {
-    void handleRetry();
-  }, [handleRetry]);
-
-  // With no trip selected the call to action depends on whether there is
-  // anything to select: send people to the list when trips exist, straight to
-  // the create form when the device is empty.
-  const hasTrips = trips.length > 0;
-
-  const handleEmptyAction = useCallback(() => {
-    navigate(hasTrips ? '/trips' : '/trips/new');
-  }, [hasTrips, navigate]);
-
-  return (
-    <>
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-              <Luggage className="size-5 text-primary" aria-hidden="true" />
-            </div>
-            <div className="flex-1">
-              <CardTitle className="text-base">{t('settings.currentTrip', 'Current Trip')}</CardTitle>
-              <CardDescription>
-                {t('settings.currentTripDescription', 'Edit your current trip settings')}
-              </CardDescription>
-            </div>
-            {currentTrip && (
-              <div className="flex gap-2">
-                <Button variant="destructive" size="sm" onClick={handleOpenDeleteDialog}>
-                  <Trash2 className="mr-2 size-4" aria-hidden="true" />
-                  {t('common.delete')}
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center py-6">
-              <LoadingState
-                variant="inline"
-                size="lg"
-                label={t('settings.currentTripLoading', 'Loading your trip…')}
-              />
-            </div>
-          ) : currentTrip && !canEdit ? (
-            // A read-only trip: the facts, and the one thing that can be done
-            // about it here — deleting this device's copy — stays in the header.
-            <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-muted-foreground">{t('trips.name')}</dt>
-                <dd className="font-medium">{currentTrip.name}</dd>
-              </div>
-              {currentTrip.location && (
-                <div>
-                  <dt className="text-muted-foreground">{t('trips.location')}</dt>
-                  <dd className="font-medium">{currentTrip.location}</dd>
-                </div>
-              )}
-              <div>
-                <dt className="text-muted-foreground">{t('trips.startDate')}</dt>
-                <dd className="font-medium">{currentTrip.startDate}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">{t('trips.endDate')}</dt>
-                <dd className="font-medium">{currentTrip.endDate}</dd>
-              </div>
-              <p className="flex items-start gap-2 text-muted-foreground sm:col-span-2">
-                <Eye className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                {t(
-                  'viewer.description',
-                  'You opened this trip from an invite link. You can see everything and change nothing. Sign in to edit it with the others.',
-                )}
-              </p>
-            </dl>
-          ) : currentTrip ? (
-            // A trip in hand beats a stale error. `error` is the whole trip
-            // context's error, and a `setCurrentTrip` that failed on another
-            // page leaves it set until someone clears it — showing the error
-            // here would unmount an editable form (and any unsaved edits in
-            // it) over something that has nothing to do with this trip.
-            <>
-              <TripForm
-                trip={currentTrip}
-                onSubmit={handleSubmit}
-                onCancel={handleCancel}
-                onDirtyChange={handleDirtyChange}
-              />
-              {isDirty && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {t('settings.unsavedTripChanges', 'You have unsaved changes')}
-                </p>
-              )}
-            </>
-          ) : error ? (
-            <ErrorDisplay
-              error={error}
-              size="compact"
-              title={t('settings.currentTripError', 'Could not load your trip')}
-              onRetry={handleRetryClick}
-            />
-          ) : (
-            <EmptyState
-              icon={Luggage}
-              title={t('settings.noCurrentTrip', 'No trip selected')}
-              description={
-                hasTrips
-                  ? t(
-                      'settings.noCurrentTripDescription',
-                      'Open a trip and its name, dates and location become editable here.',
-                    )
-                  : t(
-                      'settings.noTripsYetDescription',
-                      'Create your first trip and its name, dates and location become editable here.',
-                    )
-              }
-              action={{
-                label: hasTrips
-                  ? t('settings.chooseTrip', 'Choose a trip')
-                  : t('settings.createFirstTrip', 'Create a trip'),
-                onClick: handleEmptyAction,
-              }}
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      <ConfirmDialog
-        open={isDeleteDialogOpen}
-        onOpenChange={handleDeleteDialogOpenChange}
-        title={t('confirm.deleteTrip')}
-        description={t('confirm.deleteTripDescription')}
-        confirmLabel={t('common.delete')}
-        onConfirm={handleDelete}
-        variant="destructive"
-      />
-    </>
-  );
-});
-
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -521,9 +278,6 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
  * Settings page component.
  *
  * Features:
- * - Current trip: edit or delete, with loading, error and empty states
- * - Guest identity: which guest this browser is on the current trip
- * - Trip summary: opens the printable one-page sheet
  * - Account: sign in with Google, sign out
  * - Language selector (French/English)
  * - Theme selector (light/dark/system)
@@ -554,20 +308,6 @@ function SettingsPageComponent(): ReactElement {
       />
 
       <div className="mt-6 space-y-6">
-        {/* Current Trip Section — carries its own loading, error and empty states */}
-        <CurrentTripSection />
-
-        {/* Which guest this browser is — directly under the trip it belongs to,
-            because the answer is per trip and means nothing without one. The
-            transport views filter by this answer too, which is why the card
-            writes the explicit choice and not only the share-link store. */}
-        <GuestIdentitySelector />
-
-        {/* The printable sheet, reached from here rather than from a
-            navigation entry of its own: printing is an occasional action, not
-            a section of the trip. */}
-        <PrintSummaryCard />
-
         {/* Account Section */}
         <AccountCard />
 

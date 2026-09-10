@@ -1,11 +1,11 @@
 /**
- * @fileoverview Tests for the "print the trip summary" settings card.
+ * @fileoverview Tests for the "print the trip summary" trip settings card.
  *
  * The card replaced a navigation entry, so what matters is that the sheet is
  * still reachable: the button must navigate to the current trip's summary
  * route, and must not offer a route it cannot build when no trip is open.
  *
- * @module features/settings/components/__tests__/PrintSummaryCard.test
+ * @module features/trips/components/__tests__/PrintSummaryCard.test
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';

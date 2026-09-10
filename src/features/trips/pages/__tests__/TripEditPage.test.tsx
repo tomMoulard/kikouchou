@@ -1,3 +1,15 @@
+/**
+ * @fileoverview Tests for the trip's own settings page.
+ *
+ * The trip form, the delete button, the guest identity card and the print
+ * button used to be spread over this page and `/settings`. They are all here
+ * now, so the page's own cover has to say that the two cards are mounted — a
+ * card that quietly stopped rendering would otherwise leave the app with no
+ * way at all to say which guest this browser is.
+ *
+ * @module features/trips/pages/__tests__/TripEditPage.test
+ */
+
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@/test/utils';
 import type { Trip } from '@/types';
@@ -66,6 +78,15 @@ vi.mock('@/features/trips/components/TripForm', () => ({
   ),
 }));
 
+// The two trip cards below the form: mounted here, driven by their own tests.
+vi.mock('@/features/trips/components/GuestIdentitySelector', () => ({
+  GuestIdentitySelector: () => <div data-testid="guest-identity-selector" />,
+}));
+
+vi.mock('@/features/trips/components/PrintSummaryCard', () => ({
+  PrintSummaryCard: () => <div data-testid="print-summary-card" />,
+}));
+
 // Mock ConfirmDialog to capture confirm and openChange callbacks
 vi.mock('@/components/shared/ConfirmDialog', () => ({
   ConfirmDialog: ({ open, onConfirm, onOpenChange }: { open: boolean; onConfirm: () => Promise<void>; onOpenChange?: (open: boolean) => void }) =>
@@ -85,10 +106,27 @@ describe('TripEditPage', () => {
     mockGetTripById.mockResolvedValue(mockTrip);
   });
 
-  it('renders the edit page with trip data', async () => {
+  it('renders the trip settings page with trip data', async () => {
     render(<TripEditPage />, { withProviders: false });
-    expect(await screen.findByText('trips.edit')).toBeInTheDocument();
+    expect(await screen.findByText('trips.settings')).toBeInTheDocument();
     expect(await screen.findByTestId('edit-mode')).toBeInTheDocument();
+  });
+
+  it('carries the two cards that belong to the trip', async () => {
+    render(<TripEditPage />, { withProviders: false });
+    expect(await screen.findByTestId('guest-identity-selector')).toBeInTheDocument();
+    expect(screen.getByTestId('print-summary-card')).toBeInTheDocument();
+  });
+
+  it('shows the facts instead of the form on a viewer trip', async () => {
+    // A trip opened from an invite link with no account: `viewerToken` is set,
+    // and nothing on the device may write into it.
+    mockGetTripById.mockResolvedValue({ ...mockTrip, viewerToken: 'token-1' });
+    render(<TripEditPage />, { withProviders: false });
+
+    expect(await screen.findByText('Existing Trip')).toBeInTheDocument();
+    expect(screen.getByText('viewer.description')).toBeInTheDocument();
+    expect(screen.queryByTestId('trip-form')).not.toBeInTheDocument();
   });
 
   it('renders delete button', async () => {
@@ -201,9 +239,9 @@ describe('TripEditPage', () => {
 
   it('renders back link to trips', async () => {
     render(<TripEditPage />, { withProviders: false });
-    await screen.findByText('trips.edit');
+    await screen.findByText('trips.settings');
     // The PageHeader with backLink="/trips" should render a link
-    expect(screen.getByText('trips.edit')).toBeInTheDocument();
+    expect(screen.getByText('trips.settings')).toBeInTheDocument();
   });
 
   it('handles update error gracefully', async () => {
