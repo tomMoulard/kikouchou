@@ -54,6 +54,9 @@ function areTripsEqual(a: Trip | null, b: Trip | null): boolean {
     a.updatedAt === b.updatedAt &&
     // Compare coordinates if present
     areCoordinatesEqual(a.coordinates, b.coordinates) &&
+    // The currency every amount on the money page is formatted with: a change
+    // that never reached the UI would leave the figures labelled in the old one.
+    a.currency === b.currency &&
     // Whether the trip is shared. Listed because the comparator must cover every
     // mutable field — a missing one means a change that never re-renders.
     a.remoteTripId === b.remoteTripId &&

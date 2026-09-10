@@ -21,6 +21,7 @@ import {
   MAX_VEHICLE_SEAT_COUNT,
   MIN_LEAD_TIME_MINUTES,
   MIN_VEHICLE_SEAT_COUNT,
+  normalizeCurrency,
   normalizePersonHeadcount,
 } from '@/types';
 import type { ChildSeatKind } from '@/types';
@@ -158,13 +159,23 @@ export function sanitizeOptionalText(
  * @returns Sanitized trip form data
  */
 export function sanitizeTripData<
-  T extends { name: string; location?: string; description?: string },
+  T extends {
+    name: string;
+    location?: string;
+    description?: string;
+    currency?: string;
+  },
 >(data: T): T {
   return {
     ...data,
     name: sanitizeText(data.name, MAX_LENGTHS.tripName),
     location: sanitizeOptionalText(data.location, MAX_LENGTHS.tripLocation),
     description: sanitizeOptionalText(data.description, MAX_LENGTHS.tripDescription),
+    // Normalised rather than merely trimmed, because the code is handed to
+    // `Intl.NumberFormat`, which throws on a malformed one and would take the
+    // whole money page down with it.
+    currency:
+      data.currency === undefined ? undefined : normalizeCurrency(data.currency),
   };
 }
 

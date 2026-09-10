@@ -16,7 +16,8 @@ import { loadTripNightSplit } from '@/features/money/lib/night-split';
 import type { TripNightSplit } from '@/features/money/lib/night-split';
 import type { PersonNightCounts } from '@/features/money/lib/expense-split';
 import { db } from '@/lib/db/database';
-import type { Expense, Person, PersonId, TripId } from '@/types';
+import { normalizeCurrency } from '@/types';
+import type { CurrencyCode, Expense, Person, PersonId, TripId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -34,6 +35,8 @@ export interface TripMoney {
   readonly persons: readonly Person[];
   /** Each guest's person nights, ready for a line split by nights. */
   readonly personNights: PersonNightCounts;
+  /** The currency every amount is in, as the trip declares it. */
+  readonly currency: CurrencyCode;
 }
 
 // ============================================================================
@@ -68,7 +71,8 @@ export async function loadTripMoney(tripId: TripId): Promise<TripMoney | null> {
     return null;
   }
 
-  const [expenses, persons] = await Promise.all([
+  const [trip, expenses, persons] = await Promise.all([
+    db.trips.get(tripId),
     db.expenses
       .where('[tripId+date]')
       .between([tripId, ''], [tripId, MAX_STRING_KEY])
@@ -91,5 +95,6 @@ export async function loadTripMoney(tripId: TripId): Promise<TripMoney | null> {
     ),
     persons,
     personNights,
+    currency: normalizeCurrency(trip?.currency),
   };
 }

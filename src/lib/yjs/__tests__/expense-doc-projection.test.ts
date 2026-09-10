@@ -196,6 +196,36 @@ describe('expenses crossing the trust boundary', () => {
     expect((await db.expenses.get('e1'))?.splits).toEqual([]);
   });
 
+  it('takes the currency from the document, normalised', async () => {
+    const tripId = await makeTrip();
+    const doc = makeDoc();
+    doc.getMap('meta').set('currency', 'usd');
+
+    await syncDocToDexie(doc, tripId);
+
+    expect((await db.trips.get(tripId))?.currency).toBe('USD');
+  });
+
+  it('refuses a currency no formatter could read', async () => {
+    // `Intl.NumberFormat` throws on a malformed code, so adopting one from a
+    // peer would blank the money page rather than mislabel it.
+    const tripId = await makeTrip();
+    const doc = makeDoc();
+    doc.getMap('meta').set('currency', '€€€');
+
+    await syncDocToDexie(doc, tripId);
+
+    expect((await db.trips.get(tripId))?.currency).toBe('EUR');
+  });
+
+  it('leaves a trip that never chose a currency without one', async () => {
+    const tripId = await makeTrip();
+
+    await syncDocToDexie(makeDoc(), tripId);
+
+    expect((await db.trips.get(tripId))?.currency).toBeUndefined();
+  });
+
   it('writes only to the trip the caller named, whatever the line says', async () => {
     const mine = await makeTrip();
     const theirs = await makeTrip();

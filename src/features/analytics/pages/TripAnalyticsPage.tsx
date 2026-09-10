@@ -46,7 +46,6 @@ const HINT_SEPARATOR = ' · ';
 
 const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   const { t } = useTranslation();
-  const formatMoney = useMoneyFormat();
   const navigate = useNavigate();
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
 
@@ -90,6 +89,12 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
     },
     [tripIdFromUrl, now, retryToken],
   );
+
+  // Labelled with the trip's own currency, which the read carries so the page
+  // never has to guess at one. Called here rather than beside the figures it
+  // formats: the render below returns early for loading, error and not-found,
+  // and a hook after those runs in some renders and not others.
+  const formatMoney = useMoneyFormat(result?.data?.currency);
 
   const tripAnalyticsHref = useMemo(
     () => (tripIdFromUrl ? `/trips/${tripIdFromUrl}/analytics` : '/trips'),

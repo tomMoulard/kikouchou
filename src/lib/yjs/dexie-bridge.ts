@@ -59,6 +59,7 @@ import type {
 import {
   CHILD_SEAT_KINDS,
   DEFAULT_EXPENSE_CATEGORY,
+  normalizeCurrency,
   DEFAULT_EXPENSE_SPLIT_MODE,
   EXPENSE_CATEGORIES,
   EXPENSE_KINDS,
@@ -209,6 +210,15 @@ function buildTripRecord(
   );
   if (boundedDescription !== undefined) {
     trip.description = boundedDescription;
+  }
+
+  // Normalised rather than adopted: the code reaches `Intl.NumberFormat`, which
+  // throws on a malformed one, so a peer sending "€€€" would blank the money
+  // page rather than merely mis-label it. A missing one stays missing, which
+  // reads as the default everywhere it is used.
+  const currency = meta.get('currency');
+  if (currency !== undefined) {
+    trip.currency = normalizeCurrency(currency);
   }
 
   const coordinates = meta.get('coordinates');
@@ -893,6 +903,7 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
     meta.set('shareId', trip.shareId);
     meta.set('createdAt', trip.createdAt);
     meta.set('updatedAt', trip.updatedAt);
+    if (trip.currency !== undefined) meta.set('currency', trip.currency);
     if (trip.location !== undefined) meta.set('location', trip.location);
     if (trip.description !== undefined) meta.set('description', trip.description);
     if (trip.coordinates !== undefined) meta.set('coordinates', trip.coordinates);

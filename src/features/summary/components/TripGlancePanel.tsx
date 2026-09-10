@@ -147,7 +147,7 @@ export const TripGlancePanel = memo(function TripGlancePanel({
 }: TripGlancePanelProps): ReactElement {
   const { t, i18n } = useTranslation();
   const { today } = useToday();
-  const formatMoney = useMoneyFormat();
+  const formatMoney = useMoneyFormat(trip.currency);
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
   const { rooms, isLoading: isRoomsLoading } = useRoomContext();
   const { assignments, isLoading: isAssignmentsLoading } = useAssignmentContext();

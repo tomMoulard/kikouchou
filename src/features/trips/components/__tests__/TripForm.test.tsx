@@ -212,12 +212,36 @@ describe('TripForm Submission', () => {
       expect(onSubmit).toHaveBeenCalledTimes(1);
     });
 
+    // The currency rides along on every save: a trip that never picked one
+    // still carries the default, so the money page has something to label its
+    // figures with.
     expect(onSubmit).toHaveBeenCalledWith({
       name: 'Beach Vacation',
       location: 'Brittany, France',
       startDate: isoDate('2024-07-15'),
       endDate: isoDate('2024-07-22'),
+      currency: 'EUR',
     });
+  });
+
+  it('keeps the currency a trip already had', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <TripForm
+        trip={createTestTrip({ currency: 'CHF' })}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /common\.save/iu }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ currency: 'CHF' });
   });
 
   it('trims whitespace from name and location', async () => {

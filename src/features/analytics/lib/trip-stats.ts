@@ -27,8 +27,8 @@ import {
 } from '@/features/transports/utils/pickup-utils';
 import { resolveRides } from '@/features/transports/utils/ride-model';
 import { db } from '@/lib/db/database';
-import { getPersonHeadcount } from '@/types';
-import type { ISODateTimeString, Transport, TripId } from '@/types';
+import { getPersonHeadcount, normalizeCurrency } from '@/types';
+import type { CurrencyCode, ISODateTimeString, Transport, TripId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -96,6 +96,14 @@ export interface TripStats {
    * zero exactly when the group is level.
    */
   readonly unsettledTotal: number;
+  /**
+   * The currency the two figures above are in, as the trip declares it.
+   *
+   * Carried on the stats rather than read again by the page: a total labelled
+   * in the wrong currency is worse than one with no label at all, and the page
+   * that shows several trips at once has to be able to see that they disagree.
+   */
+  readonly currency: CurrencyCode;
 }
 
 /** {@link TripStats} summed across trips, for the all-trips page. */
@@ -155,6 +163,7 @@ export async function loadTripStats(
     transports,
     rides,
     vehicles,
+    trip,
     expenses,
     nightSplit,
   ] = await Promise.all([
@@ -186,6 +195,8 @@ export async function loadTripStats(
       // Read whole for the same reason: a journey's car is part of what
       // `resolveRides()` resolves, and the count falls out of the array.
       db.vehicles.where('tripId').equals(tripId).toArray(),
+      // The trip row itself, for the currency its money figures are in.
+      db.trips.get(tripId),
       // Read whole rather than counted: what the trip cost and what is still
       // owed both need the lines themselves.
       db.expenses
@@ -278,6 +289,7 @@ export async function loadTripStats(
     expenseCount: expenses.length,
     spendTotal: spendTotal / 100,
     unsettledTotal: unsettledCents / 100,
+    currency: normalizeCurrency(trip?.currency),
   };
 }
 
@@ -336,6 +348,14 @@ export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
         (Math.round(totals.unsettledTotal * 100) +
           Math.round(row.unsettledTotal * 100)) /
         100,
+      // Adding two currencies gives a number in neither of them. The rows are
+      // still summed — the reader asked for a total and a blank is not one —
+      // but the total stops claiming a currency as soon as two trips disagree,
+      // so nothing labels it with a symbol it does not have.
+      currency:
+        totals.currency === '' || totals.currency === row.currency
+          ? row.currency
+          : MIXED_CURRENCIES,
     }),
     {
       guestCount: 0,
@@ -351,9 +371,18 @@ export function sumTripStats(rows: readonly TripStats[]): TripStatsTotals {
       expenseCount: 0,
       spendTotal: 0,
       unsettledTotal: 0,
+      currency: '',
     },
   );
 }
+
+/**
+ * What {@link sumTripStats} reports as the currency when the trips disagree.
+ *
+ * Deliberately not a real code: the caller has to notice it rather than format
+ * a euro total of euros and Swiss francs.
+ */
+export const MIXED_CURRENCIES = 'MIXED';
 
 /**
  * Whether a trip has nothing to summarise yet.

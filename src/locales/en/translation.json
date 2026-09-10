@@ -134,7 +134,8 @@
     "unsettledTotalHint": "What the settling payments come to",
     "unsettledSettled": "Everybody is level",
     "totalSpend": "Total spent",
-    "totalUnsettled": "Still owed"
+    "totalUnsettled": "Still owed",
+    "mixedCurrencies": "These trips are kept in different currencies"
   },
   "trips": {
     "title": "My trips",
@@ -264,6 +265,22 @@
       "description": "You joined a house somebody else organized. Create your own trip, share the link, and your friends sort out rooms and pickups the same way.",
       "action": "Plan my trip",
       "notNow": "Not now"
+    },
+    "currency": "Currency",
+    "currencyHint": "What the money page labels every amount with.",
+    "currencies": {
+      "EUR": "Euro (€)",
+      "USD": "US dollar ($)",
+      "GBP": "Pound sterling (£)",
+      "CHF": "Swiss franc (CHF)",
+      "CAD": "Canadian dollar (CA$)",
+      "SEK": "Swedish krona (kr)",
+      "NOK": "Norwegian krone (kr)",
+      "DKK": "Danish krone (kr)",
+      "PLN": "Polish złoty (zł)",
+      "CZK": "Czech koruna (Kč)",
+      "MAD": "Moroccan dirham (DH)",
+      "JPY": "Japanese yen (¥)"
     }
   },
   "rooms": {

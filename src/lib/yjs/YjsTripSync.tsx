@@ -217,11 +217,13 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       location: trip.location,
       description: trip.description,
       coordinates: trip.coordinates,
+      currency: trip.currency,
     });
   }, [
     readOnly,
     trip,
     trip?.coordinates,
+    trip?.currency,
     trip?.description,
     trip?.endDate,
     trip?.location,

@@ -22,6 +22,7 @@ import { ExpenseForm } from '@/features/money/components/ExpenseForm';
 import type { PersonNightCounts } from '@/features/money/lib/expense-split';
 import { useOfflineAwareNotify } from '@/hooks';
 import type {
+  CurrencyCode,
   Expense,
   ExpenseFormData,
   ISODateString,
@@ -47,6 +48,8 @@ export interface ExpenseDialogProps {
   readonly persons: readonly Person[];
   /** Each guest's person nights, for a line split by nights. */
   readonly personNights: PersonNightCounts;
+  /** The trip's currency, for every amount in the form. */
+  readonly currency: CurrencyCode | undefined;
   /** Day pre-selected in create mode (YYYY-MM-DD). */
   readonly defaultDate?: ISODateString;
   /** Guest pre-selected as the payer in create mode. */
@@ -79,6 +82,7 @@ const ExpenseDialog = memo(function ExpenseDialog({
   onOpenChange,
   persons,
   personNights,
+  currency,
   defaultDate,
   defaultPayerId,
   onSave,
@@ -185,6 +189,7 @@ const ExpenseDialog = memo(function ExpenseDialog({
             expense={expense}
             persons={persons}
             personNights={personNights}
+            currency={currency}
             defaultDate={isEditMode ? undefined : defaultDate}
             defaultPayerId={isEditMode ? undefined : defaultPayerId}
             onSubmit={handleSubmit}

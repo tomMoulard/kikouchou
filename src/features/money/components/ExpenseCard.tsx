@@ -16,7 +16,7 @@ import { statusVariants } from '@/components/ui/status.variants';
 import { ExpenseCategoryIcon } from '@/features/money/components/ExpenseCategoryIcon';
 import { useMoneyFormat } from '@/features/money/hooks/useMoneyFormat';
 import { cn } from '@/lib/utils';
-import type { Expense, Person, PersonId } from '@/types';
+import type { CurrencyCode, Expense, Person, PersonId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -30,6 +30,8 @@ export interface ExpenseCardProps {
   readonly expense: Expense;
   /** The trip's guests, for the payer's and beneficiaries' names. */
   readonly personsMap: ReadonlyMap<PersonId, Person>;
+  /** The trip's currency, for the amount. */
+  readonly currency: CurrencyCode | undefined;
   /** Opens the line. */
   readonly onOpen: (expense: Expense) => void;
 }
@@ -41,10 +43,11 @@ export interface ExpenseCardProps {
 const ExpenseCard = memo(function ExpenseCard({
   expense,
   personsMap,
+  currency,
   onOpen,
 }: ExpenseCardProps): ReactElement {
   const { t } = useTranslation();
-  const formatMoney = useMoneyFormat();
+  const formatMoney = useMoneyFormat(currency);
 
   const handleClick = useCallback((): void => {
     onOpen(expense);

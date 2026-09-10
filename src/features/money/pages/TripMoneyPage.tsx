@@ -420,6 +420,7 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
                 <ExpenseCard
                   expense={expense}
                   personsMap={personsMap}
+                  currency={trip.currency}
                   onOpen={handleOpenExpense}
                 />
               </li>
@@ -431,6 +432,7 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
           expenses={expenses}
           persons={persons}
           personNights={personNights}
+          currency={trip.currency}
           onRecordPayment={canEdit ? handleRecordPayment : undefined}
         />
       )}
@@ -455,6 +457,7 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
         onOpenChange={handleDialogOpenChange}
         persons={persons}
         personNights={personNights}
+        currency={trip?.currency}
         defaultDate={defaultDate}
         defaultPayerId={myPersonId}
         onSave={handleSave}

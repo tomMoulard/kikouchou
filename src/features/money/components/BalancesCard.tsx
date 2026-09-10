@@ -21,7 +21,7 @@ import { computeBalances, isSettled, settleBalances } from '@/features/money/lib
 import type { SettlementPayment } from '@/features/money/lib/balances';
 import type { PersonNightCounts } from '@/features/money/lib/expense-split';
 import { cn } from '@/lib/utils';
-import type { Expense, Person, PersonId } from '@/types';
+import type { CurrencyCode, Expense, Person, PersonId } from '@/types';
 
 // ============================================================================
 // Type Definitions
@@ -37,6 +37,8 @@ export interface BalancesCardProps {
   readonly persons: readonly Person[];
   /** Each guest's person nights, for lines split by nights. */
   readonly personNights: PersonNightCounts;
+  /** The trip's currency, for every figure on the card. */
+  readonly currency: CurrencyCode | undefined;
   /** Records one payment as a transfer. Absent on a read-only trip. */
   readonly onRecordPayment?: (payment: SettlementPayment) => void;
 }
@@ -49,10 +51,11 @@ const BalancesCard = memo(function BalancesCard({
   expenses,
   persons,
   personNights,
+  currency,
   onRecordPayment,
 }: BalancesCardProps): ReactElement {
   const { t } = useTranslation();
-  const formatMoney = useMoneyFormat();
+  const formatMoney = useMoneyFormat(currency);
 
   const personsMap = useMemo(
     () => new Map<PersonId, Person>(persons.map((person) => [person.id, person])),
