@@ -10,6 +10,7 @@ import { ThemeProvider } from 'next-themes';
 import { RouterProvider } from 'react-router-dom';
 
 import { AppProviders } from '@/contexts/AppProviders';
+import { InstallPromptProvider } from '@/contexts/InstallPromptContext';
 import { Toaster } from '@/components/ui/sonner';
 import { StatusAnnouncer } from '@/components/shared/StatusAnnouncer';
 import { InstallPrompt, OfflineIndicator } from '@/components/pwa';
@@ -93,9 +94,15 @@ function App(): ReactElement {
       enableSystem
       disableTransitionOnChange
     >
-      <AppProviders>
-        <RouterProvider router={router} />
-      </AppProviders>
+      {/*
+        One install prompt for the app. The banner below and the nudge on a
+        shared trip's calendar (inside the router) both read it, so it sits
+        above both — and outside AppProviders, which never remounts it.
+      */}
+      <InstallPromptProvider>
+        <AppProviders>
+          <RouterProvider router={router} />
+        </AppProviders>
 
       {/*
         Global chrome, deliberately outside AppProviders.
@@ -153,6 +160,7 @@ function App(): ReactElement {
       <StatusAnnouncer />
       <InstallPrompt />
       <OfflineIndicator />
+      </InstallPromptProvider>
     </ThemeProvider>
   );
 }

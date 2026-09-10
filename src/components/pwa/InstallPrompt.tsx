@@ -23,10 +23,8 @@ import {
   CardDescription,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  type ManualInstallPlatform,
-  useInstallPrompt,
-} from '@/hooks/useInstallPrompt';
+import { useInstallPromptState } from '@/contexts/InstallPromptContext';
+import { MANUAL_INSTALL_STEPS } from '@/lib/pwa/manual-install-steps';
 import { cn } from '@/lib/utils';
 import { notify } from '@/lib/notifications';
 
@@ -42,51 +40,7 @@ const STORAGE_KEY = 'kikouchou-install-dismissed',
 /**
  * Duration in milliseconds to hide the prompt after dismissal (7 days).
  */
- DISMISSAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000,
-
-/**
- * The steps for each browser that never fires `beforeinstallprompt`, with the
- * English each key holds so a missing translation still reads as instructions.
- *
- * A table of literal keys rather than a `pwa.manualInstall.${platform}`
- * template: the scan in `lib/i18n/__tests__/translationKeys.test.ts` resolves
- * literals only, and a key it cannot see is a key that can go missing from `fr`
- * without anything failing.
- */
- MANUAL_INSTALL_STEPS: Record<
-  ManualInstallPlatform,
-  { readonly key: string; readonly fallback: string }
-> = {
-  ios: {
-    key: 'pwa.manualInstall.ios',
-    fallback: 'Tap the Share button, then "Add to Home Screen", then "Add".',
-  },
-  firefoxAndroid: {
-    key: 'pwa.manualInstall.firefoxAndroid',
-    fallback:
-      'Open Firefox\'s ⋮ menu and tap "Install" — older versions call it "Add app to Home Screen".',
-  },
-  firefoxWindows: {
-    key: 'pwa.manualInstall.firefoxWindows',
-    fallback:
-      'Click "Add tab to taskbar" in the address bar (Firefox 142 and later). The app gets its own window, toolbar included.',
-  },
-  firefoxLinux: {
-    key: 'pwa.manualInstall.firefoxLinux',
-    fallback:
-      'Set browser.taskbarTabs.enabled to true in about:config, then click "Add tab to taskbar" in the address bar.',
-  },
-  firefoxMac: {
-    key: 'pwa.manualInstall.firefoxMac',
-    fallback:
-      'Firefox on macOS cannot install web apps yet. Kikouchou works fully in a tab — or install it from Safari or Chrome.',
-  },
-  generic: {
-    key: 'pwa.manualInstall.generic',
-    fallback:
-      'Look for "Install", "Add to Dock" or "Add to Home Screen" in your browser\'s menu.',
-  },
-};
+ DISMISSAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ============================================================================
 // Type Definitions
@@ -180,7 +134,7 @@ export const InstallPrompt = memo(function InstallPrompt({
     isInstalled,
     installIntent,
     manualInstallPlatform,
-   } = useInstallPrompt(),
+   } = useInstallPromptState(),
 
   // ============================================================================
   // State
@@ -263,6 +217,27 @@ export const InstallPrompt = memo(function InstallPrompt({
     // When conditions change (not canInstall or isDismissed), hide via timeout cleanup
     return undefined;
   }, [canInstall, isDismissed, installIntent]);
+
+  /**
+   * A request raised after mount shows the card at once, dismissal or not.
+   *
+   * `installIntent` is read from the URL on arrival, but it can also turn true
+   * later: the nudge on a shared trip's calendar sends a phone to the invite
+   * page to install from there and raises the request through the context
+   * (`contexts/InstallPromptContext`). The initial-state shortcuts above never
+   * see that, so this effect does what they would have done on arrival — and
+   * clears a standing dismissal, because this time the visitor asked.
+   */
+  useEffect(() => {
+    if (!installIntent) {return undefined;}
+
+    // A timer rather than a synchronous set, for the same reason as below.
+    const timer = setTimeout(() => {
+      setIsDismissed(false);
+      setIsVisible(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [installIntent]);
 
   /**
    * Confirm the install once the app is installed.
