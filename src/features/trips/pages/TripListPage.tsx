@@ -351,7 +351,7 @@ const TripListPage = memo(function TripListPage() {
                  of the two. Joining someone else's trip is the rarer of the two
                  ways in, and it was the only one this screen made obvious. */
               secondaryAction={{
-                label: t('trips.importFromQr'),
+                label: t('trips.joinWithInvite', 'Scan or paste an invite'),
                 onClick: openImportQr,
               }}
             />

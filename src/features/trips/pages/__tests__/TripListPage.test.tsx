@@ -205,9 +205,10 @@ describe('TripListPage', () => {
     expect(floating[0]).toHaveAccessibleName('trips.new');
 
     // And the QR scanner is still reachable, from the empty state rather than
-    // from a second unlabelled circle.
+    // from a second unlabelled circle — named for what it is for: an invite,
+    // scanned or pasted.
     expect(
-      screen.getAllByRole('button', { name: 'trips.importFromQr' }),
+      screen.getAllByRole('button', { name: 'trips.joinWithInvite' }),
     ).not.toHaveLength(0);
   });
 
@@ -225,7 +226,7 @@ describe('TripListPage', () => {
     render(<TripListPage />, { withProviders: false });
 
     await user.click(
-      screen.getAllByRole('button', { name: 'trips.importFromQr' })[0]!,
+      screen.getAllByRole('button', { name: 'trips.joinWithInvite' })[0]!,
     );
     expect(screen.getByTestId('import-qr-dialog')).toBeInTheDocument();
   });

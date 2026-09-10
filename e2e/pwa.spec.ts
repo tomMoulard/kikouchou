@@ -637,6 +637,45 @@ test.describe('Manifest Validation', () => {
     expect(manifest.id).toBe('/');
   });
 
+  test('manifest opens a link in the running app rather than a second window', async ({
+    page,
+  }) => {
+    const response = await page.request.get('/manifest.webmanifest');
+    const manifest = await response.json();
+
+    /**
+     * Every window shares one IndexedDB, and a second window onto the same trip
+     * is a second Yjs session doing the same work. `navigate-existing` sends a
+     * tapped link — a reminder's, a chat's — into the window already open.
+     */
+    expect(manifest.launch_handler).toEqual({ client_mode: 'navigate-existing' });
+  });
+
+  test('a second manifest, without start_url, installs the page it is read from', async ({
+    page,
+  }) => {
+    const response = await page.request.get('/manifest-here.webmanifest');
+    expect(response.ok()).toBe(true);
+    const here = await response.json();
+    const main = await (await page.request.get('/manifest.webmanifest')).json();
+
+    /**
+     * An iPhone's Home Screen app has storage separate from Safari's, so it
+     * must open on a page that can fetch the trip again — the invite it was
+     * installed from. A manifest with no `start_url` opens the installed app on
+     * the page it was added from, and that is the only lever Safari offers. The
+     * invite page and the trip link page swap the document's manifest link to
+     * this file while they are on screen (`lib/pwa/use-here-manifest`).
+     */
+    expect(here).not.toHaveProperty('start_url');
+    // Same `id`, so both manifests install one app and not two icons.
+    expect(here.id).toBe(main.id);
+    // Everything else is the same app: name, icons, colours, display mode.
+    const mainWithoutStartUrl: Record<string, unknown> = { ...main };
+    delete mainWithoutStartUrl.start_url;
+    expect(here).toEqual(mainWithoutStartUrl);
+  });
+
   test('manifest icons are accessible', async ({ page, baseURL }) => {
     const response = await page.request.get('/manifest.webmanifest');
     const manifest = await response.json();
@@ -1076,6 +1115,37 @@ test.describe('PWA Installation Readiness', () => {
 
     expect(manifestLink.exists).toBe(true);
     expect(manifestLink.href).toContain('manifest');
+  });
+
+  test('the invite page and the trip link install themselves', async ({ page }) => {
+    /**
+     * An iPhone's Home Screen app has storage separate from Safari's, so an app
+     * installed from an invite must open on that invite, and the only lever
+     * Safari offers is a manifest with no `start_url`: it opens the installed
+     * app on the page it was added from. The two pages a phone is sent to
+     * install from swap the document's manifest link to that variant while they
+     * are on screen, and put the ordinary one back when they are left.
+     */
+    await page.goto('/join/deadtokendeadtoken1');
+    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
+      'href',
+      /\/manifest-here\.webmanifest$/,
+    );
+
+    // Leaving the page — a client-side navigation, so the same document —
+    // restores the manifest that opens the app on its root.
+    await page.getByRole('button', { name: /my trips/i }).click({ timeout: 20_000 });
+    await expect(page).toHaveURL(/\/trips/);
+    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
+      'href',
+      /\/manifest\.webmanifest$/,
+    );
+
+    await page.goto('/t/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
+    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
+      'href',
+      /\/manifest-here\.webmanifest$/,
+    );
   });
 
   test('theme-color meta tag is present', async ({ page }) => {

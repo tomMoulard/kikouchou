@@ -60,6 +60,7 @@ import type { Trip } from '@/types';
 
 import { SyncStatusBadge } from './SyncStatusBadge';
 import { ViewerUnlockCard } from './ViewerUnlockCard';
+import { InstallNudgeCard } from '@/components/pwa/InstallNudgeCard';
 
 // ============================================================================
 // Type Definitions
@@ -996,7 +997,18 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
    */
    showViewerCard =
     currentTrip?.viewerToken !== undefined &&
-    location.pathname.startsWith(`/trips/${currentTrip.id}`);
+    location.pathname.startsWith(`/trips/${currentTrip.id}`),
+
+  /**
+   * Whether this is the one page that may suggest installing the app.
+   *
+   * The calendar is where an invite lands and where the dates worth a reminder
+   * are, so the suggestion sits there and nowhere else. The card itself decides
+   * the rest — phone, browser tab, a trip that is actually shared, not
+   * dismissed — so a laptop or the installed app renders nothing here.
+   */
+   showInstallNudge =
+    currentTrip !== null && location.pathname === `/trips/${currentTrip.id}/calendar`;
 
   return (
     // `min-h-svh`, not `min-h-screen` (`100vh`): on a phone `100vh` is the tall
@@ -1048,6 +1060,7 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
         )}
       >
         {showViewerCard ? <ViewerUnlockCard className="mb-4" /> : null}
+        {showInstallNudge ? <InstallNudgeCard trip={currentTrip} className="mb-4" /> : null}
         {children}
       </main>
 
