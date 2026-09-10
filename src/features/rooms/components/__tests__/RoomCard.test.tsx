@@ -69,7 +69,7 @@ describe('RoomCard', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument();
   });
 
-  it('shows full badge when room is full', () => {
+  it('calls a full room complete, not full', () => {
     render(
       <RoomCard
         room={mockRoom}
@@ -82,7 +82,26 @@ describe('RoomCard', () => {
       />,
       { withProviders: false },
     );
-    expect(screen.getByText('rooms.full')).toBeInTheDocument();
+    expect(screen.getByText('rooms.complete')).toBeInTheDocument();
+    expect(screen.queryByText('rooms.overCapacity')).not.toBeInTheDocument();
+  });
+
+  it('shows the over capacity badge instead when more people than beds', () => {
+    render(
+      <RoomCard
+        room={mockRoom}
+        occupants={[]}
+        peakOccupancy={5}
+        availableSpots={0}
+        isFull={true}
+        isOverCapacity={true}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+      { withProviders: false },
+    );
+    expect(screen.getByText('rooms.overCapacity')).toBeInTheDocument();
+    expect(screen.queryByText('rooms.complete')).not.toBeInTheDocument();
   });
 
   it('shows available spots text when spots are open', () => {

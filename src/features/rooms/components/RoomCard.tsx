@@ -16,7 +16,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, Copy, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, Copy, MoreHorizontal, Pencil, Trash2, Users } from 'lucide-react';
 import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
 
 import {
@@ -59,6 +59,16 @@ export interface RoomCardProps {
   readonly availableSpots: number;
   /** Whether the room is at or over capacity */
   readonly isFull: boolean;
+  /**
+   * Whether more people sleep in the room than it has beds.
+   *
+   * This is the only state the card paints red. A room that is exactly full is
+   * the goal of assigning guests, so it reads as "Complete" in green;
+   * over-capacity is the real trouble, and keeps the alarm colour to itself.
+   *
+   * Comes from `summarizeRoomOccupancy().isOverCapacity`.
+   */
+  readonly isOverCapacity?: boolean;
   /** Whether the card interaction is currently disabled */
   readonly isDisabled?: boolean;
   /** Whether the card is currently expanded (controlled mode) */
@@ -138,6 +148,7 @@ const RoomCard = memo(function RoomCard({
   peakOccupancy,
   availableSpots,
   isFull,
+  isOverCapacity = false,
   isDisabled = false,
   isExpanded = false,
   onClick,
@@ -161,12 +172,16 @@ const RoomCard = memo(function RoomCard({
   // Capacity progress ratio (0-1, capped at 1)
    capacityRatio = room.capacity > 0 ? Math.min(peakOccupancy / room.capacity, 1) : 0,
 
-  // Progress bar color based on capacity usage
-   progressColor = capacityRatio >= 1
+  // Progress bar colour. Filling the beds is the goal of the whole exercise,
+  // so the bar reads as progress towards it: neutral while it fills, green
+  // once the room is complete. Red is kept for the one state that actually
+  // needs fixing, which is more people than beds. The bar used to turn amber
+  // halfway and red on the last bed, which called the finished state trouble.
+   progressColor = isOverCapacity
     ? 'bg-destructive'
-    : capacityRatio >= 0.5
-      ? 'bg-warning'
-      : 'bg-success',
+    : capacityRatio >= 1
+      ? 'bg-success'
+      : 'bg-primary',
 
   // Build aria-label for screen readers
    ariaLabel = useMemo(
@@ -278,7 +293,10 @@ const RoomCard = memo(function RoomCard({
             'hover:shadow-md hover:border-primary/20',
           ],
           isDisabled && 'opacity-50 cursor-not-allowed',
-          isFull && 'opacity-75 bg-muted/30',
+          // A complete room is not a disabled one: it keeps full contrast and
+          // gains a green edge. Only over capacity is drawn as trouble.
+          isFull && !isOverCapacity && 'border-success/50',
+          isOverCapacity && 'border-destructive/50',
         )}
       >
         {/*
@@ -399,11 +417,29 @@ const RoomCard = memo(function RoomCard({
               <span className="text-sm text-muted-foreground">
                 {t('rooms.spotsTaken', { occupied: peakOccupancy, count: room.capacity })}
               </span>
-              {isFull && (
-                <Badge variant="destructive" className="text-xs">
-                  {t('rooms.full')}
+              {/*
+                Two different facts, two different tones: a room whose beds are
+                all taken is finished ("Complete", green), and only a room
+                holding more people than beds is a problem ("Over capacity",
+                red, with the icon so the colour is not the only carrier).
+              */}
+              {isOverCapacity ? (
+                <Badge
+                  variant="outline"
+                  className={cn('text-xs', statusVariants({ tone: 'danger', emphasis: 'soft' }))}
+                >
+                  <AlertTriangle className="size-3 mr-1" aria-hidden="true" />
+                  {t('rooms.overCapacity')}
                 </Badge>
-              )}
+              ) : isFull ? (
+                <Badge
+                  variant="outline"
+                  className={cn('text-xs', statusVariants({ tone: 'success', emphasis: 'soft' }))}
+                >
+                  <Check className="size-3 mr-1" aria-hidden="true" />
+                  {t('rooms.complete')}
+                </Badge>
+              ) : null}
             </div>
             {/* Progress bar */}
             <div
