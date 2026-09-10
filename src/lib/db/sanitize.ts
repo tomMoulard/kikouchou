@@ -13,6 +13,9 @@
 import {
   CHILD_SEAT_KINDS,
   MAX_ACTIVITY_PARTICIPANTS,
+  MAX_EXPENSE_AMOUNT,
+  MAX_EXPENSE_SPLITS,
+  MAX_EXPENSE_SPLIT_VALUE,
   MAX_GUEST_GROUP_MEMBERS,
   MAX_LEAD_TIME_MINUTES,
   MAX_VEHICLE_SEAT_COUNT,
@@ -76,6 +79,10 @@ export const MAX_LENGTHS = {
   activityLocation: 200,
   /** Activity notes (booking links, price, what to bring) */
   activityNotes: 1000,
+  /** Expense title (e.g., "Courses du samedi") */
+  expenseTitle: 100,
+  /** Expense description (what was in the basket, which receipt this is) */
+  expenseDescription: 1000,
   /** Guest group name (e.g., "Family") */
   guestGroupName: 100,
   /** Vehicle name (e.g., "Espace de location") */
@@ -349,6 +356,90 @@ export function sanitizeActivityData<
       : data.participantIds,
     maxParticipants: normalizeMaxParticipants(data.maxParticipants),
   };
+}
+
+/**
+ * Sanitizes expense form data.
+ *
+ * Trims the text fields, drops an empty description, bounds the amount, and
+ * keeps one share per guest: the last one typed for a person wins, which is
+ * what a form that lists each guest once already produces and what a remote
+ * line that lists somebody twice has to be reduced to before it is divided.
+ *
+ * @param data - Expense form data to sanitize
+ * @returns Sanitized expense form data
+ */
+export function sanitizeExpenseData<
+  T extends {
+    title: string;
+    description?: string;
+    amount: number;
+    splits?: readonly { readonly personId: string; readonly value: number }[];
+  },
+>(data: T): T {
+  return {
+    ...data,
+    title: sanitizeText(data.title, MAX_LENGTHS.expenseTitle),
+    description: sanitizeOptionalText(
+      data.description,
+      MAX_LENGTHS.expenseDescription,
+    ),
+    amount: normalizeExpenseAmount(data.amount),
+    splits: data.splits ? dedupeExpenseSplits(data.splits) : data.splits,
+  };
+}
+
+/**
+ * Clamps a raw money amount to a positive, finite number within the bounds.
+ *
+ * A line's sign lives in its kind, so a negative amount is not a credit here —
+ * it is a typo or a hostile write, and zero is the honest reading of both.
+ *
+ * @param value - Raw amount (form input, imported changeset, peer document)
+ * @returns A finite amount between 0 and {@link MAX_EXPENSE_AMOUNT}
+ */
+export function normalizeExpenseAmount(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return value > MAX_EXPENSE_AMOUNT ? MAX_EXPENSE_AMOUNT : value;
+}
+
+/**
+ * Keeps one share per guest and bounds both the values and the list length.
+ *
+ * @param splits - Raw shares
+ * @returns At most {@link MAX_EXPENSE_SPLITS} shares, one per guest
+ */
+function dedupeExpenseSplits<
+  T extends { readonly personId: string; readonly value: number },
+>(splits: readonly T[]): T[] {
+  const byPerson = new Map<string, T>();
+
+  for (const split of splits) {
+    if (typeof split?.personId !== 'string' || split.personId.length === 0) {
+      continue;
+    }
+    byPerson.set(split.personId, {
+      ...split,
+      value: normalizeExpenseSplitValue(split.value),
+    });
+  }
+
+  return [...byPerson.values()].slice(0, MAX_EXPENSE_SPLITS);
+}
+
+/**
+ * Clamps one share's value: never negative, never past the bound.
+ *
+ * @param value - Raw parts or amount
+ * @returns A finite value between 0 and {@link MAX_EXPENSE_SPLIT_VALUE}
+ */
+export function normalizeExpenseSplitValue(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return value > MAX_EXPENSE_SPLIT_VALUE ? MAX_EXPENSE_SPLIT_VALUE : value;
 }
 
 /**

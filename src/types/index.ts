@@ -38,6 +38,9 @@ export type TransportId = Brand<'TransportId'>;
 /** Type-safe Activity identifier (nanoid generated) */
 export type ActivityId = Brand<'ActivityId'>;
 
+/** Type-safe Expense identifier (nanoid generated) */
+export type ExpenseId = Brand<'ExpenseId'>;
+
 /** Type-safe Ride identifier (nanoid generated) */
 export type RideId = Brand<'RideId'>;
 
@@ -240,6 +243,80 @@ export function getActivityCategoryColor(
     ACTIVITY_CATEGORY_COLORS.other
   );
 }
+
+/**
+ * What one money line does to the group's accounts.
+ *
+ * The three kinds are one signed model rather than three code paths: an expense
+ * moves money from the payer to the people it benefited, an income moves it the
+ * other way (a deposit that came back, a refund one guest received for
+ * everybody), and a transfer is one guest handing money to another to settle up.
+ */
+export type ExpenseKind = 'expense' | 'income' | 'transfer';
+
+/**
+ * All money line kinds, in the order they are offered in the form.
+ */
+export const EXPENSE_KINDS: readonly ExpenseKind[] = [
+  'expense',
+  'income',
+  'transfer',
+] as const;
+
+/**
+ * Kind of spending, driving the icon shown on the money page.
+ */
+export type ExpenseCategory =
+  | 'lodging'   // Rent, the house, the deposit
+  | 'groceries' // Supermarket runs, the market
+  | 'meal'      // Restaurants, takeaway, the bar
+  | 'transport' // Fuel, tolls, train and plane tickets
+  | 'activity'  // Tickets, entries, guides
+  | 'supplies'  // Cleaning, firewood, what the house lacked
+  | 'other';    // Anything else
+
+/**
+ * All expense categories, in the order they are offered in the form.
+ */
+export const EXPENSE_CATEGORIES: readonly ExpenseCategory[] = [
+  'lodging',
+  'groceries',
+  'meal',
+  'transport',
+  'activity',
+  'supplies',
+  'other',
+] as const;
+
+/**
+ * Default category used when none is selected.
+ */
+export const DEFAULT_EXPENSE_CATEGORY: ExpenseCategory = 'other';
+
+/**
+ * How the amount of one line is divided between the people it benefited.
+ *
+ * - `equal` — one share each, which is what a group means by "we split it";
+ * - `shares` — weights, for "Alice ate five parts of that pizza and Bob one";
+ * - `nights` — each person's nights on the trip, the rule a rent split needs;
+ * - `amounts` — the exact figure per person, for a receipt read line by line.
+ */
+export type ExpenseSplitMode = 'equal' | 'shares' | 'nights' | 'amounts';
+
+/**
+ * All split modes, in the order they are offered in the form.
+ */
+export const EXPENSE_SPLIT_MODES: readonly ExpenseSplitMode[] = [
+  'equal',
+  'shares',
+  'nights',
+  'amounts',
+] as const;
+
+/**
+ * Default split mode used when none is chosen.
+ */
+export const DEFAULT_EXPENSE_SPLIT_MODE: ExpenseSplitMode = 'equal';
 
 /**
  * Room icon type for visual identification across views.
@@ -1094,6 +1171,128 @@ export interface Activity extends Identifiable, TripScoped {
 }
 
 /**
+ * One share of a money line, as the person who typed it wrote it down.
+ *
+ * `value` is read through the line's {@link ExpenseSplitMode} and means nothing
+ * on its own: parts under `shares`, an amount of money under `amounts`, and
+ * ignored under `equal` and `nights`, where the rule supplies the weights.
+ */
+export interface ExpenseSplit {
+  /** The guest this share belongs to. */
+  readonly personId: PersonId;
+  /**
+   * Parts or money, depending on the line's split mode. Never negative.
+   * @example 3
+   */
+  readonly value: number;
+}
+
+/**
+ * One line of the trip's accounts: an expense, an income or a transfer.
+ *
+ * @description The group used to keep this in Tricount and the trip description
+ * held the link. A line says who put the money in, how much, and who it was
+ * for; the money page turns every line into one balance per guest and then into
+ * the shortest list of payments that clears them.
+ *
+ * The three kinds share one arithmetic. An `expense` credits the payer and debits
+ * the beneficiaries. An `income` is the same line with the signs swapped: the
+ * guest who received the money holds it for the people it belongs to. A
+ * `transfer` is an expense with exactly one beneficiary — the guest being paid —
+ * and it is what a settling payment is recorded as.
+ *
+ * @see {@link Trip} - Parent entity
+ * @see {@link Person} - Payer and beneficiaries
+ *
+ * @example
+ * ```typescript
+ * const expense: Expense = {
+ *   id: 'exp123' as ExpenseId,
+ *   tripId: 'trip456' as TripId,
+ *   kind: 'expense',
+ *   category: 'groceries',
+ *   title: 'Courses du samedi',
+ *   date: '2024-07-16' as ISODateString,
+ *   amount: 84.2,
+ *   payerId: 'person789' as PersonId,
+ *   splitMode: 'equal',
+ *   splits: [{ personId: 'person789' as PersonId, value: 1 }],
+ * };
+ * ```
+ */
+export interface Expense extends Identifiable, TripScoped {
+  /** Unique expense identifier */
+  readonly id: ExpenseId;
+
+  /**
+   * What this line does to the accounts.
+   * @see {@link ExpenseKind}
+   */
+  kind: ExpenseKind;
+
+  /**
+   * Kind of spending, driving the icon on the money page.
+   *
+   * A transfer keeps a category like any other line, and the form offers
+   * `other`: a settling payment is not spending, and nothing reads the value.
+   */
+  category: ExpenseCategory;
+
+  /**
+   * Short title shown in the list.
+   * @example "Courses du samedi"
+   */
+  title: string;
+
+  /**
+   * The day the money moved, as a local calendar day.
+   *
+   * A day rather than an instant: a receipt is dated, not timed, and the list
+   * groups on the day the person who paid remembers.
+   */
+  date: ISODateString;
+
+  /**
+   * How much money moved, always positive.
+   *
+   * The sign belongs to {@link kind}, not to this field: an income of 30 is
+   * `kind: 'income'` with `amount: 30`, never an expense of -30. One sign
+   * convention means a total can be read without knowing which rule wrote it.
+   */
+  amount: number;
+
+  /**
+   * Who put the money in — or, for an `income`, who received it.
+   * @see {@link Person}
+   */
+  payerId: PersonId;
+
+  /**
+   * How {@link amount} is divided between {@link splits}.
+   * @see {@link ExpenseSplitMode}
+   */
+  splitMode: ExpenseSplitMode;
+
+  /**
+   * The guests this line is for, and their shares.
+   *
+   * Empty means nobody benefited, which the money page reads as a line that
+   * only moves the payer's own money and leaves every balance alone.
+   *
+   * The whole array is one document field, so two guests editing the shares of
+   * one line while both offline keep only the later edit — the same limitation
+   * activity participants carry, and for the same reason (`lib/yjs/doc-model`).
+   */
+  splits: ExpenseSplit[];
+
+  /**
+   * Free-text description: what was in the basket, which receipt this is.
+   * @example "Deux caddies, le vin compris"
+   */
+  description?: string;
+}
+
+/**
  * One person inside a {@link GuestGroup}.
  *
  * @description A member is a *template* for a guest, not a guest. Importing a
@@ -1533,6 +1732,33 @@ export interface ActivityFormData {
 // ============================================================================
 
 /**
+ * Data required to create or update an {@link Expense}.
+ * Excludes auto-generated fields (id, tripId).
+ *
+ * @see {@link Expense}
+ */
+export interface ExpenseFormData {
+  /** What this line does to the accounts */
+  kind: ExpenseKind;
+  /** Kind of spending */
+  category: ExpenseCategory;
+  /** Short title shown in the list */
+  title: string;
+  /** The day the money moved (YYYY-MM-DD) */
+  date: ISODateString;
+  /** How much money moved, always positive */
+  amount: number;
+  /** Who put the money in */
+  payerId: PersonId;
+  /** How the amount is divided */
+  splitMode: ExpenseSplitMode;
+  /** The guests this line is for, and their shares */
+  splits: ExpenseSplit[];
+  /** Free-text description */
+  description?: string;
+}
+
+/**
  * Union of all trip-scoped entity types.
  */
 export type TripEntity =
@@ -1542,7 +1768,8 @@ export type TripEntity =
   | Transport
   | Ride
   | Vehicle
-  | Activity;
+  | Activity
+  | Expense;
 
 /**
  * Union of all entity types in the application.
@@ -1672,6 +1899,34 @@ export function getPersonHeadcount(person: { readonly headcount?: number }): num
  * Beyond that the cap is meaningless and treated as "unlimited".
  */
 export const MAX_ACTIVITY_PARTICIPANTS = 999;
+
+/**
+ * Largest amount a single money line may carry.
+ *
+ * A holiday house, not a mortgage. The bound is a guard rather than a product
+ * limit: the amount is multiplied by a share and summed, and a line arriving
+ * from a peer with `1e308` on it turns every balance on the page into
+ * `Infinity`, which no arithmetic below recovers from.
+ */
+export const MAX_EXPENSE_AMOUNT = 1_000_000;
+
+/**
+ * Largest value one {@link ExpenseSplit} may carry — parts, or money.
+ *
+ * Bounded for the same reason as {@link MAX_EXPENSE_AMOUNT}: a weight is a
+ * divisor, and an unbounded one from a peer makes every other share round to
+ * zero.
+ */
+export const MAX_EXPENSE_SPLIT_VALUE = 1_000_000;
+
+/**
+ * Largest number of shares a single money line may carry.
+ *
+ * One per guest is the shape the form produces, and the trip roster is a house
+ * full of people rather than a mailing list. The bound stops a remote line from
+ * becoming a row nothing can render.
+ */
+export const MAX_EXPENSE_SPLITS = 200;
 
 /**
  * Largest number of members a single {@link GuestGroup} may hold.

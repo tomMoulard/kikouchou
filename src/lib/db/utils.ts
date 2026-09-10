@@ -11,6 +11,7 @@
 import { nanoid } from 'nanoid';
 import type {
   ActivityId,
+  ExpenseId,
   GuestGroupId,
   GuestGroupMemberId,
   HexColor,
@@ -100,6 +101,18 @@ export const createVehicleId = (): VehicleId => nanoid() as VehicleId;
  * ```
  */
 export const createActivityId = (): ActivityId => nanoid() as ActivityId;
+
+/**
+ * Creates a new Expense ID.
+ *
+ * @returns A branded ExpenseId
+ *
+ * @example
+ * ```typescript
+ * const expenseId = createExpenseId();
+ * ```
+ */
+export const createExpenseId = (): ExpenseId => nanoid() as ExpenseId;
 
 /**
  * Creates a new GuestGroup ID.

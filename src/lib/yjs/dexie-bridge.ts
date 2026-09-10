@@ -18,6 +18,8 @@ import { db } from '@/lib/db/database';
 import {
   MAX_LENGTHS,
   normalizeChildSeats,
+  normalizeExpenseAmount,
+  normalizeExpenseSplitValue,
   normalizeLeadTimeMinutes,
   normalizeSeatCount,
   sanitizeOptionalText,
@@ -41,6 +43,8 @@ import {
 import type {
   Activity,
   ChildSeatKind,
+  Expense,
+  ExpenseSplit,
   Person,
   Ride,
   Room,
@@ -52,7 +56,16 @@ import type {
   UnixTimestamp,
   Vehicle,
 } from '@/types';
-import { CHILD_SEAT_KINDS, RIDE_DIRECTIONS } from '@/types';
+import {
+  CHILD_SEAT_KINDS,
+  DEFAULT_EXPENSE_CATEGORY,
+  DEFAULT_EXPENSE_SPLIT_MODE,
+  EXPENSE_CATEGORIES,
+  EXPENSE_KINDS,
+  EXPENSE_SPLIT_MODES,
+  MAX_EXPENSE_SPLITS,
+  RIDE_DIRECTIONS,
+} from '@/types';
 
 const COMPACTION_THRESHOLD = 100;
 
@@ -448,6 +461,75 @@ function buildVehicleRecord(vehicle: SharedRecord, tripId: TripId): Vehicle {
   return row;
 }
 
+/**
+ * Projects one money line out of the document, bounding what the log carried.
+ *
+ * Every field here ends up in arithmetic that the whole page is built on, so an
+ * unbounded one is not merely wrong data:
+ *
+ * - `date` is the second component of `[tripId+date]`, the index every expense
+ *   read uses. A non-string one is filed outside the range those reads scan, so
+ *   the row becomes invisible to the page, to the balances *and* to
+ *   `syncDocToDexie`'s own delete-candidate query — nothing could ever remove it
+ *   again. The record is dropped instead of stored unreachable.
+ * - `amount` and each share's `value` are multiplied and summed. One `1e308`
+ *   from a peer turns every balance on the page into `NaN`, which no arithmetic
+ *   below recovers from.
+ * - `kind`, `category` and `splitMode` drive a label, an icon and which
+ *   division runs. An unknown value from a newer peer falls back rather than
+ *   rendering an empty pill or dividing by a rule this build does not have.
+ *
+ * @param expense - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row ready for Dexie, or undefined when it is unusable
+ */
+function buildExpenseRecord(
+  expense: SharedRecord,
+  tripId: TripId,
+): Expense | undefined {
+  const row = { ...expense, tripId } as Expense;
+
+  if (typeof row.date !== 'string' || row.date.length === 0) {
+    return undefined;
+  }
+  if (typeof row.payerId !== 'string' || row.payerId.length === 0) {
+    return undefined;
+  }
+
+  row.title = sanitizeText(boundedString(row.title), MAX_LENGTHS.expenseTitle);
+  row.description = optionalBoundedText(
+    row.description,
+    MAX_LENGTHS.expenseDescription,
+  );
+  row.amount = normalizeExpenseAmount(row.amount);
+
+  if (!(EXPENSE_KINDS as readonly unknown[]).includes(row.kind)) {
+    row.kind = 'expense';
+  }
+  if (!(EXPENSE_CATEGORIES as readonly unknown[]).includes(row.category)) {
+    row.category = DEFAULT_EXPENSE_CATEGORY;
+  }
+  if (!(EXPENSE_SPLIT_MODES as readonly unknown[]).includes(row.splitMode)) {
+    row.splitMode = DEFAULT_EXPENSE_SPLIT_MODE;
+  }
+
+  row.splits = Array.isArray(row.splits)
+    ? row.splits
+        .filter(
+          (split): split is ExpenseSplit =>
+            typeof (split as ExpenseSplit | undefined)?.personId === 'string' &&
+            (split as ExpenseSplit).personId.length > 0,
+        )
+        .slice(0, MAX_EXPENSE_SPLITS)
+        .map((split) => ({
+          personId: split.personId,
+          value: normalizeExpenseSplitValue(split.value),
+        }))
+    : [];
+
+  return row;
+}
+
 async function replaceTripScopedRows<T extends { id: string; tripId: TripId }>(
   currentRows: readonly T[],
   nextRows: readonly T[],
@@ -626,6 +708,7 @@ export async function syncDocToDexie(
         db.rides,
         db.vehicles,
         db.activities,
+        db.expenses,
       ],
       async () => {
         await db.trips.put(nextTrip);
@@ -655,6 +738,10 @@ export async function syncDocToDexie(
           .where('[tripId+startDatetime]')
           .between([tripId, ''], [tripId, '\uffff'])
           .toArray();
+        const currentExpenses = await db.expenses
+          .where('[tripId+date]')
+          .between([tripId, ''], [tripId, '\uffff'])
+          .toArray();
 
         const sharePhone = isGuestPhoneSharingEnabled();
         const localGuestsById = new Map(currentGuests.map((row) => [row.id as string, row]));
@@ -682,6 +769,9 @@ export async function syncDocToDexie(
         const nextActivities = readCollection(doc, 'activities').map(
           (activity) => ({ ...activity, tripId } as Activity),
         );
+        const nextExpenses = readCollection(doc, 'expenses')
+          .map((expense) => buildExpenseRecord(expense, tripId))
+          .filter((expense): expense is Expense => expense !== undefined);
 
         await replaceTripScopedRows(
           currentGuests,
@@ -725,6 +815,12 @@ export async function syncDocToDexie(
           (rows) => db.activities.bulkPut(rows),
           (ids) => db.activities.bulkDelete([...ids]),
         );
+        await replaceTripScopedRows(
+          currentExpenses,
+          nextExpenses,
+          (rows) => db.expenses.bulkPut(rows),
+          (ids) => db.expenses.bulkDelete([...ids]),
+        );
       },
     );
   } catch (error) {
@@ -741,8 +837,17 @@ export async function syncDocToDexie(
 export const applyDocToDexie = syncDocToDexie;
 
 export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<void> {
-  const [trip, guests, rooms, assignments, transport, rides, vehicles, activities] =
-    await Promise.all([
+  const [
+    trip,
+    guests,
+    rooms,
+    assignments,
+    transport,
+    rides,
+    vehicles,
+    activities,
+    expenses,
+  ] = await Promise.all([
       db.trips.get(tripId),
       db.persons.where('tripId').equals(tripId).toArray(),
       db.rooms
@@ -764,6 +869,10 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
       db.vehicles.where('tripId').equals(tripId).toArray(),
       db.activities
         .where('[tripId+startDatetime]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+      db.expenses
+        .where('[tripId+date]')
         .between([tripId, ''], [tripId, '\uffff'])
         .toArray(),
     ]);
@@ -806,6 +915,7 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
       ['rides', rides],
       ['vehicles', vehicles],
       ['activities', activities],
+      ['expenses', expenses],
     ];
 
     for (const [name, rows] of sources) {

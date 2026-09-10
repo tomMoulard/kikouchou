@@ -60,6 +60,8 @@ describe('MAX_LENGTHS constants', () => {
       'activityTitle',
       'activityLocation',
       'activityNotes',
+      'expenseTitle',
+      'expenseDescription',
       'guestGroupName',
       'vehicleName',
       'vehicleLuggageNotes',

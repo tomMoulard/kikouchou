@@ -10,7 +10,13 @@
 import { z } from 'zod';
 import {
   ACTIVITY_CATEGORIES,
+  EXPENSE_CATEGORIES,
+  EXPENSE_KINDS,
+  EXPENSE_SPLIT_MODES,
   MAX_ACTIVITY_PARTICIPANTS,
+  MAX_EXPENSE_AMOUNT,
+  MAX_EXPENSE_SPLITS,
+  MAX_EXPENSE_SPLIT_VALUE,
   MAX_GUEST_GROUP_MEMBERS,
   MAX_LEAD_TIME_MINUTES,
   MAX_PERSON_HEADCOUNT,
@@ -21,6 +27,9 @@ import {
 } from '@/types';
 import type {
   ActivityCategory,
+  ExpenseCategory,
+  ExpenseKind,
+  ExpenseSplitMode,
   HexColor,
   ISODateString,
   PersonId,
@@ -139,6 +148,27 @@ export const transportModeSchema = z.enum([
 export const activityCategorySchema = z.enum(
   ACTIVITY_CATEGORIES as unknown as [ActivityCategory, ...ActivityCategory[]],
 ) satisfies z.ZodType<ActivityCategory>;
+
+/**
+ * Expense kind validator.
+ */
+export const expenseKindSchema = z.enum(
+  EXPENSE_KINDS as unknown as [ExpenseKind, ...ExpenseKind[]],
+) satisfies z.ZodType<ExpenseKind>;
+
+/**
+ * Expense category validator.
+ */
+export const expenseCategorySchema = z.enum(
+  EXPENSE_CATEGORIES as unknown as [ExpenseCategory, ...ExpenseCategory[]],
+) satisfies z.ZodType<ExpenseCategory>;
+
+/**
+ * Expense split mode validator.
+ */
+export const expenseSplitModeSchema = z.enum(
+  EXPENSE_SPLIT_MODES as unknown as [ExpenseSplitMode, ...ExpenseSplitMode[]],
+) satisfies z.ZodType<ExpenseSplitMode>;
 
 /**
  * Branded ID schema factory.
@@ -471,6 +501,90 @@ export const ActivityFormDataSchema = z
   );
 
 /**
+ * Expense form data schema.
+ *
+ * Validates:
+ * - kind: required, one of expense / income / transfer
+ * - category: required, a known expense category
+ * - title: required, 1-100 characters
+ * - date: required, a real calendar day
+ * - amount: required, above zero and at most MAX_EXPENSE_AMOUNT
+ * - payerId: required, a person id
+ * - splitMode: required, one of the four split rules
+ * - splits: required array (may be empty), one entry per guest at most
+ * - description: optional, max 1000 characters
+ *
+ * Two rules are checked across fields, because both decide whether the line can
+ * be divided at all rather than whether one field is well formed:
+ *
+ * - a `transfer` names exactly one guest, the one being paid, and it is not the
+ *   payer — a line from a guest to themselves moves no money and would render
+ *   as a settling payment nobody has to make;
+ * - an `amounts` split has to add up to the amount, to the cent. The rule is the
+ *   one the person typing it thinks they are following, and a total that is out
+ *   by fifty is a typo rather than a rounding difference.
+ */
+export const ExpenseFormDataSchema = z
+  .object({
+    kind: expenseKindSchema,
+    category: expenseCategorySchema,
+    title: z
+      .string()
+      .min(1, 'Title is required')
+      .max(100, 'Title must be 100 characters or less'),
+    date: isoDateStringSchema,
+    amount: z
+      .number()
+      .positive('Amount must be above zero')
+      .max(MAX_EXPENSE_AMOUNT, `Amount must be ${MAX_EXPENSE_AMOUNT} or less`),
+    payerId: personIdSchema,
+    splitMode: expenseSplitModeSchema,
+    splits: z
+      .array(
+        z.object({
+          personId: personIdSchema,
+          value: z
+            .number()
+            .min(0, 'A share cannot be negative')
+            .max(
+              MAX_EXPENSE_SPLIT_VALUE,
+              `A share must be ${MAX_EXPENSE_SPLIT_VALUE} or less`,
+            ),
+        }),
+      )
+      .max(MAX_EXPENSE_SPLITS, `A line holds at most ${MAX_EXPENSE_SPLITS} shares`),
+    description: z
+      .string()
+      .max(1000, 'Description must be 1000 characters or less')
+      .optional(),
+  })
+  .refine(
+    (data) =>
+      data.kind !== 'transfer' ||
+      (data.splits.length === 1 && data.splits[0]?.personId !== data.payerId),
+    {
+      message: 'A transfer goes to exactly one other guest',
+      path: ['splits'],
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.splitMode !== 'amounts' || data.splits.length === 0) {
+        return true;
+      }
+      const typed = data.splits.reduce(
+        (total, split) => total + Math.round(split.value * 100),
+        0,
+      );
+      return typed === Math.round(data.amount * 100);
+    },
+    {
+      message: 'The amounts must add up to the total',
+      path: ['splits'],
+    },
+  );
+
+/**
  * Guest group member schema.
  *
  * Deliberately the same bounds as {@link PersonFormDataSchema} on the fields
@@ -547,6 +661,7 @@ export type TransportFormDataInput = z.input<typeof TransportFormDataSchema>;
 export type RideFormDataInput = z.input<typeof RideFormDataSchema>;
 export type VehicleFormDataInput = z.input<typeof VehicleFormDataSchema>;
 export type ActivityFormDataInput = z.input<typeof ActivityFormDataSchema>;
+export type ExpenseFormDataInput = z.input<typeof ExpenseFormDataSchema>;
 export type GuestGroupFormDataInput = z.input<typeof GuestGroupFormDataSchema>;
 export type GuestGroupMemberFormDataInput = z.input<
   typeof GuestGroupMemberFormDataSchema

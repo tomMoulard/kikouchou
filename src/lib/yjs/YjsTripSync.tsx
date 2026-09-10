@@ -16,6 +16,7 @@ import { db } from '@/lib/db/database';
 import { SupabaseTripSync } from '@/lib/sync/SupabaseTripSync';
 import type {
   Activity,
+  Expense,
   Person,
   Ride,
   Room,
@@ -167,6 +168,12 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       .between([id, Dexie.minKey], [id, Dexie.maxKey])
       .toArray(),
   );
+  const expenses = useTripScopedRows<Expense>(tripId, (id) =>
+    db.expenses
+      .where('[tripId+date]')
+      .between([id, Dexie.minKey], [id, Dexie.maxKey])
+      .toArray(),
+  );
 
   /**
    * Every document collection this component publishes, checked at compile time.
@@ -190,6 +197,7 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
     rides,
     vehicles,
     activities,
+    expenses,
   } satisfies Record<DocCollectionName, unknown>;
   void publishedCollections;
 
@@ -294,6 +302,16 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
   }, [readOnly, activities, tripId, yjs?.doc, yjs?.loaded]);
+
+  useEffect(() => {
+    if (readOnly || !yjs?.loaded || !expenses) {
+      return;
+    }
+
+    syncDexieToDoc(yjs.doc, 'expenses', stripTripId(expenses), {
+      allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
+    });
+  }, [readOnly, expenses, tripId, yjs?.doc, yjs?.loaded]);
 
   return null;
 });
