@@ -160,7 +160,6 @@ const GLANCE_PATH_SUFFIXES: readonly string[] = [
   'calendar',
   'rooms',
   'persons',
-  'transports',
   'activities',
   'money',
   'edit',
@@ -204,8 +203,8 @@ const ASSISTANT_NAV_ITEM: NavItem = {
  */
 const MOBILE_SECONDARY_TRIP_PATHS: readonly string[] = [
   'activities',
+  'transports',
   'analytics',
-  'money',
   'edit',
 ];
 
