@@ -56,7 +56,10 @@ function areTripsEqual(a: Trip | null, b: Trip | null): boolean {
     areCoordinatesEqual(a.coordinates, b.coordinates) &&
     // Whether the trip is shared. Listed because the comparator must cover every
     // mutable field — a missing one means a change that never re-renders.
-    a.remoteTripId === b.remoteTripId
+    a.remoteTripId === b.remoteTripId &&
+    // Whether this device reads the trip through an invite link. Cleared when
+    // the viewer signs in, and every "read-only" control in the app follows it.
+    a.viewerToken === b.viewerToken
   );
 }
 

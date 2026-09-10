@@ -157,6 +157,13 @@ function buildTripRecord(
     ...(existingTrip?.remoteTripId
       ? { remoteTripId: existingTrip.remoteTripId }
       : {}),
+    // Device-local for the same reason, and load-bearing: this projection runs
+    // on every remote update, and `put` replaces the row. Dropping the token
+    // here would silently turn a read-only viewer trip into an editable member
+    // trip on the first refresh after it was opened.
+    ...(existingTrip?.viewerToken !== undefined
+      ? { viewerToken: existingTrip.viewerToken }
+      : {}),
   };
 
   // Bounded, unlike the name above, and the asymmetry is the point.

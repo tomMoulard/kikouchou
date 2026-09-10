@@ -26,8 +26,11 @@ export {
   buildInviteUrl,
   createInvite,
   extractInviteToken,
+  inviteExpiryForTrip,
+  inviteOutlastsTrip,
   isInviteUsable,
   listInvites,
+  mapInviteError,
   redeemInvite,
   revokeInvite,
   type CreateInviteResult,
@@ -47,6 +50,19 @@ export {
   type JoinTripResult,
 } from './join-trip';
 export { useTripSync, type UseTripSyncOptions } from './useTripSync';
+export { useViewerSync, type UseViewerSyncOptions } from './useViewerSync';
+export {
+  materialiseViewerTrip,
+  readSharedTrip,
+  refreshViewerTrip,
+  upgradeViewerTrip,
+  type InviteRejection,
+  type ReadSharedTripResult,
+  type SharedTripPayload,
+  type ViewerRefreshResult,
+  type ViewerTripResult,
+  type ViewerUpgradeResult,
+} from './viewer';
 export {
   SupabaseTripSync,
   useSyncStatus,

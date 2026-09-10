@@ -379,7 +379,7 @@ describe('syncAccountTrips', () => {
 
       const result = await syncAccountTrips(server.client, null);
 
-      expect(result).toEqual({ uploaded: 0, downloaded: 0, failed: 0 });
+      expect(result).toEqual({ uploaded: 0, downloaded: 0, upgraded: 0, failed: 0 });
       expect(server.trips).toHaveLength(0);
     });
 
@@ -388,7 +388,7 @@ describe('syncAccountTrips', () => {
 
       const result = await syncAccountTrips(null, USER);
 
-      expect(result).toEqual({ uploaded: 0, downloaded: 0, failed: 0 });
+      expect(result).toEqual({ uploaded: 0, downloaded: 0, upgraded: 0, failed: 0 });
     });
   });
 
@@ -405,8 +405,8 @@ describe('syncAccountTrips', () => {
     const first = await syncAccountTrips(server.client, USER);
     const second = await syncAccountTrips(server.client, USER);
 
-    expect(first).toEqual({ uploaded: 1, downloaded: 1, failed: 0 });
-    expect(second).toEqual({ uploaded: 0, downloaded: 0, failed: 0 });
+    expect(first).toEqual({ uploaded: 1, downloaded: 1, upgraded: 0, failed: 0 });
+    expect(second).toEqual({ uploaded: 0, downloaded: 0, upgraded: 0, failed: 0 });
     // Two trips, two rows: the sweep re-running must not litter either side.
     expect(await db.trips.count()).toBe(2);
     expect(server.trips).toHaveLength(2);

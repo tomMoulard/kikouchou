@@ -30,6 +30,7 @@ import { useYjsContext } from '@/lib/yjs/YjsProvider';
 import { syncRemoteTripMetadata } from './remote-trip';
 import type { SyncState } from './SupabaseYjsProvider';
 import { useTripSync } from './useTripSync';
+import { useViewerSync } from './useViewerSync';
 import type { TripId } from '@/types';
 
 // ============================================================================
@@ -68,12 +69,24 @@ interface SupabaseTripSyncProps {
   readonly tripId: TripId;
   /** Server `trips.id`, absent until the trip has been shared. */
   readonly remoteTripId: string | undefined;
+  /**
+   * The invite token a viewer trip is read through. Absent for a member trip.
+   *
+   * While set, the trip is pulled through `useViewerSync` and the two-way
+   * provider never mounts — signed in or not. An account that has not redeemed
+   * the token is not on the roster, and a provider mounted for it would push
+   * the document at a log whose insert policy refuses it. The account sweep
+   * redeems the token and clears this, and the provider mounts on the next
+   * render.
+   */
+  readonly viewerToken?: string | undefined;
   readonly children: ReactNode;
 }
 
 export function SupabaseTripSync({
   tripId,
   remoteTripId,
+  viewerToken,
   children,
 }: SupabaseTripSyncProps): ReactElement {
   const yjs = useYjsContext();
@@ -81,17 +94,29 @@ export function SupabaseTripSync({
   // The id, not the session object: the object is replaced on every token
   // refresh and would remount the provider each time.
   const userId = session?.user.id ?? null;
+  const isViewer = viewerToken !== undefined;
 
-  const { state, syncNow } = useTripSync({
-    // `loaded` gates on the document having replayed its persisted updates.
-    // Starting before that would diff a half-built document against the server
-    // and push a deletion of everything not yet replayed.
-    doc: yjs?.loaded ? yjs.doc : null,
+  // `loaded` gates on the document having replayed its persisted updates.
+  // Starting before that would diff a half-built document against the server
+  // and push a deletion of everything not yet replayed.
+  const doc = yjs?.loaded ? yjs.doc : null;
+
+  const member = useTripSync({
+    doc,
     tripId,
     remoteTripId: remoteTripId ?? null,
-    isSignedIn: session !== null,
+    isSignedIn: session !== null && !isViewer,
     userId,
   });
+
+  const viewer = useViewerSync({
+    doc,
+    tripId,
+    viewerToken: viewerToken ?? null,
+    enabled: isViewer,
+  });
+
+  const { state, syncNow } = isViewer ? viewer : member;
 
   // Keep the server's denormalised preview in step with the document.
   //
@@ -100,8 +125,10 @@ export function SupabaseTripSync({
   // until that device hydrates. Cosmetic, and deliberately fire-and-forget: a
   // stale preview must never hold up an edit.
   const { currentTrip } = useTripContext();
+  // Never from a viewer: the UPDATE is narrowed to the owner's rows and would
+  // match nothing, and a viewer's copy of the name is the server's own anyway.
   const previewKey =
-    currentTrip && currentTrip.id === tripId && remoteTripId !== undefined
+    currentTrip && currentTrip.id === tripId && remoteTripId !== undefined && !isViewer
       ? `${currentTrip.name}|${currentTrip.startDate}|${currentTrip.endDate}`
       : null;
 

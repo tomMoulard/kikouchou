@@ -32,7 +32,7 @@ export type JoinTripResult =
   | { readonly status: 'already-local'; readonly tripId: TripId }
   | { readonly status: 'error'; readonly message: string };
 
-interface RemoteTripPreview {
+export interface RemoteTripPreview {
   readonly name: string;
   readonly startDate: string;
   readonly endDate: string;
@@ -97,7 +97,7 @@ async function fetchRemoteTripPreview(
  * is called. Importing `@/lib/i18n` from `lib/` follows that bridge: it is the
  * framework-free i18next instance, not a React hook.
  */
-function sanitisePreview(preview: RemoteTripPreview | null): RemoteTripPreview {
+export function sanitisePreview(preview: RemoteTripPreview | null): RemoteTripPreview {
   // The viewer's own calendar day, not UTC: these become `Trip.startDate` /
   // `Trip.endDate`, which the whole app reads as local day keys. Deriving the
   // fallback in UTC handed a Paris user yesterday's date for most of the

@@ -165,6 +165,15 @@ export interface SyncState {
   readonly lastSyncedAt?: number;
   readonly lastError?: string;
   /**
+   * Whether this device holds the trip as a viewer — read through an invite
+   * link, with no account, so nothing here can be sent to the server.
+   *
+   * Set only by `useViewerSync`; the provider never syncs a viewer trip. The
+   * badge reads it to say "read-only" rather than "everyone is up to date",
+   * which would promise a two-way sync that is not happening.
+   */
+  readonly readOnly?: boolean;
+  /**
    * People currently on this trip, this device included.
    *
    * `null` means unknown rather than nobody: Realtime is not connected, so the
