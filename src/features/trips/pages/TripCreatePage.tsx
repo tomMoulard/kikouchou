@@ -10,35 +10,47 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { UsersRound } from 'lucide-react';
 import { useOfflineAwareNotify, useUnsavedChanges } from '@/hooks';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 
+import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useTripContext } from '@/contexts/TripContext';
+import { TripCreateWizard } from '@/features/trips/components/TripCreateWizard';
 import {
   TripForm,
   type NewTripGuest,
   type NewTripRoom,
   type TripFormHandle,
 } from '@/features/trips/components/TripForm';
+import {
+  createTripWithDetails,
+  type TripCreationWarning,
+} from '@/features/trips/lib/create-trip-with-details';
 import { useAuth } from '@/features/auth/AuthContext';
 import { getAccountGuestName } from '@/features/auth/display-name';
 import {
   GuestGroupImportDialog,
   type GuestGroupSelection,
 } from '@/features/guest-groups';
-import {
-  createTrip,
-  setCurrentTrip,
-  cloneRoomsToTrip,
-  createPerson,
-  createPersonWithAutoColor,
-  createRoom,
-} from '@/lib/db';
+import { setCurrentTrip } from '@/lib/db';
 import { captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
-import { writeGuestIdentity } from '@/lib/sharing/guest-identity';
-import type { PersonId, TripFormData, TripId } from '@/types';
+import type { Trip, TripFormData, TripId } from '@/types';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * The PostHog flag that swaps the one-page form for the first-trip wizard.
+ *
+ * Only for a device that holds no trip yet: the comparison is about the first
+ * creation, and somebody who has made a trip before knows the form.
+ */
+export const FIRST_TRIP_WIZARD_FLAG = 'first-trip-wizard';
 
 // ============================================================================
 // Component
@@ -67,6 +79,26 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const { t } = useTranslation();
   const { notifySuccess } = useOfflineAwareNotify();
   const { user } = useAuth();
+  const { trips, isLoading: tripsLoading } = useTripContext();
+  const wizardFlag = useFeatureFlag(FIRST_TRIP_WIZARD_FLAG);
+
+  /**
+   * Which experience this visit gets.
+   *
+   * The wizard only ever replaces the form for a first trip, and only once the
+   * flag has answered: rendering the form and then swapping it for the wizard
+   * a second later would be the worst of both. A device with a trip already
+   * skips the question entirely.
+   */
+  const isFirstTrip = !tripsLoading && trips.length === 0;
+  /**
+   * Latched the moment the wizard starts writing: the trip list grows with the
+   * first write, which would otherwise swap the wizard for the form between
+   * the last question and the done screen.
+   */
+  const [wizardBusy, setWizardBusy] = useState(false);
+  const showWizard = wizardFlag === true && (isFirstTrip || wizardBusy);
+  const decidingWizard = isFirstTrip && wizardFlag === undefined && !wizardBusy;
 
   /**
    * What to pre-fill the first guest — "you" — with.
@@ -171,142 +203,38 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
    */
   const handleSubmit = useCallback(
     async (data: TripFormData): Promise<void> => {
-      const newTrip = await createTrip(data);
+      // The writes are shared with the first-trip wizard; see
+      // `lib/create-trip-with-details`. What is left here is what the form
+      // says about them.
+      const outcome = await createTripWithDetails({
+        form: data,
+        guests: guestsRef.current,
+        rooms: roomsRef.current,
+        importSourceTripId: importSourceRef.current,
+      });
 
-      // Validate trip was created with valid ID (defensive check for database quirks)
-      if (!newTrip?.id) {
-        throw new Error('Trip creation failed: missing trip ID');
+      // The trip exists either way, so each of these is a warning rather than
+      // a rolled-back creation.
+      const warningMessages: Record<TripCreationWarning, string> = {
+        'rooms-import': t('trips.importRoomsFailed', 'Trip created but room import failed'),
+        guests: t('trips.guestsCreateFailed', 'Trip created but some guests could not be added'),
+        rooms: t('trips.roomsCreateFailed', 'Trip created but some rooms could not be added'),
+        // Same message the settings picker shows, because it is the same failure.
+        identity: t(
+          'sharing.identityStorageFailed',
+          'Could not save your identity. You may need to re-select on your next visit.',
+        ),
+      };
+      for (const warning of outcome.warnings) {
+        notify.error(warningMessages[warning]);
       }
-
-      // Clone rooms from import source if one was selected
-      let didImportRooms = false;
-      if (importSourceRef.current) {
-        try {
-          await cloneRoomsToTrip(importSourceRef.current, newTrip.id);
-          didImportRooms = true;
-        } catch (error) {
-          console.error('Failed to clone rooms from import source:', error);
-          // Trip is created — show warning but don't block navigation
-          notify.error(t('trips.importRoomsFailed', 'Trip created but room import failed'));
-        }
-      }
-
-      /*
-        Add the guests the form collected, one at a time and in list order.
-
-        One loop for the whole list, typed and imported alike: they are the same
-        list on screen and there is no reason for them to be two here. A guest
-        that came from a saved group brings its own colour and whatever else was
-        stored with it; a typed one gets a colour from the palette.
-
-        Sequential on purpose: `createPersonWithAutoColor` picks its colour from
-        the trip's *current* person count, so a `Promise.all` over the list
-        would read the same count in every call and hand every guest the same
-        colour — on a feature whose entire job is telling guests apart.
-      */
-      const guests = guestsRef.current;
-      let addedGuestCount = 0,
-        importedGuestCount = 0,
-        selfPersonId: PersonId | undefined;
-
-      for (const guest of guests) {
-        try {
-          let person;
-          if (guest.color) {
-            person = await createPerson(newTrip.id, {
-              name: guest.name,
-              color: guest.color,
-              ...(guest.headcount === undefined ? {} : { headcount: guest.headcount }),
-              ...(guest.notes === undefined ? {} : { notes: guest.notes }),
-              ...(guest.phone === undefined ? {} : { phone: guest.phone }),
-            });
-            importedGuestCount += 1;
-          } else {
-            person = await createPersonWithAutoColor(newTrip.id, guest.name);
-          }
-          if (guest.isSelf) {
-            selfPersonId = person?.id;
-          }
-          addedGuestCount += 1;
-        } catch (error) {
-          console.error('Failed to add guest to new trip:', error);
-        }
-      }
-
-      // The trip exists either way, so a failed guest is a warning rather than
-      // a rolled-back creation — the same call the room import above makes.
-      if (addedGuestCount < guests.length) {
-        notify.error(t('trips.guestsCreateFailed', 'Trip created but some guests could not be added'));
-      }
-
-      /*
-        Add the rooms the form collected, in list order.
-
-        Sequential like the guests, and for a related reason: `createRoom` reads
-        the trip's current rooms to place the new one last, so a `Promise.all`
-        would hand every room the same order value.
-
-        A room that fails is a warning rather than a rolled-back trip — the trip
-        and its guests are already saved, and the Rooms page can take the rest.
-      */
-      const rooms = roomsRef.current;
-      let addedRoomCount = 0;
-
-      for (const room of rooms) {
-        try {
-          await createRoom(newTrip.id, {
-            name: room.name,
-            capacity: room.capacity,
-          });
-          addedRoomCount += 1;
-        } catch (error) {
-          console.error('Failed to add room to new trip:', error);
-        }
-      }
-
-      if (addedRoomCount < rooms.length) {
-        notify.error(t('trips.roomsCreateFailed', 'Trip created but some rooms could not be added'));
-      }
-
-      /*
-        Become the person the "You" row created.
-
-        The form asks for the user's own name and badges the row "You", so the
-        answer to "who is this browser" is already on screen — and until this,
-        nothing wrote it down. Settings read "Nobody in particular" on a trip
-        the user had just created and put their own name at the top of, and
-        claiming a room, joining an activity and offering a ride all acted for
-        nobody until they found the identity picker and chose themselves.
-
-        Nothing to store when the user cleared the row: a host arranging a trip
-        they are not on is nobody in particular, and that is the right answer.
-      */
-      if (selfPersonId) {
-        // The trip and its guests are saved by now, so a storage refusal —
-        // private browsing, a full quota — is a warning like the failed guest
-        // above, not a reason to strand the user on the form. Same message the
-        // settings picker shows, because it is the same failure.
-        if (!writeGuestIdentity(newTrip.shareId, {
-          personId: selfPersonId,
-          tripId: newTrip.id,
-        })) {
-          notify.error(
-            t(
-              'sharing.identityStorageFailed',
-              'Could not save your identity. You may need to re-select on your next visit.',
-            ),
-          );
-        }
-      }
-
-      // Set the new trip as the current trip so CalendarPage can display it
-      await setCurrentTrip(newTrip.id);
 
       captureUsage('trip_created', {
-        imported_rooms: didImportRooms,
-        guest_count: addedGuestCount,
-        imported_guests: importedGuestCount,
-        room_count: addedRoomCount,
+        via: 'form',
+        imported_rooms: outcome.counts.importedRooms,
+        guest_count: outcome.counts.guests,
+        imported_guests: outcome.counts.importedGuests,
+        room_count: outcome.counts.rooms,
       });
 
       // Reset dirty state and skip blocker before navigation.
@@ -317,16 +245,37 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
 
       // Offline-aware, like every other entity: a trip created on a train is
       // saved on this device and not yet anywhere else, and the confirmation says so.
-      if (didImportRooms) {
+      if (outcome.counts.importedRooms) {
         notifySuccess(t('trips.createdWithImport', 'Trip created with rooms imported'));
       } else if (!importSourceRef.current) {
         notifySuccess(t('trips.created', 'Trip created successfully'));
       }
 
       // Navigate to the new trip's calendar
-      navigate(`/trips/${newTrip.id}/calendar`);
+      navigate(`/trips/${outcome.trip.id}/calendar`);
     },
     [navigate, skipNextBlock, notifySuccess, t],
+  );
+
+  const handleWizardCreating = useCallback((): void => {
+    setWizardBusy(true);
+  }, []);
+
+  /**
+   * The wizard's way out: it has already created the trip and celebrated.
+   *
+   * The trip is selected here rather than at creation — see `selectAsCurrent`
+   * in `lib/create-trip-with-details` — so the wizard survives to its done
+   * screen.
+   */
+  const handleWizardCreated = useCallback(
+    async (trip: Trip): Promise<void> => {
+      setIsDirty(false);
+      skipNextBlock();
+      await setCurrentTrip(trip.id);
+      navigate(`/trips/${trip.id}/calendar`);
+    },
+    [navigate, skipNextBlock],
   );
 
   // ============================================================================
@@ -346,6 +295,35 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   // ============================================================================
   // Render
   // ============================================================================
+
+  if (decidingWizard) {
+    return (
+      <div className="container max-w-2xl py-6 md:py-8">
+        <PageHeader title={t('trips.new')} backLink="/trips" />
+        <LoadingState variant="inline" />
+      </div>
+    );
+  }
+
+  if (showWizard) {
+    return (
+      <div className="container max-w-2xl py-6 md:py-8">
+        <PageHeader title={t('trips.wizard.title', 'Your first trip')} backLink="/trips" />
+        <Card>
+          <CardContent className="pt-6">
+            <TripCreateWizard
+              currentUserName={currentUserName}
+              onCreating={handleWizardCreating}
+              onCreated={(trip) => void handleWizardCreated(trip)}
+              onCancel={handleCancel}
+              onDirtyChange={handleDirtyChange}
+            />
+          </CardContent>
+        </Card>
+        <UnsavedChangesDialog open={isBlocked} onStay={reset} onLeave={proceed} />
+      </div>
+    );
+  }
 
   return (
     <div className="container max-w-2xl py-6 md:py-8">
