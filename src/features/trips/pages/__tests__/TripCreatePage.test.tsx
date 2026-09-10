@@ -40,6 +40,26 @@ vi.mock('@/lib/sharing/guest-identity', () => ({
   writeGuestIdentity: (...args: unknown[]) => mockWriteGuestIdentity(...args),
 }));
 
+// The page decides between the form and the first-trip wizard from the trip
+// list and a feature flag. Both are held here so the form tests stay about the
+// form: a device with a trip, a flag that says no.
+const mockTrips = vi.fn<() => { trips: unknown[]; isLoading: boolean }>(() => ({
+  trips: [{ id: 'existing-trip' }],
+  isLoading: false,
+}));
+vi.mock('@/contexts/TripContext', () => ({
+  useTripContext: () => mockTrips(),
+}));
+
+const mockFlag = vi.fn<() => boolean | undefined>(() => false);
+vi.mock('@/hooks/useFeatureFlag', () => ({
+  useFeatureFlag: () => mockFlag(),
+}));
+
+vi.mock('@/features/trips/components/TripCreateWizard', () => ({
+  TripCreateWizard: () => <div data-testid="trip-wizard">wizard</div>,
+}));
+
 const mockErrorToast = vi.fn();
 
 vi.mock('sonner', () => ({ toast: { error: (...args: unknown[]) => mockErrorToast(...args) } }));
@@ -96,6 +116,8 @@ import { TripCreatePage } from '../TripCreatePage';
 describe('TripCreatePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockTrips.mockReturnValue({ trips: [{ id: 'existing-trip' }], isLoading: false });
+    mockFlag.mockReturnValue(false);
     mockCreateTrip.mockResolvedValue({ id: 'new-trip-1', shareId: 'share-1' });
     mockCloneRoomsToTrip.mockResolvedValue(undefined);
     mockCreatePersonWithAutoColor.mockResolvedValue(undefined);
@@ -108,6 +130,48 @@ describe('TripCreatePage', () => {
     render(<TripCreatePage />, { withProviders: false });
     expect(screen.getByText('trips.new')).toBeInTheDocument();
     expect(screen.getByTestId('trip-form')).toBeInTheDocument();
+  });
+
+  describe('the first-trip wizard', () => {
+    it('replaces the form for a first trip when the flag is on', () => {
+      mockTrips.mockReturnValue({ trips: [], isLoading: false });
+      mockFlag.mockReturnValue(true);
+
+      render(<TripCreatePage />, { withProviders: false });
+
+      expect(screen.getByTestId('trip-wizard')).toBeInTheDocument();
+      expect(screen.queryByTestId('trip-form')).not.toBeInTheDocument();
+      expect(screen.getByText('trips.wizard.title')).toBeInTheDocument();
+    });
+
+    it('waits for the flag rather than flashing the form first', () => {
+      mockTrips.mockReturnValue({ trips: [], isLoading: false });
+      mockFlag.mockReturnValue(undefined);
+
+      render(<TripCreatePage />, { withProviders: false });
+
+      expect(screen.queryByTestId('trip-form')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('trip-wizard')).not.toBeInTheDocument();
+    });
+
+    it('keeps the form for a device that already holds a trip, flag or not', () => {
+      mockTrips.mockReturnValue({ trips: [{ id: 'existing-trip' }], isLoading: false });
+      mockFlag.mockReturnValue(true);
+
+      render(<TripCreatePage />, { withProviders: false });
+
+      expect(screen.getByTestId('trip-form')).toBeInTheDocument();
+      expect(screen.queryByTestId('trip-wizard')).not.toBeInTheDocument();
+    });
+
+    it('keeps the form when the flag is off', () => {
+      mockTrips.mockReturnValue({ trips: [], isLoading: false });
+      mockFlag.mockReturnValue(false);
+
+      render(<TripCreatePage />, { withProviders: false });
+
+      expect(screen.getByTestId('trip-form')).toBeInTheDocument();
+    });
   });
 
   it('navigates back on cancel', async () => {
