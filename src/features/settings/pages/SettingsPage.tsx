@@ -8,8 +8,9 @@
 import { type ReactElement, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Globe, Info, Luggage, Trash2, UserRound } from 'lucide-react';
+import { Eye, Globe, Info, Luggage, Trash2, UserRound } from 'lucide-react';
 import { useOfflineAwareNotify } from '@/hooks';
+import { useTripAccess } from '@/hooks/useTripAccess';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -292,6 +293,7 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
   const { currentTrip, setCurrentTrip, trips, isLoading, error, checkConnection } =
     useTripContext();
   const { notifySuccess } = useOfflineAwareNotify();
+  const { canEdit } = useTripAccess();
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -416,6 +418,36 @@ const CurrentTripSection = memo(function CurrentTripSection(): ReactElement {
                 label={t('settings.currentTripLoading', 'Loading your trip…')}
               />
             </div>
+          ) : currentTrip && !canEdit ? (
+            // A read-only trip: the facts, and the one thing that can be done
+            // about it here — deleting this device's copy — stays in the header.
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">{t('trips.name')}</dt>
+                <dd className="font-medium">{currentTrip.name}</dd>
+              </div>
+              {currentTrip.location && (
+                <div>
+                  <dt className="text-muted-foreground">{t('trips.location')}</dt>
+                  <dd className="font-medium">{currentTrip.location}</dd>
+                </div>
+              )}
+              <div>
+                <dt className="text-muted-foreground">{t('trips.startDate')}</dt>
+                <dd className="font-medium">{currentTrip.startDate}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{t('trips.endDate')}</dt>
+                <dd className="font-medium">{currentTrip.endDate}</dd>
+              </div>
+              <p className="flex items-start gap-2 text-muted-foreground sm:col-span-2">
+                <Eye className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                {t(
+                  'viewer.description',
+                  'You opened this trip from an invite link. You can see everything and change nothing. Sign in to edit it with the others.',
+                )}
+              </p>
+            </dl>
           ) : currentTrip ? (
             // A trip in hand beats a stale error. `error` is the whole trip
             // context's error, and a `setCurrentTrip` that failed on another

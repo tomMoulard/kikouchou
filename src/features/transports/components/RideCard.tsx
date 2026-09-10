@@ -135,6 +135,8 @@ export interface RideCardProps {
   readonly isActionsDisabled?: boolean;
   /** Whether the journey has already happened. */
   readonly isPast?: boolean;
+  /** A read-only trip: the car is shown with no menu, no claim, no row actions. */
+  readonly readOnly?: boolean;
 }
 
 /**
@@ -153,6 +155,8 @@ interface RidePassengerRowProps {
   readonly onDelete: (transportId: TransportId) => void;
   /** Whether the row actions are disabled. */
   readonly isActionsDisabled: boolean;
+  /** Hides the row menu on a read-only trip. */
+  readonly readOnly: boolean;
 }
 
 // ============================================================================
@@ -197,6 +201,7 @@ const RidePassengerRow = memo(function RidePassengerRow({
   onEdit,
   onDelete,
   isActionsDisabled,
+  readOnly,
 }: RidePassengerRowProps): ReactElement {
   const { t } = useTranslation(),
     { transport, person } = leg,
@@ -248,29 +253,31 @@ const RidePassengerRow = memo(function RidePassengerRow({
           {time}
         </span>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:size-8 shrink-0"
-              disabled={isActionsDisabled}
-              aria-label={`${t('common.actions', 'Actions')}: ${name}`}
-            >
-              <MoreVertical className="size-5 md:size-4" aria-hidden="true" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleEdit}>
-              <Edit className="size-4" aria-hidden="true" />
-              {t('common.edit')}
-            </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onClick={handleDelete}>
-              <Trash2 className="size-4" aria-hidden="true" />
-              {t('common.delete')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {!readOnly && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:size-8 shrink-0"
+                disabled={isActionsDisabled}
+                aria-label={`${t('common.actions', 'Actions')}: ${name}`}
+              >
+                <MoreVertical className="size-5 md:size-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleEdit}>
+                <Edit className="size-4" aria-hidden="true" />
+                {t('common.edit')}
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onClick={handleDelete}>
+                <Trash2 className="size-4" aria-hidden="true" />
+                {t('common.delete')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* "Meet at gate 12" is written against one passenger's leg, and folding
@@ -322,6 +329,7 @@ const RideCard = memo(function RideCard({
   onEditLeg,
   onDeleteLeg,
   isActionsDisabled = false,
+  readOnly = false,
   isPast = false,
 }: RideCardProps): ReactElement {
   const { t } = useTranslation(),
@@ -349,8 +357,8 @@ const RideCard = memo(function RideCard({
     // on. A legacy `driverId`-only leg is presented as a one-passenger journey
     // so the list has one shape to render, but it has no ride to edit and none
     // to cancel — offering either would open a dialog on nothing.
-    canEditJourney = journey.ride !== undefined && onEditRide !== undefined,
-    canCancelJourney = journey.ride !== undefined && onDeleteRide !== undefined,
+    canEditJourney = journey.ride !== undefined && onEditRide !== undefined && !readOnly,
+    canCancelJourney = journey.ride !== undefined && onDeleteRide !== undefined && !readOnly,
     handleEditRide = useCallback(() => {
       const id = journey.ride?.id;
       if (id !== undefined) {
@@ -521,7 +529,7 @@ const RideCard = memo(function RideCard({
           ) : (
             <span>{driverSummary}</span>
           )}
-          {!hasDriver && onClaimRide !== undefined && journey.ride !== undefined && (
+          {!hasDriver && onClaimRide !== undefined && journey.ride !== undefined && !readOnly && (
             <Button
               size="sm"
               variant="secondary"
@@ -568,6 +576,7 @@ const RideCard = memo(function RideCard({
               onEdit={onEditLeg}
               onDelete={onDeleteLeg}
               isActionsDisabled={isActionsDisabled}
+              readOnly={readOnly}
             />
           ))}
         </ul>

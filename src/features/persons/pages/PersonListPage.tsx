@@ -46,6 +46,7 @@ import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useOfflineAwareNotify } from '@/hooks';
+import { useTripAccess } from '@/hooks/useTripAccess';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
@@ -113,6 +114,13 @@ interface PersonCardProps {
   readonly onDelete: (personId: PersonId) => void;
   /** Whether interaction is disabled */
   readonly isDisabled?: boolean;
+  /**
+   * A read-only trip: the card describes the guest and opens nothing.
+   *
+   * The whole-card button is the edit affordance, so it is not rendered; the
+   * summary it carried for screen readers stays, as plain text.
+   */
+  readonly readOnly?: boolean;
   /** Date locale for formatting */
   readonly dateLocale: Locale;
 }
@@ -158,15 +166,16 @@ const PersonCard = memo(function PersonCard({
   onClick,
   onDelete,
   isDisabled = false,
+  readOnly = false,
   dateLocale,
 }: PersonCardProps): ReactElement {
   const { t } = useTranslation(),
 
   // Handle click
    handleClick = useCallback(() => {
-    if (isDisabled) {return;}
+    if (isDisabled || readOnly) {return;}
     onClick(person.id);
-  }, [person.id, onClick, isDisabled]),
+  }, [person.id, onClick, isDisabled, readOnly]),
    handleDeleteClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
@@ -233,8 +242,8 @@ const PersonCard = memo(function PersonCard({
     <Card
       onClick={handleClick}
       className={cn(
-        'relative cursor-pointer transition-all duration-200',
-        'hover:shadow-md hover:border-primary/20',
+        'relative transition-all duration-200',
+        readOnly ? 'cursor-default' : 'cursor-pointer hover:shadow-md hover:border-primary/20',
         isDisabled && 'opacity-50 cursor-not-allowed',
       )}
     >
@@ -251,17 +260,21 @@ const PersonCard = memo(function PersonCard({
         keyboard Enter/Space produces — bubbles to the card's `onClick`, which
         is also what a click on the card's text does.
       */}
-      <button
-        type="button"
-        tabIndex={isDisabled ? -1 : 0}
-        aria-label={ariaLabel}
-        aria-disabled={isDisabled}
-        className={cn(
-          'absolute inset-0 z-10 rounded-xl',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-          isDisabled && 'cursor-not-allowed',
-        )}
-      />
+      {readOnly ? (
+        <span className="sr-only">{ariaLabel}</span>
+      ) : (
+        <button
+          type="button"
+          tabIndex={isDisabled ? -1 : 0}
+          aria-label={ariaLabel}
+          aria-disabled={isDisabled}
+          className={cn(
+            'absolute inset-0 z-10 rounded-xl',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+            isDisabled && 'cursor-not-allowed',
+          )}
+        />
+      )}
 
       <CardHeader className="pb-2">
         <div className="flex items-center gap-3">
@@ -284,19 +297,21 @@ const PersonCard = memo(function PersonCard({
               <span className="tabular-nums">{personHeadcount}</span>
             </span>
           )}
-          <Button
-            type="button"
-            size="icon"
-            // `relative z-20` lifts it above the full-card activation button,
-            // which would otherwise swallow the click.
-            className="relative z-20 ml-auto size-8 text-muted-foreground hover:text-destructive"
-            variant="ghost"
-            aria-label={t('common.delete')}
-            onClick={handleDeleteClick}
-            disabled={isDisabled}
-          >
-            <Trash2 className="size-4" aria-hidden="true" />
-          </Button>
+          {!readOnly && (
+            <Button
+              type="button"
+              size="icon"
+              // `relative z-20` lifts it above the full-card activation button,
+              // which would otherwise swallow the click.
+              className="relative z-20 ml-auto size-8 text-muted-foreground hover:text-destructive"
+              variant="ghost"
+              aria-label={t('common.delete')}
+              onClick={handleDeleteClick}
+              disabled={isDisabled}
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+            </Button>
+          )}
         </div>
       </CardHeader>
 
@@ -438,6 +453,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
    { tripId: tripIdFromUrl } = useParams<'tripId'>(),
    [searchParams, setSearchParams] = useSearchParams(),
    { notifySuccess } = useOfflineAwareNotify(),
+   { canEdit } = useTripAccess(),
 
   // Context hooks
    { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
@@ -792,17 +808,24 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
             icon={Users}
             title={t('persons.empty')}
             description={t('persons.emptyDescription')}
-            action={{
-              label: t('persons.new'),
-              onClick: handleAddPerson,
-            }}
-            // An empty guest list is exactly where a saved group pays off, so
-            // the second way in is offered beside the first rather than hidden
-            // in a header the empty state has drawn attention away from.
-            secondaryAction={{
-              label: t('guestGroups.importAction', 'Add from a group'),
-              onClick: handleOpenImportGroup,
-            }}
+            // Nothing to offer on a read-only trip: the guests are whoever the
+            // members put there.
+            {...(canEdit
+              ? {
+                  action: {
+                    label: t('persons.new'),
+                    onClick: handleAddPerson,
+                  },
+                  // An empty guest list is exactly where a saved group pays off,
+                  // so the second way in is offered beside the first rather than
+                  // hidden in a header the empty state has drawn attention away
+                  // from.
+                  secondaryAction: {
+                    label: t('guestGroups.importAction', 'Add from a group'),
+                    onClick: handleOpenImportGroup,
+                  },
+                }
+              : {})}
           />
         </div>
 
@@ -830,7 +853,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
     <div className="container max-w-4xl py-6 md:py-8">
       <PageHeader
         title={t('persons.title')}
-        action={headerAction}
+        action={canEdit ? headerAction : undefined}
       />
 
       {/* Person grid */}
@@ -854,6 +877,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
               onClick={handlePersonClick}
               onDelete={handlePersonDeleteIntent}
               isDisabled={isNavigating}
+              readOnly={!canEdit}
               dateLocale={dateLocale}
             />
           </div>
@@ -861,19 +885,21 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
       </div>
 
       {/* Floating Action Button for mobile */}
-      <Button
-        onClick={handleAddPerson}
-        size="lg"
-        className={cn(
-          'fixed bottom-nav-safe right-4 z-10',
-          'size-14 rounded-full shadow-lg',
-          'sm:hidden',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        )}
-        aria-label={t('persons.new')}
-      >
-        <Plus className="size-6" aria-hidden="true" />
-      </Button>
+      {canEdit && (
+        <Button
+          onClick={handleAddPerson}
+          size="lg"
+          className={cn(
+            'fixed bottom-nav-safe right-4 z-10',
+            'size-14 rounded-full shadow-lg',
+            'sm:hidden',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          )}
+          aria-label={t('persons.new')}
+        >
+          <Plus className="size-6" aria-hidden="true" />
+        </Button>
+      )}
 
       {/* Person Create/Edit Dialog */}
       <PersonDialog

@@ -63,6 +63,8 @@ export interface ActivityCardProps {
   readonly onDelete: (activityId: ActivityId) => void;
   /** Callback when the current guest joins or leaves */
   readonly onToggleParticipation?: (activityId: ActivityId, joining: boolean) => void;
+  /** A read-only trip: no menu and no join button. */
+  readonly readOnly?: boolean;
   /** Whether actions are disabled */
   readonly isActionsDisabled?: boolean;
 }
@@ -87,6 +89,7 @@ const ActivityCard = memo(function ActivityCard({
   onDelete,
   onToggleParticipation,
   isActionsDisabled = false,
+  readOnly = false,
 }: ActivityCardProps): ReactElement {
   const { t } = useTranslation();
 
@@ -111,7 +114,8 @@ const ActivityCard = memo(function ActivityCard({
   const isJoined = currentPersonId
     ? (activity.participantIds ?? []).includes(currentPersonId)
     : false;
-  const canToggleParticipation = Boolean(currentPersonId && onToggleParticipation);
+  const canToggleParticipation =
+    Boolean(currentPersonId && onToggleParticipation) && !readOnly;
 
   const handleEdit = useCallback(() => {
     onEdit(activity.id);
@@ -193,29 +197,31 @@ const ActivityCard = memo(function ActivityCard({
             </div>
           </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="shrink-0 md:size-8"
-                disabled={isActionsDisabled}
-                aria-label={t('common.actions', 'Actions')}
-              >
-                <MoreVertical className="size-5 md:size-4" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleEdit}>
-                <Edit className="size-4" aria-hidden="true" />
-                {t('common.edit')}
-              </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onClick={handleDelete}>
-                <Trash2 className="size-4" aria-hidden="true" />
-                {t('common.delete')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {!readOnly && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 md:size-8"
+                  disabled={isActionsDisabled}
+                  aria-label={t('common.actions', 'Actions')}
+                >
+                  <MoreVertical className="size-5 md:size-4" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleEdit}>
+                  <Edit className="size-4" aria-hidden="true" />
+                  {t('common.edit')}
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onClick={handleDelete}>
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  {t('common.delete')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </CardHeader>
 

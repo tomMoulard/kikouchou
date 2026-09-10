@@ -56,6 +56,7 @@ import {
 } from '@dnd-kit/core';
 import { notify } from '@/lib/notifications';
 import { useOfflineAwareNotify } from '@/hooks';
+import { useTripAccess } from '@/hooks/useTripAccess';
 import { type Locale, format, parseISO } from 'date-fns';
 import {
   ArrowDownToLine,
@@ -168,6 +169,8 @@ interface TransportCardProps {
   readonly isActionsDisabled?: boolean;
   /** Whether this transport is in the past */
   readonly isPast?: boolean;
+  /** A read-only trip: no menu on the card. */
+  readonly readOnly?: boolean;
   /**
    * The rides somebody has volunteered to drive, from `collectDrivenRideIds`.
    *
@@ -249,6 +252,8 @@ interface TransportListProps {
   readonly emptyDescription: string;
   /** Whether actions are disabled */
   readonly isActionsDisabled?: boolean;
+  /** A read-only trip: every card and car is shown without its controls. */
+  readonly readOnly?: boolean;
   /** The rides somebody is driving, from `collectDrivenRideIds`. */
   readonly drivenRideIds: ReadonlySet<string>;
   /** How many people a guest row stands for — never assume one. */
@@ -455,6 +460,7 @@ const TransportCard = memo(function TransportCard({
   isPast = false,
   drivenRideIds,
   isDraggable = false,
+  readOnly = false,
 }: TransportCardProps): ReactElement {
   const { t } = useTranslation(),
 
@@ -646,32 +652,34 @@ const TransportCard = memo(function TransportCard({
           )}
 
           {/* Actions dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="md:size-8 shrink-0"
-                disabled={isActionsDisabled}
-                aria-label={t('common.actions', 'Actions')}
-              >
-                <MoreVertical className="size-5 md:size-4" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleEdit}>
-                <Edit className="size-4" aria-hidden="true" />
-                {t('common.edit')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={handleDelete}
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-                {t('common.delete')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {!readOnly && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="md:size-8 shrink-0"
+                  disabled={isActionsDisabled}
+                  aria-label={t('common.actions', 'Actions')}
+                >
+                  <MoreVertical className="size-5 md:size-4" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleEdit}>
+                  <Edit className="size-4" aria-hidden="true" />
+                  {t('common.edit')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={handleDelete}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  {t('common.delete')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </CardHeader>
 
@@ -756,6 +764,8 @@ interface DateGroupSectionProps {
   readonly isActionsDisabled?: boolean;
   /** Whether the entries in this group are past */
   readonly isPast?: boolean;
+  /** A read-only trip: cards and cars without menus, claims or drag handles. */
+  readonly readOnly?: boolean;
   /** The rides somebody is driving, from `collectDrivenRideIds`. */
   readonly drivenRideIds: ReadonlySet<string>;
   /** How many people a guest row stands for — never assume one. */
@@ -793,6 +803,7 @@ const DateGroupSection = memo(function DateGroupSection({
   dateLocale,
   isActionsDisabled = false,
   isPast = false,
+  readOnly = false,
   drivenRideIds,
   resolveHeadcount,
   myPersonId,
@@ -839,6 +850,7 @@ const DateGroupSection = memo(function DateGroupSection({
               onDeleteLeg={onDelete}
               isActionsDisabled={isActionsDisabled}
               isPast={isPast}
+              readOnly={readOnly}
             />
           );
 
@@ -881,7 +893,8 @@ const DateGroupSection = memo(function DateGroupSection({
               isActionsDisabled={isActionsDisabled}
               isPast={isPast}
               drivenRideIds={drivenRideIds}
-              isDraggable={canDropOnRide}
+              isDraggable={canDropOnRide && !readOnly}
+              readOnly={readOnly}
             />
           </div>
         );
@@ -911,6 +924,7 @@ const TransportList = memo(function TransportList({
   emptyTitle,
   emptyDescription,
   isActionsDisabled = false,
+  readOnly = false,
   drivenRideIds,
   resolveHeadcount,
   myPersonId,
@@ -960,6 +974,7 @@ const TransportList = memo(function TransportList({
           dateLocale={dateLocale}
           isActionsDisabled={isActionsDisabled}
           isPast={false}
+          readOnly={readOnly}
           drivenRideIds={drivenRideIds}
           resolveHeadcount={resolveHeadcount}
           myPersonId={myPersonId}
@@ -1011,6 +1026,7 @@ const TransportList = memo(function TransportList({
                   dateLocale={dateLocale}
                   isActionsDisabled={isActionsDisabled}
                   isPast={true}
+                  readOnly={readOnly}
                   drivenRideIds={drivenRideIds}
                   resolveHeadcount={resolveHeadcount}
                   myPersonId={myPersonId}
@@ -1049,6 +1065,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
 
   // Context hooks
    { notifySuccess } = useOfflineAwareNotify(),
+   { canEdit } = useTripAccess(),
 
    { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
    { persons, isLoading: isPersonsLoading } = usePersonContext(),
@@ -1587,7 +1604,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     <div className="container max-w-4xl py-6 md:py-8">
       <PageHeader
         title={t('transports.title')}
-        action={headerAction}
+        action={canEdit ? headerAction : undefined}
       />
 
       {/* Whose travel this page is showing, and what that is hiding */}
@@ -1659,10 +1676,11 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         It renders nothing once every leg has a driver, which is the ordinary
         state of a trip that is organised.
       */}
-      <ProposedRuns className="mb-6" />
+      {canEdit && <ProposedRuns className="mb-6" />}
 
-      {/* Pickup alerts section - only when a driver is still needed */}
-      {hasUnassignedUpcomingPickup && (
+      {/* Pickup alerts section - only when a driver is still needed, and only
+          where somebody can answer it: the panel's whole job is to volunteer. */}
+      {hasUnassignedUpcomingPickup && canEdit && (
         <div
           className={cn(
             statusVariants({ tone: 'warning', emphasis: 'surface' }),
@@ -1681,8 +1699,9 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         nothing outside this list drags or accepts a drop, and a context that
         spans more than it needs makes every pointer event its business.
       */}
-      <DndContext sensors={dragSensors} onDragEnd={handleDragEnd}>
+      <DndContext sensors={canEdit ? dragSensors : []} onDragEnd={handleDragEnd}>
       <TransportList
+        readOnly={!canEdit}
         upcomingDateGroups={upcomingDateGroups}
         pastDateGroups={pastDateGroups}
         pastCount={pastCount}
@@ -1710,19 +1729,21 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       </DndContext>
 
       {/* Floating Action Button for mobile */}
-      <Button
-        onClick={handleAddTransport}
-        size="lg"
-        className={cn(
-          'fixed bottom-nav-safe right-4 z-10',
-          'size-14 rounded-full shadow-lg',
-          'sm:hidden',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-        )}
-        aria-label={t('transports.new')}
-      >
-        <Plus className="size-6" aria-hidden="true" />
-      </Button>
+      {canEdit && (
+        <Button
+          onClick={handleAddTransport}
+          size="lg"
+          className={cn(
+            'fixed bottom-nav-safe right-4 z-10',
+            'size-14 rounded-full shadow-lg',
+            'sm:hidden',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          )}
+          aria-label={t('transports.new')}
+        >
+          <Plus className="size-6" aria-hidden="true" />
+        </Button>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
