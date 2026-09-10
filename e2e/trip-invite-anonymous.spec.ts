@@ -107,6 +107,58 @@ async function shareTripWithGuests(
   return { token, ownerPage };
 }
 
+/**
+ * A browser that can receive a push, without a push service.
+ *
+ * The dev server registers no service worker, so `navigator.serviceWorker.ready`
+ * never settles and there is no `PushManager` to subscribe with. This script
+ * stands both in: a registration whose push manager hands back a fixed
+ * subscription, and a `Notification` whose permission is granted the moment it
+ * is asked. What the app then sends to the server is the real thing under test.
+ */
+const FAKE_PUSH_BROWSER = `
+  (() => {
+    const subscription = {
+      endpoint: 'https://push.example.test/send/e2e-device',
+      expirationTime: null,
+      toJSON() {
+        return {
+          endpoint: this.endpoint,
+          expirationTime: null,
+          keys: {
+            p256dh: 'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM',
+            auth: 'tBHItJI5svbpez7KI4CCXg',
+          },
+        };
+      },
+      unsubscribe: async () => true,
+    };
+    let current = null;
+    const pushManager = {
+      getSubscription: async () => current,
+      subscribe: async () => { current = subscription; return subscription; },
+    };
+    const registration = { pushManager, scope: location.origin + '/' };
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { ready: Promise.resolve(registration), getRegistration: async () => registration },
+    });
+    window.PushManager = function PushManager() {};
+    let permission = 'default';
+    window.Notification = {
+      get permission() { return permission; },
+      requestPermission: async () => { permission = 'granted'; return permission; },
+    };
+  })();
+`;
+
+/**
+ * A browser that cannot receive a push: an iPhone's Safari tab, as far as the
+ * app can tell. Playwright's Chromium has a `PushManager`, so the install
+ * nudge — which stands in for the reminder card exactly there — needs it gone.
+ */
+const NO_PUSH_BROWSER = `delete window.PushManager;`;
+
 const openContexts: BrowserContext[] = [];
 
 test.afterEach(async () => {
@@ -119,7 +171,7 @@ async function newDevice(
   browser: Browser,
   stub: SupabaseStub,
   user?: StubUser,
-  options: { readonly phone?: boolean } = {},
+  options: { readonly phone?: boolean; readonly push?: boolean } = {},
 ): Promise<Page> {
   const context = await browser.newContext(
     // A phone-sized viewport is what decides "phone" in the app — the install
@@ -128,6 +180,11 @@ async function newDevice(
   );
   openContexts.push(context);
   const page = await context.newPage();
+  if (options.push === true) {
+    await page.addInitScript(FAKE_PUSH_BROWSER);
+  } else if (options.push === false) {
+    await page.addInitScript(NO_PUSH_BROWSER);
+  }
   await stub.install(page);
   if (user) {
     await stub.signIn(page, user);
@@ -209,7 +266,8 @@ test.describe('an invite opened with no account', () => {
     const stub = new SupabaseStub();
     const { token } = await shareTripWithGuests(browser, stub);
 
-    const phone = await newDevice(browser, stub, undefined, { phone: true });
+    // A phone whose browser cannot receive a push: the iPhone Safari case.
+    const phone = await newDevice(browser, stub, undefined, { phone: true, push: false });
     await phone.goto(`/join/${token}`);
     await phone.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
     await expect(phone).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
@@ -240,17 +298,66 @@ test.describe('an invite opened with no account', () => {
     await expect(phone).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
   });
 
+  test('offers reminders where a push can arrive, and registers the device', async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+    const { token } = await shareTripWithGuests(browser, stub);
+
+    // A browser with a push manager gets the reminder card, not the install
+    // nudge — on a phone too, because installing would buy nothing here.
+    const phone = await newDevice(browser, stub, undefined, { phone: true, push: true });
+    await phone.goto(`/join/${token}`);
+    await phone.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
+    await expect(phone).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+
+    const card = phone.getByTestId('reminder-card');
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card).toContainText(/before your own arrival/i);
+    await expect(phone.getByTestId('install-nudge-card')).toHaveCount(0);
+
+    // Nothing was asked of the browser, or the server, before the click.
+    expect(stub.counts.reminderSubscribes).toBe(0);
+
+    await card.getByRole('button', { name: /turn on reminders/i }).click();
+
+    // The device is registered for this trip, as Alice, through the token,
+    // and the card has said its piece.
+    await expect(card).toHaveCount(0, { timeout: 20_000 });
+    expect(stub.counts.reminderSubscribes).toBe(1);
+    expect(stub.pushSubscriptions).toHaveLength(1);
+    const row = stub.pushSubscriptions[0]!;
+    expect(row.endpoint).toBe('https://push.example.test/send/e2e-device');
+    // Alice's id is whatever the owner's device minted; what matters is that
+    // the pick made on the join page travelled with the subscription.
+    expect(row.person_id).toEqual(expect.stringMatching(/^[A-Za-z0-9_-]{8,}$/));
+    expect(row.user_id).toBeNull();
+    expect(row.locale).toBe('en');
+    // Reading is still not joining.
+    expect(stub.counts.redeems).toBe(0);
+
+    // Settings knows, and is where they are turned off again.
+    await phone.goto('/settings');
+    const settings = phone.getByTestId('trip-reminders-settings');
+    await expect(settings).toContainText(/on for shared brittany/i, { timeout: 20_000 });
+    await settings.getByRole('button', { name: /turn off/i }).click();
+    await expect(settings).toContainText(/off for shared brittany/i, { timeout: 20_000 });
+    await expect.poll(() => stub.pushSubscriptions.length, { timeout: 10_000 }).toBe(0);
+    expect(stub.counts.reminderUnsubscribes).toBe(1);
+  });
+
   test('keeps the install suggestion off a laptop', async ({ browser }) => {
     const stub = new SupabaseStub();
     const { token } = await shareTripWithGuests(browser, stub);
 
-    const laptop = await newDevice(browser, stub);
+    const laptop = await newDevice(browser, stub, undefined, { push: false });
     await laptop.goto(`/join/${token}`);
     await laptop.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
     await expect(laptop).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
     await expect(laptop.getByTestId('viewer-unlock-card')).toBeVisible({ timeout: 20_000 });
 
-    // Nobody installs a web app on a desktop, and Firefox on macOS cannot.
+    // Nobody installs a web app on a desktop, and Firefox on macOS cannot —
+    // even one that, like this stand-in, could not receive a push either.
     await expect(laptop.getByTestId('install-nudge-card')).toHaveCount(0);
   });
 
