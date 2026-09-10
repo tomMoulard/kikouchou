@@ -260,6 +260,30 @@ export type Database = {
       }
       redeem_invite: { Args: { invite_token: string }; Returns: string }
       revoke_invite: { Args: { invite_token: string }; Returns: undefined }
+      subscribe_member_reminders: {
+        Args: {
+          analytics_id?: string
+          locale?: string
+          person_id?: string
+          subscription: Json
+          trip: string
+        }
+        Returns: string
+      }
+      subscribe_trip_reminders: {
+        Args: {
+          analytics_id?: string
+          invite_token: string
+          locale?: string
+          person_id?: string
+          subscription: Json
+        }
+        Returns: string
+      }
+      unsubscribe_reminders: {
+        Args: { endpoint: string; trip?: string }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never
