@@ -85,6 +85,7 @@ import {
 } from '../models';
 import posthog, { captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
+import { formatBytes } from '@/lib/utils/format-bytes';
 import type { AssistantModelId } from '@/types';
 
 // ============================================================================
@@ -167,6 +168,11 @@ const AssistantModelCompactSelect = memo(function AssistantModelCompactSelect({
           <SelectItem key={preset.id} value={preset.id}>
             <span className="inline-flex items-center gap-1.5">
               <span>{`${t(preset.nameKey, preset.fallbackName)} (${preset.id})`}</span>
+              {/* The size belongs next to the name: this list is where the
+                  user picks what gets downloaded. */}
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {formatBytes(preset.approxDownloadBytes)}
+              </span>
               {cachedModelIds.has(preset.id) ? <CachedModelIcon /> : null}
             </span>
           </SelectItem>
@@ -191,6 +197,7 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
 }): ReactElement {
   const { t } = useTranslation();
   const selectedModel = getAssistantModelPreset(selectedModelId);
+  const downloadSize = formatBytes(selectedModel.approxDownloadBytes);
 
   return (
     <Card className="mb-4">
@@ -224,6 +231,9 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
               <SelectItem key={preset.id} value={preset.id}>
                 <span className="inline-flex items-center gap-1.5">
                   <span>{`${t(preset.nameKey, preset.fallbackName)} (${preset.id})`}</span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {formatBytes(preset.approxDownloadBytes)}
+                  </span>
                   {cachedModelIds.has(preset.id) ? <CachedModelIcon /> : null}
                 </span>
               </SelectItem>
@@ -244,6 +254,14 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
           <p className="text-xs text-muted-foreground">
             {t(selectedModel.hintKey, selectedModel.fallbackHint)}
           </p>
+          {isCached !== true && (
+            <p className="text-xs text-muted-foreground">
+              {t('assistant.modelDownloadSize', {
+                defaultValue: 'First use downloads about {{size}}.',
+                size: downloadSize,
+              })}
+            </p>
+          )}
           {isCached === true && (
             <p className="text-xs text-primary">
               {t(
@@ -325,12 +343,15 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
   loadProgress,
   error,
   deviceSupport,
+  downloadSize,
 }: {
   readonly onLoad: () => void;
   readonly status: string;
   readonly loadProgress: LoadProgress | null;
   readonly error: string | null;
   readonly deviceSupport: DeviceSupport;
+  /** Approximate download size of the selected preset, already formatted. */
+  readonly downloadSize: string;
 }): ReactElement {
   const { t } = useTranslation();
   const activeFiles = loadProgress?.files.filter((f) => !f.done) ?? [];
@@ -510,11 +531,21 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
           {(status === 'idle' || status === 'error') &&
             deviceSupport === 'supported' && (
               <>
+                {/* The size, before the button, and in the same place the
+                    user decides: a phone on mobile data pays for this. */}
                 <p className="text-xs text-muted-foreground text-center">
-                  {t(
-                    'assistant.loadHint',
-                    'The model (~2.5 GB) will be downloaded and cached in your browser. Requires WebGPU support.',
-                  )}
+                  {t('assistant.loadHint', {
+                    defaultValue:
+                      'The model is about {{size}}. It is downloaded once, then cached in your browser. It needs WebGPU.',
+                    size: downloadSize,
+                  })}
+                </p>
+                <p className="text-xs text-muted-foreground text-center">
+                  {t('assistant.loadDataWarning', {
+                    defaultValue:
+                      'If you are on mobile data, connect to Wi-Fi first: {{size}} is a large download.',
+                    size: downloadSize,
+                  })}
                 </p>
                 <Button className="w-full" onClick={onLoad}>
                   <Download className="size-4 mr-2" aria-hidden="true" />
@@ -685,7 +716,8 @@ function AssistantPageComponent(): ReactElement {
   const { systemPrompt } = useTripSystemPrompt();
   const { executeActions } = useTripActions();
 
-  // Asked before the assistant offers a 2.5 GB download, not after it fails.
+  // Asked before the assistant offers a multi-gigabyte download, not after it
+  // fails.
   const webgpuSupport = useWebGPUSupport();
   const deviceSupport = resolveDeviceSupport(
     selectedModel.device === 'webgpu',
@@ -1218,6 +1250,7 @@ function AssistantPageComponent(): ReactElement {
               loadProgress={loadProgress}
               error={error}
               deviceSupport={deviceSupport}
+              downloadSize={formatBytes(selectedModel.approxDownloadBytes)}
             />
           </div>
         </>

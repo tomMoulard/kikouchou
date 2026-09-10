@@ -1005,13 +1005,15 @@
     "description": "Exécutez un modèle localement sur votre appareil pour gérer votre voyage en langage naturel.",
     "pageDescription": "Posez des questions ou modifiez votre voyage en langage naturel",
     "modelLabel": "Modèle de l'assistant",
-    "modelDescription": "Choisissez un petit modèle pour les appareils modestes, ou un plus gros pour une meilleure qualité.",
+    "modelDescription": "Choisissez un petit modèle pour les appareils modestes, ou un plus gros pour une meilleure qualité. La taille indiquée à côté de chaque nom est ce que télécharge la première utilisation.",
+    "modelDownloadSize": "La première utilisation télécharge environ {{size}}.",
     "hubModelLabel": "Modèle HF : {{model}}",
     "modelCached": "Ce modèle est déjà en cache sur cet appareil.",
     "modelChanged": "Modèle de l'assistant défini sur {{model}}",
     "modelChangeFailed": "Impossible de changer le modèle de l'assistant. Veuillez réessayer.",
     "loadModel": "Charger le modèle",
-    "loadHint": "Le modèle sélectionné sera téléchargé et mis en cache dans votre navigateur avant la première utilisation.",
+    "loadHint": "Le modèle pèse environ {{size}}. Il est téléchargé une fois, puis mis en cache dans votre navigateur. Il nécessite WebGPU.",
+    "loadDataWarning": "Si vous êtes en données mobiles, connectez-vous d'abord au Wi-Fi : {{size}}, c'est un gros téléchargement.",
     "deviceUnsupportedTitle": "Cet appareil ne peut pas exécuter l'assistant",
     "deviceUnsupportedDescription": "L'assistant exécute le modèle entièrement sur votre appareil, ce qui nécessite WebGPU — et ce navigateur ne peut pas l'utiliser ici. Ouvrez l'application dans une version récente de Chrome, Edge ou Safari sur ordinateur pour en profiter.",
     "initializingLoader": "Initialisation…",
@@ -1066,7 +1068,7 @@
       "gemma-4-e4b": {
         "name": "Meilleure qualité",
         "description": "Le plus gros preset de l'application, avec la meilleure qualité de raisonnement.",
-        "hint": "Nécessite un appareil WebGPU plus puissant et le téléchargement le plus volumineux."
+        "hint": "Nécessite un appareil WebGPU plus puissant, et c'est le plus gros téléchargement des trois."
       }
     },
     "actionDetails": {

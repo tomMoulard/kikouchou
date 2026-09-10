@@ -187,6 +187,40 @@ describe('AssistantPage', () => {
     });
   });
 
+  it('states the download size and the mobile-data cost before the download', async () => {
+    // The complaint this answers: the page offered to fetch gigabytes of
+    // weights and named no number, on a phone that may be on mobile data.
+    render(<AssistantPage />, { withProviders: false });
+
+    await screen.findByRole('button', { name: 'assistant.loadModel' });
+
+    // The default preset is gemma-4-e2b, whose files add up to 2.92 GB.
+    expect(screen.getByText('assistant.modelDownloadSize')).toBeInTheDocument();
+    expect(screen.getAllByText('2.92 GB').length).toBeGreaterThan(0);
+    expect(screen.getByText('assistant.loadHint')).toBeInTheDocument();
+    expect(screen.getByText('assistant.loadDataWarning')).toBeInTheDocument();
+  });
+
+  it('drops the first-download size once the weights are cached', async () => {
+    mockUseWebLLM.mockReturnValue({
+      status: 'idle',
+      loadProgress: null,
+      error: null,
+      isCached: true,
+      loadModel: mockLoadModel,
+      generate: mockGenerate,
+      interrupt: mockInterrupt,
+      unload: mockUnload,
+    });
+
+    render(<AssistantPage />, { withProviders: false });
+
+    await screen.findByText('assistant.modelCached');
+    expect(
+      screen.queryByText('assistant.modelDownloadSize'),
+    ).not.toBeInTheDocument();
+  });
+
   describe('WebGPU device gate', () => {
     it('offers no download when the device cannot supply a GPU adapter', async () => {
       // Android Chrome off the driver allowlist: the API is there, the adapter
