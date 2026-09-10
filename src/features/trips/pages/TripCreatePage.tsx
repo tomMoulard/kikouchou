@@ -298,7 +298,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
 
   if (decidingWizard) {
     return (
-      <div className="container max-w-2xl py-6 md:py-8">
+      <div className="container mx-auto max-w-2xl py-6 md:py-8">
         <PageHeader title={t('trips.new')} backLink="/trips" />
         <LoadingState variant="inline" />
       </div>
@@ -307,7 +307,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
 
   if (showWizard) {
     return (
-      <div className="container max-w-2xl py-6 md:py-8">
+      <div className="container mx-auto max-w-2xl py-6 md:py-8">
         <PageHeader title={t('trips.wizard.title', 'Your first trip')} backLink="/trips" />
         <Card>
           <CardContent className="pt-6">
@@ -326,7 +326,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   }
 
   return (
-    <div className="container max-w-2xl py-6 md:py-8">
+    <div className="container mx-auto max-w-2xl py-6 md:py-8">
       <PageHeader title={t('trips.new')} backLink="/trips" />
 
       <Card>

@@ -293,7 +293,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   // Error state - trip not found or load error
   if (loadError || !trip) {
     return (
-      <div className="container max-w-2xl py-6 md:py-8">
+      <div className="container mx-auto max-w-2xl py-6 md:py-8">
         <PageHeader title={t('trips.edit')} backLink="/trips" />
         <ErrorDisplay
           error={loadError}
@@ -315,7 +315,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
 
   // Success state - show edit form
   return (
-    <div className="container max-w-2xl py-6 md:py-8">
+    <div className="container mx-auto max-w-2xl py-6 md:py-8">
       <PageHeader
         title={t('trips.edit')}
         backLink="/trips"

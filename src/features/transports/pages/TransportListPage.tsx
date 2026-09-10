@@ -829,7 +829,7 @@ const DateGroupSection = memo(function DateGroupSection({
     <div
       className={cn(
         'grid gap-4',
-        'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+        'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4',
       )}
     >
       {group.entries.map((entry) => {
@@ -1544,7 +1544,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
 
   if (isLoading) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('transports.title')} />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <LoadingState variant="inline" size="lg" />
@@ -1559,7 +1559,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
 
   if (!tripIdFromUrl || !currentTrip || tripMismatch) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('transports.title')} backLink="/trips" />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <EmptyState
@@ -1585,7 +1585,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
 
   if (transportsError) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('transports.title')} />
         <ErrorDisplay
           error={transportsError}
@@ -1601,7 +1601,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
   // ============================================================================
 
   return (
-    <div className="container max-w-4xl py-6 md:py-8">
+    <div className="container max-w-6xl py-6 md:py-8">
       <PageHeader
         title={t('transports.title')}
         action={canEdit ? headerAction : undefined}

@@ -943,7 +943,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
   if (isLoading) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('rooms.title')} />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <LoadingState variant="inline" size="lg" />
@@ -958,7 +958,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
   if (!tripIdFromUrl || !currentTrip || tripMismatch) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('rooms.title')} backLink="/trips" />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <EmptyState
@@ -984,7 +984,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
   if (roomsError) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('rooms.title')} />
         <ErrorDisplay
           error={roomsError}
@@ -1001,7 +1001,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
 
   if (rooms.length === 0) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('rooms.title')} />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <EmptyState
@@ -1047,7 +1047,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         className={cn(
           'py-6 md:py-8',
           currentView !== 'timeline'
-            ? 'container max-w-4xl'
+            ? 'container max-w-6xl'
             : // A trip too long to show at once should not also be paying for a
               // reading-width cap — that width is the day axis's to use. Even
               // `container` caps at 1536px, so it goes too: here it contributes
@@ -1131,7 +1131,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           aria-label={t('rooms.title')}
           className={cn(
             'grid gap-4',
-            'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+            'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4',
             // No bottom padding of its own: `<main>`'s `pb-bottom-stack` clears
             // the FAB and the nav bar for every page, and this grid's own
             // `pb-20 sm:pb-4` did not protect the timeline view next to it.

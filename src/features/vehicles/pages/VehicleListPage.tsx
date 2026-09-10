@@ -320,7 +320,7 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
 
   if (isLoading) {
     return (
-      <div className="container max-w-5xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader
           title={t('vehicles.title')}
           backLink={
@@ -340,7 +340,7 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
 
   if (!tripIdFromUrl || !currentTrip || tripMismatch) {
     return (
-      <div className="container max-w-5xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('vehicles.title')} backLink="/trips" />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
           <EmptyState
@@ -363,7 +363,7 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
 
   if (vehiclesError) {
     return (
-      <div className="container max-w-5xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader
           title={t('vehicles.title')}
           backLink={`/trips/${tripIdFromUrl}/transports`}
@@ -382,7 +382,7 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
   // ============================================================================
 
   return (
-    <div className="container max-w-5xl py-6 md:py-8">
+    <div className="container max-w-6xl py-6 md:py-8">
       <PageHeader
         title={t('vehicles.title')}
         description={t('vehicles.description')}
@@ -412,7 +412,7 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
             : {})}
         />
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {vehicles.map((vehicle) => (
             <li key={vehicle.id}>
               <VehicleCard

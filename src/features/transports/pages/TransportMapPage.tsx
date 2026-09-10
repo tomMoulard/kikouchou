@@ -779,7 +779,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
 
   if (isLoading) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader
           title={t('transports.mapView', 'Transport Map')}
           backLink={tripIdFromUrl ? `/trips/${tripIdFromUrl}/transports` : '/trips'}
@@ -797,7 +797,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
 
   if (!tripIdFromUrl || !currentTrip || tripMismatch) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('transports.mapView', 'Transport Map')} backLink="/trips" />
         <div className="flex-1 flex items-center justify-center min-h-[400px]">
           <EmptyState
@@ -823,7 +823,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
 
   if (transportsError) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader
           title={t('transports.mapView', 'Transport Map')}
           backLink={`/trips/${tripIdFromUrl}/transports`}
@@ -846,7 +846,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
   // something to show, and the empty state used to hide the whole map from it.
   if (transportsWithCoordinates.length === 0 && mappableJourneys.length === 0) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader
           title={t('transports.mapView', 'Transport Map')}
           backLink={`/trips/${tripIdFromUrl}/transports`}
@@ -875,7 +875,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
   // ============================================================================
 
   return (
-    <div className="container max-w-4xl py-6 md:py-8">
+    <div className="container max-w-6xl py-6 md:py-8">
       <PageHeader
         title={t('transports.mapView', 'Transport Map')}
         backLink={`/trips/${tripIdFromUrl}/transports`}

@@ -144,7 +144,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
 
   if (isLoading) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('analytics.tripTitle')} />
         <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
@@ -164,7 +164,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   // The read failing is a real database problem, so it outranks everything.
   if (statsError) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('analytics.tripTitle')} />
         <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
         <ErrorDisplay
@@ -186,7 +186,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   // button that can never succeed, is the wrong answer to a mistyped URL.
   if (!tripIdFromUrl || trip === undefined || stats === null) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('analytics.tripTitle')} backLink="/trips" />
         <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
@@ -210,7 +210,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
 
   if (tripError) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('analytics.tripTitle')} />
         <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
         <ErrorDisplay
@@ -228,7 +228,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
 
   if (isTripStatsEmpty(stats)) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('analytics.tripTitle')} />
         <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
@@ -251,7 +251,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   // ==========================================================================
 
   return (
-    <div className="container max-w-4xl py-6 md:py-8">
+    <div className="container max-w-6xl py-6 md:py-8">
       <PageHeader title={t('analytics.tripTitle')} />
 
       <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />

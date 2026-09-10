@@ -112,7 +112,7 @@ const ActivityDateGroupSection = memo(function ActivityDateGroupSection({
         {group.displayDate}
       </h2>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {group.activities.map((activity) => (
           <div key={activity.id} role="listitem">
             <ActivityCard
@@ -356,7 +356,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
 
   if (isLoading) {
     return (
-      <div className="container max-w-5xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('activities.title')} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
           <LoadingState variant="inline" size="lg" />
@@ -371,7 +371,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
 
   if (!tripIdFromUrl || !currentTrip || tripMismatch) {
     return (
-      <div className="container max-w-5xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('activities.title')} backLink="/trips" />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
           <EmptyState
@@ -397,7 +397,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
 
   if (activitiesError) {
     return (
-      <div className="container max-w-5xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('activities.title')} />
         <ErrorDisplay
           error={activitiesError}
@@ -415,7 +415,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
   const hasActivities = activities.length > 0;
 
   return (
-    <div className="container max-w-5xl py-6 md:py-8">
+    <div className="container max-w-6xl py-6 md:py-8">
       <PageHeader
         title={t('activities.title')}
         description={currentTrip.name}

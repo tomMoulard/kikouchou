@@ -743,7 +743,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
 
   if (isLoading) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('persons.title')} />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <LoadingState variant="inline" size="lg" />
@@ -758,7 +758,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
 
   if (!tripIdFromUrl || !currentTrip || tripMismatch) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('persons.title')} backLink="/trips" />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <EmptyState
@@ -784,7 +784,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
 
   if (personsError) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('persons.title')} />
         <ErrorDisplay
           error={personsError}
@@ -801,7 +801,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
 
   if (persons.length === 0) {
     return (
-      <div className="container max-w-4xl py-6 md:py-8">
+      <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('persons.title')} />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
           <EmptyState
@@ -850,7 +850,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
   // ============================================================================
 
   return (
-    <div className="container max-w-4xl py-6 md:py-8">
+    <div className="container max-w-6xl py-6 md:py-8">
       <PageHeader
         title={t('persons.title')}
         action={canEdit ? headerAction : undefined}
@@ -862,7 +862,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
         aria-label={t('persons.title')}
         className={cn(
           'grid gap-4',
-          'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
+          'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4',
           // No bottom padding of its own: `<main>`'s `pb-bottom-stack` clears
           // the FAB, the nav bar and the home indicator for every page.
         )}
