@@ -115,8 +115,17 @@ test.afterEach(async () => {
 });
 
 /** A device: its own context, wired to the stub, signed in only when asked. */
-async function newDevice(browser: Browser, stub: SupabaseStub, user?: StubUser): Promise<Page> {
-  const context = await browser.newContext();
+async function newDevice(
+  browser: Browser,
+  stub: SupabaseStub,
+  user?: StubUser,
+  options: { readonly phone?: boolean } = {},
+): Promise<Page> {
+  const context = await browser.newContext(
+    // A phone-sized viewport is what decides "phone" in the app — the install
+    // nudge appears below the `md` breakpoint and nowhere wider.
+    options.phone ? { viewport: { width: 390, height: 844 } } : {},
+  );
   openContexts.push(context);
   const page = await context.newPage();
   await stub.install(page);
@@ -192,6 +201,57 @@ test.describe('an invite opened with no account', () => {
 
     // And the trip never left the device: not a single log write was attempted.
     expect(stub.counts.updateAttempts).toBe(stub.counts.updateInserts);
+  });
+
+  test('suggests installing on a phone, and hands off to the invite page', async ({
+    browser,
+  }) => {
+    const stub = new SupabaseStub();
+    const { token } = await shareTripWithGuests(browser, stub);
+
+    const phone = await newDevice(browser, stub, undefined, { phone: true });
+    await phone.goto(`/join/${token}`);
+    await phone.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
+    await expect(phone).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+
+    // The one place the app asks to be installed, and the reason it gives.
+    const nudge = phone.getByTestId('install-nudge-card');
+    await expect(nudge).toBeVisible({ timeout: 20_000 });
+    await expect(nudge).toContainText(/remind you before Shared Brittany starts/i);
+
+    // Playwright's Chromium never fires `beforeinstallprompt`, so the button is
+    // the manual route: back to the invite page, which is the page to install
+    // *from* so the installed app opens on this trip.
+    await nudge.getByRole('button', { name: /show me how/i }).click();
+    await expect(phone).toHaveURL(new RegExp(`/join/${token}\\?install=1`), { timeout: 20_000 });
+    await expect(phone.getByTestId('install-here-hint')).toBeVisible({ timeout: 20_000 });
+    // The manifest swap that makes the handoff work is a production-build
+    // property — the dev server injects no manifest link at all — so it is
+    // asserted in `pwa.spec.ts`, not here.
+    // The browser's own steps, from the global banner — the generic ones,
+    // since Playwright's Chromium is neither an iPhone nor Firefox.
+    const banner = phone.getByRole('region', { name: /app installation prompt/i });
+    await expect(banner).toBeVisible({ timeout: 20_000 });
+    await expect(banner).toContainText(/add to home screen/i);
+
+    // A returning viewer is not asked who they are again; one tap goes back —
+    // and the banner along the bottom must not be sitting on that tap.
+    await phone.getByRole('button', { name: /open the trip/i }).click();
+    await expect(phone).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+  });
+
+  test('keeps the install suggestion off a laptop', async ({ browser }) => {
+    const stub = new SupabaseStub();
+    const { token } = await shareTripWithGuests(browser, stub);
+
+    const laptop = await newDevice(browser, stub);
+    await laptop.goto(`/join/${token}`);
+    await laptop.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
+    await expect(laptop).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+    await expect(laptop.getByTestId('viewer-unlock-card')).toBeVisible({ timeout: 20_000 });
+
+    // Nobody installs a web app on a desktop, and Firefox on macOS cannot.
+    await expect(laptop.getByTestId('install-nudge-card')).toHaveCount(0);
   });
 
   test('explains a dead link the same way it does to a member', async ({ page }) => {

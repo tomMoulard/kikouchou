@@ -5,4 +5,5 @@
  */
 
 export { InstallPrompt, type InstallPromptProps } from './InstallPrompt';
+export { InstallNudgeCard, type InstallNudgeCardProps } from './InstallNudgeCard';
 export { OfflineIndicator, type OfflineIndicatorProps } from './OfflineIndicator';

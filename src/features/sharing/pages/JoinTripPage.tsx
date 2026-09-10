@@ -22,12 +22,22 @@ import { type ReactElement, useCallback, useEffect, useMemo, useState } from 're
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Calendar, Check, Loader2, MapPin, Palmtree, UserRound } from 'lucide-react';
+import {
+  AlertTriangle,
+  Calendar,
+  Check,
+  Loader2,
+  MapPin,
+  Palmtree,
+  Smartphone,
+  UserRound,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { onboardingSurface, statusVariants } from '@/components/ui/status.variants';
 import { PersonBadge } from '@/components/shared/PersonBadge';
+import { useInstallPromptState } from '@/contexts/InstallPromptContext';
 import { useTripContext } from '@/contexts/TripContext';
 import posthog from '@/lib/posthog';
 import { db } from '@/lib/db/database';
@@ -37,6 +47,7 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cacheClaimedPersonId } from '@/lib/identity/trip-identity';
 import { notify } from '@/lib/notifications';
 import { isRunningStandalone } from '@/lib/pwa/display-mode';
+import { useHereManifest } from '@/lib/pwa/use-here-manifest';
 import { getTripGuestPersonId, writeGuestIdentity } from '@/lib/sharing/guest-identity';
 import { claimParticipant, fetchClaimedParticipants } from '@/lib/sync/join-trip';
 import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
@@ -347,6 +358,11 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
 
 interface ViewerWelcomeProps {
   readonly trip: Trip;
+  /**
+   * The visitor is here to install the app from this page, not to go on to
+   * the calendar: the install nudge sent them, or the link said `?install=1`.
+   */
+  readonly installRequested: boolean;
 }
 
 /**
@@ -363,7 +379,7 @@ interface ViewerWelcomeProps {
  * tagline says what the app is when the page is not running as an installed
  * app — an icon on a Home Screen has already said so.
  */
-function ViewerWelcome({ trip }: ViewerWelcomeProps): ReactElement {
+function ViewerWelcome({ trip, installRequested }: ViewerWelcomeProps): ReactElement {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
 
@@ -384,13 +400,17 @@ function ViewerWelcome({ trip }: ViewerWelcomeProps): ReactElement {
     void navigate(`/trips/${trip.id}/calendar`);
   }, [navigate, trip.id]);
 
+  const alreadyIdentified = getTripGuestPersonId(trip) !== undefined;
+
   // A returning viewer already said who they are; the wizard would ask again
-  // and the calendar is what they came back for.
+  // and the calendar is what they came back for. Unless they came back to
+  // install: then this page has to stay under the share sheet, because an app
+  // added to the Home Screen from here opens here.
   useEffect(() => {
-    if (getTripGuestPersonId(trip) !== undefined) {
+    if (alreadyIdentified && !installRequested) {
       openTrip();
     }
-  }, [openTrip, trip]);
+  }, [alreadyIdentified, installRequested, openTrip]);
 
   const handlePick = useCallback(
     (personId: PersonId): void => {
@@ -416,7 +436,16 @@ function ViewerWelcome({ trip }: ViewerWelcomeProps): ReactElement {
   }, [openTrip]);
 
   return (
-    <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
+    <div
+      className={cn(
+        'flex min-h-svh items-center justify-center p-4',
+        // The global banner is showing the install steps along the bottom of
+        // the screen — `bottom-above-stack` puts its top about 20rem up on a
+        // phone. Room for it, so the card's own button stays reachable.
+        installRequested && 'pb-96',
+        onboardingSurface,
+      )}
+    >
       <Card className="w-full max-w-md border-warning-border shadow-lg">
         <CardHeader className="pb-4 pt-8 text-center">
           <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-warning/20">
@@ -462,62 +491,90 @@ function ViewerWelcome({ trip }: ViewerWelcomeProps): ReactElement {
             </div>
           </div>
 
-          <div className="space-y-1 text-center">
-            <p className="text-lg font-semibold text-foreground">
-              {t('sharing.join.whoAreYou', 'Which one are you?')}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {t(
-                'sharing.join.viewerHint',
-                'Pick your name and the trip shows your room and your travel. You can look at everything; changing anything needs a sign-in.',
-              )}
-            </p>
-          </div>
+          {installRequested ? (
+            <div
+              className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-left text-sm"
+              data-testid="install-here-hint"
+            >
+              <Smartphone className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+              <p className="text-foreground">
+                {t(
+                  'sharing.join.installHere',
+                  'Add Kikouchou to your Home Screen from this page, and the app opens on this trip.',
+                )}
+              </p>
+            </div>
+          ) : null}
 
-          {persons.length === 0 ? (
-            <p className={cn('rounded-xl p-4 text-center text-sm', statusVariants({ tone: 'warning' }))}>
-              {t(
-                'sharing.join.noParticipantsHint',
-                "Either nobody has been added to this trip yet, or their details haven't reached this device. You can open the trip and carry on.",
-              )}
-            </p>
+          {installRequested && alreadyIdentified ? (
+            <Button type="button" variant="outline" className="h-11 w-full" onClick={openTrip}>
+              {t('sharing.join.openTrip', 'Open the trip')}
+            </Button>
           ) : (
-            <ul className="space-y-2">
-              {persons.map((person) => (
-                <li key={person.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handlePick(person.id);
-                    }}
-                    className={cn(
-                      'flex w-full min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border-2 p-4 text-left transition-colors',
-                      'border-warning-border bg-card hover:border-warning',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    )}
-                  >
-                    <span
-                      className="size-8 flex-shrink-0 rounded-full"
-                      style={{ backgroundColor: person.color }}
-                      aria-hidden="true"
-                    />
-                    <span className="flex-1 font-medium text-foreground">{person.name}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+            <>
+              <div className="space-y-1 text-center">
+                <p className="text-lg font-semibold text-foreground">
+                  {t('sharing.join.whoAreYou', 'Which one are you?')}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {t(
+                    'sharing.join.viewerHint',
+                    'Pick your name and the trip shows your room and your travel. You can look at everything; changing anything needs a sign-in.',
+                  )}
+                </p>
+              </div>
 
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-11 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface dark:hover:bg-warning-surface dark:hover:text-warning-on-surface"
-            onClick={skip}
-          >
-            {persons.length === 0
-              ? t('sharing.join.lookAround', 'Have a look around')
-              : t('sharing.join.notListed', "I'm not on the list")}
-          </Button>
+              {persons.length === 0 ? (
+                <p
+                  className={cn(
+                    'rounded-xl p-4 text-center text-sm',
+                    statusVariants({ tone: 'warning' }),
+                  )}
+                >
+                  {t(
+                    'sharing.join.noParticipantsHint',
+                    "Either nobody has been added to this trip yet, or their details haven't reached this device. You can open the trip and carry on.",
+                  )}
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {persons.map((person) => (
+                    <li key={person.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handlePick(person.id);
+                        }}
+                        className={cn(
+                          'flex w-full min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border-2 p-4 text-left transition-colors',
+                          'border-warning-border bg-card hover:border-warning',
+                          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                        )}
+                      >
+                        <span
+                          className="size-8 flex-shrink-0 rounded-full"
+                          style={{ backgroundColor: person.color }}
+                          aria-hidden="true"
+                        />
+                        <span className="flex-1 font-medium text-foreground">{person.name}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-11 w-full text-warning-on-surface hover:bg-warning-surface hover:text-warning-on-surface dark:hover:bg-warning-surface dark:hover:text-warning-on-surface"
+                onClick={skip}
+              >
+                {persons.length === 0
+                  ? t('sharing.join.lookAround', 'Have a look around')
+                  : t('sharing.join.notListed', "I'm not on the list")}
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -535,6 +592,15 @@ export function JoinTripPage(): ReactElement {
   const { setCurrentTrip, trips } = useTripContext();
 
   const { phase, retry } = useJoinTrip(token ?? null);
+  const { installIntent, isInstalled } = useInstallPromptState();
+
+  // An iPhone that installs from this page opens the installed app on this
+  // page — the one place the trip can be fetched again without Safari's
+  // storage. Restored when the page is left.
+  useHereManifest();
+
+  // Not inside the installed app, where the same URL is just the invite.
+  const installRequested = installIntent && !isInstalled;
 
   // Selecting the trip is what mounts the sync provider, which is what fills the
   // participant list the identity step needs — and, for a viewer, what starts
@@ -631,7 +697,7 @@ export function JoinTripPage(): ReactElement {
         </JoinShell>
       );
     }
-    return <ViewerWelcome trip={landedTrip} />;
+    return <ViewerWelcome trip={landedTrip} installRequested={installRequested} />;
   }
 
   return (
@@ -641,9 +707,7 @@ export function JoinTripPage(): ReactElement {
       ) : (
         <div className="flex flex-col items-center gap-3 text-center">
           <Check className="size-6 text-primary" aria-hidden="true" />
-          <CardTitle className="text-lg">
-            {t('sharing.join.joined', "You're in")}
-          </CardTitle>
+          <CardTitle className="text-lg">{t('sharing.join.joined', "You're in")}</CardTitle>
           <Button onClick={() => void navigate(`/trips/${phase.tripId}/calendar`)}>
             {t('sharing.join.openTrip', 'Open the trip')}
           </Button>

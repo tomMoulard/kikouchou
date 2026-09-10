@@ -26,6 +26,7 @@ import { useSyncStatus } from '@/lib/sync/SupabaseTripSync';
 import { fetchClaimedParticipants } from '@/lib/sync/join-trip';
 import type { SyncState } from '@/lib/sync/SupabaseYjsProvider';
 import { isRunningStandalone } from '@/lib/pwa/display-mode';
+import { useHereManifest } from '@/lib/pwa/use-here-manifest';
 import type { Person, PersonId, TripId } from '@/types';
 
 // ============================================================================
@@ -69,6 +70,21 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('../../hooks/useJoinTrip', () => ({ useJoinTrip: vi.fn() }));
+
+// The install request the nudge raises, and the manifest swap it relies on.
+const installState = {
+  canInstall: false,
+  isInstalled: false,
+  isInstalling: false,
+  installIntent: false,
+  manualInstallPlatform: 'ios' as const,
+  install: vi.fn(async () => false),
+  requestInstall: vi.fn(),
+};
+vi.mock('@/contexts/InstallPromptContext', () => ({
+  useInstallPromptState: () => installState,
+}));
+vi.mock('@/lib/pwa/use-here-manifest', () => ({ useHereManifest: vi.fn() }));
 vi.mock('@/lib/sync/SupabaseTripSync', () => ({ useSyncStatus: vi.fn() }));
 
 vi.mock('@/contexts/TripContext', () => ({ useTripContext: vi.fn() }));
@@ -327,6 +343,8 @@ describe('JoinTripPage for a viewer', () => {
   beforeEach(() => {
     localStorage.clear();
     mockedStandalone.mockReturnValue(false);
+    installState.installIntent = false;
+    installState.isInstalled = false;
     viewing();
   });
 
@@ -410,6 +428,64 @@ describe('JoinTripPage for a viewer', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /have a look around/i })).toBeInTheDocument();
+    });
+  });
+
+  it('points the document at the manifest that installs this page', () => {
+    render(<JoinTripPage />);
+
+    // An iPhone that installs from here must open the installed app here.
+    expect(vi.mocked(useHereManifest)).toHaveBeenCalled();
+  });
+
+  describe('when the visitor came to install', () => {
+    beforeEach(() => {
+      installState.installIntent = true;
+    });
+
+    it('keeps a returning viewer on the page and says where to install from', async () => {
+      localStorage.setItem(
+        'kikouchou_guest_share-abc1',
+        JSON.stringify({ personId: 'person-alice', tripId: TRIP_ID }),
+      );
+
+      render(<JoinTripPage />);
+
+      // The page has to stay under the share sheet: a Home Screen app added
+      // from here opens here, and that is the whole point of the detour.
+      expect(screen.getByTestId('install-here-hint')).toBeInTheDocument();
+      expect(screen.queryByText('Which one are you?')).not.toBeInTheDocument();
+      expect(navigate).not.toHaveBeenCalled();
+
+      screen.getByRole('button', { name: /open the trip/i }).click();
+
+      expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
+    });
+
+    it('still asks a first-time viewer who they are', async () => {
+      await seedPersons(TRIP_ID, ['Alice']);
+
+      render(<JoinTripPage />);
+
+      expect(screen.getByTestId('install-here-hint')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /alice/i })).toBeInTheDocument();
+      });
+    });
+
+    it('drops the hint inside the installed app', () => {
+      installState.isInstalled = true;
+      localStorage.setItem(
+        'kikouchou_guest_share-abc1',
+        JSON.stringify({ personId: 'person-alice', tripId: TRIP_ID }),
+      );
+
+      render(<JoinTripPage />);
+
+      // The Home Screen app carries `?install=1` in its start URL; there is
+      // nothing left to install, so the returning viewer goes on through.
+      expect(screen.queryByTestId('install-here-hint')).not.toBeInTheDocument();
+      expect(navigate).toHaveBeenCalledWith(`/trips/${TRIP_ID}/calendar`);
     });
   });
 });
