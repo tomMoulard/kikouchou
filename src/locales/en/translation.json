@@ -1005,13 +1005,15 @@
     "description": "Run a local model on your device to manage your trip with natural language.",
     "pageDescription": "Ask questions or modify your trip using natural language",
     "modelLabel": "Assistant model",
-    "modelDescription": "Pick a smaller model for weaker devices or a bigger one for better quality.",
+    "modelDescription": "Pick a smaller model for weaker devices or a bigger one for better quality. The size next to each name is what the first use downloads.",
+    "modelDownloadSize": "First use downloads about {{size}}.",
     "hubModelLabel": "HF model: {{model}}",
     "modelCached": "This model is already cached on this device.",
     "modelChanged": "Assistant model set to {{model}}",
     "modelChangeFailed": "Could not switch the assistant model. Please try again.",
     "loadModel": "Load Model",
-    "loadHint": "The selected model will be downloaded and cached in your browser before first use.",
+    "loadHint": "The model is about {{size}}. It is downloaded once, then cached in your browser. It needs WebGPU.",
+    "loadDataWarning": "If you are on mobile data, connect to Wi-Fi first: {{size}} is a large download.",
     "deviceUnsupportedTitle": "This device cannot run the assistant",
     "deviceUnsupportedDescription": "The assistant runs the model entirely on your own device, which needs WebGPU — and this browser cannot use it here. Open the app on a recent desktop Chrome, Edge or Safari to use it.",
     "initializingLoader": "Initializing…",
@@ -1066,7 +1068,7 @@
       "gemma-4-e4b": {
         "name": "Best quality",
         "description": "Largest preset with the strongest reasoning quality in this app.",
-        "hint": "Needs a stronger WebGPU-capable device and the biggest download."
+        "hint": "Needs a stronger WebGPU-capable device, and it is the biggest download of the three."
       }
     },
     "actionDetails": {

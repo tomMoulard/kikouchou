@@ -34,6 +34,20 @@ export interface AssistantModelPreset {
   readonly descriptionKey: string;
   /** Translation key for the preset load/runtime hint. */
   readonly hintKey: string;
+  /**
+   * Approximate size of the first download, in bytes.
+   *
+   * Transformers.js loads a `text-generation` pipeline, so it fetches the
+   * text-only sessions of the repository plus the tokenizer: `embed_tokens`
+   * and `decoder_model_merged` at the preset `dtype` for the Gemma 4 presets,
+   * and the single `model` file for Gemma 3 1B. The vision and audio encoders
+   * stay on the server. Numbers come from the Hugging Face blob sizes of those
+   * files, so they move when a repository is re-exported: they are a size
+   * order to warn the user with, not a promise. Rendered with `formatBytes`,
+   * the same helper the download counter uses, so the announced size and the
+   * counter agree on units.
+   */
+  readonly approxDownloadBytes: number;
   /** Short human-readable fallback name. */
   readonly fallbackName: string;
   /** Short human-readable fallback description. */
@@ -79,6 +93,8 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
     // character budget (action-schema.test.ts) and the history has a cap.
     dtype: 'q4f16',
     device: 'webgpu',
+    // onnx/model_q4f16.onnx(_data) + tokenizer.json
+    approxDownloadBytes: 784_000_000,
     nameKey: 'assistant.models.gemma-3-1b.name',
     descriptionKey: 'assistant.models.gemma-3-1b.description',
     hintKey: 'assistant.models.gemma-3-1b.hint',
@@ -91,6 +107,8 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
     modelId: 'onnx-community/gemma-4-E2B-it-ONNX',
     dtype: 'q4f16',
     device: 'webgpu',
+    // embed_tokens + decoder_model_merged at q4f16 + tokenizer.json
+    approxDownloadBytes: 3_131_000_000,
     nameKey: 'assistant.models.gemma-4-e2b.name',
     descriptionKey: 'assistant.models.gemma-4-e2b.description',
     hintKey: 'assistant.models.gemma-4-e2b.hint',
@@ -103,6 +121,8 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
     modelId: 'onnx-community/gemma-4-E4B-it-ONNX',
     dtype: 'q4f16',
     device: 'webgpu',
+    // embed_tokens + decoder_model_merged (two data files) + tokenizer.json
+    approxDownloadBytes: 4_925_000_000,
     nameKey: 'assistant.models.gemma-4-e4b.name',
     descriptionKey: 'assistant.models.gemma-4-e4b.description',
     hintKey: 'assistant.models.gemma-4-e4b.hint',
