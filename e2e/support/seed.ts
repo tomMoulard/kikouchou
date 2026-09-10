@@ -30,6 +30,14 @@ export interface SeedTripOptions {
   readonly endDate: string;
   /** Pin the trip on the map; without it no map preview renders. */
   readonly coordinates?: { readonly lat: number; readonly lon: number };
+  /**
+   * ISO 4217 code every money figure of this trip is labelled with.
+   *
+   * Omitted, the row carries no code at all, which is what a trip written
+   * before the field existed looks like — the money page then reads the
+   * default. Pass one to assert that the trip's own choice is what shows.
+   */
+  readonly currency?: string;
 }
 
 /**
@@ -77,7 +85,14 @@ export async function seedTrip(
   await page.waitForLoadState('load');
 
   const seeded = await page.evaluate(
-    async ({ name, location, startDate, endDate, coordinates }: SeedTripOptions) => {
+    async ({
+      name,
+      location,
+      startDate,
+      endDate,
+      coordinates,
+      currency,
+    }: SeedTripOptions) => {
       const id = `seed-trip-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
       const shareId = `share-${Math.random().toString(36).slice(2, 12)}`;
       const now = Date.now();
@@ -97,6 +112,7 @@ export async function seedTrip(
             startDate,
             endDate,
             ...(coordinates === undefined ? {} : { coordinates }),
+            ...(currency === undefined ? {} : { currency }),
             createdAt: now,
             updatedAt: now,
           });
@@ -486,6 +502,110 @@ export async function seedRide(
         tx.onerror = () => {
           db.close();
           reject(new Error('Failed to create ride'));
+        };
+      };
+    });
+  }, options);
+}
+
+/**
+ * One guest's share of a seeded money line.
+ */
+export interface SeedExpenseSplit {
+  readonly personId: string;
+  /**
+   * The weight this guest carries, as the split mode reads it: parts under
+   * `shares`, the guest's own figure under `amounts`, and ignored under
+   * `equal` and `nights`, where the rule supplies the weight itself.
+   */
+  readonly value: number;
+}
+
+/**
+ * The fields a seeded money line is given.
+ */
+export interface SeedExpenseOptions {
+  readonly tripId: string;
+  /** ISO `yyyy-MM-dd`, from `./fixture-dates`. */
+  readonly date: string;
+  /** Shown on the card. */
+  readonly title: string;
+  /** Always positive: the sign belongs to {@link SeedExpenseOptions.kind}. */
+  readonly amount: number;
+  /** The guest who paid, or who received the money for an income. */
+  readonly payerId: string;
+  /** Omit for a plain expense. */
+  readonly kind?: 'expense' | 'income' | 'transfer';
+  /** Omit for `other`, which is what the form offers a transfer. */
+  readonly category?: string;
+  /** Omit for `equal`. */
+  readonly splitMode?: 'equal' | 'shares' | 'nights' | 'amounts';
+  /** The guests the line is for. Empty leaves every balance alone. */
+  readonly splits: readonly SeedExpenseSplit[];
+}
+
+/**
+ * Writes one money line into the `expenses` store.
+ *
+ * Seeding rather than typing, for the specs whose subject is somewhere else:
+ * the analytics cards and the organiser column read the finished rows, and
+ * driving the form to produce them would make those specs fail for a reason
+ * that belongs to `money-expenses.spec.ts`.
+ *
+ * Same ordering rule as {@link seedPerson}: seed before the trip is current.
+ *
+ * @param page - Playwright page object
+ * @param options - The line to write
+ * @returns The new line's id
+ *
+ * @example
+ * ```ts
+ * await seedExpense(page, {
+ *   tripId,
+ *   date: fixtureDate(2),
+ *   title: 'Shopping',
+ *   amount: 90,
+ *   payerId: alice,
+ *   splits: [alice, bob, cara].map((personId) => ({ personId, value: 1 })),
+ * });
+ * ```
+ */
+export async function seedExpense(
+  page: Page,
+  options: SeedExpenseOptions,
+): Promise<string> {
+  return await page.evaluate(async (options: SeedExpenseOptions) => {
+    const id = `seed-expense-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    const now = Date.now();
+
+    return new Promise<string>((resolve, reject) => {
+      const request = indexedDB.open('kikouchou');
+      request.onerror = () => reject(new Error('Failed to open database'));
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction('expenses', 'readwrite');
+        tx.objectStore('expenses').add({
+          id,
+          tripId: options.tripId,
+          kind: options.kind ?? 'expense',
+          category: options.category ?? 'other',
+          title: options.title,
+          date: options.date,
+          amount: options.amount,
+          payerId: options.payerId,
+          splitMode: options.splitMode ?? 'equal',
+          splits: options.splits.map((split) => ({ ...split })),
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve(id);
+        };
+        tx.onerror = () => {
+          db.close();
+          reject(new Error('Failed to create expense'));
         };
       };
     });
