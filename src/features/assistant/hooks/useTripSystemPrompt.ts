@@ -17,6 +17,7 @@
 
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLiveQuery } from 'dexie-react-hooks';
 
 import { format, isValid, parseISO } from 'date-fns';
 
@@ -26,6 +27,9 @@ import {
 } from '@/features/activities/utils/activity-utils';
 
 import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
+
+import { computeBalances } from '@/features/money/lib/balances';
+import { loadTripMoney } from '@/features/money/lib/trip-money';
 
 import {
   collectDrivenRideIds,
@@ -51,6 +55,7 @@ import {
   DEFAULT_LEAD_TIME_MINUTES,
   getPersonHeadcount,
   type Activity,
+  type Expense,
   type Language,
   type Person,
   type PersonId,
@@ -241,6 +246,43 @@ function formatActivityWhen(activity: Activity): string {
  * @param todayIso - Local "today" (YYYY-MM-DD) used to tag current activities
  * @returns A single prompt line
  */
+/**
+ * One money line, as the assistant reads it.
+ *
+ * The id leads, because a `removeExpense` needs it; then the plain-language
+ * facts a question is asked about — what it was, how much, who paid, and how
+ * many guests it was split between.
+ *
+ * @param expense - The line to serialize
+ * @param persons - All guests of the trip, used to resolve names
+ * @returns A single prompt line
+ */
+function formatExpenseLine(
+  expense: Expense,
+  persons: ReadonlyMap<string, Person>,
+): string {
+  const beneficiaries = expense.splits ?? [];
+  const kind =
+    expense.kind === 'transfer'
+      ? `paid to ${personNameById(persons, beneficiaries[0]?.personId ?? '')}`
+      : expense.kind === 'income'
+        ? 'money in'
+        : expense.category;
+
+  return [
+    `- "${toPromptText(expense.title)}" (id: ${expense.id})`,
+    String(expense.amount),
+    kind,
+    `on ${expense.date}`,
+    `paid by ${personNameById(persons, expense.payerId)}`,
+    expense.kind === 'transfer'
+      ? ''
+      : `split ${expense.splitMode} between ${beneficiaries.length}`,
+  ]
+    .filter((segment) => segment !== '')
+    .join(' · ');
+}
+
 function formatActivityLine(
   activity: Activity,
   persons: ReadonlyMap<string, Person>,
@@ -463,6 +505,13 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
   const { activities } = useActivityContext();
   const { groups: guestGroups } = useGuestGroups();
   const { today } = useToday();
+  // The accounts are the one part of a trip no context holds, so they are read
+  // here. `undefined` while the read is in flight; the section then says the
+  // list is unavailable rather than claiming it is empty.
+  const money = useLiveQuery(
+    () => (currentTrip ? loadTripMoney(currentTrip.id) : Promise.resolve(null)),
+    [currentTrip?.id],
+  );
   const { i18n } = useTranslation();
 
   const todayIso = useMemo(() => toLocalISODateString(today), [today]);
@@ -578,7 +627,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
         );
       }
     } else {
-      parts.push('', '## Rooms', 'No rooms configured yet.');
+      parts.push('', '## Rooms', 'No rooms yet.');
     }
 
     // Guests
@@ -641,7 +690,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
         parts.push(formatTransportLine(transport, personsById, drivenRideIds));
       }
     } else {
-      parts.push('', '## Transports', 'No transport plans yet.');
+      parts.push('', '## Transports', 'No transports yet.');
     }
 
     // Rides — the cars meeting those legs. Membership lives on the leg, so the
@@ -699,8 +748,29 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       parts.push(
         '',
         '## Activities (shared agenda)',
-        'No activities planned yet.',
+        'No activities yet.',
       );
+    }
+
+    // Money (the trip's accounts)
+    const expenses = money?.expenses ?? [];
+    if (expenses.length > 0) {
+      parts.push('', '## Money (the trip accounts, amounts in the trip currency)');
+      for (const expense of expenses) {
+        parts.push(formatExpenseLine(expense, personsById));
+      }
+
+      const balances = computeBalances(expenses, money?.personNights);
+      parts.push(
+        'Balances (positive: the group owes them; negative: they owe the group):',
+      );
+      for (const balance of balances) {
+        parts.push(
+          `- ${personNameById(personsById, balance.personId)}: ${balance.balance}`,
+        );
+      }
+    } else {
+      parts.push('', '## Money', 'No line yet.');
     }
 
     // Modification action instructions — generated from the shared schema
@@ -718,6 +788,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     vehicles,
     activities,
     guestGroups,
+    money,
     todayIso,
     languageName,
   ]);
