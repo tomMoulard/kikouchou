@@ -41,6 +41,7 @@ import {
 import { assistantRoutes } from '@/features/assistant/routes';
 import { analyticsRoutes } from '@/features/analytics/routes';
 import { summaryRoutes } from '@/features/summary/routes';
+import { moneyRoutes } from '@/features/money/routes';
 import { authRoutes } from '@/features/auth/routes';
 
 // ============================================================================
@@ -255,6 +256,9 @@ export const appRoutes: RouteObject = {
     // Printable one-page trip summary
     ...summaryRoutes,
 
+    // The trip's money: the nights each guest owes for, and a bill split by them
+    ...moneyRoutes,
+
     // Settings route
     settingsRoute,
 
@@ -311,6 +315,7 @@ const publicRoutes: RouteObject = {
  *   - `/trips/:tripId/activities` - Shared activity agenda
  *   - `/trips/:tripId/analytics` - Trip analytics
  *   - `/trips/:tripId/summary` - Printable one-page trip summary
+ *   - `/trips/:tripId/money` - Nights per guest, and one bill split by them
  *   - `/analytics` - Analytics across all trips
  *   - `/groups` - Reusable guest groups, imported into any trip
  *   - `/settings` - App settings
