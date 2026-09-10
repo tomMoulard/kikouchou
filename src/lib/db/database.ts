@@ -11,6 +11,7 @@ import Dexie, { type Table } from 'dexie';
 import type {
   Activity,
   AppSettings,
+  Expense,
   GuestGroup,
   Person,
   Ride,
@@ -22,7 +23,7 @@ import type {
 } from '@/types';
 
 /** Current database schema version */
-export const DB_VERSION = 10;
+export const DB_VERSION = 11;
 
 // ============================================================================
 // Yjs Persistence Types
@@ -248,6 +249,17 @@ export class KikouchouDatabase extends Dexie {
    * Multi-entry index: *participantIds (activities a given guest joined)
    */
   activities!: Table<Activity, string>;
+
+  /**
+   * Expenses table - stores the trip's money lines (expense, income, transfer).
+   * Primary key: id (ExpenseId)
+   * Indexes: tripId (cascade and trip queries), payerId (cascade)
+   * Compound index: [tripId+date] for the chronological read
+   *
+   * Shares live on the row rather than in a table of their own: a share is only
+   * ever read as part of its line, and nothing points at one.
+   */
+  expenses!: Table<Expense, string>;
 
   /**
    * Settings table - stores application settings (singleton).
@@ -612,6 +624,41 @@ export class KikouchouDatabase extends Dexie {
       vehicles: 'id, tripId, ownerId',
       activities:
         'id, tripId, organizerId, *participantIds, [tripId+startDatetime], [tripId+category]',
+      settings: 'id',
+      guestGroups: 'id, name, remoteGroupId',
+      rideNotices: 'key, tripId',
+      yjsUpdates: '++id, tripId',
+      yjsOutbox: '++id, tripId',
+      syncCursors: 'tripId',
+      tripMembers: '[tripId+userId], tripId, userId',
+    });
+
+    /**
+     * Schema Version 11 - The trip's accounts
+     *
+     * Added:
+     * - `expenses`: one row per money line the group shares
+     *   - plain `tripId` so the cascade and every trip query can see a row even
+     *     if it is missing the second half of a compound index
+     *   - `payerId` for the cascade that follows a deleted guest
+     *   - `[tripId+date]` for the chronological read the money page does
+     *
+     * No data migration: the table starts empty, and the night split the money
+     * page shipped with reads the stays rather than any stored line.
+     */
+    this.version(11).stores({
+      trips: 'id, &shareId, remoteTripId, startDate, createdAt',
+      rooms: 'id, [tripId+order]',
+      persons: 'id, tripId, [tripId+name]',
+      roomAssignments:
+        'id, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+      transports:
+        'id, personId, driverId, rideId, [tripId+datetime], [tripId+personId], [tripId+type]',
+      rides: 'id, tripId, driverId, vehicleId, [tripId+meetDatetime]',
+      vehicles: 'id, tripId, ownerId',
+      activities:
+        'id, tripId, organizerId, *participantIds, [tripId+startDatetime], [tripId+category]',
+      expenses: 'id, tripId, payerId, [tripId+date]',
       settings: 'id',
       guestGroups: 'id, name, remoteGroupId',
       rideNotices: 'key, tripId',

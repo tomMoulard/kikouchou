@@ -15,7 +15,7 @@ import {
   sanitizePersonData,
 } from '@/lib/db/sanitize';
 import { createPersonId } from '@/lib/db/utils';
-import type { Person, PersonFormData, PersonId, TripId } from '@/types';
+import type { Expense, Person, PersonFormData, PersonId, TripId } from '@/types';
 import { getDefaultPersonColor, normalizePersonHeadcount } from '@/types';
 
 /**
@@ -199,7 +199,15 @@ export async function deletePerson(id: PersonId): Promise<void> {
   try {
     await db.transaction(
       'rw',
-      [db.persons, db.roomAssignments, db.transports, db.rides, db.vehicles, db.activities],
+      [
+        db.persons,
+        db.roomAssignments,
+        db.transports,
+        db.rides,
+        db.vehicles,
+        db.activities,
+        db.expenses,
+      ],
       async () => {
         // Delete related records in parallel
         await Promise.all([
@@ -227,6 +235,9 @@ export async function deletePerson(id: PersonId): Promise<void> {
 
           // Drop the guest from every activity they had joined or organized
           removePersonFromActivities(id),
+
+          // Take the guest out of the trip's accounts
+          removePersonFromExpenses(id),
         ]);
 
         // Delete the person
@@ -354,7 +365,15 @@ export async function deletePersonWithOwnershipCheck(
 ): Promise<void> {
   await db.transaction(
     'rw',
-    [db.persons, db.roomAssignments, db.transports, db.rides, db.vehicles, db.activities],
+    [
+      db.persons,
+      db.roomAssignments,
+      db.transports,
+      db.rides,
+      db.vehicles,
+      db.activities,
+      db.expenses,
+    ],
     async () => {
       const person = await db.persons.get(id);
 
@@ -391,6 +410,9 @@ export async function deletePersonWithOwnershipCheck(
 
         // Drop the guest from every activity they had joined or organized
         removePersonFromActivities(id),
+
+        // Take the guest out of the trip's accounts
+        removePersonFromExpenses(id),
       ]);
 
       // Delete the person
@@ -424,4 +446,37 @@ async function removePersonFromActivities(id: PersonId): Promise<void> {
     .where('organizerId')
     .equals(id)
     .modify({ organizerId: undefined });
+}
+
+/**
+ * Takes a guest out of the trip's accounts.
+ *
+ * Two different things happen, because a payer and a beneficiary are not the
+ * same kind of reference:
+ *
+ * - a line the guest **paid** is deleted. The arithmetic has no reading for a
+ *   payer who is not on the trip: their balance would name somebody the page
+ *   cannot show, and no settling payment could ever clear it;
+ * - a line the guest merely **benefited** from keeps its other shares and loses
+ *   theirs, which is the rule the agenda already applies to a participant.
+ *
+ * A line that had only this guest as its beneficiary is left with an empty
+ * split list, which the money page reads as a line that moves nobody's money.
+ * That is deliberate: the payer's own record of what they spent survives the
+ * departure of the person it was for.
+ *
+ * @param id - The person being deleted
+ *
+ * @internal Called from within the person delete transactions.
+ */
+async function removePersonFromExpenses(id: PersonId): Promise<void> {
+  await db.expenses.where('payerId').equals(id).delete();
+
+  await db.expenses.toCollection().modify((expense: Expense) => {
+    const splits = expense.splits ?? [];
+    if (!splits.some((split) => split.personId === id)) {
+      return;
+    }
+    expense.splits = splits.filter((split) => split.personId !== id);
+  });
 }

@@ -24,6 +24,7 @@
 import type { ZodError, ZodType } from 'zod';
 import type {
   ActivityFormData,
+  ExpenseFormData,
   PersonFormData,
   RoomAssignmentFormData,
   RoomFormData,
@@ -33,6 +34,7 @@ import type {
 
 import {
   ActivityFormDataSchema,
+  ExpenseFormDataSchema,
   PersonFormDataSchema,
   RoomAssignmentFormDataSchema,
   RoomFormDataSchema,
@@ -48,6 +50,7 @@ export {
   RoomAssignmentFormDataSchema,
   TransportFormDataSchema,
   ActivityFormDataSchema,
+  ExpenseFormDataSchema,
   // Primitive schemas
   isoDateStringSchema,
   isoDateTimeStringSchema,
@@ -56,6 +59,9 @@ export {
   transportTypeSchema,
   transportModeSchema,
   activityCategorySchema,
+  expenseKindSchema,
+  expenseCategorySchema,
+  expenseSplitModeSchema,
   coordinatesSchema,
   personIdSchema,
   roomIdSchema,
@@ -324,6 +330,32 @@ export function validateActivityForm(
   data: unknown,
 ): ValidationResult<ActivityFormData> {
   return validate(ActivityFormDataSchema, data);
+}
+
+/**
+ * Validates expense form data.
+ *
+ * @param data - Unknown data to validate
+ * @returns Validation result with typed ExpenseFormData or errors
+ *
+ * @example
+ * ```typescript
+ * const result = validateExpenseForm({
+ *   kind: 'expense',
+ *   category: 'groceries',
+ *   title: 'Courses du samedi',
+ *   date: '2024-07-16',
+ *   amount: 84.2,
+ *   payerId: personId,
+ *   splitMode: 'equal',
+ *   splits: [{ personId, value: 1 }],
+ * });
+ * ```
+ */
+export function validateExpenseForm(
+  data: unknown,
+): ValidationResult<ExpenseFormData> {
+  return validate(ExpenseFormDataSchema, data);
 }
 
 // ============================================================================

@@ -25,11 +25,15 @@
  *    such race.
  *
  * 3. **Field values that are objects or arrays merge atomically**, not
- *    per-element: `coordinates` and `participantIds` are replaced whole by the
- *    last writer. That is right for a coordinate pair and a known limitation for
- *    activity participants — two guests joining the same activity while both
- *    offline will keep only one of the two joins. Fixing that needs a `Y.Array`
- *    per activity and is deliberately out of scope here.
+ *    per-element: `coordinates`, `participantIds` and an expense's `splits` are
+ *    replaced whole by the last writer. That is right for a coordinate pair and
+ *    a known limitation for activity participants — two guests joining the same
+ *    activity while both offline will keep only one of the two joins. An
+ *    expense's shares are the same shape and the same limitation, and there it
+ *    is closer to right than wrong: the shares of one line are agreed together,
+ *    so the later edit is the group's later reading of that receipt. Fixing the
+ *    activity case needs a `Y.Array` per activity and is deliberately out of
+ *    scope here.
  *
  * @module lib/yjs/doc-model
  */
@@ -48,7 +52,8 @@ export type DocCollectionName =
   | 'transport'
   | 'rides'
   | 'vehicles'
-  | 'activities';
+  | 'activities'
+  | 'expenses';
 
 /** A trip entity as it travels through the document: plain fields, no `tripId`. */
 export type DocRecord = Record<string, unknown>;
@@ -85,6 +90,7 @@ const COLLECTION_ROOT: Readonly<Record<DocCollectionName, string>> = {
   rides: 'ridesById',
   vehicles: 'vehiclesById',
   activities: 'activitiesById',
+  expenses: 'expensesById',
 };
 
 /**
@@ -186,6 +192,10 @@ function compareRecords(
         String(right.startDatetime ?? ''),
       );
       return byStart === 0 ? byId : byStart;
+    }
+    case 'expenses': {
+      const byDate = String(left.date ?? '').localeCompare(String(right.date ?? ''));
+      return byDate === 0 ? byId : byDate;
     }
   }
 }

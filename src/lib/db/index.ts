@@ -204,6 +204,18 @@ export {
   deleteActivityWithOwnershipCheck,
 } from './repositories/activity-repository';
 
+// Expense repository
+export {
+  createExpense,
+  getExpensesByTripId,
+  getExpenseById,
+  getExpensesByPayerId,
+  getExpenseCount,
+  // Transactional operations with ownership validation
+  updateExpenseWithOwnershipCheck,
+  deleteExpenseWithOwnershipCheck,
+} from './repositories/expense-repository';
+
 // Guest group repository (global — not trip-scoped)
 export {
   createGuestGroup,
