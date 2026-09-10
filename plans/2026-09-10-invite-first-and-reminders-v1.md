@@ -168,15 +168,16 @@ Tests:
 
 Nothing is gated. Installation is offered where it helps, with a stated benefit.
 
-- An InstallNudgeCard built on useInstallPrompt, shown on phones in a browser tab: after the guest picks who they are, and on the calendar. It is dismissible for 30 days, like PlanOwnTripPrompt. Before phase 3 the benefit reads "open the trip in one tap". After phase 3 it reads "get a heads-up before your train".
-- The iPhone steps come from the existing manual install table.
-- First launch of an installed app with no trips: the empty state on /trips gains "Paste or scan an invite link" next to "New trip". ImportTripQrDialog already accepts a pasted link and routes to /join.
-- A stable deep link /t/:remoteTripId resolves the local trip by its server id. It downloads the trip when signed in and asks for the invite link otherwise. Notifications point at it, so an expired token does not break a reminder.
-- The iPhone handoff: the build emits a second manifest, identical to the first but without a start_url. The join page swaps its manifest link to that file. Safari then opens the Home Screen app on the page it was added from, which is /join/<token>, and the installed app fetches the trip on its own. The nudge on a trip page sends the viewer to /join/<token>?install=1 first, so the steps and the right manifest are on screen together.
+- An InstallNudgeCard on the calendar of a shared trip, on a phone, in a browser tab. It says why: reminders before the trip starts, on arrival, and before a pickup. It is dismissible for 30 days, like PlanOwnTripPrompt. A local-only trip gets no card, because nothing will be sent about it.
+- One install prompt for the app. useInstallPrompt runs once, in InstallPromptProvider, and the banner and the nudge read it through the context. The context also carries requestInstall(), the same request as ?install=1 raised after the page loaded.
+- The iPhone steps come from the shared manual install table (lib/pwa/manual-install-steps).
+- First launch of an installed app with no trips: the empty state on /trips names its second action "Scan or paste an invite". ImportTripQrDialog already accepts a pasted link and routes to /join.
+- A stable deep link /t/:remoteTripId resolves the local trip by its server id. It downloads the trip when signed in and asks to sign in, or to use the invite link, otherwise. Notifications point at it, so an expired token does not break a reminder.
+- The iPhone handoff: the build emits a second manifest, identical to the first but without a start_url (manifest-here.webmanifest). The join page and the trip link page swap their manifest link to that file while they are on screen. Safari then opens the Home Screen app on the page it was added from, and the installed app fetches the trip on its own. The nudge sends a viewer to /join/<token>?install=1 and a member to /t/<remoteTripId>?install=1, so the steps and the right manifest are on screen together, and the page does not go on to the calendar until the visitor taps "Open the trip".
 - The manifest gains launch_handler with client_mode navigate-existing, so Chromium opens a link in the running installed app instead of a second window.
-- Nothing about installation is shown on desktop.
+- Nothing about installation is shown on desktop: the nudge reads the viewport, below the md breakpoint only.
 
-Tests: unit tests for the nudge decision, an e2e spec that stubs the standalone media query through an init script, and the existing install-request spec.
+Tests: unit tests for the nudge, the provider, the viewport hook, the manifest variant, the manifest swap and the trip link page; the anonymous invite e2e spec drives the nudge on a phone viewport; the production e2e spec checks both manifests and the swap.
 
 ### Phase 3. Reminders, the reason to come back (6 to 9 days)
 
@@ -260,7 +261,16 @@ Phase 0 and phase 1 are built on the branch feat/invite-without-account, as one 
 - Invite expiry bound to the trip end date plus seven days, and a viewer's share dialog handing on the same link.
 - The e2e stub answers read_shared_trip, and trip-invite-anonymous.spec.ts drives the journey in the sync project.
 
-Not in phase 1, on purpose: the install nudge (phase 2), the iPhone handoff manifest (phase 2), and reminders (phase 3).
+Phase 2 is built on the branch feat/install-nudge-and-handoff, stacked on the first:
+
+- InstallPromptProvider and useInstallPromptState: one install prompt, shared by the banner and the nudge, with requestInstall().
+- InstallNudgeCard on the calendar route, phone viewport only (usePhoneViewport), for trips with a remoteTripId or a viewerToken, dismissible for 30 days, with install_nudge_shown, install_nudge_accepted and install_nudge_dismissed events.
+- The iPhone handoff: manifest-here.webmanifest emitted by the build, useHereManifest on the join page and the trip link page, install=1 keeps the join page on screen with an "Open the trip" button, and the banner answers a request raised after mount.
+- The trip link page at /t/:remoteTripId, and the trip_link_opened event.
+- launch_handler navigate-existing on the manifest.
+- The trips empty state names its second action "Scan or paste an invite".
+
+Not in phase 2, on purpose: reminders (phase 3) and the creation wizard (phase 4).
 
 ## 8. Effort
 
