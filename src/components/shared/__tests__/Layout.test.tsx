@@ -916,15 +916,40 @@ describe('Layout', () => {
 
   describe('Glance panel', () => {
     /**
-     * The panel is `hidden xl:block`, so its absence from a narrow screen is a
-     * class rather than a missing element. What these tests pin is the other
-     * half: which routes mount it at all.
+     * The panel is mounted only where it is shown, so its absence from a
+     * narrow screen is a missing element rather than a class. These tests pin
+     * both halves: the width, and which routes get it at that width.
      */
     function getGlancePanel() {
       return document.querySelector('aside[aria-label="glance.title"]');
     }
 
+    /**
+     * Answers the layout's width question, and nothing else.
+     *
+     * The suite's own `matchMedia` matches nothing, which is the narrow arm:
+     * a test that wants the column has to say so.
+     *
+     * @param isWide - Whether the viewport is at least `xl`
+     */
+    function setViewportWidth(isWide: boolean): void {
+      vi.mocked(window.matchMedia).mockImplementation(
+        (query: string) =>
+          ({
+            matches: query.includes('min-width: 1280px') ? isWide : false,
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+          }) as unknown as MediaQueryList,
+      );
+    }
+
     beforeEach(() => {
+      setViewportWidth(true);
       mockUseTripContext.mockReturnValue({
         currentTrip: mockTrip,
         trips: [mockTrip],
@@ -949,6 +974,16 @@ describe('Layout', () => {
 
     it('stays away from the pages that belong to no single trip', () => {
       renderLayoutAt('/trips');
+
+      expect(getGlancePanel()).not.toBeInTheDocument();
+    });
+
+    it('is not mounted at all on a screen too narrow to show it', () => {
+      // A class alone used to hide it here, which still ran its live query and
+      // put a second copy of every guest and room name in the document.
+      setViewportWidth(false);
+
+      renderLayoutAt(`/trips/${mockTrip.id}/rooms`);
 
       expect(getGlancePanel()).not.toBeInTheDocument();
     });

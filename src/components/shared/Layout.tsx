@@ -54,6 +54,7 @@ import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useToday } from '@/hooks/useToday';
+import { useWideViewport } from '@/hooks/usePhoneViewport';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
@@ -210,9 +211,9 @@ const MOBILE_SECONDARY_TRIP_PATHS: readonly string[] = [
 
 /**
  * Primary mobile bottom nav items (max 5 for UX: 4 trip items + "More").
- * Calendar, Rooms, Guests and Transports are directly accessible.
- * Activities, Analytics, Money, Trip settings, Trips, Settings are inside the
- * "More" sheet.
+ * Calendar, Rooms, Guests and Money are directly accessible.
+ * Activities, Transport, Analytics, Trip settings, Trips, Settings are inside
+ * the "More" sheet.
  * Derived from canonical arrays to avoid duplication.
  */
 const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] = TRIP_NAV_ITEMS.filter(
@@ -1027,6 +1028,7 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
   const { t } = useTranslation(),
    { currentTrip } = useTripContext(),
    location = useLocation(),
+   isWideViewport = useWideViewport(),
    [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false),
 
   // Memoize derived values to prevent unnecessary re-renders
@@ -1066,11 +1068,16 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
   /**
    * Whether the page beside the content gets the organiser's column.
    *
-   * See {@link GLANCE_PATH_SUFFIXES}. The panel itself is hidden below `xl`,
-   * so this only decides whether the two-column wrapper is worth mounting at
-   * all — a phone renders `children` exactly as it did before.
+   * Two conditions, and the width is the one that used to be a class alone.
+   * `hidden xl:block` painted nothing on a phone while still mounting the
+   * panel, so a phone ran the panel's live query on every trip page and
+   * carried a second, invisible copy of every guest and room name in its
+   * document. The class stays for the frame between a resize and the
+   * listener; this decides whether the column exists at all.
+   *
+   * See {@link GLANCE_PATH_SUFFIXES} for which pages it sits beside.
    */
-   showGlancePanel = hasGlancePanel(location.pathname, tripId);
+   showGlancePanel = isWideViewport && hasGlancePanel(location.pathname, tripId);
 
   return (
     // `min-h-svh`, not `min-h-screen` (`100vh`): on a phone `100vh` is the tall

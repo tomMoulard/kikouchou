@@ -52,3 +52,12 @@ export { useNowMs, NOW_REFRESH_INTERVAL_MS } from './useNowMs';
 
 // Feature flags
 export { useFeatureFlag, readFlagOverride, FLAG_OVERRIDE_PREFIX } from './useFeatureFlag';
+
+// Viewport shape — the two breakpoints the layout itself draws
+export {
+  usePhoneViewport,
+  useWideViewport,
+  PHONE_MEDIA_QUERY,
+  WIDE_MEDIA_QUERY,
+} from './usePhoneViewport';
+export { useMediaQuery } from './useMediaQuery';
