@@ -16,6 +16,7 @@ import { AppProviders } from '@/contexts/AppProviders';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { createActivity } from '@/lib/db/repositories/activity-repository';
+import { createExpense } from '@/lib/db/repositories/expense-repository';
 import { createGuestGroup } from '@/lib/db/repositories/guest-group-repository';
 import { createPerson } from '@/lib/db/repositories/person-repository';
 import {
@@ -295,12 +296,76 @@ describe('useTripSystemPrompt', () => {
     expect(result.current.prompt.systemPrompt).toContain('TODAY');
   });
 
+  it('reads a money line as what it was, who paid and how it splits', async () => {
+    const { tripId, personId } = await seedTrip();
+    await createExpense(tripId, {
+      kind: 'expense',
+      category: 'groceries',
+      title: 'Saturday shopping',
+      date: isoDate('2024-07-16'),
+      amount: 84.2,
+      payerId: personId,
+      splitMode: 'equal',
+      splits: [{ personId, value: 1 }],
+    });
+
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('Saturday shopping');
+    });
+
+    expect(result.current.prompt.systemPrompt).toContain('paid by Alice');
+    expect(result.current.prompt.systemPrompt).toContain('split equal between 1');
+  });
+
+  it('states each guest balance, which is what the page is asked about', async () => {
+    const { tripId, personId } = await seedTrip();
+    const other = await createPerson(tripId, {
+      name: 'Bruno',
+      color: hexColor('#3b82f6'),
+    });
+    await createExpense(tripId, {
+      kind: 'expense',
+      category: 'groceries',
+      title: 'Saturday shopping',
+      date: isoDate('2024-07-16'),
+      amount: 100,
+      payerId: personId,
+      splitMode: 'equal',
+      splits: [
+        { personId, value: 1 },
+        { personId: other.id, value: 1 },
+      ],
+    });
+
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('Balances');
+    });
+
+    expect(result.current.prompt.systemPrompt).toContain('Alice: 50');
+    expect(result.current.prompt.systemPrompt).toContain('Bruno: -50');
+  });
+
+  it('states the accounts are empty rather than omitting the section', async () => {
+    const { tripId } = await seedTrip();
+    const result = await renderWithTrip(tripId);
+
+    await waitFor(() => {
+      expect(result.current.prompt.systemPrompt).toContain('## Money');
+    });
+
+    expect(result.current.prompt.systemPrompt).toContain('No line yet.');
+  });
+
   it('states the agenda is empty rather than omitting the section', async () => {
     const { tripId } = await seedTrip();
     const result = await renderWithTrip(tripId);
 
     expect(result.current.prompt.systemPrompt).toContain(
-      'No activities planned yet.',
+      'No activities yet.',
     );
   });
 
