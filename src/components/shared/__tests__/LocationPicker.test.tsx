@@ -380,7 +380,7 @@ describe('LocationPicker', () => {
   // ============================================================================
 
   describe('Selection', () => {
-    it('selects location on click and shows map preview', async () => {
+    it('saves the place on click and shows its pin', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       render(<LocationPicker value="" onChange={mockOnChange} />);
 
@@ -396,14 +396,17 @@ describe('LocationPicker', () => {
       const firstOption = screen.getAllByRole('option')[0];
       fireEvent.mouseDown(firstOption!);
 
-      // Map preview should be shown, onChange not called yet
-      expect(mockOnChange).not.toHaveBeenCalled();
+      // Picking the place is the answer: it is saved without a confirm step.
+      expect(mockOnChange).toHaveBeenCalledWith(
+        'Paris, Île-de-France, France',
+        { lat: 48.8566, lon: 2.3522 }
+      );
 
       // Input should show the selected location name
       expect(input).toHaveValue('Paris, Île-de-France, France');
     });
 
-    it('calls onChange after confirming selection', async () => {
+    it('offers no confirm button to press', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       render(<LocationPicker value="" onChange={mockOnChange} />);
 
@@ -419,14 +422,10 @@ describe('LocationPicker', () => {
       const firstOption = screen.getAllByRole('option')[0];
       fireEvent.mouseDown(firstOption!);
 
-      // Click the confirm button
-      const confirmButton = await screen.findByRole('button', { name: /confirm/i });
-      await user.click(confirmButton);
-
-      expect(mockOnChange).toHaveBeenCalledWith(
-        'Paris, Île-de-France, France',
-        { lat: 48.8566, lon: 2.3522 }
-      );
+      // The place is already saved, so there is nothing left to confirm or
+      // to back out of.
+      expect(screen.queryByRole('button', { name: /confirm/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
     });
 
     it('clears location on clear button click', async () => {
@@ -528,7 +527,7 @@ describe('LocationPicker', () => {
       expect(firstOption).toHaveAttribute('aria-selected', 'true');
     });
 
-    it('selects with Enter and shows map preview', async () => {
+    it('saves the place chosen with Enter', async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       render(<LocationPicker value="" onChange={mockOnChange} />);
 
@@ -543,15 +542,14 @@ describe('LocationPicker', () => {
 
       await user.keyboard('{ArrowDown}{Enter}');
 
-      // Map preview should be shown, onChange not called yet
-      expect(mockOnChange).not.toHaveBeenCalled();
+      // Saved straight away, the same as picking it with the pointer.
+      expect(mockOnChange).toHaveBeenCalledWith(
+        'Paris, Île-de-France, France',
+        { lat: 48.8566, lon: 2.3522 }
+      );
 
       // Input should show the selected location name
       expect(input).toHaveValue('Paris, Île-de-France, France');
-
-      // Click the confirm button to finalize selection
-      const confirmButton = await screen.findByRole('button', { name: /confirm/i });
-      await user.click(confirmButton);
 
       expect(mockOnChange).toHaveBeenCalledWith(
         'Paris, Île-de-France, France',

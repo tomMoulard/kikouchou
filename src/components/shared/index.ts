@@ -73,8 +73,8 @@ export type { DateTimePickerProps } from './DateTimePicker';
 export { LocationPicker } from './LocationPicker';
 export type { LocationPickerProps, Coordinates } from './LocationPicker';
 
-export { LocationMapConfirm } from './LocationMapConfirm';
-export type { LocationMapConfirmProps } from './LocationMapConfirm';
+export { LocationMapPicker } from './LocationMapPicker';
+export type { LocationMapPickerProps } from './LocationMapPicker';
 
 // ============================================================================
 // Display Components

@@ -970,7 +970,7 @@ describe('TripForm Map Pin', () => {
     });
   });
 
-  it('shows the existing pin next to the location field', () => {
+  it('shows the existing pin on a map, not as coordinates', () => {
     const onSubmit = vi.fn();
     const onCancel = vi.fn();
 
@@ -978,7 +978,8 @@ describe('TripForm Map Pin', () => {
 
     render(<TripForm trip={trip} onSubmit={onSubmit} onCancel={onCancel} />);
 
-    expect(screen.getByText(/trips\.pinnedAt/)).toBeInTheDocument();
+    expect(screen.getByTestId('location-map-picker')).toBeInTheDocument();
+    expect(screen.queryByText(/48\.390400/)).not.toBeInTheDocument();
   });
 
   it('drops the pin when the location text is edited', async () => {

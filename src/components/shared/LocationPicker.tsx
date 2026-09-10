@@ -20,7 +20,7 @@ import { Loader2, MapPin, TextCursorInput, X } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { LocationMapConfirm } from '@/components/shared/LocationMapConfirm';
+import { LocationMapPicker } from '@/components/shared/LocationMapPicker';
 import { cn } from '@/lib/utils';
 import {
   GEOCODING_DEBOUNCE_MS,
@@ -60,9 +60,9 @@ export interface LocationPickerProps {
 }
 
 /**
- * Pending location selection before user confirmation.
+ * The place whose pin the map is currently showing.
  */
-interface PendingSelection {
+interface PinnedPlace {
   displayName: string;
   coordinates: Coordinates;
 }
@@ -113,7 +113,10 @@ export const LocationPicker = memo(function LocationPicker({
   const [error, setError] = useState<string | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   // Pending selection - shown in map preview before confirmation
-  const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
+  // The place currently pinned on the map, if any. Not a proposal: it has
+  // already been reported through `onChange`. This component is not told the
+  // parent's coordinates, so it has to remember which place its map is showing.
+  const [pinnedPlace, setPinnedPlace] = useState<PinnedPlace | null>(null);
 
   // ============================================================================
   // Refs
@@ -243,8 +246,9 @@ export const LocationPicker = memo(function LocationPicker({
 
   const handleSelect = useCallback(
     (place: GeocodingPlace) => {
-      // Set pending selection to show map preview
-      setPendingSelection({
+      // Saved here, not after a confirm step: picking the place is the answer.
+      // The map that follows is for nudging the pin, and each nudge saves too.
+      setPinnedPlace({
         displayName: place.label,
         coordinates: place.coordinates,
       });
@@ -252,43 +256,31 @@ export const LocationPicker = memo(function LocationPicker({
       setIsOpen(false);
       setResults([]);
       setHighlightedIndex(-1);
+      onChange(place.label, place.coordinates);
     },
-    []
+    [onChange]
   );
 
   /**
-   * Confirms the pending selection and calls onChange with final values.
+   * Saves the new pin position when the user drags the marker or clicks the map.
    */
-  const handleConfirmSelection = useCallback(() => {
-    if (pendingSelection) {
-      onChange(pendingSelection.displayName, pendingSelection.coordinates);
-      setPendingSelection(null);
-    }
-  }, [pendingSelection, onChange]);
-
-  /**
-   * Cancels the pending selection and reverts to previous state.
-   */
-  const handleCancelSelection = useCallback(() => {
-    setPendingSelection(null);
-    setInputValue(value); // Revert to original value
-  }, [value]);
-
-  /**
-   * Updates coordinates when user drags marker on the map.
-   */
-  const handleCoordinatesChange = useCallback((coordinates: Coordinates) => {
-    setPendingSelection((prev) =>
-      prev ? { ...prev, coordinates } : null
-    );
-  }, []);
+  const handleCoordinatesChange = useCallback(
+    (coordinates: Coordinates) => {
+      if (!pinnedPlace) {
+        return;
+      }
+      setPinnedPlace({ ...pinnedPlace, coordinates });
+      onChange(pinnedPlace.displayName, coordinates);
+    },
+    [onChange, pinnedPlace]
+  );
 
   const handleClear = useCallback(() => {
     setInputValue('');
     setResults([]);
     setIsOpen(false);
     setHighlightedIndex(-1);
-    setPendingSelection(null);
+    setPinnedPlace(null);
     onChange('', undefined);
     inputRef.current?.focus();
   }, [onChange]);
@@ -382,7 +374,7 @@ export const LocationPicker = memo(function LocationPicker({
   // Computed Values
   // ============================================================================
 
-  const showClear = inputValue.length > 0 && !disabled && !pendingSelection;
+  const showClear = inputValue.length > 0 && !disabled;
   const inputId = id ?? 'location-picker';
   const listboxId = `${inputId}-listbox`;
 
@@ -429,7 +421,7 @@ export const LocationPicker = memo(function LocationPicker({
           onBlur={handleInputBlur}
           onKeyDown={handleKeyDown}
           placeholder={placeholder ?? defaultPlaceholder}
-          disabled={disabled || pendingSelection !== null}
+          disabled={disabled}
           className={cn(
             'pl-9',
             showClear && 'pr-16',
@@ -568,14 +560,11 @@ export const LocationPicker = memo(function LocationPicker({
         </div>
       )}
 
-      {/* Map preview for confirming selected location */}
-      {pendingSelection && (
-        <LocationMapConfirm
-          coordinates={pendingSelection.coordinates}
-          locationName={pendingSelection.displayName}
+      {/* The pin as it stands. Dragging it saves; there is nothing to confirm. */}
+      {pinnedPlace && (
+        <LocationMapPicker
+          coordinates={pinnedPlace.coordinates}
           onCoordinatesChange={handleCoordinatesChange}
-          onConfirm={handleConfirmSelection}
-          onCancel={handleCancelSelection}
         />
       )}
     </div>

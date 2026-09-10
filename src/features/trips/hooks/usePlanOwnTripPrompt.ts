@@ -9,12 +9,14 @@
  * Three conditions, and each one is there to keep the card off a screen where
  * it would be noise:
  *
- * 1. **Every local trip is one this browser joined as a guest.** The signal is
- *    the guest identity the share wizard writes — see `lib/sharing/guest-identity`
- *    — because there is no local field saying who owns a trip: `remoteTripId`
- *    is set on an owner's uploaded trip and on a joined one alike. The moment
- *    the visitor creates a trip, the `every` fails and the card is gone without
- *    anything having to remember that it worked.
+ * 1. **This browser has organised nothing, and is a guest on every trip it
+ *    holds.** Creating a trip sets a flag, and the guest identity the share
+ *    wizard writes marks a joined one — see `lib/sharing/guest-identity`.
+ *    Both are needed. There is no local field saying who owns a trip
+ *    (`remoteTripId` is set on an owner's uploaded trip and on a joined one
+ *    alike), and the identity alone stopped being enough once the create form
+ *    grew a "You" row: filling it writes the creator an identity through that
+ *    same key, so an organiser's own trip looked exactly like a joined one.
  * 2. **At least one of those trips has started.** Pitching "plan your own" to
  *    somebody who joined ten minutes ago and has not yet seen a trip run is
  *    asking for a decision they have no basis for. Once a trip is under way
@@ -44,6 +46,32 @@ import type { Trip } from '@/types';
 
 /** LocalStorage key holding the dismissal timestamp. */
 const DISMISSAL_STORAGE_KEY = 'kikouchou-own-trip-prompt-dismissed';
+
+/**
+ * LocalStorage key set the first time this browser creates a trip.
+ *
+ * Written by `createTripWithDetails`. Somebody who has organised a trip is not
+ * the visitor this card is for, whatever their trips look like afterwards.
+ */
+export const ORGANISED_STORAGE_KEY = 'kikouchou-has-organised-a-trip';
+
+/**
+ * Records that this browser has organised a trip.
+ *
+ * Called by `createTripWithDetails`. Failure is ignored on purpose: the flag
+ * only suppresses a suggestion, and losing it costs the reader one dismissal.
+ */
+export function markTripOrganised(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(ORGANISED_STORAGE_KEY, Date.now().toString());
+  } catch {
+    // Storage refused. See above: nothing here is worth surfacing.
+  }
+}
 
 /** How long a dismissal hides the card (30 days). */
 const DISMISSAL_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -95,6 +123,25 @@ function isDismissedRecently(): boolean {
 }
 
 /**
+ * Reads whether this browser has ever created a trip.
+ *
+ * @returns True when the visitor has organised at least one trip
+ */
+function hasOrganisedATrip(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(ORGANISED_STORAGE_KEY) !== null;
+  } catch {
+    // Storage refused. Fall back to the guest-identity test below, which is
+    // what decided this on its own before the flag existed.
+    return false;
+  }
+}
+
+/**
  * Persists the dismissal timestamp.
  */
 function storeDismissal(): void {
@@ -133,9 +180,19 @@ export function usePlanOwnTripPrompt(
     isDismissedRecently(),
   );
 
-  /** True when this browser is a guest on every trip it holds. */
+  /**
+   * True when this browser has organised nothing and is a guest on every trip
+   * it holds.
+   *
+   * The guest-identity test alone stopped being enough once the create form
+   * grew a "You" row: filling it writes the creator an identity through the
+   * same key the share wizard uses, so an organiser's own trip started looking
+   * exactly like a joined one and the card appeared on the trip they had just
+   * made. The flag settles it, because only creating a trip sets it.
+   */
   const isGuestOnly = useMemo(
     () =>
+      !hasOrganisedATrip() &&
       trips.length > 0 &&
       trips.every((trip) => getTripGuestPersonId(trip) !== undefined),
     [trips],

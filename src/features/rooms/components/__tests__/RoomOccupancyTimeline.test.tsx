@@ -155,6 +155,9 @@ vi.mock('@/features/rooms/components/DroppableAssignment', () => ({
 /** Which day column the frame reports as "today"; -1 means none is on screen. */
 let todayColumnIndex = -1;
 
+/** Whether the frame reports its sticky label column as fully folded. */
+let labelsCollapsed = false;
+
 // Mock TripTimelineFrame to expose rows
 vi.mock('@/components/shared/TripTimelineFrame', () => ({
   TripTimelineFrame: ({
@@ -175,7 +178,7 @@ vi.mock('@/components/shared/TripTimelineFrame', () => ({
         todayColumnIndex,
         laneHeightPx: 36,
         labelColumnWidth: 140,
-        labelsCollapsed: false,
+        labelsCollapsed,
       })}
     </div>
   ),
@@ -242,6 +245,7 @@ const defaultProps = {
 describe('RoomOccupancyTimeline', () => {
   beforeEach(() => {
     todayColumnIndex = -1;
+    labelsCollapsed = false;
   });
 
   it('renders the timeline frame with aria label', () => {
@@ -276,6 +280,23 @@ describe('RoomOccupancyTimeline', () => {
     expect(screen.getByTitle(/Main Bedroom/).getAttribute('title')).toContain(
       'rooms.doubleClickToEdit',
     );
+  });
+
+  // Folded, the column is 40px. "jaune" came out as "j..", which names no
+  // room; the glyph says more in the width that is left.
+  it('drops the room name once the label column has folded', () => {
+    labelsCollapsed = true;
+    render(<RoomOccupancyTimeline {...defaultProps} />);
+
+    expect(screen.queryByText('Main Bedroom')).not.toBeInTheDocument();
+    // Still reachable: the row names the room for assistive tech.
+    expect(screen.getByRole('listitem', { name: /Main Bedroom/ })).toBeInTheDocument();
+  });
+
+  it('shows the room name while the column is open', () => {
+    render(<RoomOccupancyTimeline {...defaultProps} />);
+
+    expect(screen.getByText('Main Bedroom')).toBeInTheDocument();
   });
 
   it('renders room rows as list items', () => {

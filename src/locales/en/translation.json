@@ -228,8 +228,6 @@
     "importQrMergeFailed": "Could not import this trip data. Try again or use Share on the trips page.",
     "shareTripAria": "Share trip — link and QR code",
     "placeSuggestions": "Places on the map",
-    "pinnedAt": "Pinned at {{coordinates}}",
-    "adjustPin": "Adjust",
     "removePin": "Remove map pin",
     "view": {
       "ariaLabel": "Trips view",
@@ -1330,7 +1328,6 @@
     "searchError": "Search failed. Please try again.",
     "timeoutError": "Search timed out. Please try again.",
     "dragToAdjust": "Drag marker or click to adjust location",
-    "confirmLocation": "Confirm",
     "useTyped": "Use “{{value}}”",
     "useTypedHint": "Kept as written, with no place on the map"
   },
