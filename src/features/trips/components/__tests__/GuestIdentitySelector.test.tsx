@@ -1,5 +1,5 @@
 /**
- * @fileoverview Tests for the "which guest am I?" settings card.
+ * @fileoverview Tests for the "which guest am I?" trip settings card.
  *
  * The assertions go through `localStorage` rather than a mocked helper: the
  * key's shape is the contract every other reader of the guest identity depends
@@ -7,7 +7,7 @@
  * the right thing under the wrong key would pass a mock-level test and still
  * leave the app believing this browser is nobody.
  *
- * @module features/settings/components/__tests__/GuestIdentitySelector.test
+ * @module features/trips/components/__tests__/GuestIdentitySelector.test
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,5 +1,5 @@
 /**
- * @fileoverview "Which guest am I?" card for the settings page.
+ * @fileoverview "Which guest am I?" card for the trip settings page.
  *
  * The share-link wizard asks this once, on the way in, and stores the answer
  * under the trip's share key. Until now nothing could show it back or change
@@ -11,7 +11,7 @@
  * written through the same `lib/sharing/guest-identity` helpers rather than a
  * seventh hand-rolled `kikouchou_guest_` key.
  *
- * @module features/settings/components/GuestIdentitySelector
+ * @module features/trips/components/GuestIdentitySelector
  */
 
 import { type ReactElement, memo, useCallback, useEffect, useState } from 'react';

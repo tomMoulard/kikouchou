@@ -1,6 +1,17 @@
+/**
+ * @fileoverview Tests for the app settings page.
+ *
+ * The page is app-level and nothing else: the account, the language, the
+ * theme, the ride alerts, the version, and clearing the device. The trip used
+ * to be edited here as well, so one test states the separation directly — a
+ * trip form or a "delete this trip" button on this page is the bug, and it is
+ * the kind that comes back.
+ *
+ * @module features/settings/pages/__tests__/SettingsPage.test
+ */
+
 import { afterAll, beforeAll, describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@/test/utils';
-import type { Trip } from '@/types';
 
 /**
  * Radix's Select trigger calls `hasPointerCapture` on pointerdown and scrolls
@@ -39,46 +50,18 @@ function installPointerCaptureShims(): () => void {
   };
 }
 
-const mockNavigate = vi.fn();
-const mockTrip: Trip = {
-  id: 'trip-1' as Trip['id'],
-  shareId: 'share-1' as Trip['shareId'],
-  name: 'Test Trip',
-  location: 'Paris',
-  startDate: '2026-07-01' as Trip['startDate'],
-  endDate: '2026-07-10' as Trip['endDate'],
-  description: '',
-  createdAt: Date.now(),
-  updatedAt: Date.now(),
-};
-
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
-  return { ...actual, useNavigate: () => mockNavigate };
-});
-
-const mockSetCurrentTrip = vi.fn().mockResolvedValue(undefined);
-
+// The ride-alert card reads the trip on screen, to say whether the server's
+// reminders are on for it. It is the only reason this page still asks for the
+// trip context at all.
 vi.mock('@/contexts/TripContext', () => ({
-  useTripContext: vi.fn(() => ({
-    currentTrip: mockTrip,
-    setCurrentTrip: mockSetCurrentTrip,
-    trips: [mockTrip],
-    isLoading: false,
-    error: null,
-    checkConnection: vi.fn().mockResolvedValue(undefined),
-  })),
+  useTripContext: () => ({ currentTrip: null }),
 }));
 
 const mockDbDelete = vi.fn().mockResolvedValue(undefined);
 const mockDbOpen = vi.fn().mockResolvedValue(undefined);
-const mockDeleteTrip = vi.fn().mockResolvedValue(undefined);
-const mockUpdateTrip = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@/lib/db', () => ({
   db: { delete: (...args: unknown[]) => mockDbDelete(...args), open: (...args: unknown[]) => mockDbOpen(...args) },
-  deleteTrip: (...args: unknown[]) => mockDeleteTrip(...args),
-  updateTrip: (...args: unknown[]) => mockUpdateTrip(...args),
 }));
 
 const mockChangeLanguage = vi.fn().mockResolvedValue(undefined);
@@ -125,29 +108,10 @@ vi.mock('@/hooks', () => ({
   }),
 }));
 
-// Mock TripForm to expose onSubmit, onCancel, and onDirtyChange callbacks
-vi.mock('@/features/trips/components/TripForm', () => ({
-  TripForm: ({ onSubmit, onCancel, onDirtyChange }: { onSubmit?: (data: unknown) => Promise<void>; onCancel?: () => void; onDirtyChange?: (dirty: boolean) => void }) => (
-    <div data-testid="trip-form">
-      <button data-testid="trip-form-submit" onClick={() => void onSubmit?.({ name: 'Updated', startDate: '2026-07-01', endDate: '2026-07-10' }).catch(() => {})}>Submit</button>
-      <button data-testid="trip-form-cancel" onClick={onCancel}>Cancel</button>
-      <button data-testid="trip-form-dirty" onClick={() => onDirtyChange?.(true)}>Mark Dirty</button>
-    </div>
-  ),
-}));
-
 // Stub the account panel: it needs AuthProvider, which withProviders:false does
 // not supply, and its states are covered in features/auth/__tests__.
 vi.mock('@/features/auth/components/AccountSection', () => ({
   AccountSection: () => <div data-testid="account-section" />,
-}));
-
-// Same reason for the guest identity card: it reads PersonProvider and, through
-// `useTripIdentity`, AuthProvider and Dexie. Its own states live in
-// features/settings/components/__tests__; what this file asserts is that the
-// page still composes it.
-vi.mock('@/features/settings/components/GuestIdentitySelector', () => ({
-  GuestIdentitySelector: () => <div data-testid="guest-identity-selector" />,
 }));
 
 // Mock ConfirmDialog to capture confirm callback and onOpenChange
@@ -162,7 +126,6 @@ vi.mock('@/components/shared/ConfirmDialog', () => ({
 }));
 
 import { SettingsPage } from '../SettingsPage';
-import { useTripContext } from '@/contexts/TripContext';
 
 describe('SettingsPage', () => {
   let restorePointerCaptureShims: () => void;
@@ -177,15 +140,6 @@ describe('SettingsPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Re-establish context mock after clearAllMocks resets return values
-    vi.mocked(useTripContext).mockReturnValue({
-      currentTrip: mockTrip,
-      setCurrentTrip: mockSetCurrentTrip,
-      trips: [mockTrip],
-      isLoading: false,
-      error: null,
-      checkConnection: vi.fn().mockResolvedValue(undefined),
-    } as ReturnType<typeof useTripContext>);
   });
 
   it('renders settings page with all sections', () => {
@@ -203,156 +157,16 @@ describe('SettingsPage', () => {
     expect(screen.getByTestId('account-section')).toBeInTheDocument();
   });
 
-  it('mounts the guest identity card, the only way to answer "who am I"', () => {
+  it('leaves the trip to the trip', () => {
+    // The trip form, "Delete this trip", the guest identity card and the print
+    // button all live on `/trips/:tripId/edit` now. The only destructive
+    // control left here empties the device rather than one trip.
     render(<SettingsPage />, { withProviders: false });
-    expect(screen.getByTestId('guest-identity-selector')).toBeInTheDocument();
-  });
 
-  it('renders current trip section when trip is selected', () => {
-    render(<SettingsPage />, { withProviders: false });
-    expect(screen.getByText('settings.currentTrip')).toBeInTheDocument();
-    expect(screen.getByTestId('trip-form')).toBeInTheDocument();
-  });
-
-  describe('CurrentTripSection states', () => {
-    it('shows a loading state, not a hole, while the trip query resolves', () => {
-      vi.mocked(useTripContext).mockReturnValue({
-        currentTrip: null,
-        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
-        trips: [],
-        isLoading: true,
-        error: null,
-        checkConnection: vi.fn().mockResolvedValue(undefined),
-      } as ReturnType<typeof useTripContext>);
-      render(<SettingsPage />, { withProviders: false });
-
-      const status = screen.getByRole('status');
-      expect(status).toHaveAttribute('aria-busy', 'true');
-      expect(status).toHaveAttribute('aria-live', 'polite');
-      expect(status).toHaveTextContent('settings.currentTripLoading');
-      expect(screen.queryByTestId('trip-form')).not.toBeInTheDocument();
-    });
-
-    it('shows an error with a retry that rechecks the connection', async () => {
-      const checkConnection = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(useTripContext).mockReturnValue({
-        currentTrip: null,
-        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
-        trips: [],
-        isLoading: false,
-        error: new Error('IndexedDB is unavailable'),
-        checkConnection,
-      } as ReturnType<typeof useTripContext>);
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-
-      const alert = screen.getByRole('alert');
-      expect(alert).toHaveAttribute('aria-live', 'assertive');
-      expect(alert).toHaveTextContent('settings.currentTripError');
-      expect(alert).toHaveTextContent('IndexedDB is unavailable');
-
-      await user.click(screen.getByRole('button', { name: /common\.retry/i }));
-      expect(checkConnection).toHaveBeenCalledTimes(1);
-    });
-
-    it('keeps the editable form when a stale context error arrives with a trip', () => {
-      // TripContext's error is shared: a setCurrentTrip that failed on another
-      // page leaves it set. That must not unmount a form the user can still use.
-      vi.mocked(useTripContext).mockReturnValue({
-        currentTrip: mockTrip,
-        setCurrentTrip: mockSetCurrentTrip,
-        trips: [mockTrip],
-        isLoading: false,
-        error: new Error('Trip with ID "other" not found'),
-        checkConnection: vi.fn().mockResolvedValue(undefined),
-      } as ReturnType<typeof useTripContext>);
-      render(<SettingsPage />, { withProviders: false });
-
-      expect(screen.getByTestId('trip-form')).toBeInTheDocument();
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    });
-
-    it('swallows a retry that fails again instead of rejecting', async () => {
-      const checkConnection = vi.fn().mockRejectedValue(new Error('still broken'));
-      vi.mocked(useTripContext).mockReturnValue({
-        currentTrip: null,
-        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
-        trips: [],
-        isLoading: false,
-        error: new Error('IndexedDB is unavailable'),
-        checkConnection,
-      } as ReturnType<typeof useTripContext>);
-      const onUnhandled = vi.fn();
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      process.on('unhandledRejection', onUnhandled);
-      try {
-        render(<SettingsPage />, { withProviders: false });
-        await user.click(screen.getByRole('button', { name: /common\.retry/i }));
-        await waitFor(() => {
-          expect(checkConnection).toHaveBeenCalledTimes(1);
-        });
-        // Give the microtask queue a turn for a rejection to surface.
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(onUnhandled).not.toHaveBeenCalled();
-      } finally {
-        process.off('unhandledRejection', onUnhandled);
-      }
-    });
-
-    it('shows an empty state pointing at the trip list when trips exist', async () => {
-      vi.mocked(useTripContext).mockReturnValue({
-        currentTrip: null,
-        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
-        trips: [mockTrip],
-        isLoading: false,
-        error: null,
-        checkConnection: vi.fn().mockResolvedValue(undefined),
-      } as ReturnType<typeof useTripContext>);
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-
-      expect(screen.getByText('settings.noCurrentTrip')).toBeInTheDocument();
-      expect(screen.getByText('settings.noCurrentTripDescription')).toBeInTheDocument();
-      expect(screen.queryByTestId('trip-form')).not.toBeInTheDocument();
-
-      await user.click(screen.getByRole('button', { name: 'settings.chooseTrip' }));
-      expect(mockNavigate).toHaveBeenCalledWith('/trips');
-    });
-
-    it('offers to create the first trip when the device has none', async () => {
-      vi.mocked(useTripContext).mockReturnValue({
-        currentTrip: null,
-        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
-        trips: [],
-        isLoading: false,
-        error: null,
-        checkConnection: vi.fn().mockResolvedValue(undefined),
-      } as ReturnType<typeof useTripContext>);
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-
-      expect(screen.getByText('settings.noTripsYetDescription')).toBeInTheDocument();
-
-      await user.click(screen.getByRole('button', { name: 'settings.createFirstTrip' }));
-      expect(mockNavigate).toHaveBeenCalledWith('/trips/new');
-    });
-
-    it('hides the destructive delete button when there is no trip to delete', () => {
-      vi.mocked(useTripContext).mockReturnValue({
-        currentTrip: null,
-        setCurrentTrip: vi.fn().mockResolvedValue(undefined),
-        trips: [mockTrip],
-        isLoading: false,
-        error: null,
-        checkConnection: vi.fn().mockResolvedValue(undefined),
-      } as ReturnType<typeof useTripContext>);
-      render(<SettingsPage />, { withProviders: false });
-      expect(screen.queryByText('common.delete')).not.toBeInTheDocument();
-    });
+    expect(screen.queryByTestId('trip-form')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('guest-identity-selector')).not.toBeInTheDocument();
+    expect(screen.queryByText('common.delete')).not.toBeInTheDocument();
+    expect(screen.getByText('settings.clearData')).toBeInTheDocument();
   });
 
   it('renders version information', () => {
@@ -368,68 +182,6 @@ describe('SettingsPage', () => {
   it('renders data management section', () => {
     render(<SettingsPage />, { withProviders: false });
     expect(screen.getByText('settings.dataManagement')).toBeInTheDocument();
-  });
-
-  describe('CurrentTripSection interactions', () => {
-    it('updates trip when form is submitted', async () => {
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-
-      await user.click(screen.getByTestId('trip-form-submit'));
-
-      expect(mockUpdateTrip).toHaveBeenCalledWith('trip-1', {
-        name: 'Updated',
-        startDate: '2026-07-01',
-        endDate: '2026-07-10',
-      });
-    });
-
-    it('confirms a trip update through the offline-aware toast', async () => {
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-
-      await user.click(screen.getByTestId('trip-form-submit'));
-
-      await waitFor(() => {
-        expect(mockSuccessToast).toHaveBeenCalledWith('trips.updated');
-      });
-    });
-
-    it('confirms a trip deletion through the offline-aware toast', async () => {
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-
-      await user.click(screen.getAllByText('common.delete')[0]!);
-      await user.click(await screen.findByTestId('confirm-action'));
-
-      await waitFor(() => {
-        expect(mockSuccessToast).toHaveBeenCalledWith('trips.deleted');
-      });
-    });
-
-    it('opens delete confirmation and deletes trip', async () => {
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-
-      // There are multiple "common.delete" buttons; find the one in the current trip section
-      const deleteButtons = screen.getAllByText('common.delete');
-      // The first delete button is in the CurrentTripSection header
-      await user.click(deleteButtons[0]!);
-
-      // Confirm the deletion
-      const confirmBtn = await screen.findByTestId('confirm-action');
-      await user.click(confirmBtn);
-
-      await waitFor(() => {
-        expect(mockDeleteTrip).toHaveBeenCalledWith('trip-1');
-      });
-      expect(mockSetCurrentTrip).toHaveBeenCalledWith(null);
-      expect(mockNavigate).toHaveBeenCalledWith('/trips', { replace: true });
-    });
   });
 
   describe('LanguageSelector interactions', () => {
@@ -453,80 +205,6 @@ describe('SettingsPage', () => {
         'settings.languages.en',
         'settings.languages.fr',
       ]);
-    });
-  });
-
-  describe('CurrentTripSection error handling', () => {
-    it('handles update trip error gracefully', async () => {
-      await import('sonner');
-      mockUpdateTrip.mockRejectedValueOnce(new Error('Update failed'));
-
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-
-      // The mock TripForm will call onSubmit when submit is clicked
-      // but the error will be thrown from updateTrip, which is not caught by the mock
-      // The actual form catches this via useFormSubmission
-      await user.click(screen.getByTestId('trip-form-submit'));
-
-      // updateTrip should have been called and rejected
-      expect(mockUpdateTrip).toHaveBeenCalled();
-    });
-
-    it('handles trip cancel by resetting dirty state', async () => {
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-
-      // `isDirty` is not internal — it renders the unsaved-changes notice, so
-      // "should reset" is observable rather than a comment. This test used to
-      // click Cancel and assert nothing at all.
-      await user.click(screen.getByTestId('trip-form-dirty'));
-      expect(screen.getByText('settings.unsavedTripChanges')).toBeInTheDocument();
-
-      await user.click(screen.getByTestId('trip-form-cancel'));
-      expect(screen.queryByText('settings.unsavedTripChanges')).not.toBeInTheDocument();
-    });
-
-    it('handles delete error gracefully', async () => {
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      mockDeleteTrip.mockRejectedValueOnce(new Error('Delete failed'));
-
-      render(<SettingsPage />, { withProviders: false });
-
-      const deleteButtons = screen.getAllByText('common.delete');
-      await user.click(deleteButtons[0]!);
-
-      const confirmBtn = await screen.findByTestId('confirm-action');
-      await user.click(confirmBtn);
-
-      await waitFor(() => {
-        expect(mockDeleteTrip).toHaveBeenCalled();
-      });
-      // Should not navigate on error
-      expect(mockNavigate).not.toHaveBeenCalledWith('/trips', { replace: true });
-    });
-
-    it('handles setCurrentTrip failure during delete', async () => {
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      mockSetCurrentTrip.mockRejectedValueOnce(new Error('Clear failed'));
-
-      render(<SettingsPage />, { withProviders: false });
-
-      const deleteButtons = screen.getAllByText('common.delete');
-      await user.click(deleteButtons[0]!);
-
-      const confirmBtn = await screen.findByTestId('confirm-action');
-      await user.click(confirmBtn);
-
-      await waitFor(() => {
-        expect(mockDeleteTrip).toHaveBeenCalled();
-      });
-      // Should still navigate (clear error is non-fatal)
-      expect(mockNavigate).toHaveBeenCalledWith('/trips', { replace: true });
     });
   });
 
@@ -613,12 +291,6 @@ describe('SettingsPage', () => {
   });
 
   describe('Additional edge cases', () => {
-    it('renders trip form in current trip section', () => {
-      render(<SettingsPage />, { withProviders: false });
-      expect(screen.getByTestId('trip-form')).toBeInTheDocument();
-      expect(screen.getByTestId('trip-form-submit')).toBeInTheDocument();
-    });
-
     it('renders about section with version', () => {
       render(<SettingsPage />, { withProviders: false });
       expect(screen.getByText('settings.about')).toBeInTheDocument();
@@ -636,34 +308,7 @@ describe('SettingsPage', () => {
     });
   });
 
-  describe('handleDirtyChange and dialog interactions', () => {
-    it('tracks dirty state via onDirtyChange callback', async () => {
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-      expect(screen.queryByText('settings.unsavedTripChanges')).not.toBeInTheDocument();
-
-      await user.click(screen.getByTestId('trip-form-dirty'));
-
-      // Asserting the button is still in the document (what this used to do)
-      // cannot see whether the callback did anything.
-      expect(screen.getByText('settings.unsavedTripChanges')).toBeInTheDocument();
-    });
-
-    it('closes delete confirm dialog via onOpenChange', async () => {
-      const { userEvent } = await import('@testing-library/user-event');
-      const user = userEvent.setup();
-      render(<SettingsPage />, { withProviders: false });
-      // Open delete dialog
-      const deleteBtn = screen.getByRole('button', { name: /common\.delete/i });
-      await user.click(deleteBtn);
-      expect(screen.getByTestId('confirm-dialog')).toBeInTheDocument();
-      // Close it via onOpenChange
-      const closeBtn = screen.getByTestId('confirm-close');
-      await user.click(closeBtn);
-      expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument();
-    });
-
+  describe('Dialog interactions', () => {
     it('closes clear data dialog via onOpenChange', async () => {
       const { userEvent } = await import('@testing-library/user-event');
       const user = userEvent.setup();

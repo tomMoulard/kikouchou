@@ -1,5 +1,6 @@
 /**
- * @fileoverview E2E cover for the "which guest am I?" card on `/settings`.
+ * @fileoverview E2E cover for the "which guest am I?" card on the trip's
+ * settings page.
  *
  * The card's whole value is a contract with code it never calls: the share
  * wizard writes `kikouchou_guest_<shareId>`, and the agenda reads it back to
@@ -93,9 +94,10 @@ test.describe('Guest identity', () => {
     await seedPerson(page, tripId, 'Alice');
     const bob = await seedPerson(page, tripId, 'Bob');
 
-    // Selecting the trip is what puts it in front of the settings page.
+    // The card lives on the trip's own settings page, so the trip in the URL
+    // is what puts it in front of it.
     await openRoute(page, `/trips/${tripId}/calendar`);
-    await openRoute(page, '/settings');
+    await openRoute(page, `/trips/${tripId}/edit`);
 
     // Nothing stored yet: the card offers the guests without claiming to be one.
     expect(await storedIdentity(page, shareId)).toBeNull();
@@ -107,7 +109,7 @@ test.describe('Guest identity', () => {
       .toEqual({ personId: bob, tripId });
 
     // The point of storing it: a reload still knows who this browser is.
-    await openRoute(page, '/settings');
+    await openRoute(page, `/trips/${tripId}/edit`);
     await expect(page.getByTestId('guest-identity-select')).toHaveText(/Bob/);
 
     await pickIdentity(page, null);
@@ -129,7 +131,7 @@ test.describe('Guest identity', () => {
     });
 
     await openRoute(page, `/trips/${tripId}/calendar`);
-    await openRoute(page, '/settings');
+    await openRoute(page, `/trips/${tripId}/edit`);
 
     await expect(page.getByTestId('guest-identity-select')).toHaveCount(0);
 

@@ -585,8 +585,8 @@ test.describe('Trip Lifecycle', () => {
     // Navigate to the edit page
     await page.goto(`/trips/${tripId}/edit`);
 
-    // Verify we're on the edit page with the correct title
-    await expect(page.getByRole('heading', { name: /edit trip/i })).toBeVisible();
+    // Verify we're on the trip's settings page with the correct title
+    await expect(page.getByRole('heading', { name: /trip settings/i })).toBeVisible();
 
     // Verify the form is pre-filled with existing data — dates included, which
     // also fixes the starting point this test's own edit is measured against.
@@ -868,7 +868,7 @@ test.describe('Trip Lifecycle', () => {
     await expect(page).toHaveURL(`/trips/${tripId}/edit`);
     // The edit form is still there, still on this trip: cancelling a deletion
     // must leave the page exactly as it was, and a URL cannot say that.
-    await expectTripFormPage(page, /edit trip/i);
+    await expectTripFormPage(page, /trip settings/i);
     await expect(page.getByLabel(/trip name/i)).toHaveValue(TEST_TRIP.name);
 
     // Verify trip still exists by going to trips list

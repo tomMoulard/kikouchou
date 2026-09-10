@@ -304,7 +304,7 @@ const publicRoutes: RouteObject = {
  * - `/` - Main app root (with navigation)
  *   - `/trips` - Trip list
  *   - `/trips/new` - Create trip
- *   - `/trips/:tripId/edit` - Edit trip
+ *   - `/trips/:tripId/edit` - The trip's own settings: name, dates, who you are, delete
  *   - `/trips/:tripId` - Redirects to the calendar, keeping `?view=`
  *   - `/trips/:tripId/calendar` - Trip calendar
  *   - `/trips/:tripId/sync` - P2P sync (QR export/import)
@@ -318,7 +318,7 @@ const publicRoutes: RouteObject = {
  *   - `/trips/:tripId/money` - Nights per guest, and one bill split by them
  *   - `/analytics` - Analytics across all trips
  *   - `/groups` - Reusable guest groups, imported into any trip
- *   - `/settings` - App settings
+ *   - `/settings` - App settings: the account, the language, the theme, the device's data
  *   - `/signin` - Sign in (providers come from the project's own config)
  */
 export const routes: RouteObject[] = [

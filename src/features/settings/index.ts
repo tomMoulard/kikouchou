@@ -9,9 +9,7 @@
 // Components
 // ============================================================================
 
-export { GuestIdentitySelector } from './components/GuestIdentitySelector';
 export { NotificationSettings } from './components/NotificationSettings';
-export { PrintSummaryCard } from './components/PrintSummaryCard';
 export { ThemeSelector } from './components/ThemeSelector';
 
 // ============================================================================

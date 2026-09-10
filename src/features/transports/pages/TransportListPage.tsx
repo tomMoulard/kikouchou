@@ -1612,6 +1612,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       <TransportScopeFilter
         scope={scope}
         canFilter={canFilterScope}
+        tripId={tripIdFromUrl ?? null}
         hiddenCount={hiddenCount}
         onScopeChange={setScope}
       />

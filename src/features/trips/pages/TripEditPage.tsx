@@ -1,6 +1,12 @@
 /**
- * @fileoverview Trip Edit Page for modifying and deleting existing vacation trips.
- * Provides form interface with trip data loading, update, and delete functionality.
+ * @fileoverview The trip's own settings page: its name, dates and location, who
+ * this browser is on it, its printable summary, and deleting it.
+ *
+ * Everything that belongs to one trip lives here. `/settings` used to carry the
+ * trip form, the delete button, the guest identity card and the print button
+ * beside the language and the theme, which put two jobs on one page: a
+ * preference that follows the device and a trip that follows the group. The app
+ * settings page keeps the preferences, and this page owns the trip.
  *
  * @module features/trips/pages/TripEditPage
  */
@@ -16,7 +22,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify, useUnsavedChanges } from '@/hooks';
-import { Trash2 } from 'lucide-react';
+import { Eye, Trash2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -25,7 +31,10 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { GuestIdentitySelector } from '@/features/trips/components/GuestIdentitySelector';
+import { PrintSummaryCard } from '@/features/trips/components/PrintSummaryCard';
 import { TripForm } from '@/features/trips/components/TripForm';
+import { tripAccessOf } from '@/hooks/useTripAccess';
 import { useTripContext } from '@/contexts/TripContext';
 
 import { deleteTrip, getTripById, updateTrip } from '@/lib/db';
@@ -38,17 +47,23 @@ import type { Trip, TripFormData, TripId } from '@/types';
 // ============================================================================
 
 /**
- * Page component for editing an existing trip.
+ * Page component for one trip's settings.
  *
  * Features:
  * - Loads trip data from URL params
  * - Handles loading, error, and success states
  * - Uses TripForm component in edit mode
+ * - Which guest this browser is, and the printable summary
  * - Supports trip deletion with confirmation dialog
  * - Confirms success as an OS notification, reports errors as a toast
  * - Prevents double-submission and memory leaks
  *
- * @returns The trip edit page element with form or loading/error state
+ * A viewer trip, opened from an invite link with no account, gets the facts
+ * instead of the form: the cards below it read the *current* trip, so the page
+ * also puts the trip in the URL into the trip context, the way every other
+ * trip-scoped page does.
+ *
+ * @returns The trip settings page element with form or loading/error state
  *
  * @example
  * ```tsx
@@ -60,7 +75,11 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { tripId } = useParams<{ tripId: string }>();
-  const { currentTrip, setCurrentTrip } = useTripContext();
+  const {
+    currentTrip,
+    setCurrentTrip,
+    isLoading: isTripContextLoading,
+  } = useTripContext();
   const { notifySuccess } = useOfflineAwareNotify();
 
   // ============================================================================
@@ -98,6 +117,17 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
    */
   const isDeletingRef = useRef(false);
 
+  /**
+   * Set once the trip is gone, so the effect below stops offering it.
+   *
+   * A delete clears the current trip and then navigates, and this page renders
+   * at least once in between — with `currentTrip` null and the URL still naming
+   * the trip that has just been destroyed. Without this the effect would ask
+   * the context to select it again, and the trips list would greet the user
+   * with "Trip with ID … not found" over the empty state.
+   */
+  const isDeletedRef = useRef(false);
+
   // ============================================================================
   // Effects
   // ============================================================================
@@ -114,6 +144,31 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
       isMountedRef.current = false;
     };
   }, []);
+
+  /**
+   * Put the trip in the URL in front of the app, the way every other
+   * trip-scoped page does.
+   *
+   * The guest identity card and the print button read `currentTrip`, and the
+   * guests they offer come from `PersonContext`, which is scoped to it too.
+   * Without this, opening this page for a trip that is not the selected one
+   * would name the guests of a different trip entirely.
+   */
+  useEffect(() => {
+    if (!tripId || isTripContextLoading || isDeletedRef.current) {
+      return;
+    }
+    // Only a trip this page has actually loaded: asking the context to select
+    // an id that is not in the database turns a "trip not found" page into a
+    // context-wide error that outlives the visit.
+    if (trip?.id !== tripId || currentTrip?.id === tripId) {
+      return;
+    }
+
+    setCurrentTrip(tripId).catch((err: unknown) => {
+      console.error('Failed to set current trip from URL:', err);
+    });
+  }, [tripId, trip?.id, currentTrip?.id, isTripContextLoading, setCurrentTrip]);
 
   /**
    * Load trip data when tripId changes.
@@ -227,6 +282,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
 
     try {
       await deleteTrip(tripId as TripId);
+      isDeletedRef.current = true;
 
       if (currentTrip?.id === tripId) {
         try {
@@ -285,6 +341,12 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   // Render
   // ============================================================================
 
+  // Asked of the loaded row rather than of `useTripAccess()`, which reads the
+  // *current* trip: the effect above needs a render to land it, and for that one
+  // render an editable form over somebody else's read-only trip is exactly the
+  // control this rule exists to hide.
+  const canEdit = tripAccessOf(trip) === 'member';
+
   // Loading state
   if (isLoading) {
     return <LoadingState variant="fullPage" />;
@@ -294,7 +356,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   if (loadError || !trip) {
     return (
       <div className="container mx-auto max-w-2xl py-6 md:py-8">
-        <PageHeader title={t('trips.edit')} backLink="/trips" />
+        <PageHeader title={t('trips.settings', 'Trip settings')} backLink="/trips" />
         <ErrorDisplay
           error={loadError}
           title={t('errors.tripNotFound', 'Trip not found')}
@@ -313,11 +375,15 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
     );
   }
 
-  // Success state - show edit form
+  // Success state - the trip's own settings
   return (
     <div className="container mx-auto max-w-2xl py-6 md:py-8">
       <PageHeader
-        title={t('trips.edit')}
+        title={t('trips.settings', 'Trip settings')}
+        description={t(
+          'trips.settingsDescription',
+          'The trip itself: its name, its dates, and who you are on it.',
+        )}
         backLink="/trips"
         action={
           <Button variant="destructive" onClick={handleOpenDeleteDialog}>
@@ -327,11 +393,54 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
         }
       />
 
-      <Card>
-        <CardContent className="pt-6">
-          <TripForm trip={trip} onSubmit={handleSubmit} onCancel={handleCancel} onDirtyChange={handleDirtyChange} />
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="pt-6">
+            {canEdit ? (
+              <TripForm trip={trip} onSubmit={handleSubmit} onCancel={handleCancel} onDirtyChange={handleDirtyChange} />
+            ) : (
+              // A read-only trip: the facts, and the one thing that can be done
+              // about it here — deleting this device's copy — stays in the header.
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-muted-foreground">{t('trips.name')}</dt>
+                  <dd className="font-medium">{trip.name}</dd>
+                </div>
+                {trip.location && (
+                  <div>
+                    <dt className="text-muted-foreground">{t('trips.location')}</dt>
+                    <dd className="font-medium">{trip.location}</dd>
+                  </div>
+                )}
+                <div>
+                  <dt className="text-muted-foreground">{t('trips.startDate')}</dt>
+                  <dd className="font-medium">{trip.startDate}</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">{t('trips.endDate')}</dt>
+                  <dd className="font-medium">{trip.endDate}</dd>
+                </div>
+                <p className="flex items-start gap-2 text-muted-foreground sm:col-span-2">
+                  <Eye className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  {t(
+                    'viewer.description',
+                    'You opened this trip from an invite link. You can see everything and change nothing. Sign in to edit it with the others.',
+                  )}
+                </p>
+              </dl>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Which guest this browser is — under the trip it belongs to, because
+            the answer is per trip and means nothing without one. */}
+        <GuestIdentitySelector />
+
+        {/* The printable sheet, reached from here rather than from a navigation
+            entry of its own: printing is an occasional action, not a section of
+            the trip. */}
+        <PrintSummaryCard />
+      </div>
 
       <ConfirmDialog
         open={isDeleteDialogOpen}

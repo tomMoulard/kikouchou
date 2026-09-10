@@ -4,16 +4,16 @@
  * The browser is the only place this can be asserted, because the feature is
  * three separately-testable halves that have to agree on one guest id:
  *
- *   - the Settings card writes the identity into `AppSettings.myPersonIdByTripId`;
+ *   - the trip settings card writes the identity into `AppSettings.myPersonIdByTripId`;
  *   - `useTripIdentity` resolves it out of Dexie on a *different* route;
  *   - the transport list turns it into a filter and persists the choice in the
  *     URL, where a reload reads it back.
  *
  * A unit test on any one of them stays green while the chain is broken — the
- * settings card can save an id nothing reads, and the list can filter by an id
- * nothing writes. This is the test that fails when the two ends disagree, and
- * the only place "the choice survives a reload" is a claim about real history
- * rather than about a mocked `useSearchParams`.
+ * trip settings card can save an id nothing reads, and the list can filter by
+ * an id nothing writes. This is the test that fails when the two ends disagree,
+ * and the only place "the choice survives a reload" is a claim about real
+ * history rather than about a mocked `useSearchParams`.
  *
  * The legs are departures on purpose: a seeded arrival carries `needsPickup`,
  * which raises the unassigned-pickup alert panel — deliberately *not* scoped,
@@ -129,16 +129,18 @@ async function seedScopeTrip(page: Page): Promise<ScopeFixture> {
 }
 
 /**
- * Says "I am Tom" through the Settings card, the way a user would.
+ * Says "I am Tom" through the card on the trip's settings page, the way a user
+ * would.
  *
  * Going through the UI rather than writing the setting directly is the point:
  * the card is the only thing that can create an identity for a trip's own
  * organiser, who never opens their own share link.
  *
  * @param page - Playwright page object
+ * @param tripId - The trip whose settings carry the card
  */
-async function chooseMyself(page: Page): Promise<void> {
-  await page.goto('/settings');
+async function chooseMyself(page: Page, tripId: string): Promise<void> {
+  await page.goto(`/trips/${tripId}/edit`);
   await waitForRoute(page);
 
   await page.getByRole('combobox', { name: LABELS.identity }).click();
@@ -167,8 +169,8 @@ async function openTransports(
   await waitForRoute(page);
 
   // My own leg is in every scope, so waiting for it proves the trip is current
-  // and its transports have arrived — which is what the Settings card needs
-  // before it can offer a guest list at all.
+  // and its transports have arrived — which is what the guest identity card
+  // needs before it can offer a guest list at all.
   await expect(page.getByText(GUESTS.me).first()).toBeVisible();
 }
 
@@ -197,7 +199,7 @@ test.describe('transport scope filter', () => {
     const { tripId } = await seedScopeTrip(page);
 
     await openTransports(page, tripId);
-    await chooseMyself(page);
+    await chooseMyself(page, tripId);
     await openTransports(page, tripId, '?scope=mine');
 
     // My own leg, and the passenger in the car I am driving — his leg is not
@@ -219,7 +221,7 @@ test.describe('transport scope filter', () => {
     const { tripId } = await seedScopeTrip(page);
 
     await openTransports(page, tripId);
-    await chooseMyself(page);
+    await chooseMyself(page, tripId);
     await openTransports(page, tripId);
 
     // Nothing in the URL yet: an identified device defaults to its own travel.
@@ -247,7 +249,7 @@ test.describe('transport scope filter', () => {
     const { tripId } = await seedScopeTrip(page);
 
     await openTransports(page, tripId);
-    await chooseMyself(page);
+    await chooseMyself(page, tripId);
     await openTransports(page, tripId, '?scope=mine');
 
     const status = page.getByRole('status').filter({ hasText: LABELS.hidden });

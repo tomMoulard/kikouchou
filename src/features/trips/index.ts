@@ -42,6 +42,10 @@ export type { TripCardProps } from './components/TripCard';
 export { TripsLocationMap } from './components/TripsLocationMap';
 export type { TripsLocationMapProps } from './components/TripsLocationMap';
 
+export { GuestIdentitySelector } from './components/GuestIdentitySelector';
+
+export { PrintSummaryCard } from './components/PrintSummaryCard';
+
 export { PlanOwnTripPrompt } from './components/PlanOwnTripPrompt';
 export type { PlanOwnTripPromptProps } from './components/PlanOwnTripPrompt';
 
