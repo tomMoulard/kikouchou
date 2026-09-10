@@ -426,6 +426,24 @@ export interface Trip extends Identifiable, WithTimestamps {
    * row rather than creating a second one.
    */
   remoteTripId?: string;
+
+  /**
+   * The invite token this device reads the trip through, when it reads it as
+   * a **viewer** rather than as a member.
+   *
+   * Set by `lib/sync/viewer` when somebody opens an invite link with no
+   * account: the trip is fetched through `read_shared_trip`, projected into
+   * Dexie, and refreshed from the same token whenever the trip is open. While
+   * this is set the trip is read-only on this device — nothing here can be
+   * written to the server, because every write policy needs an account.
+   *
+   * Cleared by the account sweep the moment the same device signs in and the
+   * token is redeemed: the trip then becomes an ordinary member trip and
+   * `remoteTripId` (already set) is what mounts the sync provider.
+   *
+   * Device-local, like `remoteTripId`: it never travels in the document.
+   */
+  viewerToken?: string;
 }
 
 /**

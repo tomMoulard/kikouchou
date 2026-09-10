@@ -66,7 +66,8 @@
     "syncPending_other": "{{count}} modifications pas encore envoyées",
     "syncStatusRegion": "État de la synchronisation",
     "guestGroups": "Groupes",
-    "vehicles": "Voitures"
+    "vehicles": "Voitures",
+    "syncReadOnly": "Copie en lecture seule"
   },
   "analytics": {
     "tripTitle": "Analyses du voyage",
@@ -906,7 +907,7 @@
       "copyLinkAction": "Copier le lien",
       "linkCopied": "Lien copié",
       "shareDescription": "Partagez ce lien pour collaborer en temps réel",
-      "privacyNotice": "Toute personne disposant de ce lien peut voir et modifier ce voyage",
+      "privacyNotice": "Toute personne disposant de ce lien peut voir ce séjour. Le modifier demande un compte.",
       "connectionError": "Échec de la connexion",
       "connectionErrorDescription": "Impossible de rejoindre ce voyage. Vérifiez votre connexion puis réessayez.",
       "joining": "Connexion au voyage...",
@@ -941,7 +942,12 @@
       "expired": "Ce lien d'invitation a expiré.",
       "exhausted": "Ce lien d'invitation a déjà servi au maximum.",
       "askAgain": "Demandez un nouveau lien à la personne qui vous a invité.",
-      "failed": "Impossible de rejoindre le séjour"
+      "failed": "Impossible de rejoindre le séjour",
+      "welcomeTagline": "Bienvenue sur Kikouchou, l'appli pour une maison pleine d'amis.",
+      "welcomeTo": "Vous êtes invité à {{tripName}}",
+      "viewerHint": "Choisissez votre nom et le séjour affiche votre chambre et vos trajets. Vous pouvez tout regarder ; pour modifier quoi que ce soit, il faut se connecter.",
+      "opening": "Ouverture du séjour…",
+      "lookAround": "Jeter un œil"
     }
   },
   "assistant": {
@@ -1054,7 +1060,8 @@
     "vehicleNotFound": "Cette voiture est introuvable.",
     "transportNotFound": "Cette arrivée ou ce départ est introuvable.",
     "invalidRide": "Ces informations de trajet sont invalides, rien n'a été enregistré.",
-    "invalidVehicle": "Ces informations de voiture sont invalides, rien n'a été enregistré."
+    "invalidVehicle": "Ces informations de voiture sont invalides, rien n'a été enregistré.",
+    "readOnlyTrip": "Ce séjour est en lecture seule sur cet appareil. Connectez-vous pour le modifier."
   },
   "auth": {
     "account": {
@@ -1492,5 +1499,14 @@
     "bestEffort": "Kikouchou n’a pas de serveur : une alerte ne peut partir que si l’application tourne ou vient d’être utilisée. L’alerte dans l’application, elle, vous attend à chaque ouverture.",
     "deniedHint": "Votre navigateur bloque les notifications pour Kikouchou. L’application ne peut plus les demander — autorisez-les pour ce site dans les réglages de votre navigateur ou de votre système.",
     "unsupportedHint": "Ce navigateur ne peut pas afficher de notifications. Sur iPhone, ajoutez d’abord Kikouchou à l’écran d’accueil. Les alertes trajets restent visibles dans l’application."
+  },
+  "viewer": {
+    "title": "Lecture seule",
+    "description": "Vous avez ouvert ce séjour depuis un lien d'invitation. Vous pouvez tout voir et rien modifier. Connectez-vous pour le modifier avec les autres.",
+    "signIn": "Se connecter pour modifier",
+    "signInReason": "Connectez-vous pour modifier ce séjour avec les autres. Rien de ce que vous voyez ici ne change.",
+    "accepting": "Acceptation de votre invitation…",
+    "acceptFailed": "Votre invitation n'a pas pu être acceptée.",
+    "stillReadOnly": "Cette copie reste en lecture seule tant que ce n'est pas fait."
   }
 }

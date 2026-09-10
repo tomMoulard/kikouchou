@@ -19,6 +19,8 @@ import {
   buildInviteUrl,
   createInvite,
   extractInviteToken,
+  inviteExpiryForTrip,
+  inviteOutlastsTrip,
   isInviteUsable,
   listInvites,
   redeemInvite,
@@ -448,5 +450,69 @@ describe('revokeInvite', () => {
       ok: false,
       message: 'not a member of this trip',
     });
+  });
+});
+
+// ============================================================================
+// Expiry that follows the trip
+// ============================================================================
+
+describe('inviteExpiryForTrip', () => {
+  const now = new Date('2026-09-10T10:00:00.000Z');
+
+  it('lets a link live until a week after the trip ends', () => {
+    // End of the last day, plus seven days: somebody looking up the return
+    // train the morning after still gets in.
+    expect(inviteExpiryForTrip('2026-12-20', now).toISOString()).toBe(
+      '2026-12-27T23:59:59.999Z',
+    );
+  });
+
+  it('outlives the old one-month default for a trip planned months ahead', () => {
+    // The defect this replaces: a trip planned three months out had a link
+    // that died after one, so every viewer lost their updates before the trip.
+    const expiry = inviteExpiryForTrip('2026-12-20', now);
+    const oneMonthOut = new Date('2026-10-10T10:00:00.000Z');
+    expect(expiry.getTime()).toBeGreaterThan(oneMonthOut.getTime());
+  });
+
+  it('falls back to one month for a trip that has already ended', () => {
+    // Sharing an old trip must still produce a link that works.
+    expect(inviteExpiryForTrip('2026-01-05', now).toISOString()).toBe(
+      '2026-10-10T10:00:00.000Z',
+    );
+  });
+
+  it('falls back to one month for an unreadable end date', () => {
+    expect(inviteExpiryForTrip('not-a-date', now).toISOString()).toBe(
+      '2026-10-10T10:00:00.000Z',
+    );
+  });
+});
+
+describe('inviteOutlastsTrip', () => {
+  const live = {
+    token: 'tokentokentokent',
+    createdAt: '2026-09-01T00:00:00.000Z',
+    maxUses: null,
+    uses: 0,
+    revokedAt: null,
+  };
+
+  it('accepts a link with no expiry', () => {
+    expect(inviteOutlastsTrip({ ...live, expiresAt: null }, '2026-12-20')).toBe(true);
+  });
+
+  it('accepts a link that expires after the last day', () => {
+    expect(
+      inviteOutlastsTrip({ ...live, expiresAt: '2026-12-21T00:00:00.000Z' }, '2026-12-20'),
+    ).toBe(true);
+  });
+
+  it('rejects a link that dies before the trip is over', () => {
+    // Live today, dead before the trip: not worth handing out again.
+    expect(
+      inviteOutlastsTrip({ ...live, expiresAt: '2026-10-07T10:00:00.000Z' }, '2026-12-20'),
+    ).toBe(false);
   });
 });

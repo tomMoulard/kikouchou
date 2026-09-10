@@ -91,7 +91,7 @@ describe('AccountTripSync', () => {
     vi.clearAllMocks();
     mockedOnlineStatus.mockReturnValue({ isOnline: true, hasRecentlyChanged: false });
     mockedGetClient.mockResolvedValue(CLIENT);
-    mockedSweep.mockResolvedValue({ uploaded: 0, downloaded: 0, failed: 0 });
+    mockedSweep.mockResolvedValue({ uploaded: 0, downloaded: 0, upgraded: 0, failed: 0 });
   });
 
   it('renders nothing', () => {
@@ -245,7 +245,7 @@ describe('AccountTripSync', () => {
       overlapped ||= running > 1;
       await new Promise((resolve) => setTimeout(resolve, 10));
       running -= 1;
-      return { uploaded: 0, downloaded: 0, failed: 0 };
+      return { uploaded: 0, downloaded: 0, upgraded: 0, failed: 0 };
     });
 
     signedInAs('user-1');

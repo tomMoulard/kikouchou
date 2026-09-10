@@ -69,7 +69,9 @@ export function AccountTripSync(): null {
   const pendingUploadKey = useLiveQuery(async () => {
     const trips = await db.trips.toArray();
     return trips
-      .filter((trip) => trip.remoteTripId === undefined)
+      // A viewer trip is pending in the same sense: signed in, the sweep turns
+      // it into a member trip, and until then it has work waiting.
+      .filter((trip) => trip.remoteTripId === undefined || trip.viewerToken !== undefined)
       .map((trip) => String(trip.id))
       .sort()
       .join(',');
@@ -163,10 +165,16 @@ export function AccountTripSync(): null {
         // event describes, and it happened. Only a `setState` would need a
         // mounted guard, and there is none — the trip list follows Dexie on its
         // own.
-        if (result.uploaded > 0 || result.downloaded > 0 || result.failed > 0) {
+        if (
+          result.uploaded > 0 ||
+          result.downloaded > 0 ||
+          result.upgraded > 0 ||
+          result.failed > 0
+        ) {
           posthog?.capture('account_trip_sync', {
             uploaded: result.uploaded,
             downloaded: result.downloaded,
+            upgraded: result.upgraded,
             failed: result.failed,
           });
         }

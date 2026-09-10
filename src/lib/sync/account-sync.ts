@@ -52,6 +52,7 @@ import { db } from '@/lib/db/database';
 import { materialiseJoinedTrip } from './join-trip';
 import { ensureRemoteTrip, listRemoteTripsMissingLocally } from './remote-trip';
 import { uploadTripDocument } from './upload-document';
+import { upgradeViewerTrip } from './viewer';
 
 // ============================================================================
 // Type Definitions
@@ -71,7 +72,9 @@ export interface AccountSyncResult {
   readonly uploaded: number;
   /** Server trips materialised onto this device. */
   readonly downloaded: number;
-  /** Trips that could not be moved, in either direction. */
+  /** Viewer trips whose invite this account redeemed, now member trips. */
+  readonly upgraded: number;
+  /** Trips that could not be moved, in any direction. */
   readonly failed: number;
 }
 
@@ -79,11 +82,46 @@ export interface AccountSyncResult {
 // Constants
 // ============================================================================
 
-const NOTHING: AccountSyncResult = { uploaded: 0, downloaded: 0, failed: 0 };
+const NOTHING: AccountSyncResult = { uploaded: 0, downloaded: 0, upgraded: 0, failed: 0 };
 
 // ============================================================================
 // Internals
 // ============================================================================
+
+/**
+ * Redeems the invites behind the trips this device only *reads*.
+ *
+ * A viewer trip was opened from a link with no account. The moment there is
+ * one, the same token joins the account to the trip, the trip stops being
+ * read-only, and the sync provider takes over the document. This is the one
+ * moment that transition can happen unattended, and it runs first: a trip that
+ * is upgraded here is a member trip by the time the push half looks at it.
+ *
+ * A dead token — revoked, expired, spent — leaves the trip as it was: readable
+ * and read-only. The card on the trip's pages says so and offers a retry.
+ */
+async function upgradeViewerTrips(
+  client: TypedSupabaseClient,
+  userId: string,
+): Promise<AccountSyncResult> {
+  const viewing = (await db.trips.toArray()).filter((trip) => trip.viewerToken !== undefined);
+
+  let upgraded = 0;
+  let failed = 0;
+
+  for (const trip of viewing) {
+    const result = await upgradeViewerTrip(client, userId, trip);
+    if (result.status === 'upgraded') {
+      upgraded += 1;
+      continue;
+    }
+    if (result.status !== 'already-member') {
+      failed += 1;
+    }
+  }
+
+  return { uploaded: 0, downloaded: 0, upgraded, failed };
+}
 
 /**
  * Uploads the trips on this device that have never been on the server.
@@ -131,7 +169,7 @@ async function pushLocalTrips(
     uploaded += 1;
   }
 
-  return { uploaded, downloaded: 0, failed };
+  return { uploaded, downloaded: 0, upgraded: 0, failed };
 }
 
 /**
@@ -162,7 +200,7 @@ async function pullRemoteTrips(
     }
   }
 
-  return { uploaded: 0, downloaded, failed };
+  return { uploaded: 0, downloaded, upgraded: 0, failed };
 }
 
 // ============================================================================
@@ -192,7 +230,12 @@ export async function syncAccountTrips(
   }
 
   try {
-    // Up first. The trips already on this device are the ones the person can
+    // Viewer trips first: redeeming their invites is what turns them into
+    // trips the account is actually on, so the pull below does not fetch a
+    // second copy of a trip that is already here.
+    const upgraded = await upgradeViewerTrips(client, userId);
+
+    // Then up. The trips already on this device are the ones the person can
     // see, so getting them onto the account is what makes the *other* device
     // useful — and doing it first leaves the pull below a settled picture of
     // what is already here.
@@ -202,7 +245,8 @@ export async function syncAccountTrips(
     return {
       uploaded: pushed.uploaded,
       downloaded: pulled.downloaded,
-      failed: pushed.failed + pulled.failed,
+      upgraded: upgraded.upgraded,
+      failed: upgraded.failed + pushed.failed + pulled.failed,
     };
   } catch (error: unknown) {
     // Belt and braces: everything above reports rather than throws, so reaching

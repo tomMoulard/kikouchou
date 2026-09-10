@@ -25,7 +25,7 @@
 
 import { type ReactElement, memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, Check, Loader2, Users } from 'lucide-react';
+import { AlertCircle, Check, Eye, Loader2, Users } from 'lucide-react';
 
 import { statusVariants } from '@/components/ui/status.variants';
 
@@ -71,7 +71,23 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
   const showCount =
     state.onlineCount !== null && state.status !== 'offline' && pending === 0;
 
-  const appearance = showCount
+  /**
+   * A viewer trip that is current.
+   *
+   * Said as what it is — a read-only copy — rather than "everyone is up to
+   * date", which would promise a two-way sync. Offline and syncing keep their
+   * ordinary wording: they describe the connection, not the copy.
+   */
+  const isReadOnlyCurrent = state.readOnly === true && state.status === 'synced';
+
+  const appearance = isReadOnlyCurrent
+    ? {
+        icon: <Eye className="size-3.5 shrink-0" aria-hidden="true" />,
+        tone: 'text-muted-foreground',
+        dot: 'bg-muted-foreground',
+        label: t('nav.syncReadOnly', 'Read-only copy'),
+      }
+    : showCount
     ? {
         icon: <Users className="size-3.5 shrink-0" aria-hidden="true" />,
         tone: statusVariants({ tone: 'success', emphasis: 'text' }),

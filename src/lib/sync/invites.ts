@@ -51,6 +51,64 @@ function defaultExpiry(from: Date): Date {
   return expiry;
 }
 
+/**
+ * How long a link keeps working after the trip it opens has ended.
+ *
+ * A link is shared while a trip is being planned and forwarded, screenshotted
+ * and re-read right up to the last day of it. Somebody looking up the return
+ * train the morning after should still get in; somebody finding the link in
+ * a chat six months later should not.
+ */
+const GRACE_DAYS_AFTER_TRIP = 7;
+
+/**
+ * When a link for a trip ending on `endDate` stops working.
+ *
+ * The end of that calendar day plus {@link GRACE_DAYS_AFTER_TRIP}, in UTC — a
+ * trip's dates are calendar days with no timezone, and a link that dies a few
+ * hours early or late at the far end of a week-long grace period costs nobody
+ * anything. A one-month default used to apply regardless of the trip, which
+ * meant a trip planned three months ahead outlived its own link: every viewer
+ * reading it through the token lost their updates after the first month.
+ *
+ * A trip that has already ended gets the old one-month default instead, so
+ * sharing an old trip still produces a link that works.
+ *
+ * @param endDate - The trip's last day, `yyyy-MM-dd`
+ * @param now - The moment the link is minted
+ * @returns When the link expires
+ */
+export function inviteExpiryForTrip(endDate: string, now: Date = new Date()): Date {
+  const expiry = new Date(`${endDate}T23:59:59.999Z`);
+  if (Number.isNaN(expiry.getTime())) {
+    return defaultExpiry(now);
+  }
+  expiry.setUTCDate(expiry.getUTCDate() + GRACE_DAYS_AFTER_TRIP);
+  return expiry <= now ? defaultExpiry(now) : expiry;
+}
+
+/**
+ * Whether an invite still works on the trip's last day.
+ *
+ * The share dialog reuses a live link rather than minting one per opening, but
+ * a link minted under the old one-month default can be live today and dead
+ * before the trip starts. Such a link is not worth handing out again.
+ *
+ * @param invite - A live invite
+ * @param endDate - The trip's last day, `yyyy-MM-dd`
+ * @returns True when the invite has no expiry or expires after that day
+ */
+export function inviteOutlastsTrip(invite: TripInvite, endDate: string): boolean {
+  if (invite.expiresAt === null) {
+    return true;
+  }
+  const lastMoment = new Date(`${endDate}T23:59:59.999Z`);
+  if (Number.isNaN(lastMoment.getTime())) {
+    return true;
+  }
+  return new Date(invite.expiresAt) > lastMoment;
+}
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
@@ -280,7 +338,7 @@ export async function redeemInvite(
     });
 
     if (error) {
-      return mapRedeemError(error);
+      return mapInviteError(error);
     }
     if (typeof data !== 'string' || data.length === 0) {
       return { status: 'error', message: 'server did not return a trip id' };
@@ -324,13 +382,15 @@ function toInvite(row: unknown): TripInvite {
 }
 
 /**
- * Maps the RPC's failure signals to a result.
+ * Maps an invite RPC's failure signals to a result.
  *
  * `hint` is matched before `message`, because the hints are a deliberate
  * contract set by the migration while the messages are prose that could
- * reasonably be reworded.
+ * reasonably be reworded. Shared by `redeem_invite` and `read_shared_trip`,
+ * which refuse a dead token with the same hints on purpose: the person holding
+ * the link is told the same thing whichever door they came through.
  */
-function mapRedeemError(error: {
+export function mapInviteError(error: {
   readonly message?: string;
   readonly hint?: string | null;
   readonly code?: string;

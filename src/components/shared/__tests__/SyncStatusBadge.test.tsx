@@ -126,3 +126,25 @@ describe('SyncStatusBadge', () => {
     expect(screen.getByText('2 people online')).toHaveClass('sr-only');
   });
 });
+
+describe('SyncStatusBadge — a viewer trip', () => {
+  it('says the copy is read-only rather than that everyone is up to date', () => {
+    withState({ status: 'synced', pendingCount: 0, onlineCount: null, readOnly: true });
+
+    render(<SyncStatusBadge />);
+
+    // "Everyone is up to date" promises a two-way sync. A trip read through an
+    // invite link has one direction, and the badge says so.
+    expect(screen.getByText('Read-only copy')).toBeInTheDocument();
+    expect(screen.queryByText('Everyone is up to date')).not.toBeInTheDocument();
+  });
+
+  it('keeps the connection wording when the copy cannot be refreshed', () => {
+    withState({ status: 'offline', pendingCount: 0, onlineCount: null, readOnly: true });
+
+    render(<SyncStatusBadge />);
+
+    // Offline describes the connection, not the copy: unchanged for a viewer.
+    expect(screen.getByText('Not connected')).toBeInTheDocument();
+  });
+});

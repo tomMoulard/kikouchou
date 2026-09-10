@@ -85,8 +85,22 @@ function useTripScopedRows<T>(
 
 const YjsSyncObserver = memo(function YjsSyncObserver({
   tripId,
+  readOnly,
 }: {
   readonly tripId: TripId;
+  /**
+   * A viewer trip: the document is the server's, replayed, and nothing from
+   * Dexie may be written into it.
+   *
+   * Every effect below that writes into the document is skipped while this is
+   * set. The hazard is not cosmetic. A viewer's Dexie rows are a projection
+   * taken at some earlier moment; writing them back as new CRDT items would put
+   * that moment's values ahead of whatever the members wrote since, and the day
+   * the viewer signs in `reconcile()` would push them over everybody's copy.
+   * `populateDocFromDexie` is the worst offender — it runs on every open — but
+   * the per-collection effects fire on any Dexie write too.
+   */
+  readonly readOnly: boolean;
 }): null {
   const yjs = useYjsContext();
   /**
@@ -101,7 +115,7 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
   const populatedForRef = useRef<TripId | null>(null);
 
   useEffect(() => {
-    if (!yjs?.loaded || populatedForRef.current === tripId) {
+    if (readOnly || !yjs?.loaded || populatedForRef.current === tripId) {
       return;
     }
 
@@ -114,7 +128,7 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
     void populateDocFromDexie(yjs.doc, tripId).catch((error) => {
       console.error('[YjsTripSync] Failed to populate Y.Doc from Dexie:', error);
     });
-  }, [tripId, yjs?.doc, yjs?.loaded]);
+  }, [readOnly, tripId, yjs?.doc, yjs?.loaded]);
 
   const trip = useLiveQuery(() => db.trips.get(tripId), [tripId]);
   const persons = useTripScopedRows<Person>(tripId, (id) =>
@@ -183,7 +197,7 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
     // The trip carries its own id, so it needs no tagging to be checked — but it
     // goes stale in exactly the same window, and writing the previous trip's
     // name and dates into this document renames the trip for every member.
-    if (!yjs?.loaded || trip?.id !== tripId) {
+    if (readOnly || !yjs?.loaded || trip?.id !== tripId) {
       return;
     }
 
@@ -197,6 +211,7 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       coordinates: trip.coordinates,
     });
   }, [
+    readOnly,
     trip,
     trip?.coordinates,
     trip?.description,
@@ -211,74 +226,74 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
   ]);
 
   useEffect(() => {
-    if (!yjs?.loaded || !persons) {
+    if (readOnly || !yjs?.loaded || !persons) {
       return;
     }
 
     syncDexieToDoc(yjs.doc, 'guests', stripTripId(persons), {
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
-  }, [persons, tripId, yjs?.doc, yjs?.loaded]);
+  }, [readOnly, persons, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
-    if (!yjs?.loaded || !rooms) {
+    if (readOnly || !yjs?.loaded || !rooms) {
       return;
     }
 
     syncDexieToDoc(yjs.doc, 'rooms', stripTripId(rooms), {
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
-  }, [rooms, tripId, yjs?.doc, yjs?.loaded]);
+  }, [readOnly, rooms, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
-    if (!yjs?.loaded || !roomAssignments) {
+    if (readOnly || !yjs?.loaded || !roomAssignments) {
       return;
     }
 
     syncDexieToDoc(yjs.doc, 'roomAssignments', stripTripId(roomAssignments), {
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
-  }, [roomAssignments, tripId, yjs?.doc, yjs?.loaded]);
+  }, [readOnly, roomAssignments, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
-    if (!yjs?.loaded || !transports) {
+    if (readOnly || !yjs?.loaded || !transports) {
       return;
     }
 
     syncDexieToDoc(yjs.doc, 'transport', stripTripId(transports), {
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
-  }, [transports, tripId, yjs?.doc, yjs?.loaded]);
+  }, [readOnly, transports, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
-    if (!yjs?.loaded || !rides) {
+    if (readOnly || !yjs?.loaded || !rides) {
       return;
     }
 
     syncDexieToDoc(yjs.doc, 'rides', stripTripId(rides), {
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
-  }, [rides, tripId, yjs?.doc, yjs?.loaded]);
+  }, [readOnly, rides, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
-    if (!yjs?.loaded || !vehicles) {
+    if (readOnly || !yjs?.loaded || !vehicles) {
       return;
     }
 
     syncDexieToDoc(yjs.doc, 'vehicles', stripTripId(vehicles), {
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
-  }, [vehicles, tripId, yjs?.doc, yjs?.loaded]);
+  }, [readOnly, vehicles, tripId, yjs?.doc, yjs?.loaded]);
 
   useEffect(() => {
-    if (!yjs?.loaded || !activities) {
+    if (readOnly || !yjs?.loaded || !activities) {
       return;
     }
 
     syncDexieToDoc(yjs.doc, 'activities', stripTripId(activities), {
       allowDeletions: isDexieTrustedMirror(yjs.doc, tripId),
     });
-  }, [activities, tripId, yjs?.doc, yjs?.loaded]);
+  }, [readOnly, activities, tripId, yjs?.doc, yjs?.loaded]);
 
   return null;
 });
@@ -287,6 +302,8 @@ interface TripYjsSyncBindingProps {
   readonly tripId: TripId;
   /** Server `trips.id`. Absent means the trip is local-only. */
   readonly remoteTripId?: string;
+  /** The invite token a viewer trip is read through. Absent for a member trip. */
+  readonly viewerToken?: string;
   readonly children?: ReactNode;
 }
 
@@ -300,12 +317,17 @@ interface TripYjsSyncBindingProps {
 const TripYjsSyncBinding = memo(function TripYjsSyncBinding({
   tripId,
   remoteTripId,
+  viewerToken,
   children,
 }: TripYjsSyncBindingProps): ReactElement {
   return (
     <YjsProvider tripId={tripId}>
-      <YjsSyncObserver tripId={tripId} />
-      <SupabaseTripSync tripId={tripId} remoteTripId={remoteTripId}>
+      <YjsSyncObserver tripId={tripId} readOnly={viewerToken !== undefined} />
+      <SupabaseTripSync
+        tripId={tripId}
+        remoteTripId={remoteTripId}
+        viewerToken={viewerToken}
+      >
         {children}
       </SupabaseTripSync>
     </YjsProvider>
@@ -328,6 +350,7 @@ const YjsTripSync = memo(function YjsTripSync({
 
   return (
     <TripYjsSyncBinding
+      viewerToken={currentTrip.viewerToken}
       tripId={currentTrip.id}
       {...(currentTrip.remoteTripId ? { remoteTripId: currentTrip.remoteTripId } : {})}
     >

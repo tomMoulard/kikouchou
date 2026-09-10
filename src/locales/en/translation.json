@@ -66,7 +66,8 @@
     "syncPending_other": "{{count}} changes not sent yet",
     "syncStatusRegion": "Sync status",
     "guestGroups": "Groups",
-    "vehicles": "Cars"
+    "vehicles": "Cars",
+    "syncReadOnly": "Read-only copy"
   },
   "analytics": {
     "tripTitle": "Trip analytics",
@@ -906,7 +907,7 @@
       "copyLinkAction": "Copy link",
       "linkCopied": "Link copied",
       "shareDescription": "Share this link to collaborate in real-time",
-      "privacyNotice": "Anyone with this link can view and edit this trip",
+      "privacyNotice": "Anyone with this link can see this trip. Editing needs an account.",
       "connectionError": "Failed to connect",
       "connectionErrorDescription": "Could not join this trip. Check your connection and try again.",
       "joining": "Joining trip...",
@@ -941,7 +942,12 @@
       "expired": "This invite link has expired.",
       "exhausted": "This invite link has been used up.",
       "askAgain": "Ask whoever invited you for a fresh link.",
-      "failed": "Couldn't join the trip"
+      "failed": "Couldn't join the trip",
+      "welcomeTagline": "Welcome to Kikouchou, the app for a house full of friends.",
+      "welcomeTo": "You're invited to {{tripName}}",
+      "viewerHint": "Pick your name and the trip shows your room and your travel. You can look at everything; changing anything needs a sign-in.",
+      "opening": "Opening the trip…",
+      "lookAround": "Have a look around"
     }
   },
   "assistant": {
@@ -1054,7 +1060,8 @@
     "vehicleNotFound": "That car was not found.",
     "transportNotFound": "That arrival or departure was not found.",
     "invalidRide": "Those ride details are invalid, nothing was saved.",
-    "invalidVehicle": "Those car details are invalid, nothing was saved."
+    "invalidVehicle": "Those car details are invalid, nothing was saved.",
+    "readOnlyTrip": "This trip is read-only on this device. Sign in to change it."
   },
   "auth": {
     "account": {
@@ -1492,5 +1499,14 @@
     "bestEffort": "Kikouchou has no server, so an alert can only be sent while the app is running or recently used. The alert inside the app is always there when you open it.",
     "deniedHint": "Your browser is blocking notifications for Kikouchou. The app cannot ask again — allow them for this site in your browser or system settings.",
     "unsupportedHint": "This browser cannot show notifications. On an iPhone, add Kikouchou to the Home Screen first. Ride alerts still appear inside the app."
+  },
+  "viewer": {
+    "title": "Read-only",
+    "description": "You opened this trip from an invite link. You can see everything and change nothing. Sign in to edit it with the others.",
+    "signIn": "Sign in to edit",
+    "signInReason": "Sign in to edit this trip with the others. Nothing you can see here changes.",
+    "accepting": "Accepting your invitation…",
+    "acceptFailed": "Your invitation could not be accepted.",
+    "stillReadOnly": "This copy stays read-only until it is."
   }
 }
