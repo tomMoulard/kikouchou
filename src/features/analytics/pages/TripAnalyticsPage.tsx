@@ -23,6 +23,7 @@ import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { AnalyticsScopeSelector } from '@/features/analytics/components/AnalyticsScopeSelector';
 import { StatCard } from '@/features/analytics/components/StatCard';
+import { useMoneyFormat } from '@/features/money/hooks/useMoneyFormat';
 import { useAnalyticsClock } from '@/features/analytics/hooks/useAnalyticsClock';
 import {
   isTripStatsEmpty,
@@ -45,6 +46,7 @@ const HINT_SEPARATOR = ' · ';
 
 const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   const { t } = useTranslation();
+  const formatMoney = useMoneyFormat();
   const navigate = useNavigate();
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
 
@@ -95,6 +97,9 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   );
 
   const backLink = tripIdFromUrl ? `/trips/${tripIdFromUrl}/calendar` : '/trips';
+
+  // The page the money figures are read from and acted on.
+  const moneyHref = tripIdFromUrl ? `/trips/${tripIdFromUrl}/money` : '/trips';
 
   // The screen that lists what "pickups needing a driver" counts, already
   // narrowed to those legs.
@@ -160,6 +165,13 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
 
   const statsError = result?.error ?? null;
   const stats = result?.data ?? null;
+
+  // Per real person, and only where there is one: a trip with no guests yet
+  // still has a total, and dividing it by nobody would print Infinity.
+  const spendPerPerson =
+    stats && stats.headcount > 0
+      ? Math.round((stats.spendTotal / stats.headcount) * 100) / 100
+      : 0;
 
   // The read failing is a real database problem, so it outranks everything.
   if (statsError) {
@@ -306,6 +318,35 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
           value={stats.vehicleCount}
           testId="stat-vehicles"
         />
+        {/* Money. The total is what the trip cost — expenses less incomes,
+            with transfers left out, because a guest paying another back moves
+            the group's own money rather than spending any. */}
+        <StatCard
+          label={t('analytics.spendTotal')}
+          value={formatMoney(stats.spendTotal)}
+          hint={t('analytics.spendTotalHint', { count: stats.expenseCount })}
+          href={moneyHref}
+          testId="stat-spend"
+        />
+        {/* Per person, not per guest row: a row can stand for a family. */}
+        <StatCard
+          label={t('analytics.spendPerPerson')}
+          value={formatMoney(spendPerPerson)}
+          hint={t('analytics.spendPerPersonHint', { count: stats.headcount })}
+          testId="stat-spend-per-person"
+        />
+        <StatCard
+          label={t('analytics.unsettledTotal')}
+          value={formatMoney(stats.unsettledTotal)}
+          hint={
+            stats.unsettledTotal === 0
+              ? t('analytics.unsettledSettled')
+              : t('analytics.unsettledTotalHint')
+          }
+          href={moneyHref}
+          testId="stat-unsettled"
+        />
+
         {/* The one figure on this page with something to do about it: the run
             sheet lists the very legs this counts. */}
         <StatCard

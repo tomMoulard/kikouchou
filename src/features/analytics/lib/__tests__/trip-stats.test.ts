@@ -13,6 +13,7 @@ import {
 } from '@/features/analytics/lib/trip-stats';
 import { db } from '@/lib/db/database';
 import type {
+  Expense,
   ISODateTimeString,
   Person,
   Ride,
@@ -76,6 +77,29 @@ function ride(id: string, tripId: TripId): Ride {
     meetDatetime: TOMORROW,
     location: 'Gare du Nord',
   } as unknown as Ride;
+}
+
+function expense(
+  id: string,
+  tripId: TripId,
+  overrides: Record<string, unknown> = {},
+): Expense {
+  return {
+    id,
+    tripId,
+    kind: 'expense',
+    category: 'groceries',
+    title: id,
+    date: '2026-07-02',
+    amount: 100,
+    payerId: 'p1',
+    splitMode: 'equal',
+    splits: [
+      { personId: 'p1', value: 1 },
+      { personId: 'p2', value: 1 },
+    ],
+    ...overrides,
+  } as unknown as Expense;
 }
 
 function transport(
@@ -207,6 +231,58 @@ describe('loadTripStats', () => {
     expect(stats.transportCount).toBe(1);
   });
 
+  it('adds the accounts up, leaving transfers out of what the trip cost', async () => {
+    await db.persons.bulkPut([person('p1', TRIP_A), person('p2', TRIP_A)]);
+    await db.expenses.bulkPut([
+      expense('e1', TRIP_A, { amount: 100 }),
+      // Money back: it makes the trip cost less.
+      expense('e2', TRIP_A, { kind: 'income', amount: 30 }),
+      // Paying somebody back moves money the group already spent, so it is not
+      // spending of its own.
+      expense('e3', TRIP_A, {
+        kind: 'transfer',
+        amount: 20,
+        payerId: 'p2',
+        splits: [{ personId: 'p1', value: 20 }],
+      }),
+    ]);
+
+    const stats = await loadTripStats(TRIP_A, NOW);
+
+    expect(stats.expenseCount).toBe(3);
+    expect(stats.spendTotal).toBe(70);
+  });
+
+  it('reports what is still owed, and zero once the payment is recorded', async () => {
+    await db.persons.bulkPut([person('p1', TRIP_A), person('p2', TRIP_A)]);
+    await db.expenses.put(expense('e1', TRIP_A, { amount: 100 }));
+
+    expect((await loadTripStats(TRIP_A, NOW)).unsettledTotal).toBe(50);
+
+    await db.expenses.put(
+      expense('e2', TRIP_A, {
+        kind: 'transfer',
+        amount: 50,
+        payerId: 'p2',
+        splits: [{ personId: 'p1', value: 50 }],
+      }),
+    );
+
+    expect((await loadTripStats(TRIP_A, NOW)).unsettledTotal).toBe(0);
+  });
+
+  it('never counts the accounts of another trip', async () => {
+    await db.expenses.bulkPut([
+      expense('e1', TRIP_A, { amount: 100 }),
+      expense('e2', TRIP_B, { amount: 900 }),
+    ]);
+
+    const stats = await loadTripStats(TRIP_A, NOW);
+
+    expect(stats.expenseCount).toBe(1);
+    expect(stats.spendTotal).toBe(100);
+  });
+
   it('returns zeros for a trip with no rows', async () => {
     const stats = await loadTripStats(TRIP_A, NOW);
 
@@ -245,6 +321,9 @@ describe('sumTripStats', () => {
       rideCount: 0,
       vehicleCount: 0,
       pickupsNeedingDriver: 0,
+      expenseCount: 0,
+      spendTotal: 0,
+      unsettledTotal: 0,
     });
   });
 });

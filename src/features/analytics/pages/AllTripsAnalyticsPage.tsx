@@ -22,6 +22,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { AnalyticsScopeSelector } from '@/features/analytics/components/AnalyticsScopeSelector';
 import { StatCard } from '@/features/analytics/components/StatCard';
+import { useMoneyFormat } from '@/features/money/hooks/useMoneyFormat';
 import { useAnalyticsClock } from '@/features/analytics/hooks/useAnalyticsClock';
 import {
   type TripStats,
@@ -46,6 +47,7 @@ const HINT_SEPARATOR = ' · ';
 
 const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElement {
   const { t } = useTranslation();
+  const formatMoney = useMoneyFormat();
   const navigate = useNavigate();
   const {
     trips,
@@ -244,6 +246,25 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
           label={t('analytics.totalVehicles')}
           value={totals.vehicleCount}
           testId="stat-total-vehicles"
+        />
+        {/* Every trip's accounts added together. Transfers are left out of the
+            total for the same reason as on one trip: paying somebody back is
+            not spending. */}
+        <StatCard
+          label={t('analytics.totalSpend')}
+          value={formatMoney(totals.spendTotal)}
+          hint={t('analytics.spendTotalHint', { count: totals.expenseCount })}
+          testId="stat-total-spend"
+        />
+        <StatCard
+          label={t('analytics.totalUnsettled')}
+          value={formatMoney(totals.unsettledTotal)}
+          hint={
+            totals.unsettledTotal === 0
+              ? t('analytics.unsettledSettled')
+              : t('analytics.unsettledTotalHint')
+          }
+          testId="stat-total-unsettled"
         />
       </div>
 
