@@ -86,6 +86,7 @@ import {
   createHeadcountResolver,
   isDateInStayRange,
   isZeroNightWindow,
+  summarizeRoomOccupancy,
 } from '@/features/rooms/utils/capacity-utils';
 import { createRoomDragAnnouncements } from '@/features/rooms/utils/dnd-announcements';
 import { inferGuestParties } from '@/features/rooms/utils/guest-parties';
@@ -125,6 +126,8 @@ interface RoomWithOccupancy {
   readonly availableSpots: number;
   /** Whether the room is at or over capacity */
   readonly isFull: boolean;
+  /** Whether more people sleep in the room than it has beds */
+  readonly isOverCapacity: boolean;
 }
 
 /**
@@ -402,8 +405,12 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             0,
           );
 
-      const availableSpots = Math.max(0, room.capacity - peakOccupancy);
-      const isFull = peakOccupancy >= room.capacity;
+      // The card draws "full" and "over capacity" differently, so both facts
+      // come from the one helper rather than being re-derived here.
+      const { availableSpots, isFull, isOverCapacity } = summarizeRoomOccupancy(
+        room.capacity,
+        peakOccupancy,
+      );
 
       return {
         room,
@@ -411,6 +418,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         peakOccupancy,
         availableSpots,
         isFull,
+        isOverCapacity,
       };
     }), [rooms, getAssignmentsByRoom, getPersonById, todayStr, effectiveDateRange, headcountOf]),
 
@@ -1129,7 +1137,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
             // `pb-20 sm:pb-4` did not protect the timeline view next to it.
           )}
         >
-          {sortedRoomsWithOccupancy.map(({ room, currentOccupants, peakOccupancy, availableSpots, isFull }) => (
+          {sortedRoomsWithOccupancy.map(({ room, currentOccupants, peakOccupancy, availableSpots, isFull, isOverCapacity }) => (
             <div key={room.id} role="listitem">
               <DroppableRoom roomId={room.id}>
                 <RoomCard
@@ -1138,6 +1146,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
                   peakOccupancy={peakOccupancy}
                   availableSpots={availableSpots}
                   isFull={isFull}
+                  isOverCapacity={isOverCapacity}
                   onClick={handleRoomClick}
                   onEdit={handleRoomEdit}
                   onDelete={handleRoomDelete}

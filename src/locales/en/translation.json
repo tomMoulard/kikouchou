@@ -287,6 +287,8 @@
     "spotsOpen_one": "{{count}} spot open",
     "spotsOpen_other": "{{count}} spots open",
     "full": "Full",
+    "complete": "Complete",
+    "overCapacity": "Over capacity",
     "claimRoom": "Claim this room",
     "assignGuest": "Assign a guest",
     "roomJustFilled": "This room just filled up! Try another one",
