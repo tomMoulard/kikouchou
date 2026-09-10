@@ -28,6 +28,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NumberStepper } from '@/components/ui/number-stepper';
+import {
+  RoomIconPicker,
+  getRoomIconComponent,
+} from '@/components/shared/RoomIconPicker';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import {
@@ -45,7 +49,8 @@ import {
   ImportBadge,
   type TripImportData,
 } from '@/features/trips/components/LocationAutocomplete';
-import type { HexColor, Trip, TripFormData, TripId } from '@/types';
+import { DEFAULT_ROOM_ICON } from '@/types';
+import type { HexColor, RoomIcon, Trip, TripFormData, TripId } from '@/types';
 
 // ============================================================================
 // Constants
@@ -199,6 +204,8 @@ export interface NewTripGuest {
 export interface NewTripRoom {
   readonly name: string;
   readonly capacity: number;
+  /** Which glyph the room shows in every list and timeline. */
+  readonly icon: RoomIcon;
 }
 
 /**
@@ -211,6 +218,8 @@ interface RoomRow {
   readonly name: string;
   /** Beds in this room. */
   readonly capacity: number;
+  /** Chosen from the row's own popover; a bed until the reader says otherwise. */
+  readonly icon: RoomIcon;
 }
 
 /**
@@ -532,7 +541,11 @@ const TripForm = memo(function TripForm({
   const roomsToCreate = useMemo(
     (): readonly NewTripRoom[] =>
       rooms
-        .map((room) => ({ name: room.name.trim(), capacity: room.capacity }))
+        .map((room) => ({
+          name: room.name.trim(),
+          capacity: room.capacity,
+          icon: room.icon,
+        }))
         .filter((room) => room.name !== ''),
     [rooms],
   );
@@ -884,6 +897,15 @@ const TripForm = memo(function TripForm({
   }, []);
 
   /**
+   * Handles a room icon change, by row id.
+   */
+  const handleRoomIconChange = useCallback((id: string, icon: RoomIcon) => {
+    setRooms((prev) =>
+      prev.map((room) => (room.id === id ? { ...room, icon } : room)),
+    );
+  }, []);
+
+  /**
    * Appends an empty room row and puts the cursor in it.
    */
   const handleAddRoom = useCallback(() => {
@@ -891,7 +913,7 @@ const TripForm = memo(function TripForm({
     pendingRoomFocusRef.current = id;
     setRooms((prev) => [
       ...prev,
-      { id, name: '', capacity: DEFAULT_ROOM_CAPACITY },
+      { id, name: '', capacity: DEFAULT_ROOM_CAPACITY, icon: DEFAULT_ROOM_ICON },
     ]);
   }, []);
 
@@ -1320,9 +1342,12 @@ const TripForm = memo(function TripForm({
           {/*
             A house is typed once, here, rather than one room at a time through
             the Rooms page dialog: six identical doubles are six rows and one
-            save. Only the name and the beds are asked for — an icon and a
-            description are decisions about one room, and the Rooms page is
-            where a room gets that kind of attention.
+            save. The name, the beds and the icon are asked for; a description
+            is a decision about one room, and the Rooms page is where a room
+            gets that kind of attention. The icon earns its place because a
+            house is rarely six of the same thing — a tent, a caravan and a
+            sofa read apart at a glance in every list and timeline afterwards,
+            and setting it later means opening six dialogs.
           */}
           <p id="trip-rooms-hint" className="text-xs text-muted-foreground">
             {t('trips.roomsHint', 'Name each room and say how many beds it has. You can add rooms later.')}
@@ -1331,8 +1356,33 @@ const TripForm = memo(function TripForm({
           <ul className="space-y-2">
             {rooms.map((room, index) => {
               const bedsId = `trip-room-beds-${room.id}`;
+              // Resolved here rather than in a wrapper component: the lookup
+              // returns a component, and building one inside another
+              // component's body is what `react-hooks/static-components`
+              // objects to. The rooms timeline reads it the same way.
+              const RoomGlyph = getRoomIconComponent(room.icon);
               return (
                 <li key={room.id} className="flex items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon-sm"
+                        aria-label={t('trips.roomIconLabel', 'Icon for room {{number}}', {
+                          number: index + 1,
+                        })}
+                      >
+                        <RoomGlyph className="size-4" aria-hidden="true" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-72 p-3" align="start">
+                      <RoomIconPicker
+                        value={room.icon}
+                        onChange={(icon) => handleRoomIconChange(room.id, icon)}
+                      />
+                    </PopoverContent>
+                  </Popover>
                   <Input
                     ref={(element) => {
                       const inputs = roomInputsRef.current;

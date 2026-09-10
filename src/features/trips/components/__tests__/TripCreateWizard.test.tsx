@@ -264,7 +264,7 @@ describe('TripCreateWizard', () => {
       expect(mockedCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           guests: [{ name: 'Tom', isSelf: true }, { name: 'Alice' }],
-          rooms: [{ name: 'Attic', capacity: 2 }],
+          rooms: [{ name: 'Attic', capacity: 2, icon: 'bed-double' }],
         }),
       );
     });

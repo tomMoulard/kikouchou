@@ -135,7 +135,7 @@ describe('TripForm Room List', () => {
 
     await waitFor(() => {
       expect(onRoomsChange).toHaveBeenLastCalledWith([
-        { name: 'Double bed', capacity: 1 },
+        { name: 'Double bed', capacity: 1, icon: 'bed-double' },
       ]);
     });
   });
@@ -160,9 +160,77 @@ describe('TripForm Room List', () => {
     expect(bedInputs().map((field) => field.value)).toEqual(['2', '1']);
     await waitFor(() => {
       expect(onRoomsChange).toHaveBeenLastCalledWith([
-        { name: 'Double bed', capacity: 2 },
-        { name: 'Single bed', capacity: 1 },
+        { name: 'Double bed', capacity: 2, icon: 'bed-double' },
+        { name: 'Single bed', capacity: 1, icon: 'bed-double' },
       ]);
+    });
+  });
+
+  // A house is rarely six of the same thing. Choosing the glyph here means the
+  // tent, the caravan and the sofa read apart in every list afterwards, rather
+  // than needing six visits to the Rooms page.
+  describe('room icon', () => {
+    it('starts every row on the default glyph', async () => {
+      const user = userEvent.setup();
+      const onRoomsChange = vi.fn();
+
+      render(
+        <TripForm onSubmit={vi.fn()} onCancel={vi.fn()} onRoomsChange={onRoomsChange} />,
+      );
+
+      await addRoom(user, 'Attic');
+
+      await waitFor(() => {
+        expect(onRoomsChange).toHaveBeenLastCalledWith([
+          { name: 'Attic', capacity: 1, icon: 'bed-double' },
+        ]);
+      });
+    });
+
+    it('reports the icon picked from the row popover', async () => {
+      const user = userEvent.setup();
+      const onRoomsChange = vi.fn();
+
+      render(
+        <TripForm onSubmit={vi.fn()} onCancel={vi.fn()} onRoomsChange={onRoomsChange} />,
+      );
+
+      await addRoom(user, 'Garden');
+
+      await user.click(
+        within(roomList()).getByRole('button', { name: /trips\.roomIconLabel/iu }),
+      );
+      await user.click(await screen.findByRole('radio', { name: /rooms\.icons\.tent/iu }));
+
+      await waitFor(() => {
+        expect(onRoomsChange).toHaveBeenLastCalledWith([
+          { name: 'Garden', capacity: 1, icon: 'tent' },
+        ]);
+      });
+    });
+
+    it('changes the icon of one row without touching the others', async () => {
+      const user = userEvent.setup();
+      const onRoomsChange = vi.fn();
+
+      render(
+        <TripForm onSubmit={vi.fn()} onCancel={vi.fn()} onRoomsChange={onRoomsChange} />,
+      );
+
+      await addRoom(user, 'Garden');
+      await addRoom(user, 'Attic');
+
+      await user.click(
+        within(roomList()).getAllByRole('button', { name: /trips\.roomIconLabel/iu })[0]!,
+      );
+      await user.click(await screen.findByRole('radio', { name: /rooms\.icons\.tent/iu }));
+
+      await waitFor(() => {
+        expect(onRoomsChange).toHaveBeenLastCalledWith([
+          { name: 'Garden', capacity: 1, icon: 'tent' },
+          { name: 'Attic', capacity: 1, icon: 'bed-double' },
+        ]);
+      });
     });
   });
 
