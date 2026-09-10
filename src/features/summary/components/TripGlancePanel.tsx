@@ -1,13 +1,16 @@
 /**
- * @fileoverview The organiser's column: beds tonight, next arrivals, no bed yet.
+ * @fileoverview The organiser's column: beds tonight, next arrivals, no bed yet,
+ * and where the money stands.
  *
  * A laptop shows every trip page in its left third and nothing in the other
- * two. This panel is what goes there — the three questions the host asks all
- * day, answered beside whatever page they are on instead of behind two clicks.
+ * two. This panel is what goes there — the questions the host asks all day,
+ * answered beside whatever page they are on instead of behind two clicks.
  *
- * It reads the trip contexts the pages themselves read, so it adds no database
- * work, and it derives nothing itself: {@link buildTripGlance} owns the night
- * arithmetic so this file is only markup.
+ * The first three sections read the trip contexts the pages themselves read, so
+ * they add no database work, and they derive nothing themselves:
+ * {@link buildTripGlance} owns the night arithmetic. The balances are the one
+ * exception: the money lines are not in any context, so they are read here with
+ * one live query that re-runs only when the accounts actually change.
  *
  * Hidden below `xl` by the layout that mounts it. On a phone the same answers
  * are one tap away on the rooms and transport pages, and a fourth stacked
@@ -19,9 +22,13 @@
 import { type ReactElement, memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowDownToLine, BedDouble, TriangleAlert } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { ArrowDownToLine, BedDouble, CheckCircle2, TriangleAlert } from 'lucide-react';
 
 import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
+import { useMoneyFormat } from '@/features/money/hooks/useMoneyFormat';
+import { computeBalances, settleBalances } from '@/features/money/lib/balances';
+import { loadTripMoney } from '@/features/money/lib/trip-money';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { statusVariants } from '@/components/ui/status.variants';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
@@ -50,7 +57,8 @@ import { buildTripGlance } from '../lib/trip-glance';
  */
 const MAX_ROOM_ROWS = 6,
   MAX_ARRIVAL_ROWS = 4,
-  MAX_GUEST_ROWS = 5;
+  MAX_GUEST_ROWS = 5,
+  MAX_BALANCE_ROWS = 5;
 
 // ============================================================================
 // Types
@@ -139,6 +147,7 @@ export const TripGlancePanel = memo(function TripGlancePanel({
 }: TripGlancePanelProps): ReactElement {
   const { t, i18n } = useTranslation();
   const { today } = useToday();
+  const formatMoney = useMoneyFormat();
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
   const { rooms, isLoading: isRoomsLoading } = useRoomContext();
   const { assignments, isLoading: isAssignmentsLoading } = useAssignmentContext();
@@ -170,16 +179,45 @@ export const TripGlancePanel = memo(function TripGlancePanel({
   const isLoading =
     isPersonsLoading || isRoomsLoading || isAssignmentsLoading || isTransportsLoading;
 
+  // The accounts. `undefined` while the read is in flight, which is a third
+  // state rather than "no lines yet" — showing "nobody owes anything" before
+  // the read lands would be a wrong answer rather than a slow one.
+  const money = useLiveQuery(() => loadTripMoney(trip.id), [trip.id]);
+
+  const balances = useMemo(
+    () =>
+      money
+        ? computeBalances(money.expenses, money.personNights).filter(
+            // Somebody level is not news. The section is about who is out of
+            // pocket, and a settled group is said in one line below.
+            (row) => Math.round(row.balance * 100) !== 0,
+          )
+        : [],
+    [money],
+  );
+
+  const paymentCount = useMemo(
+    () => (money ? settleBalances(computeBalances(money.expenses, money.personNights)).length : 0),
+    [money],
+  );
+
+  const personNameById = useMemo(
+    () => new Map(persons.map((person) => [person.id, person])),
+    [persons],
+  );
+
   const roomsPath = `/trips/${trip.id}/rooms`,
     personsPath = `/trips/${trip.id}/persons`,
-    transportsPath = `/trips/${trip.id}/transports`;
+    transportsPath = `/trips/${trip.id}/transports`,
+    moneyPath = `/trips/${trip.id}/money`;
 
   const bedsTitle =
     glance.night === 'firstNight'
       ? t('glance.beds.titleFirstNight', 'Beds on the first night')
       : t('glance.beds.titleTonight', 'Beds tonight');
 
-  const hiddenRooms = Math.max(0, glance.rooms.length - MAX_ROOM_ROWS),
+  const hiddenBalances = Math.max(0, balances.length - MAX_BALANCE_ROWS),
+    hiddenRooms = Math.max(0, glance.rooms.length - MAX_ROOM_ROWS),
     hiddenArrivals = Math.max(0, glance.nextArrivals.length - MAX_ARRIVAL_ROWS),
     hiddenGuests = Math.max(0, glance.guestsWithoutRoom.length - MAX_GUEST_ROWS);
 
@@ -382,6 +420,59 @@ export const TripGlancePanel = memo(function TripGlancePanel({
                   defaultValue_one: '{{count}} more guest',
                   defaultValue_other: '{{count}} more guests',
                 })}
+              </p>
+            ) : null}
+          </>
+        )}
+      </GlanceSection>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Where the money stands                                           */}
+      {/* ---------------------------------------------------------------- */}
+      <GlanceSection
+        title={t('glance.money.title')}
+        to={moneyPath}
+        linkLabel={t('glance.money.openMoney')}
+      >
+        {money === undefined ? (
+          <p className="text-muted-foreground">{t('glance.loading', 'Loading…')}</p>
+        ) : money === null || money.expenses.length === 0 ? (
+          <p className="text-muted-foreground">{t('glance.money.empty')}</p>
+        ) : balances.length === 0 ? (
+          <p className="flex items-center gap-2 text-muted-foreground">
+            <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+            {t('glance.money.settled')}
+          </p>
+        ) : (
+          <>
+            <ul className="space-y-1.5" aria-label={t('glance.money.title')}>
+              {balances.slice(0, MAX_BALANCE_ROWS).map((row) => (
+                <li key={row.personId} className="flex items-center gap-2">
+                  <GuestDot color={personNameById.get(row.personId)?.color} />
+                  <span className="min-w-0 truncate text-foreground">
+                    {personNameById.get(row.personId)?.name ?? t('common.unknown')}
+                  </span>
+                  <span
+                    className={cn(
+                      'ml-auto shrink-0 tabular-nums text-xs',
+                      row.balance > 0
+                        ? statusVariants({ tone: 'success', emphasis: 'text' })
+                        : statusVariants({ tone: 'warning', emphasis: 'text' }),
+                    )}
+                  >
+                    {formatMoney(row.balance)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {hiddenBalances > 0 ? (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {t('glance.money.moreGuests', { count: hiddenBalances })}
+              </p>
+            ) : null}
+            {paymentCount > 0 ? (
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {t('glance.money.payments', { count: paymentCount })}
               </p>
             ) : null}
           </>
