@@ -200,6 +200,8 @@ export class SupabaseStub {
     /** Log writes the server accepted. */
     updateInserts: 0,
     redeems: 0,
+    /** Reads through `read_shared_trip`, signed in or not. */
+    sharedReads: 0,
   };
 
   private nextTrip = 1;
@@ -871,10 +873,15 @@ export class SupabaseStub {
   // --------------------------------------------------------------------------
 
   private async handleRpc(route: Route, name: string): Promise<void> {
-    const body = this.body<{ invite_token?: string }>(route);
+    const body = this.body<{ invite_token?: string; after_id?: number }>(route);
     const token = body.invite_token ?? '';
     const caller = this.callerId(route);
     const invite = this.invites.find((row) => row.token === token);
+
+    if (name === 'read_shared_trip') {
+      await this.readSharedTrip(route, invite, body.after_id ?? 0);
+      return;
+    }
 
     if (name === 'redeem_invite') {
       this.counts.redeems += 1;
@@ -936,6 +943,91 @@ export class SupabaseStub {
     }
 
     await this.fail(route, 404, `stub has no rpc ${name}`);
+  }
+
+  /**
+   * `public.read_shared_trip(invite_token, after_id)`: the one door `anon` has.
+   *
+   * Answers the way the real function does — the same four refusals with the
+   * same hints, no use consumed, nobody added to the roster — and returns the
+   * same shape: the preview row, the snapshot when it folds rows past the
+   * cursor, the log after whichever is later, and whether a page is left over.
+   * The caller's session is deliberately not consulted: the token is the whole
+   * authorisation.
+   */
+  private async readSharedTrip(
+    route: Route,
+    invite: InviteRow | undefined,
+    afterId: number,
+  ): Promise<void> {
+    this.counts.sharedReads += 1;
+
+    if (!invite) {
+      await this.json(route, 400, {
+        code: 'P0002',
+        message: 'invite not found',
+        hint: 'invite_not_found',
+      });
+      return;
+    }
+    if (invite.revoked_at !== null) {
+      await this.json(route, 400, {
+        code: 'P0001',
+        message: 'invite revoked',
+        hint: 'invite_revoked',
+      });
+      return;
+    }
+    if (invite.expires_at !== null && new Date(invite.expires_at) <= new Date()) {
+      await this.json(route, 400, {
+        code: 'P0001',
+        message: 'invite expired',
+        hint: 'invite_expired',
+      });
+      return;
+    }
+    if (invite.max_uses !== null && invite.uses >= invite.max_uses) {
+      await this.json(route, 400, {
+        code: 'P0001',
+        message: 'invite has no uses left',
+        hint: 'invite_exhausted',
+      });
+      return;
+    }
+
+    const trip = this.trips.find((row) => row.id === invite.trip_id);
+    if (!trip) {
+      await this.json(route, 400, {
+        code: 'P0002',
+        message: 'invite not found',
+        hint: 'invite_not_found',
+      });
+      return;
+    }
+
+    let floor = Math.max(afterId, 0);
+    const snapshot = this.snapshots.find((row) => row.trip_id === trip.id);
+    const sendSnapshot = snapshot !== undefined && snapshot.through_id > floor;
+    if (sendSnapshot) {
+      floor = snapshot.through_id;
+    }
+
+    const remaining = this.updates
+      .filter((row) => row.trip_id === trip.id && row.id > floor)
+      .sort((left, right) => left.id - right.id);
+    const page = remaining.slice(0, 500);
+
+    await this.json(route, 200, {
+      trip: {
+        id: trip.id,
+        name: trip.name,
+        start_date: trip.start_date,
+        end_date: trip.end_date,
+      },
+      snapshot: sendSnapshot ? { state: snapshot.state, through_id: snapshot.through_id } : null,
+      updates: page.map((row) => ({ id: row.id, update: row.update })),
+      has_more: remaining.length > page.length,
+    });
   }
 
   // --------------------------------------------------------------------------

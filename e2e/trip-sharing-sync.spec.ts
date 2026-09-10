@@ -560,7 +560,9 @@ test.describe('joining a trip', () => {
     expect(stub.members.filter((m) => m.user_id === GUEST.id)).toHaveLength(0);
   });
 
-  test('asks an unsigned-in invitee to register first', async ({ page }) => {
+  test('lets an unsigned-in invitee read the trip instead of registering first', async ({
+    page,
+  }) => {
     const stub = new SupabaseStub();
     stub.trips.push({
       id: '00000000-0000-4000-8000-000000000098',
@@ -576,11 +578,14 @@ test.describe('joining a trip', () => {
     await stub.install(page);
     await page.goto('/join/needsaccount1');
 
-    // Joining is one of the two operations allowed to require an account.
-    await expect(page.getByRole('button', { name: /sign in|continue with google/i }).first()).toBeVisible({
-      timeout: 20_000,
-    });
+    // The wall that stood here lost three invitees out of four. Reading needs
+    // no account: the trip's name is on screen, through `read_shared_trip`,
+    // and nothing was redeemed. `trip-invite-anonymous.spec.ts` has the rest
+    // of the journey.
+    await expect(page.getByText(TRIP.name).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: /sign in/i })).toHaveCount(0);
     expect(stub.counts.redeems).toBe(0);
+    expect(stub.counts.sharedReads).toBeGreaterThan(0);
   });
 
   test('opening the same invite twice does not create a second trip', async ({ page }) => {

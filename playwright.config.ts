@@ -134,7 +134,7 @@ const PRODUCTION_BUILD_SPECS_PATTERN =
  * `sync` project.
  */
 const DEV_SERVER_IGNORE_PATTERN =
-  /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts|trip-sharing-sync\.spec\.ts/;
+  /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts|trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts/;
 
 /**
  * The projects that drive this checkout, on the servers started below.
@@ -215,7 +215,7 @@ const LOCAL_PROJECTS: Projects = [
       ...devices['Desktop Chrome'],
       baseURL: SYNC_URL,
     },
-    testMatch: /trip-sharing-sync\.spec\.ts/,
+    testMatch: /trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts/,
     /**
      * Serial. Several tests drive two browser contexts against one stub, and
      * the stub is a single in-process object — parallel workers would share
@@ -263,15 +263,16 @@ const LIVE_URL = process.env.PW_LIVE_URL ?? 'https://app.kikouchou.app';
  *     build carries a real key, so the app there is supposed to try.
  *   - `sharing.spec.ts` asserts the share dialog explains that no sync server
  *     is configured. The deployment has one, so the assertion is inverted there.
- *   - `trip-sharing-sync.spec.ts` signs in and writes trips, guests and
- *     previews through the backend. Against the deployment those writes would
- *     land in the real Supabase project instead of `support/supabase-stub`.
+ *   - `trip-sharing-sync.spec.ts` and `trip-invite-anonymous.spec.ts` sign in
+ *     and write trips, guests and previews through the backend. Against the
+ *     deployment those writes would land in the real Supabase project instead
+ *     of `support/supabase-stub`.
  *   - `performance.spec.ts` compares durations against thresholds calibrated on
  *     a loopback dev server. Over the public internet those numbers measure the
  *     tester's link, not the app.
  */
 const LIVE_EXCLUDED_SPECS_PATTERN =
-  /analytics-privacy\.spec\.ts|sharing\.spec\.ts|trip-sharing-sync\.spec\.ts|performance\.spec\.ts/;
+  /analytics-privacy\.spec\.ts|sharing\.spec\.ts|trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts|performance\.spec\.ts/;
 
 /**
  * Every host the deployed build sends analytics to: PostHog's own domains and
