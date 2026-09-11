@@ -36,7 +36,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { ExpenseCategoryIcon } from '@/features/money/components/ExpenseCategoryIcon';
+import { ExpenseCategoryPicker } from '@/features/money/components/ExpenseCategoryPicker';
 import { useMoneyFormat } from '@/features/money/hooks/useMoneyFormat';
 import { computeExpenseShares } from '@/features/money/lib/expense-split';
 import type { PersonNightCounts } from '@/features/money/lib/expense-split';
@@ -44,7 +44,6 @@ import { cn } from '@/lib/utils';
 import {
   DEFAULT_EXPENSE_CATEGORY,
   DEFAULT_EXPENSE_SPLIT_MODE,
-  EXPENSE_CATEGORIES,
   EXPENSE_KINDS,
   EXPENSE_SPLIT_MODES,
   MAX_EXPENSE_AMOUNT,
@@ -412,8 +411,8 @@ const ExpenseForm = memo(function ExpenseForm({
     setErrors((prev) => (prev.splits ? { ...prev, splits: undefined } : prev));
   }, []);
 
-  const handleCategoryChange = useCallback((value: string) => {
-    setFormState((prev) => ({ ...prev, category: value as ExpenseCategory }));
+  const handleCategoryChange = useCallback((category: ExpenseCategory) => {
+    setFormState((prev) => ({ ...prev, category }));
   }, []);
 
   const handleTitleChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -581,54 +580,40 @@ const ExpenseForm = memo(function ExpenseForm({
         </p>
       </div>
 
-      {/* Title */}
+      {/* Title, with the category as the icon in front of it — a transfer is not
+          spending, so it has nothing to categorise */}
       <div className="space-y-2">
         <Label htmlFor="expense-title">
           {t('money.expense.title_field')}
           <span className="text-destructive ml-1" aria-hidden="true">*</span>
         </Label>
-        <Input
-          id="expense-title"
-          type="text"
-          value={formState.title}
-          onChange={handleTitleChange}
-          placeholder={t('money.expense.titlePlaceholder')}
-          aria-invalid={Boolean(errors.title)}
-          aria-describedby={errors.title ? 'expense-title-error' : undefined}
-          disabled={isSubmitting}
-        />
+        <div className="flex items-center gap-2">
+          {!isTransfer && (
+            <ExpenseCategoryPicker
+              id="expense-category"
+              value={formState.category}
+              onChange={handleCategoryChange}
+              disabled={isSubmitting}
+            />
+          )}
+          <Input
+            id="expense-title"
+            type="text"
+            className="min-w-0 flex-1"
+            value={formState.title}
+            onChange={handleTitleChange}
+            placeholder={t('money.expense.titlePlaceholder')}
+            aria-invalid={Boolean(errors.title)}
+            aria-describedby={errors.title ? 'expense-title-error' : undefined}
+            disabled={isSubmitting}
+          />
+        </div>
         {errors.title && (
           <p id="expense-title-error" className="text-sm text-destructive" role="alert">
             {errors.title}
           </p>
         )}
       </div>
-
-      {/* Category — a transfer is not spending, so it has nothing to categorise */}
-      {!isTransfer && (
-        <div className="space-y-2">
-          <Label htmlFor="expense-category">{t('money.expense.category')}</Label>
-          <Select
-            value={formState.category}
-            onValueChange={handleCategoryChange}
-            disabled={isSubmitting}
-          >
-            <SelectTrigger id="expense-category" className="w-full">
-              <SelectValue placeholder={t('money.expense.category')} />
-            </SelectTrigger>
-            <SelectContent>
-              {EXPENSE_CATEGORIES.map((category) => (
-                <SelectItem key={category} value={category}>
-                  <div className="flex items-center gap-2">
-                    <ExpenseCategoryIcon category={category} />
-                    {t(`money.expense.categories.${category}`)}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
 
       {/* Amount and day */}
       <div className="grid gap-4 sm:grid-cols-2">
