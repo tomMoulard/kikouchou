@@ -165,3 +165,81 @@ export function buildTripDayColumns(trip: Trip): readonly Date[] {
 export function toDayKeys(days: readonly Date[]): readonly ISODateString[] {
   return days.map((day) => toLocalISODateString(day));
 }
+
+/**
+ * How far outside the trip dates the day axis may stretch to reach an event,
+ * in days, at each end.
+ *
+ * A transport dated a year off the trip is a typo, not a plan, and an axis that
+ * followed it would render hundreds of day columns — every one of them a grid
+ * cell, at 44px each — to show a single pill. Events past this limit stay off
+ * the axis, as they were before it existed.
+ */
+export const TIMELINE_DAY_AXIS_MAX_EXTENSION_DAYS = 31;
+
+/**
+ * Builds the day columns of a timeline whose axis has to cover more than the
+ * trip itself.
+ *
+ * The trip range is always on the axis; each key in `mustInclude` widens it
+ * outwards, up to `maxExtensionDays` beyond either end. This is what puts a
+ * transport dated the day before the trip starts — or a late flight home — on
+ * screen: a day with no column cannot draw anything.
+ *
+ * @param args - The trip range, the day keys that must have a column, and how far the axis may stretch
+ * @returns One local-midnight Date per day of the resulting axis
+ *
+ * @example
+ * ```typescript
+ * // Trip 15-18 July, a guest flying in on the 13th:
+ * buildDayColumnsCovering({
+ *   startKey: isoDate('2024-07-15'),
+ *   endKey: isoDate('2024-07-18'),
+ *   mustInclude: [isoDate('2024-07-13')],
+ * }).length; // 6
+ * ```
+ */
+export function buildDayColumnsCovering(args: {
+  readonly startKey: ISODateString;
+  readonly endKey: ISODateString;
+  readonly mustInclude: readonly (string | null | undefined)[];
+  readonly maxExtensionDays?: number;
+}): readonly Date[] {
+  const {
+    startKey,
+    endKey,
+    mustInclude,
+    maxExtensionDays = TIMELINE_DAY_AXIS_MAX_EXTENSION_DAYS,
+  } = args;
+
+  const start = parseLocalDayKey(startKey);
+  const end = parseLocalDayKey(endKey);
+  if (!start || !end || start > end) {
+    // An unusable trip range has no axis to widen — same answer as
+    // `buildTripDayColumns` gives, so callers keep one empty-model branch.
+    return [];
+  }
+
+  const extension = Math.max(0, maxExtensionDays);
+  const earliestAllowedKey = toLocalISODateString(addDays(start, -extension));
+  const latestAllowedKey = toLocalISODateString(addDays(end, extension));
+
+  let firstKey: ISODateString = toLocalISODateString(start);
+  let lastKey: ISODateString = toLocalISODateString(end);
+
+  for (const key of mustInclude) {
+    // Day keys are lexicographically ordered, so these string comparisons are
+    // the date comparisons — and they cannot drift with the time of day.
+    if (!key || parseLocalDayKey(key) === null) {
+      continue;
+    }
+    if (key < firstKey && key >= earliestAllowedKey) {
+      firstKey = key as ISODateString;
+    }
+    if (key > lastKey && key <= latestAllowedKey) {
+      lastKey = key as ISODateString;
+    }
+  }
+
+  return buildDayColumns(firstKey, lastKey);
+}

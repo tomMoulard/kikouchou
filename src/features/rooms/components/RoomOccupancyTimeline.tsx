@@ -239,6 +239,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
       dayKeys={model.dayKeys}
       dateLocale={dateLocale}
       todayKey={todayKey}
+      scrollbarLabel={t('common.scrollTimeline', 'Scroll the timeline')}
     >
       {(viewport) => {
         const {

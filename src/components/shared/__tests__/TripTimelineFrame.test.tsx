@@ -3,8 +3,8 @@
  * @module components/shared/__tests__/TripTimelineFrame.test
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { addDays, format } from 'date-fns';
 import { TripTimelineFrame } from '../TripTimelineFrame';
 import { toDayKeys } from '@/lib/utils/trip-days';
@@ -39,11 +39,35 @@ function makeDayKeys(count: number, startDate = '2026-01-05'): ISODateString[] {
   return [...toDayKeys(makeDays(count, startDate))];
 }
 
+/**
+ * jsdom lays nothing out, so every element measures zero. The frame decides
+ * whether its day axis overflows from the width it was given, which is
+ * `clientWidth` on the scroll surface — stub it to put the component in the
+ * narrow-viewport case a phone is actually in.
+ */
+function stubMeasurements(measurements: {
+  readonly clientWidth: number;
+  readonly scrollWidth?: number;
+}): void {
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(
+    measurements.clientWidth,
+  );
+  if (measurements.scrollWidth !== undefined) {
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(
+      measurements.scrollWidth,
+    );
+  }
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
 
 describe('TripTimelineFrame', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   const defaultProps = {
     ariaLabel: 'Test timeline',
     labelColumnWidth: 150,
@@ -211,6 +235,106 @@ describe('TripTimelineFrame', () => {
 
     const viewport = (childrenFn.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
     expect(viewport.todayColumnIndex).toBeUndefined();
+  });
+
+  it('marks the columns outside the trip when the axis runs past it', () => {
+    // The axis now covers every event the timeline draws, so it can start
+    // before the trip does. A reader has to be able to see which columns are
+    // the trip itself.
+    const dayKeys = makeDayKeys(5);
+
+    render(
+      <TripTimelineFrame
+        {...defaultProps}
+        tripRange={{ startKey: dayKeys[1]!, endKey: dayKeys[3]! }}
+        outsideTripLabel="Outside the trip dates"
+      >
+        {() => <div>content</div>}
+      </TripTimelineFrame>
+    );
+
+    const outside = screen.getAllByText('Outside the trip dates');
+    expect(outside).toHaveLength(2);
+    expect(screen.getByText('05').closest('[data-outside-trip="true"]')).toBeInTheDocument();
+    expect(screen.getByText('09').closest('[data-outside-trip="true"]')).toBeInTheDocument();
+    expect(screen.getByText('07').closest('[data-outside-trip="true"]')).toBeNull();
+  });
+
+  it('marks no column when no trip range is given', () => {
+    const { container } = render(
+      <TripTimelineFrame {...defaultProps}>
+        {() => <div>content</div>}
+      </TripTimelineFrame>
+    );
+
+    expect(container.querySelectorAll('[data-outside-trip]')).toHaveLength(0);
+  });
+
+  it('offers no scrollbar while the whole trip fits on screen', () => {
+    // Nothing to scroll, so the control would be furniture — and a disabled or
+    // full-width thumb reads as "there is more here" when there is not.
+    stubMeasurements({ clientWidth: 2000 });
+
+    render(
+      <TripTimelineFrame {...defaultProps}>
+        {() => <div>content</div>}
+      </TripTimelineFrame>
+    );
+
+    expect(screen.queryByTestId('timeline-scrollbar')).toBeNull();
+  });
+
+  it('offers a labelled scrollbar once the day axis overflows', () => {
+    // A month-long trip on a phone: the pills are drag targets, so a swipe
+    // across them is a drag and the reader needs something else to pan with.
+    stubMeasurements({ clientWidth: 320 });
+
+    render(
+      <TripTimelineFrame {...defaultProps} days={makeDays(40)} dayKeys={makeDayKeys(40)} scrollbarLabel="Scroll the timeline">
+        {() => <div>content</div>}
+      </TripTimelineFrame>
+    );
+
+    const scrollbar = screen.getByTestId('timeline-scrollbar');
+    expect(scrollbar).toHaveAttribute('type', 'range');
+    expect(screen.getByRole('slider', { name: 'Scroll the timeline' })).toBe(scrollbar);
+  });
+
+  it('follows the day axis when the reader scrolls it', () => {
+    stubMeasurements({ clientWidth: 320, scrollWidth: 1920 });
+
+    const { container } = render(
+      <TripTimelineFrame {...defaultProps} days={makeDays(40)} dayKeys={makeDayKeys(40)}>
+        {() => <div>content</div>}
+      </TripTimelineFrame>
+    );
+
+    const scrollSurface = container.querySelector('[tabindex="0"]') as HTMLElement;
+    const scrollbar = screen.getByTestId('timeline-scrollbar') as HTMLInputElement;
+
+    expect(scrollbar.value).toBe('0');
+
+    scrollSurface.scrollLeft = (1920 - 320) / 2;
+    fireEvent.scroll(scrollSurface);
+
+    expect(scrollbar.value).toBe('50');
+  });
+
+  it('scrolls the day axis when the reader moves it', () => {
+    stubMeasurements({ clientWidth: 320, scrollWidth: 1920 });
+
+    const { container } = render(
+      <TripTimelineFrame {...defaultProps} days={makeDays(40)} dayKeys={makeDayKeys(40)}>
+        {() => <div>content</div>}
+      </TripTimelineFrame>
+    );
+
+    const scrollSurface = container.querySelector('[tabindex="0"]') as HTMLElement;
+    const scrollbar = screen.getByTestId('timeline-scrollbar') as HTMLInputElement;
+
+    fireEvent.change(scrollbar, { target: { value: '100' } });
+
+    expect(scrollSurface.scrollLeft).toBe(1920 - 320);
   });
 
   it('handles zero days gracefully', () => {

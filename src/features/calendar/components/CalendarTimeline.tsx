@@ -11,12 +11,19 @@ import { Calendar as CalendarIcon, Users } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
 import { ActivityTimelineRow } from '@/features/activities/components/ActivityTimelineRow';
-import { buildActivityTimelineModel } from '@/features/activities/utils/activity-timeline-utils';
+import {
+  buildActivityTimelineModel,
+  collectActivityDayKeys,
+} from '@/features/activities/utils/activity-timeline-utils';
 import { toLocalISODateString } from '@/lib/db/utils';
 import type { ISODateString } from '@/types';
 import type { CalendarTimelineProps } from '../types';
 import { buildDailyHeadcounts } from '../utils/headcount-utils';
-import { buildCalendarTimelineModel } from '../utils/timeline-utils';
+import {
+  buildCalendarTimelineModel,
+  collectAssignmentDayKeys,
+  collectTransportDayKeys,
+} from '../utils/timeline-utils';
 import { CalendarTimelineRow } from './CalendarTimelineRow';
 
 // ============================================================================
@@ -38,6 +45,23 @@ export const CALENDAR_TIMELINE_LABEL_COLUMN_WIDTH_PX = 200;
 const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineProps): ReactElement {
   const { t } = useTranslation();
 
+  // Both halves of the timeline are drawn on one day axis, so each model is
+  // built over the union of both sets of events — otherwise widening the guest
+  // half for an early flight would slide the activity bands off the days they
+  // belong to.
+  const guestDayKeys = useMemo(
+    () => [
+      ...collectTransportDayKeys([...props.arrivals, ...props.departures]),
+      ...collectAssignmentDayKeys(props.assignments),
+    ],
+    [props.arrivals, props.assignments, props.departures],
+  );
+
+  const activityDayKeys = useMemo(
+    () => collectActivityDayKeys(props.activities),
+    [props.activities],
+  );
+
   const model = useMemo(
     () =>
       buildCalendarTimelineModel({
@@ -48,6 +72,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
         arrivals: props.arrivals,
         departures: props.departures,
         unknownLabel: t('common.unknown'),
+        extraDayKeys: activityDayKeys,
       }),
     [
       props.trip,
@@ -56,6 +81,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
       props.assignments,
       props.arrivals,
       props.departures,
+      activityDayKeys,
       t,
     ],
   );
@@ -67,11 +93,19 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
       buildActivityTimelineModel({
         trip: props.trip,
         activities: props.activities,
+        extraDayKeys: guestDayKeys,
       }),
-    [props.trip, props.activities],
+    [props.trip, props.activities, guestDayKeys],
   );
 
   const todayKey = toLocalISODateString(props.today) as ISODateString;
+
+  // The axis can now reach past the trip, so the header says which columns are
+  // the trip itself and which are the days either side of it.
+  const tripRange = useMemo(
+    () => ({ startKey: props.trip.startDate, endKey: props.trip.endDate }),
+    [props.trip.startDate, props.trip.endDate],
+  );
 
   // People on site each night — hosts read this row to plan meals.
   const headcountsByDate = useMemo(
@@ -140,6 +174,9 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
       dayKeys={model.dayKeys}
       dateLocale={props.dateLocale}
       todayKey={todayKey}
+      tripRange={tripRange}
+      outsideTripLabel={t('calendar.outsideTripDates', 'Outside the trip dates')}
+      scrollbarLabel={t('common.scrollTimeline', 'Scroll the timeline')}
       renderDayMeta={renderDayHeadcount}
     >
       {(viewport) => (

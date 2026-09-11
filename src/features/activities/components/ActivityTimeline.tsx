@@ -149,6 +149,7 @@ const ActivityTimeline = memo(function ActivityTimeline({
         dayKeys={model.dayKeys}
         dateLocale={dateLocale}
         todayKey={todayKey}
+        scrollbarLabel={t('common.scrollTimeline', 'Scroll the timeline')}
       >
         {(viewport) => (
           <div role="list" aria-label={t('activities.timeline.rows', 'Timeline rows')}>

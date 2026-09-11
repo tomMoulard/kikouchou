@@ -125,35 +125,69 @@ describe('buildActivityTimelineModel', () => {
     expect(model.rows[0]?.laneCount).toBe(1);
   });
 
-  it('clamps an activity that starts before the trip', () => {
+  it('extends the axis to an activity that starts before the trip', () => {
     const model = buildActivityTimelineModel({
       trip: makeTrip(),
       activities: [makeActivity('a1', 12, 16)],
     });
 
+    expect(model.dayKeys[0]).toBe('2024-07-12');
     expect(model.rows[0]?.items[0]?.startIndex).toBe(0);
-    expect(model.rows[0]?.items[0]?.endIndex).toBe(1);
+    expect(model.rows[0]?.items[0]?.endIndex).toBe(4);
   });
 
-  it('clamps an activity that ends after the trip', () => {
+  it('extends the axis to an activity that ends after the trip', () => {
     const model = buildActivityTimelineModel({
       trip: makeTrip(),
       activities: [makeActivity('a1', 19, 25)],
     });
 
+    expect(model.dayKeys[model.dayKeys.length - 1]).toBe('2024-07-25');
     expect(model.rows[0]?.items[0]?.startIndex).toBe(4);
-    expect(model.rows[0]?.items[0]?.endIndex).toBe(5);
+    expect(model.rows[0]?.items[0]?.endIndex).toBe(10);
   });
 
-  it('counts activities entirely outside the trip as hidden', () => {
+  it('draws activities that fall entirely outside the trip', () => {
     const model = buildActivityTimelineModel({
       trip: makeTrip(),
       activities: [makeActivity('before', 1), makeActivity('after', 30)],
     });
 
+    expect(model.dayKeys[0]).toBe('2024-07-01');
+    expect(model.dayKeys[model.dayKeys.length - 1]).toBe('2024-07-30');
+    expect(model.visibleCount).toBe(2);
+    expect(model.hiddenCount).toBe(0);
+  });
+
+  it('counts an activity too far out for the axis as hidden', () => {
+    // Months off the trip: reaching it would cost a hundred day columns to
+    // show one pill, so it stays off the axis and the UI says so instead.
+    const distant = makeActivity('distant', 16, undefined, {
+      startDatetime: new Date(2024, 9, 5, 10, 0).toISOString(),
+      endDatetime: undefined,
+    });
+
+    const model = buildActivityTimelineModel({
+      trip: makeTrip(),
+      activities: [distant],
+    });
+
+    expect(model.dayKeys).toHaveLength(6);
     expect(model.rows).toHaveLength(0);
-    expect(model.visibleCount).toBe(0);
-    expect(model.hiddenCount).toBe(2);
+    expect(model.hiddenCount).toBe(1);
+  });
+
+  it('extends the axis to the day keys the caller asks for', () => {
+    // The calendar timeline draws these bands beside its guest rows, so both
+    // halves are built over the union of the two sets of events.
+    const model = buildActivityTimelineModel({
+      trip: makeTrip(),
+      activities: [],
+      extraDayKeys: [isoDate('2024-07-13'), isoDate('2024-07-22')],
+    });
+
+    expect(model.dayKeys[0]).toBe('2024-07-13');
+    expect(model.dayKeys[model.dayKeys.length - 1]).toBe('2024-07-22');
   });
 
   it('counts activities with unparseable dates as hidden', () => {
