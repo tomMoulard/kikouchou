@@ -13,6 +13,7 @@
  * @module lib/__tests__/posthog.test
  */
 
+import type { CaptureResult } from 'posthog-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ============================================================================
@@ -212,6 +213,127 @@ describe('lib/posthog', () => {
     expect(mockRegister).toHaveBeenCalledWith(
       expect.objectContaining({ display_mode: 'standalone' }),
     );
+  });
+
+  it('filters events through the opaque-exception drop', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+
+    const { dropOpaqueExceptions } = await importPosthog();
+
+    // The function is tested on its own below; what this asserts is that it is
+    // actually wired in. A filter nothing calls is the easy way for this to
+    // regress silently the next time the init options are edited.
+    const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(options['before_send']).toBe(dropOpaqueExceptions);
+  });
+});
+
+// ============================================================================
+// dropOpaqueExceptions
+// ============================================================================
+
+/** Builds the `$exception` shape posthog-js hands to `before_send`. */
+function exceptionEvent(list: unknown): CaptureResult {
+  return {
+    uuid: '01a091ea-7f76-79d3-8f33-70daf1ca074c',
+    event: '$exception',
+    properties: { $exception_list: list },
+  } as CaptureResult;
+}
+
+/** One frame, enough to make a stack trace non-empty. */
+const SOME_FRAME = { filename: 'app.js', function: 'save', in_app: true };
+
+describe('dropOpaqueExceptions', () => {
+  it.each(['Script error.', 'Script error', '  Script error.  '])(
+    'drops a stackless %s, the error a browser refuses to describe',
+    async (value) => {
+      const { dropOpaqueExceptions } = await importPosthog();
+
+      // The real event behind this: Mobile Safari on `/trips`, synthetic and
+      // unhandled, no file, no line, no frames. Nothing in it can be fixed, and
+      // PostHog folds every such event from every unknown script into one
+      // issue that reopens forever.
+      expect(dropOpaqueExceptions(exceptionEvent([{ type: 'Error', value }]))).toBeNull();
+    },
+  );
+
+  it('drops one whose stacktrace is present but empty', async () => {
+    const { dropOpaqueExceptions } = await importPosthog();
+
+    // posthog-js normalizes an error with no usable frames to an empty array
+    // rather than omitting the key. Both spellings mean the same nothing.
+    const event = exceptionEvent([
+      { type: 'Error', value: 'Script error.', stacktrace: { frames: [] } },
+    ]);
+
+    expect(dropOpaqueExceptions(event)).toBeNull();
+  });
+
+  it('keeps a real error that happens to carry that message', async () => {
+    const { dropOpaqueExceptions } = await importPosthog();
+
+    // The message alone must never be the test. Application code is free to
+    // throw `new Error('Script error.')`, and that error arrives with frames
+    // because it came from a same-origin script — which is exactly the event
+    // this filter exists to protect.
+    const event = exceptionEvent([
+      { type: 'Error', value: 'Script error.', stacktrace: { frames: [SOME_FRAME] } },
+    ]);
+
+    expect(dropOpaqueExceptions(event)).toBe(event);
+  });
+
+  it('keeps an exception whose list also holds a readable entry', async () => {
+    const { dropOpaqueExceptions } = await importPosthog();
+
+    // A chained error: the opaque half says nothing, the other half says where.
+    // Dropping the whole event to silence one entry would lose the cause.
+    const event = exceptionEvent([
+      { type: 'Error', value: 'Script error.' },
+      { type: 'TypeError', value: 'x is undefined', stacktrace: { frames: [SOME_FRAME] } },
+    ]);
+
+    expect(dropOpaqueExceptions(event)).toBe(event);
+  });
+
+  it('keeps every ordinary exception', async () => {
+    const { dropOpaqueExceptions } = await importPosthog();
+
+    const event = exceptionEvent([{ type: 'TypeError', value: 'x is undefined' }]);
+
+    expect(dropOpaqueExceptions(event)).toBe(event);
+  });
+
+  it('keeps events that are not exceptions at all', async () => {
+    const { dropOpaqueExceptions } = await importPosthog();
+
+    // `before_send` sees every event, `$pageview` and `app_used` included. This
+    // filter has one job and must not become a general-purpose gate.
+    const event = { uuid: 'u', event: 'app_used', properties: {} } as CaptureResult;
+
+    expect(dropOpaqueExceptions(event)).toBe(event);
+  });
+
+  it.each([
+    ['a null event', null],
+    ['a missing list', undefined],
+    ['an empty list', []],
+    ['a list that is not an array', 'Script error.'],
+    ['a list of nulls', [null]],
+    ['a list of non-objects', ['Script error.']],
+    ['an entry with no value', [{ type: 'Error' }]],
+  ])('passes %s through rather than throwing', async (_label, list) => {
+    const { dropOpaqueExceptions } = await importPosthog();
+
+    // posthog-js calls this on the way out of every capture, and a throw here
+    // would surface as an error inside the error reporter. The unhappy paths
+    // return the input untouched; dropping is the deliberate case only.
+    const event = list === null ? null : exceptionEvent(list);
+
+    expect(() => dropOpaqueExceptions(event)).not.toThrow();
+    expect(dropOpaqueExceptions(event)).toBe(event);
   });
 });
 
