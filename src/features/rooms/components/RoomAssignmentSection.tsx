@@ -78,6 +78,7 @@ import type {
 } from '@/types';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { useStalled } from '@/hooks/useStalled';
+import { captureDeletion } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -984,6 +985,10 @@ export const RoomAssignmentSection = memo(function RoomAssignmentSection({
 
     try {
       await deleteAssignment(deletingAssignment.id);
+      // Nothing captures an assignment being *made* — it happens by drag and
+      // drop — so this one is not the other half of a pair. It is here because
+      // unpicking a room plan is the clearest signal the plan was wrong.
+      captureDeletion('assignment_deleted', { source: 'rooms' });
       notifySuccess(t('assignments.deleteSuccess'));
 
       if (isMountedRef.current) {

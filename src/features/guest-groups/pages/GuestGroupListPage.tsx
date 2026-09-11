@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils';
 import { getPersonHeadcount } from '@/types';
 import type { GuestGroup, GuestGroupId } from '@/types';
 import { reportFailure } from '@/lib/errors/report-failure';
+import { captureDeletion } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -197,6 +198,7 @@ const GuestGroupListPage = memo(function GuestGroupListPage(): ReactElement {
 
     try {
       await deleteGroup(pendingDeleteId);
+      captureDeletion('guest_group_deleted', { remaining_count: groups.length - 1 });
       notifySuccess(t('guestGroups.deleteSuccess', 'Group deleted'));
     } catch (error) {
       reportFailure(
@@ -207,7 +209,7 @@ const GuestGroupListPage = memo(function GuestGroupListPage(): ReactElement {
     } finally {
       setPendingDeleteId(null);
     }
-  }, [deleteGroup, pendingDeleteId, notifySuccess, t]);
+  }, [deleteGroup, groups.length, pendingDeleteId, notifySuccess, t]);
 
   const handleDeleteOpenChange = useCallback((open: boolean) => {
     if (!open) {

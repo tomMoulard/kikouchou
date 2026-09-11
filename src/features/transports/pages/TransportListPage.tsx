@@ -124,6 +124,7 @@ import { TransportDialog } from '@/features/transports/components/TransportDialo
 import { TransportScopeFilter } from '@/features/transports/components/TransportScopeFilter';
 import { UpcomingPickups } from '@/features/transports/components/UpcomingPickups';
 import { useTransportScope } from '@/features/transports/hooks/useTransportScope';
+import { captureDeletion } from '@/lib/posthog';
 import {
   collectDrivenRideIds,
   isLegCovered,
@@ -1339,6 +1340,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
 
     try {
       await deleteTransport(transportToDelete);
+      captureDeletion('transport_deleted', { source: 'list' });
       setTransportToDelete(null);
       notifySuccess(t('transports.deleteSuccess', 'Transport deleted successfully'));
     } catch (error) {
@@ -1444,6 +1446,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
 
     try {
       await deleteRide(rideToDelete);
+      captureDeletion('ride_deleted', { source: 'list' });
       setRideToDelete(null);
       notifySuccess(t('rides.deleteSuccess'));
     } catch (error) {

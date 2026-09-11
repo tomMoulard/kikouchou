@@ -115,6 +115,7 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
 import { buildDayColumns } from '@/lib/utils/trip-days';
+import { captureDeletion, captureEvent } from '@/lib/posthog';
 
 // Import types and utilities
 import type {
@@ -211,6 +212,11 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   const handleViewChange = useCallback(
     (nextValue: string) => {
       const nextView = nextValue === 'timeline' ? 'timeline' : 'card';
+      // The two views answer different questions — a month grid for "who is
+      // here when", a timeline for "what happens next" — and nothing said
+      // which one people actually keep. The URL carries it, so a `$pageview`
+      // cannot: the switch never navigates.
+      captureEvent('calendar_view_changed', { view: nextView });
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.set('view', nextView);
@@ -1034,6 +1040,9 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     if (selectedEvent.type === 'assignment') {
       try {
         await deleteAssignment(selectedEvent.assignment.id);
+        // `source` separates the two ways to unpick a room plan: this dialog
+        // and the assignment list on the rooms page.
+        captureDeletion('assignment_deleted', { source: 'calendar' });
         notifySuccess(t('assignments.deleteSuccess', 'Assignment deleted'));
       } catch (error) {
         reportFailure(
@@ -1046,6 +1055,10 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     } else if (selectedEvent.type === 'transport') {
       try {
         await deleteTransport(selectedEvent.transport.id);
+        captureDeletion('transport_deleted', {
+          source: 'calendar',
+          type: selectedEvent.transport.type,
+        });
         notifySuccess(t('calendar.transportDeleted', 'Transport deleted successfully'));
       } catch (error) {
         reportFailure(
@@ -1058,6 +1071,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
     } else if (selectedEvent.type === 'activity') {
       try {
         await deleteActivity(selectedEvent.activity.id);
+        captureDeletion('activity_deleted', { source: 'calendar' });
         notifySuccess(t('activities.deleteSuccess'));
       } catch (error) {
         reportFailure(

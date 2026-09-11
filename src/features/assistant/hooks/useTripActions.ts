@@ -62,6 +62,7 @@ import {
   updateTrip,
 } from '@/lib/db';
 import { notify } from '@/lib/notifications';
+import { captureDeletion } from '@/lib/posthog';
 import {
   ActivityFormDataSchema,
   ExpenseFormDataSchema,
@@ -715,6 +716,11 @@ export function useTripActions(): UseTripActionsReturn {
               break;
             }
 
+            // Every `remove*` case below captures the same deletion event a
+            // list page does, with `source: 'assistant'`. Without it the
+            // assistant would be a hole in the netting: one confirmation here
+            // can execute a batch of deletes, so a trip tidied up by chat
+            // would read as a trip nothing was ever removed from.
             case 'removeGuest': {
               const tid = activeTripId;
               if (!tid) {
@@ -724,6 +730,7 @@ export function useTripActions(): UseTripActionsReturn {
               const pid = action.data.personId as PersonId;
               const guest = await getPersonById(pid);
               await deletePersonWithOwnershipCheck(pid, tid);
+              captureDeletion('person_deleted', { source: 'assistant' });
               guestIdCache.delete(tid);
               notifySuccess(t('persons.deleteSuccess'));
               executedCount++;
@@ -792,6 +799,7 @@ export function useTripActions(): UseTripActionsReturn {
               const rid = action.data.roomId as RoomId;
               const room = await getRoomById(rid);
               await deleteRoomWithOwnershipCheck(rid, tid);
+              captureDeletion('room_deleted', { source: 'assistant' });
               notifySuccess(t('rooms.deleteSuccess'));
               executedCount++;
               summaries.push(
@@ -861,6 +869,7 @@ export function useTripActions(): UseTripActionsReturn {
                 ? await getRoomById(assignment.roomId)
                 : undefined;
               await deleteAssignmentWithOwnershipCheck(aid, tid);
+              captureDeletion('assignment_deleted', { source: 'assistant' });
               notifySuccess(t('assignments.deleteSuccess'));
               executedCount++;
               summaries.push(
@@ -921,6 +930,7 @@ export function useTripActions(): UseTripActionsReturn {
               const transportId = action.data.transportId as TransportId;
               const tr = await getTransportById(transportId);
               await deleteTransportWithOwnershipCheck(transportId, tid);
+              captureDeletion('transport_deleted', { source: 'assistant' });
               notifySuccess(t('transports.deleteSuccess'));
               executedCount++;
               const label = tr
@@ -1108,6 +1118,7 @@ export function useTripActions(): UseTripActionsReturn {
               // summary says so, because "removed the ride" alone reads as
               // having removed the people in it.
               await deleteRideWithOwnershipCheck(rideId, tid);
+              captureDeletion('ride_deleted', { source: 'assistant' });
               notifySuccess(t('rides.deleteSuccess'));
               executedCount++;
               summaries.push(
@@ -1186,6 +1197,7 @@ export function useTripActions(): UseTripActionsReturn {
               // standing — three people still have a train to meet — so the
               // summary says which half went.
               await deleteVehicleWithOwnershipCheck(vehicleId, tid);
+              captureDeletion('vehicle_deleted', { source: 'assistant' });
               notifySuccess(t('vehicles.deleteSuccess'));
               executedCount++;
               summaries.push(
@@ -1447,6 +1459,7 @@ export function useTripActions(): UseTripActionsReturn {
                 break;
               }
               await deleteActivityWithOwnershipCheck(aid, tid);
+              captureDeletion('activity_deleted', { source: 'assistant' });
               notifySuccess(t('activities.deleteSuccess'));
               executedCount++;
               summaries.push(
@@ -1675,6 +1688,7 @@ export function useTripActions(): UseTripActionsReturn {
               }
 
               await deleteExpenseWithOwnershipCheck(eid, tid);
+              captureDeletion('expense_deleted', { source: 'assistant' });
               notifySuccess(t('money.expense.deleteSuccess'));
               executedCount++;
               summaries.push(
