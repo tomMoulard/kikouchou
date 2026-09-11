@@ -8,7 +8,7 @@
  * @module features/money/components/__tests__/ExpenseForm.test
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ExpenseForm } from '@/features/money/components/ExpenseForm';
 import { render, screen, waitFor } from '@/test/utils';
@@ -71,6 +71,16 @@ function renderForm(props: Partial<Parameters<typeof ExpenseForm>[0]> = {}) {
 
   return { ...result, onSubmit, onCancel };
 }
+
+// Radix's Select drives itself with pointer capture and scrolls the highlighted
+// option into view, neither of which jsdom implements — without these the split
+// rule's listbox never opens.
+beforeAll(() => {
+  Element.prototype.hasPointerCapture ??= (): boolean => false;
+  Element.prototype.setPointerCapture ??= (): void => undefined;
+  Element.prototype.releasePointerCapture ??= (): void => undefined;
+  Element.prototype.scrollIntoView ??= (): void => undefined;
+});
 
 // ============================================================================
 // Tests
@@ -290,5 +300,121 @@ describe('ExpenseForm — the category', () => {
       expect(onSubmit).toHaveBeenCalled();
     });
     expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({ category: 'groceries' });
+  });
+});
+
+describe('ExpenseForm — what a split rule starts on', () => {
+  /** Picks a split rule the way the user does, through the select. */
+  async function pickSplitMode(
+    user: ReturnType<typeof renderForm>['user'],
+    mode: 'shares' | 'amounts',
+  ): Promise<void> {
+    await user.click(screen.getByRole('combobox', { name: 'money.expense.splitMode' }));
+    await user.click(
+      await screen.findByRole('option', { name: `money.expense.splitModes.${mode}` }),
+    );
+  }
+
+  it('gives every picked guest one part, for a split by parts', async () => {
+    const { user, onSubmit } = renderForm();
+
+    await user.type(screen.getByLabelText(/money.expense.title_field/), 'Pizza');
+    await user.type(screen.getByRole('spinbutton', { name: 'money.expense.amount' }), '90');
+    await pickSplitMode(user, 'shares');
+
+    const parts = screen.getAllByRole('spinbutton', { name: 'money.expense.sharesFor' });
+    expect(parts.map((field) => (field as HTMLInputElement).value)).toEqual(['1', '1']);
+
+    await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalled();
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      splitMode: 'shares',
+      splits: [
+        { personId: ALICE, value: 1 },
+        { personId: BOB, value: 1 },
+      ],
+    });
+  });
+
+  it('gives every picked guest their equal share, for a split by amount', async () => {
+    const { user } = renderForm();
+
+    await user.type(screen.getByRole('spinbutton', { name: 'money.expense.amount' }), '90');
+    await pickSplitMode(user, 'amounts');
+
+    const amounts = screen.getAllByRole('spinbutton', { name: 'money.expense.amountFor' });
+    expect(amounts.map((field) => (field as HTMLInputElement).value)).toEqual(['45', '45']);
+  });
+
+  it('hands out the odd cent of a total that does not divide evenly', async () => {
+    const carol = { id: 'carol' as PersonId, tripId: TRIP, name: 'Carol', color: '#22c55e' };
+    const { user, onSubmit } = renderForm({
+      persons: [...PERSONS, carol] as unknown as Person[],
+    });
+
+    await user.type(screen.getByLabelText(/money.expense.title_field/), 'Taxi');
+    await user.type(screen.getByRole('spinbutton', { name: 'money.expense.amount' }), '100');
+    await pickSplitMode(user, 'amounts');
+
+    // The repo's rounding rule, not this test's: the leftover cent goes to the
+    // row the floor cut the most, first one first.
+    const amounts = screen.getAllByRole('spinbutton', { name: 'money.expense.amountFor' });
+    expect(amounts.map((field) => (field as HTMLInputElement).value)).toEqual([
+      '33.34',
+      '33.33',
+      '33.33',
+    ]);
+
+    // And because they were divided that way, they add up to the total, so the
+    // line saves without the "amounts do not add up" complaint.
+    await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalled();
+    });
+    expect(onSubmit.mock.calls[0]?.[0]).toMatchObject({
+      splitMode: 'amounts',
+      splits: [
+        { personId: ALICE, value: 33.34 },
+        { personId: BOB, value: 33.33 },
+        { personId: carol.id, value: 33.33 },
+      ],
+    });
+  });
+
+  it('recomputes the defaults when the guest list changes', async () => {
+    const { user } = renderForm();
+
+    await user.type(screen.getByRole('spinbutton', { name: 'money.expense.amount' }), '90');
+    await pickSplitMode(user, 'amounts');
+    await user.click(screen.getByRole('button', { name: /Bob/ }));
+
+    const amounts = screen.getAllByRole('spinbutton', { name: 'money.expense.amountFor' });
+    expect(amounts.map((field) => (field as HTMLInputElement).value)).toEqual(['90']);
+  });
+
+  it('leaves a figure typed by hand alone when the total changes', async () => {
+    const { user } = renderForm();
+
+    const total = screen.getByRole('spinbutton', { name: 'money.expense.amount' });
+    await user.type(total, '100');
+    await pickSplitMode(user, 'amounts');
+
+    const [aliceAmount] = screen.getAllByRole('spinbutton', {
+      name: 'money.expense.amountFor',
+    });
+    await user.clear(aliceAmount as HTMLElement);
+    await user.type(aliceAmount as HTMLElement, '60');
+
+    await user.clear(total);
+    await user.type(total, '200');
+
+    const amounts = screen.getAllByRole('spinbutton', { name: 'money.expense.amountFor' });
+    // Alice's own figure survives the new total; Bob, who typed nothing, moves
+    // to what an equal split of it gives him.
+    expect(amounts.map((field) => (field as HTMLInputElement).value)).toEqual(['60', '100']);
   });
 });
