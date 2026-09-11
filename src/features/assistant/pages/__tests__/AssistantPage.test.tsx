@@ -13,6 +13,9 @@ const mockUpdateSettings = vi.fn().mockResolvedValue(undefined);
 
 const mockCapture = vi.fn();
 vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(),
   // The real module exports `undefined` when the PostHog env vars are absent,
   // which they are in tests — so without this every capture is a no-op and
   // nothing here could observe one.

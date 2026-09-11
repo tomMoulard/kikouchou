@@ -47,6 +47,9 @@ vi.mock('@/lib/notifications/push', () => ({
   getReminderState: vi.fn(),
 }));
 vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(),
   default: { capture: vi.fn(), get_distinct_id: () => 'ph-device' },
 }));
 vi.mock('@/lib/supabase/client', () => ({

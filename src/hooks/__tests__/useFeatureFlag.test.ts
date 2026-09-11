@@ -29,6 +29,9 @@ const client = {
 };
 
 vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(),
   get default() {
     return client.present ? client : null;
   },

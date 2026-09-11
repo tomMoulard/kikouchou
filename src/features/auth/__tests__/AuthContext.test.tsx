@@ -34,6 +34,9 @@ const mockReset = vi.fn();
 const mockRegister = vi.fn();
 const mockCapture = vi.fn();
 vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(),
   // The real module exports `undefined` without env config, which is the case in
   // tests, so nothing here could observe a call without this.
   default: {
@@ -746,6 +749,16 @@ describe('AuthProvider — state', () => {
       expect(consoleError).toHaveBeenCalled();
     });
     expect(result.current.session).toBeNull();
+
+    // The part that matters, and the part that was broken: "resolved" means the
+    // answer is known, not that there is a session. It used to stay false for
+    // the life of the page, and every consumer waits on it — the invite-link
+    // landing page sat on a spinner with no error and no retry, and
+    // `useJoinTrip` never ran at all.
+    await waitFor(() => {
+      expect(result.current.isResolved).toBe(true);
+    });
+
     consoleError.mockRestore();
   });
 

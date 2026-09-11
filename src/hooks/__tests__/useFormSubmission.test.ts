@@ -157,8 +157,11 @@ describe('useFormSubmission', () => {
       });
 
       expect(result.current.isSubmitting).toBe(false);
-      // Default error key is 'errors.saveFailed', and mock t() returns the key
-      expect(result.current.submitError).toBe('errors.saveFailed');
+      // Default error key is 'errors.saveFailed', and mock t() returns the key.
+      // The reason follows it: a form that says only that saving failed, and
+      // never why, is what sent a room assignment bug to a session replay to be
+      // diagnosed.
+      expect(result.current.submitError).toBe('errors.saveFailed: Error: Save failed');
     });
 
     it('uses custom error key when provided', async () => {
@@ -176,7 +179,7 @@ describe('useFormSubmission', () => {
       });
 
       // The mock t() returns the key when no default value
-      expect(result.current.submitError).toBe('errors.customError');
+      expect(result.current.submitError).toBe('errors.customError: Error: fail');
     });
 
     it('re-throws the error so callers can handle it', async () => {

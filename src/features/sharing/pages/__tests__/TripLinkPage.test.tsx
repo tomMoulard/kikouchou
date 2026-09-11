@@ -52,7 +52,10 @@ vi.mock('@/lib/supabase/client', () => ({
   getSupabaseClient: vi.fn(async () => ({}) as never),
 }));
 vi.mock('@/lib/sync/join-trip', () => ({ materialiseJoinedTrip: vi.fn() }));
-vi.mock('@/lib/posthog', () => ({ default: { capture: vi.fn() } }));
+vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(), default: { capture: vi.fn() } }));
 
 const mockedUseTripContext = vi.mocked(useTripContext);
 const mockedUseAuth = vi.mocked(useAuth);

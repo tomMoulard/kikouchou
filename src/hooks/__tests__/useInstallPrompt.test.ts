@@ -15,6 +15,9 @@ import { useInstallPrompt } from '../useInstallPrompt';
 const mockCapture = vi.fn();
 
 vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(),
   // The real module exports `undefined` without env config, which is the case
   // in tests, so nothing here could observe a capture without this.
   default: { capture: (...args: unknown[]) => mockCapture(...args) },

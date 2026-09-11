@@ -39,7 +39,7 @@ import { tripAccessOf } from '@/hooks/useTripAccess';
 import { useTripContext } from '@/contexts/TripContext';
 
 import { deleteTrip, getTripById, updateTrip } from '@/lib/db';
-import posthog, { captureUsage } from '@/lib/posthog';
+import posthog, { captureUsage, reportError } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import type { Trip, TripFormData, TripId } from '@/types';
 
@@ -290,7 +290,10 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
         try {
           await setCurrentTrip(null);
         } catch (clearErr) {
-          console.error('Failed to clear current trip after delete:', clearErr);
+          // The trip is already deleted, so the navigation below still has to
+          // happen. Reported because the app is now holding a deleted trip as
+          // its current one.
+          reportError(clearErr, { source: 'TripEditPage.clearCurrentTrip' });
         }
       }
 

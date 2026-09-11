@@ -375,7 +375,11 @@ describe('RideMismatchNotice', () => {
         screen.getByRole('button', { name: /Move the ride to .*19:00/ }),
       );
 
-      expect(errorToast).toHaveBeenCalledWith('Failed to save');
+      // The headline is the translated part; the reason is what the driver
+      // could not see before, and what says whether to try again.
+      expect(errorToast).toHaveBeenCalledWith('Failed to save', {
+        description: 'Error: offline',
+      });
       // The button comes back rather than staying stuck on the failed attempt.
       expect(
         screen.getByRole('button', { name: /Move the ride to .*19:00/ }),
@@ -454,7 +458,11 @@ describe('RideMismatchNotice', () => {
       );
       await user.click(screen.getByRole('button', { name: 'Drop from ride' }));
 
-      expect(errorToast).toHaveBeenCalledWith('Failed to save');
+      // The headline is the translated part; the reason is what the driver
+      // could not see before, and what says whether to try again.
+      expect(errorToast).toHaveBeenCalledWith('Failed to save', {
+        description: 'Error: offline',
+      });
       // Dismissing it would leave the driver certain they had dropped somebody
       // who is still in the car.
       expect(screen.getByRole('alertdialog')).toBeInTheDocument();

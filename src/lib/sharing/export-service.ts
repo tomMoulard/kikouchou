@@ -26,6 +26,7 @@ import { isGuestPhoneSharingEnabled } from '@/lib/flags';
 import { toSharedGuest } from '@/lib/sharing/guest-privacy';
 import type { AppChangeset, EntityCollection, ImportBaseline } from '@/lib/sharing/types';
 import { getBaselineStorageKey } from '@/lib/sharing/types';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Baseline Management
@@ -40,7 +41,9 @@ export function saveBaseline(baseline: ImportBaseline): void {
     const key = getBaselineStorageKey(baseline.shareId);
     localStorage.setItem(key, JSON.stringify(baseline));
   } catch (error) {
-    console.error('Failed to save import baseline:', error);
+    // Best-effort by design, but the cost is not nothing: without a baseline
+    // the next QR export sends a delta against the wrong starting point.
+    reportError(error, { source: 'export-service.saveBaseline' });
   }
 }
 

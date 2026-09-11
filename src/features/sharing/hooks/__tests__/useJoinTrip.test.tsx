@@ -29,6 +29,9 @@ vi.mock('@/lib/sync/invites', () => ({ redeemInvite: vi.fn() }));
 vi.mock('@/lib/sync/join-trip', () => ({ materialiseJoinedTrip: vi.fn() }));
 vi.mock('@/lib/sync/viewer', () => ({ materialiseViewerTrip: vi.fn() }));
 vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(),
   default: { capture: vi.fn() },
   captureUsage: vi.fn(),
 }));

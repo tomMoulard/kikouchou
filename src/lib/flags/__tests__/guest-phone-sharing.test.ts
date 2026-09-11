@@ -10,6 +10,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 // test — so a client has to be mocked in to exercise anything but the default.
 const isFeatureEnabled = vi.fn();
 vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(),
   get default() {
     return mockClient;
   },

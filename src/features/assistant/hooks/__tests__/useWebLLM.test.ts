@@ -27,6 +27,9 @@ vi.mock('@/lib/i18n', () => ({
 const mockCapture = vi.fn();
 const mockCaptureException = vi.fn();
 vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(),
   // The real module exports `undefined` with no PostHog env vars, which is the
   // case in every test — so without this the assertions below would pass
   // against a hook that captured nothing at all.

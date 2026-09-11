@@ -32,6 +32,7 @@ import { useOnlineStatus } from '@/hooks';
 import { useAuth } from '@/features/auth/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { syncGuestGroups, type GuestGroupSyncResult } from './guest-groups';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Context
@@ -126,8 +127,13 @@ export function GuestGroupSync({ children }: GuestGroupSyncProps): ReactElement 
       }
       if (result.status === 'error') {
         // Loud in the console, silent in the UI: the page works regardless, and
-        // a toast on every failed background attempt would be noise.
+        // a toast on every failed background attempt would be noise. Reported
+        // all the same, or a sync that is failing for everybody looks exactly
+        // like one that is working.
         console.warn('[guest-groups] sync failed:', result.message);
+        reportError(new Error(result.message ?? 'guest group sync failed'), {
+          source: 'GuestGroupSync.sync',
+        });
       }
     } finally {
       inFlightRef.current = false;

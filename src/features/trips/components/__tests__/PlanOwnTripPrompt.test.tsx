@@ -25,6 +25,9 @@ const storage = installLocalStorageDouble();
 // `vi.hoisted`, because `vi.mock`'s factory is lifted above every `const`.
 const mockCapture = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(),
   default: { capture: mockCapture },
 }));
 
