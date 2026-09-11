@@ -41,6 +41,7 @@ import { NotificationSettings } from '@/features/settings/components/Notificatio
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
 import { db } from '@/lib/db';
 import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, isLanguageSupported } from '@/lib/i18n';
+import { captureEvent } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import { formatAppVersion } from '@/lib/utils/app-version';
 import { reportFailure } from '@/lib/errors/report-failure';
@@ -79,6 +80,12 @@ const LanguageSelector = memo(function LanguageSelector(): ReactElement {
     // doing nothing.
     if (isLanguageSupported(value)) {
       void changeLanguage(value);
+      // Which languages people actually switch *to*, which is a different
+      // question from which locale their browser reports: the app defaults to
+      // French, and somebody changing it is saying the default was wrong for
+      // them. Captured inside the guard, so an unsupported value reports
+      // nothing rather than reporting a change that did not happen.
+      captureEvent('language_changed', { language: value });
       // Deliberately a raw confirmation: the language lives in localStorage and never
       // syncs, so the offline-aware "Saved on this device" wording adds
       // nothing. That helper is for writes to shared trip data.

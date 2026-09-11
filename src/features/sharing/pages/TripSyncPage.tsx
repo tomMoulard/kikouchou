@@ -61,6 +61,7 @@ import type {
 } from '@/lib/sharing';
 import { cn } from '@/lib/utils';
 import type { Trip, TripId } from '@/types';
+import { captureEvent } from '@/lib/posthog';
 
 import { TripSyncExportPanel } from '../components/TripSyncExportPanel';
 import { reportFailure } from '@/lib/errors/report-failure';
@@ -278,6 +279,15 @@ const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: 
       const result = await applyMerge(resolvedResult);
       const totalApplied = result.roomsUpserted + result.personsUpserted +
         result.assignmentsUpserted + result.transportsUpserted + result.conflictsAccepted;
+
+      // The other half of `trip_sync_exported`, and the half that says the
+      // hand-off worked. Conflicts are counted because they are the reason a
+      // scan ends in a review screen rather than in the trip.
+      captureEvent('trip_sync_imported', {
+        applied_count: totalApplied,
+        conflict_count: mergeResult.conflicts.length,
+        warning_count: mergeResult.warnings.length,
+      });
 
       notifySuccess(
         t('sharing.sync.mergeSuccess', 'Merged {{count}} changes successfully', {

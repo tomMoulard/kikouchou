@@ -49,6 +49,7 @@ import {
 import { getGuestIdentityStorageKey } from '@/lib/sharing/guest-identity';
 import { createBaselineForGuest } from '@/lib/sharing';
 import { cn } from '@/lib/utils';
+import { captureEvent } from '@/lib/posthog';
 import type {
   Person,
   PersonId,
@@ -259,6 +260,18 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
       // Mark wizard as completed for this share link (non-fatal if storage fails)
       try { localStorage.setItem(getWizardCompleteKey(shareId), 'true'); } catch { /* non-fatal */ }
 
+      // The end of the funnel, and the only step whose outcome is not a
+      // navigation choice: everything before it can be skipped, this one is
+      // the invitee arriving in the trip. What they brought with them —
+      // whether they claimed a room, whether they said when they land — is
+      // what makes the earlier skips readable.
+      captureEvent('share_wizard_step', {
+        step: 'summary',
+        outcome: 'complete',
+        claimed_room: claimedRoom !== undefined,
+        transport_count: transports.length,
+      });
+
       // Navigate INTO the context boundary
       navigate(`/trips/${trip.id}/calendar`);
     } catch (error) {
@@ -270,7 +283,7 @@ export const SummaryStepPage = memo(function SummaryStepPage(): ReactElement {
       isSubmittingRef.current = false;
       if (isMountedRef.current) setIsSubmitting(false);
     }
-  }, [trip, shareId, guestPersonId, navigate, t]);
+  }, [claimedRoom, transports.length, trip, shareId, guestPersonId, navigate, t]);
 
   // ============================================================================
   // Render

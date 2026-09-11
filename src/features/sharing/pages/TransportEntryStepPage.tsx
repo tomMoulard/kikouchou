@@ -61,6 +61,7 @@ import {
 import { getGuestIdentityStorageKey } from '@/lib/sharing/guest-identity';
 import { toCanonicalDatetime } from '@/lib/db/transport-datetime';
 import { cn } from '@/lib/utils';
+import { captureEvent } from '@/lib/posthog';
 import type {
   PersonId,
   ShareId,
@@ -445,8 +446,15 @@ export const TransportEntryStepPage = memo(function TransportEntryStepPage(): Re
    */
   const handleNavigateToSummary = useCallback((): void => {
     if (!shareId) return;
+    // Same reading as the room step: nothing entered is a skip, and the count
+    // says whether the guest gave one leg or both.
+    captureEvent('share_wizard_step', {
+      step: 'transport',
+      outcome: enteredTransports.length === 0 ? 'skip' : 'next',
+      entered_count: enteredTransports.length,
+    });
     navigate(`/share/${shareId}/summary`);
-  }, [shareId, navigate]);
+  }, [enteredTransports.length, shareId, navigate]);
 
   /**
    * Handles type toggle click.
