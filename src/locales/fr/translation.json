@@ -27,7 +27,8 @@
     "comingSoon": "Bientôt disponible",
     "date": "Date",
     "time": "Heure",
-    "pickDate": "Choisir une date"
+    "pickDate": "Choisir une date",
+    "scrollTimeline": "Faire défiler la frise"
   },
   "nav": {
     "calendar": "Calendrier",

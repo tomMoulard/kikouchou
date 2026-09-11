@@ -818,13 +818,128 @@ describe('buildCalendarTimelineModel', () => {
     expect(model.maxLaneCount).toBeGreaterThanOrEqual(1);
   });
 
-  it('skips transports outside trip date range', () => {
+  it('gives a transport before the trip start its own day column', () => {
+    // A guest flying in the day before everybody else had no column to be drawn
+    // in, so the timeline simply did not show the flight.
     const arrival: Transport = {
       id: 'tr1' as Transport['id'],
       tripId: 'trip-1' as TripId,
       personId: 'p1' as PersonId,
       type: 'arrival',
-      datetime: localInstant(2026, 6, 1, 14), // Way outside trip range
+      datetime: localInstant(2026, 3, 30, 14),
+      location: 'Airport',
+      needsPickup: false,
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [p1],
+      rooms: [],
+      assignments: [],
+      arrivals: [arrival],
+      departures: [],
+      unknownLabel: 'Unknown',
+    });
+
+    expect(model.dayKeys[0]).toBe('2026-03-30');
+    expect(model.dayKeys).toContain('2026-04-05');
+
+    const row = model.rows[0]!;
+    const transportItem = row.items.find((i) => i.kind === 'transport');
+    expect(transportItem).toBeDefined();
+    expect(transportItem?.startIndex).toBe(0);
+  });
+
+  it('gives a transport after the trip end its own day column', () => {
+    const departure: Transport = {
+      id: 'tr2' as Transport['id'],
+      tripId: 'trip-1' as TripId,
+      personId: 'p1' as PersonId,
+      type: 'departure',
+      datetime: localInstant(2026, 4, 8, 9),
+      location: 'Airport',
+      needsPickup: false,
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [p1],
+      rooms: [],
+      assignments: [],
+      arrivals: [],
+      departures: [departure],
+      unknownLabel: 'Unknown',
+    });
+
+    expect(model.dayKeys[model.dayKeys.length - 1]).toBe('2026-04-08');
+
+    const row = model.rows[0]!;
+    const transportItem = row.items.find((i) => i.kind === 'transport');
+    expect(transportItem).toBeDefined();
+    expect(transportItem?.startIndex).toBe(model.dayKeys.length - 1);
+  });
+
+  it('covers a whole run of out-of-trip transports on one axis', () => {
+    const arrival: Transport = {
+      id: 'tr1' as Transport['id'],
+      tripId: 'trip-1' as TripId,
+      personId: 'p1' as PersonId,
+      type: 'arrival',
+      datetime: localInstant(2026, 3, 28, 20),
+      location: 'Airport',
+      needsPickup: false,
+    };
+    const departure: Transport = {
+      id: 'tr2' as Transport['id'],
+      tripId: 'trip-1' as TripId,
+      personId: 'p2' as PersonId,
+      type: 'departure',
+      datetime: localInstant(2026, 4, 9, 6),
+      location: 'Station',
+      needsPickup: false,
+    };
+
+    const model = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [p1, p2],
+      rooms: [],
+      assignments: [],
+      arrivals: [arrival],
+      departures: [departure],
+      unknownLabel: 'Unknown',
+    });
+
+    expect(model.dayKeys[0]).toBe('2026-03-28');
+    expect(model.dayKeys[model.dayKeys.length - 1]).toBe('2026-04-09');
+    expect(model.dayKeys).toHaveLength(13);
+  });
+
+  it('extends the axis for a transport the caller asks for in extraDayKeys', () => {
+    // The calendar draws the activity bands on this same axis, so a caller can
+    // hand the builder days its own events do not cover.
+    const model = buildCalendarTimelineModel({
+      trip: createTrip(),
+      persons: [p1],
+      rooms: [],
+      assignments: [],
+      arrivals: [],
+      departures: [],
+      unknownLabel: 'Unknown',
+      extraDayKeys: [iso('2026-04-07')],
+    });
+
+    expect(model.dayKeys[model.dayKeys.length - 1]).toBe('2026-04-07');
+  });
+
+  it('leaves a transport too far out for the axis off the timeline', () => {
+    const arrival: Transport = {
+      id: 'tr1' as Transport['id'],
+      tripId: 'trip-1' as TripId,
+      personId: 'p1' as PersonId,
+      type: 'arrival',
+      // Two months out: a typo, not a plan. Stretching the axis to it would
+      // cost sixty day columns to show one pill.
+      datetime: localInstant(2026, 6, 1, 14),
       location: 'Airport',
       needsPickup: false,
     };
@@ -841,5 +956,6 @@ describe('buildCalendarTimelineModel', () => {
 
     const row = model.rows[0]!;
     expect(row.items.length).toBe(0);
+    expect(model.dayKeys).toHaveLength(5);
   });
 });

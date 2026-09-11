@@ -6,9 +6,11 @@
  */
 
 import {
+  type ChangeEvent,
   type ReactElement,
   type ReactNode,
   memo,
+  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -44,6 +46,15 @@ import type { ISODateString } from '@/types';
  */
 export const TIMELINE_COLLAPSED_LABEL_COLUMN_WIDTH_PX = 40;
 
+/**
+ * The scrollbar control reports the scroll offset as a whole percentage.
+ *
+ * Percent rather than pixels because the value is read out to assistive tech
+ * and stepped by the arrow keys: "40" means something to both, a pixel offset
+ * into a canvas means nothing to either.
+ */
+const TIMELINE_SCROLLBAR_STEPS = 100;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -78,6 +89,26 @@ export interface TripTimelineFrameProps {
   /** When set, that day column is highlighted in the header (local “today”). */
   readonly todayKey?: ISODateString;
   /**
+   * The trip's own dates, when the axis is allowed to run past them.
+   *
+   * The axis covers every event the timeline draws, which can be a flight the
+   * day before the trip starts, so the columns outside this range are marked as
+   * not part of the trip. Leave it unset when the axis *is* the trip.
+   */
+  readonly tripRange?: { readonly startKey: ISODateString; readonly endKey: ISODateString };
+  /**
+   * Translated name for a column outside `tripRange`, read to assistive tech
+   * and added to the column's tooltip. Required for `tripRange` to say anything
+   * to a screen reader — the greying alone is visual.
+   */
+  readonly outsideTripLabel?: string;
+  /**
+   * Translated label for the scrollbar control under the timeline
+   * (`common.scrollTimeline`). Falls back to `ariaLabel`, which names the
+   * timeline rather than the control, so pass it.
+   */
+  readonly scrollbarLabel?: string;
+  /**
    * Optional extra content rendered under each day number in the header
    * (e.g. the number of people on site that night).
    * Memoize the callback — the frame is a `memo` component.
@@ -98,10 +129,14 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
   dayKeys,
   dateLocale,
   todayKey,
+  tripRange,
+  outsideTripLabel,
+  scrollbarLabel,
   renderDayMeta,
   children,
 }: TripTimelineFrameProps): ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollbarRef = useRef<HTMLInputElement>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
   // True once the column has folded all the way down to the colours. Only the
   // padding and the header's own label read it — the width itself is not React
@@ -128,6 +163,43 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
     };
   }, []);
 
+  /**
+   * Moves the scrollbar's thumb to wherever the day axis now is.
+   *
+   * Deliberately a DOM write and not React state, for the same reason the label
+   * fold below is: this runs on every scroll frame, and re-rendering every row
+   * of the timeline that often would drop frames on the gesture the control
+   * exists to smooth. The input is uncontrolled, and this is the one place its
+   * value comes from.
+   */
+  const syncScrollbarFromScroll = useCallback((): void => {
+    const el = scrollRef.current;
+    const bar = scrollbarRef.current;
+    if (!el || !bar) {
+      return;
+    }
+
+    const maxScrollLeft = el.scrollWidth - el.clientWidth;
+    const ratio = maxScrollLeft > 0 ? el.scrollLeft / maxScrollLeft : 0;
+    bar.value = String(Math.round(Math.min(1, Math.max(0, ratio)) * TIMELINE_SCROLLBAR_STEPS));
+  }, []);
+
+  /** The other direction: the reader drags, types or taps the control. */
+  const handleScrollbarChange = useCallback((event: ChangeEvent<HTMLInputElement>): void => {
+    const el = scrollRef.current;
+    if (!el) {
+      return;
+    }
+
+    const steps = Number(event.target.value);
+    if (!Number.isFinite(steps)) {
+      return;
+    }
+
+    const maxScrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+    el.scrollLeft = (steps / TIMELINE_SCROLLBAR_STEPS) * maxScrollLeft;
+  }, []);
+
   // The fold is driven straight into a CSS variable rather than through React.
   //
   // It has to update on every scroll frame, and re-rendering a timeline of rows
@@ -152,6 +224,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
 
       el.style.setProperty(TIMELINE_LABEL_WIDTH_VAR, `${width}px`);
       setLabelsCollapsed(width <= TIMELINE_COLLAPSED_LABEL_COLUMN_WIDTH_PX);
+      syncScrollbarFromScroll();
     };
 
     el.addEventListener('scroll', syncFoldFromScroll, { passive: true });
@@ -159,7 +232,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
     return () => {
       el.removeEventListener('scroll', syncFoldFromScroll);
     };
-  }, [labelColumnWidth]);
+  }, [labelColumnWidth, syncScrollbarFromScroll]);
 
   const dayCount = days.length;
 
@@ -223,6 +296,26 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
       todayColumnIndex,
     ],
   );
+
+  /**
+   * Whether the day axis is wider than the viewport, and so whether the
+   * scrollbar control below it has anything to scroll.
+   *
+   * Answered from the layout the frame just decided, not read back off the
+   * element: `computeTimelineViewportLayout` either fits the days into the
+   * width it was given, or falls back to a fixed day width that overflows it.
+   * A measurement would also be a second source of truth for the same fact,
+   * one frame behind this one.
+   */
+  const maxScrollLeft = Math.max(0, labelColumnWidth + canvasWidth - viewportWidth);
+  const isScrollable = viewportWidth > 0 && maxScrollLeft > 1;
+
+  // The thumb's position is a share of a scrollable width that just changed —
+  // a resize, a different trip, the day count moving — so it is re-read once
+  // the new layout is in place. Scroll-time updates go through the listener.
+  useLayoutEffect(() => {
+    syncScrollbarFromScroll();
+  }, [isScrollable, maxScrollLeft, syncScrollbarFromScroll]);
 
   // What the last auto-centre was for. Collapsing the label column changes
   // `effectiveLabelColumnWidth`, and through it `canvasWidth` and `cellWidthPx`
@@ -324,14 +417,23 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
                   const monthLabel = format(day, 'MMM', { locale: dateLocale });
                   const dayLabel = format(day, 'dd', { locale: dateLocale });
                   const isToday = todayColumnIndex === index;
+                  const isOutsideTrip =
+                    tripRange !== undefined &&
+                    (key < tripRange.startKey || key > tripRange.endKey);
                   return (
                     <div
                       key={`timeline-day-${index}-${key}`}
                       className={cn(
                         'min-w-0 border-r border-muted px-1 py-2 text-xs text-muted-foreground',
+                        isOutsideTrip && 'bg-muted/60',
                         isToday && 'bg-primary/12 text-foreground',
                       )}
-                      title={format(day, 'PPPP', { locale: dateLocale })}
+                      data-outside-trip={isOutsideTrip ? 'true' : undefined}
+                      title={
+                        isOutsideTrip && outsideTripLabel
+                          ? `${format(day, 'PPPP', { locale: dateLocale })} — ${outsideTripLabel}`
+                          : format(day, 'PPPP', { locale: dateLocale })
+                      }
                       {...(isToday ? { 'aria-current': 'date' as const } : {})}
                     >
                       <div className="flex flex-col items-center leading-none">
@@ -358,6 +460,9 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
                         >
                           {dayLabel}
                         </div>
+                        {isOutsideTrip && outsideTripLabel ? (
+                          <span className="sr-only">{outsideTripLabel}</span>
+                        ) : null}
                         {renderDayMeta?.(key, index)}
                       </div>
                     </div>
@@ -370,6 +475,49 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
           {children(viewport)}
         </div>
       </div>
+
+      {/*
+        A scrollbar of our own, under the timeline.
+
+        The pills inside the rows are drag targets (dnd-kit), so on a phone a
+        horizontal swipe that starts on one is a drag and not a pan: the
+        timeline barely scrolls. A native scrollbar is no answer either — iOS
+        and Android draw none, and a mouse user gets a 15px overlay strip at
+        the bottom edge of a surface that is as tall as the trip has rows.
+
+        It is a range input on purpose. That is a slider the browser already
+        drives with touch, mouse, arrow keys, Home and End, and already reports
+        to assistive tech as one, with a value the reader can make sense of
+        because it is a percentage rather than a pixel offset. It renders only
+        while the axis actually overflows, so a short trip that fits on screen
+        gains no furniture.
+      */}
+      {isScrollable && (
+        <div className="flex items-center border-t border-muted bg-background px-3 py-2">
+          <input
+            ref={scrollbarRef}
+            type="range"
+            min={0}
+            max={TIMELINE_SCROLLBAR_STEPS}
+            step={1}
+            defaultValue={0}
+            aria-label={scrollbarLabel ?? ariaLabel}
+            data-testid="timeline-scrollbar"
+            onChange={handleScrollbarChange}
+            className={cn(
+              'h-6 w-full cursor-grab appearance-none bg-transparent',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded-full',
+              // The track and the thumb have to be styled per engine: each
+              // vendor pseudo-element is dropped by any engine that does not
+              // know it, so a shared selector list would style nothing.
+              '[&::-webkit-slider-runnable-track]:h-2 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-muted',
+              '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-12 [&::-webkit-slider-thumb]:-mt-1 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-muted-foreground/70',
+              '[&::-moz-range-track]:h-2 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-muted',
+              '[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-12 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-muted-foreground/70',
+            )}
+          />
+        </div>
+      )}
     </div>
   );
 });
