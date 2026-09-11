@@ -47,6 +47,7 @@ import { toLocalISODateString } from '@/lib/db/utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import type { Activity, ActivityId, ISODateString, Person, PersonId } from '@/types';
+import { captureDeletion } from '@/lib/posthog';
 
 import { ActivityCard } from '../components/ActivityCard';
 import { ActivityDialog } from '../components/ActivityDialog';
@@ -286,6 +287,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
 
     try {
       await deleteActivity(activityToDelete);
+      captureDeletion('activity_deleted', { remaining_count: activities.length - 1 });
       setActivityToDelete(null);
       notifySuccess(t('activities.deleteSuccess'));
     } catch (error) {
@@ -296,7 +298,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
       );
       throw error; // Keep the dialog open so the user can retry
     }
-  }, [activityToDelete, deleteActivity, t, notifySuccess]);
+  }, [activities.length, activityToDelete, deleteActivity, t, notifySuccess]);
 
   const handleCancelDelete = useCallback((open: boolean) => {
     if (!open) {

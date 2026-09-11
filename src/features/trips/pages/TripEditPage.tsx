@@ -39,7 +39,7 @@ import { tripAccessOf } from '@/hooks/useTripAccess';
 import { useTripContext } from '@/contexts/TripContext';
 
 import { deleteTrip, getTripById, updateTrip } from '@/lib/db';
-import posthog, { captureUsage, reportError } from '@/lib/posthog';
+import { captureDeletion, captureUsage, reportError } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import type { Trip, TripFormData, TripId } from '@/types';
 
@@ -298,7 +298,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
       }
 
       notifySuccess(t('trips.deleted', 'Trip deleted successfully'));
-      posthog?.capture('trip_deleted');
+      captureDeletion('trip_deleted');
 
       skipNextBlock();
 

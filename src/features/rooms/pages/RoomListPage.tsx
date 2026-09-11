@@ -96,7 +96,7 @@ import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout
 import { buildDayColumns } from '@/lib/utils/trip-days';
 import { notify } from '@/lib/notifications';
 import { reportFailure } from '@/lib/errors/report-failure';
-import { captureUsage } from '@/lib/posthog';
+import { captureDeletion, captureUsage } from '@/lib/posthog';
 import { getPersonHeadcount } from '@/types';
 import type {
   ISODateString,
@@ -583,6 +583,12 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
     async (room: Room) => {
       try {
         await deleteRoom(room.id);
+        // `capacity` mirrors what `room_saved` carries, so the two events
+        // subtract from each other in one breakdown.
+        captureDeletion('room_deleted', {
+          capacity: room.capacity,
+          remaining_count: rooms.length - 1,
+        });
         notifySuccess(t('rooms.deleteSuccess', 'Room deleted successfully'));
       } catch (error) {
         reportFailure(
@@ -593,7 +599,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         throw error; // Re-throw to keep ConfirmDialog open for retry
       }
     },
-    [deleteRoom, t, notifySuccess],
+    [deleteRoom, rooms.length, t, notifySuccess],
   ),
 
   /**

@@ -43,6 +43,7 @@ import { cn } from '@/lib/utils';
 import { CHILD_SEAT_KINDS } from '@/types';
 import type { ChildSeatKind, Person, PersonId, Vehicle, VehicleId } from '@/types';
 import { reportFailure } from '@/lib/errors/report-failure';
+import { captureDeletion } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -299,6 +300,7 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
 
     try {
       await deleteVehicle(pendingDeleteId);
+      captureDeletion('vehicle_deleted', { remaining_count: vehicles.length - 1 });
       notifySuccess(t('vehicles.deleteSuccess'));
     } catch (error) {
       reportFailure(
@@ -309,7 +311,7 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
     } finally {
       setPendingDeleteId(null);
     }
-  }, [deleteVehicle, pendingDeleteId, notifySuccess, t]);
+  }, [deleteVehicle, pendingDeleteId, notifySuccess, t, vehicles.length]);
 
   const handleDeleteOpenChange = useCallback((open: boolean) => {
     if (!open) {

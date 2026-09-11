@@ -69,7 +69,7 @@ import {
   useGuestGroups,
   type GuestGroupSelection,
 } from '@/features/guest-groups';
-import { captureUsage } from '@/lib/posthog';
+import { captureDeletion, captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import { getPersonHeadcount } from '@/types';
 import type { Person, PersonId, TransportMode } from '@/types';
@@ -635,6 +635,10 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
     }
     try {
       await deletePerson(deletingPersonId);
+      // Counted after the await, so a failed delete never reports one. The
+      // remaining count is what makes `person_saved` net rather than gross:
+      // a list built up and pruned reads differently from one built up once.
+      captureDeletion('person_deleted', { remaining_count: persons.length - 1 });
       notifySuccess(t('persons.deleteSuccess', 'Guest removed successfully'));
       setDeletingPersonId(undefined);
     } catch (error) {
@@ -645,7 +649,7 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
       );
       throw error;
     }
-  }, [deletePerson, deletingPersonId, notifySuccess, t]),
+  }, [deletePerson, deletingPersonId, notifySuccess, persons.length, t]),
 
   // ============================================================================
   // Guest Groups

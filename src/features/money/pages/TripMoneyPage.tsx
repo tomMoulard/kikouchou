@@ -52,7 +52,7 @@ import {
   updateExpenseWithOwnershipCheck,
 } from '@/lib/db/repositories/expense-repository';
 import { toLocalISODateString } from '@/lib/db/utils';
-import { captureUsage } from '@/lib/posthog';
+import { captureDeletion, captureUsage } from '@/lib/posthog';
 import type {
   Expense,
   ExpenseFormData,
@@ -248,6 +248,14 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
 
       try {
         await deleteExpenseWithOwnershipCheck(expense.id, tripIdFromUrl as TripId);
+        // The same shape `expense_saved` reports, minus the operation: a
+        // deleted line has to subtract from the same breakdowns it added to.
+        captureDeletion('expense_deleted', {
+          kind: expense.kind,
+          category: expense.category,
+          split_mode: expense.splitMode,
+          beneficiary_count: expense.splits.length,
+        });
         notifySuccess(t('money.expense.deleteSuccess'));
       } catch (error) {
         reportFailure(
