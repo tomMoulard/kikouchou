@@ -237,7 +237,18 @@ const TripSetupChecklist = memo(function TripSetupChecklist({
             const isNext = step.key === nextStepKey;
 
             return (
-              <li key={step.key} className="flex items-center gap-3">
+              /* A grid rather than one flex row. The action labels are short
+                 phrases ("Assign rooms", "Nouvel arrivant") and a Button is
+                 `whitespace-nowrap shrink-0`, so on a phone the button held its
+                 full width and the only thing left to give was the step's own
+                 text — which squeezed to a couple of characters per line beside
+                 a button that looked enormous next to it. Here the button drops
+                 to its own line under the text until there is room for a third
+                 column, and the text keeps the width it needs at every size. */
+              <li
+                key={step.key}
+                className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 sm:grid-cols-[auto_minmax(0,1fr)_auto]"
+              >
                 {/* Tick or icon, never colour alone: the tick is the shape that
                     says "done" for anyone who cannot see the green. */}
                 <span
@@ -256,7 +267,7 @@ const TripSetupChecklist = memo(function TripSetupChecklist({
                   )}
                 </span>
 
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0">
                   <p
                     className={cn(
                       'text-sm font-medium',
@@ -281,6 +292,7 @@ const TripSetupChecklist = memo(function TripSetupChecklist({
                     size="sm"
                     variant={isNext ? 'default' : 'outline'}
                     onClick={handlers[step.key]}
+                    className="col-start-2 justify-self-start sm:col-start-3 sm:justify-self-end"
                   >
                     {stepAction[step.key]}
                   </Button>
