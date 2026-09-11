@@ -34,7 +34,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { useAuth } from '@/features/auth/AuthContext';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
 import { db } from '@/lib/db/database';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import { useHereManifest } from '@/lib/pwa/use-here-manifest';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { materialiseJoinedTrip } from '@/lib/sync/join-trip';
@@ -187,7 +187,7 @@ export function TripLinkPage(): ReactElement {
     navigatedRef.current = true;
     if (reportedRef.current === null) {
       reportedRef.current = 'local';
-      posthog?.capture('trip_link_opened', { outcome: 'local' });
+      captureEvent('trip_link_opened', { outcome: 'local' });
     }
     openTrip(localTrip.id);
   }, [installRequested, localTrip, openTrip]);
@@ -218,13 +218,13 @@ export function TripLinkPage(): ReactElement {
       }
       if (result.status === 'error') {
         reportedRef.current = 'error';
-        posthog?.capture('trip_link_opened', { outcome: 'error' });
+        captureEvent('trip_link_opened', { outcome: 'error' });
         setFailure({ attempt, message: result.message });
         return;
       }
       if (result.status === 'joined') {
         reportedRef.current = 'downloaded';
-        posthog?.capture('trip_link_opened', { outcome: 'downloaded' });
+        captureEvent('trip_link_opened', { outcome: 'downloaded' });
       }
       // `already-local` and `joined` alike: the row is in Dexie now, and the
       // live query above re-renders this page onto it.
@@ -250,7 +250,7 @@ export function TripLinkPage(): ReactElement {
       return;
     }
     reportedRef.current = settledOutcome;
-    posthog?.capture('trip_link_opened', { outcome: settledOutcome });
+    captureEvent('trip_link_opened', { outcome: settledOutcome });
   }, [settledOutcome]);
 
   const retry = useCallback((): void => {

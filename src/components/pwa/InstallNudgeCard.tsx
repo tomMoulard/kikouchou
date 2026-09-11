@@ -37,7 +37,7 @@ import { useInstallPromptState } from '@/contexts/InstallPromptContext';
 import { usePhoneViewport } from '@/hooks/usePhoneViewport';
 import { installHandoffUrl } from '@/lib/pwa/install-handoff';
 import { notify } from '@/lib/notifications';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 import type { Trip } from '@/types';
 
@@ -120,7 +120,7 @@ export const InstallNudgeCard = memo(function InstallNudgeCard({
 
   useEffect(() => {
     if (isVisible) {
-      posthog?.capture('install_nudge_shown', {
+      captureEvent('install_nudge_shown', {
         trip_access: trip.viewerToken !== undefined ? 'viewer' : 'member',
         can_prompt: canInstall,
       });
@@ -129,7 +129,7 @@ export const InstallNudgeCard = memo(function InstallNudgeCard({
   }, [isVisible, trip.id]);
 
   const handleInstall = useCallback(async (): Promise<void> => {
-    posthog?.capture('install_nudge_accepted', { via: 'prompt' });
+    captureEvent('install_nudge_accepted', { via: 'prompt' });
     const success = await install();
     if (!success) {
       notify.error(t('pwa.installFailed', 'Installation failed. Please try again.'));
@@ -140,7 +140,7 @@ export const InstallNudgeCard = memo(function InstallNudgeCard({
     if (handoffUrl === null) {
       return;
     }
-    posthog?.capture('install_nudge_accepted', {
+    captureEvent('install_nudge_accepted', {
       via: 'handoff',
       platform: manualInstallPlatform,
     });
@@ -151,7 +151,7 @@ export const InstallNudgeCard = memo(function InstallNudgeCard({
   }, [handoffUrl, manualInstallPlatform, navigate, requestInstall]);
 
   const handleDismiss = useCallback((): void => {
-    posthog?.capture('install_nudge_dismissed');
+    captureEvent('install_nudge_dismissed');
     storeDismissal();
     setIsDismissed(true);
   }, []);

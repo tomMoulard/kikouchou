@@ -34,7 +34,7 @@ import {
   getReminderState,
   type ReminderState,
 } from '@/lib/notifications/push';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient } from '@/lib/supabase/client';
 
 // ============================================================================
@@ -146,7 +146,7 @@ export const NotificationSettings = memo(function NotificationSettings(): ReactE
       const client = await getSupabaseClient();
       if (client) {
         await disableTripReminders(client, currentTrip.id);
-        posthog?.capture('reminders_disabled', {
+        captureEvent('reminders_disabled', {
           trip_access: currentTrip.viewerToken !== undefined ? 'viewer' : 'member',
         });
       }

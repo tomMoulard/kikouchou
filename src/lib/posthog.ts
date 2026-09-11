@@ -423,6 +423,155 @@ export function resetAnalyticsIdentity(): void {
 }
 
 // ============================================================================
+// Capture
+// ============================================================================
+
+/**
+ * Every event name this app captures itself.
+ *
+ * A closed union, for the reason {@link UsageAction} is one: the set of things
+ * this project measures is a decision somebody makes, and a free `string`
+ * parameter turns a typo into a second event that quietly splits an insight in
+ * half. It covers only the app's own events — posthog-js keeps capturing
+ * `$pageview`, `$exception` and the rest under names it owns, and LLM analytics
+ * captures `$ai_generation` through the client directly, because those names
+ * belong to PostHog's schema rather than to this list.
+ */
+export type AnalyticsEvent =
+  | UsageAction
+  | DeletionEvent
+  | typeof USAGE_EVENT
+  // Account
+  | 'account_registered'
+  | 'account_trip_sync'
+  | 'sign_in_started'
+  | 'sign_in_failed'
+  | 'signed_out'
+  // Assistant
+  | 'assistant_answer_failed'
+  | 'assistant_answer_received'
+  | 'assistant_device_unsupported'
+  | 'assistant_model_load_failed'
+  // Reading what the app worked out
+  | 'analytics_viewed'
+  | 'calendar_view_changed'
+  | 'summary_printed'
+  | 'transports_view_opened'
+  // Install and reminders
+  | 'install_nudge_accepted'
+  | 'install_nudge_dismissed'
+  | 'install_nudge_shown'
+  | 'notification_opened'
+  | 'pwa_install_completed'
+  | 'reminder_card_dismissed'
+  | 'reminder_card_shown'
+  | 'reminders_disabled'
+  | 'reminders_enable_result'
+  | 'run_calendar_exported'
+  // Preferences
+  | 'language_changed'
+  | 'theme_changed'
+  // Sharing, joining and syncing
+  | 'own_trip_prompt_accepted'
+  | 'own_trip_prompt_dismissed'
+  | 'own_trip_prompt_shown'
+  | 'share_wizard_step'
+  | 'trip_identity_claim_failed'
+  | 'trip_identity_claimed'
+  | 'trip_identity_skipped'
+  | 'trip_invite_ready'
+  | 'trip_join_failed'
+  | 'trip_link_opened'
+  | 'trip_share_blocked'
+  | 'trip_sync_exported'
+  | 'trip_sync_imported'
+  | 'trip_sync_offline'
+  | 'trip_sync_recovered'
+  | 'viewer_sign_in_clicked'
+  // Creating a trip
+  | 'trip_wizard_started'
+  | 'trip_wizard_step';
+
+/** One captured event, as {@link readCapturedEvents} hands it back. */
+export interface CapturedEvent {
+  readonly event: AnalyticsEvent;
+  readonly properties?: Record<string, unknown>;
+}
+
+declare global {
+  interface Window {
+    /**
+     * Every event captured since the page loaded, on a dev build only.
+     *
+     * See {@link recordForInspection} for why it exists and why production
+     * never has it.
+     */
+    __kikouchouAnalytics?: CapturedEvent[];
+  }
+}
+
+/**
+ * How many captures the dev-only log keeps before dropping the oldest.
+ *
+ * A bound rather than an unbounded array: a dev server left open all afternoon
+ * with the assistant running would otherwise grow one forever, and nothing
+ * reading this log cares about an event five hundred captures ago.
+ */
+const INSPECTION_LOG_LIMIT = 500;
+
+/**
+ * Writes one capture to `window.__kikouchouAnalytics`, on a dev build only.
+ *
+ * The end-to-end suite cannot watch the wire: `lib/posthog` refuses to
+ * initialize on a loopback hostname and the Playwright servers blank
+ * `VITE_POSTHOG_KEY`, both deliberately — see `e2e/analytics-privacy.spec.ts`
+ * for the nineteen phantom people that bought those guards. So the suite needs
+ * somewhere else to look, and this is it: the events are observable where they
+ * are decided, one step before a client that is not there would have sent them.
+ *
+ * `import.meta.env.DEV` is replaced by a literal at build time, so a production
+ * bundle keeps neither this log nor the branch that fills it — the Playwright
+ * `production` project, which runs a real build, correctly sees nothing. Guard
+ * `window` too: this module is imported by unit tests whose environment has no
+ * DOM, and it must never throw at import time.
+ */
+function recordForInspection(
+  event: AnalyticsEvent,
+  properties?: Record<string, unknown>,
+): void {
+  if (!import.meta.env.DEV || typeof window === 'undefined') {
+    return;
+  }
+  const log = (window.__kikouchouAnalytics ??= []);
+  log.push(properties === undefined ? { event } : { event, properties });
+  if (log.length > INSPECTION_LOG_LIMIT) {
+    log.shift();
+  }
+}
+
+/**
+ * Captures one event, and is the only place in the app that does.
+ *
+ * Every call site goes through here rather than through `posthog?.capture`, for
+ * two reasons. The name is checked against {@link AnalyticsEvent}, so a typo is
+ * a build error rather than an orphan event nobody notices for a month. And
+ * there is exactly one point where a capture can be observed, which is what
+ * lets `e2e/analytics-events.spec.ts` assert that a click produces the event it
+ * is supposed to produce.
+ *
+ * Safe with no client, like everything else here: analytics is simply off, and
+ * the inspection log still fills, so the end-to-end suite works on a build that
+ * sends nothing anywhere.
+ */
+export function captureEvent(
+  event: AnalyticsEvent,
+  properties?: Record<string, unknown>,
+): void {
+  posthogClient?.capture(event, properties);
+  recordForInspection(event, properties);
+}
+
+// ============================================================================
 // Usage
 // ============================================================================
 
@@ -502,8 +651,59 @@ export function captureUsage(
   action: UsageAction,
   properties?: Record<string, unknown>,
 ): void {
-  posthogClient?.capture(action, properties);
-  posthogClient?.capture(USAGE_EVENT, { action });
+  captureEvent(action, properties);
+  captureEvent(USAGE_EVENT, { action });
+}
+
+// ============================================================================
+// Deletion
+// ============================================================================
+
+/**
+ * The events that mean a record left a trip.
+ *
+ * Saving was counted from the start and deleting was not, which made every
+ * `*_saved` count a gross number: a trip whose rooms were entered three times
+ * and pruned twice reads the same as one entered once and kept. These are the
+ * matching halves, named after the events they undo.
+ *
+ * None of them is a {@link UsageAction}, and that is the same call the module
+ * already made for `trip_deleted`: cleanup is not what "somebody used the app"
+ * is meant to measure, and counting it would let a person tidying up on a
+ * Sunday read as engagement.
+ *
+ * `assignment_deleted` has no `assignment_saved` beside it — putting a guest in
+ * a room happens by drag and drop and was never captured. It is here anyway:
+ * unpicking a room plan is the one deletion that says the plan was wrong.
+ */
+export type DeletionEvent =
+  | 'activity_deleted'
+  | 'assignment_deleted'
+  | 'expense_deleted'
+  | 'guest_group_deleted'
+  | 'person_deleted'
+  | 'ride_deleted'
+  | 'room_deleted'
+  | 'transport_deleted'
+  | 'trip_deleted'
+  | 'vehicle_deleted';
+
+/**
+ * Captures one record being deleted.
+ *
+ * A thin name over {@link captureEvent} rather than a second mechanism: it
+ * exists so the deletion events are one closed list somebody reads in one
+ * place, the way {@link UsageAction} is, instead of ten string literals spread
+ * over ten features.
+ *
+ * `trip_deleted` predates this and keeps its exact name, so the insights built
+ * on it are unaffected.
+ */
+export function captureDeletion(
+  event: DeletionEvent,
+  properties?: Record<string, unknown>,
+): void {
+  captureEvent(event, properties);
 }
 
 // ============================================================================

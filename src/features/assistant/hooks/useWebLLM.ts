@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import i18n from '@/lib/i18n';
-import posthog from '@/lib/posthog';
+import posthog, { captureEvent } from '@/lib/posthog';
 import { formatBytes } from '@/lib/utils/format-bytes';
 import type { AssistantModelPreset } from '../models';
 import type {
@@ -630,7 +630,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       // error in a worker reaches it on its own, which is why a device that
       // cannot run the assistant at all used to look, in PostHog, like somebody
       // who opened the page and lost interest.
-      posthog?.capture('assistant_model_load_failed', {
+      captureEvent('assistant_model_load_failed', {
         reason: classifyModelLoadFailure(message),
         model_id: preset.modelId,
         dtype: preset.dtype,

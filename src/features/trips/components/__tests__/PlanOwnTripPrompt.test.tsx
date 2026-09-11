@@ -29,6 +29,7 @@ vi.mock('@/lib/posthog', () => ({
   // without it makes the reporter itself the error under test.
   reportError: vi.fn(),
   default: { capture: mockCapture },
+  captureEvent: mockCapture,
 }));
 
 import { PlanOwnTripPrompt } from '../PlanOwnTripPrompt';

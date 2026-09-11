@@ -21,6 +21,7 @@ vi.mock('@/lib/posthog', () => ({
   // The real module exports `undefined` without env config, which is the case
   // in tests, so nothing here could observe a capture without this.
   default: { capture: (...args: unknown[]) => mockCapture(...args) },
+  captureEvent: (...args: unknown[]) => mockCapture(...args),
 }));
 
 function dispatchBeforeInstallPrompt(

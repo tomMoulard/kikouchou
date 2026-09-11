@@ -33,6 +33,7 @@ vi.mock('@/lib/posthog', () => ({
   // without it makes the reporter itself the error under test.
   reportError: vi.fn(),
   default: { capture: vi.fn() },
+  captureEvent: vi.fn(),
   captureUsage: vi.fn(),
 }));
 

@@ -11,7 +11,7 @@ import userEvent from '@testing-library/user-event';
 import { TripCreateWizard } from '../TripCreateWizard';
 import { createTripWithDetails } from '../../lib/create-trip-with-details';
 import { announceStatus } from '@/lib/notifications';
-import posthog, { captureUsage } from '@/lib/posthog';
+import { captureEvent, captureUsage } from '@/lib/posthog';
 
 // ============================================================================
 // Test doubles
@@ -88,16 +88,21 @@ vi.mock('canvas-confetti', () => ({ default: (...args: unknown[]) => confetti(..
 
 vi.mock('../../lib/create-trip-with-details', () => ({ createTripWithDetails: vi.fn() }));
 vi.mock('@/lib/notifications', () => ({ announceStatus: vi.fn() }));
-vi.mock('@/lib/posthog', () => ({
+// One spy behind both shapes — see `TripLinkPage.test.tsx`.
+vi.mock('@/lib/posthog', () => {
+  const capture = vi.fn();
+  return {
+    default: { capture },
+    captureEvent: capture,
+    captureUsage: vi.fn(),
   // Named export used by every catch block that reports; a mock
   // without it makes the reporter itself the error under test.
   reportError: vi.fn(),
-  default: { capture: vi.fn() },
-  captureUsage: vi.fn(),
-}));
+  };
+});
 
 const mockedCreate = vi.mocked(createTripWithDetails);
-const capture = vi.mocked(posthog!.capture);
+const capture = vi.mocked(captureEvent);
 
 const CREATED_TRIP = {
   id: 'trip-1',

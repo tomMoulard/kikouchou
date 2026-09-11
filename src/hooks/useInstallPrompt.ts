@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import { STANDALONE_MEDIA_QUERY, isRunningStandalone } from '@/lib/pwa/display-mode';
 
 // ============================================================================
@@ -405,7 +405,7 @@ export function useInstallPrompt(): UseInstallPromptResult {
         second listener and count the install twice — read the context, do
         not call this hook.
       */
-      posthog?.capture('pwa_install_completed', {
+      captureEvent('pwa_install_completed', {
         // Whether the app's own Install button produced this, as against
         // something in the browser's UI that we never see.
         via_prompt: hasPromptedRef.current,

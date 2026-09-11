@@ -26,7 +26,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { useAuth } from '@/features/auth/AuthContext';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
 import { useTripAccess } from '@/hooks/useTripAccess';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { upgradeViewerTrip, type ViewerUpgradeResult } from '@/lib/sync/viewer';
 import { cn } from '@/lib/utils';
@@ -106,7 +106,7 @@ export const ViewerUnlockCard = memo(function ViewerUnlockCard({
       setUpgrade({ kind: 'idle' });
       return;
     }
-    posthog?.capture('trip_join_failed', { reason: result.status, mode: 'upgrade' });
+    captureEvent('trip_join_failed', { reason: result.status, mode: 'upgrade' });
     setUpgrade({ kind: 'failed', result });
   }, [currentTrip, userId]);
 
@@ -132,7 +132,7 @@ export const ViewerUnlockCard = memo(function ViewerUnlockCard({
   }, [access, tripId, tryUpgrade, userId]);
 
   const handleSignIn = useCallback((): void => {
-    posthog?.capture('viewer_sign_in_clicked');
+    captureEvent('viewer_sign_in_clicked');
     setSignInOpen(true);
   }, []);
 
