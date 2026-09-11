@@ -28,7 +28,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import posthog, { captureUsage } from '@/lib/posthog';
+import { captureEvent, captureUsage } from '@/lib/posthog';
 import { useAuth } from '@/features/auth/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { redeemInvite, type RedeemInviteResult } from '@/lib/sync/invites';
@@ -134,7 +134,7 @@ export function useJoinTrip(token: string | null): {
         // The reason is the whole point: a revoked link and an exhausted one are
         // the same dead end to the person holding it and completely different
         // problems to fix.
-        posthog?.capture('trip_join_failed', { reason: viewed.status, mode: 'viewer' });
+        captureEvent('trip_join_failed', { reason: viewed.status, mode: 'viewer' });
         setPhase({ kind: 'rejected', reason: viewed.status });
         return;
       }
@@ -144,7 +144,7 @@ export function useJoinTrip(token: string | null): {
         return;
       }
       if (redeemed.status !== 'joined') {
-        posthog?.capture('trip_join_failed', { reason: redeemed.status, mode: 'member' });
+        captureEvent('trip_join_failed', { reason: redeemed.status, mode: 'member' });
         setPhase(toFailurePhase(redeemed));
         return;
       }

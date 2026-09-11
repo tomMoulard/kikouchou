@@ -84,7 +84,7 @@ import {
   getAssistantModelPreset,
   isAssistantModelId,
 } from '../models';
-import posthog, { captureUsage } from '@/lib/posthog';
+import posthog, { captureEvent, captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import { formatBytes } from '@/lib/utils/format-bytes';
 import type { AssistantModelId } from '@/types';
@@ -873,7 +873,7 @@ function AssistantPageComponent(): ReactElement {
     }
     reportedUnsupportedRef.current = key;
 
-    posthog?.capture('assistant_device_unsupported', {
+    captureEvent('assistant_device_unsupported', {
       reason: webgpuSupport,
       model_id: selectedModel.modelId,
       device: selectedModel.device ?? 'default',
@@ -992,7 +992,7 @@ function AssistantPageComponent(): ReactElement {
           ),
         );
 
-        posthog?.capture('assistant_answer_received', {
+        captureEvent('assistant_answer_received', {
           duration_ms: Date.now() - startedAt,
           answer_length: response.length,
           action_count: actionsExecuted,
@@ -1044,7 +1044,7 @@ function AssistantPageComponent(): ReactElement {
           ),
         );
 
-        posthog?.capture('assistant_answer_failed', {
+        captureEvent('assistant_answer_failed', {
           duration_ms: Date.now() - startedAt,
           // A crashed engine and a refused generation need different fixes: the
           // first is the device running out of GPU, the second is the model or

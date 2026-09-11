@@ -15,7 +15,7 @@ import { useInstallPromptState } from '@/contexts/InstallPromptContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useHereManifest } from '@/lib/pwa/use-here-manifest';
 import { materialiseJoinedTrip } from '@/lib/sync/join-trip';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import type { ShareId, Trip, TripId } from '@/types';
 
 // ============================================================================
@@ -52,16 +52,24 @@ vi.mock('@/lib/supabase/client', () => ({
   getSupabaseClient: vi.fn(async () => ({}) as never),
 }));
 vi.mock('@/lib/sync/join-trip', () => ({ materialiseJoinedTrip: vi.fn() }));
-vi.mock('@/lib/posthog', () => ({
+// One spy behind both shapes: the page captures through `captureEvent`, and
+// the client is still exported for the code that reads a distinct id.
+vi.mock('@/lib/posthog', () => {
+  const capture = vi.fn();
+  return {
+    default: { capture },
+    captureEvent: capture,
   // Named export used by every catch block that reports; a mock
   // without it makes the reporter itself the error under test.
-  reportError: vi.fn(), default: { capture: vi.fn() } }));
+  reportError: vi.fn(),
+  };
+});
 
 const mockedUseTripContext = vi.mocked(useTripContext);
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedInstallState = vi.mocked(useInstallPromptState);
 const mockedMaterialise = vi.mocked(materialiseJoinedTrip);
-const capture = vi.mocked(posthog!.capture);
+const capture = vi.mocked(captureEvent);
 const setCurrentTrip = vi.fn(async () => {});
 
 const TRIP_ID = 'trip-local-1' as TripId;

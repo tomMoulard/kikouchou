@@ -28,7 +28,7 @@ import {
   enableTripReminders,
   getReminderState,
 } from '@/lib/notifications/push';
-import posthog from '@/lib/posthog';
+import posthog, { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
 import type { Trip } from '@/types';
@@ -130,7 +130,7 @@ export const ReminderCard = memo(function ReminderCard({
 
   useEffect(() => {
     if (isVisible) {
-      posthog?.capture('reminder_card_shown', {
+      captureEvent('reminder_card_shown', {
         trip_access: trip.viewerToken !== undefined ? 'viewer' : 'member',
       });
     }
@@ -189,7 +189,7 @@ export const ReminderCard = memo(function ReminderCard({
       if (!isMountedRef.current) {
         return;
       }
-      posthog?.capture('reminders_enable_result', {
+      captureEvent('reminders_enable_result', {
         outcome: result.status,
         trip_access: trip.viewerToken !== undefined ? 'viewer' : 'member',
         has_person: identity.personId !== undefined,
@@ -207,7 +207,7 @@ export const ReminderCard = memo(function ReminderCard({
   }, [explain, i18n.language, t, trip, user?.id]);
 
   const handleDismiss = useCallback((): void => {
-    posthog?.capture('reminder_card_dismissed');
+    captureEvent('reminder_card_dismissed');
     storeDismissal(trip.id);
     setIsDismissed(true);
   }, [trip.id]);

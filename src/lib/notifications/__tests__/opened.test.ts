@@ -20,6 +20,7 @@ vi.mock('@/lib/posthog', () => ({
   // without it makes the reporter itself the error under test.
   reportError: vi.fn(),
   default: { capture: (...args: unknown[]) => mockCapture(...args) },
+  captureEvent: (...args: unknown[]) => mockCapture(...args),
 }));
 
 // ============================================================================

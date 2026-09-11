@@ -13,7 +13,7 @@ import { useAuth } from '@/features/auth/AuthContext';
 import { resolveTripIdentity } from '@/lib/identity/trip-identity';
 import { notify } from '@/lib/notifications';
 import { enableTripReminders, getReminderState } from '@/lib/notifications/push';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import type { Trip } from '@/types';
 
 // ============================================================================
@@ -46,12 +46,18 @@ vi.mock('@/lib/notifications/push', () => ({
   enableTripReminders: vi.fn(),
   getReminderState: vi.fn(),
 }));
-vi.mock('@/lib/posthog', () => ({
+// One spy behind both shapes: the card captures through `captureEvent` and
+// still reads the distinct id off the client.
+vi.mock('@/lib/posthog', () => {
+  const capture = vi.fn();
+  return {
+    default: { capture, get_distinct_id: () => 'ph-device' },
+    captureEvent: capture,
   // Named export used by every catch block that reports; a mock
   // without it makes the reporter itself the error under test.
   reportError: vi.fn(),
-  default: { capture: vi.fn(), get_distinct_id: () => 'ph-device' },
-}));
+  };
+});
 vi.mock('@/lib/supabase/client', () => ({
   getSupabaseClient: vi.fn(async () => ({}) as never),
 }));
@@ -60,7 +66,7 @@ const mockedUseAuth = vi.mocked(useAuth);
 const mockedIdentity = vi.mocked(resolveTripIdentity);
 const mockedEnable = vi.mocked(enableTripReminders);
 const mockedState = vi.mocked(getReminderState);
-const capture = vi.mocked(posthog!.capture);
+const capture = vi.mocked(captureEvent);
 
 const VIEWER_TRIP = {
   id: 'trip-1',

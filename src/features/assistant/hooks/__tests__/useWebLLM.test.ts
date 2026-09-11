@@ -37,6 +37,9 @@ vi.mock('@/lib/posthog', () => ({
     capture: (...args: unknown[]) => mockCapture(...args),
     captureException: (...args: unknown[]) => mockCaptureException(...args),
   },
+  // Call sites capture through the named helper now; the client is left on the
+  // mock because `captureException` still goes through it directly.
+  captureEvent: (...args: unknown[]) => mockCapture(...args),
 }));
 
 // ============================================================================

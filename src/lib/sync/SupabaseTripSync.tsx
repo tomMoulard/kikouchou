@@ -24,7 +24,7 @@ import {
 
 import { useTripContext } from '@/contexts/TripContext';
 import { useAuth } from '@/features/auth/AuthContext';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { useYjsContext } from '@/lib/yjs/YjsProvider';
 import { syncRemoteTripMetadata } from './remote-trip';
@@ -174,11 +174,11 @@ export function SupabaseTripSync({
       return;
     }
     if (state.status === 'offline') {
-      posthog?.capture('trip_sync_offline', { pending_count: state.pendingCount });
+      captureEvent('trip_sync_offline', { pending_count: state.pendingCount });
       return;
     }
     if (previous === 'offline' && state.status === 'synced') {
-      posthog?.capture('trip_sync_recovered', { pending_count: state.pendingCount });
+      captureEvent('trip_sync_recovered', { pending_count: state.pendingCount });
     }
   }, [state.status, state.pendingCount]);
 

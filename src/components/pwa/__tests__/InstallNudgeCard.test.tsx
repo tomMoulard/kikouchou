@@ -12,7 +12,7 @@ import { InstallNudgeCard } from '../InstallNudgeCard';
 import { installHandoffUrl } from '@/lib/pwa/install-handoff';
 import { useInstallPromptState } from '@/contexts/InstallPromptContext';
 import { usePhoneViewport } from '@/hooks/usePhoneViewport';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import type { Trip } from '@/types';
 
 // ============================================================================
@@ -43,14 +43,21 @@ vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 vi.mock('@/contexts/InstallPromptContext', () => ({ useInstallPromptState: vi.fn() }));
 vi.mock('@/hooks/usePhoneViewport', () => ({ usePhoneViewport: vi.fn() }));
 vi.mock('@/lib/notifications', () => ({ notify: { success: vi.fn(), error: vi.fn() } }));
-vi.mock('@/lib/posthog', () => ({
+// One spy behind both shapes — see `TripLinkPage.test.tsx`.
+vi.mock('@/lib/posthog', () => {
+  const capture = vi.fn();
+  return {
+    default: { capture },
+    captureEvent: capture,
   // Named export used by every catch block that reports; a mock
   // without it makes the reporter itself the error under test.
-  reportError: vi.fn(), default: { capture: vi.fn() } }));
+  reportError: vi.fn(),
+  };
+});
 
 const mockedState = vi.mocked(useInstallPromptState);
 const mockedPhone = vi.mocked(usePhoneViewport);
-const capture = vi.mocked(posthog!.capture);
+const capture = vi.mocked(captureEvent);
 
 const install = vi.fn(async () => true);
 const requestInstall = vi.fn();

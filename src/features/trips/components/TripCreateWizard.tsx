@@ -35,7 +35,7 @@ import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePi
 import { ShareDialog } from '@/features/sharing/components/ShareDialog';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { announceStatus } from '@/lib/notifications';
-import posthog, { captureUsage } from '@/lib/posthog';
+import { captureEvent, captureUsage } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 import { DEFAULT_ROOM_ICON } from '@/types';
 import type { ISODateString, Trip, TripFormData } from '@/types';
@@ -142,7 +142,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
 
   useEffect(() => {
     isMountedRef.current = true;
-    posthog?.capture('trip_wizard_started');
+    captureEvent('trip_wizard_started');
     return () => {
       isMountedRef.current = false;
     };
@@ -180,7 +180,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
   const stepIndex = QUESTIONS.indexOf(step);
 
   const report = useCallback((outcome: 'next' | 'skip' | 'back', from: Step): void => {
-    posthog?.capture('trip_wizard_step', { step: from, outcome });
+    captureEvent('trip_wizard_step', { step: from, outcome });
   }, []);
 
   const goTo = useCallback((next: Step): void => {

@@ -25,7 +25,7 @@ import {
   CardDescription,
   CardTitle,
 } from '@/components/ui/card';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 import { usePlanOwnTripPrompt } from '../hooks/usePlanOwnTripPrompt';
 import type { Trip } from '@/types';
@@ -83,17 +83,17 @@ export const PlanOwnTripPrompt = memo(function PlanOwnTripPrompt({
       hasReportedRef.current = true;
       // Not a `captureUsage` action: seeing a card is not using the app, and the
       // `trip_created` this hopes to produce is already counted as activity.
-      posthog?.capture('own_trip_prompt_shown', { trip_count: trips.length });
+      captureEvent('own_trip_prompt_shown', { trip_count: trips.length });
     }
   }, [isVisible, trips.length]);
 
   const handleCreate = useCallback((): void => {
-    posthog?.capture('own_trip_prompt_accepted');
+    captureEvent('own_trip_prompt_accepted');
     onCreateTrip();
   }, [onCreateTrip]);
 
   const handleDismiss = useCallback((): void => {
-    posthog?.capture('own_trip_prompt_dismissed');
+    captureEvent('own_trip_prompt_dismissed');
     dismiss();
   }, [dismiss]);
 

@@ -31,7 +31,7 @@
  * @module lib/notifications/opened
  */
 
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 
 // ============================================================================
 // Constants
@@ -200,7 +200,7 @@ function listenForClicks(): void {
  */
 export function reportNotificationOpened(kind: string): void {
   try {
-    posthog?.capture(OPENED_EVENT, { kind });
+    captureEvent(OPENED_EVENT, { kind });
   } catch (error) {
     console.warn('[notifications] could not report a notification click:', error);
   }

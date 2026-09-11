@@ -39,7 +39,7 @@ import { onboardingSurface, statusVariants } from '@/components/ui/status.varian
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { useInstallPromptState } from '@/contexts/InstallPromptContext';
 import { useTripContext } from '@/contexts/TripContext';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import { reportFailure } from '@/lib/errors/report-failure';
 import { db } from '@/lib/db/database';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -196,14 +196,14 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
       }
 
       if (result.status === 'taken') {
-        posthog?.capture('trip_identity_claim_failed', { reason: 'taken' });
+        captureEvent('trip_identity_claim_failed', { reason: 'taken' });
         // Somebody claimed this person between the list loading and the tap.
         setClaimed((current) => new Set(current).add(personId));
         setError(t('sharing.join.identityTaken', 'Somebody else just took that name.'));
         return;
       }
       if (result.status === 'not-a-member') {
-        posthog?.capture('trip_identity_claim_failed', { reason: 'not-a-member' });
+        captureEvent('trip_identity_claim_failed', { reason: 'not-a-member' });
         // The server has no roster row for this account, so nothing was
         // recorded. Navigating anyway would leave the participant looking free
         // to whoever joins next.
@@ -220,7 +220,7 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
         return;
       }
 
-      posthog?.capture('trip_identity_claimed', { scope: 'account' });
+      captureEvent('trip_identity_claimed', { scope: 'account' });
 
       // Cache the confirmed claim locally. The server row stays authoritative,
       // but until this line existed the claim was written to Postgres and never
@@ -238,7 +238,7 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
     // Distinguished from claiming, because somebody entering a trip as nobody in
     // particular will not see their own room or travel — a quiet drop-off worth
     // measuring rather than guessing at.
-    posthog?.capture('trip_identity_skipped', { scope: 'account' });
+    captureEvent('trip_identity_skipped', { scope: 'account' });
     void navigate(`/trips/${tripId}/calendar`);
   }, [navigate, tripId]);
 
@@ -444,14 +444,14 @@ function ViewerWelcome({ trip, installRequested }: ViewerWelcomeProps): ReactEle
           ),
         );
       }
-      posthog?.capture('trip_identity_claimed', { scope: 'device' });
+      captureEvent('trip_identity_claimed', { scope: 'device' });
       openTrip();
     },
     [openTrip, t, trip.id, trip.shareId],
   );
 
   const skip = useCallback((): void => {
-    posthog?.capture('trip_identity_skipped', { scope: 'device' });
+    captureEvent('trip_identity_skipped', { scope: 'device' });
     openTrip();
   }, [openTrip]);
 

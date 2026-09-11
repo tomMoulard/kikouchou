@@ -31,7 +31,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { useTripIdentity } from '@/hooks/useTripIdentity';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { buildIcsCalendar, ICS_MIME_TYPE } from '@/lib/calendar/ics';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import { downloadTextFile, toFilenameSegment } from '@/lib/utils/download';
 import { formatTransportDatetime } from '@/lib/utils/datetime-format';
 import {
@@ -165,7 +165,7 @@ export const AddRunsToCalendarButton = memo(function AddRunsToCalendarButton({
       return;
     }
 
-    posthog?.capture('run_calendar_exported', {
+    captureEvent('run_calendar_exported', {
       ride_count: events.length,
       alarm_minutes_before: RIDE_ALARM_MINUTES_BEFORE,
     });

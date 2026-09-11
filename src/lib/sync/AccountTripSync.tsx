@@ -33,7 +33,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { db } from '@/lib/db/database';
-import posthog from '@/lib/posthog';
+import { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { syncAccountTrips } from './account-sync';
 
@@ -171,7 +171,7 @@ export function AccountTripSync(): null {
           result.upgraded > 0 ||
           result.failed > 0
         ) {
-          posthog?.capture('account_trip_sync', {
+          captureEvent('account_trip_sync', {
             uploaded: result.uploaded,
             downloaded: result.downloaded,
             upgraded: result.upgraded,
