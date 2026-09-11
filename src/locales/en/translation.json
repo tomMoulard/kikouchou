@@ -27,7 +27,8 @@
     "comingSoon": "Coming soon",
     "date": "Date",
     "time": "Time",
-    "pickDate": "Pick a date"
+    "pickDate": "Pick a date",
+    "scrollTimeline": "Scroll the timeline"
   },
   "nav": {
     "calendar": "Calendar",
