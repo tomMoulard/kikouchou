@@ -43,6 +43,7 @@ import { db } from '@/lib/db';
 import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, isLanguageSupported } from '@/lib/i18n';
 import { notify } from '@/lib/notifications';
 import { formatAppVersion } from '@/lib/utils/app-version';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Constants
@@ -211,8 +212,11 @@ const DataSection = memo(function DataSection(): ReactElement {
       // Reload the page to reset all state
       window.location.href = import.meta.env.BASE_URL + 'trips';
     } catch (error) {
-      console.error('Failed to clear data:', error);
-      notify.error(t('settings.clearDataFailed', 'Failed to clear data. Please try again.'));
+      reportFailure(
+        'SettingsPage.clearData',
+        error,
+        t('settings.clearDataFailed', 'Failed to clear data. Please try again.'),
+      );
     } finally {
       setIsClearing(false);
     }

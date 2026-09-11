@@ -115,7 +115,6 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
 import { buildDayColumns } from '@/lib/utils/trip-days';
-import { notify } from '@/lib/notifications';
 
 // Import types and utilities
 import type {
@@ -131,6 +130,7 @@ import {
 } from '../utils/calendar-utils';
 import { buildDailyHeadcounts } from '../utils/headcount-utils';
 import { buildTripSetupChecklist, shouldShowTripSetupChecklist } from '../utils/setup-checklist';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Constants
@@ -1036,8 +1036,11 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         await deleteAssignment(selectedEvent.assignment.id);
         notifySuccess(t('assignments.deleteSuccess', 'Assignment deleted'));
       } catch (error) {
-        console.error('Failed to delete assignment:', error);
-        notify.error(t('errors.deleteFailed', 'Failed to delete'));
+        reportFailure(
+          'CalendarPage.deleteAssignment',
+          error,
+          t('errors.deleteFailed', 'Failed to delete'),
+        );
         throw error;
       }
     } else if (selectedEvent.type === 'transport') {
@@ -1045,8 +1048,11 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         await deleteTransport(selectedEvent.transport.id);
         notifySuccess(t('calendar.transportDeleted', 'Transport deleted successfully'));
       } catch (error) {
-        console.error('Failed to delete transport:', error);
-        notify.error(t('errors.deleteFailed', 'Failed to delete'));
+        reportFailure(
+          'CalendarPage.deleteTransport',
+          error,
+          t('errors.deleteFailed', 'Failed to delete'),
+        );
         throw error;
       }
     } else if (selectedEvent.type === 'activity') {
@@ -1054,8 +1060,11 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         await deleteActivity(selectedEvent.activity.id);
         notifySuccess(t('activities.deleteSuccess'));
       } catch (error) {
-        console.error('Failed to delete activity:', error);
-        notify.error(t('errors.deleteFailed', 'Failed to delete'));
+        reportFailure(
+          'CalendarPage.deleteActivity',
+          error,
+          t('errors.deleteFailed', 'Failed to delete'),
+        );
         throw error;
       }
     }

@@ -25,9 +25,9 @@ import { useOfflineAwareNotify } from '@/hooks';
 import { GuestGroupDialog } from '@/features/guest-groups/components/GuestGroupDialog';
 import { useGuestGroups } from '@/features/guest-groups/hooks/useGuestGroups';
 import { cn } from '@/lib/utils';
-import { notify } from '@/lib/notifications';
 import { getPersonHeadcount } from '@/types';
 import type { GuestGroup, GuestGroupId } from '@/types';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Type Definitions
@@ -199,8 +199,11 @@ const GuestGroupListPage = memo(function GuestGroupListPage(): ReactElement {
       await deleteGroup(pendingDeleteId);
       notifySuccess(t('guestGroups.deleteSuccess', 'Group deleted'));
     } catch (error) {
-      console.error('Failed to delete guest group:', error);
-      notify.error(t('errors.deleteFailed', 'Failed to delete'));
+      reportFailure(
+        'GuestGroupListPage.deleteGuestGroup',
+        error,
+        t('errors.deleteFailed', 'Failed to delete'),
+      );
     } finally {
       setPendingDeleteId(null);
     }

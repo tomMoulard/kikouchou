@@ -44,7 +44,6 @@ import {
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CalendarClock, UserMinus } from 'lucide-react';
 
-import { notify } from '@/lib/notifications';
 import { Button } from '@/components/ui/button';
 import { statusVariants } from '@/components/ui/status.variants';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
@@ -59,6 +58,7 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatTransportDatetime } from '@/lib/utils/datetime-format';
 import type { TransportId } from '@/types';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Type Definitions
@@ -143,8 +143,11 @@ const RideMismatchNotice = memo(function RideMismatchNotice({
           }),
         );
       } catch (error) {
-        console.error('Failed to move ride to a passenger time:', error);
-        notify.error(t('errors.saveFailed'));
+        reportFailure(
+          'RideMismatchNotice.moveRideToAPassengerTime',
+          error,
+          t('errors.saveFailed'),
+        );
       } finally {
         if (isMountedRef.current) {
           setPendingLegId(null);
@@ -171,8 +174,11 @@ const RideMismatchNotice = memo(function RideMismatchNotice({
       // Nothing closes the dialog here: `ConfirmDialog` does it on a resolved
       // confirm, and that lands back through `handleDropDialogChange`.
     } catch (error) {
-      console.error('Failed to drop a passenger from a ride:', error);
-      notify.error(t('errors.saveFailed'));
+      reportFailure(
+        'RideMismatchNotice.dropAPassengerFromARide',
+        error,
+        t('errors.saveFailed'),
+      );
       // Rethrown on purpose. `ConfirmDialog` closes on a resolved confirm and
       // stays open on a rejected one, so swallowing this would dismiss the
       // question over a write that never happened — leaving the driver certain

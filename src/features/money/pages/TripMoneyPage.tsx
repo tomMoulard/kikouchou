@@ -52,7 +52,6 @@ import {
   updateExpenseWithOwnershipCheck,
 } from '@/lib/db/repositories/expense-repository';
 import { toLocalISODateString } from '@/lib/db/utils';
-import { notify } from '@/lib/notifications';
 import { captureUsage } from '@/lib/posthog';
 import type {
   Expense,
@@ -62,6 +61,7 @@ import type {
   PersonId,
   TripId,
 } from '@/types';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Type Definitions
@@ -250,8 +250,11 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
         await deleteExpenseWithOwnershipCheck(expense.id, tripIdFromUrl as TripId);
         notifySuccess(t('money.expense.deleteSuccess'));
       } catch (error) {
-        console.error('Failed to delete expense:', error);
-        notify.error(t('errors.deleteFailed'));
+        reportFailure(
+          'TripMoneyPage.deleteExpense',
+          error,
+          t('errors.deleteFailed'),
+        );
         throw error; // Keep the dialog open so the user can retry
       }
     },
@@ -296,8 +299,11 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
           });
         })
         .catch((error: unknown) => {
-          console.error('Failed to record the payment:', error);
-          notify.error(t('money.balances.paymentFailed'));
+          reportFailure(
+            'TripMoneyPage.recordThePayment',
+            error,
+            t('money.balances.paymentFailed'),
+          );
         });
     },
     [defaultDate, notifySuccess, personsMap, t, tripIdFromUrl],

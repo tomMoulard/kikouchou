@@ -26,7 +26,6 @@ import { useTranslation } from 'react-i18next';
 import type { Locale } from 'date-fns';
 import { ArrowRight, Clock, Eye, MapPin } from 'lucide-react';
 
-import { notify } from '@/lib/notifications';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { statusVariants } from '@/components/ui/status.variants';
@@ -37,6 +36,7 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatTransportDatetime } from '@/lib/utils/datetime-format';
 import type { TransportId } from '@/types';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Type Definitions
@@ -186,8 +186,11 @@ const RideChangeFeed = memo(function RideChangeFeed({
         try {
           await acknowledge(transportId);
         } catch (error) {
-          console.error('Failed to acknowledge a ride change:', error);
-          notify.error(t('errors.saveFailed'));
+          reportFailure(
+            'RideChangeFeed.acknowledgeARideChange',
+            error,
+            t('errors.saveFailed'),
+          );
         }
       })();
     },
@@ -199,8 +202,11 @@ const RideChangeFeed = memo(function RideChangeFeed({
       try {
         await acknowledgeAll();
       } catch (error) {
-        console.error('Failed to acknowledge the ride changes:', error);
-        notify.error(t('errors.saveFailed'));
+        reportFailure(
+          'RideChangeFeed.acknowledgeTheRideChanges',
+          error,
+          t('errors.saveFailed'),
+        );
       }
     })();
   }, [acknowledgeAll, t]);

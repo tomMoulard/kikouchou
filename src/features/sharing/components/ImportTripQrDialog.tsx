@@ -36,6 +36,7 @@ import {
   extractP2pTripInviteFromScannedPayload,
   extractShareIdFromScannedPayload,
 } from '../utils/share-qr-parse';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Types
@@ -115,8 +116,9 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
           );
           return;
         }
-        console.error('Failed to import trip sync payload:', error);
-        notify.error(
+        reportFailure(
+          'ImportTripQrDialog.importTripSyncPayload',
+          error,
           t(
             'trips.importQrMergeFailed',
             'Could not import this trip data. Try again or use Share on the trips page.',

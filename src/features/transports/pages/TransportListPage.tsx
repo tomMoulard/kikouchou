@@ -54,7 +54,6 @@ import {
   useSensors,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { notify } from '@/lib/notifications';
 import { useOfflineAwareNotify } from '@/hooks';
 import { useTripAccess } from '@/hooks/useTripAccess';
 import { type Locale, format, parseISO } from 'date-fns';
@@ -145,6 +144,7 @@ import type {
   TransportId,
   TransportType,
 } from '@/types';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Type Definitions
@@ -1343,8 +1343,11 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       notifySuccess(t('transports.deleteSuccess', 'Transport deleted successfully'));
     } catch (error) {
       // Log for debugging, show user-friendly error via toast
-      console.error('Failed to delete transport:', error);
-      notify.error(t('errors.deleteFailed', 'Failed to delete'));
+      reportFailure(
+        'TransportListPage.deleteTransport',
+        error,
+        t('errors.deleteFailed', 'Failed to delete'),
+      );
       throw error; // Re-throw to keep dialog open for retry
     }
   }, [transportToDelete, deleteTransport, t, notifySuccess]),
@@ -1382,8 +1385,11 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
           notifySuccess(t('transports.addedToRide'));
         })
         .catch((error: unknown) => {
-          console.error('Failed to put the leg in the ride:', error);
-          notify.error(t('errors.saveFailed'));
+          reportFailure(
+            'TransportListPage.putTheLegInTheRide',
+            error,
+            t('errors.saveFailed'),
+          );
         });
     },
     [setTransportRide, notifySuccess, t],
@@ -1441,8 +1447,11 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       setRideToDelete(null);
       notifySuccess(t('rides.deleteSuccess'));
     } catch (error) {
-      console.error('Failed to delete ride:', error);
-      notify.error(t('errors.deleteFailed', 'Failed to delete'));
+      reportFailure(
+        'TransportListPage.deleteRide',
+        error,
+        t('errors.deleteFailed', 'Failed to delete'),
+      );
       throw error; // Re-thrown so the dialog stays open for a retry
     }
   }, [rideToDelete, deleteRide, t, notifySuccess]),
@@ -1466,8 +1475,11 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
         await updateRide(rideId, { driverId: myPersonId });
         notifySuccess(t('proposedRuns.claimed'));
       } catch (error) {
-        console.error('Failed to take the driver seat:', error);
-        notify.error(t('errors.saveFailed'));
+        reportFailure(
+          'TransportListPage.takeTheDriverSeat',
+          error,
+          t('errors.saveFailed'),
+        );
       }
     },
     [myPersonId, updateRide, notifySuccess, t],

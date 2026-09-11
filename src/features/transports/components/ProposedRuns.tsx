@@ -37,7 +37,6 @@ import { useRideContext } from '@/contexts/RideContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useOfflineAwareNotify, useTripIdentity } from '@/hooks';
 import { getDateLocale } from '@/lib/i18n/date-locale';
-import { notify } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
 import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { selectPickupsNeedingDriver } from '@/features/transports/utils/pickup-utils';
@@ -47,6 +46,7 @@ import {
 } from '@/features/transports/utils/proposed-runs';
 import { DEFAULT_LEAD_TIME_MINUTES } from '@/types';
 import type { Person, PersonId } from '@/types';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Type Definitions
@@ -294,8 +294,11 @@ export const ProposedRuns = memo(function ProposedRuns({
         await work();
         return true;
       } catch (error) {
-        console.error('Failed to arrange a proposed run:', error);
-        notify.error(t('errors.saveFailed'));
+        reportFailure(
+          'ProposedRuns.arrangeAProposedRun',
+          error,
+          t('errors.saveFailed'),
+        );
         return false;
       } finally {
         setBusyKeys((previous) => {

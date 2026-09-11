@@ -25,7 +25,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Car, Plus, Trash2 } from 'lucide-react';
 
-import { notify } from '@/lib/notifications';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,6 +42,7 @@ import { useTripContext } from '@/contexts/TripContext';
 import { cn } from '@/lib/utils';
 import { CHILD_SEAT_KINDS } from '@/types';
 import type { ChildSeatKind, Person, PersonId, Vehicle, VehicleId } from '@/types';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Type Definitions
@@ -301,8 +301,11 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
       await deleteVehicle(pendingDeleteId);
       notifySuccess(t('vehicles.deleteSuccess'));
     } catch (error) {
-      console.error('Failed to delete vehicle:', error);
-      notify.error(t('errors.deleteFailed'));
+      reportFailure(
+        'VehicleListPage.deleteVehicle',
+        error,
+        t('errors.deleteFailed'),
+      );
     } finally {
       setPendingDeleteId(null);
     }
