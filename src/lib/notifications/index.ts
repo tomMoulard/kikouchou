@@ -41,6 +41,8 @@
  *   ever asks. The ask is behind a settings card, never on load.
  * - `ride-notify.ts` — one ride notice, at most once per device, never
  *   throwing.
+ * - `opened.ts` — the one `notification_opened` event, and the two routes a
+ *   click takes from the worker to a document.
  * - `public/sw-notifications.js` — the `notificationclick` handler, folded into
  *   the generated Workbox worker by `workbox.importScripts` in
  *   `vite.config.ts`. The worker stays in `generateSW` mode; see that file.
@@ -77,3 +79,9 @@ export {
 // ============================================================================
 
 export { notifyRide, type RideNotification } from './ride-notify';
+
+// ============================================================================
+// Clicks
+// ============================================================================
+
+export { reportNotificationOpened } from './opened';

@@ -31,6 +31,8 @@
  * @module lib/notifications/os-notification
  */
 
+import { reportNotificationOpened } from '@/lib/notifications/opened';
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -61,6 +63,17 @@ const NOTIFICATION_TAG = 'kikouchou-status';
  * own four seconds plus room to notice it.
  */
 const AUTO_DISMISS_MS = 6_000;
+
+/**
+ * What a click on a confirmation reports.
+ *
+ * One name for all of them: a confirmation is "the thing you just did worked",
+ * and which save it followed says nothing a click can be read for. It exists so
+ * that confirmations are separable from the reminders that are meant to bring
+ * somebody back — those carry their own kind (`pickup`, `leave`, …), and mixing
+ * the two would let a save inflate the number that measures reminders.
+ */
+const NOTIFICATION_KIND = 'status';
 
 // ============================================================================
 // Module State
@@ -140,6 +153,10 @@ function notificationOptions(body: string): NotificationOptions {
     // These are confirmations of something the user just did. They do not need
     // a sound each time, and on a phone a chime per save would be its own bug.
     silent: true,
+    // Read by the worker's `notificationclick` handler, which is what reports a
+    // click on the service-worker-delivered copy. The page-delivered copy has
+    // its own `onclick` below.
+    data: { kind: NOTIFICATION_KIND },
   };
 }
 
@@ -152,6 +169,8 @@ function deliverFromPage(body: string): boolean {
   try {
     const notification = new Notification(APP_NAME, notificationOptions(body));
     notification.onclick = (): void => {
+      // This copy never reaches the worker, so nothing else would count it.
+      reportNotificationOpened(NOTIFICATION_KIND);
       window.focus();
       notification.close();
     };
