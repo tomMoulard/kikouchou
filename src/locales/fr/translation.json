@@ -1530,6 +1530,7 @@
     "transportNotFound": "Transport non trouvé. Veuillez réessayer.",
     "loadingFailed": "Échec du chargement",
     "saveFailed": "Échec de l'enregistrement",
+    "syncFailed": "Impossible d'enregistrer le voyage sur cet appareil",
     "deleteFailed": "Échec de la suppression",
     "activityNotFound": "Activité introuvable. Veuillez réessayer.",
     "dev": {

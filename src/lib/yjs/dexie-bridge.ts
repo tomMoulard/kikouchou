@@ -29,6 +29,8 @@ import { isGuestPhoneSharingEnabled } from '@/lib/flags';
 import { hasValidCoordinates } from '@/lib/geocoding';
 import { toSharedGuest } from '@/lib/sharing/guest-privacy';
 import i18n from '@/lib/i18n';
+import { reportFailure } from '@/lib/errors/report-failure';
+import { reportError } from '@/lib/posthog';
 import {
   DOC_SCHEMA_VERSION,
   type DocCollectionName,
@@ -629,7 +631,12 @@ export function subscribeToUpdates(doc: Y.Doc, tripId: TripId): () => void {
     }
 
     if (origin !== ORIGIN_DEXIE_SYNC) {
-      void syncDocToDexie(doc, tripId);
+      void syncDocToDexie(doc, tripId).catch((error: unknown) => {
+        // Its own failures are handled inside; this catches anything thrown
+        // outside that try, which would otherwise be an unhandled rejection on
+        // every document update.
+        reportError(error, { source: 'dexie-bridge.subscribeToUpdates' });
+      });
     }
   };
 
@@ -834,7 +841,20 @@ export async function syncDocToDexie(
       },
     );
   } catch (error) {
-    console.error('[yjs-bridge] Failed to sync Y.Doc → Dexie:', error);
+    // Not projected, so not marked. This used to log and fall through to
+    // `markProjected` below, which handed out the right to delete on the
+    // strength of a projection that had just failed — the precise situation
+    // the flag exists to withhold it in. A half-written or aborted transaction
+    // leaves Dexie holding less than the document does, and the next
+    // Dexie-to-document sync would then read those absences as deletions and
+    // remove the rows from the shared trip.
+    reportFailure(
+      'dexie-bridge.syncDocToDexie',
+      error,
+      i18n.t('errors.syncFailed', 'Could not save the trip to this device'),
+      { trip_id: tripId },
+    );
+    return tripId;
   }
 
   // Dexie now mirrors this document for this trip, which is the only basis on
