@@ -119,7 +119,15 @@ export function getSupabaseClient(): Promise<TypedSupabaseClient | null> {
     return Promise.resolve(null);
   }
 
-  pending = createConfiguredClient(config);
+  // Cleared on rejection, so a load that failed once can be retried. Holding a
+  // rejected promise here made the first failure permanent for the life of the
+  // tab: every later caller got the same rejection instantly, and a dynamic
+  // import that fails is usually transient — an offline moment, or a stale
+  // index.html pointing at a chunk a deploy has replaced.
+  pending = createConfiguredClient(config).catch((error: unknown) => {
+    pending = null;
+    throw error;
+  });
   return pending;
 }
 

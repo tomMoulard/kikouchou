@@ -40,6 +40,7 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 import { useInstallPromptState } from '@/contexts/InstallPromptContext';
 import { useTripContext } from '@/contexts/TripContext';
 import posthog from '@/lib/posthog';
+import { reportFailure } from '@/lib/errors/report-failure';
 import { db } from '@/lib/db/database';
 import { useAuth } from '@/features/auth/AuthContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
@@ -166,14 +167,33 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
       setClaiming(personId);
       setError(null);
 
-      const client = await getSupabaseClient();
-      if (!client) {
-        setClaiming(null);
-        return;
-      }
+      // Everything below runs inside this try for one reason: a single pending
+      // claim disables *every* name in the list, so any throw between here and
+      // the reset used to leave the whole picker permanently dead — a spinner
+      // on one row, no error anywhere, and a reload the only way forward. The
+      // awaits below reach a dynamic import and the network, both of which
+      // fail on an invitee opening a link for the first time on a phone.
+      let result: Awaited<ReturnType<typeof claimParticipant>>;
+      try {
+        const client = await getSupabaseClient();
+        if (!client) {
+          // No backend configured. Say so rather than looking like a dead tap.
+          setError(t('errors.generic', 'Something went wrong'));
+          return;
+        }
 
-      const result = await claimParticipant(client, remoteTripId, user.id, personId);
-      setClaiming(null);
+        result = await claimParticipant(client, remoteTripId, user.id, personId);
+      } catch (error) {
+        reportFailure(
+          'JoinTripPage.handleClaim',
+          error,
+          t('errors.generic', 'Something went wrong'),
+        );
+        setError(t('errors.generic', 'Something went wrong'));
+        return;
+      } finally {
+        setClaiming(null);
+      }
 
       if (result.status === 'taken') {
         posthog?.capture('trip_identity_claim_failed', { reason: 'taken' });
