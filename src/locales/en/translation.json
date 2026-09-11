@@ -315,6 +315,8 @@
     "dragHint": "Drag a chip onto a room to give it a bed",
     "needsRoom": "needs room",
     "icon": "Room icon",
+    "iconHint": "Pick the icon that fits this room best.",
+    "changeIcon": "Change the room icon: {{icon}}",
     "spotsTaken_one": "{{occupied}} of {{count}} spot taken",
     "spotsTaken_other": "{{occupied}} of {{count}} spots taken",
     "spotsOpen_one": "{{count}} spot open",
@@ -351,7 +353,16 @@
       "home": "House",
       "doorOpen": "Entryway",
       "baby": "Kids room",
-      "armchair": "Lounge"
+      "armchair": "Lounge",
+      "bunkBed": "Bunk beds",
+      "hammock": "Hammock",
+      "camperVan": "Camper van",
+      "campsite": "Campsite",
+      "hotel": "Hotel room",
+      "rockingChair": "Nursery",
+      "shower": "Shower room",
+      "toilet": "Toilet",
+      "boat": "Boat cabin"
     },
     "assignMenu": {
       "trigger": "Assign {{name}} to a room",

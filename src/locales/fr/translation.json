@@ -315,6 +315,8 @@
     "dragHint": "Glissez une étiquette sur une chambre pour lui donner un lit",
     "needsRoom": "a besoin d'une chambre",
     "icon": "Icône de la chambre",
+    "iconHint": "Choisissez l'icône qui va le mieux à cette chambre.",
+    "changeIcon": "Changer l'icône de la chambre : {{icon}}",
     "spotsTaken_one": "{{occupied}} sur {{count}} place prise",
     "spotsTaken_other": "{{occupied}} sur {{count}} places prises",
     "spotsOpen_one": "{{count}} place libre",
@@ -351,7 +353,16 @@
       "home": "Maison",
       "doorOpen": "Entrée",
       "baby": "Chambre enfant",
-      "armchair": "Fauteuil"
+      "armchair": "Fauteuil",
+      "bunkBed": "Lits superposés",
+      "hammock": "Hamac",
+      "camperVan": "Van aménagé",
+      "campsite": "Camping",
+      "hotel": "Chambre d'hôtel",
+      "rockingChair": "Chambre de bébé",
+      "shower": "Salle de douche",
+      "toilet": "Toilettes",
+      "boat": "Cabine de bateau"
     },
     "assignMenu": {
       "trigger": "Attribuer une chambre à {{name}}",

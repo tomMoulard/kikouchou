@@ -11,13 +11,22 @@ import {
   Armchair,
   Baby,
   Bath,
+  Bed,
   BedDouble,
   BedSingle,
   Caravan,
   DoorOpen,
   Home,
+  Hotel,
+  RockingChair,
+  Sailboat,
+  ShowerHead,
   Sofa,
   Tent,
+  TentTree,
+  Toilet,
+  TreePalm,
+  Van,
   Warehouse,
   type LucideIcon,
 } from 'lucide-react';
@@ -40,6 +49,14 @@ export interface RoomIconPickerProps {
   readonly onChange: (icon: RoomIcon) => void;
   /** Whether the picker is disabled */
   readonly disabled?: boolean;
+  /**
+   * Whether to draw the "Room icon" label above the grid.
+   *
+   * Set it false where something else already says what the grid is — a
+   * dialog whose title reads "Room icon", for one. The label is still in the
+   * page for a screen reader, because it is what names the radiogroup.
+   */
+  readonly showLabel?: boolean;
   /** Additional CSS classes for the container */
   readonly className?: string;
   /** ID for form association */
@@ -60,6 +77,11 @@ interface IconConfig {
 
 /**
  * Map of room icon types to their lucide-react components and label keys.
+ *
+ * lucide 0.563 has no glyph for a bunk bed, a hammock, a crib or an air
+ * mattress, so those places borrow the nearest thing it does draw: a plain
+ * `Bed` for the bunks and the spare mattress, a palm tree for the hammock, and
+ * the rocking chair for a nursery. A cot already has `baby`.
  */
 const ROOM_ICONS: Record<RoomIcon, IconConfig> = {
   'bed-double': { icon: BedDouble, labelKey: 'rooms.icons.bedDouble' },
@@ -73,10 +95,21 @@ const ROOM_ICONS: Record<RoomIcon, IconConfig> = {
   'door-open': { icon: DoorOpen, labelKey: 'rooms.icons.doorOpen' },
   'baby': { icon: Baby, labelKey: 'rooms.icons.baby' },
   'armchair': { icon: Armchair, labelKey: 'rooms.icons.armchair' },
+  'bunk-bed': { icon: Bed, labelKey: 'rooms.icons.bunkBed' },
+  'hammock': { icon: TreePalm, labelKey: 'rooms.icons.hammock' },
+  'camper-van': { icon: Van, labelKey: 'rooms.icons.camperVan' },
+  'campsite': { icon: TentTree, labelKey: 'rooms.icons.campsite' },
+  'hotel': { icon: Hotel, labelKey: 'rooms.icons.hotel' },
+  'rocking-chair': { icon: RockingChair, labelKey: 'rooms.icons.rockingChair' },
+  'shower': { icon: ShowerHead, labelKey: 'rooms.icons.shower' },
+  'toilet': { icon: Toilet, labelKey: 'rooms.icons.toilet' },
+  'boat': { icon: Sailboat, labelKey: 'rooms.icons.boat' },
 } as const;
 
 /**
- * Ordered list of icon keys for keyboard navigation.
+ * Ordered list of icon keys for keyboard navigation, and the order the grid
+ * draws. The original eleven stay at the front so nobody has to hunt for the
+ * icon they have always used; the newer places follow.
  */
 const ICON_ORDER: readonly RoomIcon[] = [
   'bed-double',
@@ -90,6 +123,15 @@ const ICON_ORDER: readonly RoomIcon[] = [
   'door-open',
   'baby',
   'armchair',
+  'bunk-bed',
+  'hammock',
+  'camper-van',
+  'campsite',
+  'hotel',
+  'rocking-chair',
+  'shower',
+  'toilet',
+  'boat',
 ] as const;
 
 /**
@@ -125,7 +167,7 @@ export function getRoomIconLabelKey(icon: RoomIcon): string {
  * Room icon picker component for selecting room type icons.
  *
  * Features:
- * - Grid layout of 11 icon options
+ * - Grid layout of every icon in {@link ICON_ORDER}
  * - Keyboard navigation (arrow keys, Home/End)
  * - Visual selection state with ring highlight
  * - Accessible with ARIA labels and descriptions
@@ -146,6 +188,7 @@ const RoomIconPicker = memo(function RoomIconPicker({
   value,
   onChange,
   disabled = false,
+  showLabel = true,
   className,
   id,
 }: RoomIconPickerProps) {
@@ -224,7 +267,9 @@ const RoomIconPicker = memo(function RoomIconPicker({
 
   return (
     <div className={cn('space-y-2', className)}>
-      <Label id={`${pickerId}-label`}>{t('rooms.icon', 'Room icon')}</Label>
+      <Label id={`${pickerId}-label`} className={cn(!showLabel && 'sr-only')}>
+        {t('rooms.icon', 'Room icon')}
+      </Label>
       <div
         role="radiogroup"
         aria-labelledby={`${pickerId}-label`}

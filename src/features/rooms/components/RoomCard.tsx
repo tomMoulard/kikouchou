@@ -376,31 +376,45 @@ const RoomCard = memo(function RoomCard({
         )}
 
         {/* Card Header - Room name and capacity badge */}
-        <CardHeader className="pb-2 pr-12">
-          <div className="flex items-start justify-between gap-2">
-            {/*
-              `relative z-20` is what makes the double click reachable at all:
-              the full-card activation button above covers the header at z-10,
-              so without it every pointer event on the name lands on the button
-              instead. Lifting only the name keeps the rest of the card's hit
-              area — and its focus ring — on that button.
+        <CardHeader className="pb-2">
+          {/*
+            The name has a row to itself, and that row is as wide as the card
+            allows: everything but `pr-12`, which is the corner the menu button
+            floats over.
 
-              `select-none` because the second click of the gesture would
-              otherwise leave the name highlighted behind the dialog it just
-              opened.
-            */}
-            <CardTitle
-              className="text-lg truncate relative z-20 select-none"
-              title={`${room.name} — ${t('rooms.doubleClickToEdit')}`}
-              onDoubleClick={handleNameDoubleClick}
-            >
-              {room.name}
-            </CardTitle>
-            <Badge variant="outline" className="shrink-0">
-              <RoomIconComponent className="size-3 mr-1" aria-hidden="true" />
-              {room.capacity}
-            </Badge>
-          </div>
+            It used to share a flex row with the capacity badge, inside a grid
+            track no `min-w-0` ever reached. Two things went wrong at once. The
+            badge and the row's own right padding took a third of a phone-width
+            card away from the name, so it ran out of room after a dozen
+            characters. And because the flex row could grow past its track, a
+            long name pushed the row wider than the card — the ellipsis landed
+            somewhere outside the card's right border, and the whole page
+            scrolled sideways at 320px. The name now ends with an ellipsis when
+            it is longer than the card, and not a character earlier.
+
+            `relative z-20` is what makes the double click reachable at all:
+            the full-card activation button above covers the header at z-10,
+            so without it every pointer event on the name lands on the button
+            instead. Lifting only the name keeps the rest of the card's hit
+            area — and its focus ring — on that button.
+
+            `select-none` because the second click of the gesture would
+            otherwise leave the name highlighted behind the dialog it just
+            opened.
+          */}
+          <CardTitle
+            className="min-w-0 truncate pr-12 text-lg relative z-20 select-none"
+            title={`${room.name} — ${t('rooms.doubleClickToEdit')}`}
+            onDoubleClick={handleNameDoubleClick}
+          >
+            {room.name}
+          </CardTitle>
+          {/* `w-fit` so the badge keeps its own width instead of stretching
+              across the grid track it now sits in alone. */}
+          <Badge variant="outline" className="w-fit shrink-0">
+            <RoomIconComponent className="size-3 mr-1" aria-hidden="true" />
+            {room.capacity}
+          </Badge>
           {room.description && (
             <CardDescription className="line-clamp-2" title={room.description}>
               {room.description}

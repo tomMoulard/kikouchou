@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@/test/utils';
+import { render, screen, waitFor, within } from '@/test/utils';
 import type { Room } from '@/types';
 
 vi.mock('@/hooks', () => ({
@@ -10,13 +10,32 @@ vi.mock('@/hooks', () => ({
   }),
 }));
 
-vi.mock('@/components/shared/RoomIconPicker', () => ({
-  RoomIconPicker: ({ value, onChange }: { value?: string; onChange: (v: string) => void }) => (
-    <button data-testid="icon-picker" onClick={() => onChange('tent')}>{value ?? 'none'}</button>
-  ),
-}));
-
 import { RoomForm } from '../RoomForm';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * The icon button that sits to the left of the name input.
+ *
+ * The picker used to be mocked out here. It is the real thing now, because the
+ * icon is a button opening a dialog and a stub cannot say whether that works.
+ */
+function iconButton(): HTMLElement {
+  return screen.getByRole('button', { name: 'rooms.changeIcon' });
+}
+
+/**
+ * The glyph a button draws, by the class lucide stamps on its `svg`
+ * (`lucide-bed-double`). Names the picture, not the stored key, so a table
+ * wired to the wrong icon has something to contradict.
+ */
+function glyphOf(element: HTMLElement): string | undefined {
+  return [...(element.querySelector('svg')?.classList ?? [])]
+    .find((name) => name.startsWith('lucide-'))
+    ?.replace('lucide-', '');
+}
 
 describe('RoomForm', () => {
   beforeEach(() => {
@@ -31,7 +50,7 @@ describe('RoomForm', () => {
     expect(screen.getByLabelText(/rooms.name/)).toBeInTheDocument();
     expect(screen.getByLabelText(/rooms.capacity/)).toBeInTheDocument();
     expect(screen.getByLabelText(/rooms.description/)).toBeInTheDocument();
-    expect(screen.getByTestId('icon-picker')).toBeInTheDocument();
+    expect(iconButton()).toBeInTheDocument();
   });
 
   it('renders edit mode with room data', () => {
@@ -131,8 +150,8 @@ describe('RoomForm', () => {
     );
     const nameInput = screen.getByPlaceholderText('rooms.namePlaceholder');
     await user.type(nameInput, 'Tent Room');
-    // Click the icon picker to select 'tent'
-    await user.click(screen.getByTestId('icon-picker'));
+    await user.click(iconButton());
+    await user.click(screen.getByRole('radio', { name: 'rooms.icons.tent' }));
     await user.click(screen.getByText('common.save'));
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Tent Room', icon: 'tent' }),
@@ -324,8 +343,106 @@ describe('RoomForm', () => {
       { withProviders: false },
     );
     expect(screen.getByDisplayValue('Icon Room')).toBeInTheDocument();
-    // Icon picker should show the tent value
-    expect(screen.getByTestId('icon-picker')).toHaveTextContent('tent');
+    // The button shows the room's own icon, not the default one.
+    expect(glyphOf(iconButton())).toBe('tent');
+  });
+
+  // ==========================================================================
+  // The icon button
+  // ==========================================================================
+
+  describe('room icon', () => {
+    it('shows the double bed for a new room', async () => {
+      render(
+        <RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} />,
+        { withProviders: false },
+      );
+      expect(glyphOf(iconButton())).toBe('bed-double');
+
+      // And it is the tile already chosen when the picker opens.
+      const { userEvent } = await import('@testing-library/user-event');
+      await userEvent.setup().click(iconButton());
+      expect(
+        screen.getByRole('radio', { name: 'rooms.icons.bedDouble' }),
+      ).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('opens the picker dialog when the button is clicked', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(
+        <RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} />,
+        { withProviders: false },
+      );
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+      await user.click(iconButton());
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toBeInTheDocument();
+      expect(within(dialog).getByRole('radiogroup')).toBeInTheDocument();
+    });
+
+    it('lists the newer room icons after the original ones', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(
+        <RoomForm onSubmit={vi.fn()} onCancel={vi.fn()} />,
+        { withProviders: false },
+      );
+      await user.click(iconButton());
+
+      const keys = screen
+        .getAllByRole('radio')
+        .map((tile) => tile.dataset.roomIcon);
+      expect(keys.slice(0, 4)).toEqual(['bed-double', 'bed-single', 'bath', 'sofa']);
+      expect(keys).toContain('bunk-bed');
+      expect(keys).toContain('hammock');
+      expect(keys.indexOf('bunk-bed')).toBeGreaterThan(keys.indexOf('armchair'));
+    });
+
+    it('takes the pick, closes the dialog and saves the new icon', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <RoomForm onSubmit={onSubmit} onCancel={vi.fn()} />,
+        { withProviders: false },
+      );
+      await user.type(screen.getByPlaceholderText('rooms.namePlaceholder'), 'Bunks');
+      await user.click(iconButton());
+      await user.click(screen.getByRole('radio', { name: 'rooms.icons.bunkBed' }));
+
+      // One tile is the whole errand, so nothing is left to confirm.
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      });
+      expect(glyphOf(iconButton())).toBe('bed');
+
+      await user.click(screen.getByText('common.save'));
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Bunks', icon: 'bunk-bed' }),
+      );
+    });
+
+    it('leaves a room with no icon storing no icon', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <RoomForm onSubmit={onSubmit} onCancel={vi.fn()} />,
+        { withProviders: false },
+      );
+      await user.type(screen.getByPlaceholderText('rooms.namePlaceholder'), 'Plain');
+      await user.click(screen.getByText('common.save'));
+
+      // The button draws the double bed for an empty icon field, and drawing
+      // it must not write it: a room saved before the picker existed keeps an
+      // empty field, and so does one nobody picked an icon for.
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Plain', icon: undefined }),
+      );
+    });
   });
 
   it('prevents submit with empty name', async () => {
