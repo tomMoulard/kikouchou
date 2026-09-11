@@ -20,6 +20,18 @@ export const dialogOverlayClassName =
  * Horizontal: inset + mx-auto avoids translate-x clipping with overflow-x-hidden
  * and wide children.
  *
+ * The width is `w-auto`, and that is the whole of the centring. A percentage
+ * width on a fixed element resolves against the **viewport**, not against the
+ * box `inset-x-4` leaves behind, so `w-full` meant `width: 100vw` next to
+ * `left: 1rem; right: 1rem`. All of left, width and right then being set
+ * over-constrains the box: CSS resolves that by keeping `left`, dropping
+ * `right`, and — when the equal auto margins `mx-auto` asks for would come out
+ * negative — pinning `margin-left` to 0. So every dialog narrower than ~544px
+ * of viewport sat 16px from the left edge and hung 16px off the right one: a
+ * gutter on one side only. With `w-auto` the two insets decide the width, the
+ * gutters are equal by construction, and above the cap `max-w-lg` clamps the
+ * width and the auto margins centre it exactly as before.
+ *
  * Vertical: the box is centred on the viewport, so one taller than the viewport
  * clips off BOTH edges at once with no way to reach either. The cap lives here
  * rather than at each call site because 14 of the 20 call sites forgot it, and a
@@ -32,7 +44,7 @@ export const dialogOverlayClassName =
  * while the body one level in still scrolls.
  */
 export const dialogContentClassName =
-  'fixed inset-x-4 top-1/2 z-50 mx-auto flex h-auto max-h-[calc(100dvh-2rem)] min-h-0 w-full min-w-0 max-w-lg -translate-y-1/2 flex-col gap-4 overflow-hidden rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg';
+  'fixed inset-x-4 top-1/2 z-50 mx-auto flex h-auto max-h-[calc(100dvh-2rem)] min-h-0 w-auto min-w-0 max-w-lg -translate-y-1/2 flex-col gap-4 overflow-hidden rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg';
 
 /**
  * The scrolling part: everything the caller put inside the dialog.
