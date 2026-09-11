@@ -1138,7 +1138,10 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           )}
         >
           {sortedRoomsWithOccupancy.map(({ room, currentOccupants, peakOccupancy, availableSpots, isFull, isOverCapacity }) => (
-            <div key={room.id} role="listitem">
+            // `min-w-0`: a grid item is allowed to grow past its track by
+            // default, so without it a room with a long name stretched its
+            // column and the page scrolled sideways on a phone.
+            <div key={room.id} role="listitem" className="min-w-0">
               <DroppableRoom roomId={room.id}>
                 <RoomCard
                   room={room}
