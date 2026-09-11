@@ -14,13 +14,13 @@
  * @module lib/yjs/__tests__/dexie-bridge.test
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
-import { syncDocToDexie } from '@/lib/yjs/dexie-bridge';
+import { isDexieTrustedMirror, syncDocToDexie } from '@/lib/yjs/dexie-bridge';
 import { DOC_SCHEMA_VERSION, upsertDocEntity } from '@/lib/yjs/doc-model';
 import { isoDate } from '@/test/utils';
 import type { Person, TripId } from '@/types';
@@ -50,6 +50,67 @@ function makeDoc(meta: Record<string, unknown>): Y.Doc {
 // ============================================================================
 // Tests
 // ============================================================================
+
+describe('syncDocToDexie — the deletion right', () => {
+  /**
+   * The flag `isDexieTrustedMirror` reads is what turns on `allowDeletions` for
+   * every Dexie-to-document sync in `YjsTripSync`. Its whole job is to answer
+   * "has this document actually been written into Dexie yet", because until it
+   * has, an absence in Dexie means "not copied here", not "deleted by someone".
+   *
+   * A failed transaction produces exactly that: Dexie holding less than the
+   * document does. It used to be marked as projected anyway — the catch logged
+   * and fell through — so the next sync back read those absences as deletions
+   * and removed the rows from the trip everyone shares.
+   */
+  it('withholds the deletion right when the projection fails', async () => {
+    const trip = await createTrip({
+      name: 'Shared trip',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+
+    const doc = makeDoc({
+      id: trip.id,
+      name: 'Brittany',
+      startDate: '2024-08-01',
+      endDate: '2024-08-05',
+    });
+
+    // A write that rejects part-way, which is what a blocked upgrade or a full
+    // disk looks like from here.
+    const transaction = vi
+      .spyOn(db, 'transaction')
+      .mockRejectedValueOnce(new Error('QuotaExceededError') as never);
+
+    await syncDocToDexie(doc, trip.id);
+
+    expect(isDexieTrustedMirror(doc, trip.id)).toBe(false);
+
+    transaction.mockRestore();
+  });
+
+  it('grants it once a projection has actually landed', async () => {
+    const trip = await createTrip({
+      name: 'Shared trip',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+
+    const doc = makeDoc({
+      id: trip.id,
+      name: 'Brittany',
+      startDate: '2024-08-01',
+      endDate: '2024-08-05',
+    });
+
+    expect(isDexieTrustedMirror(doc, trip.id)).toBe(false);
+
+    await syncDocToDexie(doc, trip.id);
+
+    expect(isDexieTrustedMirror(doc, trip.id)).toBe(true);
+  });
+});
 
 describe('syncDocToDexie — trust boundary', () => {
   it('accepts a doc for the trip it is bound to', async () => {
