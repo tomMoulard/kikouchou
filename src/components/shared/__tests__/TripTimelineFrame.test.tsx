@@ -354,4 +354,63 @@ describe('TripTimelineFrame', () => {
     const viewport = (childrenFn.mock.calls[0] as unknown[])[0] as Record<string, unknown>;
     expect(viewport.dayCount).toBe(0);
   });
+
+  // One line through the stack of rows at the present moment: the only mark on
+  // the timeline that answers "where are we right now" at a glance.
+  describe('the now-marker', () => {
+    it('draws no marker without a current instant', () => {
+      render(<TripTimelineFrame {...defaultProps}>{() => null}</TripTimelineFrame>);
+
+      expect(screen.getByTestId('timeline-now-marker').hidden).toBe(true);
+    });
+
+    it('draws the marker when now falls on the axis', () => {
+      stubMeasurements({ clientWidth: 640 });
+
+      render(
+        <TripTimelineFrame {...defaultProps} now={new Date(2026, 0, 7, 12, 0)}>
+          {() => null}
+        </TripTimelineFrame>,
+      );
+
+      const marker = screen.getByTestId('timeline-now-marker');
+      expect(marker.hidden).toBe(false);
+      expect(marker.style.left).not.toBe('');
+    });
+
+    it('hides the marker when now is nowhere near the trip', () => {
+      stubMeasurements({ clientWidth: 640 });
+
+      render(
+        <TripTimelineFrame {...defaultProps} now={new Date(2030, 0, 7, 12, 0)}>
+          {() => null}
+        </TripTimelineFrame>,
+      );
+
+      expect(screen.getByTestId('timeline-now-marker').hidden).toBe(true);
+    });
+  });
+
+  // Weekends read as a darker band, so a reader finds "the Saturday" without
+  // counting columns.
+  it('marks the weekend columns in the header', () => {
+    // Monday 5 January 2026 to the following Sunday: one Saturday, one Sunday.
+    const { container } = render(
+      <TripTimelineFrame {...defaultProps} days={makeDays(7)} dayKeys={makeDayKeys(7)}>
+        {() => null}
+      </TripTimelineFrame>,
+    );
+
+    expect(container.querySelectorAll('[data-weekend="true"]')).toHaveLength(2);
+  });
+
+  it('renders toolbar content above the timeline', () => {
+    render(
+      <TripTimelineFrame {...defaultProps} toolbar={<button type="button">Now</button>}>
+        {() => null}
+      </TripTimelineFrame>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Now' })).toBeInTheDocument();
+  });
 });

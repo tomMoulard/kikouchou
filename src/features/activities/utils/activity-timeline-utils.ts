@@ -9,7 +9,12 @@
  */
 
 import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
-import { buildDayColumnsCovering, toDayKeys } from '@/lib/utils/trip-days';
+import {
+  type TimelineColumn,
+  columnsFromDays,
+  resolveColumnRange,
+} from '@/lib/utils/timeline-scale';
+import { buildDayColumnsCovering, parseLocalDayKey, toDayKeys } from '@/lib/utils/trip-days';
 import { ACTIVITY_CATEGORIES } from '@/types';
 import type { Activity, ActivityCategory, ISODateString, Trip } from '@/types';
 
@@ -56,9 +61,11 @@ export interface ActivityTimelineRowModel {
  * The full activity timeline model.
  */
 export interface ActivityTimelineModel {
-  /** One Date per day of the axis (the trip, widened to reach its activities) */
+  /** The axis the bands are laid out on, at whatever scale is being shown */
+  readonly columns: readonly TimelineColumn[];
+  /** One Date per column of the axis — day midnights on a day-per-column axis */
   readonly tripDays: readonly Date[];
-  /** Day keys matching `tripDays` (YYYY-MM-DD) */
+  /** Keys of the columns that are exactly one calendar day, in axis order */
   readonly dayKeys: readonly ISODateString[];
   /** Category rows, in the canonical category order, empty rows omitted */
   readonly rows: readonly ActivityTimelineRowModel[];
@@ -128,22 +135,42 @@ export function buildActivityTimelineModel(args: {
    * The calendar timeline draws these bands under its guest rows on one shared
    * axis, so it hands this builder the guest half's keys and the guest builder
    * these ones. Both then span the same days and the two halves line up.
+   *
+   * Ignored when `columns` is given: an axis the caller built is already the
+   * shared one.
    */
   readonly extraDayKeys?: readonly ISODateString[];
+  /**
+   * The axis to lay the bands out on, at whatever scale is being shown.
+   *
+   * Left out, the builder makes the day-per-column axis it always made: the
+   * trip's days, widened to reach every activity on them.
+   */
+  readonly columns?: readonly TimelineColumn[];
 }): ActivityTimelineModel {
   const { trip, activities } = args;
 
-  const tripDays = buildDayColumnsCovering({
-    startKey: trip.startDate,
-    endKey: trip.endDate,
-    mustInclude: [...collectActivityDayKeys(activities), ...(args.extraDayKeys ?? [])],
-  });
-  // Local keys, matching `getActivityStartDayKey` — an activity has to land in
-  // the column whose date the guest reads off their own clock.
-  const dayKeys = toDayKeys(tripDays);
+  const columns =
+    args.columns ??
+    (() => {
+      const days = buildDayColumnsCovering({
+        startKey: trip.startDate,
+        endKey: trip.endDate,
+        mustInclude: [...collectActivityDayKeys(activities), ...(args.extraDayKeys ?? [])],
+      });
+      // Local keys, matching `getActivityStartDayKey` — an activity has to land
+      // in the column whose date the guest reads off their own clock.
+      return columnsFromDays(days, toDayKeys(days));
+    })();
 
-  if (dayKeys.length === 0) {
+  const tripDays = columns.map((column) => column.start);
+  const dayKeys = columns
+    .map((column) => column.dayKey)
+    .filter((key): key is ISODateString => key !== undefined);
+
+  if (columns.length === 0) {
     return {
+      columns,
       tripDays,
       dayKeys,
       rows: [],
@@ -151,14 +178,6 @@ export function buildActivityTimelineModel(args: {
       hiddenCount: activities.length,
     };
   }
-
-  const firstKey = dayKeys[0]!;
-  const lastKey = dayKeys[dayKeys.length - 1]!;
-
-  const dayIndexByKey = new Map<ISODateString, number>();
-  dayKeys.forEach((key, index) => {
-    dayIndexByKey.set(key, index);
-  });
 
   const itemsByCategory = new Map<ActivityCategory, ActivityTimelineItem[]>();
   let visibleCount = 0;
@@ -173,22 +192,26 @@ export function buildActivityTimelineModel(args: {
       continue;
     }
 
+    // An activity's last day is inclusive, so the half-open range it covers runs
+    // to the start of the day after it.
+    const from = parseLocalDayKey(startKey);
+    const toInclusive = parseLocalDayKey(endKey);
+    if (!from || !toInclusive) {
+      hiddenCount += 1;
+      continue;
+    }
+
+    const to = new Date(toInclusive);
+    to.setDate(to.getDate() + 1);
+
     // Too far out for the axis to reach: nothing to draw.
-    if (endKey < firstKey || startKey > lastKey) {
+    const range = resolveColumnRange(columns, from, to);
+    if (range === undefined) {
       hiddenCount += 1;
       continue;
     }
 
-    const clampedStart = startKey < firstKey ? firstKey : startKey;
-    const clampedEnd = endKey > lastKey ? lastKey : endKey;
-
-    const startIndex = dayIndexByKey.get(clampedStart);
-    const endIndex = dayIndexByKey.get(clampedEnd);
-
-    if (startIndex === undefined || endIndex === undefined) {
-      hiddenCount += 1;
-      continue;
-    }
+    const { startIndex, endIndex } = range;
 
     const category = activity.category ?? 'other';
     const bucket = itemsByCategory.get(category);
@@ -225,5 +248,5 @@ export function buildActivityTimelineModel(args: {
     rows.push({ category, items: withLanes, laneCount });
   }
 
-  return { tripDays, dayKeys, rows, visibleCount, hiddenCount };
+  return { columns, tripDays, dayKeys, rows, visibleCount, hiddenCount };
 }

@@ -5,11 +5,12 @@
  */
 
 import { type ReactElement, memo, useCallback, useMemo } from 'react';
-import { addDays, format, type Locale } from 'date-fns';
+import { format, type Locale } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { Car } from 'lucide-react';
 
 import { TIMELINE_LABEL_CELL_STYLE } from '@/components/shared/timeline-label-cell';
+import { TimelineOffscreenArrows } from '@/components/shared/TimelineOffscreenArrows';
 import type { TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
 import { getPersonHeadcount } from '@/types';
 import type { HexColor, RoomAssignment, Transport, TransportId } from '@/types';
@@ -20,13 +21,30 @@ import type { CalendarTransport, CalendarTimelineRowModel, TimelineItemWithLane 
 import { formatTime, getContrastTextColor } from '../utils/calendar-utils';
 
 // ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Narrowest a transport pill may be drawn, in pixels.
+ *
+ * A transport pill used to be exactly one column wide, which was fine while a
+ * column was a 44px day and wrong as soon as it was not: the pill reads
+ * `↓ 14:30`, and at 28px the clock time was clipped to `14:` — the one piece of
+ * information the pill exists to carry. It now takes the room it needs and
+ * overlaps its neighbours instead of hiding the time.
+ */
+const TRANSPORT_PILL_MIN_WIDTH_PX = 56;
+
+/** Same, for a pill that also carries the shared-car glyph. */
+const TRANSPORT_PILL_WITH_RIDE_MIN_WIDTH_PX = 72;
+
+// ============================================================================
 // Component
 // ============================================================================
 
 interface CalendarTimelineRowProps {
   readonly model: CalendarTimelineRowModel;
   readonly viewport: TripTimelineViewportContext;
-  readonly tripDays: readonly Date[];
   readonly dateLocale: Locale;
   readonly onAssignmentClick: (assignment: RoomAssignment, relatedTransports?: readonly Transport[]) => void;
   readonly onTransportClick?: (transport: CalendarTransport) => void;
@@ -37,7 +55,6 @@ interface CalendarTimelineRowProps {
 const CalendarTimelineRow = memo(function CalendarTimelineRow({
   model,
   viewport,
-  tripDays,
   dateLocale,
   onAssignmentClick,
   onTransportClick,
@@ -46,7 +63,14 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
   const { t } = useTranslation();
 
   const rowHeight = Math.max(1, model.laneCount) * viewport.laneHeightPx;
-  const { canvasWidth, dayCount, cellWidthPx, dayGridTemplateColumns, todayColumnIndex } = viewport;
+  const {
+    canvasWidth,
+    columns,
+    dayCount,
+    cellWidthPx,
+    dayGridTemplateColumns,
+    todayColumnIndex,
+  } = viewport;
 
   const personLabel = model.person.name || t('common.unknown');
   // A guest entry can stand for several people (e.g. a couple under one name).
@@ -114,21 +138,32 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
 
   const formatVisibleAssignmentRange = useCallback(
     (startIndex: number, endIndex: number): string => {
-      const startDate = tripDays[startIndex];
-      const endDate = tripDays[endIndex];
-      if (!startDate || !endDate) {
+      // The axis, not a day list: a column's `end` is the first instant after
+      // it, which on a day axis is the next midnight — the same checkout date
+      // this label printed before the timeline had scales.
+      const first = columns[startIndex];
+      const last = columns[endIndex];
+      if (!first || !last) {
         return '';
       }
-      return `${format(startDate, 'd MMM', { locale: dateLocale })} – ${format(addDays(endDate, 1), 'd MMM', { locale: dateLocale })}`;
+      return `${format(first.start, 'd MMM', { locale: dateLocale })} – ${format(last.end, 'd MMM', { locale: dateLocale })}`;
     },
-    [dateLocale, tripDays],
+    [columns, dateLocale],
   );
 
-  const renderedItems = useMemo(() => {
+  const { renderedItems, itemBounds } = useMemo(() => {
     const cellW = cellWidthPx;
     const laneH = viewport.laneHeightPx;
+    /**
+     * Where each pill sits on the canvas, for the off-screen arrows below.
+     *
+     * Collected here rather than measured from the DOM because it is the same
+     * arithmetic the pills are drawn with — a second, measured answer would be
+     * one frame behind the first and would disagree with it mid-scroll.
+     */
+    const bounds: { readonly left: number; readonly right: number; readonly centre: number }[] = [];
 
-    return model.items.map((item) => {
+    const buttons = model.items.map((item) => {
       const laneIndex = item.laneIndex;
       const left = item.startIndex * cellW;
       const baseWidth = (item.endIndex - item.startIndex + 1) * cellW;
@@ -156,6 +191,30 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
       const width = Math.min(rawBarWidth, maxBarWidth);
 
       const pillWidth = Math.max(12, width - 4);
+
+      // A transport pill takes the width its clock time needs, and is centred
+      // on its column rather than filling it. At a day per column that is very
+      // nearly what it did before; at fifteen minutes per column it is the
+      // difference between `14:30` and `14:`.
+      const transportWidth = isTransport
+        ? Math.max(
+            cellW,
+            transportRideLabel !== undefined
+              ? TRANSPORT_PILL_WITH_RIDE_MIN_WIDTH_PX
+              : TRANSPORT_PILL_MIN_WIDTH_PX,
+          )
+        : 0;
+      const transportLeft = isTransport
+        ? Math.max(0, Math.min(canvasWidth - transportWidth, left + cellW / 2 - transportWidth / 2))
+        : 0;
+
+      const drawnLeft = isTransport ? transportLeft : pillLeft;
+      const drawnWidth = isTransport ? transportWidth : pillWidth;
+      bounds.push({
+        left: drawnLeft,
+        right: drawnLeft + drawnWidth,
+        centre: drawnLeft + drawnWidth / 2,
+      });
 
       const assignmentRange =
         isAssignment && item.kind === 'assignment'
@@ -216,17 +275,19 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
           type="button"
           onClick={() => handleItemClick(item)}
           className={cn(
-            'absolute z-[1] flex items-center gap-2 rounded-md px-2 text-xs overflow-hidden',
+            'absolute z-[1] flex items-center gap-2 rounded-md text-xs overflow-hidden',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
             'transition-opacity hover:opacity-90',
-            isAssignment && 'justify-start gap-1.5',
+            isAssignment && 'justify-start gap-1.5 px-2',
             isAssignment && 'border',
-            isTransport && 'justify-center border',
+            // Tighter padding than a stay pill: every pixel spent on padding is
+            // a pixel the clock time does not get.
+            isTransport && 'justify-center border px-1',
           )}
           style={{
-            left: isTransport ? left : pillLeft,
+            left: drawnLeft,
             top: bandTop,
-            width: isTransport ? cellW : pillWidth,
+            width: drawnWidth,
             height: laneH - 6,
             backgroundColor: isAssignment ? item.color : orphanBg,
             color: isAssignment ? item.textColor : orphanTextColor,
@@ -338,10 +399,11 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         </button>
       );
     });
+
+    return { renderedItems: buttons, itemBounds: bounds };
   }, [
     canvasWidth,
     cellWidthPx,
-    dateLocale,
     dayCount,
     formatVisibleAssignmentRange,
     handleItemClick,
@@ -432,15 +494,27 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
                 : undefined
             }
           >
-            {Array.from({ length: dayCount }).map((_, i) => (
-              <div
-                key={`grid-bg-${i}`}
-                className={cn(
-                  'min-w-0 h-full border-r border-muted/50',
-                  todayColumnIndex === i ? 'bg-primary/12' : i % 2 === 0 && 'bg-muted/10',
-                )}
-              />
-            ))}
+            {Array.from({ length: dayCount }).map((_, i) => {
+              // Weekends read darker than the weekdays either side, which is
+              // what lets a reader find "the Saturday" without counting
+              // columns. It also replaces the plain odd/even banding on those
+              // columns, so the two shadings never add up into a third tone.
+              const isWeekend = columns[i]?.isWeekend === true;
+              return (
+                <div
+                  key={`grid-bg-${i}`}
+                  data-weekend={isWeekend ? 'true' : undefined}
+                  className={cn(
+                    'min-w-0 h-full border-r border-muted/50',
+                    todayColumnIndex === i
+                      ? 'bg-primary/12'
+                      : isWeekend
+                        ? 'bg-muted/35'
+                        : i % 2 === 0 && 'bg-muted/10',
+                  )}
+                />
+              );
+            })}
           </div>
         </div>
 
@@ -458,6 +532,18 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
         )}
 
         {renderedItems}
+
+        <TimelineOffscreenArrows
+          bounds={itemBounds}
+          leftLabel={t('calendar.timeline.offscreenLeft', '{{name}} is booked earlier — scroll back', {
+            name: personLabel,
+          })}
+          rightLabel={t(
+            'calendar.timeline.offscreenRight',
+            '{{name}} is booked later — scroll forward',
+            { name: personLabel },
+          )}
+        />
       </div>
     </div>
   );

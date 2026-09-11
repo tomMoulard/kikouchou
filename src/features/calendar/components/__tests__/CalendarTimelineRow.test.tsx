@@ -8,6 +8,13 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { CalendarTimelineRow } from '../CalendarTimelineRow';
 import type { CalendarTimelineRowModel, TimelineItemWithLane } from '../../types';
 import type { TripTimelineViewportContext } from '@/components/shared/TripTimelineFrame';
+import {
+  TimelineScrollContext,
+  type TimelineScrollApi,
+  type TimelineVisibleRange,
+} from '@/components/shared/timeline-scroll-context';
+import { columnsFromDays } from '@/lib/utils/timeline-scale';
+import { toDayKeys } from '@/lib/utils/trip-days';
 import type { HexColor, ISODateString, Person, PersonId, RoomAssignment, RoomAssignmentId, RoomId, TransportId, TripId } from '@/types';
 import { enUS } from 'date-fns/locale';
 
@@ -54,6 +61,14 @@ function makeAssignment(id: string, roomId: string, personId: string): RoomAssig
   } as RoomAssignment;
 }
 
+const defaultTripDays = Array.from({ length: 6 }, (_, index) => {
+  const date = new Date(2026, 0, 5);
+  date.setDate(date.getDate() + index);
+  return date;
+});
+
+const defaultColumns = columnsFromDays(defaultTripDays, toDayKeys(defaultTripDays), enUS);
+
 const defaultViewport: TripTimelineViewportContext = {
   canvasWidth: 600,
   dayCount: 6,
@@ -65,13 +80,8 @@ const defaultViewport: TripTimelineViewportContext = {
   laneHeightPx: 32,
   todayColumnIndex: undefined,
   dayGridTemplateColumns: undefined,
+  columns: defaultColumns,
 };
-
-const defaultTripDays = Array.from({ length: 6 }, (_, index) => {
-  const date = new Date('2026-01-05T00:00:00Z');
-  date.setUTCDate(date.getUTCDate() + index);
-  return date;
-});
 
 function makeModel(overrides: Partial<CalendarTimelineRowModel> = {}): CalendarTimelineRowModel {
   const person = makePerson('Alice');
@@ -85,11 +95,183 @@ function makeModel(overrides: Partial<CalendarTimelineRowModel> = {}): CalendarT
   };
 }
 
+/**
+ * Renders `children` under a scroll context reporting one fixed visible slice
+ * of the canvas, which is what the off-screen arrows read.
+ */
+function withVisibleRange(range: TimelineVisibleRange, scrollTo = vi.fn()) {
+  const api: TimelineScrollApi = {
+    subscribeVisibleRange: (listener) => {
+      listener(range);
+      return () => undefined;
+    },
+    scrollCanvasPositionIntoView: scrollTo,
+  };
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return <TimelineScrollContext.Provider value={api}>{children}</TimelineScrollContext.Provider>;
+  };
+}
+
+const TRANSPORT_ITEM: TimelineItemWithLane = {
+  kind: 'transport',
+  id: 't-width',
+  startIndex: 1,
+  endIndex: 1,
+  transport: {
+    id: 't-width' as TransportId,
+    tripId: 'trip-1' as TripId,
+    personId: 'p-Alice' as PersonId,
+    type: 'arrival',
+    datetime: '2026-01-06T14:30:00Z',
+    location: 'Station',
+  } as never,
+  person: makePerson('Alice'),
+  label: 'Station',
+  laneIndex: 0,
+};
+
 // ============================================================================
 // Tests
 // ============================================================================
 
 describe('CalendarTimelineRow', () => {
+  // A transport pill reads `↓ 14:30`. Drawn exactly one column wide it lost the
+  // clock time the moment a column was narrower than a 44px day — which is
+  // every column of the hours and day scales.
+  describe('transport pill width', () => {
+    it('never draws a transport pill narrower than its clock time needs', () => {
+      render(
+        <CalendarTimelineRow
+          model={makeModel({ items: [TRANSPORT_ITEM] })}
+          viewport={{ ...defaultViewport, cellWidthPx: 20 }}
+          dateLocale={enUS}
+          onAssignmentClick={vi.fn()}
+        />,
+      );
+
+      const pill = screen.getAllByRole('button')[0]!;
+      expect(parseFloat(pill.style.width)).toBeGreaterThanOrEqual(56);
+    });
+
+    it('centres the pill on its column and keeps it inside the canvas', () => {
+      render(
+        <CalendarTimelineRow
+          model={makeModel({ items: [{ ...TRANSPORT_ITEM, startIndex: 5, endIndex: 5 }] })}
+          viewport={{ ...defaultViewport, cellWidthPx: 20, canvasWidth: 120 }}
+          dateLocale={enUS}
+          onAssignmentClick={vi.fn()}
+        />,
+      );
+
+      const pill = screen.getAllByRole('button')[0]!;
+      const left = parseFloat(pill.style.left);
+      const width = parseFloat(pill.style.width);
+      expect(left).toBeGreaterThanOrEqual(0);
+      expect(left + width).toBeLessThanOrEqual(120);
+    });
+  });
+
+  // Weekends read as a darker band, so a reader finds "the Saturday" without
+  // counting columns.
+  describe('weekend shading', () => {
+    it('marks the weekend columns behind the row', () => {
+      // The axis runs Monday 5 January 2026 to Saturday the 10th, so exactly
+      // one column of the six is a weekend day.
+      const { container } = render(
+        <CalendarTimelineRow
+          model={makeModel()}
+          viewport={defaultViewport}
+          dateLocale={enUS}
+          onAssignmentClick={vi.fn()}
+        />,
+      );
+
+      const weekendCells = container.querySelectorAll('[data-weekend="true"]');
+      expect(weekendCells).toHaveLength(1);
+    });
+  });
+
+  // A guest whose whole stay is off to one side leaves an empty row, and an
+  // empty row reads as "nothing booked" rather than "you scrolled past it".
+  describe('off-screen pills', () => {
+    const stayItem: TimelineItemWithLane = {
+      kind: 'assignment',
+      id: 'a-off',
+      startIndex: 4,
+      endIndex: 5,
+      assignment: makeAssignment('a-off', 'r1', 'p-Alice'),
+      person: makePerson('Alice'),
+      room: undefined,
+      label: 'Blue room',
+      color: '#ef4444' as HexColor,
+      textColor: 'white',
+      laneIndex: 0,
+    };
+
+    it('points right when the only pill is further along the axis', () => {
+      render(
+        <CalendarTimelineRow
+          model={makeModel({ items: [stayItem] })}
+          viewport={defaultViewport}
+          dateLocale={enUS}
+          onAssignmentClick={vi.fn()}
+        />,
+        { wrapper: withVisibleRange({ start: 0, end: 200 }) },
+      );
+
+      expect(screen.getByTestId('timeline-offscreen-right').hidden).toBe(false);
+      expect(screen.getByTestId('timeline-offscreen-left').hidden).toBe(true);
+    });
+
+    it('points left when the only pill is behind the visible axis', () => {
+      render(
+        <CalendarTimelineRow
+          model={makeModel({ items: [stayItem] })}
+          viewport={defaultViewport}
+          dateLocale={enUS}
+          onAssignmentClick={vi.fn()}
+        />,
+        { wrapper: withVisibleRange({ start: 600, end: 800 }) },
+      );
+
+      expect(screen.getByTestId('timeline-offscreen-left').hidden).toBe(false);
+      expect(screen.getByTestId('timeline-offscreen-right').hidden).toBe(true);
+    });
+
+    it('shows no arrow while the pill is on screen', () => {
+      render(
+        <CalendarTimelineRow
+          model={makeModel({ items: [stayItem] })}
+          viewport={defaultViewport}
+          dateLocale={enUS}
+          onAssignmentClick={vi.fn()}
+        />,
+        { wrapper: withVisibleRange({ start: 0, end: 600 }) },
+      );
+
+      expect(screen.getByTestId('timeline-offscreen-left').hidden).toBe(true);
+      expect(screen.getByTestId('timeline-offscreen-right').hidden).toBe(true);
+    });
+
+    it('scrolls to the hidden pill when the arrow is pressed', () => {
+      const scrollTo = vi.fn();
+      render(
+        <CalendarTimelineRow
+          model={makeModel({ items: [stayItem] })}
+          viewport={defaultViewport}
+          dateLocale={enUS}
+          onAssignmentClick={vi.fn()}
+        />,
+        { wrapper: withVisibleRange({ start: 0, end: 200 }, scrollTo) },
+      );
+
+      fireEvent.click(screen.getByTestId('timeline-offscreen-right'));
+
+      // The pill covers columns 4 and 5 of six 100px columns, less the 4px a
+      // stay pill insets itself by, so its centre is at 498 on the canvas.
+      expect(scrollTo).toHaveBeenCalledWith(498);
+    });
+  });
   // Folded, the column is 40px — one letter's worth of space. A colour dot plus
   // a name truncated to "M.." spent that space saying almost nothing; the
   // initial in the guest's own colour carries both identity and colour.
@@ -101,7 +283,6 @@ describe('CalendarTimelineRow', () => {
         <CalendarTimelineRow
           model={makeModel()}
           viewport={collapsed}
-          tripDays={defaultTripDays}
           dateLocale={enUS}
           onAssignmentClick={vi.fn()}
         />,
@@ -115,7 +296,6 @@ describe('CalendarTimelineRow', () => {
         <CalendarTimelineRow
           model={makeModel()}
           viewport={collapsed}
-          tripDays={defaultTripDays}
           dateLocale={enUS}
           onAssignmentClick={vi.fn()}
         />,
@@ -129,7 +309,6 @@ describe('CalendarTimelineRow', () => {
         <CalendarTimelineRow
           model={makeModel()}
           viewport={collapsed}
-          tripDays={defaultTripDays}
           dateLocale={enUS}
           onAssignmentClick={vi.fn()}
         />,
@@ -146,7 +325,6 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
-        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,
@@ -161,7 +339,6 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
-        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,
@@ -177,7 +354,6 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
-        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,
@@ -210,7 +386,6 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
-        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={onClick}
       />,
@@ -255,7 +430,6 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
-        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
         onTransportClick={onTransportClick}
@@ -276,7 +450,6 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
-        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,
@@ -293,8 +466,7 @@ describe('CalendarTimelineRow', () => {
     const { container } = render(
       <CalendarTimelineRow
         model={model}
-        viewport={{ ...defaultViewport, dayCount: 3 }}
-        tripDays={defaultTripDays.slice(0, 3)}
+        viewport={{ ...defaultViewport, dayCount: 3, columns: defaultColumns.slice(0, 3) }}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,
@@ -314,7 +486,6 @@ describe('CalendarTimelineRow', () => {
       <CalendarTimelineRow
         model={model}
         viewport={defaultViewport}
-        tripDays={defaultTripDays}
         dateLocale={enUS}
         onAssignmentClick={vi.fn()}
       />,

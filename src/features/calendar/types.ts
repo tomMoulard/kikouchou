@@ -8,6 +8,7 @@
 import type { KeyboardEvent } from 'react';
 import type { Locale } from 'date-fns/locale';
 import type { ResolvedRide } from '@/features/transports/utils/ride-model';
+import type { TimelineColumn } from '@/lib/utils/timeline-scale';
 import type { DailyHeadcount } from './utils/headcount-utils';
 import type {
   Activity,
@@ -246,7 +247,11 @@ export interface CalendarTimelineRowModel {
 }
 
 export interface CalendarTimelineModel {
+  /** The axis the rows are laid out on, at whatever scale is being shown. */
+  readonly columns: readonly TimelineColumn[];
+  /** Each column's first instant — day midnights on a day-per-column axis. */
   readonly tripDays: readonly Date[];
+  /** Keys of the columns that are exactly one calendar day, in axis order. */
   readonly dayKeys: readonly ISODateString[];
   readonly rows: readonly CalendarTimelineRowModel[];
   readonly maxLaneCount: number;

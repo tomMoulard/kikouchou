@@ -28,7 +28,18 @@
     "date": "Date",
     "time": "Heure",
     "pickDate": "Choisir une date",
-    "scrollTimeline": "Faire défiler la frise"
+    "scrollTimeline": "Faire défiler la frise",
+    "now": "Maintenant",
+    "currentTime": "Heure actuelle",
+    "timelineScale": "Échelle de la frise",
+    "timelineScales": {
+      "hours": "Heures (15 min)",
+      "day": "Journée (1 heure)",
+      "week": "Semaine (1 jour)",
+      "month": "Séjour (1 jour)",
+      "year": "Année (1 semaine)",
+      "fiveYears": "5 ans (1 mois)"
+    }
   },
   "nav": {
     "calendar": "Calendrier",
@@ -351,6 +362,8 @@
     "timeline": {
       "ariaLabel": "Chronologie d'occupation des chambres",
       "rows": "Lignes de chambres",
+      "offscreenLeft": "{{name}} est réservée plus tôt — revenir en arrière",
+      "offscreenRight": "{{name}} est réservée plus tard — avancer",
       "freeBedHint": "Un autre lit est libre dans cette chambre — glissez un participant sur cette ligne",
       "assignmentPillA11y": "{{name}} — séjour {{range}}"
     },
@@ -806,7 +819,9 @@
       "assignmentBarTitle": "{{room}} — {{range}}",
       "assignmentBarAria": "{{room}}. Séjour {{range}}.",
       "guestHeadcount_one": "Compte pour {{count}} personne",
-      "guestHeadcount_other": "Compte pour {{count}} personnes"
+      "guestHeadcount_other": "Compte pour {{count}} personnes",
+      "offscreenLeft": "{{name}} est réservé plus tôt — revenir en arrière",
+      "offscreenRight": "{{name}} est réservé plus tard — avancer"
     },
     "viewActivityDetails": "Voir l'activité {{title}} ({{category}}), {{participants}} participants",
     "setup": {
@@ -840,6 +855,20 @@
         "count_one": "{{count}} arrivée",
         "count_other": "{{count}} arrivées"
       }
+    },
+    "guestOverview": {
+      "title": "À propos de {{name}}",
+      "checkIn": "Arrivée",
+      "checkOut": "Départ",
+      "rooms": "Chambres",
+      "otherTravel": "Autres trajets",
+      "activities": "Activités",
+      "owes": "Doit au groupe",
+      "isOwed": "Le groupe lui doit",
+      "settled": "À jour avec le groupe",
+      "noMoney": "Aucune dépense pour le moment",
+      "nothingElse": "Rien d’autre de prévu pour cet invité",
+      "noTravel": "Aucun trajet enregistré"
     }
   },
   "summary": {

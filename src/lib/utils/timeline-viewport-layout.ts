@@ -51,10 +51,21 @@ export function computeTimelineViewportLayout(params: {
   readonly viewportWidth: number;
   readonly labelColumnWidth: number;
   readonly dayCount: number;
+  /**
+   * Column width the layout aims for before it starts compressing.
+   *
+   * A day column carries `Jul` over `14`; a quarter-hour column carries
+   * `14:15`, which does not fit in the same 44px. Each timeline scale states
+   * the width its own labels need, and leaving this out keeps the day-axis
+   * width every timeline used before scales existed.
+   */
+  readonly preferredColumnWidthPx?: number;
 }): TimelineViewportLayout {
   const { viewportWidth, labelColumnWidth, dayCount } = params;
-  const preferred = TIMELINE_PREFERRED_DAY_WIDTH_PX;
-  const minCompressed = TIMELINE_MIN_COMPRESSED_DAY_WIDTH_PX;
+  const preferred = params.preferredColumnWidthPx ?? TIMELINE_PREFERRED_DAY_WIDTH_PX;
+  // Never compress past the point where the preferred width itself is the
+  // floor: a scale that asked for narrow columns must not be widened by it.
+  const minCompressed = Math.min(TIMELINE_MIN_COMPRESSED_DAY_WIDTH_PX, preferred);
 
   if (dayCount < 1) {
     return { dayWidthPx: preferred, canvasWidth: 0, useFractionalColumns: false };
