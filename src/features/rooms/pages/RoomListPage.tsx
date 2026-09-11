@@ -1200,6 +1200,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
               endDate: currentTrip.endDate,
             }}
             todayKey={todayStr as ISODateString}
+            today={todayDate}
             {...(canEdit
               ? {
                   onEditRoom: handleRoomEdit,

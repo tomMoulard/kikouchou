@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { Calendar as CalendarIcon, Users } from 'lucide-react';
 
 import { EmptyState } from '@/components/shared/EmptyState';
+import { TimelineScaleControls } from '@/components/shared/TimelineScaleControls';
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
 import { ActivityTimelineRow } from '@/features/activities/components/ActivityTimelineRow';
 import {
@@ -16,6 +17,8 @@ import {
   collectActivityDayKeys,
 } from '@/features/activities/utils/activity-timeline-utils';
 import { toLocalISODateString } from '@/lib/db/utils';
+import { useTimelineAxis } from '@/components/shared/useTimelineAxis';
+import { buildDayColumnsCovering, toDayKeys } from '@/lib/utils/trip-days';
 import type { ISODateString } from '@/types';
 import type { CalendarTimelineProps } from '../types';
 import { buildDailyHeadcounts } from '../utils/headcount-utils';
@@ -62,6 +65,32 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
     [props.activities],
   );
 
+  // The trip's own days, widened to reach every event drawn on them: a guest
+  // who flies in the day before the trip starts has no column on a trip-only
+  // axis, and a pill with no column is a pill nobody can see.
+  const tripDays = useMemo(
+    () =>
+      buildDayColumnsCovering({
+        startKey: props.trip.startDate,
+        endKey: props.trip.endDate,
+        mustInclude: [...guestDayKeys, ...activityDayKeys],
+      }),
+    [props.trip.startDate, props.trip.endDate, guestDayKeys, activityDayKeys],
+  );
+
+  const tripDayKeys = useMemo(() => toDayKeys(tripDays), [tripDays]);
+
+  // One axis for both halves of the timeline. Building it here rather than
+  // inside each model is what guarantees the guest rows and the activity bands
+  // line up: they are not two axes that agree, they are the same axis.
+  const axis = useTimelineAxis({
+    days: tripDays,
+    dayKeys: tripDayKeys,
+    dateLocale: props.dateLocale,
+    today: props.today,
+  });
+  const columns = axis.columns;
+
   const model = useMemo(
     () =>
       buildCalendarTimelineModel({
@@ -72,7 +101,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
         arrivals: props.arrivals,
         departures: props.departures,
         unknownLabel: t('common.unknown'),
-        extraDayKeys: activityDayKeys,
+        columns,
       }),
     [
       props.trip,
@@ -81,21 +110,21 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
       props.assignments,
       props.arrivals,
       props.departures,
-      activityDayKeys,
+      columns,
       t,
     ],
   );
 
-  // The shared agenda gets its own bands under the guest rows; it reuses the
-  // same day axis, so the two halves of the timeline always line up.
+  // The shared agenda gets its own bands under the guest rows, on that same
+  // axis.
   const activityModel = useMemo(
     () =>
       buildActivityTimelineModel({
         trip: props.trip,
         activities: props.activities,
-        extraDayKeys: guestDayKeys,
+        columns,
       }),
-    [props.trip, props.activities, guestDayKeys],
+    [props.trip, props.activities, columns],
   );
 
   const todayKey = toLocalISODateString(props.today) as ISODateString;
@@ -172,11 +201,19 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
       leftHeader={<span className="text-sm font-medium">{t('calendar.timeline.persons', 'Guests')}</span>}
       days={model.tripDays}
       dayKeys={model.dayKeys}
+      columns={model.columns}
       dateLocale={props.dateLocale}
+      preferredColumnWidthPx={axis.preferredColumnWidthPx}
       todayKey={todayKey}
+      now={props.today}
+      recenterToken={axis.recenterToken}
       tripRange={tripRange}
       outsideTripLabel={t('calendar.outsideTripDates', 'Outside the trip dates')}
+      nowLabel={t('common.currentTime', 'Current time')}
       scrollbarLabel={t('common.scrollTimeline', 'Scroll the timeline')}
+      toolbar={
+        <TimelineScaleControls value={axis.scale} onChange={axis.setScale} onNow={axis.goToNow} />
+      }
       renderDayMeta={renderDayHeadcount}
     >
       {(viewport) => (
@@ -187,7 +224,6 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
                 <CalendarTimelineRow
                   model={row}
                   viewport={viewport}
-                  tripDays={model.tripDays}
                   dateLocale={props.dateLocale}
                   onAssignmentClick={props.onAssignmentClick}
                   onTransportClick={props.onTransportClick}

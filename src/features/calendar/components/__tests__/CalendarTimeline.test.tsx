@@ -243,4 +243,31 @@ describe('CalendarTimeline', () => {
     );
     expect(screen.queryByRole('button', { name: 'Add guests' })).not.toBeInTheDocument();
   });
+
+  // The trip laid out a day at a time answers "who is here this week". It
+  // cannot answer "who lands before lunch on Friday", and the dropdown is how
+  // the reader asks the second question without leaving the screen.
+  describe('the scale controls', () => {
+    it('offers the scale dropdown and the way back to now', () => {
+      render(<CalendarTimeline {...defaultProps} />);
+
+      expect(screen.getByTestId('timeline-scale-select')).toBeInTheDocument();
+      expect(screen.getByTestId('timeline-now-button')).toBeInTheDocument();
+    });
+
+    it('starts on the trip scale, one column per day', () => {
+      render(<CalendarTimeline {...defaultProps} />);
+
+      expect(screen.getByTestId('timeline-scale-select')).toHaveTextContent('Trip (1 day)');
+    });
+
+    it('keeps the rows on screen when the reader asks to go back to now', async () => {
+      const user = userEvent.setup();
+      render(<CalendarTimeline {...defaultProps} />);
+
+      await user.click(screen.getByTestId('timeline-now-button'));
+
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+    });
+  });
 });

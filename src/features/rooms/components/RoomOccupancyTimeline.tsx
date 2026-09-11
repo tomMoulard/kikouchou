@@ -4,17 +4,22 @@
  * @module features/rooms/components/RoomOccupancyTimeline
  */
 
-import { type CSSProperties, type ReactElement, memo, useMemo } from 'react';
-import { differenceInCalendarDays, format, parseISO, subDays } from 'date-fns';
+import { type CSSProperties, type ReactElement, memo, useMemo, useState } from 'react';
+import { addDays, format, parseISO, subDays } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { TriangleAlert } from 'lucide-react';
 
+import { TimelineOffscreenArrows } from '@/components/shared/TimelineOffscreenArrows';
+import { TimelineScaleControls } from '@/components/shared/TimelineScaleControls';
 import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
+import { useTimelineAxis } from '@/components/shared/useTimelineAxis';
 import { TIMELINE_LABEL_CELL_STYLE } from '@/components/shared/timeline-label-cell';
 import { getRoomIconComponent } from '@/components/shared/RoomIconPicker';
 import { cn } from '@/lib/utils';
 import { timelineAssignmentBarStyle, TIMELINE_LANE_HEIGHT_PX } from '@/lib/utils/timeline-bar-geometry';
 import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
+import { type TimelineColumn, resolveColumnRange } from '@/lib/utils/timeline-scale';
+import { buildDayColumns, toDayKeys } from '@/lib/utils/trip-days';
 import type { ISODateString, Person, Room, RoomAssignment, RoomId, Transport, Trip } from '@/types';
 import { DroppableRoom } from '@/features/rooms/components/DroppableRoom';
 import { DraggableGuest } from '@/features/rooms/components/DraggableGuest';
@@ -43,8 +48,7 @@ export const ROOM_TIMELINE_LABEL_COLUMN_WIDTH_PX = 140;
 
 function buildUnassignedSegments(
   unassignedGuests: RoomOccupancyTimelineProps['unassignedGuests'],
-  tripStart: Date,
-  tripEnd: Date,
+  columns: readonly TimelineColumn[],
 ): readonly {
   readonly person: Person;
   readonly startDate: string;
@@ -76,21 +80,20 @@ function buildUnassignedSegments(
           return null;
         }
 
-        const clippedStart = start < tripStart ? tripStart : start;
-        const clippedEnd = lastNight > tripEnd ? tripEnd : lastNight;
-        if (clippedEnd < clippedStart) {
+        // The nights, as a half-open span: from the first night's midnight to
+        // the morning after the last. The axis clips it, and says so by
+        // returning nothing at all when the run is off it entirely.
+        const range = resolveColumnRange(columns, start, addDays(lastNight, 1));
+        if (!range) {
           return null;
         }
-
-        const startIndex = Math.max(0, differenceInCalendarDays(clippedStart, tripStart));
-        const spanNights = Math.max(1, differenceInCalendarDays(clippedEnd, clippedStart) + 1);
 
         return {
           person,
           startDate: stay.startDate,
           endDate: stay.endDate,
-          startIndex,
-          endIndex: startIndex + spanNights - 1,
+          startIndex: range.startIndex,
+          endIndex: range.endIndex,
         };
       });
     })
@@ -128,6 +131,14 @@ export interface RoomOccupancyTimelineProps {
   /** Local-date key for “today” column highlight (optional). */
   readonly todayKey?: ISODateString;
   /**
+   * The present moment, for the vertical now-marker and the "now" button.
+   *
+   * `todayKey` names a column; this names an instant inside it, which is what a
+   * marker at half past two needs. Left out, the timeline reads the clock once
+   * when it mounts.
+   */
+  readonly today?: Date;
+  /**
    * Opens the room's edit dialog, wired to a double click on the room name.
    *
    * Omitted, the names carry no interaction at all — which is why the handler
@@ -162,6 +173,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
   dateLocale,
   range,
   todayKey,
+  today,
   onEditRoom,
   onAssignGuestToRoom,
   onMoveAssignmentToRoom,
@@ -169,6 +181,27 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
   const { t } = useTranslation();
 
   const personsById = useMemo(() => new Map<string, Person>(persons.map((p) => [p.id, p])), [persons]);
+
+  // The trip's days, and the axis whatever scale the reader picked makes of
+  // them. Shared with the guest calendar through `useTimelineAxis`, so the two
+  // timelines offer the same zooms and mean the same thing by each of them.
+  // Read once on mount when the caller does not say: a marker that re-read the
+  // clock on every render would move the axis under the reader.
+  const [mountedAt] = useState(() => new Date());
+  const nowInstant = today ?? mountedAt;
+
+  const tripDays = useMemo(
+    () => buildDayColumns(range.startDate, range.endDate),
+    [range.startDate, range.endDate],
+  );
+  const tripDayKeys = useMemo(() => toDayKeys(tripDays), [tripDays]);
+
+  const axis = useTimelineAxis({
+    days: tripDays,
+    dayKeys: tripDayKeys,
+    dateLocale,
+    today: nowInstant,
+  });
 
   const model = useMemo(
     () =>
@@ -181,8 +214,9 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
         unknownLabel: t('common.unknown'),
         arrivals,
         departures,
+        columns: axis.columns,
       }),
-    [trip, range, rooms, assignments, arrivals, departures, personsById, t],
+    [trip, range, rooms, assignments, arrivals, departures, personsById, axis.columns, t],
   );
 
   // Lanes describe the *layout* (how many bars stack in a row); they say nothing
@@ -216,14 +250,11 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
 
   const dayCount = model.days.length;
 
-  const tripStart = parseISO(range.startDate);
-  const tripEnd = parseISO(range.endDate);
-
   // One row for everyone still without a bed, packed into lanes exactly like a
   // room's — guests who overlap stack instead of drawing over each other.
   const unassignedLanes = useMemo(
-    () => allocateTimelineLanes(buildUnassignedSegments(unassignedGuests, tripStart, tripEnd)),
-    [unassignedGuests, tripStart, tripEnd],
+    () => allocateTimelineLanes(buildUnassignedSegments(unassignedGuests, axis.columns)),
+    [unassignedGuests, axis.columns],
   );
   const unassignedLaneCount = unassignedLanes.reduce(
     (max, lane) => Math.max(max, lane.laneIndex + 1),
@@ -237,9 +268,17 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
       leftHeader={<span className="text-sm font-medium">{t('rooms.title')}</span>}
       days={model.days}
       dayKeys={model.dayKeys}
+      columns={model.columns}
       dateLocale={dateLocale}
+      preferredColumnWidthPx={axis.preferredColumnWidthPx}
       todayKey={todayKey}
+      now={nowInstant}
+      recenterToken={axis.recenterToken}
+      nowLabel={t('common.currentTime', 'Current time')}
       scrollbarLabel={t('common.scrollTimeline', 'Scroll the timeline')}
+      toolbar={
+        <TimelineScaleControls value={axis.scale} onChange={axis.setScale} onNow={axis.goToNow} />
+      }
     >
       {(viewport) => {
         const {
@@ -301,9 +340,12 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                         {Array.from({ length: dayCount }).map((_, i) => (
                           <div
                             key={`grid-unassigned-${i}`}
+                            data-weekend={viewport.columns[i]?.isWeekend ? 'true' : undefined}
                             className={cn(
                               'min-w-0 h-full border-r border-muted/50',
-                              i % 2 === 0 && 'bg-muted/10',
+                              viewport.columns[i]?.isWeekend
+                                ? 'bg-muted/35'
+                                : i % 2 === 0 && 'bg-muted/10',
                               viewport.todayColumnIndex === i && 'bg-primary/12',
                             )}
                           />
@@ -472,9 +514,12 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                             {Array.from({ length: dayCount }).map((_, i) => (
                               <div
                                 key={`grid-${row.room.id}-${i}`}
+                                data-weekend={viewport.columns[i]?.isWeekend ? 'true' : undefined}
                                 className={cn(
                                   'min-w-0 h-full border-r border-muted/50',
-                                  i % 2 === 0 && 'bg-muted/10',
+                                  viewport.columns[i]?.isWeekend
+                                    ? 'bg-muted/35'
+                                    : i % 2 === 0 && 'bg-muted/10',
                                   viewport.todayColumnIndex === i && 'bg-primary/12',
                                 )}
                               />
@@ -547,6 +592,31 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                             </DroppableAssignment>
                           );
                         })}
+
+                        {/*
+                          A room whose only booking has been scrolled past reads
+                          as an empty room. These say which way the booking went,
+                          and take the reader to it.
+                        */}
+                        <TimelineOffscreenArrows
+                          bounds={row.items.map((item) => ({
+                            left: item.startIndex * viewport.cellWidthPx,
+                            right: (item.endIndex + 1) * viewport.cellWidthPx,
+                            centre:
+                              (item.startIndex + (item.endIndex - item.startIndex + 1) / 2) *
+                              viewport.cellWidthPx,
+                          }))}
+                          leftLabel={t(
+                            'rooms.timeline.offscreenLeft',
+                            '{{name}} is booked earlier — scroll back',
+                            { name: row.room.name },
+                          )}
+                          rightLabel={t(
+                            'rooms.timeline.offscreenRight',
+                            '{{name}} is booked later — scroll forward',
+                            { name: row.room.name },
+                          )}
+                        />
                       </div>
                     </DroppableRoom>
                   </div>

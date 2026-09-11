@@ -300,6 +300,9 @@ vi.mock('@/components/shared/TripTimelineFrame', () => ({
         laneHeightPx: 36,
         labelColumnWidth: 140,
         labelsCollapsed: false,
+        // The rows read the axis for the weekend shading; this stub has no
+        // real one, so no column is a weekend.
+        columns: [],
       })}
     </div>
   ),

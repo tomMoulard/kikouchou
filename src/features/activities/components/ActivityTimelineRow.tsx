@@ -209,17 +209,26 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
                 : undefined
             }
           >
-            {Array.from({ length: dayCount }).map((_, index) => (
-              <div
-                key={`activity-grid-bg-${index}`}
-                className={cn(
-                  'h-full min-w-0 border-r border-muted/50',
-                  todayColumnIndex === index
-                    ? 'bg-primary/12'
-                    : index % 2 === 0 && 'bg-muted/10',
-                )}
-              />
-            ))}
+            {Array.from({ length: dayCount }).map((_, index) => {
+              // A weekend column reads darker than the weekdays either side,
+              // and replaces the odd/even banding there so the two shadings
+              // never add up into a third tone.
+              const isWeekend = viewport.columns[index]?.isWeekend === true;
+              return (
+                <div
+                  key={`activity-grid-bg-${index}`}
+                  data-weekend={isWeekend ? 'true' : undefined}
+                  className={cn(
+                    'h-full min-w-0 border-r border-muted/50',
+                    todayColumnIndex === index
+                      ? 'bg-primary/12'
+                      : isWeekend
+                        ? 'bg-muted/35'
+                        : index % 2 === 0 && 'bg-muted/10',
+                  )}
+                />
+              );
+            })}
           </div>
         </div>
 

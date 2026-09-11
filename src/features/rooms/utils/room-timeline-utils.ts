@@ -15,6 +15,11 @@ import {
   ROOM_TIMELINE_PREFERRED_DAY_WIDTH_PX,
   type RoomTimelineViewportLayout,
 } from '@/lib/utils/timeline-viewport-layout';
+import {
+  type TimelineColumn,
+  columnsFromDays,
+  resolveColumnRange,
+} from '@/lib/utils/timeline-scale';
 import { buildDayColumns, parseLocalDayKey, toDayKeys } from '@/lib/utils/trip-days';
 import type { ISODateString, Person, Room, RoomAssignment, Transport, Trip } from '@/types';
 
@@ -62,7 +67,11 @@ export interface RoomTimelineRowModel {
 }
 
 export interface RoomTimelineModel {
+  /** The axis the rows are laid out on, at whatever scale is being shown. */
+  readonly columns: readonly TimelineColumn[];
+  /** Each column's first instant — day midnights on a day-per-column axis. */
   readonly days: readonly Date[];
+  /** Keys of the columns that are exactly one calendar day, in axis order. */
   readonly dayKeys: readonly ISODateString[];
   readonly rows: readonly RoomTimelineRowModel[];
 }
@@ -106,8 +115,7 @@ function clipAssignmentToPersonStayAndTripGrid(
   person: Person | undefined,
   arrivals: readonly Transport[],
   departures: readonly Transport[],
-  dayKeys: readonly ISODateString[],
-  dayIndexByKey: ReadonlyMap<ISODateString, number>,
+  columns: readonly TimelineColumn[],
 ): {
   readonly startIndex: number;
   readonly endIndex: number;
@@ -156,35 +164,38 @@ function clipAssignmentToPersonStayAndTripGrid(
     }
   }
 
-  const firstKey = dayKeys[0];
-  const lastKey = dayKeys[dayKeys.length - 1];
-  if (!firstKey || !lastKey) {
+  const first = columns[0];
+  const last = columns[columns.length - 1];
+  if (!first || !last) {
     return null;
   }
 
-  if (fn > lastKey || ln < firstKey) {
+  // The nights, as a half-open span of time: from the first night's midnight to
+  // the morning after the last one. That is the same span on a day-per-column
+  // axis as the old day-key arithmetic produced, and it is also the only form
+  // a quarter-hour axis can place.
+  const from = parseLocalDayKey(fn);
+  const lastNight = parseLocalDayKey(ln);
+  if (!from || !lastNight) {
+    return null;
+  }
+  const until = addDays(lastNight, 1);
+
+  const range = resolveColumnRange(columns, from, until);
+  if (!range) {
     return null;
   }
 
-  const visFn = fn < firstKey ? firstKey : fn;
-  const visLn = ln > lastKey ? lastKey : ln;
-
-  const startIndex = dayIndexByKey.get(visFn);
-  const endIndex = dayIndexByKey.get(visLn);
-  if (startIndex === undefined || endIndex === undefined) {
-    return null;
-  }
-
-  const visLnParsed = parseLocalDayKey(visLn);
-  if (!visLnParsed) {
-    return null;
-  }
+  // The label says what is *visible*, so a stay running off either end of the
+  // axis is reported clipped to it rather than claiming days with no column.
+  const visibleFrom = from < first.start ? first.start : from;
+  const visibleUntil = until > last.end ? last.end : until;
 
   return {
-    startIndex,
-    endIndex,
-    displayStayStart: visFn,
-    displayStayEnd: toLocalISODateString(addDays(visLnParsed, 1)),
+    startIndex: range.startIndex,
+    endIndex: range.endIndex,
+    displayStayStart: toLocalISODateString(visibleFrom),
+    displayStayEnd: toLocalISODateString(visibleUntil),
   };
 }
 
@@ -279,7 +290,7 @@ function pickCanonicalAssignmentForCluster(
 
 function mergeOverlappingOrAdjacentClusterForPerson(
   items: readonly RoomTimelineAssignmentItem[],
-  dayKeys: readonly ISODateString[],
+  columns: readonly TimelineColumn[],
 ): RoomTimelineAssignmentItem[] {
   if (items.length <= 1) {
     return [...items];
@@ -316,13 +327,9 @@ function mergeOverlappingOrAdjacentClusterForPerson(
     const startIndex = Math.min(...cluster.map((c) => c.startIndex));
     const endIndex = Math.max(...cluster.map((c) => c.endIndex));
     const canonical = pickCanonicalAssignmentForCluster(cluster);
-    const visStartKey = dayKeys[startIndex];
-    const visEndKey = dayKeys[endIndex];
-    if (!visStartKey || !visEndKey) {
-      continue;
-    }
-    const visLnParsed = parseLocalDayKey(visEndKey);
-    if (!visLnParsed) {
+    const firstColumn = columns[startIndex];
+    const lastColumn = columns[endIndex];
+    if (!firstColumn || !lastColumn) {
       continue;
     }
     result.push({
@@ -334,8 +341,10 @@ function mergeOverlappingOrAdjacentClusterForPerson(
       person: canonical.person,
       label: canonical.label,
       color: canonical.color,
-      displayStayStart: visStartKey,
-      displayStayEnd: toLocalISODateString(addDays(visLnParsed, 1)),
+      displayStayStart: toLocalISODateString(firstColumn.start),
+      // The column's own end is the first instant after it, which on a day
+      // axis is the checkout morning the merged bar covers up to.
+      displayStayEnd: toLocalISODateString(lastColumn.end),
     });
   }
   return result;
@@ -343,7 +352,7 @@ function mergeOverlappingOrAdjacentClusterForPerson(
 
 function mergeOverlappingOrAdjacentSamePersonRoomItems(
   items: readonly RoomTimelineAssignmentItem[],
-  dayKeys: readonly ISODateString[],
+  columns: readonly TimelineColumn[],
 ): RoomTimelineAssignmentItem[] {
   const byPerson = new Map<string, RoomTimelineAssignmentItem[]>();
   for (const item of items) {
@@ -358,7 +367,7 @@ function mergeOverlappingOrAdjacentSamePersonRoomItems(
 
   const merged: RoomTimelineAssignmentItem[] = [];
   for (const group of byPerson.values()) {
-    merged.push(...mergeOverlappingOrAdjacentClusterForPerson(group, dayKeys));
+    merged.push(...mergeOverlappingOrAdjacentClusterForPerson(group, columns));
   }
   return merged;
 }
@@ -376,16 +385,27 @@ export function buildRoomTimelineModel(args: {
   readonly unknownLabel: string;
   readonly arrivals: readonly Transport[];
   readonly departures: readonly Transport[];
+  /**
+   * The axis to lay the rows out on, at whatever scale is being shown.
+   *
+   * Left out, the builder makes the day-per-column axis it always made, one
+   * column per day of `range`.
+   */
+  readonly columns?: readonly TimelineColumn[];
 }): RoomTimelineModel {
   const { range, rooms, assignments, personsById, unknownLabel, arrivals, departures } = args;
 
-  const days = buildDayColumns(range.startDate, range.endDate);
-  const dayKeys = toDayKeys(days);
-  const dayIndexByKey = new Map<ISODateString, number>();
-  for (let i = 0; i < dayKeys.length; i++) {
-    const key = dayKeys[i];
-    if (key) dayIndexByKey.set(key, i);
-  }
+  const columns =
+    args.columns ??
+    (() => {
+      const dayColumns = buildDayColumns(range.startDate, range.endDate);
+      return columnsFromDays(dayColumns, toDayKeys(dayColumns));
+    })();
+
+  const days = columns.map((column) => column.start);
+  const dayKeys = columns
+    .map((column) => column.dayKey)
+    .filter((key): key is ISODateString => key !== undefined);
 
   const roomsById = new Map<string, Room>(rooms.map((r) => [r.id, r]));
 
@@ -412,8 +432,7 @@ export function buildRoomTimelineModel(args: {
       person,
       arrivals,
       departures,
-      dayKeys,
-      dayIndexByKey,
+      columns,
     );
     if (!clipped) {
       continue;
@@ -462,7 +481,7 @@ export function buildRoomTimelineModel(args: {
       (item) => item.assignment.personId,
     );
 
-    const mergedItems = mergeOverlappingOrAdjacentSamePersonRoomItems(dedupedItems, dayKeys);
+    const mergedItems = mergeOverlappingOrAdjacentSamePersonRoomItems(dedupedItems, columns);
 
     const itemsWithLanes = allocateLanes(mergedItems) as readonly RoomTimelineItemWithLane[];
     const laneCount = itemsWithLanes.reduce((max, i) => Math.max(max, i.laneIndex + 1), 1);
@@ -470,6 +489,6 @@ export function buildRoomTimelineModel(args: {
     return { room, items: itemsWithLanes, laneCount };
   });
 
-  return { days, dayKeys, rows };
+  return { columns, days, dayKeys, rows };
 }
 

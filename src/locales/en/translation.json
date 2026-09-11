@@ -28,7 +28,18 @@
     "date": "Date",
     "time": "Time",
     "pickDate": "Pick a date",
-    "scrollTimeline": "Scroll the timeline"
+    "scrollTimeline": "Scroll the timeline",
+    "now": "Now",
+    "currentTime": "Current time",
+    "timelineScale": "Timeline scale",
+    "timelineScales": {
+      "hours": "Hours (15 min)",
+      "day": "Day (1 hour)",
+      "week": "Week (1 day)",
+      "month": "Trip (1 day)",
+      "year": "Year (1 week)",
+      "fiveYears": "5 years (1 month)"
+    }
   },
   "nav": {
     "calendar": "Calendar",
@@ -351,6 +362,8 @@
     "timeline": {
       "ariaLabel": "Room occupancy timeline",
       "rows": "Room rows",
+      "offscreenLeft": "{{name}} is booked earlier — scroll back",
+      "offscreenRight": "{{name}} is booked later — scroll forward",
       "freeBedHint": "Another bed is free in this room — drag a guest onto this row",
       "assignmentPillA11y": "{{name}} — stay {{range}}"
     },
@@ -806,7 +819,9 @@
       "assignmentBarTitle": "{{room}} — {{range}}",
       "assignmentBarAria": "{{room}}. Stay {{range}}.",
       "guestHeadcount_one": "Counts as {{count}} person",
-      "guestHeadcount_other": "Counts as {{count}} people"
+      "guestHeadcount_other": "Counts as {{count}} people",
+      "offscreenLeft": "{{name}} is booked earlier — scroll back",
+      "offscreenRight": "{{name}} is booked later — scroll forward"
     },
     "viewActivityDetails": "View activity {{title}} ({{category}}), {{participants}} participants",
     "setup": {
@@ -840,6 +855,20 @@
         "count_one": "{{count}} arrival",
         "count_other": "{{count}} arrivals"
       }
+    },
+    "guestOverview": {
+      "title": "About {{name}}",
+      "checkIn": "Check-in",
+      "checkOut": "Check-out",
+      "rooms": "Rooms",
+      "otherTravel": "Other travel",
+      "activities": "Activities",
+      "owes": "Owes the group",
+      "isOwed": "The group owes them",
+      "settled": "Square with the group",
+      "noMoney": "Not on any money line yet",
+      "nothingElse": "Nothing else booked for this guest yet",
+      "noTravel": "No travel recorded"
     }
   },
   "summary": {

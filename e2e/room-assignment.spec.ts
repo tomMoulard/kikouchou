@@ -1181,9 +1181,12 @@ test.describe('Room Assignment Flow', () => {
     });
     await navigateToRooms(page, tripId, 'timeline');
 
-    // The sticky label column: the only place the timeline prints a room name,
-    // and the only element carrying a title that mentions it.
-    const roomLabel = timelineRows(page).getByTitle(new RegExp(TEST_DATA.room.name));
+    // The sticky label column: the only place the timeline prints a room name.
+    // Reached through the printed name rather than through a title, because the
+    // row's off-screen arrows are titled with the room name too.
+    const roomLabel = timelineRows(page)
+      .getByText(TEST_DATA.room.name, { exact: true })
+      .locator('xpath=ancestor::*[@title][1]');
     await expect(roomLabel).toBeVisible();
     await roomLabel.dblclick();
 

@@ -164,12 +164,15 @@ vi.mock('@/components/shared/TripTimelineFrame', () => ({
     children,
     ariaLabel,
     todayKey,
+    toolbar,
   }: {
     children: (viewport: Record<string, unknown>) => React.ReactNode;
     ariaLabel: string;
     todayKey?: string;
+    toolbar?: React.ReactNode;
   }) => (
     <div aria-label={ariaLabel} data-testid="timeline-frame" data-today-key={todayKey ?? ''}>
+      {toolbar}
       {children({
         canvasWidth: 800,
         dayGridTemplateColumns: 'repeat(9, 1fr)',
@@ -179,6 +182,9 @@ vi.mock('@/components/shared/TripTimelineFrame', () => ({
         laneHeightPx: 36,
         labelColumnWidth: 140,
         labelsCollapsed,
+        // The rows read the axis for the weekend shading; this stub has no real
+        // one, so no column is a weekend.
+        columns: [],
       })}
     </div>
   ),
@@ -270,16 +276,37 @@ describe('RoomOccupancyTimeline', () => {
   // Without the callback the names carry no gesture, so the tooltip must not
   // advertise one.
   it('only offers the double-click hint when onEditRoom is wired up', () => {
+    // The label cell, reached through the name it renders: the row's
+    // off-screen arrows are titled with the room name too, so a title query
+    // alone now matches three elements.
+    const labelTitleOf = (): string =>
+      screen.getByText('Main Bedroom').closest('[title]')?.getAttribute('title') ?? '';
+
     const { unmount } = render(<RoomOccupancyTimeline {...defaultProps} />);
-    expect(screen.getByTitle(/Main Bedroom/).getAttribute('title')).not.toContain(
-      'rooms.doubleClickToEdit',
-    );
+    expect(labelTitleOf()).not.toContain('rooms.doubleClickToEdit');
     unmount();
 
     render(<RoomOccupancyTimeline {...defaultProps} onEditRoom={vi.fn()} />);
-    expect(screen.getByTitle(/Main Bedroom/).getAttribute('title')).toContain(
-      'rooms.doubleClickToEdit',
-    );
+    expect(labelTitleOf()).toContain('rooms.doubleClickToEdit');
+  });
+
+  // The room board and the guest calendar offer the same zooms: one of them
+  // gaining a scale the other has not is a difference the reader has to
+  // relearn every time they switch screens.
+  it('offers the same scale controls as the guest calendar', () => {
+    render(<RoomOccupancyTimeline {...defaultProps} />);
+
+    expect(screen.getByTestId('timeline-scale-select')).toBeInTheDocument();
+    expect(screen.getByTestId('timeline-now-button')).toBeInTheDocument();
+  });
+
+  it('says which way a booking went when the row has scrolled past it', () => {
+    render(<RoomOccupancyTimeline {...defaultProps} />);
+
+    // Both arrows are mounted and hidden; the frame's visible range decides
+    // which one shows, and this stub frame publishes none.
+    expect(screen.getAllByTestId('timeline-offscreen-left').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('timeline-offscreen-right').length).toBeGreaterThan(0);
   });
 
   // Folded, the column is 40px. "jaune" came out as "j..", which names no
