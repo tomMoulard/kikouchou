@@ -22,6 +22,7 @@ import { AlertTriangle, Check, Fingerprint, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthProviders } from '@/features/auth/hooks/useAuthProviders';
 import { useAuth } from '@/features/auth/AuthContext';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Component
@@ -52,8 +53,19 @@ export const PasskeyEnrolment = memo(function PasskeyEnrolment(): ReactElement |
       setError(null);
       setIsEnrolled(false);
       setIsEnrolling(true);
-      const outcome = await registerPasskey();
-      setIsEnrolling(false);
+
+      // Without this, a throw leaves the button spinning for good: neither the
+      // enrolled branch nor the error branch below is ever reached.
+      let outcome: Awaited<ReturnType<typeof registerPasskey>>;
+      try {
+        outcome = await registerPasskey();
+      } catch (error) {
+        reportError(error, { source: 'PasskeyEnrolment.handleEnrol' });
+        setError(t('errors.generic', 'Something went wrong'));
+        return;
+      } finally {
+        setIsEnrolling(false);
+      }
 
       if (outcome.status === 'enrolled') {
         setIsEnrolled(true);

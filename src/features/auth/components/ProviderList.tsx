@@ -41,6 +41,7 @@ import { useAuth } from '@/features/auth/AuthContext';
 import type { SignInOutcome } from '@/features/auth/AuthContext';
 import type { Web3Chain } from '@/features/auth/web3';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Constants
@@ -119,13 +120,28 @@ export const ProviderList = memo(function ProviderList({
     async (providerId: string): Promise<void> => {
       setError(null);
       setPending(providerId);
-      const outcome = await signInWithProvider(providerId);
+
+      // `pending` disables every provider button, the email form and the wallet
+      // buttons, not only the one that was pressed, so a throw between here and
+      // the reset takes the whole panel down with no error on screen.
+      // `runSignIn` returns an outcome rather than rejecting today; this is what
+      // keeps that an implementation detail rather than a load-bearing one.
+      let outcome: Awaited<ReturnType<typeof signInWithProvider>>;
+      try {
+        outcome = await signInWithProvider(providerId);
+      } catch (error) {
+        setPending(null);
+        reportError(error, { source: 'ProviderList.handleProvider', provider: providerId });
+        setError(t('errors.generic', 'Something went wrong'));
+        return;
+      }
+
       if (outcome.status !== 'redirecting') {
         setPending(null);
       }
       handleOutcome(outcome);
     },
-    [handleOutcome, signInWithProvider],
+    [handleOutcome, signInWithProvider, t],
   );
 
   const runPasskey = useCallback(async (): Promise<void> => {
@@ -134,10 +150,18 @@ export const ProviderList = memo(function ProviderList({
     // Completes in this document like a wallet does — the browser prompts for a
     // screen lock and a session follows — so there is always a `pending` to
     // clear afterwards.
-    const outcome = await signInWithPasskey();
-    setPending(null);
+    let outcome: Awaited<ReturnType<typeof signInWithPasskey>>;
+    try {
+      outcome = await signInWithPasskey();
+    } catch (error) {
+      reportError(error, { source: 'ProviderList.runPasskey' });
+      setError(t('errors.generic', 'Something went wrong'));
+      return;
+    } finally {
+      setPending(null);
+    }
     handleOutcome(outcome);
-  }, [handleOutcome, signInWithPasskey]);
+  }, [handleOutcome, signInWithPasskey, t]);
 
   const handlePasskey = useCallback((): void => {
     void runPasskey();
@@ -149,14 +173,22 @@ export const ProviderList = memo(function ProviderList({
       setPending(chain);
       // Shown inside the wallet's own signing prompt, so it has to say what is
       // being agreed to. One line: most wallets reject a newline.
-      const outcome = await signInWithWallet(
-        chain,
-        t(
-          'auth.signIn.walletStatement',
-          'Sign in to Kikoushou. This does not approve any transaction.',
-        ),
-      );
-      setPending(null);
+      let outcome: Awaited<ReturnType<typeof signInWithWallet>>;
+      try {
+        outcome = await signInWithWallet(
+          chain,
+          t(
+            'auth.signIn.walletStatement',
+            'Sign in to Kikoushou. This does not approve any transaction.',
+          ),
+        );
+      } catch (error) {
+        reportError(error, { source: 'ProviderList.handleWallet', chain });
+        setError(t('errors.generic', 'Something went wrong'));
+        return;
+      } finally {
+        setPending(null);
+      }
       handleOutcome(outcome);
     },
     [handleOutcome, signInWithWallet, t],

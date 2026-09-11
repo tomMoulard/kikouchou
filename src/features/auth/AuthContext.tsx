@@ -54,7 +54,7 @@ import {
   getCapturedAuthError,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import posthog, { resetAnalyticsIdentity } from '@/lib/posthog';
+import posthog, { reportError, resetAnalyticsIdentity } from '@/lib/posthog';
 
 import { getAccountDisplayName } from './display-name';
 import type { Web3Chain } from './web3';
@@ -569,7 +569,17 @@ export function AuthProvider({
       .catch((error: unknown) => {
         // A chunk that will not load — offline on a cold launch, or a stale
         // service worker. Sign-in is unavailable; everything else is unaffected.
-        console.error('[auth] failed to load the Supabase client:', error);
+        reportError(error, { source: 'AuthContext.getSupabaseClient' });
+
+        // Resolved means "we know the answer", not "there is a session". This
+        // used to return without setting it, so `isResolved` stayed false for
+        // the life of the page and every consumer waited on an event that was
+        // never coming: the invite-link landing page sat on a spinner with no
+        // error and no retry, and `useJoinTrip` never ran at all. There is no
+        // session and there is not going to be one, which is an answer.
+        if (isMountedRef.current && !cancelled) {
+          setHasSeenAuthEvent(true);
+        }
       });
 
     return () => {
