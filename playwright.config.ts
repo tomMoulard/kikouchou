@@ -261,6 +261,10 @@ const LIVE_URL = process.env.PW_LIVE_URL ?? 'https://app.kikouchou.app';
  *   - `analytics-privacy.spec.ts` asserts that *nothing* reaches PostHog. That
  *     is a statement about a build with `VITE_POSTHOG_KEY` blank; the deployed
  *     build carries a real key, so the app there is supposed to try.
+ *   - `analytics-events.spec.ts` reads the capture log `lib/posthog` keeps on a
+ *     dev build. The deployment is a production build, where that log is
+ *     compiled out, so every assertion in it would fail against a deployment
+ *     whose analytics are working perfectly.
  *   - `sharing.spec.ts` asserts the share dialog explains that no sync server
  *     is configured. The deployment has one, so the assertion is inverted there.
  *   - `trip-sharing-sync.spec.ts` and `trip-invite-anonymous.spec.ts` sign in
@@ -272,7 +276,7 @@ const LIVE_URL = process.env.PW_LIVE_URL ?? 'https://app.kikouchou.app';
  *     tester's link, not the app.
  */
 const LIVE_EXCLUDED_SPECS_PATTERN =
-  /analytics-privacy\.spec\.ts|sharing\.spec\.ts|trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts|performance\.spec\.ts/;
+  /analytics-privacy\.spec\.ts|analytics-events\.spec\.ts|sharing\.spec\.ts|trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts|performance\.spec\.ts/;
 
 /**
  * Every host the deployed build sends analytics to: PostHog's own domains and
