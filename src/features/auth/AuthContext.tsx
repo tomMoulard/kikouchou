@@ -742,7 +742,11 @@ export function AuthProvider({
     try {
       await client.auth.signOut({ scope: 'local' });
     } catch (error: unknown) {
+      // The local session is cleared below regardless, so the person is signed
+      // out either way. Reported because a sign-out that throws is still a
+      // fault worth knowing about.
       console.error('[auth] sign-out failed:', error);
+      reportError(error, { source: 'AuthContext.signOut' });
     }
 
     if (isMountedRef.current) {

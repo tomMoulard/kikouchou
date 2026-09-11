@@ -58,6 +58,7 @@ import type {
   Transport,
   TransportId,
 } from '@/types';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Type Definitions
@@ -729,11 +730,17 @@ const EventDetailDialog = memo(function EventDetailDialog({
       setIsDeleteDialogOpen(false);
       onOpenChange(false);
     } catch (error) {
-      console.error('Failed to delete:', error);
+      // Was a bare log: the dialog stayed open with no explanation, so from the
+      // reader's side the Delete button simply did nothing.
+      reportFailure(
+        'EventDetailDialog.handleConfirmDelete',
+        error,
+        t('errors.deleteFailed', 'Failed to delete'),
+      );
     } finally {
       setIsDeleting(false);
     }
-  }, [onDelete, onOpenChange]);
+  }, [onDelete, onOpenChange, t]);
 
   // Handle delete dialog close
   const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
