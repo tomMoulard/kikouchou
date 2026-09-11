@@ -24,7 +24,7 @@ import { Input } from '@/components/ui/input';
 import { NumberStepper } from '@/components/ui/number-stepper';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { RoomIconPicker } from '@/components/shared/RoomIconPicker';
+import { RoomIconDialog } from '@/components/shared/RoomIconDialog';
 import { cn } from '@/lib/utils';
 import type { Room, RoomFormData, RoomIcon } from '@/types';
 
@@ -316,19 +316,34 @@ const RoomForm = memo(function RoomForm({
           {t('rooms.name')}
           <span className="text-destructive ml-1" aria-hidden="true">*</span>
         </Label>
-        <Input
-          id="room-name"
-          type="text"
-          value={name}
-          onChange={handleNameChange}
-          onBlur={handleNameBlur}
-          placeholder={t('rooms.namePlaceholder')}
-          aria-invalid={Boolean(errors.name)}
-          aria-describedby={errors.name ? 'room-name-error' : undefined}
-          disabled={isSubmitting}
-          // eslint-disable-next-line jsx-a11y/no-autofocus -- The first control of a form the user has just chosen to open. Without it focus stays on the trigger — or, in a dialog, on the close button — and the user tabs to reach the field they came for.
-          autoFocus
-        />
+        {/*
+          The icon sits on the name's line, to its left, because it is part of
+          naming the room: "the double bed one at the back". It is a button, not
+          a grid of twenty tiles between the name and the bed count — the
+          default is right for most rooms, and the picker opens for the rest.
+        */}
+        <div className="flex items-center gap-2">
+          <RoomIconDialog
+            id="room-icon"
+            value={icon}
+            onChange={handleIconChange}
+            disabled={isSubmitting}
+          />
+          <Input
+            id="room-name"
+            type="text"
+            className="min-w-0 flex-1"
+            value={name}
+            onChange={handleNameChange}
+            onBlur={handleNameBlur}
+            placeholder={t('rooms.namePlaceholder')}
+            aria-invalid={Boolean(errors.name)}
+            aria-describedby={errors.name ? 'room-name-error' : undefined}
+            disabled={isSubmitting}
+            // eslint-disable-next-line jsx-a11y/no-autofocus -- The first control of a form the user has just chosen to open. Without it focus stays on the trigger — or, in a dialog, on the close button — and the user tabs to reach the field they came for.
+            autoFocus
+          />
+        </div>
         {errors.name && (
           <p
             id="room-name-error"
@@ -339,14 +354,6 @@ const RoomForm = memo(function RoomForm({
           </p>
         )}
       </div>
-
-      {/* Icon Field */}
-      <RoomIconPicker
-        id="room-icon"
-        value={icon}
-        onChange={handleIconChange}
-        disabled={isSubmitting}
-      />
 
       {/* Capacity Field */}
       <div className="space-y-2">

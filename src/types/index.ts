@@ -385,8 +385,14 @@ export const DEFAULT_EXPENSE_SPLIT_MODE: ExpenseSplitMode = 'equal';
 /**
  * Room icon type for visual identification across views.
  * Icons are from lucide-react library.
+ *
+ * A room stores this key as a plain string, so the list only ever grows: a
+ * room saved by an older build carries one of the first eleven keys, and a key
+ * a build does not know falls back to the default icon rather than failing.
  */
 export type RoomIcon =
+  // The original eleven. They keep their order in the picker, so a trip
+  // organiser finds the icon where it has always been.
   | 'bed-double'   // Default bedroom
   | 'bed-single'   // Single bed room
   | 'bath'         // Bathroom
@@ -397,7 +403,17 @@ export type RoomIcon =
   | 'home'         // General room
   | 'door-open'    // Entryway
   | 'baby'         // Kids room
-  | 'armchair';    // Lounge
+  | 'armchair'     // Lounge
+  // Added for the places people actually sleep in a holiday house.
+  | 'bunk-bed'     // Bunk beds / an extra bed
+  | 'hammock'      // Hammock, outdoors
+  | 'camper-van'   // Camper van
+  | 'campsite'     // Pitch under the trees
+  | 'hotel'        // Hotel room nearby
+  | 'rocking-chair'// Nursery
+  | 'shower'       // Shower room
+  | 'toilet'       // Toilet
+  | 'boat';        // Boat cabin
 
 /**
  * Default room icon when none is selected.
