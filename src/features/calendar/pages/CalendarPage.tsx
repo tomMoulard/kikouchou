@@ -27,6 +27,7 @@ import {
   useState,
 } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify } from '@/hooks';
 import { useTripAccess } from '@/hooks/useTripAccess';
@@ -71,6 +72,7 @@ import type {
   HexColor,
   ISODateString,
   Person,
+  PersonId,
   Room,
   RoomAssignment,
   Transport,
@@ -106,6 +108,9 @@ import {
   getActivityEndDayKey,
   getActivityStartDayKey,
 } from '@/features/activities/utils/activity-utils';
+import { computeBalances, type PersonBalance } from '@/features/money/lib/balances';
+import { loadTripMoney } from '@/features/money/lib/trip-money';
+import { buildGuestOverview } from '../utils/guest-overview';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
@@ -860,6 +865,33 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   }, [defaultFocusedDateKey, focusedDateKey, visibleDateKeys]);
 
   // ============================================================================
+  // The trip's accounts
+  // ============================================================================
+
+  /*
+    Read here rather than in the dialog so the money follows the same path as
+    every other fact the dialog shows: database, page, dialog. A live query
+    because the accounts change on another screen — settle up on the money page
+    and a calendar left open behind it should not still claim a debt.
+  */
+  const tripMoney = useLiveQuery(
+    () => (currentTrip ? loadTripMoney(currentTrip.id) : Promise.resolve(null)),
+    [currentTrip?.id],
+  );
+
+  const balanceByPersonId = useMemo(() => {
+    if (!tripMoney) {
+      return new Map<PersonId, PersonBalance>();
+    }
+    return new Map(
+      computeBalances(tripMoney.expenses, tripMoney.personNights).map((balance) => [
+        balance.personId,
+        balance,
+      ]),
+    );
+  }, [tripMoney]);
+
+  // ============================================================================
   // Event Handlers
   // ============================================================================
 
@@ -890,12 +922,41 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
         room,
         relatedTransports:
           relatedTransports && relatedTransports.length > 0 ? relatedTransports : undefined,
+        // A booking on its own answers "which room". The reader clicking it
+        // usually wants the guest: when they land, what they signed up for,
+        // and whether they still owe the kitty. Undefined only while the trip
+        // itself is still loading, when there is no guest to describe.
+        guestOverview:
+          person && currentTrip
+            ? buildGuestOverview({
+                person,
+                trip: currentTrip,
+                rooms,
+                assignments,
+                arrivals,
+                departures,
+                activities,
+                balance: balanceByPersonId.get(person.id),
+                currency: tripMoney?.currency,
+              })
+            : undefined,
       };
 
       setSelectedEvent(eventData);
       setIsEventDialogOpen(true);
     },
-    [getPersonById, roomsMap],
+    [
+      getPersonById,
+      roomsMap,
+      currentTrip,
+      rooms,
+      assignments,
+      arrivals,
+      departures,
+      activities,
+      balanceByPersonId,
+      tripMoney?.currency,
+    ],
   );
 
   const handleTransportClick = useCallback(
