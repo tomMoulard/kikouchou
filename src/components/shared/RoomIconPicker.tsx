@@ -24,7 +24,6 @@ import {
   Sofa,
   Tent,
   TentTree,
-  Toilet,
   TreePalm,
   Van,
   Warehouse,
@@ -102,7 +101,6 @@ const ROOM_ICONS: Record<RoomIcon, IconConfig> = {
   'hotel': { icon: Hotel, labelKey: 'rooms.icons.hotel' },
   'rocking-chair': { icon: RockingChair, labelKey: 'rooms.icons.rockingChair' },
   'shower': { icon: ShowerHead, labelKey: 'rooms.icons.shower' },
-  'toilet': { icon: Toilet, labelKey: 'rooms.icons.toilet' },
   'boat': { icon: Sailboat, labelKey: 'rooms.icons.boat' },
 } as const;
 
@@ -130,7 +128,6 @@ const ICON_ORDER: readonly RoomIcon[] = [
   'hotel',
   'rocking-chair',
   'shower',
-  'toilet',
   'boat',
 ] as const;
 
