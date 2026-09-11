@@ -714,8 +714,14 @@ describe('useTripSystemPrompt — rides and cars', () => {
     const { tripId, vehicleId } = await seedRide({ withDriver: true });
     const result = await renderWithTrip(tripId);
 
+    // The owner's name, not the heading. `## Cars` is in the prompt from the
+    // first render — it is the empty-list heading too — so waiting for it waits
+    // for nothing, and the guests and the cars arrive from two live queries
+    // that settle independently. CI caught the window: the car was listed with
+    // `owner: Unknown` under a `## Guests` section that still said none had
+    // been added. This waits for the guest the assertion below reads.
     await waitFor(() => {
-      expect(result.current.prompt.systemPrompt).toContain('## Cars');
+      expect(result.current.prompt.systemPrompt).toContain('owner: Tom');
     });
 
     const prompt = result.current.prompt.systemPrompt;
