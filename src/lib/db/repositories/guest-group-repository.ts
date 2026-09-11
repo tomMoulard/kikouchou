@@ -33,6 +33,7 @@ import type {
   TripId,
 } from '@/types';
 import { getPersonHeadcount } from '@/types';
+import { repositoryError } from '@/lib/db/repository-error';
 
 // ============================================================================
 // Internal Helpers
@@ -94,9 +95,7 @@ export async function createGuestGroup(
     await db.guestGroups.add(group);
     return group;
   } catch (error) {
-    throw new Error(`Failed to create guest group "${sanitized.name}"`, {
-      cause: error,
-    });
+    throw repositoryError(`Failed to create guest group "${sanitized.name}"`, error);
   }
 }
 

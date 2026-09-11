@@ -17,6 +17,7 @@ import { db } from '@/lib/db/database';
 import { sanitizeVehicleData } from '@/lib/db/sanitize';
 import { createVehicleId } from '@/lib/db/utils';
 import type { PersonId, TripId, Vehicle, VehicleFormData, VehicleId } from '@/types';
+import { repositoryError } from '@/lib/db/repository-error';
 
 // ============================================================================
 // Reads
@@ -124,9 +125,7 @@ export async function createVehicle(
     await db.vehicles.add(vehicle);
     return vehicle;
   } catch (error) {
-    throw new Error(`Failed to create vehicle "${sanitizedData.name}"`, {
-      cause: error,
-    });
+    throw repositoryError(`Failed to create vehicle "${sanitizedData.name}"`, error);
   }
 }
 

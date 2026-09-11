@@ -43,6 +43,7 @@ import type {
   TripId,
   VehicleId,
 } from '@/types';
+import { repositoryError } from '@/lib/db/repository-error';
 
 // ============================================================================
 // Datetime Normalisation
@@ -237,9 +238,9 @@ export async function createRide(
     await db.rides.add(ride);
     return ride;
   } catch (error) {
-    throw new Error(
+    throw repositoryError(
       `Failed to create ${sanitizedData.direction} ride at "${sanitizedData.location}"`,
-      { cause: error },
+      error,
     );
   }
 }

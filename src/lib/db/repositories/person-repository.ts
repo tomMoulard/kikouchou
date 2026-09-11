@@ -17,6 +17,7 @@ import {
 import { createPersonId } from '@/lib/db/utils';
 import type { Expense, Person, PersonFormData, PersonId, TripId } from '@/types';
 import { getDefaultPersonColor, normalizePersonHeadcount } from '@/types';
+import { repositoryError } from '@/lib/db/repository-error';
 
 /**
  * Creates a new person in the database.
@@ -50,7 +51,7 @@ export async function createPerson(
     await db.persons.add(person);
     return person;
   } catch (error) {
-    throw new Error(`Failed to create person "${sanitizedData.name}" for trip ${tripId}`, { cause: error });
+    throw repositoryError(`Failed to create person "${sanitizedData.name}" for trip ${tripId}`, error);
   }
 }
 
@@ -84,7 +85,7 @@ export async function createPersonWithAutoColor(
     if (error instanceof Error && error.message.startsWith('Failed to create person')) {
       throw error;
     }
-    throw new Error(`Failed to create person "${name}" with auto color for trip ${tripId}`, { cause: error });
+    throw repositoryError(`Failed to create person "${name}" with auto color for trip ${tripId}`, error);
   }
 }
 
@@ -245,7 +246,7 @@ export async function deletePerson(id: PersonId): Promise<void> {
       },
     );
   } catch (error) {
-    throw new Error(`Failed to delete person ${id}`, { cause: error });
+    throw repositoryError(`Failed to delete person ${id}`, error);
   }
 }
 

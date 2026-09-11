@@ -46,6 +46,7 @@ import type {
   TransportId,
   TripId,
 } from '@/types';
+import { repositoryError } from '@/lib/db/repository-error';
 
 // ============================================================================
 // Datetime Normalisation
@@ -151,9 +152,9 @@ export async function createTransport(
     await db.transports.add(transport);
     return transport;
   } catch (error) {
-    throw new Error(
+    throw repositoryError(
       `Failed to create ${sanitizedData.type} transport for person ${sanitizedData.personId} at "${sanitizedData.location}"`,
-      { cause: error },
+      error,
     );
   }
 }
@@ -357,7 +358,7 @@ export async function deleteTransport(id: TransportId): Promise<void> {
   try {
     await db.transports.delete(id);
   } catch (error) {
-    throw new Error(`Failed to delete transport ${id}`, { cause: error });
+    throw repositoryError(`Failed to delete transport ${id}`, error);
   }
 }
 
