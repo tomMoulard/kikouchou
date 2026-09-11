@@ -285,7 +285,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
       }
       navigate(`/trips/${trip.id}/calendar`);
     },
-    [navigate, skipNextBlock, setCurrentTrip],
+    [navigate, skipNextBlock],
   );
 
   // ============================================================================

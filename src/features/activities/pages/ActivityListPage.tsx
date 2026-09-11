@@ -46,7 +46,6 @@ import { useTripContext } from '@/contexts/TripContext';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
-import { notify } from '@/lib/notifications';
 import type { Activity, ActivityId, ISODateString, Person, PersonId } from '@/types';
 
 import { ActivityCard } from '../components/ActivityCard';
@@ -56,6 +55,7 @@ import {
   type ActivityDateGroup,
   groupActivitiesByDate,
 } from '../utils/activity-utils';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Type Definitions
@@ -289,8 +289,11 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
       setActivityToDelete(null);
       notifySuccess(t('activities.deleteSuccess'));
     } catch (error) {
-      console.error('Failed to delete activity:', error);
-      notify.error(t('errors.deleteFailed', 'Failed to delete'));
+      reportFailure(
+        'ActivityListPage.deleteActivity',
+        error,
+        t('errors.deleteFailed', 'Failed to delete'),
+      );
       throw error; // Keep the dialog open so the user can retry
     }
   }, [activityToDelete, deleteActivity, t, notifySuccess]);
@@ -312,8 +315,11 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
           notifySuccess(joining ? t('activities.joined') : t('activities.left'));
         })
         .catch((error: unknown) => {
-          console.error('Failed to update participation:', error);
-          notify.error(t('activities.errors.participationFailed'));
+          reportFailure(
+            'ActivityListPage.updateParticipation',
+            error,
+            t('activities.errors.participationFailed'),
+          );
         });
     },
     [currentPersonId, setParticipation, notifySuccess, t],

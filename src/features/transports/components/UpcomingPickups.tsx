@@ -88,6 +88,7 @@ import {
   type Transport,
   type TransportId,
 } from '@/types';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Type Definitions
@@ -707,8 +708,11 @@ const UpcomingPickups = memo(function UpcomingPickups({
           notify.error(t('pickups.rideCreatedPartial'));
         }
       } catch (error) {
-        console.error('Failed to build a ride from a pickup group:', error);
-        notify.error(t('errors.saveFailed'));
+        reportFailure(
+          'UpcomingPickups.buildARideFromAPickupGroup',
+          error,
+          t('errors.saveFailed'),
+        );
       } finally {
         if (isMountedRef.current) {
           setBuildingRideKey(null);
@@ -739,8 +743,11 @@ const UpcomingPickups = memo(function UpcomingPickups({
         await setTransportRide(transportId, rideId);
         notifySuccess(t('pickups.addedToRide'));
       } catch (error) {
-        console.error('Failed to add a pickup to a ride:', error);
-        notify.error(t('errors.saveFailed'));
+        reportFailure(
+          'UpcomingPickups.addAPickupToARide',
+          error,
+          t('errors.saveFailed'),
+        );
       }
     },
     [setTransportRide, notifySuccess, t],
@@ -798,8 +805,11 @@ const UpcomingPickups = memo(function UpcomingPickups({
           }
         }, 2000);
       } catch (error) {
-        console.error('Failed to assign driver:', error);
-        notify.error(t('errors.saveFailed'));
+        reportFailure(
+          'UpcomingPickups.assignDriver',
+          error,
+          t('errors.saveFailed'),
+        );
         stopResolving(transportId);
       }
     },

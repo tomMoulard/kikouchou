@@ -73,6 +73,7 @@ import { captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import { getPersonHeadcount } from '@/types';
 import type { Person, PersonId, TransportMode } from '@/types';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Type Definitions
@@ -637,8 +638,11 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
       notifySuccess(t('persons.deleteSuccess', 'Guest removed successfully'));
       setDeletingPersonId(undefined);
     } catch (error) {
-      console.error('Failed to delete person:', error);
-      notify.error(t('errors.deleteFailed', 'Failed to delete'));
+      reportFailure(
+        'PersonListPage.deletePerson',
+        error,
+        t('errors.deleteFailed', 'Failed to delete'),
+      );
       throw error;
     }
   }, [deletePerson, deletingPersonId, notifySuccess, t]),
@@ -704,8 +708,11 @@ const PersonListPage = memo(function PersonListPage(): ReactElement {
           source: 'guest_list',
         });
       } catch (error) {
-        console.error('Failed to import guest groups:', error);
-        notify.error(t('guestGroups.importFailed', "Could not add the group's guests"));
+        reportFailure(
+          'PersonListPage.importGuestGroups',
+          error,
+          t('guestGroups.importFailed', "Could not add the group's guests"),
+        );
         throw error;
       }
     },

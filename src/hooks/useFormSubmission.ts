@@ -11,6 +11,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { reportError } from '@/lib/posthog';
+import { describeCause } from '@/lib/db/repository-error';
 
 // ============================================================================
 // Type Definitions
@@ -111,8 +113,21 @@ export function useFormSubmission<T>(
       try {
         await onSubmitRef.current(data);
       } catch (error) {
+        // Every form in the app routes its failures through here, and each of
+        // their own catch blocks is empty with a "handled by useFormSubmission"
+        // comment — so this was the single place where a form's real error went
+        // to be replaced by a translated headline and forgotten. The headline
+        // stays, because it is the part in the reader's language; the reason is
+        // reported and put underneath it.
+        reportError(error, { source: 'useFormSubmission', error_key: errorKeyRef.current });
         if (isMountedRef.current) {
-          setSubmitError(t(errorKeyRef.current ?? 'errors.saveFailed', 'Save failed'));
+          const headline = t(errorKeyRef.current ?? 'errors.saveFailed', 'Save failed');
+          // The reason is appended rather than returned separately so every
+          // form that already renders `submitError` shows it with no change of
+          // its own. Untranslated, because it comes from the browser or from
+          // Dexie, and an unhelpful English clause beats a form that says only
+          // that saving failed and never why.
+          setSubmitError(`${headline}: ${describeCause(error)}`);
         }
         // Re-throw so caller can handle (e.g., keep dialog open)
         throw error;

@@ -60,10 +60,10 @@ import type {
   MergeResult,
 } from '@/lib/sharing';
 import { cn } from '@/lib/utils';
-import { notify } from '@/lib/notifications';
 import type { Trip, TripId } from '@/types';
 
 import { TripSyncExportPanel } from '../components/TripSyncExportPanel';
+import { reportFailure } from '@/lib/errors/report-failure';
 
 // ============================================================================
 // Import Tab
@@ -287,8 +287,11 @@ const MergeReview = memo(function MergeReview({ mergeResult, tripId, onReset }: 
 
       navigate(`/trips/${tripId}/calendar`);
     } catch (error) {
-      console.error('Failed to apply merge:', error);
-      notify.error(t('sharing.sync.mergeError', 'Failed to apply changes'));
+      reportFailure(
+        'TripSyncPage.applyMerge',
+        error,
+        t('sharing.sync.mergeError', 'Failed to apply changes'),
+      );
     } finally {
       isSubmittingRef.current = false;
       setIsApplying(false);
