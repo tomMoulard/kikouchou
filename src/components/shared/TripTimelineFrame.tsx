@@ -78,6 +78,20 @@ export interface TripTimelineFrameProps {
   /** When set, that day column is highlighted in the header (local “today”). */
   readonly todayKey?: ISODateString;
   /**
+   * The trip's own dates, when the axis is allowed to run past them.
+   *
+   * The axis covers every event the timeline draws, which can be a flight the
+   * day before the trip starts, so the columns outside this range are marked as
+   * not part of the trip. Leave it unset when the axis *is* the trip.
+   */
+  readonly tripRange?: { readonly startKey: ISODateString; readonly endKey: ISODateString };
+  /**
+   * Translated name for a column outside `tripRange`, read to assistive tech
+   * and added to the column's tooltip. Required for `tripRange` to say anything
+   * to a screen reader — the greying alone is visual.
+   */
+  readonly outsideTripLabel?: string;
+  /**
    * Optional extra content rendered under each day number in the header
    * (e.g. the number of people on site that night).
    * Memoize the callback — the frame is a `memo` component.
@@ -98,6 +112,8 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
   dayKeys,
   dateLocale,
   todayKey,
+  tripRange,
+  outsideTripLabel,
   renderDayMeta,
   children,
 }: TripTimelineFrameProps): ReactElement {
@@ -324,14 +340,23 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
                   const monthLabel = format(day, 'MMM', { locale: dateLocale });
                   const dayLabel = format(day, 'dd', { locale: dateLocale });
                   const isToday = todayColumnIndex === index;
+                  const isOutsideTrip =
+                    tripRange !== undefined &&
+                    (key < tripRange.startKey || key > tripRange.endKey);
                   return (
                     <div
                       key={`timeline-day-${index}-${key}`}
                       className={cn(
                         'min-w-0 border-r border-muted px-1 py-2 text-xs text-muted-foreground',
+                        isOutsideTrip && 'bg-muted/60',
                         isToday && 'bg-primary/12 text-foreground',
                       )}
-                      title={format(day, 'PPPP', { locale: dateLocale })}
+                      data-outside-trip={isOutsideTrip ? 'true' : undefined}
+                      title={
+                        isOutsideTrip && outsideTripLabel
+                          ? `${format(day, 'PPPP', { locale: dateLocale })} — ${outsideTripLabel}`
+                          : format(day, 'PPPP', { locale: dateLocale })
+                      }
                       {...(isToday ? { 'aria-current': 'date' as const } : {})}
                     >
                       <div className="flex flex-col items-center leading-none">
@@ -358,6 +383,9 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
                         >
                           {dayLabel}
                         </div>
+                        {isOutsideTrip && outsideTripLabel ? (
+                          <span className="sr-only">{outsideTripLabel}</span>
+                        ) : null}
                         {renderDayMeta?.(key, index)}
                       </div>
                     </div>

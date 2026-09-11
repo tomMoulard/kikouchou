@@ -11,7 +11,7 @@ import { resolveGuestStayWindow } from '@/features/persons/utils/guest-presence'
 import { dedupeContainedTimelineSpans } from '@/lib/utils/dedupe-timeline-spans';
 import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
 import {
-  buildTripDayColumns,
+  buildDayColumnsCovering,
   localDayKeyOfInstant,
   parseLocalDayKey,
   toDayKeys,
@@ -120,15 +120,19 @@ function mergeTransportsIntoAssignments(items: readonly TimelineItem[]): Timelin
 
 function isAssignmentVisible(
   assignment: RoomAssignment,
-  tripStart: ISODateString,
-  tripEnd: ISODateString,
+  axisStart: ISODateString,
+  axisEnd: ISODateString,
 ): boolean {
-  return assignment.endDate >= tripStart && assignment.startDate <= tripEnd;
+  return assignment.endDate >= axisStart && assignment.startDate <= axisEnd;
 }
 
-function isTransportVisible(transport: Transport, tripStart: ISODateString, tripEnd: ISODateString): boolean {
+function isTransportVisible(
+  transport: Transport,
+  axisStart: ISODateString,
+  axisEnd: ISODateString,
+): boolean {
   const dateKey = localDayKeyOfInstant(transport.datetime);
-  return dateKey !== null && dateKey >= tripStart && dateKey <= tripEnd;
+  return dateKey !== null && dateKey >= axisStart && dateKey <= axisEnd;
 }
 
 /**
@@ -176,6 +180,57 @@ function mergeAdjacentSameRoomAssignmentSpans(
 // Public API
 // ============================================================================
 
+/**
+ * The day keys a set of transports needs columns for.
+ *
+ * Feed these to `buildDayColumnsCovering` — a transport dated outside the trip
+ * still has to be on the axis, or the timeline simply does not draw it.
+ *
+ * @param transports - Arrivals and departures, in any order
+ * @returns One local day key per transport whose datetime parses
+ */
+export function collectTransportDayKeys(
+  transports: readonly Transport[],
+): readonly ISODateString[] {
+  const keys: ISODateString[] = [];
+  for (const transport of transports) {
+    const key = localDayKeyOfInstant(transport.datetime);
+    if (key !== null) {
+      keys.push(key);
+    }
+  }
+  return keys;
+}
+
+/**
+ * The day keys a set of room assignments needs columns for.
+ *
+ * Assignments follow the nights model — `endDate` is the checkout day, so the
+ * last night drawn is the day before it, and that is the key the axis has to
+ * reach rather than the checkout itself.
+ *
+ * @param assignments - Room assignments, in any order
+ * @returns The first night and last night key of each assignment
+ */
+export function collectAssignmentDayKeys(
+  assignments: readonly RoomAssignment[],
+): readonly ISODateString[] {
+  const keys: ISODateString[] = [];
+  for (const assignment of assignments) {
+    const start = parseLocalDayKey(assignment.startDate);
+    const end = parseLocalDayKey(assignment.endDate);
+    if (!start || !end) {
+      continue;
+    }
+    const lastNight = subDays(end, 1);
+    if (lastNight < start) {
+      continue;
+    }
+    keys.push(toLocalISODateString(start), toLocalISODateString(lastNight));
+  }
+  return keys;
+}
+
 export function buildCalendarTimelineModel(args: {
   readonly trip: Trip;
   readonly persons: readonly Person[];
@@ -184,14 +239,35 @@ export function buildCalendarTimelineModel(args: {
   readonly arrivals: readonly Transport[];
   readonly departures: readonly Transport[];
   readonly unknownLabel: string;
+  /**
+   * Extra day keys the axis must cover, on top of this model's own events.
+   *
+   * The calendar timeline draws the activity bands under the guest rows on the
+   * same axis, so both models have to be built over the same day range or the
+   * two halves stop lining up. The caller hands each builder the other's keys.
+   */
+  readonly extraDayKeys?: readonly ISODateString[];
 }): CalendarTimelineModel {
   const { trip, persons, rooms, assignments, arrivals, departures, unknownLabel } = args;
 
-  const tripDays = buildTripDayColumns(trip);
+  // The axis covers the trip *and* everything drawn on it. A guest who flies in
+  // the day before the trip starts, or home the day after it ends, has no column
+  // on a trip-only axis — and a pill with no column is a pill nobody can see.
+  const tripDays = buildDayColumnsCovering({
+    startKey: trip.startDate,
+    endKey: trip.endDate,
+    mustInclude: [
+      ...collectTransportDayKeys([...arrivals, ...departures]),
+      ...collectAssignmentDayKeys(assignments),
+      ...(args.extraDayKeys ?? []),
+    ],
+  });
   const dayKeys = toDayKeys(tripDays);
 
-  const tripStartKey = trip.startDate;
-  const tripEndKey = trip.endDate;
+  // Clipping is against the axis, not the trip: the trip range is what the
+  // header marks out, and the axis is what has columns to draw in.
+  const axisStartKey = dayKeys[0] ?? trip.startDate;
+  const axisEndKey = dayKeys[dayKeys.length - 1] ?? trip.endDate;
 
   const dayIndexByKey = new Map<ISODateString, number>();
   for (let i = 0; i < dayKeys.length; i++) {
@@ -228,9 +304,9 @@ export function buildCalendarTimelineModel(args: {
       const lastNight = subDays(end, 1);
       if (lastNight < start) return undefined;
 
-      const clippedStartKey = stayStartKey < tripStartKey ? tripStartKey : stayStartKey;
+      const clippedStartKey = stayStartKey < axisStartKey ? axisStartKey : stayStartKey;
       const lastNightKey = toLocalISODateString(lastNight);
-      const clippedEndKey = lastNightKey > tripEndKey ? tripEndKey : lastNightKey;
+      const clippedEndKey = lastNightKey > axisEndKey ? axisEndKey : lastNightKey;
 
       const startIndex = dayIndexByKey.get(clippedStartKey);
       const endIndex = dayIndexByKey.get(clippedEndKey);
@@ -241,7 +317,7 @@ export function buildCalendarTimelineModel(args: {
 
     const checkoutDayIndex = (() => {
       if (!stayEndKey) return undefined;
-      const clippedCheckoutKey = stayEndKey > tripEndKey ? tripEndKey : stayEndKey;
+      const clippedCheckoutKey = stayEndKey > axisEndKey ? axisEndKey : stayEndKey;
       return dayIndexByKey.get(clippedCheckoutKey);
     })();
 
@@ -251,7 +327,7 @@ export function buildCalendarTimelineModel(args: {
       if (assignment.personId !== person.id) {
         continue;
       }
-      if (!isAssignmentVisible(assignment, tripStartKey, tripEndKey)) {
+      if (!isAssignmentVisible(assignment, axisStartKey, axisEndKey)) {
         continue;
       }
 
@@ -379,7 +455,7 @@ export function buildCalendarTimelineModel(args: {
       if (transport.personId !== person.id) {
         continue;
       }
-      if (!isTransportVisible(transport, tripStartKey, tripEndKey)) {
+      if (!isTransportVisible(transport, axisStartKey, axisEndKey)) {
         continue;
       }
 

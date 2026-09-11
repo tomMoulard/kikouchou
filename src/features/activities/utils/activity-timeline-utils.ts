@@ -9,7 +9,7 @@
  */
 
 import { allocateTimelineLanes } from '@/lib/utils/timeline-lanes';
-import { buildTripDayColumns, toDayKeys } from '@/lib/utils/trip-days';
+import { buildDayColumnsCovering, toDayKeys } from '@/lib/utils/trip-days';
 import { ACTIVITY_CATEGORIES } from '@/types';
 import type { Activity, ActivityCategory, ISODateString, Trip } from '@/types';
 
@@ -56,7 +56,7 @@ export interface ActivityTimelineRowModel {
  * The full activity timeline model.
  */
 export interface ActivityTimelineModel {
-  /** One Date per trip day */
+  /** One Date per day of the axis (the trip, widened to reach its activities) */
   readonly tripDays: readonly Date[];
   /** Day keys matching `tripDays` (YYYY-MM-DD) */
   readonly dayKeys: readonly ISODateString[];
@@ -65,8 +65,11 @@ export interface ActivityTimelineModel {
   /** Number of activities placed on the timeline */
   readonly visibleCount: number;
   /**
-   * Number of activities that fall entirely outside the trip dates and are
-   * therefore not drawn. Surfaced so the UI can explain the gap.
+   * Number of activities the axis could not reach and that are therefore not
+   * drawn: an unreadable date, or a day so far outside the trip that stretching
+   * the axis to it would cost hundreds of columns
+   * (`TIMELINE_DAY_AXIS_MAX_EXTENSION_DAYS`). Surfaced so the UI can explain
+   * the gap.
    */
   readonly hiddenCount: number;
 }
@@ -76,10 +79,36 @@ export interface ActivityTimelineModel {
 // ============================================================================
 
 /**
+ * The day keys a set of activities needs columns for.
+ *
+ * Feed these to `buildDayColumnsCovering` so an activity that runs past the
+ * trip's own dates still has a column to be drawn in.
+ *
+ * @param activities - Activities, in any order
+ * @returns The first and last day key of each activity whose dates parse
+ */
+export function collectActivityDayKeys(
+  activities: readonly Activity[],
+): readonly ISODateString[] {
+  const keys: ISODateString[] = [];
+  for (const activity of activities) {
+    const startKey = getActivityStartDayKey(activity);
+    if (!startKey) {
+      continue;
+    }
+    keys.push(startKey, getActivityEndDayKey(activity) ?? startKey);
+  }
+  return keys;
+}
+
+/**
  * Builds the activity timeline model for a trip.
  *
- * Activities that start before the trip or end after it are clamped to the
- * visible window; activities entirely outside it are counted in `hiddenCount`.
+ * The day axis covers the trip and every activity on it, so an outing that
+ * starts the day before the trip does gets a column of its own rather than
+ * being clamped onto the first trip day. Only an activity the axis cannot
+ * reach — an unreadable date, or one too far out to stretch to — is counted in
+ * `hiddenCount`.
  *
  * @param args - The trip and its activities
  * @returns A timeline model ready to render
@@ -93,10 +122,22 @@ export interface ActivityTimelineModel {
 export function buildActivityTimelineModel(args: {
   readonly trip: Trip;
   readonly activities: readonly Activity[];
+  /**
+   * Extra day keys the axis must cover, on top of this model's own activities.
+   *
+   * The calendar timeline draws these bands under its guest rows on one shared
+   * axis, so it hands this builder the guest half's keys and the guest builder
+   * these ones. Both then span the same days and the two halves line up.
+   */
+  readonly extraDayKeys?: readonly ISODateString[];
 }): ActivityTimelineModel {
   const { trip, activities } = args;
 
-  const tripDays = buildTripDayColumns(trip);
+  const tripDays = buildDayColumnsCovering({
+    startKey: trip.startDate,
+    endKey: trip.endDate,
+    mustInclude: [...collectActivityDayKeys(activities), ...(args.extraDayKeys ?? [])],
+  });
   // Local keys, matching `getActivityStartDayKey` — an activity has to land in
   // the column whose date the guest reads off their own clock.
   const dayKeys = toDayKeys(tripDays);
@@ -132,7 +173,7 @@ export function buildActivityTimelineModel(args: {
       continue;
     }
 
-    // Entirely before or after the trip window: nothing to draw.
+    // Too far out for the axis to reach: nothing to draw.
     if (endKey < firstKey || startKey > lastKey) {
       hiddenCount += 1;
       continue;
