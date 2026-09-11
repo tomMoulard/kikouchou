@@ -56,6 +56,7 @@ import type {
   Trip,
   TripId,
 } from '@/types';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -116,6 +117,16 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
   const [persons, setPersons] = useState<Person[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+
+  /**
+   * The read threw, as opposed to finding nothing.
+   *
+   * Kept apart from `notFound` because they are different facts and only one of
+   * them is the reader's problem to solve. A blocked IndexedDB used to land
+   * here as "this trip link doesn't seem to work", which sends somebody off to
+   * ask for a new link for a trip that exists and a link that is fine.
+   */
+  const [loadFailed, setLoadFailed] = useState(false);
   /** True when data fetching failed for a reason other than trip not existing (recoverable). */
   const [loadError, setLoadError] = useState(false);
 
@@ -249,8 +260,8 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
         setAssignments(assignmentsData);
         setPersons(personsData);
       } catch (error) {
-        console.error('Failed to load room selection data:', error);
-        if (!cancelled && isMountedRef.current) setNotFound(true);
+        reportError(error, { source: 'RoomSelectionStepPage.loadData' });
+        if (!cancelled && isMountedRef.current) setLoadFailed(true);
       } finally {
         if (!cancelled && isMountedRef.current) setIsLoading(false);
       }
@@ -385,7 +396,7 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
   }
 
   // Trip not found / link invalid
-  if (notFound || trip === undefined) {
+  if (notFound || loadFailed || trip === undefined) {
     return (
       <div className={cn('flex min-h-svh items-center justify-center p-4', onboardingSurface)}>
         <Card className="w-full max-w-md border-warning-border text-center shadow-lg">
@@ -394,15 +405,22 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
               <SearchX className="size-8 text-warning-on-surface" aria-hidden="true" />
             </div>
             <CardTitle className="text-xl text-warning-on-surface">
-              {t('sharing.notFoundWizard', "This trip link doesn't seem to work")}
+              {loadFailed
+                ? t('sharing.loadFailedWizard', 'Could not open the trip on this device')
+                : t('sharing.notFoundWizard', "This trip link doesn't seem to work")}
             </CardTitle>
           </CardHeader>
           <CardContent className="pb-8">
             <p className="text-sm text-muted-foreground">
-              {t(
-                'sharing.notFoundWizardDescription',
-                'The link may be incorrect or the trip may no longer exist.',
-              )}
+              {loadFailed
+                ? t(
+                    'sharing.loadFailedWizardDescription',
+                    'The link is fine. This device could not read its stored data. Close the app in other tabs and try again.',
+                  )
+                : t(
+                    'sharing.notFoundWizardDescription',
+                    'The link may be incorrect or the trip may no longer exist.',
+                  )}
             </p>
           </CardContent>
         </Card>

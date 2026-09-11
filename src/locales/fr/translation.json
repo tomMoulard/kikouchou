@@ -1098,6 +1098,8 @@
     "continueToTrip": "Accéder au voyage",
     "notFoundWizard": "Ce lien de voyage ne semble pas fonctionner",
     "notFoundWizardDescription": "Le lien est peut-être incorrect ou le voyage n'existe plus.",
+    "loadFailedWizard": "Impossible d'ouvrir le voyage sur cet appareil",
+    "loadFailedWizardDescription": "Le lien est valide. Cet appareil n'a pas pu lire ses données enregistrées. Fermez l'application dans les autres onglets, puis réessayez.",
     "returning": "Bon retour ! Redirection vers le voyage...",
     "onboardingComingSoon": "Cette étape sera bientôt disponible.",
     "identityTitle": "Qui êtes-vous ?",
