@@ -7,7 +7,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { render, screen, waitFor } from '@/test/utils';
 import { db } from '@/lib/db/database';
-import type { Person, Ride, Room, Transport, Trip, TripId, Vehicle } from '@/types';
+import type {
+  Expense,
+  Person,
+  Ride,
+  Room,
+  Transport,
+  Trip,
+  TripId,
+  Vehicle,
+} from '@/types';
 
 // ============================================================================
 // Fixtures
@@ -96,6 +105,21 @@ vi.mock('@/contexts/TripContext', () => ({
 
 import { TripAnalyticsPage } from '../TripAnalyticsPage';
 import { useTripContext } from '@/contexts/TripContext';
+
+function expense(id: string, tripId: TripId, date: string, amount: number): Expense {
+  return {
+    id,
+    tripId,
+    kind: 'expense',
+    category: 'other',
+    title: id,
+    date,
+    amount,
+    payerId: 'p1',
+    splitMode: 'equal',
+    splits: [],
+  } as unknown as Expense;
+}
 
 // ============================================================================
 // Helpers
@@ -224,6 +248,33 @@ describe('TripAnalyticsPage', () => {
       'href',
       '/trips/trip-a/transports/runsheet?filter=needsDriver',
     );
+  });
+
+  it('draws the spending along the calendar, one point per day', async () => {
+    await db.expenses.bulkPut([
+      expense('e1', TRIP_A, '2026-07-01', 120),
+      expense('e2', TRIP_A, '2026-07-04', 30),
+    ]);
+
+    render(<TripAnalyticsPage />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('spend-timeline-chart')).toBeInTheDocument();
+    });
+    // The gap between the two receipts is drawn, so the axis is time and not
+    // "days that happen to have a receipt".
+    expect(screen.getAllByTestId('spend-timeline-point')).toHaveLength(4);
+  });
+
+  it('leaves the chart out when the trip has no money lines', async () => {
+    await db.persons.bulkPut([person('p1', TRIP_A, 2)]);
+
+    render(<TripAnalyticsPage />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(statValue('analytics.people')).toBe('2');
+    });
+    expect(screen.queryByTestId('spend-timeline-chart')).not.toBeInTheDocument();
   });
 
   it('shows an empty state rather than a wall of zeros', async () => {

@@ -18,6 +18,10 @@
  * @module features/analytics/lib/trip-stats
  */
 
+import {
+  type SpendTimeline,
+  buildSpendTimeline,
+} from '@/features/analytics/lib/spend-timeline';
 import { computeBalances } from '@/features/money/lib/balances';
 import { loadTripNightSplit } from '@/features/money/lib/night-split';
 import {
@@ -104,10 +108,25 @@ export interface TripStats {
    * that shows several trips at once has to be able to see that they disagree.
    */
   readonly currency: CurrencyCode;
+  /**
+   * The same spending, bucketed by calendar, for the chart under the cards.
+   *
+   * `null` when no money line carries a usable date: a chart of nothing is a
+   * blank rectangle the reader has to interpret, so the page leaves it out.
+   * Built from the very lines `spendTotal` is summed from, so the bars always
+   * add up to the card above them.
+   */
+  readonly spendTimeline: SpendTimeline | null;
 }
 
-/** {@link TripStats} summed across trips, for the all-trips page. */
-export type TripStatsTotals = Omit<TripStats, 'tripId'>;
+/**
+ * {@link TripStats} summed across trips, for the all-trips page.
+ *
+ * The timeline is deliberately not in it. Trips can be kept in different
+ * currencies and run in different years, so one series across all of them would
+ * draw francs and euros on one axis with empty months between two holidays.
+ */
+export type TripStatsTotals = Omit<TripStats, 'tripId' | 'spendTimeline'>;
 
 /**
  * The outcome of an analytics read.
@@ -290,6 +309,7 @@ export async function loadTripStats(
     spendTotal: spendTotal / 100,
     unsettledTotal: unsettledCents / 100,
     currency: normalizeCurrency(trip?.currency),
+    spendTimeline: buildSpendTimeline(expenses),
   };
 }
 

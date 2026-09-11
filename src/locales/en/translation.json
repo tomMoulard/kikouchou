@@ -136,7 +136,19 @@
     "unsettledSettled": "Everybody is level",
     "totalSpend": "Total spent",
     "totalUnsettled": "Still owed",
-    "mixedCurrencies": "These trips are kept in different currencies"
+    "mixedCurrencies": "These trips are kept in different currencies",
+    "spendTimeline": "Spending over time",
+    "spendTimelineUnit": {
+      "day": "day by day",
+      "week": "week by week",
+      "month": "month by month"
+    },
+    "spendTimelineCaption": "What the trip had cost, {{step}} · {{total}} in all",
+    "spendTimelinePointTitle": "{{when}}: {{amount}} · {{total}} so far",
+    "spendTimelineWhen": "When",
+    "spendTimelineRunningTotal": "Total so far",
+    "spendTimelineAriaLabel_one": "What the trip had cost over time: 1 point, {{total}} in all",
+    "spendTimelineAriaLabel_other": "What the trip had cost over time: {{count}} points, {{total}} in all"
   },
   "trips": {
     "title": "My trips",
