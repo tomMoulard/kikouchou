@@ -8,6 +8,7 @@ import { type PointerEvent, type ReactElement, memo } from 'react';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from 'react-i18next';
+import { GripVertical } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import {
@@ -107,6 +108,9 @@ const DraggableRoomAssignment = memo(function DraggableRoomAssignment({
         )}
         aria-label={accessibilityLabel ?? label}
       >
+        {/* The grab cursor only appears once the pointer is already on the
+            pill. The grip says the bar can be dragged before anyone tries. */}
+        <GripVertical className="-ml-1 size-3 shrink-0 opacity-70" aria-hidden="true" />
         <span className="truncate">{label}</span>
       </div>
       {hasMenu && onAssignRoom !== undefined && assignableRooms !== undefined && (
