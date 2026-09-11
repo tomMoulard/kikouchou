@@ -74,7 +74,7 @@ const TimelineOffscreenArrows = memo(function TimelineOffscreenArrows({
   bounds,
   leftLabel,
   rightLabel,
-}: TimelineOffscreenArrowsProps): ReactElement {
+}: TimelineOffscreenArrowsProps): ReactElement | null {
   const leftRef = useRef<HTMLButtonElement>(null);
   const rightRef = useRef<HTMLButtonElement>(null);
   /** Canvas x of the nearest hidden pill on each side, for the arrow's click. */
@@ -129,6 +129,15 @@ const TimelineOffscreenArrows = memo(function TimelineOffscreenArrows({
       scrollCanvasPositionIntoView(target);
     }
   }, [scrollCanvasPositionIntoView]);
+
+  // A row with no pills can never have one off screen, and there are a great
+  // many such rows: every room nobody is booked into, every guest with nothing
+  // arranged yet. Two hidden buttons and a scroll subscription each is real
+  // money on a house with twenty rooms — it measured 700ms of layout on the
+  // room board alone — for an indicator that could never fire.
+  if (bounds.length === 0) {
+    return null;
+  }
 
   const arrowClassName = cn(
     'absolute top-1/2 z-[3] -translate-y-1/2 rounded-full border bg-background/90 shadow-sm',

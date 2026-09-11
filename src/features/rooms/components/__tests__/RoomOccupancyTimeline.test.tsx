@@ -301,12 +301,21 @@ describe('RoomOccupancyTimeline', () => {
   });
 
   it('says which way a booking went when the row has scrolled past it', () => {
-    render(<RoomOccupancyTimeline {...defaultProps} />);
+    render(<RoomOccupancyTimeline {...defaultProps} assignments={[mockAssignment]} />);
 
     // Both arrows are mounted and hidden; the frame's visible range decides
     // which one shows, and this stub frame publishes none.
     expect(screen.getAllByTestId('timeline-offscreen-left').length).toBeGreaterThan(0);
     expect(screen.getAllByTestId('timeline-offscreen-right').length).toBeGreaterThan(0);
+  });
+
+  // A room nobody is booked into can never have a booking off screen, and a
+  // house has a great many such rows: two hidden buttons and a scroll
+  // subscription each measured 700ms of layout on a twenty-room board.
+  it('adds no off-screen arrows to a room with nothing booked in it', () => {
+    render(<RoomOccupancyTimeline {...defaultProps} />);
+
+    expect(screen.queryByTestId('timeline-offscreen-left')).not.toBeInTheDocument();
   });
 
   // Folded, the column is 40px. "jaune" came out as "j..", which names no
