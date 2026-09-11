@@ -87,6 +87,13 @@ vi.mock('@/features/trips/components/PrintSummaryCard', () => ({
   PrintSummaryCard: () => <div data-testid="print-summary-card" />,
 }));
 
+// The share dialog: mounted here, driven by its own tests. It reads the auth
+// context, which this page's tests do not provide.
+vi.mock('@/features/sharing', () => ({
+  ShareDialog: ({ open, trip }: { open: boolean; trip?: { name: string } }) =>
+    open ? <div data-testid="share-dialog">{trip?.name}</div> : null,
+}));
+
 // Mock ConfirmDialog to capture confirm and openChange callbacks
 vi.mock('@/components/shared/ConfirmDialog', () => ({
   ConfirmDialog: ({ open, onConfirm, onOpenChange }: { open: boolean; onConfirm: () => Promise<void>; onOpenChange?: (open: boolean) => void }) =>
@@ -132,6 +139,20 @@ describe('TripEditPage', () => {
   it('renders delete button', async () => {
     render(<TripEditPage />, { withProviders: false });
     expect(await screen.findByText('common.delete')).toBeInTheDocument();
+  });
+
+  it('opens the share dialog for this trip', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<TripEditPage />, { withProviders: false });
+
+    expect(screen.queryByTestId('share-dialog')).not.toBeInTheDocument();
+
+    const shareBtn = await screen.findByText('nav.share');
+    await user.click(shareBtn);
+
+    const dialog = await screen.findByTestId('share-dialog');
+    expect(dialog).toHaveTextContent('Existing Trip');
   });
 
   it('navigates back on cancel', async () => {

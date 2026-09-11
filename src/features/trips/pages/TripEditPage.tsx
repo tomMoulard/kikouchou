@@ -22,7 +22,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify, useUnsavedChanges } from '@/hooks';
-import { Eye, Trash2 } from 'lucide-react';
+import { Eye, Share2, Trash2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -34,6 +34,7 @@ import { Button } from '@/components/ui/button';
 import { GuestIdentitySelector } from '@/features/trips/components/GuestIdentitySelector';
 import { PrintSummaryCard } from '@/features/trips/components/PrintSummaryCard';
 import { TripForm } from '@/features/trips/components/TripForm';
+import { ShareDialog } from '@/features/sharing';
 import { tripAccessOf } from '@/hooks/useTripAccess';
 import { useTripContext } from '@/contexts/TripContext';
 
@@ -90,6 +91,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
   // ============================================================================
@@ -324,6 +326,23 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   }, []);
 
   /**
+   * Opens the share dialog (link + QR) for this trip.
+   *
+   * The same dialog the trip list opens from a card: sharing belongs to the
+   * trip, so the page that owns the trip offers it too.
+   */
+  const handleOpenShareDialog = useCallback(() => {
+    setIsShareDialogOpen(true);
+  }, []);
+
+  /**
+   * Handles share dialog open state changes.
+   */
+  const handleShareDialogOpenChange = useCallback((open: boolean) => {
+    setIsShareDialogOpen(open);
+  }, []);
+
+  /**
    * Handles delete dialog open state changes.
    */
   const handleDeleteDialogOpenChange = useCallback((open: boolean) => {
@@ -386,10 +405,21 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
         )}
         backLink="/trips"
         action={
-          <Button variant="destructive" onClick={handleOpenDeleteDialog}>
-            <Trash2 className="mr-2 size-4" aria-hidden="true" />
-            {t('common.delete')}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleOpenShareDialog}
+              aria-label={t('trips.shareTripAria')}
+            >
+              <Share2 className="mr-2 size-4" aria-hidden="true" />
+              {t('nav.share')}
+            </Button>
+            <Button variant="destructive" onClick={handleOpenDeleteDialog}>
+              <Trash2 className="mr-2 size-4" aria-hidden="true" />
+              {t('common.delete')}
+            </Button>
+          </div>
         }
       />
 
@@ -450,6 +480,12 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
         confirmLabel={t('common.delete')}
         onConfirm={handleDelete}
         variant="destructive"
+      />
+
+      <ShareDialog
+        open={isShareDialogOpen}
+        onOpenChange={handleShareDialogOpenChange}
+        trip={trip}
       />
 
       <UnsavedChangesDialog open={isBlocked} onStay={reset} onLeave={proceed} />
