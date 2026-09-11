@@ -79,6 +79,7 @@ import { formatTransportDatetimeParts } from '@/lib/utils/datetime-format';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import type { Person, PersonId, Transport, TransportMode } from '@/types';
 import { cn } from '@/lib/utils';
+import { captureEvent } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -733,6 +734,24 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
       return () => clearTimeout(timer);
     }
     return undefined;
+  }, [isLoading, markers.length, routePolylines.length]);
+
+  // The map's own "opened" event, beside the run sheet's.
+  //
+  // `mapped_count` is the number that matters: a transport with no coordinates
+  // is not on the map, so a reader can open this page and see an empty one
+  // while the trip is full of travel. That gap is invisible in `$pageview`.
+  const hasReportedViewRef = useRef(false);
+  useEffect(() => {
+    if (isLoading || hasReportedViewRef.current) {
+      return;
+    }
+    hasReportedViewRef.current = true;
+    captureEvent('transports_view_opened', {
+      view: 'map',
+      mapped_count: markers.length,
+      route_count: routePolylines.length,
+    });
   }, [isLoading, markers.length, routePolylines.length]);
 
   // Validate tripId matches current trip

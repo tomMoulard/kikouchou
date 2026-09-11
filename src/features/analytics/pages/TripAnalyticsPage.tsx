@@ -11,7 +11,7 @@
  * @module features/analytics/pages/TripAnalyticsPage
  */
 
-import { type ReactElement, memo, useCallback, useEffect, useMemo } from 'react';
+import { type ReactElement, memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -33,6 +33,7 @@ import {
 } from '@/features/analytics/lib/trip-stats';
 import { useTripContext } from '@/contexts/TripContext';
 import type { TripId } from '@/types';
+import { captureEvent } from '@/lib/posthog';
 
 // ============================================================================
 // Constants
@@ -127,6 +128,38 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
     isTripLoading ||
     isStatsStale ||
     (tripIdFromUrl !== undefined && result === undefined);
+
+  // Reported once per trip, after the numbers are actually on screen.
+  //
+  // `$pageview` already counts the route, and counting it twice would be
+  // pointless. What it cannot say is whether the page had anything to show:
+  // these figures separate a reader who opened a trip worth analysing from one
+  // who opened an empty one and left. The effect has to sit above the loading
+  // return below — hooks cannot live under a conditional — so it carries its
+  // own guards instead: nothing is reported while `isLoading`, which covers
+  // both the first read and the stale paint straight after a trip switch.
+  const reportedTripIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const loadedStats = result?.data ?? null;
+    if (
+      isLoading ||
+      tripIdFromUrl === undefined ||
+      loadedStats === null ||
+      reportedTripIdRef.current === tripIdFromUrl
+    ) {
+      return;
+    }
+    // Set before the capture, not after: the clock ticks every minute on this
+    // page and each tick re-runs the effect.
+    reportedTripIdRef.current = tripIdFromUrl;
+    captureEvent('analytics_viewed', {
+      scope: 'trip',
+      guest_count: loadedStats.guestCount,
+      room_count: loadedStats.roomCount,
+      transport_count: loadedStats.transportCount,
+      expense_count: loadedStats.expenseCount,
+    });
+  }, [isLoading, result, tripIdFromUrl]);
 
   const handleBack = useCallback((): void => {
     void navigate(backLink);

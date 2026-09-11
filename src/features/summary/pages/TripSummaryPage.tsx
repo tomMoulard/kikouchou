@@ -31,6 +31,7 @@ import { SummarySheet } from '@/features/summary/components/SummarySheet';
 import { loadTripSummary } from '@/features/summary/lib/trip-summary';
 import { useTripContext } from '@/contexts/TripContext';
 import type { TripId } from '@/types';
+import { captureEvent } from '@/lib/posthog';
 
 // ============================================================================
 // Page
@@ -110,8 +111,18 @@ const TripSummaryPage = memo(function TripSummaryPage(): ReactElement {
   // The browser's own print dialog is the whole feature: it prints on paper and
   // it saves a PDF, on every platform, with nothing to install and no network.
   const handlePrint = useCallback((): void => {
+    // Captured before the dialog opens, because `window.print()` blocks the
+    // page until it is dismissed and nothing here can tell whether the reader
+    // then pressed Print or Cancel. So this counts the intent, which is the
+    // honest reading: the feature is a sheet somebody wanted on a wall.
+    captureEvent('summary_printed', {
+      guest_count: summary?.guests.length ?? 0,
+      room_count: summary?.rooms.length ?? 0,
+      travel_count: summary?.travels.length ?? 0,
+      guests_without_room: summary?.guestsWithoutRoom.length ?? 0,
+    });
     window.print();
-  }, []);
+  }, [summary]);
 
   const isLoading =
     isTripLoading || (tripIdFromUrl !== undefined && result === undefined);
