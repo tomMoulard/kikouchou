@@ -31,6 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/features/auth/AuthContext';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -69,8 +70,19 @@ export const EmailSignInForm = memo(function EmailSignInForm({
 
       setError(null);
       setIsSending(true);
-      const outcome = await signInWithEmailLink(address);
-      setIsSending(false);
+
+      // `isSending` disables the field and the button, so a throw here left the
+      // whole form dead with nothing said.
+      let outcome: Awaited<ReturnType<typeof signInWithEmailLink>>;
+      try {
+        outcome = await signInWithEmailLink(address);
+      } catch (error) {
+        reportError(error, { source: 'EmailSignInForm.handleSubmit' });
+        setError(t('errors.generic', 'Something went wrong'));
+        return;
+      } finally {
+        setIsSending(false);
+      }
 
       switch (outcome.status) {
         case 'email-sent':
