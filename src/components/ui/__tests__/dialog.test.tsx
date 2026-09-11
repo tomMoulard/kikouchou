@@ -172,3 +172,34 @@ describe('DialogContent height', () => {
     expect(content).not.toHaveClass('max-h-[calc(100dvh-2rem)]');
   });
 });
+
+describe('DialogContent width', () => {
+  it('lets the insets decide the width, so the gutters match', () => {
+    renderDialog();
+
+    const content = screen.getByRole('dialog');
+
+    // `w-full` here meant `width: 100vw`, because a percentage width on a
+    // fixed element resolves against the viewport and not against the box
+    // `inset-x-4` leaves behind. Left, width and right were then all set,
+    // which over-constrains the box: the browser keeps `left`, drops `right`,
+    // and pins `margin-left` to 0 rather than giving `mx-auto` the negative
+    // margins it asked for — so every dialog under ~544px of viewport sat 16px
+    // from the left edge and hung 16px off the right one. The gutters
+    // themselves are measured in `e2e/dialog-narrow-gutters.spec.ts`; jsdom
+    // lays nothing out, so this half only says the spelling has not come back.
+    expect(content).toHaveClass('w-auto');
+    expect(content.className).not.toMatch(/(^|\s)w-full(\s|$)/);
+    expect(content).toHaveClass('inset-x-4');
+    expect(content).toHaveClass('mx-auto');
+  });
+
+  it('still caps how wide it grows on a wide screen', () => {
+    renderDialog();
+
+    // Above the cap the insets leave more room than the box may take, so
+    // `max-w-lg` clamps it and the auto margins centre what is left — the
+    // behaviour wide screens already had.
+    expect(screen.getByRole('dialog')).toHaveClass('max-w-lg');
+  });
+});
