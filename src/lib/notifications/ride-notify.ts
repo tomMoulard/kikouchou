@@ -196,7 +196,13 @@ export async function notifyRide(notification: RideNotification): Promise<boolea
       tag: key,
       icon: NOTIFICATION_ICON,
       badge: NOTIFICATION_ICON,
-      data: { url: toAppRelative(path ?? `trips/${tripId}/transports`) },
+      data: {
+        url: toAppRelative(path ?? `trips/${tripId}/transports`),
+        // What a click reports. The tag above says the same thing, but it also
+        // carries the subject id, which is not something to put in a URL or in
+        // an event — see `lib/notifications/opened`.
+        kind,
+      },
     });
 
     // Written after the post, not before: a `showNotification` that rejects

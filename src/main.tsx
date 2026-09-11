@@ -19,6 +19,10 @@ import { createRoot } from 'react-dom/client';
 
 import { ensureSettings } from '@/lib/db';
 import '@/lib/posthog';
+// After lib/posthog, which must have initialised before anything captures, and
+// before App.tsx pulls in the router — this reads a query parameter the router
+// is free to normalise away. See lib/notifications/opened.
+import '@/lib/notifications/opened';
 import { registerServiceWorker } from '@/lib/pwa/register';
 import App from './App.tsx';
 import './index.css';

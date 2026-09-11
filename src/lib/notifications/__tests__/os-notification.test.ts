@@ -10,6 +10,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockReportOpened = vi.fn();
+
+// A confirmation delivered by the page never reaches the service worker, so its
+// own `onclick` is the only thing that can report the click.
+vi.mock('@/lib/notifications/opened', () => ({
+  reportNotificationOpened: (kind: string) => mockReportOpened(kind),
+}));
+
 // ============================================================================
 // Fixtures
 // ============================================================================
@@ -126,6 +134,7 @@ async function loadModule(): Promise<
 describe('os-notification', () => {
   beforeEach(() => {
     constructed.length = 0;
+    mockReportOpened.mockClear();
     vi.useFakeTimers();
   });
 
@@ -291,6 +300,30 @@ describe('os-notification', () => {
       constructed[0]?.onclick?.();
 
       expect(focus).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports the click it just handled, as a status notification', async () => {
+      stubNotificationApi('granted');
+      vi.spyOn(window, 'focus').mockImplementation(() => undefined);
+      const { showOsNotification } = await loadModule();
+
+      await showOsNotification('Room created successfully');
+      constructed[0]?.onclick?.();
+
+      expect(mockReportOpened).toHaveBeenCalledExactlyOnceWith('status');
+    });
+
+    it('tags the worker copy so the worker can report a click on it', async () => {
+      stubNotificationApi('granted', { constructorThrows: true });
+      const { showNotification } = stubServiceWorker({});
+      const { showOsNotification } = await loadModule();
+
+      await showOsNotification('Room created successfully');
+
+      expect(showNotification).toHaveBeenCalledWith(
+        'Kikouchou',
+        expect.objectContaining({ data: { kind: 'status' } }),
+      );
     });
 
     it('falls back to the service worker where the constructor is illegal', async () => {

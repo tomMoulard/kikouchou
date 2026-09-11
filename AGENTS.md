@@ -371,6 +371,16 @@ The client half (`lib/notifications/push.ts`) asks for permission from a click
 and from nowhere else, and the reminder card renders only where a push can
 arrive; an iPhone's Safari tab gets the install nudge instead (`Layout`).
 
+**A click is reported as `notification_opened`, with the kind that was clicked**
+— `trip_start`, `own_arrival`, `pickup` from the server, `leave` or `moved` from
+a ride notice, `status` for an in-app confirmation. The service worker cannot
+capture it (posthog-js is in the page), so the kind travels to a document as a
+`from_notification` query parameter when a page has to load anyway, and as a
+`postMessage` when the page is already on screen; `lib/notifications/opened.ts`
+turns either into the one event and strips the parameter back off the URL. A new
+kind of notification must put a `kind` on the notification's `data`, or its
+clicks all count as `unknown`.
+
 ### A feature flag is a three-state answer, and it can be forced locally
 
 `useFeatureFlag(key)` returns `undefined` while PostHog is asked, then `true`

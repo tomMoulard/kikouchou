@@ -189,7 +189,24 @@ describe('notifyRide', () => {
       await notifyRide(LEAVE_NOTICE);
 
       const [, options] = registration.showNotification.mock.calls[0] ?? [];
-      expect(options?.data).toEqual({ url: `trips/${TRIP_ID}/transports` });
+      expect(options?.data).toEqual({
+        url: `trips/${TRIP_ID}/transports`,
+        kind: 'leave',
+      });
+    });
+
+    it('stores the kind, so a click can say which notice brought them back', async () => {
+      const registration = createRegistration();
+      setServiceWorker(registration);
+
+      await notifyRide({
+        ...LEAVE_NOTICE,
+        kind: 'moved',
+        subjectId: TRANSPORT_ID,
+      });
+
+      const [, options] = registration.showNotification.mock.calls[0] ?? [];
+      expect((options?.data as { kind: string } | undefined)?.kind).toBe('moved');
     });
 
     it('strips a leading slash so a click resolves under the app base', async () => {
@@ -202,7 +219,10 @@ describe('notifyRide', () => {
       await notifyRide({ ...LEAVE_NOTICE, path: '/trips/abc/transports' });
 
       const [, options] = registration.showNotification.mock.calls[0] ?? [];
-      expect(options?.data).toEqual({ url: 'trips/abc/transports' });
+      expect(options?.data).toEqual({
+        url: 'trips/abc/transports',
+        kind: 'leave',
+      });
     });
 
     it('drops the segments that would climb out of the app base', async () => {
@@ -216,7 +236,7 @@ describe('notifyRide', () => {
       await notifyRide({ ...LEAVE_NOTICE, path: '../../../evil//./page' });
 
       const [, options] = registration.showNotification.mock.calls[0] ?? [];
-      expect(options?.data).toEqual({ url: 'evil/page' });
+      expect(options?.data).toEqual({ url: 'evil/page', kind: 'leave' });
     });
   });
 
