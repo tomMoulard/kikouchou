@@ -89,6 +89,9 @@ vi.mock('canvas-confetti', () => ({ default: (...args: unknown[]) => confetti(..
 vi.mock('../../lib/create-trip-with-details', () => ({ createTripWithDetails: vi.fn() }));
 vi.mock('@/lib/notifications', () => ({ announceStatus: vi.fn() }));
 vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(),
   default: { capture: vi.fn() },
   captureUsage: vi.fn(),
 }));

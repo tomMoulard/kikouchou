@@ -811,7 +811,11 @@ describe('UpcomingPickups', () => {
 
     // The failure is surfaced, not swallowed
     await waitFor(() => {
-      expect(vi.mocked(toastMock.error)).toHaveBeenCalledWith('errors.saveFailed');
+      // The reason rides under the headline now: "could not save" on its own
+      // never told anybody whether to try again.
+      expect(vi.mocked(toastMock.error)).toHaveBeenCalledWith('errors.saveFailed', {
+        description: 'Error: Network error',
+      });
     });
 
     // …and the pickup goes back to needing a driver rather than staying stuck

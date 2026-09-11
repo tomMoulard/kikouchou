@@ -102,7 +102,10 @@ vi.mock('@/hooks', () => ({
   }),
 }));
 
-vi.mock('@/lib/posthog', () => ({ captureUsage: mocks.captureUsage }));
+vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(), captureUsage: mocks.captureUsage }));
 
 /** The submitted ride: Alice drives, and Alice is also in the car. */
 const submitted: RideFormData = {

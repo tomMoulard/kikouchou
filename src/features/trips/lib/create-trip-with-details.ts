@@ -26,6 +26,7 @@ import {
 import { writeGuestIdentity } from '@/lib/sharing/guest-identity';
 import { markTripOrganised } from '@/features/trips/hooks/usePlanOwnTripPrompt';
 import type { PersonId, Trip, TripFormData, TripId } from '@/types';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -125,7 +126,11 @@ export async function createTripWithDetails(draft: TripDraft): Promise<TripCreat
       }
       guests += 1;
     } catch (error) {
-      console.error('Failed to add guest to new trip:', error);
+      // Counted, not raised: the trip is already made and the caller reports
+      // "some guests could not be added" from the tally below. The reason was
+      // going nowhere, though, so somebody finishing the wizard with guests
+      // missing left no trace of why.
+      reportError(error, { source: 'create-trip-with-details.guest' });
     }
   }
   if (guests < draft.guests.length) {
@@ -142,7 +147,7 @@ export async function createTripWithDetails(draft: TripDraft): Promise<TripCreat
       });
       rooms += 1;
     } catch (error) {
-      console.error('Failed to add room to new trip:', error);
+      reportError(error, { source: 'create-trip-with-details.room' });
     }
   }
   if (rooms < draft.rooms.length) {

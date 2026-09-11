@@ -569,6 +569,7 @@ export function AuthProvider({
       .catch((error: unknown) => {
         // A chunk that will not load — offline on a cold launch, or a stale
         // service worker. Sign-in is unavailable; everything else is unaffected.
+        console.error('[auth] failed to load the Supabase client:', error);
         reportError(error, { source: 'AuthContext.getSupabaseClient' });
 
         // Resolved means "we know the answer", not "there is a session". This

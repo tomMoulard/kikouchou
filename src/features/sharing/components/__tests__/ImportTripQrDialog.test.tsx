@@ -59,6 +59,9 @@ vi.mock('react-router-dom', async () => {
 const mockCapture = vi.fn();
 
 vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(),
   // The real module exports `undefined` without env config, which is the case
   // in tests, so nothing here could observe a capture without this.
   default: { capture: (...args: unknown[]) => mockCapture(...args) },
@@ -490,7 +493,9 @@ describe('ImportTripQrDialog', () => {
       await scan(encodeChangeset(makeChangeset()));
 
       await waitFor(() => {
-        expect(mockNotifyError).toHaveBeenCalledWith('trips.importQrMergeFailed');
+        expect(mockNotifyError).toHaveBeenCalledWith('trips.importQrMergeFailed', {
+      description: 'Error: IndexedDB is unavailable',
+    });
       });
       expect(mockNotifyError).not.toHaveBeenCalledWith('trips.importQrSnapshotRequired');
       expect(mockNavigate).not.toHaveBeenCalled();

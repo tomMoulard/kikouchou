@@ -43,7 +43,10 @@ vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 vi.mock('@/contexts/InstallPromptContext', () => ({ useInstallPromptState: vi.fn() }));
 vi.mock('@/hooks/usePhoneViewport', () => ({ usePhoneViewport: vi.fn() }));
 vi.mock('@/lib/notifications', () => ({ notify: { success: vi.fn(), error: vi.fn() } }));
-vi.mock('@/lib/posthog', () => ({ default: { capture: vi.fn() } }));
+vi.mock('@/lib/posthog', () => ({
+  // Named export used by every catch block that reports; a mock
+  // without it makes the reporter itself the error under test.
+  reportError: vi.fn(), default: { capture: vi.fn() } }));
 
 const mockedState = vi.mocked(useInstallPromptState);
 const mockedPhone = vi.mocked(usePhoneViewport);
