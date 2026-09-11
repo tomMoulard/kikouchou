@@ -29,7 +29,6 @@ import {
   Sofa,
   Tent,
   TentTree,
-  Toilet,
   TreePalm,
   Van,
   Warehouse,
@@ -71,7 +70,6 @@ const EXPECTED_ICONS: ReadonlyArray<readonly [RoomIcon, string, LucideIcon]> = [
   ['hotel', 'Hotel', Hotel],
   ['rocking-chair', 'RockingChair', RockingChair],
   ['shower', 'ShowerHead', ShowerHead],
-  ['toilet', 'Toilet', Toilet],
   ['boat', 'Sailboat', Sailboat],
 ];
 

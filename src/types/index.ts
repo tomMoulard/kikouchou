@@ -412,7 +412,6 @@ export type RoomIcon =
   | 'hotel'        // Hotel room nearby
   | 'rocking-chair'// Nursery
   | 'shower'       // Shower room
-  | 'toilet'       // Toilet
   | 'boat';        // Boat cabin
 
 /**
