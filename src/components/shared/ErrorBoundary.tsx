@@ -17,6 +17,7 @@ import { useLocation } from 'react-router-dom';
 import { type TFunction } from 'i18next';
 
 import { cn } from '@/lib/utils';
+import { reportError } from '@/lib/posthog';
 import { Button } from '@/components/ui/button';
 
 // ============================================================================
@@ -170,19 +171,17 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
       console.error('ErrorBoundary caught an error:', error);
       console.error('Component stack:', errorInfo.componentStack);
     }
-    // REVIEW-CQ-2: Production Error Reporting Strategy
-    // For the MVP, we are not integrating a third-party error reporting service.
-    // Errors will fail gracefully to the UI but will not be automatically
-    // reported to developers in production. This is an accepted limitation.
-    //
-    // FUTURE: To enable production error reporting, pass an `onError` handler
-    // from the root of the application (e.g., in `App.tsx`) that sends the
-    // `error` and `errorInfo` objects to a service like Sentry, LogRocket,
-    // or an equivalent. The `onError` prop is the designated integration point.
-    // Example:
-    // <ErrorBoundary onError={(err, info) => MyErrorTracking.send(err, info)}>
-    //   ...
-    // </ErrorBoundary>
+
+    // A boundary that renders a fallback has, by definition, handled the error,
+    // so PostHog's unhandled-error capture never sees it. Every crash this
+    // boundary absorbed used to be invisible in error tracking while the
+    // session replay showed the fallback on screen. Reported here rather than
+    // through `onError` because the prop is optional and no call site passes
+    // it: reporting a crash must not depend on the caller remembering to.
+    reportError(error, {
+      source: 'ErrorBoundary',
+      component_stack: errorInfo.componentStack ?? undefined,
+    });
   }
 
   /**

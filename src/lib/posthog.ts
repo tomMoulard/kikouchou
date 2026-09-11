@@ -506,4 +506,44 @@ export function captureUsage(
   posthogClient?.capture(USAGE_EVENT, { action });
 }
 
+// ============================================================================
+// Error reporting
+// ============================================================================
+
+/**
+ * Reports an error that the app already caught.
+ *
+ * `capture_exceptions` above only sees what reaches the window: an unhandled
+ * error, or an unhandled promise rejection. Everything this codebase catches on
+ * purpose — a failed write behind a toast, a boundary that renders a fallback,
+ * a route that renders the error page — is by construction never unhandled, so
+ * none of it reached PostHog. A session replay could show the red toast while
+ * error tracking held nothing at all, which is what happened to the room
+ * assignment failure this helper was written for.
+ *
+ * `console_errors` is deliberately still off: it would capture the 118 existing
+ * `console.error` sites indiscriminately, including the noisy ones. This is the
+ * opt-in counterpart — a call site that reports says so.
+ *
+ * `context` names where the error came from, because a wrapped error's own
+ * message rarely does. Everything passed here must be app-domain detail, never
+ * a guest's name or a person's contact: the project treats trip guests as
+ * records, not identities.
+ *
+ * Safe with no client, like every other call here. Never throws: a reporting
+ * failure must not replace the error that was being reported.
+ */
+export function reportError(
+  error: unknown,
+  context: { readonly source: string } & Record<string, unknown>,
+): void {
+  try {
+    const thrown = error instanceof Error ? error : new Error(String(error));
+    posthogClient?.captureException(thrown, context);
+  } catch {
+    // Reporting is best-effort. The caller is already handling a failure and
+    // must not inherit a second one from the reporter.
+  }
+}
+
 export default posthogClient;

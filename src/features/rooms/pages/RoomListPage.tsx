@@ -95,6 +95,7 @@ import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import { timelineNeedsFullPageWidth } from '@/lib/utils/timeline-viewport-layout';
 import { buildDayColumns } from '@/lib/utils/trip-days';
 import { notify } from '@/lib/notifications';
+import { reportFailure } from '@/lib/errors/report-failure';
 import { captureUsage } from '@/lib/posthog';
 import { getPersonHeadcount } from '@/types';
 import type {
@@ -535,8 +536,12 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           created += 1;
         }
       } catch (error) {
-        console.error('Failed to apply the suggested allocation:', error);
-        notify.error(t('rooms.suggest.failed'));
+        reportFailure(
+          'RoomListPage.applySuggestedStays',
+          error,
+          t('rooms.suggest.failed'),
+          { stays_requested: stays.length, stays_created: created },
+        );
         throw error;
       } finally {
         if (created > 0) {
@@ -580,8 +585,11 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
         await deleteRoom(room.id);
         notifySuccess(t('rooms.deleteSuccess', 'Room deleted successfully'));
       } catch (error) {
-        console.error('Failed to delete room:', error);
-        notify.error(t('errors.deleteFailed', 'Failed to delete room'));
+        reportFailure(
+          'RoomListPage.handleRoomDelete',
+          error,
+          t('errors.deleteFailed', 'Failed to delete room'),
+        );
         throw error; // Re-throw to keep ConfirmDialog open for retry
       }
     },
@@ -611,8 +619,11 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           count: 1,
         });
       } catch (error) {
-        console.error('Failed to duplicate room:', error);
-        notify.error(t('errors.saveFailed', 'Failed to save'));
+        reportFailure(
+          'RoomListPage.handleRoomDuplicate',
+          error,
+          t('errors.saveFailed', 'Failed to save'),
+        );
       }
     },
     [duplicateRoom, t, notifySuccess],
@@ -669,8 +680,9 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           });
           notifySuccess(t('assignments.createSuccess'));
         } catch (error) {
-          console.error('Failed to create room assignment:', error);
-          notify.error(t('errors.saveFailed'));
+          reportFailure('RoomListPage.assignGuestToRoom', error, t('errors.saveFailed'), {
+            room_id: roomId,
+          });
         }
       })();
     },
@@ -691,8 +703,9 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           await updateAssignment(assignment.id, { roomId });
           notifySuccess(t('assignments.updateSuccess'));
         } catch (error) {
-          console.error('Failed to move assignment:', error);
-          notify.error(t('errors.saveFailed'));
+          reportFailure('RoomListPage.moveAssignmentToRoom', error, t('errors.saveFailed'), {
+            room_id: roomId,
+          });
         }
       })();
     },
@@ -783,8 +796,7 @@ const RoomListPage = memo(function RoomListPage(): ReactElement {
           ]);
           notifySuccess(t('rooms.swapSuccess', 'Rooms swapped'));
         } catch (error) {
-          console.error('Failed to swap assignments:', error);
-          notify.error(t('errors.saveFailed'));
+          reportFailure('RoomListPage.swapAssignments', error, t('errors.saveFailed'));
         }
       })();
     }
