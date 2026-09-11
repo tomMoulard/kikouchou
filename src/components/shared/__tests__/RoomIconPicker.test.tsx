@@ -16,13 +16,22 @@ import {
   Armchair,
   Baby,
   Bath,
+  Bed,
   BedDouble,
   BedSingle,
   Caravan,
   DoorOpen,
   Home,
+  Hotel,
+  RockingChair,
+  Sailboat,
+  ShowerHead,
   Sofa,
   Tent,
+  TentTree,
+  Toilet,
+  TreePalm,
+  Van,
   Warehouse,
   type LucideIcon,
 } from 'lucide-react';
@@ -55,7 +64,24 @@ const EXPECTED_ICONS: ReadonlyArray<readonly [RoomIcon, string, LucideIcon]> = [
   ['door-open', 'DoorOpen', DoorOpen],
   ['baby', 'Baby', Baby],
   ['armchair', 'Armchair', Armchair],
+  ['bunk-bed', 'Bed', Bed],
+  ['hammock', 'TreePalm', TreePalm],
+  ['camper-van', 'Van', Van],
+  ['campsite', 'TentTree', TentTree],
+  ['hotel', 'Hotel', Hotel],
+  ['rocking-chair', 'RockingChair', RockingChair],
+  ['shower', 'ShowerHead', ShowerHead],
+  ['toilet', 'Toilet', Toilet],
+  ['boat', 'Sailboat', Sailboat],
 ];
+
+/**
+ * A key no build has ever written, for the unknown-key fallbacks. It has to be
+ * something the list will not grow into: `hammock` used to serve here and then
+ * became a real icon, which quietly turned two fallback tests green for the
+ * wrong reason.
+ */
+const UNKNOWN_ICON = 'igloo' as RoomIcon;
 
 /** The paths a lucide icon draws, so a rendered glyph can be identified. */
 function shapeOf(Icon: LucideIcon): string {
@@ -88,7 +114,7 @@ describe('getRoomIconComponent', () => {
 
   it('returns BedDouble for a key this build does not know', () => {
     // A row written by a peer running a newer build.
-    expect(getRoomIconComponent('hammock' as RoomIcon)).toBe(BedDouble);
+    expect(getRoomIconComponent(UNKNOWN_ICON)).toBe(BedDouble);
   });
 });
 
@@ -113,7 +139,7 @@ describe('getRoomIconLabelKey', () => {
   });
 
   it('falls back to the default label for a key this build does not know', () => {
-    expect(getRoomIconLabelKey('hammock' as RoomIcon)).toBe('rooms.icons.bedDouble');
+    expect(getRoomIconLabelKey(UNKNOWN_ICON)).toBe('rooms.icons.bedDouble');
   });
 });
 
@@ -124,9 +150,12 @@ describe('RoomIconPicker', () => {
       { withProviders: false },
     );
     expect(screen.getByRole('radiogroup')).toBeInTheDocument();
-    // Should have 11 icon buttons
+    // One tile per key, in the order the grid draws them. The original eleven
+    // lead: somebody who has always picked the fourth tile still finds it
+    // there now the list has grown.
     const radios = screen.getAllByRole('radio');
-    expect(radios.length).toBe(11);
+    expect(radios.length).toBe(ICON_ORDER.length);
+    expect(radios.map((tile) => tile.dataset.roomIcon)).toEqual([...ICON_ORDER]);
   });
 
   it('draws each button with the icon its key names', () => {
@@ -280,7 +309,7 @@ describe('RoomIconPicker', () => {
     const bedDouble = screen.getByRole('radio', { name: 'rooms.icons.bedDouble' });
     bedDouble.focus();
     await user.keyboard('{End}');
-    expect(onChange).toHaveBeenCalledWith('armchair');
+    expect(onChange).toHaveBeenCalledWith(ICON_ORDER.at(-1));
   });
 
   it('wraps around from first to last with ArrowLeft', async () => {
@@ -294,22 +323,23 @@ describe('RoomIconPicker', () => {
     const bedDouble = screen.getByRole('radio', { name: 'rooms.icons.bedDouble' });
     bedDouble.focus();
     await user.keyboard('{ArrowLeft}');
-    // Index 0 - 1 = -1, wraps to last (armchair, index 10)
-    expect(onChange).toHaveBeenCalledWith('armchair');
+    // Index 0 - 1 = -1, wraps to the last tile
+    expect(onChange).toHaveBeenCalledWith(ICON_ORDER.at(-1));
   });
 
   it('wraps around from last to first with ArrowRight', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     const onChange = vi.fn();
+    const last = ICON_ORDER.at(-1)!;
     render(
-      <RoomIconPicker value="armchair" onChange={onChange} />,
+      <RoomIconPicker value={last} onChange={onChange} />,
       { withProviders: false },
     );
-    const armchair = screen.getByRole('radio', { name: 'rooms.icons.armchair' });
-    armchair.focus();
+    const lastTile = screen.getByRole('radio', { name: getRoomIconLabelKey(last) });
+    lastTile.focus();
     await user.keyboard('{ArrowRight}');
-    // Index 10 + 1 = 11, wraps to 0 (bed-double)
+    // One past the end wraps to 0 (bed-double)
     expect(onChange).toHaveBeenCalledWith('bed-double');
   });
 
@@ -324,8 +354,8 @@ describe('RoomIconPicker', () => {
     const bedSingle = screen.getByRole('radio', { name: 'rooms.icons.bedSingle' });
     bedSingle.focus();
     await user.keyboard('{ArrowUp}');
-    // Index 1 - 4 = -3, wraps to 11 + (-3) = 8 -> 'door-open'
-    expect(onChange).toHaveBeenCalledWith('door-open');
+    // Index 1 - 4 = -3, wraps to ICON_ORDER.length - 3
+    expect(onChange).toHaveBeenCalledWith(ICON_ORDER.at(-3));
   });
 
   it('ignores unhandled keyboard keys (default branch)', async () => {
