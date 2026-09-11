@@ -18,6 +18,7 @@ import type {
   RoomId,
   TripId,
 } from '@/types';
+import { repositoryError } from '@/lib/db/repository-error';
 
 // ============================================================================
 // Validation Utilities
@@ -72,9 +73,9 @@ export async function createAssignment(
     await db.roomAssignments.add(assignment);
     return assignment;
   } catch (error) {
-    throw new Error(
+    throw repositoryError(
       `Failed to create assignment for person ${data.personId} in room ${data.roomId} (${data.startDate} to ${data.endDate})`,
-      { cause: error },
+      error,
     );
   }
 }
@@ -216,7 +217,7 @@ export async function deleteAssignment(id: RoomAssignmentId): Promise<void> {
   try {
     await db.roomAssignments.delete(id);
   } catch (error) {
-    throw new Error(`Failed to delete assignment ${id}`, { cause: error });
+    throw repositoryError(`Failed to delete assignment ${id}`, error);
   }
 }
 

@@ -17,6 +17,7 @@ import type {
   PersonId,
   TripId,
 } from '@/types';
+import { repositoryError } from '@/lib/db/repository-error';
 
 // ============================================================================
 // Constants
@@ -70,9 +71,9 @@ export async function createExpense(
     await db.expenses.add(expense);
     return expense;
   } catch (error) {
-    throw new Error(
+    throw repositoryError(
       `Failed to create expense "${sanitizedData.title}" for trip ${tripId}`,
-      { cause: error },
+      error,
     );
   }
 }

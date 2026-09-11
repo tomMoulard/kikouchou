@@ -18,6 +18,7 @@ import type {
   PersonId,
   TripId,
 } from '@/types';
+import { repositoryError } from '@/lib/db/repository-error';
 
 // ============================================================================
 // Create
@@ -60,9 +61,9 @@ export async function createActivity(
     await db.activities.add(activity);
     return activity;
   } catch (error) {
-    throw new Error(
+    throw repositoryError(
       `Failed to create activity "${sanitizedData.title}" for trip ${tripId}`,
-      { cause: error },
+      error,
     );
   }
 }

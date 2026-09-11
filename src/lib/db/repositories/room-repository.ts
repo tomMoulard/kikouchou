@@ -15,6 +15,7 @@ import { db } from '@/lib/db/database';
 import { sanitizeRoomData } from '@/lib/db/sanitize';
 import { createRoomId } from '@/lib/db/utils';
 import type { Room, RoomFormData, RoomId, TripId } from '@/types';
+import { repositoryError } from '@/lib/db/repository-error';
 
 // ============================================================================
 // Constants
@@ -154,9 +155,9 @@ export async function createRooms(
       return rooms;
     });
   } catch (error) {
-    throw new Error(
+    throw repositoryError(
       `Failed to create ${count} room(s) "${sanitizedData.name}" for trip ${tripId}`,
-      { cause: error },
+      error,
     );
   }
 }
@@ -273,7 +274,7 @@ export async function deleteRoom(id: RoomId): Promise<void> {
       await db.rooms.delete(id);
     });
   } catch (error) {
-    throw new Error(`Failed to delete room ${id}`, { cause: error });
+    throw repositoryError(`Failed to delete room ${id}`, error);
   }
 }
 
@@ -323,7 +324,7 @@ export async function reorderRooms(
     if (error instanceof Error && error.message.includes('not found or doesn\'t belong to trip')) {
       throw error;
     }
-    throw new Error(`Failed to reorder rooms for trip ${tripId}`, { cause: error });
+    throw repositoryError(`Failed to reorder rooms for trip ${tripId}`, error);
   }
 }
 
@@ -397,9 +398,9 @@ export async function cloneRoomsToTrip(
 
     return clonedRooms;
   } catch (error) {
-    throw new Error(
+    throw repositoryError(
       `Failed to clone rooms from trip ${sourceTripId} to trip ${targetTripId}`,
-      { cause: error },
+      error,
     );
   }
 }
