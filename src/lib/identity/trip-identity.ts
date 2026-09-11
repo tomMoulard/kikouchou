@@ -34,6 +34,7 @@ import { db } from '@/lib/db/database';
 import { getMyPersonId } from '@/lib/db';
 import { getTripGuestPersonId } from '@/lib/sharing/guest-identity';
 import type { PersonId, ShareId, Trip, TripId } from '@/types';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -185,7 +186,11 @@ export async function cacheClaimedPersonId(
   } catch (error) {
     // Best-effort cache. The server row is authoritative and the identity
     // resolver has two other sources, so failing to cache must not fail a join.
+    // Reported rather than only logged: a guest whose claim never caches reads
+    // their own trip as belonging to nobody, and a console line on a phone is
+    // seen by no one.
     console.error('[identity] Failed to cache trip membership:', error);
+    reportError(error, { source: 'trip-identity.cacheClaimedPersonId' });
   }
 }
 

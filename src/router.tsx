@@ -5,7 +5,7 @@
  * @module router
  */
 
-import { type ReactElement, Suspense, lazy } from 'react';
+import { type ReactElement, Suspense, lazy, useEffect } from 'react';
 import {
   Navigate,
   Outlet,
@@ -21,6 +21,7 @@ import { Layout } from '@/components/shared/Layout';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Button } from '@/components/ui/button';
+import { reportError } from '@/lib/posthog';
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
 
 // Feature route imports
@@ -91,6 +92,24 @@ function ErrorPage(): ReactElement {
     // JavaScript Error
     description = error.message;
   }
+
+  /**
+   * Reports the error this page was rendered for.
+   *
+   * React Router catches the throw and renders this element, so the error never
+   * reaches the window and PostHog's unhandled-error capture never sees it —
+   * the screen that says "something went wrong" was the one thing error
+   * tracking had no record of. In an effect keyed on the error so a re-render
+   * does not report the same failure twice.
+   *
+   * A 404 is not reported: it is a route that does not exist, not a fault.
+   */
+  useEffect(() => {
+    if (isRouteErrorResponse(error) && error.status === 404) {
+      return;
+    }
+    reportError(error, { source: 'RouteErrorPage', route_status: status });
+  }, [error, status]);
 
   const handleRetry = (): void => {
     window.location.reload();
