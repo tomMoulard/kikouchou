@@ -1530,6 +1530,7 @@
     "transportNotFound": "Transport not found. Please try again.",
     "loadingFailed": "Failed to load",
     "saveFailed": "Failed to save",
+    "syncFailed": "Could not save the trip to this device",
     "deleteFailed": "Failed to delete",
     "activityNotFound": "Activity not found. Please try again.",
     "dev": {
