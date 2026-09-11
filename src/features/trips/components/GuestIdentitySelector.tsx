@@ -46,6 +46,8 @@ import {
 } from '@/lib/sharing/guest-identity';
 import type { PersonId } from '@/types';
 import { notify } from '@/lib/notifications';
+import { reportFailure } from '@/lib/errors/report-failure';
+import { reportError } from '@/lib/posthog';
 
 
 // ============================================================================
@@ -121,7 +123,9 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
         setPersonId(undefined);
         // Clears the explicit answer too, or the higher-precedence store would
         // keep naming a guest this card has just said is nobody.
-        void setMyPersonId(undefined);
+        void setMyPersonId(undefined).catch((error: unknown) => {
+          reportError(error, { source: 'GuestIdentitySelector.clear' });
+        });
         // Deliberately a raw confirmation rather than the offline-aware one: this
         // lives in localStorage and never syncs, so "Saved on this device" is
         // the only thing it could ever mean. Same call as the language card's.
@@ -150,12 +154,27 @@ export const GuestIdentitySelector = memo(function GuestIdentitySelector(): Reac
       }
 
       setPersonId(person.id);
-      void setMyPersonId(person.id);
-      notify.success(
-        t('settings.guestIdentityChanged', 'You are {{name}} on this trip', {
-          name: person.name,
-        }),
-      );
+
+      // The confirmation used to fire beside a voided promise, so it said the
+      // choice was saved whether or not the write landed.
+      void setMyPersonId(person.id)
+        .then(() => {
+          notify.success(
+            t('settings.guestIdentityChanged', 'You are {{name}} on this trip', {
+              name: person.name,
+            }),
+          );
+        })
+        .catch((error: unknown) => {
+          reportFailure(
+            'GuestIdentitySelector.select',
+            error,
+            t(
+              'sharing.identityStorageFailed',
+              'Could not save your identity. You may need to re-select on your next visit.',
+            ),
+          );
+        });
     },
     [currentTrip, persons, setMyPersonId, t],
   );
