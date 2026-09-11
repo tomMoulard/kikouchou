@@ -900,6 +900,9 @@
         "supplies": "Supplies",
         "other": "Other"
       },
+      "categoryNamed": "Category: {{name}}",
+      "categoryPick": "Pick a category",
+      "categoryPickDescription": "What kind of spending this line is.",
       "kind": "Kind of line",
       "kinds": {
         "expense": "Expense",

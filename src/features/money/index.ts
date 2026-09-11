@@ -22,6 +22,8 @@ export type { BalancesCardProps } from './components/BalancesCard';
 export { ExpenseCard } from './components/ExpenseCard';
 export type { ExpenseCardProps } from './components/ExpenseCard';
 export { ExpenseCategoryIcon } from './components/ExpenseCategoryIcon';
+export { ExpenseCategoryPicker } from './components/ExpenseCategoryPicker';
+export type { ExpenseCategoryPickerProps } from './components/ExpenseCategoryPicker';
 export { ExpenseDialog } from './components/ExpenseDialog';
 export type { ExpenseDialogProps } from './components/ExpenseDialog';
 export { ExpenseForm } from './components/ExpenseForm';
