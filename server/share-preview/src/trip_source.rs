@@ -222,23 +222,56 @@ impl TripSource {
     }
 
     /// One PostgREST GET, deserialised into a row list.
-    async fn get<T: for<'de> Deserialize<'de>>(&self, path_and_query: &str) -> Option<Vec<T>> {
-        let response = self
+    ///
+    /// Every failure says so on stderr, and none of them says what it was
+    /// reading. `table` names the table for the log; the query string carries a
+    /// token, which is a credential, so it never reaches a log line — and
+    /// neither does a `reqwest::Error`'s own message until `without_url` has
+    /// taken the URL, and the token in it, back out.
+    async fn get<T: for<'de> Deserialize<'de>>(
+        &self,
+        table: &'static str,
+        path_and_query: &str,
+    ) -> Option<Vec<T>> {
+        let response = match self
             .authed(
                 self.client
                     .get(format!("{}/{path_and_query}", self.rest_url)),
             )
             .send()
             .await
-            .ok()?;
+        {
+            Ok(response) => response,
+            // Never reached the server at all: DNS, TLS, a refused connection,
+            // or the timeout. This used to return None in silence, which left a
+            // 503 with nothing in the log to say why.
+            Err(error) => {
+                eprintln!("supabase {table} request failed: {}", error.without_url());
+                return None;
+            }
+        };
 
         if !response.status().is_success() {
             // The body may name a column or a policy. It is not logged and it is
-            // certainly not returned; the status is all the caller needs.
-            eprintln!("supabase read failed with status {}", response.status());
+            // certainly not returned; the status is all the caller needs. 401 is
+            // the wrong key, 403 a missing grant, 404 a wrong SUPABASE_URL.
+            eprintln!(
+                "supabase {table} read failed with status {}",
+                response.status()
+            );
             return None;
         }
-        response.json::<Vec<T>>().await.ok()
+
+        match response.json::<Vec<T>>().await {
+            Ok(rows) => Some(rows),
+            Err(error) => {
+                eprintln!(
+                    "supabase {table} response did not parse: {}",
+                    error.without_url()
+                );
+                None
+            }
+        }
     }
 
     /// One PostgREST write with a JSON body, returning whether it landed.
@@ -278,10 +311,13 @@ impl TripSource {
         }
 
         let Some(invites) = self
-            .get::<InviteRow>(&format!(
-                "trip_invites?token=eq.{token}\
+            .get::<InviteRow>(
+                "trip_invites",
+                &format!(
+                    "trip_invites?token=eq.{token}\
                  &select=trip_id,expires_at,max_uses,uses,revoked_at&limit=1"
-            ))
+                ),
+            )
             .await
         else {
             return LoadResult::Error;
@@ -295,9 +331,10 @@ impl TripSource {
 
         let trip_id = &invite.trip_id;
         let Some(trips) = self
-            .get::<TripJson>(&format!(
-                "trips?id=eq.{trip_id}&select=name,start_date,end_date&limit=1"
-            ))
+            .get::<TripJson>(
+                "trips",
+                &format!("trips?id=eq.{trip_id}&select=name,start_date,end_date&limit=1"),
+            )
             .await
         else {
             return LoadResult::Error;
@@ -324,9 +361,10 @@ impl TripSource {
         if !is_uuid_shaped(trip_id) {
             return None;
         }
-        self.get::<TripJson>(&format!(
-            "trips?id=eq.{trip_id}&select=name,start_date,end_date&limit=1"
-        ))
+        self.get::<TripJson>(
+            "trips",
+            &format!("trips?id=eq.{trip_id}&select=name,start_date,end_date&limit=1"),
+        )
         .await?
         .into_iter()
         .next()
@@ -341,6 +379,7 @@ impl TripSource {
     /// each document once.
     pub async fn list_subscriptions(&self) -> Option<Vec<Subscription>> {
         self.get::<Subscription>(
+            "push_subscriptions",
             "push_subscriptions\
              ?select=id,trip_id,person_id,endpoint,p256dh,auth,locale,analytics_id\
              &order=trip_id.asc,id.asc",
@@ -353,10 +392,13 @@ impl TripSource {
         if !is_uuid_shaped(subscription_id) {
             return None;
         }
-        self.get::<Subscription>(&format!(
-            "push_subscriptions?id=eq.{subscription_id}\
-             &select=id,trip_id,person_id,endpoint,p256dh,auth,locale,analytics_id&limit=1"
-        ))
+        self.get::<Subscription>(
+            "push_subscriptions",
+            &format!(
+                "push_subscriptions?id=eq.{subscription_id}\
+                 &select=id,trip_id,person_id,endpoint,p256dh,auth,locale,analytics_id&limit=1"
+            ),
+        )
         .await?
         .into_iter()
         .next()
@@ -381,9 +423,12 @@ impl TripSource {
         if !is_uuid_shaped(subscription_id) {
             return None;
         }
-        self.get::<ReminderLogRow>(&format!(
-            "reminder_log?subscription_id=eq.{subscription_id}&select=kind,subject,sent_at"
-        ))
+        self.get::<ReminderLogRow>(
+            "reminder_log",
+            &format!(
+                "reminder_log?subscription_id=eq.{subscription_id}&select=kind,subject,sent_at"
+            ),
+        )
         .await
     }
 
@@ -452,18 +497,22 @@ impl TripSource {
     /// The compacted snapshot plus every update after it, folded into one doc.
     pub async fn load_document(&self, trip_id: &str) -> Option<Doc> {
         let snapshot = self
-            .get::<SnapshotJson>(&format!(
-                "trip_doc_snapshots?trip_id=eq.{trip_id}&select=state,through_id&limit=1"
-            ))
+            .get::<SnapshotJson>(
+                "trip_doc_snapshots",
+                &format!("trip_doc_snapshots?trip_id=eq.{trip_id}&select=state,through_id&limit=1"),
+            )
             .await
             .and_then(|rows| rows.into_iter().next());
 
         let through_id = snapshot.as_ref().map_or(0, |row| row.through_id);
         let updates = self
-            .get::<UpdateJson>(&format!(
-                "trip_doc_updates?trip_id=eq.{trip_id}&id=gt.{through_id}\
+            .get::<UpdateJson>(
+                "trip_doc_updates",
+                &format!(
+                    "trip_doc_updates?trip_id=eq.{trip_id}&id=gt.{through_id}\
                  &select=update&order=id.asc&limit={MAX_UPDATES}"
-            ))
+                ),
+            )
             .await
             .unwrap_or_default()
             .into_iter()
