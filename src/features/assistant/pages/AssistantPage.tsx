@@ -30,6 +30,7 @@ import {
   Square,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -339,6 +340,7 @@ function resolveDeviceSupport(
  */
 const ModelLoadingCard = memo(function ModelLoadingCard({
   onLoad,
+  onCancel,
   status,
   loadProgress,
   error,
@@ -346,6 +348,7 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
   downloadSize,
 }: {
   readonly onLoad: () => void;
+  readonly onCancel: () => void;
   readonly status: string;
   readonly loadProgress: LoadProgress | null;
   readonly error: string | null;
@@ -496,7 +499,28 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
                   )}
                 </p>
               ) : null}
+
+              {/* A multi-gigabyte download started on the wrong network is the
+                  reason this exists: without it the only way out is to leave
+                  the page. */}
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={onCancel}
+              >
+                <X className="size-4 mr-2" aria-hidden="true" />
+                {t('assistant.cancelLoad', 'Cancel')}
+              </Button>
             </div>
+          )}
+
+          {status === 'cancelled' && (
+            <p className="text-center text-sm text-muted-foreground" role="status">
+              {t(
+                'assistant.loadCancelled',
+                'Loading cancelled. Files already downloaded stay in your browser cache.',
+              )}
+            </p>
           )}
 
           {error && (
@@ -505,7 +529,9 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
             </div>
           )}
 
-          {(status === 'idle' || status === 'error') &&
+          {(status === 'idle' ||
+            status === 'error' ||
+            status === 'cancelled') &&
             deviceSupport === 'unsupported' && (
               <div
                 className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 space-y-1"
@@ -528,7 +554,9 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
 
           {/* Nothing while the probe is in flight: offering a download that is
               about to be withdrawn is worse than a beat of empty card. */}
-          {(status === 'idle' || status === 'error') &&
+          {(status === 'idle' ||
+            status === 'error' ||
+            status === 'cancelled') &&
             deviceSupport === 'supported' && (
               <>
                 {/* The size, before the button, and in the same place the
@@ -709,6 +737,7 @@ function AssistantPageComponent(): ReactElement {
     error,
     isCached,
     loadModel,
+    cancelLoad,
     generate,
     interrupt,
     unload,
@@ -1246,6 +1275,7 @@ function AssistantPageComponent(): ReactElement {
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             <ModelLoadingCard
               onLoad={loadModel}
+              onCancel={cancelLoad}
               status={status}
               loadProgress={loadProgress}
               error={error}
