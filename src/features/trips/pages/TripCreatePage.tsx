@@ -39,6 +39,7 @@ import { setCurrentTrip } from '@/lib/db';
 import { captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import type { Trip, TripFormData, TripId } from '@/types';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Constants
@@ -272,10 +273,19 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
     async (trip: Trip): Promise<void> => {
       setIsDirty(false);
       skipNextBlock();
-      await setCurrentTrip(trip.id);
+
+      // The trip is made and celebrated by this point, so a failure to select it
+      // must not strand the reader on the done screen with no way on and nothing
+      // said. Reported, then navigated anyway: the calendar selects the trip
+      // from the route.
+      try {
+        await setCurrentTrip(trip.id);
+      } catch (error) {
+        reportError(error, { source: 'TripCreatePage.handleWizardCreated' });
+      }
       navigate(`/trips/${trip.id}/calendar`);
     },
-    [navigate, skipNextBlock],
+    [navigate, skipNextBlock, setCurrentTrip],
   );
 
   // ============================================================================

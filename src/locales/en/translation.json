@@ -1098,6 +1098,8 @@
     "continueToTrip": "Continue to trip",
     "notFoundWizard": "This trip link doesn't seem to work",
     "notFoundWizardDescription": "The link may be incorrect or the trip may no longer exist.",
+    "loadFailedWizard": "Could not open the trip on this device",
+    "loadFailedWizardDescription": "The link is fine. This device could not read its stored data. Close the app in other tabs and try again.",
     "returning": "Welcome back! Taking you to the trip...",
     "onboardingComingSoon": "This step will be available soon.",
     "identityTitle": "Who are you?",

@@ -41,6 +41,7 @@ import { materialiseJoinedTrip } from '@/lib/sync/join-trip';
 import { cn } from '@/lib/utils';
 import { ImportTripQrDialog } from '../components/ImportTripQrDialog';
 import type { Trip, TripId } from '@/types';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Constants
@@ -163,8 +164,17 @@ export function TripLinkPage(): ReactElement {
 
   const openTrip = useCallback(
     (tripId: TripId): void => {
-      void setCurrentTrip(tripId);
-      void navigate(`/trips/${tripId}/calendar`, { replace: true });
+      // Navigated only once the trip is actually current. `setCurrentTrip` runs
+      // a Dexie transaction, and voiding it meant a rejection landed the visitor
+      // on a calendar for a trip that was never selected, with the rejection
+      // lost and the ref latch below blocking any retry.
+      void setCurrentTrip(tripId)
+        .catch((error: unknown) => {
+          reportError(error, { source: 'TripLinkPage.openTrip' });
+        })
+        .finally(() => {
+          void navigate(`/trips/${tripId}/calendar`, { replace: true });
+        });
     },
     [navigate, setCurrentTrip],
   );
