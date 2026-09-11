@@ -176,6 +176,7 @@ const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineP
       todayKey={todayKey}
       tripRange={tripRange}
       outsideTripLabel={t('calendar.outsideTripDates', 'Outside the trip dates')}
+      scrollbarLabel={t('common.scrollTimeline', 'Scroll the timeline')}
       renderDayMeta={renderDayHeadcount}
     >
       {(viewport) => (
