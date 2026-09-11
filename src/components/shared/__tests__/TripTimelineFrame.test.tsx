@@ -213,6 +213,39 @@ describe('TripTimelineFrame', () => {
     expect(viewport.todayColumnIndex).toBeUndefined();
   });
 
+  it('marks the columns outside the trip when the axis runs past it', () => {
+    // The axis now covers every event the timeline draws, so it can start
+    // before the trip does. A reader has to be able to see which columns are
+    // the trip itself.
+    const dayKeys = makeDayKeys(5);
+
+    render(
+      <TripTimelineFrame
+        {...defaultProps}
+        tripRange={{ startKey: dayKeys[1]!, endKey: dayKeys[3]! }}
+        outsideTripLabel="Outside the trip dates"
+      >
+        {() => <div>content</div>}
+      </TripTimelineFrame>
+    );
+
+    const outside = screen.getAllByText('Outside the trip dates');
+    expect(outside).toHaveLength(2);
+    expect(screen.getByText('05').closest('[data-outside-trip="true"]')).toBeInTheDocument();
+    expect(screen.getByText('09').closest('[data-outside-trip="true"]')).toBeInTheDocument();
+    expect(screen.getByText('07').closest('[data-outside-trip="true"]')).toBeNull();
+  });
+
+  it('marks no column when no trip range is given', () => {
+    const { container } = render(
+      <TripTimelineFrame {...defaultProps}>
+        {() => <div>content</div>}
+      </TripTimelineFrame>
+    );
+
+    expect(container.querySelectorAll('[data-outside-trip]')).toHaveLength(0);
+  });
+
   it('handles zero days gracefully', () => {
     const childrenFn = vi.fn(() => <div>empty timeline</div>);
 

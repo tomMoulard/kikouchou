@@ -15,7 +15,14 @@ import { toLocalISODateString } from '@/lib/db/utils';
 import { isoDate } from '@/test/utils';
 import type { ShareId, Trip, TripId } from '@/types';
 
-import { buildDayColumns, buildTripDayColumns, parseLocalDayKey, toDayKeys } from '../trip-days';
+import {
+  buildDayColumns,
+  buildDayColumnsCovering,
+  buildTripDayColumns,
+  parseLocalDayKey,
+  TIMELINE_DAY_AXIS_MAX_EXTENSION_DAYS,
+  toDayKeys,
+} from '../trip-days';
 
 function makeTrip(startDate: string, endDate: string): Trip {
   return {
@@ -152,5 +159,117 @@ describe('buildDayColumns', () => {
     expect(toDayKeys(range)).toEqual(
       toDayKeys(buildTripDayColumns(makeTrip('2024-07-15', '2024-07-17'))),
     );
+  });
+});
+
+describe('buildDayColumnsCovering', () => {
+  const startKey = isoDate('2024-07-15');
+  const endKey = isoDate('2024-07-18');
+
+  it('is the trip axis when nothing falls outside it', () => {
+    const days = buildDayColumnsCovering({
+      startKey,
+      endKey,
+      mustInclude: [isoDate('2024-07-16')],
+    });
+
+    expect(toDayKeys(days)).toEqual(
+      toDayKeys(buildTripDayColumns(makeTrip('2024-07-15', '2024-07-18'))),
+    );
+  });
+
+  it('reaches back to a day before the trip starts', () => {
+    const days = buildDayColumnsCovering({
+      startKey,
+      endKey,
+      mustInclude: [isoDate('2024-07-13')],
+    });
+
+    expect(toDayKeys(days)).toEqual([
+      '2024-07-13',
+      '2024-07-14',
+      '2024-07-15',
+      '2024-07-16',
+      '2024-07-17',
+      '2024-07-18',
+    ]);
+  });
+
+  it('reaches forward to a day after the trip ends', () => {
+    const days = buildDayColumnsCovering({
+      startKey,
+      endKey,
+      mustInclude: [isoDate('2024-07-20')],
+    });
+
+    expect(toDayKeys(days)[0]).toBe('2024-07-15');
+    expect(toDayKeys(days).at(-1)).toBe('2024-07-20');
+  });
+
+  it('stretches both ways at once and ignores unusable keys', () => {
+    const days = buildDayColumnsCovering({
+      startKey,
+      endKey,
+      mustInclude: [isoDate('2024-07-14'), null, undefined, 'nope', '2024-02-30', isoDate('2024-07-19')],
+    });
+
+    expect(toDayKeys(days)).toEqual([
+      '2024-07-14',
+      '2024-07-15',
+      '2024-07-16',
+      '2024-07-17',
+      '2024-07-18',
+      '2024-07-19',
+    ]);
+  });
+
+  it('stops at the extension limit rather than drawing months of columns', () => {
+    const days = buildDayColumnsCovering({
+      startKey,
+      endKey,
+      mustInclude: [isoDate('2025-07-15')],
+    });
+
+    expect(toDayKeys(days).at(-1)).toBe('2024-07-18');
+  });
+
+  it('reaches exactly as far as the limit allows', () => {
+    expect(TIMELINE_DAY_AXIS_MAX_EXTENSION_DAYS).toBeGreaterThan(0);
+
+    const days = buildDayColumnsCovering({
+      startKey,
+      endKey,
+      mustInclude: [isoDate('2024-07-25')],
+      maxExtensionDays: 7,
+    });
+
+    expect(toDayKeys(days).at(-1)).toBe('2024-07-25');
+
+    const tooFar = buildDayColumnsCovering({
+      startKey,
+      endKey,
+      mustInclude: [isoDate('2024-07-26')],
+      maxExtensionDays: 7,
+    });
+
+    expect(toDayKeys(tooFar).at(-1)).toBe('2024-07-18');
+  });
+
+  it('has no axis to widen when the trip dates are unusable', () => {
+    expect(
+      buildDayColumnsCovering({
+        startKey: 'nope' as typeof startKey,
+        endKey,
+        mustInclude: [isoDate('2024-07-16')],
+      }),
+    ).toEqual([]);
+
+    expect(
+      buildDayColumnsCovering({
+        startKey: endKey,
+        endKey: startKey,
+        mustInclude: [],
+      }),
+    ).toEqual([]);
   });
 });
