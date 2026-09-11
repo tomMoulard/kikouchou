@@ -728,8 +728,12 @@ test.describe('Calendar Multi-Day Events', () => {
 
     const detailDialog = page.getByRole('dialog');
     await expect(detailDialog).toBeVisible();
-    await expect(detailDialog.getByText(TEST_DATA.person.name)).toBeVisible();
-    await expect(detailDialog.getByText(TEST_DATA.room.name)).toBeVisible();
+    // `.first()`: the dialog now names the guest and the room more than once —
+    // the booking at the top, and again in the guest overview under it, which
+    // lists every room this guest is in. The assertion here is that the name
+    // reaches the dialog at all, not how many times.
+    await expect(detailDialog.getByText(TEST_DATA.person.name).first()).toBeVisible();
+    await expect(detailDialog.getByText(TEST_DATA.room.name).first()).toBeVisible();
     // The dialog spells out the length of the stay, which is the same fact the
     // segment count above asserts — read here from the other end of the app.
     await expect(detailDialog).toContainText(

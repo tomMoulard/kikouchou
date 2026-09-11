@@ -44,6 +44,8 @@ import {
   formatActivityTimeRange,
 } from '@/features/activities/utils/activity-utils';
 import { RideSummary } from '@/features/transports/components/RideSummary';
+import { GuestOverviewSection } from './GuestOverviewSection';
+import type { GuestOverview } from '../utils/guest-overview';
 import { collectDrivenRideIds, isLegCovered } from '@/features/transports/utils/pickup-utils';
 import type { ResolvedRide } from '@/features/transports/utils/ride-model';
 import { getDateLocale } from '@/lib/i18n/date-locale';
@@ -71,6 +73,15 @@ export interface AssignmentEventData {
   readonly room: Room | undefined;
   /** Arrivals/departures shown on the timeline stay pill */
   readonly relatedTransports?: readonly Transport[];
+  /**
+   * The whole guest, gathered by `buildGuestOverview`.
+   *
+   * A pill on the calendar is one booking, but the question behind clicking it
+   * is usually about the guest: when do they land, what did they sign up for,
+   * do they still owe the kitty. Left undefined, the dialog stays the
+   * booking-only view it has always been.
+   */
+  readonly guestOverview?: GuestOverview;
 }
 
 /**
@@ -191,7 +202,14 @@ interface AssignmentDetailsProps {
  */
 const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }: AssignmentDetailsProps) {
   const { t } = useTranslation();
-  const { assignment, person, room, relatedTransports } = event;
+  const { assignment, person, room, relatedTransports, guestOverview } = event;
+
+  // The legs already shown in full below, so the guest overview lists only the
+  // rest of this guest's travel rather than repeating them in one line each.
+  const shownTransportIds = useMemo(
+    () => (relatedTransports ?? []).map((transport) => transport.id),
+    [relatedTransports],
+  );
 
   // Parse dates for formatting
   const startDate = parseISO(assignment.startDate);
@@ -314,6 +332,14 @@ const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }:
             })}
           </div>
         </>
+      ) : null}
+
+      {guestOverview ? (
+        <GuestOverviewSection
+          overview={guestOverview}
+          dateLocale={dateLocale}
+          shownTransportIds={shownTransportIds}
+        />
       ) : null}
     </div>
   );

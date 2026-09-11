@@ -16,6 +16,7 @@ import {
   type TransportEventData,
 } from '../EventDetailDialog';
 import { resolveRides } from '@/features/transports/utils/ride-model';
+import type { GuestOverview } from '../../utils/guest-overview';
 import type {
   HexColor,
   ISODateString,
@@ -110,6 +111,21 @@ function makeAssignmentEvent(overrides: Partial<AssignmentEventData> = {}): Assi
     assignment: makeAssignment(),
     person: makePerson(),
     room: makeRoom(),
+    ...overrides,
+  };
+}
+
+function makeGuestOverview(overrides: Partial<GuestOverview> = {}): GuestOverview {
+  const person = makePerson();
+  return {
+    person,
+    checkIn: '2026-01-10' as ISODateString,
+    checkOut: '2026-01-13' as ISODateString,
+    stays: [{ assignment: makeAssignment(), room: makeRoom() }],
+    transports: [],
+    activities: [],
+    balance: undefined,
+    currency: undefined,
     ...overrides,
   };
 }
@@ -562,5 +578,136 @@ describe('EventDetailDialog', () => {
       expect(screen.getByText('Arrival')).toBeInTheDocument();
       expect(consoleError).toHaveBeenCalled();
     });
+  });
+});
+
+// ============================================================================
+// The whole guest, under the booking
+// ============================================================================
+
+// A pill on the calendar is one booking, but the question behind clicking it is
+// usually about the guest: when do they land, what did they sign up for, do
+// they still owe the kitty.
+describe('the guest overview', () => {
+  it('shows nothing extra for a booking with no overview gathered', () => {
+    render(<EventDetailDialog {...defaultProps} event={makeAssignmentEvent()} />);
+
+    expect(screen.queryByTestId('guest-overview')).not.toBeInTheDocument();
+  });
+
+  it('shows the guest’s check-in and check-out', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({ guestOverview: makeGuestOverview() })}
+      />,
+    );
+
+    const overview = screen.getByTestId('guest-overview');
+    expect(within(overview).getByText('Check-in')).toBeInTheDocument();
+    expect(within(overview).getByText('Check-out')).toBeInTheDocument();
+  });
+
+  it('says what the guest owes the group', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({
+          guestOverview: makeGuestOverview({
+            balance: { personId: 'person-1' as PersonId, paid: 10, owed: 52, balance: -42 },
+            currency: 'EUR',
+          }),
+        })}
+      />,
+    );
+
+    const overview = screen.getByTestId('guest-overview');
+    expect(within(overview).getByText('Owes the group')).toBeInTheDocument();
+    expect(within(overview).getByText(/42/)).toBeInTheDocument();
+  });
+
+  it('says when the group owes the guest instead', () => {
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({
+          guestOverview: makeGuestOverview({
+            balance: { personId: 'person-1' as PersonId, paid: 90, owed: 20, balance: 70 },
+            currency: 'EUR',
+          }),
+        })}
+      />,
+    );
+
+    expect(
+      within(screen.getByTestId('guest-overview')).getByText('The group owes them'),
+    ).toBeInTheDocument();
+  });
+
+  it('distinguishes a settled guest from one with no money lines at all', () => {
+    const { rerender } = render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({ guestOverview: makeGuestOverview() })}
+      />,
+    );
+
+    expect(screen.getByText('Not on any money line yet')).toBeInTheDocument();
+
+    rerender(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({
+          guestOverview: makeGuestOverview({
+            balance: { personId: 'person-1' as PersonId, paid: 30, owed: 30, balance: 0 },
+            currency: 'EUR',
+          }),
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Square with the group')).toBeInTheDocument();
+  });
+
+  it('does not repeat a leg the dialog already shows in full', () => {
+    const leg = makeTransport();
+
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({
+          relatedTransports: [leg],
+          guestOverview: makeGuestOverview({ transports: [leg] }),
+        })}
+      />,
+    );
+
+    expect(
+      within(screen.getByTestId('guest-overview')).queryByText('Other travel'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('lists the guest’s other travel', () => {
+    const shown = makeTransport();
+    const elsewhere = makeTransport({
+      id: 'transport-9' as TransportId,
+      type: 'departure',
+      location: 'Gare de Lyon',
+      datetime: '2026-01-13T08:00:00.000Z',
+    });
+
+    render(
+      <EventDetailDialog
+        {...defaultProps}
+        event={makeAssignmentEvent({
+          relatedTransports: [shown],
+          guestOverview: makeGuestOverview({ transports: [shown, elsewhere] }),
+        })}
+      />,
+    );
+
+    const overview = screen.getByTestId('guest-overview');
+    expect(within(overview).getByText('Other travel')).toBeInTheDocument();
+    expect(within(overview).getByText('Gare de Lyon')).toBeInTheDocument();
   });
 });
