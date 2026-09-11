@@ -98,8 +98,34 @@ function isDevelopmentHost(): boolean {
 }
 
 // ============================================================================
-// Exception filtering
+// Exception handling
 // ============================================================================
+
+/**
+ * Lets an error thrown by a PostHog-loaded script arrive readable.
+ *
+ * posthog-js fetches `recorder.js`, `surveys.js` and `toolbar.js` at runtime by
+ * appending a `<script>` to the document, and those come from
+ * `events.kikouchou.app` — a different origin from the page. A cross-origin
+ * script tag with no `crossorigin` attribute is opaque to the error handler by
+ * specification: whatever it throws reaches `window.onerror` as the literal
+ * `"Script error."` with the filename, line, column and stack blanked. That is
+ * an error this project cannot read, cannot attribute and therefore cannot fix.
+ *
+ * `crossOrigin = 'anonymous'` makes the browser fetch it as a CORS request and
+ * keep the real message and stack. The asset host answers
+ * `access-control-allow-origin: *`, which is what makes this safe: with the
+ * attribute set and the header missing the browser would refuse the script
+ * outright, and session replay and surveys would stop loading rather than
+ * merely reporting badly. It is the same guarantee `index.html` already relies
+ * on — Vite emits the app's own bundle with `crossorigin`.
+ *
+ * Exported for tests; wired in at init below.
+ */
+export function readableExternalScript(script: HTMLScriptElement): HTMLScriptElement {
+  script.crossOrigin = 'anonymous';
+  return script;
+}
 
 /**
  * The exception values a browser uses when it refuses to describe an error.
@@ -136,30 +162,50 @@ function isOpaqueCrossOriginException(entry: ExceptionListEntry): boolean {
 }
 
 /**
- * Drops `$exception` events that say only that something, somewhere, threw.
+ * The one issue every unreadable error is filed under.
  *
- * This exists because of one real issue in the project: a single
- * `Error: Script error.` from Mobile Safari on `/trips`, synthetic, unhandled,
- * no stack, no file, no line, arriving right after a redirect back from
- * `accounts.google.com`. There is nothing in such an event to fix. Its origin
- * is invisible by construction — a browser extension, an in-app webview
- * injection, or a script from a host that answers without
- * `Access-Control-Allow-Origin` — and PostHog fingerprints every one of them
- * into the same issue, which reopens on the next stray occurrence.
+ * PostHog groups exceptions by `$exception_fingerprint`, and it computes one
+ * from the message and the stack when the event does not carry its own. For an
+ * opaque error there is no stack and the message is a constant, so the
+ * computed fingerprint is stable but meaningless — an issue named `Error` whose
+ * description is `Script error.`, which says nothing about what it holds.
  *
- * The app's own code cannot produce one: Vite emits the bundle with
- * `crossorigin` and it is served from the document's own origin, so a throw
- * inside it arrives with its message and frames intact and passes straight
- * through here. Same for anything `captureException` reports by hand.
+ * Naming the fingerprint here puts every one of them in a single issue that
+ * reads as what it is. Nothing is lost: the events still arrive, with their
+ * URL, session, release and device, and a session replay to watch.
+ */
+const OPAQUE_EXCEPTION_FINGERPRINT = 'opaque-cross-origin-script';
+
+/**
+ * Marks an exception the browser refused to describe, and sends it anyway.
  *
- * Every other event is returned untouched, an `$exception` whose list holds one
- * readable entry beside an opaque one included. Filtering here rather than with
- * a PostHog-side suppression rule also means the request is never made, which
- * is the difference between a quiet issue list and a quiet network tab.
+ * The issue behind this is one unhandled, synthetic `Error: Script error.` from
+ * Mobile Safari on `/trips` with no stack, no file and no line. The cause is
+ * addressed above, at the only place this app can address it:
+ * {@link readableExternalScript} makes every script posthog-js injects report
+ * its errors in full, so an error from that source is no longer opaque and
+ * never reaches this function. The app's own bundle was never the source — it
+ * is same-origin and Vite emits it with `crossorigin`.
+ *
+ * What remains is genuinely outside the app: a browser extension's content
+ * script, or an in-app webview injecting its own JavaScript. No code in this
+ * repository can stop those from throwing, so the honest handling is to keep
+ * reporting them and make them tractable, which is what the two properties do.
+ * `opaque_cross_origin` makes them addressable in any insight or filter, and
+ * the fingerprint collapses them into one named issue instead of leaving them
+ * to blur into whatever else PostHog decides they resemble.
+ *
+ * Only an exception whose *every* entry is opaque is marked. One with a
+ * readable entry beside an opaque one keeps its own grouping, because that
+ * readable entry is the cause and it is what somebody would fix.
+ *
+ * Must not throw: posthog-js calls this on the way out of every capture, so a
+ * throw here would be an error raised by the error reporter. Every unexpected
+ * shape returns the event untouched.
  *
  * Exported for tests; wired in as `before_send` below.
  */
-export function dropOpaqueExceptions(event: CaptureResult | null): CaptureResult | null {
+export function markOpaqueExceptions(event: CaptureResult | null): CaptureResult | null {
   if (!event || event.event !== '$exception') {
     return event;
   }
@@ -173,7 +219,12 @@ export function dropOpaqueExceptions(event: CaptureResult | null): CaptureResult
       entry !== null &&
       isOpaqueCrossOriginException(entry as ExceptionListEntry),
   );
-  return everyEntryIsOpaque ? null : event;
+  if (!everyEntryIsOpaque) {
+    return event;
+  }
+  event.properties['opaque_cross_origin'] = true;
+  event.properties['$exception_fingerprint'] = OPAQUE_EXCEPTION_FINGERPRINT;
+  return event;
 }
 
 // ============================================================================
@@ -318,13 +369,24 @@ if (!posthogKey || !posthogHost) {
     },
 
     /**
-     * The last gate before an event leaves the browser.
+     * Runs on every `<script>` posthog-js appends for its own lazy bundles.
      *
-     * Only {@link dropOpaqueExceptions} runs here, and it drops exactly one
-     * shape: an exception the browser refused to describe. See it for why that
-     * shape is unfixable and why nothing this app throws can look like it.
+     * See {@link readableExternalScript}: without it a throw inside session
+     * replay or surveys reaches this project as `"Script error."` and nothing
+     * else. This is the fix for the cause rather than for the symptom.
      */
-    before_send: dropOpaqueExceptions,
+    prepare_external_dependency_script: readableExternalScript,
+
+    /**
+     * The last gate before an event leaves the browser. Nothing is dropped
+     * here.
+     *
+     * Only {@link markOpaqueExceptions} runs, and it only ever adds two
+     * properties, to the one exception shape a browser refuses to describe. See
+     * it for what is left once the cause above is fixed, and why that remainder
+     * is worth reporting rather than discarding.
+     */
+    before_send: markOpaqueExceptions,
   });
   // Attached to every event from here on, so any question can be sliced by
   // release without each call site having to remember to pass it. Set at init

@@ -215,22 +215,57 @@ describe('lib/posthog', () => {
     );
   });
 
-  it('filters events through the opaque-exception drop', async () => {
+  it('loads its own external scripts so their errors can be read', async () => {
     withCredentials();
     vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
 
-    const { dropOpaqueExceptions } = await importPosthog();
+    const { readableExternalScript } = await importPosthog();
+
+    // The fix for the cause rather than the symptom. posthog-js appends a
+    // `<script>` for `recorder.js` and `surveys.js`, and those come from
+    // another origin: without `crossorigin` the browser blanks anything they
+    // throw down to the string "Script error.".
+    const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(options['prepare_external_dependency_script']).toBe(readableExternalScript);
+  });
+
+  it('marks events through the opaque-exception annotator, dropping none', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+
+    const { markOpaqueExceptions } = await importPosthog();
 
     // The function is tested on its own below; what this asserts is that it is
-    // actually wired in. A filter nothing calls is the easy way for this to
+    // actually wired in. A hook nothing calls is the easy way for this to
     // regress silently the next time the init options are edited.
     const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
-    expect(options['before_send']).toBe(dropOpaqueExceptions);
+    expect(options['before_send']).toBe(markOpaqueExceptions);
   });
 });
 
 // ============================================================================
-// dropOpaqueExceptions
+// readableExternalScript
+// ============================================================================
+
+describe('readableExternalScript', () => {
+  it('requests the script with CORS, and returns it so it still loads', async () => {
+    const { readableExternalScript } = await importPosthog();
+    const script = document.createElement('script');
+
+    const prepared = readableExternalScript(script);
+
+    // `anonymous` is what makes the browser keep the real message and stack of
+    // anything the script throws. The asset host answers
+    // `access-control-allow-origin: *`, so the stricter fetch still succeeds.
+    expect(prepared.crossOrigin).toBe('anonymous');
+    // Returning `null` here would tell posthog-js not to load the script at
+    // all, which would silently turn off session replay and surveys.
+    expect(prepared).toBe(script);
+  });
+});
+
+// ============================================================================
+// markOpaqueExceptions
 // ============================================================================
 
 /** Builds the `$exception` shape posthog-js hands to `before_send`. */
@@ -245,22 +280,26 @@ function exceptionEvent(list: unknown): CaptureResult {
 /** One frame, enough to make a stack trace non-empty. */
 const SOME_FRAME = { filename: 'app.js', function: 'save', in_app: true };
 
-describe('dropOpaqueExceptions', () => {
+describe('markOpaqueExceptions', () => {
   it.each(['Script error.', 'Script error', '  Script error.  '])(
-    'drops a stackless %s, the error a browser refuses to describe',
+    'reports a stackless %s under one named issue',
     async (value) => {
-      const { dropOpaqueExceptions } = await importPosthog();
+      const { markOpaqueExceptions } = await importPosthog();
 
       // The real event behind this: Mobile Safari on `/trips`, synthetic and
-      // unhandled, no file, no line, no frames. Nothing in it can be fixed, and
-      // PostHog folds every such event from every unknown script into one
-      // issue that reopens forever.
-      expect(dropOpaqueExceptions(exceptionEvent([{ type: 'Error', value }]))).toBeNull();
+      // unhandled, no file, no line, no frames. It is still sent — it carries a
+      // URL, a session, a release and a replay — but it is filed under a name
+      // that says what it is rather than under a bare `Error`.
+      const event = markOpaqueExceptions(exceptionEvent([{ type: 'Error', value }]));
+
+      expect(event).not.toBeNull();
+      expect(event?.properties['opaque_cross_origin']).toBe(true);
+      expect(event?.properties['$exception_fingerprint']).toBe('opaque-cross-origin-script');
     },
   );
 
-  it('drops one whose stacktrace is present but empty', async () => {
-    const { dropOpaqueExceptions } = await importPosthog();
+  it('marks one whose stacktrace is present but empty', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
 
     // posthog-js normalizes an error with no usable frames to an empty array
     // rather than omitting the key. Both spellings mean the same nothing.
@@ -268,52 +307,73 @@ describe('dropOpaqueExceptions', () => {
       { type: 'Error', value: 'Script error.', stacktrace: { frames: [] } },
     ]);
 
-    expect(dropOpaqueExceptions(event)).toBeNull();
+    expect(markOpaqueExceptions(event)?.properties['opaque_cross_origin']).toBe(true);
   });
 
-  it('keeps a real error that happens to carry that message', async () => {
-    const { dropOpaqueExceptions } = await importPosthog();
+  it('leaves a real error that happens to carry that message alone', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
 
     // The message alone must never be the test. Application code is free to
     // throw `new Error('Script error.')`, and that error arrives with frames
-    // because it came from a same-origin script — which is exactly the event
-    // this filter exists to protect.
+    // because it came from a same-origin script. Regrouping it under the
+    // opaque fingerprint would bury a real bug in the noise bucket.
     const event = exceptionEvent([
       { type: 'Error', value: 'Script error.', stacktrace: { frames: [SOME_FRAME] } },
     ]);
 
-    expect(dropOpaqueExceptions(event)).toBe(event);
+    expect(markOpaqueExceptions(event)).toBe(event);
+    expect(event.properties['$exception_fingerprint']).toBeUndefined();
+    expect(event.properties['opaque_cross_origin']).toBeUndefined();
   });
 
-  it('keeps an exception whose list also holds a readable entry', async () => {
-    const { dropOpaqueExceptions } = await importPosthog();
+  it('leaves an exception whose list also holds a readable entry alone', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
 
     // A chained error: the opaque half says nothing, the other half says where.
-    // Dropping the whole event to silence one entry would lose the cause.
+    // That readable half is the cause, and it is what somebody would fix, so
+    // the event keeps the grouping PostHog computes from it.
     const event = exceptionEvent([
       { type: 'Error', value: 'Script error.' },
       { type: 'TypeError', value: 'x is undefined', stacktrace: { frames: [SOME_FRAME] } },
     ]);
 
-    expect(dropOpaqueExceptions(event)).toBe(event);
+    expect(markOpaqueExceptions(event)).toBe(event);
+    expect(event.properties['$exception_fingerprint']).toBeUndefined();
   });
 
-  it('keeps every ordinary exception', async () => {
-    const { dropOpaqueExceptions } = await importPosthog();
+  it('leaves every ordinary exception alone', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
 
     const event = exceptionEvent([{ type: 'TypeError', value: 'x is undefined' }]);
 
-    expect(dropOpaqueExceptions(event)).toBe(event);
+    expect(markOpaqueExceptions(event)).toBe(event);
+    expect(event.properties['opaque_cross_origin']).toBeUndefined();
   });
 
-  it('keeps events that are not exceptions at all', async () => {
-    const { dropOpaqueExceptions } = await importPosthog();
+  it('leaves events that are not exceptions at all alone', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
 
     // `before_send` sees every event, `$pageview` and `app_used` included. This
-    // filter has one job and must not become a general-purpose gate.
+    // hook has one job and must not become a general-purpose rewriter.
     const event = { uuid: 'u', event: 'app_used', properties: {} } as CaptureResult;
 
-    expect(dropOpaqueExceptions(event)).toBe(event);
+    expect(markOpaqueExceptions(event)).toBe(event);
+    expect(event.properties['opaque_cross_origin']).toBeUndefined();
+  });
+
+  it('never drops an event', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
+
+    // The property that matters most here: this hook reports, it does not
+    // filter. Returning `null` from `before_send` would discard the capture,
+    // and no input may ever make that happen.
+    for (const list of [
+      [{ type: 'Error', value: 'Script error.' }],
+      [{ type: 'TypeError', value: 'x is undefined' }],
+      [],
+    ]) {
+      expect(markOpaqueExceptions(exceptionEvent(list))).not.toBeNull();
+    }
   });
 
   it.each([
@@ -324,16 +384,16 @@ describe('dropOpaqueExceptions', () => {
     ['a list of nulls', [null]],
     ['a list of non-objects', ['Script error.']],
     ['an entry with no value', [{ type: 'Error' }]],
-  ])('passes %s through rather than throwing', async (_label, list) => {
-    const { dropOpaqueExceptions } = await importPosthog();
+  ])('passes %s through untouched rather than throwing', async (_label, list) => {
+    const { markOpaqueExceptions } = await importPosthog();
 
     // posthog-js calls this on the way out of every capture, and a throw here
-    // would surface as an error inside the error reporter. The unhappy paths
-    // return the input untouched; dropping is the deliberate case only.
+    // would surface as an error inside the error reporter.
     const event = list === null ? null : exceptionEvent(list);
 
-    expect(() => dropOpaqueExceptions(event)).not.toThrow();
-    expect(dropOpaqueExceptions(event)).toBe(event);
+    expect(() => markOpaqueExceptions(event)).not.toThrow();
+    expect(markOpaqueExceptions(event)).toBe(event);
+    expect(event?.properties['opaque_cross_origin']).toBeUndefined();
   });
 });
 
