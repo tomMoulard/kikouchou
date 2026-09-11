@@ -40,6 +40,7 @@ import { getGuestIdentityStorageKey } from '@/lib/sharing/guest-identity';
 import { cn } from '@/lib/utils';
 import { notify } from '@/lib/notifications';
 import type { Person, PersonId, ShareId, Trip, TripId } from '@/types';
+import { captureEvent } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -272,6 +273,11 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
       }
 
       if (isMountedRef.current) {
+        // The first step of the invitee funnel. `trip_link_opened` counts who
+        // arrived and `trip_joined` counts who finished; between them stood
+        // four pages that captured nothing, so a wizard people abandon looked
+        // exactly like a wizard nobody opened.
+        captureEvent('share_wizard_step', { step: 'identity', outcome: 'next' });
         navigate(`/share/${shareId}/room`);
       }
     } finally {

@@ -44,6 +44,7 @@ vi.mock('@/lib/posthog', () => ({
     register: (...args: unknown[]) => mockRegister(...args),
     capture: (...args: unknown[]) => mockCapture(...args),
   },
+  captureEvent: (...args: unknown[]) => mockCapture(...args),
   // Not `posthog.reset()`: the real helper also puts back the super properties
   // that `reset()` wipes. Mocking the named export is what keeps this test
   // honest about which one the provider calls.

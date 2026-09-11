@@ -46,6 +46,7 @@ import {
 } from '@/lib/db';
 import { getGuestIdentityStorageKey } from '@/lib/sharing/guest-identity';
 import { cn } from '@/lib/utils';
+import { captureEvent } from '@/lib/posthog';
 import type {
   Person,
   PersonId,
@@ -359,8 +360,18 @@ export const RoomSelectionStepPage = memo(function RoomSelectionStepPage(): Reac
    */
   const handleNavigateToTransport = useCallback((): void => {
     if (!shareId) return;
+    // One handler behind both buttons, so the outcome is read off the state
+    // rather than passed in: "Next" is disabled until a room is claimed, which
+    // makes an unclaimed exit a skip by construction. Skips are the number
+    // this step exists to produce — a wizard everybody skips through is a
+    // wizard asking for something the invitee cannot answer on their phone.
+    captureEvent('share_wizard_step', {
+      step: 'room',
+      outcome: claimedRoomId === undefined ? 'skip' : 'next',
+      room_count: rooms.length,
+    });
     navigate(`/share/${shareId}/transport`);
-  }, [shareId, navigate]);
+  }, [claimedRoomId, rooms.length, shareId, navigate]);
 
   // ============================================================================
   // Render

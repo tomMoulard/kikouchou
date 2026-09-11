@@ -26,6 +26,7 @@ import {
   THEME_PREFERENCES,
   type ThemePreference,
 } from '@/lib/theme';
+import { captureEvent } from '@/lib/posthog';
 
 // ============================================================================
 // Constants
@@ -68,6 +69,10 @@ export const ThemeSelector = memo(function ThemeSelector(): ReactElement {
       : DEFAULT_THEME_PREFERENCE,
     handleChange = useCallback(
       (value: ThemePreference): void => {
+        // `system` is the reason this is worth an event: it is the default,
+        // and a person who moves off it has told you their machine's setting
+        // is not what they want here. Nothing else in the app can report that.
+        captureEvent('theme_changed', { theme: value });
         setTheme(value);
       },
       [setTheme],

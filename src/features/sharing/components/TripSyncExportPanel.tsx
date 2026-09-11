@@ -30,6 +30,7 @@ import {
   splitIntoFrames,
 } from '@/lib/sharing';
 import type { Trip } from '@/types';
+import { captureEvent } from '@/lib/posthog';
 
 // ============================================================================
 // Types
@@ -123,6 +124,21 @@ const TripSyncExportPanel = memo(function TripSyncExportPanel({
 
         const encoded = encodeChangeset(changeset);
         const qrFrames = splitIntoFrames(encoded);
+
+        // The offline hand-off had no cover at all: a guest showing their
+        // phone to the host is the one way this app moves data with no
+        // network, and nothing said whether anybody uses it. `frame_count` is
+        // the part that decides whether they can — a changeset that needs
+        // eight QR frames is eight scans, and that is where people give up.
+        //
+        // `shareId` rather than the `isHostExport` state: the state was set a
+        // few lines up in this same run and React has not applied it yet, so
+        // reading it here would report every host export as a guest one.
+        captureEvent('trip_sync_exported', {
+          mode: shareId === undefined ? 'host' : 'guest',
+          frame_count: qrFrames.length,
+          payload_bytes: encoded.length,
+        });
 
         if (isMountedRef.current) {
           setFrames(qrFrames);

@@ -54,7 +54,7 @@ import {
   getCapturedAuthError,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import posthog, { reportError, resetAnalyticsIdentity } from '@/lib/posthog';
+import posthog, { captureEvent, reportError, resetAnalyticsIdentity } from '@/lib/posthog';
 
 import { getAccountDisplayName } from './display-name';
 import type { Web3Chain } from './web3';
@@ -82,6 +82,16 @@ export type SignInOutcome =
   /** No backend in this build, so there was nothing to try. */
   | { readonly status: 'unavailable' }
   | { readonly status: 'error'; readonly message: string };
+
+/**
+ * The ways into an account, as analytics names them.
+ *
+ * Deliberately not the provider id: `signInWithProvider` takes whatever id
+ * this project's `/auth/v1/settings` lists, and the whole point of that
+ * discovery is that the app does not hold a provider list. `oauth` is the
+ * shape of the attempt, which is what a funnel breaks down by.
+ */
+export type SignInMethod = 'oauth' | 'email-link' | 'wallet' | 'passkey';
 
 /**
  * How enrolling a passkey ended.
@@ -492,7 +502,7 @@ export function AuthProvider({
             if (isRegistrationSignIn(nextUser) && !hasReportedRegistration(nextUser.id)) {
               rememberReportedRegistration(nextUser.id);
               const provider: unknown = nextUser.app_metadata?.['provider'];
-              posthog?.capture(
+              captureEvent(
                 'account_registered',
                 typeof provider === 'string' && provider !== ''
                   ? { auth_provider: provider }
@@ -600,16 +610,33 @@ export function AuthProvider({
    */
   const runSignIn = useCallback(
     async (
+      method: SignInMethod,
       attempt: (activeClient: SupabaseClient) => Promise<SignInOutcome>,
     ): Promise<SignInOutcome> => {
       if (!isAvailable) {
+        // Reported, rather than returned quietly: a build with no backend is
+        // exactly the case where somebody pressing a sign-in button is worth
+        // knowing about, and it never reaches `settle` below.
+        captureEvent('sign_in_failed', { method, reason: 'unavailable' });
         return { status: 'unavailable' };
       }
 
+      // Every way in passes through here, so this is the one place an attempt
+      // can be counted. Only the account's *arrival* was captured before —
+      // `account_registered`, and only for a first sign-in — which left the
+      // denominator missing: a provider that fails for everybody produced no
+      // events at all, and read as nobody trying.
+      captureEvent('sign_in_started', { method });
       setIsSigningIn(true);
       setExchangeError(null);
 
       const settle = (outcome: SignInOutcome): SignInOutcome => {
+        // `status` rather than the provider's message: the message is written
+        // by GoTrue, can carry an email address, and is not a value anybody
+        // can break a chart down by.
+        if (outcome.status === 'error' || outcome.status === 'unavailable') {
+          captureEvent('sign_in_failed', { method, reason: outcome.status });
+        }
         // `redirecting` is the exception: the browser is on its way to the
         // provider, so the flag stays set and the buttons stay disabled for the
         // remainder of this document's life.
@@ -639,7 +666,7 @@ export function AuthProvider({
 
   const signInWithProvider = useCallback(
     (providerId: string): Promise<SignInOutcome> =>
-      runSignIn(async (activeClient) => {
+      runSignIn('oauth', async (activeClient) => {
         const { error } = await activeClient.auth.signInWithOAuth({
           // The id came from this project's own `/auth/v1/settings`, whose
           // `external` map is keyed by exactly these ids — so the cast asserts
@@ -661,7 +688,7 @@ export function AuthProvider({
 
   const signInWithEmailLink = useCallback(
     (email: string): Promise<SignInOutcome> =>
-      runSignIn(async (activeClient) => {
+      runSignIn('email-link', async (activeClient) => {
         const { error } = await activeClient.auth.signInWithOtp({
           email,
           // Same destination as the OAuth redirect, for the same reason: the
@@ -678,7 +705,7 @@ export function AuthProvider({
 
   const signInWithWallet = useCallback(
     (chain: Web3Chain, statement: string): Promise<SignInOutcome> =>
-      runSignIn(async (activeClient) => {
+      runSignIn('wallet', async (activeClient) => {
         // Built per chain rather than spread from the parameter: the credentials
         // type is a union discriminated on `chain`, and a widened
         // `'solana' | 'ethereum'` matches neither arm.
@@ -695,7 +722,7 @@ export function AuthProvider({
 
   const signInWithPasskey = useCallback(
     (): Promise<SignInOutcome> =>
-      runSignIn(async (activeClient) => {
+      runSignIn('passkey', async (activeClient) => {
         // Throws rather than returning an error when `experimental.passkey` is
         // off in `lib/supabase/client` — `runSignIn` catches that too.
         const { error } = await activeClient.auth.signInWithPasskey();
@@ -740,6 +767,15 @@ export function AuthProvider({
     // 'local' scope clears this device's session without calling the server, so
     // signing out works offline. A global sign-out would need the network and
     // would fail exactly when someone wants to hand their phone over.
+    // Captured before the call, not after, and that ordering is the whole
+    // point: signing out makes the auth listener above run
+    // `resetAnalyticsIdentity()`, which mints a fresh anonymous person. An
+    // event captured after that race would be attributed to the new person
+    // instead of to the account that left. Counting the intent rather than the
+    // outcome costs nothing here — a local sign-out clears this device's
+    // session and the catch below only logs.
+    captureEvent('signed_out');
+
     try {
       await client.auth.signOut({ scope: 'local' });
     } catch (error: unknown) {
