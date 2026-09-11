@@ -9,6 +9,7 @@ import { type CSSProperties, type PointerEvent, type ReactElement, memo } from '
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { useTranslation } from 'react-i18next';
+import { GripVertical } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { PersonBadge } from '@/components/shared/PersonBadge';
@@ -218,6 +219,9 @@ const DraggableGuest = memo(function DraggableGuest(props: DraggableGuestProps):
           className={handleClassName}
           aria-label={person.name}
         >
+          {/* Same grip the housed guest's pill carries, so both rows say
+              "drag me" in the same way before the cursor changes. */}
+          <GripVertical className="-ml-1 size-3 shrink-0 opacity-70" aria-hidden="true" />
           <span className="truncate">{person.name}</span>
         </div>
         {menu}
