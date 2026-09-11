@@ -22,6 +22,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorDisplay } from '@/components/shared/ErrorDisplay';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { AnalyticsScopeSelector } from '@/features/analytics/components/AnalyticsScopeSelector';
+import { SpendTimelineChart } from '@/features/analytics/components/SpendTimelineChart';
 import { StatCard } from '@/features/analytics/components/StatCard';
 import { useMoneyFormat } from '@/features/money/hooks/useMoneyFormat';
 import { useAnalyticsClock } from '@/features/analytics/hooks/useAnalyticsClock';
@@ -362,6 +363,19 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
           testId="stat-pickups"
         />
       </div>
+
+      {/* Under the cards rather than among them: the total says what the trip
+          cost, and this says when it was spent — the deposit in March, then a
+          fortnight of groceries. A card-sized version of it would be too small
+          to read either fact from. Left out entirely when no money line carries
+          a date, because an empty chart is a blank rectangle the reader has to
+          interpret. */}
+      {stats.spendTimeline !== null && (
+        <SpendTimelineChart
+          timeline={stats.spendTimeline}
+          formatMoney={formatMoney}
+        />
+      )}
     </div>
   );
 });

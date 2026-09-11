@@ -18,6 +18,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { waitForRoute } from './support/routes';
 import {
+  seedExpense,
   seedPerson,
   seedRide,
   seedTransport,
@@ -236,6 +237,46 @@ test.describe('Analytics', () => {
 
     await openRoute(page, `/trips/${second.tripId}/analytics`);
     await expect(page.getByTestId('stat-people')).toHaveText('7');
+  });
+
+  test('the spend chart draws one line through every day, gaps included', async ({ page }) => {
+    await clearIndexedDB(page);
+
+    const { tripId } = await seedTrip(page, {
+      name: 'Spending Trip',
+      startDate: isoDate(1),
+      endDate: isoDate(6),
+    });
+    const alice = await seedPerson(page, tripId, 'Alice', '#3b82f6');
+
+    // Two receipts three days apart, and a refund on the last day: the three
+    // cases the chart has to keep apart — a bar, an empty day, and money given
+    // back.
+    await seedExpense(page, {
+      tripId,
+      date: isoDate(1),
+      title: 'Deposit',
+      amount: 300,
+      payerId: alice,
+      splits: [{ personId: alice, value: 1 }],
+    });
+    await seedExpense(page, {
+      tripId,
+      date: isoDate(4),
+      title: 'Groceries',
+      amount: 60,
+      payerId: alice,
+      splits: [{ personId: alice, value: 1 }],
+    });
+
+    await openRoute(page, `/trips/${tripId}/analytics`);
+
+    await expect(page.getByTestId('spend-timeline-chart')).toBeVisible();
+    // 1, 2, 3 and 4 days out: the two empty days in the middle are drawn, so
+    // the axis is the calendar and not the list of receipts.
+    await expect(page.getByTestId('spend-timeline-point')).toHaveCount(4);
+    // The bars and the card above them come from the same lines.
+    await expect(page.getByTestId('stat-spend')).toContainText('360');
   });
 
   test('a trip with nothing in it shows an empty state, not a wall of zeros', async ({

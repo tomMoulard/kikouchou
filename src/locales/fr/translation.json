@@ -136,7 +136,19 @@
     "unsettledSettled": "Tout le monde est à jour",
     "totalSpend": "Total dépensé",
     "totalUnsettled": "Reste dû",
-    "mixedCurrencies": "Ces séjours sont tenus dans des devises différentes"
+    "mixedCurrencies": "Ces séjours sont tenus dans des devises différentes",
+    "spendTimeline": "Dépenses dans le temps",
+    "spendTimelineUnit": {
+      "day": "jour par jour",
+      "week": "semaine par semaine",
+      "month": "mois par mois"
+    },
+    "spendTimelineCaption": "Ce que le séjour avait coûté, {{step}} · {{total}} au total",
+    "spendTimelinePointTitle": "{{when}} : {{amount}} · {{total}} à ce stade",
+    "spendTimelineWhen": "Quand",
+    "spendTimelineRunningTotal": "Total à ce stade",
+    "spendTimelineAriaLabel_one": "Ce que le séjour avait coûté au fil du temps : 1 point, {{total}} au total",
+    "spendTimelineAriaLabel_other": "Ce que le séjour avait coûté au fil du temps : {{count}} points, {{total}} au total"
   },
   "trips": {
     "title": "Mes voyages",
