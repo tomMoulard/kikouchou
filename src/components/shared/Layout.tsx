@@ -58,6 +58,13 @@ import { useWideViewport } from '@/hooks/usePhoneViewport';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
+import {
+  CalendarSolid,
+  HouseSolid,
+  type SolidIconProps,
+  UsersSolid,
+  WalletSolid,
+} from '@/components/shared/nav-icons';
 import { formatDateRange } from '@/lib/utils/date-format';
 import type { Trip } from '@/types';
 
@@ -83,9 +90,24 @@ interface NavItem {
   readonly pathSuffix: string;
   /** Lucide icon component */
   readonly icon: LucideIcon;
+  /**
+   * Solid twin of {@link NavItem.icon}, drawn instead of it in the mobile tab
+   * bar while this item is the current page.
+   *
+   * Only the primary tabs carry one — see `components/shared/nav-icons` for why
+   * the set is closed. An item without one keeps its outline and is marked
+   * current by colour alone, as everything did before.
+   */
+  readonly activeIcon?: SolidIcon;
   /** Whether this route requires a trip (trip-scoped) */
   readonly requiresTrip: boolean;
 }
+
+/**
+ * A filled glyph drawn in place of an outline one. Structurally what a
+ * `LucideIcon` is used as here, minus the stroke props a fill ignores.
+ */
+type SolidIcon = (props: SolidIconProps) => React.ReactElement;
 
 /**
  * Props for the navigation components.
@@ -111,10 +133,34 @@ interface LayoutProps {
  * Navigation items that require a trip to be selected.
  */
 const TRIP_NAV_ITEMS: readonly NavItem[] = [
-  { labelKey: 'nav.calendar', pathSuffix: 'calendar', icon: Calendar, requiresTrip: true },
-  { labelKey: 'nav.rooms', pathSuffix: 'rooms', icon: Home, requiresTrip: true },
-  { labelKey: 'nav.persons', pathSuffix: 'persons', icon: Users, requiresTrip: true },
-  { labelKey: 'nav.money', pathSuffix: 'money', icon: Wallet, requiresTrip: true },
+  {
+    labelKey: 'nav.calendar',
+    pathSuffix: 'calendar',
+    icon: Calendar,
+    activeIcon: CalendarSolid,
+    requiresTrip: true,
+  },
+  {
+    labelKey: 'nav.rooms',
+    pathSuffix: 'rooms',
+    icon: Home,
+    activeIcon: HouseSolid,
+    requiresTrip: true,
+  },
+  {
+    labelKey: 'nav.persons',
+    pathSuffix: 'persons',
+    icon: Users,
+    activeIcon: UsersSolid,
+    requiresTrip: true,
+  },
+  {
+    labelKey: 'nav.money',
+    pathSuffix: 'money',
+    icon: Wallet,
+    activeIcon: WalletSolid,
+    requiresTrip: true,
+  },
   // The trip's cars are deliberately absent: they hang off the transport list
   // (`/transports/vehicles`), because a car is only ever entered in order to be
   // picked on a ride and nobody navigates to one for its own sake.
@@ -415,15 +461,24 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
                   aria-current={isDisabled ? 'false' : 'page'}
                   aria-describedby={isDisabled ? disabledHintId : undefined}
                 >
-                  {({ isActive }) => (
-                    <>
-                      <item.icon
-                        className={cn('h-5 w-5', isActive && !isDisabled && 'text-primary')}
-                        aria-hidden="true"
-                      />
-                      <span>{t(item.labelKey)}</span>
-                    </>
-                  )}
+                  {({ isActive }) => {
+                    // The current tab is drawn filled, not merely tinted. One
+                    // coloured outline among four outlines is easy to miss on a
+                    // phone; a solid glyph is the difference people actually
+                    // see, and it does not depend on telling two colours apart.
+                    const isCurrent = isActive && !isDisabled,
+                     Icon = isCurrent ? (item.activeIcon ?? item.icon) : item.icon;
+
+                    return (
+                      <>
+                        <Icon
+                          className={cn('h-5 w-5', isCurrent && 'text-primary')}
+                          aria-hidden="true"
+                        />
+                        <span>{t(item.labelKey)}</span>
+                      </>
+                    );
+                  }}
                 </NavLink>
               </li>
             );

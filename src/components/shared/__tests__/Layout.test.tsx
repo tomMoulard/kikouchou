@@ -504,6 +504,65 @@ describe('Layout', () => {
   });
 
   // ============================================================================
+  // Current Tab Tests
+  // ============================================================================
+
+  describe('Mobile nav current tab', () => {
+    beforeEach(() => {
+      mockUseTripContext.mockReturnValue({
+        currentTrip: mockTrip,
+        trips: [mockTrip],
+        isLoading: false,
+        error: null,
+        setCurrentTrip: vi.fn(),
+        checkConnection: vi.fn(),
+      });
+    });
+
+    /**
+     * lucide stamps every icon it renders with a `lucide` class. The solid
+     * twins in `nav-icons` are plain SVGs and carry none, which is what these
+     * assertions read: colour alone used to be the only difference between the
+     * current tab and the other three, and on a phone that was not enough to
+     * tell people which page they were on.
+     */
+    function iconOf(label: string): SVGSVGElement | null {
+      const mobileNav = getMobileNav(),
+       link = within(mobileNav as HTMLElement).getByText(label).closest('a');
+      return link?.querySelector('svg') ?? null;
+    }
+
+    it('draws the current tab filled rather than as an outline', () => {
+      renderLayoutAt(`/trips/${mockTrip.id}/rooms`);
+
+      expect(iconOf('nav.rooms')?.getAttribute('class') ?? '').not.toContain('lucide');
+    });
+
+    it('leaves every other tab as an outline', () => {
+      renderLayoutAt(`/trips/${mockTrip.id}/rooms`);
+
+      for (const label of ['nav.calendar', 'nav.persons', 'nav.money']) {
+        expect(iconOf(label)?.getAttribute('class') ?? '').toContain('lucide');
+      }
+    });
+
+    it('follows the route to another tab', () => {
+      renderLayoutAt(`/trips/${mockTrip.id}/money`);
+
+      expect(iconOf('nav.money')?.getAttribute('class') ?? '').not.toContain('lucide');
+      expect(iconOf('nav.rooms')?.getAttribute('class') ?? '').toContain('lucide');
+    });
+
+    it('still marks the current tab for a screen reader', () => {
+      renderLayoutAt(`/trips/${mockTrip.id}/rooms`);
+
+      const mobileNav = getMobileNav(),
+       roomsLink = within(mobileNav as HTMLElement).getByText('nav.rooms').closest('a');
+      expect(roomsLink).toHaveAttribute('aria-current', 'page');
+    });
+  });
+
+  // ============================================================================
   // Sidebar Collapse Tests
   // ============================================================================
 
