@@ -16,6 +16,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFormSubmission, useOfflineAwareNotify } from '@/hooks';
+import { useStalled } from '@/hooks/useStalled';
 import { parseISO } from 'date-fns';
 
 import { AlertTriangle, Loader2 } from 'lucide-react';
@@ -357,17 +358,21 @@ const QuickAssignmentDialog = memo(function QuickAssignmentDialog(props: QuickAs
     }
   }, [isFormValid, effectivePerson, roomId, dateRange, doSubmit]);
 
+  // Same escape hatch as AllocationSuggestionDialog: a submission that never
+  // settles must not hold a modal — and with it the whole page — open forever.
+  const isSubmitStalled = useStalled(isSubmitting);
+
   // Prevent closing during submission and guard dirty state
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
-      if (isSubmitting && !newOpen) return;
+      if (isSubmitting && !isSubmitStalled && !newOpen) return;
       if (!newOpen && isDirty) {
         setShowDiscardConfirm(true);
         return;
       }
       onOpenChange(newOpen);
     },
-    [isSubmitting, isDirty, onOpenChange],
+    [isSubmitting, isSubmitStalled, isDirty, onOpenChange],
   );
 
   /**

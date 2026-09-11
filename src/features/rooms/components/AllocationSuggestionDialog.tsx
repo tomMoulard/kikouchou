@@ -45,6 +45,7 @@ import {
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { formatDateRange } from '@/lib/utils/date-format';
 import { cn } from '@/lib/utils';
+import { useStalled } from '@/hooks/useStalled';
 import type { Person, Room, RoomAssignment, RoomId } from '@/types';
 
 // ============================================================================
@@ -308,14 +309,20 @@ const AllocationSuggestionDialog = memo(function AllocationSuggestionDialog(
     }
   }, [confirmed, isApplying, onApply, onOpenChange]);
 
+  // A write that never settles used to hold this dialog open forever, and a
+  // modal makes the page behind it inert — so the rooms page read as frozen
+  // rather than as busy. The lock still covers a real save; it no longer
+  // outlives one.
+  const isApplyStalled = useStalled(isApplying);
+
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
-      if (isApplying && !nextOpen) {
+      if (isApplying && !isApplyStalled && !nextOpen) {
         return;
       }
       onOpenChange(nextOpen);
     },
-    [isApplying, onOpenChange],
+    [isApplying, isApplyStalled, onOpenChange],
   );
 
   return (
