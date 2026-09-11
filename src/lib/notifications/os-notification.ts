@@ -125,6 +125,12 @@ async function ensurePermission(): Promise<NotificationPermission> {
     return current;
   }
 
+  // Cleared once it settles, so only genuinely concurrent callers share one
+  // prompt. Keeping it forever made a dismissal permanent: a dismissed prompt
+  // leaves the permission at `default`, the early return above does not fire,
+  // and every later call returned this same resolved promise instead of asking
+  // again — so the second tap on "enable reminders" did nothing at all, in
+  // silence, for the rest of the tab.
   permissionRequest ??= (async (): Promise<NotificationPermission> => {
     try {
       await Notification.requestPermission();
@@ -137,7 +143,11 @@ async function ensurePermission(): Promise<NotificationPermission> {
     return osNotificationPermission();
   })();
 
-  return permissionRequest;
+  try {
+    return await permissionRequest;
+  } finally {
+    permissionRequest = null;
+  }
 }
 
 // ============================================================================
