@@ -593,4 +593,66 @@ describe('RoomCard', () => {
     );
     expect(screen.getByText('Main Bedroom')).toBeInTheDocument();
   });
+
+  // jsdom does not lay anything out, so these pin the arrangement that decides
+  // where the ellipsis falls rather than the pixel it falls on. A long name
+  // used to share a flex row with the capacity badge inside a grid track that
+  // could not hold it: the badge took a third of the row away from the name on
+  // a phone, and the row grew past the card, so the page scrolled sideways.
+  describe('room name width', () => {
+    const longRoom: Room = {
+      ...mockRoom,
+      name: 'Chambre des enfants tout au fond du couloir du premier étage',
+    };
+
+    function renderLongRoom() {
+      return render(
+        <RoomCard
+          room={longRoom}
+          occupants={[]}
+          peakOccupancy={0}
+          availableSpots={4}
+          isFull={false}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+        />,
+        { withProviders: false },
+      );
+    }
+
+    it('keeps the whole name in the DOM and in its tooltip', () => {
+      renderLongRoom();
+      const name = screen.getByText(longRoom.name);
+      expect(name).toBeInTheDocument();
+      expect(name.getAttribute('title')).toContain(longRoom.name);
+    });
+
+    it('gives the name a row of its own, as wide as the card', () => {
+      renderLongRoom();
+      const name = screen.getByText(longRoom.name);
+      const header = name.parentElement;
+
+      // A direct child of the card header's grid: no intermediate flex row to
+      // grow past the track, and no sibling on the line to shorten it.
+      expect(header?.dataset.slot).toBe('card-header');
+      expect(header?.className).not.toContain('pr-12');
+
+      // `min-w-0` lets it shrink to the track, `truncate` ends it with an
+      // ellipsis there, and `pr-12` is the only width it gives up — the corner
+      // the menu button floats over.
+      expect(name).toHaveClass('min-w-0', 'truncate', 'pr-12');
+    });
+
+    it('puts the capacity badge below the name, not beside it', () => {
+      renderLongRoom();
+      const name = screen.getByText(longRoom.name);
+      const badge = screen.getByText(String(longRoom.capacity));
+
+      expect(badge).not.toHaveClass('pr-12');
+      expect(name.contains(badge)).toBe(false);
+      expect(
+        name.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+  });
 });
