@@ -397,6 +397,49 @@
 }
 
 /*
+ * Hide a PostHog survey while a modal is open, and give it back afterwards.
+ *
+ * Creating a room and being asked for feedback at the same time deadlocked the
+ * page: the survey popup was painted over the dialog, but nothing in it could
+ * be clicked or typed into, and the only way out was to close the half-filled
+ * room form. Stacking order was never the problem — posthog-js gives the popup
+ * `z-index: 2147483645`, far above the app's `z-50` dialog layer, so it really
+ * was the top-most thing on screen.
+ *
+ * What blocks it is the modality of the dialog underneath. A Radix modal sets
+ * `pointer-events: none` on `body` and traps focus inside its content, so every
+ * pointer event over the popup is discarded and every focus the popup takes is
+ * pulled straight back into the dialog. The popup is a `div.PostHogSurvey-<id>`
+ * appended to `body` (or to a host element for an inline survey), which puts it
+ * outside the dialog on both counts.
+ *
+ * Letting it through instead was considered and dropped: restoring
+ * `pointer-events` is one line, but the first click would then reach Radix's
+ * dismiss layer as an outside interaction and close the dialog the person was
+ * filling in, and the focus trap would still refuse the text field.
+ *
+ * So the survey waits. `display: none` leaves it mounted with its shadow root
+ * intact, and it reappears exactly as it was the moment the last modal closes,
+ * which is when it can finally be answered. PostHog has already captured
+ * `survey shown` by then; only the time to dismissal is skewed, and the survey
+ * is not marked seen until the person dismisses or completes it.
+ *
+ * The three overlays are the app's modal layers — dialog, sheet and alert
+ * dialog, all three of them Radix `Dialog` underneath. Popovers, selects and
+ * dropdown menus are left out: they make nothing outside them inert, and they
+ * close on the outside click anyway. Radix unmounts an overlay with its
+ * content, so the presence of one in the DOM is what "a modal is open" means.
+ */
+body:has(
+    [data-slot='dialog-overlay'],
+    [data-slot='sheet-overlay'],
+    [data-slot='alert-dialog-overlay']
+  )
+  div[class*='PostHogSurvey-'] {
+  display: none;
+}
+
+/*
  * Paper.
  *
  * `print:hidden` on the header, the sidebar and the bottom bar removes the
