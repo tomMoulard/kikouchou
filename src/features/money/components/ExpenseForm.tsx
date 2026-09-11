@@ -36,15 +36,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { ExpenseCategoryIcon } from '@/features/money/components/ExpenseCategoryIcon';
+import { ExpenseCategoryPicker } from '@/features/money/components/ExpenseCategoryPicker';
 import { useMoneyFormat } from '@/features/money/hooks/useMoneyFormat';
 import { computeExpenseShares } from '@/features/money/lib/expense-split';
 import type { PersonNightCounts } from '@/features/money/lib/expense-split';
+import { splitAmountByWeights } from '@/features/money/lib/weighted-split';
 import { cn } from '@/lib/utils';
 import {
   DEFAULT_EXPENSE_CATEGORY,
   DEFAULT_EXPENSE_SPLIT_MODE,
-  EXPENSE_CATEGORIES,
   EXPENSE_KINDS,
   EXPENSE_SPLIT_MODES,
   MAX_EXPENSE_AMOUNT,
@@ -114,6 +114,15 @@ interface FormState {
   beneficiaryIds: PersonId[];
   /** Parts or amounts per guest, as typed. Kept for guests not currently picked. */
   values: Record<string, string>;
+  /**
+   * The guests whose figure was typed by hand.
+   *
+   * Everybody else is shown what the rule starts them on, recomputed as the
+   * total and the guest list change. Without this flag the two are the same
+   * field, and a default recomputed over a typed figure is the form losing
+   * something the user wrote.
+   */
+  touched: Record<string, boolean>;
   /** The guest being paid, for a transfer. */
   recipientId: PersonId | '';
   description: string;
@@ -159,8 +168,12 @@ function getInitialFormState(
 ): FormState {
   if (expense) {
     const values: Record<string, string> = {};
+    const touched: Record<string, boolean> = {};
     for (const split of expense.splits ?? []) {
       values[split.personId] = String(split.value);
+      // A saved line's figures were typed by somebody, so no default may
+      // overwrite them when the form reopens.
+      touched[split.personId] = true;
     }
 
     return {
@@ -173,6 +186,7 @@ function getInitialFormState(
       splitMode: expense.splitMode,
       beneficiaryIds: (expense.splits ?? []).map((split) => split.personId),
       values,
+      touched,
       recipientId: expense.splits?.[0]?.personId ?? '',
       description: expense.description ?? '',
     };
@@ -190,9 +204,47 @@ function getInitialFormState(
     // it" and what they would otherwise tap once per guest.
     beneficiaryIds: persons.map((person) => person.id),
     values: {},
+    touched: {},
     recipientId: '',
     description: '',
   };
+}
+
+/**
+ * The figure a split rule starts each picked guest on.
+ *
+ * Both rules that ask for a figure start from the same place — one part each —
+ * so that a group that picked a rule has a filled-in column to correct rather
+ * than an empty one to type. The `amounts` rule says that in money, and it says
+ * it through the same division the page uses everywhere else, so the defaults
+ * add up to the total to the cent before anybody touches them.
+ *
+ * @param mode - The split rule in force
+ * @param beneficiaryIds - The guests the line is for, in the order shown
+ * @param amount - The line's total
+ * @returns The default figure per guest, as it goes in the field. Empty for the
+ *   rules that ask for no figure, and for an `amounts` line with no total yet.
+ */
+function getSplitDefaults(
+  mode: ExpenseSplitMode,
+  beneficiaryIds: readonly PersonId[],
+  amount: number,
+): Record<string, string> {
+  if (mode === 'shares') {
+    return Object.fromEntries(beneficiaryIds.map((personId) => [personId, '1']));
+  }
+
+  if (mode === 'amounts' && amount > 0) {
+    const even = splitAmountByWeights(
+      beneficiaryIds.map(() => 1),
+      amount,
+    );
+    return Object.fromEntries(
+      beneficiaryIds.map((personId, index) => [personId, String(even[index] ?? 0)]),
+    );
+  }
+
+  return {};
 }
 
 /**
@@ -292,6 +344,35 @@ const ExpenseForm = memo(function ExpenseForm({
   const amount = parseNumber(formState.amount) ?? 0;
 
   /**
+   * The figure per guest as the fields read: what was typed where something
+   * was typed, and what the rule starts the guest on everywhere else.
+   *
+   * Derived rather than written into the state, so the defaults follow the
+   * guest list and the total on their own and no effect has to chase them.
+   */
+  const effectiveValues = useMemo(() => {
+    const defaults = getSplitDefaults(
+      formState.splitMode,
+      formState.beneficiaryIds,
+      amount,
+    );
+
+    const resolved: Record<string, string> = {};
+    for (const personId of formState.beneficiaryIds) {
+      resolved[personId] = formState.touched[personId]
+        ? (formState.values[personId] ?? '')
+        : (defaults[personId] ?? '');
+    }
+    return resolved;
+  }, [
+    amount,
+    formState.beneficiaryIds,
+    formState.splitMode,
+    formState.touched,
+    formState.values,
+  ]);
+
+  /**
    * The shares as the line currently reads, for the preview under the picker.
    */
   const preview = useMemo(() => {
@@ -301,7 +382,7 @@ const ExpenseForm = memo(function ExpenseForm({
         : []
       : formState.beneficiaryIds.map((personId) => ({
           personId,
-          value: parseNumber(formState.values[personId] ?? '') ?? 0,
+          value: parseNumber(effectiveValues[personId] ?? '') ?? 0,
         }));
 
     return computeExpenseShares(
@@ -314,10 +395,10 @@ const ExpenseForm = memo(function ExpenseForm({
     );
   }, [
     amount,
+    effectiveValues,
     formState.beneficiaryIds,
     formState.recipientId,
     formState.splitMode,
-    formState.values,
     isTransfer,
     personNights,
   ]);
@@ -339,11 +420,11 @@ const ExpenseForm = memo(function ExpenseForm({
       formState.splitMode === 'amounts'
         ? formState.beneficiaryIds.reduce(
             (total, personId) =>
-              total + (parseNumber(formState.values[personId] ?? '') ?? 0),
+              total + (parseNumber(effectiveValues[personId] ?? '') ?? 0),
             0,
           )
         : 0,
-    [formState.beneficiaryIds, formState.splitMode, formState.values],
+    [effectiveValues, formState.beneficiaryIds, formState.splitMode],
   );
 
   const amountsMatch =
@@ -386,7 +467,7 @@ const ExpenseForm = memo(function ExpenseForm({
     } else if (
       formState.splitMode === 'shares' &&
       formState.beneficiaryIds.every(
-        (personId) => (parseNumber(formState.values[personId] ?? '') ?? 0) <= 0,
+        (personId) => (parseNumber(effectiveValues[personId] ?? '') ?? 0) <= 0,
       )
     ) {
       newErrors.splits = t('money.expense.errors.sharesRequired');
@@ -401,7 +482,7 @@ const ExpenseForm = memo(function ExpenseForm({
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [amountsMatch, formState, isTransfer, personNights, t]);
+  }, [amountsMatch, effectiveValues, formState, isTransfer, personNights, t]);
 
   // ==========================================================================
   // Event Handlers
@@ -412,8 +493,8 @@ const ExpenseForm = memo(function ExpenseForm({
     setErrors((prev) => (prev.splits ? { ...prev, splits: undefined } : prev));
   }, []);
 
-  const handleCategoryChange = useCallback((value: string) => {
-    setFormState((prev) => ({ ...prev, category: value as ExpenseCategory }));
+  const handleCategoryChange = useCallback((category: ExpenseCategory) => {
+    setFormState((prev) => ({ ...prev, category }));
   }, []);
 
   const handleTitleChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -450,7 +531,15 @@ const ExpenseForm = memo(function ExpenseForm({
   }, []);
 
   const handleSplitModeChange = useCallback((value: string) => {
-    setFormState((prev) => ({ ...prev, splitMode: value as ExpenseSplitMode }));
+    setFormState((prev) => ({
+      ...prev,
+      splitMode: value as ExpenseSplitMode,
+      // A new rule means a new unit: parts typed under "by parts" are not
+      // amounts, so what was typed is dropped and the new rule's own defaults
+      // fill the column instead.
+      values: {},
+      touched: {},
+    }));
     setErrors((prev) => (prev.splits ? { ...prev, splits: undefined } : prev));
   }, []);
 
@@ -481,6 +570,7 @@ const ExpenseForm = memo(function ExpenseForm({
       setFormState((prev) => ({
         ...prev,
         values: { ...prev.values, [personId]: value },
+        touched: { ...prev.touched, [personId]: true },
       }));
       setErrors((prev) => (prev.splits ? { ...prev, splits: undefined } : prev));
     },
@@ -517,7 +607,7 @@ const ExpenseForm = memo(function ExpenseForm({
             // rule earlier in this edit.
             value:
               formState.splitMode === 'shares' || formState.splitMode === 'amounts'
-                ? (parseNumber(formState.values[personId] ?? '') ?? 0)
+                ? (parseNumber(effectiveValues[personId] ?? '') ?? 0)
                 : 1,
           }));
 
@@ -541,7 +631,7 @@ const ExpenseForm = memo(function ExpenseForm({
         // Error surfaced by useFormSubmission via submitError
       }
     },
-    [validateForm, doSubmit, formState, isTransfer],
+    [validateForm, doSubmit, effectiveValues, formState, isTransfer],
   );
 
   // ==========================================================================
@@ -581,54 +671,40 @@ const ExpenseForm = memo(function ExpenseForm({
         </p>
       </div>
 
-      {/* Title */}
+      {/* Title, with the category as the icon in front of it — a transfer is not
+          spending, so it has nothing to categorise */}
       <div className="space-y-2">
         <Label htmlFor="expense-title">
           {t('money.expense.title_field')}
           <span className="text-destructive ml-1" aria-hidden="true">*</span>
         </Label>
-        <Input
-          id="expense-title"
-          type="text"
-          value={formState.title}
-          onChange={handleTitleChange}
-          placeholder={t('money.expense.titlePlaceholder')}
-          aria-invalid={Boolean(errors.title)}
-          aria-describedby={errors.title ? 'expense-title-error' : undefined}
-          disabled={isSubmitting}
-        />
+        <div className="flex items-center gap-2">
+          {!isTransfer && (
+            <ExpenseCategoryPicker
+              id="expense-category"
+              value={formState.category}
+              onChange={handleCategoryChange}
+              disabled={isSubmitting}
+            />
+          )}
+          <Input
+            id="expense-title"
+            type="text"
+            className="min-w-0 flex-1"
+            value={formState.title}
+            onChange={handleTitleChange}
+            placeholder={t('money.expense.titlePlaceholder')}
+            aria-invalid={Boolean(errors.title)}
+            aria-describedby={errors.title ? 'expense-title-error' : undefined}
+            disabled={isSubmitting}
+          />
+        </div>
         {errors.title && (
           <p id="expense-title-error" className="text-sm text-destructive" role="alert">
             {errors.title}
           </p>
         )}
       </div>
-
-      {/* Category — a transfer is not spending, so it has nothing to categorise */}
-      {!isTransfer && (
-        <div className="space-y-2">
-          <Label htmlFor="expense-category">{t('money.expense.category')}</Label>
-          <Select
-            value={formState.category}
-            onValueChange={handleCategoryChange}
-            disabled={isSubmitting}
-          >
-            <SelectTrigger id="expense-category" className="w-full">
-              <SelectValue placeholder={t('money.expense.category')} />
-            </SelectTrigger>
-            <SelectContent>
-              {EXPENSE_CATEGORIES.map((category) => (
-                <SelectItem key={category} value={category}>
-                  <div className="flex items-center gap-2">
-                    <ExpenseCategoryIcon category={category} />
-                    {t(`money.expense.categories.${category}`)}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
 
       {/* Amount and day */}
       <div className="grid gap-4 sm:grid-cols-2">
@@ -843,7 +919,7 @@ const ExpenseForm = memo(function ExpenseForm({
                             min="0"
                             step={formState.splitMode === 'amounts' ? '0.01' : '1'}
                             className="w-24 shrink-0"
-                            value={formState.values[person.id] ?? ''}
+                            value={effectiveValues[person.id] ?? ''}
                             onChange={(event) =>
                               handleValueChange(person.id, event.target.value)
                             }

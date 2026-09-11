@@ -900,6 +900,9 @@
         "supplies": "Intendance",
         "other": "Autre"
       },
+      "categoryNamed": "Catégorie : {{name}}",
+      "categoryPick": "Choisissez une catégorie",
+      "categoryPickDescription": "Le genre de dépense de cette ligne.",
       "kind": "Type de ligne",
       "kinds": {
         "expense": "Dépense",
