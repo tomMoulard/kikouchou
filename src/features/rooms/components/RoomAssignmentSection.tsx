@@ -77,6 +77,7 @@ import type {
   RoomId,
 } from '@/types';
 import { toLocalISODateString } from '@/lib/db/utils';
+import { useStalled } from '@/hooks/useStalled';
 
 // ============================================================================
 // Type Definitions
@@ -492,17 +493,23 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
     }
   }, [isFormValid, selectedPersonId, dateRange, roomId, doSubmit]);
 
+  // The same escape hatch as the other two assignment dialogs: a write that
+  // never settles must not hold this modal, and with it the rooms page, open
+  // forever. This one was missed when they were fixed, and it closes all three
+  // exits below, so it was the worst of the set to be trapped in.
+  const isSubmitStalled = useStalled(isSubmitting);
+
   // Prevent closing during submission and guard dirty state
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
-      if (isSubmitting && !newOpen) {return;}
+      if (isSubmitting && !isSubmitStalled && !newOpen) {return;}
       if (!newOpen && isDirty) {
         setShowDiscardConfirm(true);
         return;
       }
       onOpenChange(newOpen);
     },
-    [isSubmitting, isDirty, onOpenChange],
+    [isSubmitting, isSubmitStalled, isDirty, onOpenChange],
   );
 
   /**
@@ -576,8 +583,8 @@ const AssignmentFormDialog = memo(function AssignmentFormDialog({
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
           className="sm:max-w-[425px]"
-          onPointerDownOutside={(e) => isSubmitting && e.preventDefault()}
-          onEscapeKeyDown={(e) => isSubmitting && e.preventDefault()}
+          onPointerDownOutside={(e) => isSubmitting && !isSubmitStalled && e.preventDefault()}
+          onEscapeKeyDown={(e) => isSubmitting && !isSubmitStalled && e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>

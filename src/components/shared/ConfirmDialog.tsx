@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useStalled } from '@/hooks/useStalled';
 
 // ============================================================================
 // Type Definitions
@@ -130,6 +131,10 @@ const ConfirmDialog = memo(function ConfirmDialog({
   const { t } = useTranslation(),
    [isLoading, setIsLoading] = useState(false),
 
+  // Releases the close-lock below once the confirmed work has run too long to
+  // still be running.
+   isConfirmStalled = useStalled(isLoading),
+
   // Track mounted state to prevent state updates after unmount
    isMountedRef = useRef(true);
 
@@ -181,14 +186,20 @@ const ConfirmDialog = memo(function ConfirmDialog({
 
   /**
    * Handle open change, preventing close during loading.
+   *
+   * `isLoading` is cleared in a `finally`, so a rejected `onConfirm` always
+   * releases this. A `onConfirm` that never settles does not, and this dialog
+   * backs every destructive confirmation in the app over writes that reach
+   * Dexie and Yjs. An `AlertDialog` has no close button and its Escape is
+   * blocked below, so being held here means a reload.
    */
    handleOpenChange = useCallback(
     (newOpen: boolean): void => {
-      if (!isLoading) {
+      if (!isLoading || isConfirmStalled) {
         onOpenChange(newOpen);
       }
     },
-    [isLoading, onOpenChange],
+    [isLoading, isConfirmStalled, onOpenChange],
   );
 
   return (
@@ -198,7 +209,7 @@ const ConfirmDialog = memo(function ConfirmDialog({
         // Escape is the one dismissal Radix still allows; blocked mid-flight so
         // the dialog cannot vanish while the work it started is still running.
         onEscapeKeyDown={(event) => {
-          if (isLoading) {
+          if (isLoading && !isConfirmStalled) {
             event.preventDefault();
           }
         }}
