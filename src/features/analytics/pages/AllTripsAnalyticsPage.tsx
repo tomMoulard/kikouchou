@@ -8,7 +8,7 @@
  * @module features/analytics/pages/AllTripsAnalyticsPage
  */
 
-import { type ReactElement, memo, useCallback, useMemo } from 'react';
+import { type ReactElement, memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -34,6 +34,7 @@ import {
 import { TripsLocationMap } from '@/features/trips/components/TripsLocationMap';
 import { useTripContext } from '@/contexts/TripContext';
 import type { Trip } from '@/types';
+import { captureEvent } from '@/lib/posthog';
 
 // ============================================================================
 // Constants
@@ -117,6 +118,32 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
       .map((row) => row.tripId)
       .sort()
       .join('|') !== tripDependencyKey;
+
+  // The same report as the trip-scoped page, under the other scope — one
+  // event with a `scope` property rather than two events, so "does anybody
+  // read these pages" is one insight instead of a comparison of two.
+  //
+  // Once per mount rather than once per trip: this page is not keyed on a
+  // trip, and somebody adding a trip while it is open is not a second reading.
+  const hasReportedViewRef = useRef(false);
+  useEffect(() => {
+    if (
+      isTripsLoading ||
+      result === undefined ||
+      areStatsStale ||
+      hasReportedViewRef.current
+    ) {
+      return;
+    }
+    hasReportedViewRef.current = true;
+    captureEvent('analytics_viewed', {
+      scope: 'all',
+      trip_count: trips.length,
+      guest_count: totals.guestCount,
+      expense_count: totals.expenseCount,
+      mixed_currency: isMixedCurrency,
+    });
+  }, [areStatsStale, isMixedCurrency, isTripsLoading, result, totals, trips.length]);
 
   const handleNewTrip = useCallback((): void => {
     void navigate('/trips/new');

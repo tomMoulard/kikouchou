@@ -12,7 +12,7 @@
  * @module features/transports/pages/TransportRunSheetPage
  */
 
-import { type ReactElement, memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactElement, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownToLine, ArrowUpFromLine, Car, Clock, MapPin, Plane } from 'lucide-react';
@@ -46,6 +46,7 @@ import {
 } from '@/features/transports/utils/transport-grouping';
 import type { Locale } from 'date-fns';
 import type { Person, PersonId, Transport, TransportId } from '@/types';
+import { captureEvent } from '@/lib/posthog';
 
 // ============================================================================
 // Type Definitions
@@ -374,6 +375,26 @@ const TransportRunSheetPage = memo(function TransportRunSheetPage(): ReactElemen
       });
     }
   }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
+
+  // Who opens the run sheet, with which filter, and whether it had anything
+  // in it. The route has its own `$pageview`, but the filter lives in a query
+  // parameter and `requestedFilter` can differ from `filter` — asking for
+  // "mine" without an identity silently falls back to "all", which is a
+  // disappointed reader that no page-level count would show.
+  const hasReportedViewRef = useRef(false);
+  useEffect(() => {
+    if (isLoading || hasReportedViewRef.current) {
+      return;
+    }
+    hasReportedViewRef.current = true;
+    captureEvent('transports_view_opened', {
+      view: 'runsheet',
+      filter,
+      requested_filter: requestedFilter,
+      has_identity: currentPersonId !== undefined,
+      shown_count: shownCount,
+    });
+  }, [currentPersonId, filter, isLoading, requestedFilter, shownCount]);
 
   const tripMismatch =
     Boolean(tripIdFromUrl) && Boolean(currentTrip) && tripIdFromUrl !== currentTrip?.id;
