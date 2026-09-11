@@ -43,6 +43,7 @@
  */
 
 import posthog from 'posthog-js';
+import type { CaptureResult } from 'posthog-js';
 
 import { readDisplayMode } from '@/lib/pwa/display-mode';
 
@@ -94,6 +95,85 @@ function isDevelopmentHost(): boolean {
     DEVELOPMENT_HOSTNAMES.includes(hostname) ||
     DEVELOPMENT_HOSTNAME_PATTERNS.some((pattern) => pattern.test(hostname))
   );
+}
+
+// ============================================================================
+// Exception filtering
+// ============================================================================
+
+/**
+ * The exception values a browser uses when it refuses to describe an error.
+ *
+ * A script loaded from another origin without CORS headers has its error
+ * sanitized before `window.onerror` ever sees it: the message becomes the
+ * literal `"Script error."` and the filename, line, column and stack are
+ * blanked. Chrome and Firefox emit the trailing period; WebKit has shipped both
+ * spellings, so both are listed.
+ */
+const OPAQUE_EXCEPTION_VALUES: readonly string[] = ['Script error.', 'Script error'];
+
+/** One entry of `$exception_list`, narrowed to the two fields this reads. */
+interface ExceptionListEntry {
+  value?: unknown;
+  stacktrace?: { frames?: unknown } | null;
+}
+
+/**
+ * Whether one captured exception carries nothing anybody could act on.
+ *
+ * Both halves are required. The message alone is not enough — an app that
+ * genuinely threw `new Error('Script error.')` would be silenced by a
+ * message-only test — so an entry counts as opaque only when the browser also
+ * withheld every frame.
+ */
+function isOpaqueCrossOriginException(entry: ExceptionListEntry): boolean {
+  const value = typeof entry.value === 'string' ? entry.value.trim() : '';
+  if (!OPAQUE_EXCEPTION_VALUES.includes(value)) {
+    return false;
+  }
+  const frames = entry.stacktrace?.frames;
+  return !Array.isArray(frames) || frames.length === 0;
+}
+
+/**
+ * Drops `$exception` events that say only that something, somewhere, threw.
+ *
+ * This exists because of one real issue in the project: a single
+ * `Error: Script error.` from Mobile Safari on `/trips`, synthetic, unhandled,
+ * no stack, no file, no line, arriving right after a redirect back from
+ * `accounts.google.com`. There is nothing in such an event to fix. Its origin
+ * is invisible by construction — a browser extension, an in-app webview
+ * injection, or a script from a host that answers without
+ * `Access-Control-Allow-Origin` — and PostHog fingerprints every one of them
+ * into the same issue, which reopens on the next stray occurrence.
+ *
+ * The app's own code cannot produce one: Vite emits the bundle with
+ * `crossorigin` and it is served from the document's own origin, so a throw
+ * inside it arrives with its message and frames intact and passes straight
+ * through here. Same for anything `captureException` reports by hand.
+ *
+ * Every other event is returned untouched, an `$exception` whose list holds one
+ * readable entry beside an opaque one included. Filtering here rather than with
+ * a PostHog-side suppression rule also means the request is never made, which
+ * is the difference between a quiet issue list and a quiet network tab.
+ *
+ * Exported for tests; wired in as `before_send` below.
+ */
+export function dropOpaqueExceptions(event: CaptureResult | null): CaptureResult | null {
+  if (!event || event.event !== '$exception') {
+    return event;
+  }
+  const list: unknown = event.properties?.['$exception_list'];
+  if (!Array.isArray(list) || list.length === 0) {
+    return event;
+  }
+  const everyEntryIsOpaque = list.every(
+    (entry: unknown) =>
+      typeof entry === 'object' &&
+      entry !== null &&
+      isOpaqueCrossOriginException(entry as ExceptionListEntry),
+  );
+  return everyEntryIsOpaque ? null : event;
 }
 
 // ============================================================================
@@ -236,6 +316,15 @@ if (!posthogKey || !posthogHost) {
       // rejections are the signal worth paying for.
       capture_console_errors: false,
     },
+
+    /**
+     * The last gate before an event leaves the browser.
+     *
+     * Only {@link dropOpaqueExceptions} runs here, and it drops exactly one
+     * shape: an exception the browser refused to describe. See it for why that
+     * shape is unfixable and why nothing this app throws can look like it.
+     */
+    before_send: dropOpaqueExceptions,
   });
   // Attached to every event from here on, so any question can be sliced by
   // release without each call site having to remember to pass it. Set at init
