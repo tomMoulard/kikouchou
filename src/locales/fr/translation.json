@@ -1301,6 +1301,8 @@
     "preparingFile": "Préparation de {{file}}…",
     "fileDownloadDone": "Terminé : {{file}}",
     "loadingProgressCaption": "Barre du haut : progression globale du modèle. Liste : uniquement les fichiers en cours de téléchargement.",
+    "cancelLoad": "Annuler",
+    "loadCancelled": "Chargement annulé. Les fichiers déjà téléchargés restent dans le cache de votre navigateur.",
     "loadingOverallProgressAria": "Progression globale du téléchargement du modèle",
     "modelFilesListAria": "Progression du téléchargement par fichier",
     "fileDownloadProgressAria": "Progression du téléchargement pour {{file}}",

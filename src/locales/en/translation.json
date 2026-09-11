@@ -1301,6 +1301,8 @@
     "preparingFile": "Preparing {{file}}…",
     "fileDownloadDone": "Finished {{file}}",
     "loadingProgressCaption": "Top bar: overall model download progress. List: only files currently downloading.",
+    "cancelLoad": "Cancel",
+    "loadCancelled": "Loading cancelled. Files already downloaded stay in your browser cache.",
     "loadingOverallProgressAria": "Overall model download progress",
     "modelFilesListAria": "Per-file download progress",
     "fileDownloadProgressAria": "Download progress for {{file}}",

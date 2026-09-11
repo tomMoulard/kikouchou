@@ -30,7 +30,13 @@ import type {
 /**
  * Possible states for the engine lifecycle.
  */
-export type EngineStatus = 'idle' | 'loading' | 'ready' | 'generating' | 'error';
+export type EngineStatus =
+  | 'idle'
+  | 'loading'
+  | 'ready'
+  | 'generating'
+  | 'error'
+  | 'cancelled';
 
 /**
  * One model shard / file on Hugging Face Hub (e.g. `.onnx`, `.onnx_data`).
@@ -88,6 +94,28 @@ export function isFatalEngineError(error: unknown): error is FatalEngineError {
 }
 
 /**
+ * Error used to settle the in-flight load when the user cancels it. Not a
+ * failure: nothing is reported, and the card goes back to offering the
+ * download.
+ */
+export interface LoadCancelledError extends Error {
+  readonly cancelled: true;
+}
+
+/**
+ * Whether a rejected `loadModel()` was cancelled by the user rather than
+ * broken.
+ */
+export function isLoadCancelledError(
+  error: unknown,
+): error is LoadCancelledError {
+  return (
+    error instanceof Error &&
+    (error as { readonly cancelled?: unknown }).cancelled === true
+  );
+}
+
+/**
  * Why a model failed to load, as far as the error message can be trusted to
  * say. Four different fixes: ship a device gate, shrink the prompt or the
  * preset, retry the download, or go and read the message.
@@ -134,6 +162,8 @@ export interface UseWebLLMReturn {
   readonly isCached: boolean | null;
   /** Initialize and load the model */
   loadModel: () => Promise<void>;
+  /** Stop a load in progress and drop the partial download */
+  cancelLoad: () => void;
   /** Generate a chat completion from a message history */
   generate: (
     messages: ChatMessage[],
@@ -375,6 +405,21 @@ function handleWorkerMessage(event: MessageEvent<LLMWorkerResponse>): void {
   }
 }
 
+/**
+ * Kills the worker and settles everything it still owed.
+ *
+ * Transformers.js gives `pipeline()` no abort signal, so the only way to stop a
+ * download that is already in flight is to take the whole worker down. The next
+ * request builds a new one.
+ */
+function terminateWorker(reason: Error): void {
+  const worker = workerInstance;
+  workerInstance = null;
+  loadedModelId = null;
+  settleAllPending(reason);
+  worker?.terminate();
+}
+
 function handleWorkerError(event: ErrorEvent): void {
   loadedModelId = null;
   settleAllPending(
@@ -562,6 +607,19 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       setLoadProgress(null);
       setIsCached(true);
     } catch (err) {
+      if (isLoadCancelledError(err)) {
+        // The user asked for this, so it is not an error: no capture, no red
+        // card, and a status the auto-load effect will not immediately undo.
+        posthog?.capture('assistant_model_load_cancelled', {
+          model_id: preset.modelId,
+          from_cache: loadingFromCache,
+        });
+        setError(null);
+        setStatus('cancelled');
+        setLoadProgress(null);
+        return;
+      }
+
       const message =
         err instanceof Error ? err.message : 'Failed to load model';
 
@@ -596,6 +654,20 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       loadingRef.current = false;
     }
   }, [isCached, preset.device, preset.dtype, preset.modelId]);
+
+  // ------------------------------------------------------------------
+  // cancelLoad
+  // ------------------------------------------------------------------
+  const cancelLoad = useCallback((): void => {
+    if (!loadingRef.current) return;
+
+    downloadFilesRef.current = new Map();
+    terminateWorker(
+      Object.assign(new Error('Model loading was cancelled.'), {
+        cancelled: true as const,
+      }),
+    );
+  }, []);
 
   // ------------------------------------------------------------------
   // generate
@@ -673,6 +745,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     error,
     isCached,
     loadModel,
+    cancelLoad,
     generate,
     interrupt,
     unload,

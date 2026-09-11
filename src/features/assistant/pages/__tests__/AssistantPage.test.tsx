@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@/test/utils';
 
 const mockLoadModel = vi.fn().mockResolvedValue(undefined);
+const mockCancelLoad = vi.fn();
 const mockGenerate = vi.fn();
 const mockInterrupt = vi.fn();
 const mockUnload = vi.fn().mockResolvedValue(undefined);
@@ -110,6 +111,7 @@ function readyEngine(overrides: Record<string, unknown> = {}) {
     error: null,
     isCached: true,
     loadModel: mockLoadModel,
+    cancelLoad: mockCancelLoad,
     generate: mockGenerate,
     interrupt: mockInterrupt,
     unload: mockUnload,
@@ -160,6 +162,7 @@ describe('AssistantPage', () => {
       error: null,
       isCached: false,
       loadModel: mockLoadModel,
+      cancelLoad: mockCancelLoad,
       generate: mockGenerate,
       interrupt: mockInterrupt,
       unload: mockUnload,
@@ -208,6 +211,7 @@ describe('AssistantPage', () => {
       error: null,
       isCached: true,
       loadModel: mockLoadModel,
+      cancelLoad: mockCancelLoad,
       generate: mockGenerate,
       interrupt: mockInterrupt,
       unload: mockUnload,
@@ -219,6 +223,53 @@ describe('AssistantPage', () => {
     expect(
       screen.queryByText('assistant.modelDownloadSize'),
     ).not.toBeInTheDocument();
+  });
+
+  describe('cancelling the load', () => {
+    it('offers a cancel button while the model loads', async () => {
+      mockUseWebLLM.mockReturnValue({
+        status: 'loading',
+        loadProgress: { text: 'downloading', progress: 0.4, files: [] },
+        error: null,
+        isCached: false,
+        loadModel: mockLoadModel,
+        cancelLoad: mockCancelLoad,
+        generate: mockGenerate,
+        interrupt: mockInterrupt,
+        unload: mockUnload,
+      });
+
+      const { user } = render(<AssistantPage />, { withProviders: false });
+
+      await user.click(
+        await screen.findByRole('button', { name: 'assistant.cancelLoad' }),
+      );
+
+      expect(mockCancelLoad).toHaveBeenCalledTimes(1);
+    });
+
+    it('offers the download again once the load is cancelled', async () => {
+      mockUseWebLLM.mockReturnValue({
+        status: 'cancelled',
+        loadProgress: null,
+        error: null,
+        isCached: false,
+        loadModel: mockLoadModel,
+        cancelLoad: mockCancelLoad,
+        generate: mockGenerate,
+        interrupt: mockInterrupt,
+        unload: mockUnload,
+      });
+
+      render(<AssistantPage />, { withProviders: false });
+
+      expect(
+        await screen.findByRole('button', { name: 'assistant.loadModel' }),
+      ).toBeInTheDocument();
+      expect(screen.getByText('assistant.loadCancelled')).toBeInTheDocument();
+      // The cancelled state must not restart the download on its own.
+      expect(mockLoadModel).not.toHaveBeenCalled();
+    });
   });
 
   describe('WebGPU device gate', () => {
@@ -262,6 +313,7 @@ describe('AssistantPage', () => {
         error: null,
         isCached: true,
         loadModel: mockLoadModel,
+        cancelLoad: mockCancelLoad,
         generate: mockGenerate,
         interrupt: mockInterrupt,
         unload: mockUnload,
@@ -299,6 +351,7 @@ describe('AssistantPage', () => {
         error: null,
         isCached: true,
         loadModel: mockLoadModel,
+        cancelLoad: mockCancelLoad,
         generate: mockGenerate,
         interrupt: mockInterrupt,
         unload: mockUnload,
@@ -331,6 +384,7 @@ describe('AssistantPage', () => {
       error: null,
       isCached: false,
       loadModel: mockLoadModel,
+      cancelLoad: mockCancelLoad,
       generate: mockGenerate,
       interrupt: mockInterrupt,
       unload: mockUnload,
