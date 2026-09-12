@@ -833,23 +833,24 @@ import { render, screen, waitForDb, createTestTrip, isoDate } from '@/test/utils
 - `waitForDb()` flushes async DB microtasks when needed.
 - i18next is mocked — `t('key')` returns the key string.
 
-**Coverage floor: 90%, gated in CI.** CI runs `bun run test:coverage`. The build
-fails when statement coverage or line coverage drops under 90%. The number is
+**Coverage floor: 93%, gated in CI.** CI runs `bun run test:coverage`. The build
+fails when statement coverage or line coverage drops under 93%. The number is
 declared in two places on purpose. The `thresholds` block in `vitest.config.ts`
 is the one you hit locally. A step in `.github/workflows/ci.yml` reads
 `coverage/coverage-summary.json` and prints each figure, so a red build names
 the metric that fell instead of hiding it in a table.
 
-- The margin is thin. The suite measures 90.04% statements against a floor of
-  90%, so eight uncovered statements is the whole slack. A feature that lands without tests
-  turns CI red for the person who lands it.
+- The margin is thin. The suite measures 93.01% statements against a floor of
+  93%, so a couple of uncovered statements is the whole slack. A feature that
+  lands without tests turns CI red for the person who lands it.
 - If the gate goes red, add the test. Do not lower the threshold. If a number
   must move, because the code cannot be reached under jsdom at all, write in
   the commit message what dropped and why.
-- Branches (82.55%) and functions (88.95%) are printed but not gated. Most of
-  the gap there cannot be reached under jsdom: `router.tsx`, `sw/register.ts`,
-  the camera in `QRScanner.tsx`, the WebLLM worker, and the sync providers.
-  Raise these two numbers after the reachable part is done, not before.
+- Branches (85.05%) and functions (92.07%) are printed but not gated. What is
+  left cannot be reached under jsdom: the service worker registration, the lazy
+  route chunks, the camera in `QRScanner.tsx`, and the WebGPU device behind the
+  assistant's pipeline. Raise these two numbers after the reachable part is
+  done, not before.
 - `bun run test:coverage` is about 4x slower than `test:run`, so `validate`
   still uses `test:run`. Run the coverage command before you push a change that
   deletes tests or adds untested branches.
