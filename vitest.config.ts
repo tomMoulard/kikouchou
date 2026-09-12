@@ -111,21 +111,23 @@ export default defineConfig({
        * Measured 2026-09-03 on 186 files / 3528 tests:
        *   statements 81.67 · branches 75.35 · functions 82.45 · lines 82.63
        *
+       * Measured 2026-09-12 on 345 files / 6148 tests:
+       *   statements 90.05 · branches 82.55 · functions 88.95 · lines 90.63
+       *
        * Each number is set below its measured value, so a green suite stays
        * green and a real regression goes red. Raise them as coverage grows;
        * never lower one to make a red build pass without saying what dropped.
        *
-       * The branches gap is concentrated in code a jsdom unit test cannot
-       * reach: `router.tsx` and `sw/register.ts` (0%), the camera-dependent
-       * `QRScanner.tsx` (0%), the WebLLM worker and `useWebLLM.ts` (0% / 9%),
-       * and the sync providers `YjsProvider.tsx` (25%) and `useTripSync.ts`
-       * (36%).
+       * What is left is concentrated in code a jsdom unit test cannot reach:
+       * `router.tsx` and `sw/register.ts` (0%), the camera-dependent
+       * `QRScanner.tsx`, the WebLLM worker and `useWebLLM.ts`, and the sync
+       * providers `YjsProvider.tsx` and `useTripSync.ts`.
        */
       thresholds: {
-        statements: 80,
-        branches: 75,
-        functions: 80,
-        lines: 80,
+        statements: 88,
+        branches: 81,
+        functions: 87,
+        lines: 88,
       },
     },
 
