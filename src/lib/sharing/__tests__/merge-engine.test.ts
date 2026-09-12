@@ -613,5 +613,197 @@ describe('computeMerge', () => {
       );
       expect(personWarning).toBeDefined();
     });
+
+    it('warns when a returning leg names a car the host no longer holds', async () => {
+      mockHostPersons.push(makePerson());
+      mockHostRides.push({
+        id: 'ride-kept' as Ride['id'],
+        tripId: TRIP_ID,
+        direction: 'pickup',
+        meetDatetime: '2026-07-15T13:30:00Z',
+        location: 'Gare de Vannes',
+      } as Ride);
+
+      const transport = makeTransport({ rideId: 'ride-gone' as Transport['rideId'] });
+      const changeset = makeChangeset({
+        added: { persons: [], assignments: [], transports: [transport], rooms: [] },
+      });
+
+      const result = await computeMerge(changeset);
+
+      const rideWarning = result.warnings.find((w) => w.type === 'orphaned-ride-ref');
+      expect(rideWarning).toBeDefined();
+      expect(rideWarning?.entityId).toBe(transport.id);
+
+      // The host's own rides are read once per merge, and this array is the
+      // only fixture the suite-wide `beforeEach` does not reset.
+      mockHostRides.length = 0;
+    });
+
+    it('says nothing when the car the leg names is still the host’s', async () => {
+      mockHostPersons.push(makePerson());
+      mockHostRides.push({
+        id: 'ride-kept' as Ride['id'],
+        tripId: TRIP_ID,
+        direction: 'pickup',
+        meetDatetime: '2026-07-15T13:30:00Z',
+        location: 'Gare de Vannes',
+      } as Ride);
+
+      const changeset = makeChangeset({
+        added: {
+          persons: [],
+          assignments: [],
+          transports: [makeTransport({ rideId: 'ride-kept' as Transport['rideId'] })],
+          rooms: [],
+        },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.warnings.find((w) => w.type === 'orphaned-ride-ref')).toBeUndefined();
+
+      mockHostRides.length = 0;
+    });
+  });
+
+  describe('conflicting fields — every field the merge can name', () => {
+    // A guest is the authority on their own row, so this one auto-applies
+    // rather than conflicting. What is pinned here is that every field is
+    // compared, not that the merge stops at the first difference.
+    it('compares every field of a guest row, not only the first', async () => {
+      mockHostPersons.push(
+        makePerson({
+          name: 'Alice',
+          color: '#ff0000' as HexColor,
+          stayStartDate: '2026-07-15' as ISODateString,
+          stayEndDate: '2026-07-20' as ISODateString,
+          notes: 'Arrives late',
+          phone: '+33100000000',
+          headcount: 1,
+          childSeat: 'booster' as Person['childSeat'],
+        }),
+      );
+
+      const changeset = makeChangeset({
+        modified: {
+          persons: [
+            makePerson({
+              name: 'Alice B',
+              color: '#00ff00' as HexColor,
+              stayStartDate: '2026-07-16' as ISODateString,
+              stayEndDate: '2026-07-21' as ISODateString,
+              notes: 'Arrives early',
+              phone: '+33200000000',
+              headcount: 3,
+              childSeat: 'rearFacing' as Person['childSeat'],
+            }),
+          ],
+          assignments: [],
+          transports: [],
+          rooms: [],
+        },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.autoApply.persons).toHaveLength(1);
+      expect(result.autoApply.persons[0]).toMatchObject({
+        name: 'Alice B',
+        phone: '+33200000000',
+        childSeat: 'rearFacing',
+      });
+    });
+
+    it('names each stay field that differs', async () => {
+      mockHostPersons.push(makePerson());
+      mockHostRooms.push(makeRoom());
+      mockHostAssignments.push(makeAssignment());
+
+      const changeset = makeChangeset({
+        modified: {
+          persons: [],
+          assignments: [
+            makeAssignment({
+              roomId: 'room-2' as RoomId,
+              personId: 'person-2' as PersonId,
+              startDate: '2026-07-17' as ISODateString,
+              endDate: '2026-07-19' as ISODateString,
+            }),
+          ],
+          transports: [],
+          rooms: [],
+        },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.conflicts[0]?.conflictingFields).toEqual(
+        expect.arrayContaining(['roomId', 'personId', 'startDate', 'endDate']),
+      );
+    });
+
+    it('names each travel field that differs, coordinates included', async () => {
+      mockHostPersons.push(makePerson());
+      mockHostTransports.push(
+        makeTransport({
+          type: 'arrival',
+          datetime: '2026-07-15T14:30:00Z',
+          location: 'Gare de Vannes',
+          transportMode: 'train',
+          transportNumber: 'TGV 8613',
+          needsPickup: false,
+          driverId: 'person-1' as PersonId,
+          rideId: 'ride-1' as Transport['rideId'],
+          notes: 'Platform B',
+          coordinates: { lat: 47.66, lon: -2.76 },
+          startLocation: 'Paris Montparnasse',
+          startCoordinates: { lat: 48.84, lon: 2.32 },
+        } as Partial<Transport>),
+      );
+
+      const changeset = makeChangeset({
+        modified: {
+          persons: [],
+          assignments: [],
+          transports: [
+            makeTransport({
+              type: 'departure',
+              datetime: '2026-07-16T09:00:00Z',
+              location: 'Gare de Rennes',
+              transportMode: 'car',
+              transportNumber: 'TGV 8615',
+              needsPickup: true,
+              driverId: 'person-2' as PersonId,
+              rideId: 'ride-2' as Transport['rideId'],
+              notes: 'Platform C',
+              coordinates: { lat: 48.11, lon: -1.68 },
+              startLocation: 'Paris Gare de Lyon',
+              startCoordinates: { lat: 48.85, lon: 2.37 },
+            } as Partial<Transport>),
+          ],
+          rooms: [],
+        },
+      });
+
+      const result = await computeMerge(changeset);
+
+      expect(result.conflicts[0]?.conflictingFields).toEqual(
+        expect.arrayContaining([
+          'type',
+          'datetime',
+          'location',
+          'transportMode',
+          'transportNumber',
+          'needsPickup',
+          'driverId',
+          'rideId',
+          'notes',
+          'coordinates',
+          'startLocation',
+          'startCoordinates',
+        ]),
+      );
+    });
   });
 });
