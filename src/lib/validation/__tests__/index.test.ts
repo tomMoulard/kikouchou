@@ -11,6 +11,9 @@ import {
   validatePersonForm,
   validateTransportForm,
   validateRoomAssignmentForm,
+  validateActivityForm,
+  validateExpenseForm,
+  validateActivityFormOrThrow,
   validateTripFormOrThrow,
   FormValidationError,
   getFieldError,
@@ -66,6 +69,48 @@ describe('validation index', () => {
     it('returns errors for completely invalid data', () => {
       const result = validatePersonForm({});
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe('validateActivityForm', () => {
+    it('accepts an activity the form would submit', () => {
+      const result = validateActivityForm({
+        title: 'Plant fair',
+        category: 'horticulture',
+        startDatetime: '2026-07-16T09:00:00.000Z',
+        allDay: false,
+        participantIds: [],
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('returns errors for completely invalid data', () => {
+      expect(validateActivityForm({}).success).toBe(false);
+    });
+  });
+
+  describe('validateExpenseForm', () => {
+    it('returns errors for completely invalid data', () => {
+      expect(validateExpenseForm({}).success).toBe(false);
+    });
+  });
+
+  describe('validateActivityFormOrThrow', () => {
+    it('hands back the activity when it is valid', () => {
+      const activity = validateActivityFormOrThrow({
+        title: 'Plant fair',
+        category: 'horticulture',
+        startDatetime: '2026-07-16T09:00:00.000Z',
+        allDay: false,
+        participantIds: [],
+      });
+
+      expect(activity.title).toBe('Plant fair');
+    });
+
+    it('throws when it is not', () => {
+      expect(() => validateActivityFormOrThrow({})).toThrow(FormValidationError);
     });
   });
 
