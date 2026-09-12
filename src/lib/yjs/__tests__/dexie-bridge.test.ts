@@ -442,3 +442,101 @@ describe('buildTripRecord — remote field validation', () => {
     expect((await db.trips.get(trip.id))?.description).toBeUndefined();
   });
 });
+
+describe('syncDocToDexie — rows the document no longer holds', () => {
+  /**
+   * Every trip-scoped table is projected the same way: what the document holds
+   * is written, and what it does not hold is removed. The removal half only
+   * runs when Dexie is ahead of the document, which is what a deletion on
+   * another device looks like once it arrives here.
+   */
+  it('removes the rows of every table the document dropped', async () => {
+    const trip = await createTrip({
+      name: 'Shared trip',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+
+    const personId = 'person-1' as Person['id'];
+    await db.persons.put({
+      id: personId,
+      tripId: trip.id,
+      name: 'Alice',
+      color: '#ef4444',
+    } as Person);
+    await db.rooms.put({
+      id: 'room-1',
+      tripId: trip.id,
+      name: 'Attic',
+      capacity: 2,
+      order: 0,
+    } as never);
+    await db.roomAssignments.put({
+      id: 'assign-1',
+      tripId: trip.id,
+      roomId: 'room-1',
+      personId,
+      startDate: '2024-08-01',
+      endDate: '2024-08-03',
+    } as never);
+    await db.transports.put({
+      id: 'transport-1',
+      tripId: trip.id,
+      personId,
+      type: 'arrival',
+      datetime: '2024-08-01T10:00:00.000Z',
+      location: 'Gare de Vannes',
+      needsPickup: false,
+    } as never);
+    await db.rides.put({
+      id: 'ride-1',
+      tripId: trip.id,
+      direction: 'pickup',
+      meetDatetime: '2024-08-01T09:30:00.000Z',
+      location: 'Gare de Vannes',
+    } as never);
+    await db.vehicles.put({ id: 'vehicle-1', tripId: trip.id, name: 'The van' } as never);
+    await db.activities.put({
+      id: 'activity-1',
+      tripId: trip.id,
+      title: 'Market',
+      category: 'market',
+      startDatetime: '2024-08-02T09:00:00.000Z',
+      allDay: false,
+      participantIds: [],
+    } as never);
+    await db.expenses.put({
+      id: 'expense-1',
+      tripId: trip.id,
+      kind: 'expense',
+      category: 'groceries',
+      title: 'Shopping',
+      date: '2024-08-02',
+      amount: 100,
+      payerId: personId,
+      splitMode: 'equal',
+      splits: [{ personId, value: 1 }],
+    } as never);
+
+    // A document holding the trip and nothing else: every row above is gone
+    // from the copy everyone shares.
+    await syncDocToDexie(
+      makeDoc({
+        id: trip.id,
+        name: 'Shared trip',
+        startDate: '2024-08-01',
+        endDate: '2024-08-05',
+      }),
+      trip.id,
+    );
+
+    await expect(db.persons.where('tripId').equals(trip.id).count()).resolves.toBe(0);
+    await expect(db.rooms.where('tripId').equals(trip.id).count()).resolves.toBe(0);
+    await expect(db.roomAssignments.where('tripId').equals(trip.id).count()).resolves.toBe(0);
+    await expect(db.transports.where('tripId').equals(trip.id).count()).resolves.toBe(0);
+    await expect(db.rides.where('tripId').equals(trip.id).count()).resolves.toBe(0);
+    await expect(db.vehicles.where('tripId').equals(trip.id).count()).resolves.toBe(0);
+    await expect(db.activities.where('tripId').equals(trip.id).count()).resolves.toBe(0);
+    await expect(db.expenses.where('tripId').equals(trip.id).count()).resolves.toBe(0);
+  });
+});

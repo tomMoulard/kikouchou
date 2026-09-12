@@ -543,3 +543,86 @@ describe('upgradeViewerTrip', () => {
     expect((await db.trips.get(trip.id))?.remoteTripId).toBe(REMOTE_TRIP_ID);
   });
 });
+
+// ============================================================================
+// What the server sends back
+// ============================================================================
+
+describe('readSharedTrip — answers it refuses to act on', () => {
+  it.each([
+    ['not an object at all', 'a string'],
+    ['null', null],
+    ['no trip on it', { snapshot: null, updates: [] }],
+    ['a trip that is not an object', { trip: 'Brittany', snapshot: null, updates: [] }],
+    ['a trip with no id', { trip: { name: 'Brittany' }, snapshot: null, updates: [] }],
+    ['a trip whose id is not a string', { trip: { id: 7 }, snapshot: null, updates: [] }],
+    ['a trip with an empty id', { trip: { id: '' }, snapshot: null, updates: [] }],
+    [
+      'a trip whose id is far too long',
+      { trip: { id: 'x'.repeat(65) }, snapshot: null, updates: [] },
+    ],
+  ])('reports %s as unreadable', async (_label, data) => {
+    const { client } = clientAnswering({ data });
+
+    const result = await readSharedTrip(client, TOKEN, 0);
+
+    expect(result).toMatchObject({ status: 'error' });
+  });
+
+  it('drops a snapshot it cannot use and keeps the log', async () => {
+    const whole = encodeUpdate(Y.encodeStateAsUpdate(ownerDocument()));
+    const { client } = clientAnswering({
+      data: {
+        trip: { id: REMOTE_TRIP_ID, name: 'Brittany' },
+        // No `through_id`, so the snapshot names nothing the log can be read against.
+        snapshot: { state: whole },
+        updates: [{ id: 1, update: whole }],
+        has_more: false,
+      },
+    });
+
+    const result = await readSharedTrip(client, TOKEN, 0);
+
+    expect(result.status).toBe('ok');
+    if (result.status === 'ok') {
+      expect(result.payload.snapshot).toBeNull();
+      expect(result.payload.updates).toHaveLength(1);
+    }
+  });
+
+  it('drops the malformed rows of a log rather than the whole page', async () => {
+    const whole = encodeUpdate(Y.encodeStateAsUpdate(ownerDocument()));
+    const { client } = clientAnswering({
+      data: {
+        trip: { id: REMOTE_TRIP_ID, name: 'Brittany' },
+        snapshot: null,
+        updates: [
+          'not a row',
+          null,
+          { id: 0, update: whole },
+          { id: 'two', update: whole },
+          { id: 3, update: '' },
+          { id: 4, update: whole },
+        ],
+        has_more: false,
+      },
+    });
+
+    const result = await readSharedTrip(client, TOKEN, 0);
+
+    expect(result.status).toBe('ok');
+    if (result.status === 'ok') {
+      expect(result.payload.updates.map((row) => row.id)).toEqual([4]);
+    }
+  });
+
+  it('reports a network failure by its message', async () => {
+    const client = {
+      rpc: vi.fn().mockRejectedValue(new Error('the network went away')),
+    } as never;
+
+    const result = await readSharedTrip(client, TOKEN, 0);
+
+    expect(result).toMatchObject({ status: 'error', message: 'the network went away' });
+  });
+});

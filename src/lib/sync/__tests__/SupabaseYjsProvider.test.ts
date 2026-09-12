@@ -1221,3 +1221,67 @@ describe('two devices through one server', () => {
     expect(guestNames(guestDoc)).toEqual(['Alice', 'Bob', 'Carol']);
   });
 });
+
+// ============================================================================
+// After destroy, and back from offline
+// ============================================================================
+
+describe('a provider that has been destroyed', () => {
+  it('does nothing when asked to sync', async () => {
+    const server = new FakeServer();
+    const provider = track(makeProvider(server, new Y.Doc()));
+    await provider.start();
+    provider.destroy();
+
+    const readsBefore = server.readCalls;
+    const writesBefore = server.insertCalls;
+
+    await expect(provider.syncNow()).resolves.toBeUndefined();
+
+    expect(server.readCalls).toBe(readsBefore);
+    expect(server.insertCalls).toBe(writesBefore);
+  });
+
+  it('leaves its document alone once another device writes', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+    provider.destroy();
+
+    const otherDoc = new Y.Doc();
+    const other = track(makeProvider(server, otherDoc));
+    await other.start();
+    addGuest(otherDoc, 'p-late', 'Too late');
+    await settle();
+    await other.syncNow();
+    await settle();
+
+    expect(guestNames(doc)).toEqual([]);
+  });
+});
+
+describe('coming back online', () => {
+  it('tries again as soon as the browser says the network is back', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    const provider = track(makeProvider(server, doc));
+    await provider.start();
+
+    server.failWrites = 99;
+    addGuest(doc, 'p1', 'Alice');
+    await settle();
+    await provider.syncNow();
+    await settle();
+    expect(provider.getState().status).toBe('offline');
+
+    server.failWrites = 0;
+    window.dispatchEvent(new Event('online'));
+
+    await waitUntil(
+      () => provider.getState().status !== 'offline',
+      'the provider to retry once the network came back',
+    );
+    expect(server.rows.length).toBeGreaterThan(0);
+  });
+});

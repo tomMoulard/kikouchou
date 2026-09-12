@@ -11,7 +11,7 @@
  */
 
 import type { ReactElement } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 
 import { ShareDialog } from '../ShareDialog';
@@ -157,5 +157,61 @@ describe('ShareDialog', () => {
     renderDialog(<ShareDialog open={false} onOpenChange={vi.fn()} trip={baseTrip} />);
 
     expect(screen.queryByTestId('share-dialog')).not.toBeInTheDocument();
+  });
+
+  describe('copying the link', () => {
+    const url = 'https://kikouchou.app/join/aBcDeFgHiJkL3456';
+
+    beforeEach(() => {
+      mockedUseTripShareLink.mockReturnValue({
+        state: { kind: 'invite', url, token: 'aBcDeFgHiJkL3456' },
+        refresh: vi.fn(),
+      });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('puts the link on the clipboard', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      // After `setup()`: user-event installs a clipboard of its own, and it
+      // would otherwise replace this one.
+      const user = userEvent.setup();
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText },
+      });
+
+      renderDialog(<ShareDialog open onOpenChange={vi.fn()} trip={baseTrip} />);
+      await user.click(await screen.findByTestId('share-url'));
+
+      expect(writeText).toHaveBeenCalledWith(url);
+    });
+
+    it('falls back to a selection when the clipboard is not allowed', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      // An insecure context, where `navigator.clipboard` rejects: the link is
+      // the whole point of the dialog, so it copies the old way rather than
+      // failing silently.
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+      });
+      const execCommand = vi.fn().mockReturnValue(true);
+      Object.defineProperty(document, 'execCommand', {
+        configurable: true,
+        value: execCommand,
+      });
+
+      renderDialog(<ShareDialog open onOpenChange={vi.fn()} trip={baseTrip} />);
+      await user.click(await screen.findByTestId('share-url'));
+
+      await waitFor(() => {
+        expect(execCommand).toHaveBeenCalledWith('copy');
+      });
+    });
   });
 });
