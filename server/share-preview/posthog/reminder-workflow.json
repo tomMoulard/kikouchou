@@ -1,0 +1,56 @@
+{
+  "_comment": "A PostHog workflow that owns the reminder campaign. Create it as a draft from the PostHog UI or MCP (workflows-create), replace the two placeholders, test-run it against a real reminder_due event, then enable it and set PUSH_SEND_MODE=workflow on the share-preview service. While the service runs in direct mode this workflow is not needed: the three feature flags (reminder-trip-start, reminder-own-arrival, reminder-pickup) are the control.",
+  "name": "Trip reminders",
+  "description": "Sends each due trip reminder through the share-preview service, once. Edit this workflow to delay, condition or A/B test a kind; no deploy needed.",
+  "exit_condition": "exit_only_at_end",
+  "actions": [
+    {
+      "id": "trigger_reminder_due",
+      "name": "A reminder came due",
+      "type": "trigger",
+      "config": {
+        "type": "event",
+        "filters": {
+          "events": [
+            { "id": "reminder_due", "name": "reminder_due", "type": "events", "order": 0 }
+          ]
+        }
+      }
+    },
+    {
+      "id": "send_push",
+      "name": "Send the push",
+      "type": "function",
+      "config": {
+        "template_id": "template-webhook",
+        "inputs": {
+          "url": { "value": "https://share.kikouchou.app/push/send" },
+          "method": { "value": "POST" },
+          "headers": {
+            "value": {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer REPLACE_WITH_PUSH_WEBHOOK_SECRET"
+            }
+          },
+          "body": {
+            "value": {
+              "subscription_id": "{event.properties.subscription_id}",
+              "kind": "{event.properties.kind}",
+              "subject": "{event.properties.subject}"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "exit_node",
+      "name": "Exit",
+      "type": "exit",
+      "config": { "reason": "Sent, or nothing to send" }
+    }
+  ],
+  "edges": [
+    { "from": "trigger_reminder_due", "to": "send_push", "type": "continue" },
+    { "from": "send_push", "to": "exit_node", "type": "continue" }
+  ]
+}

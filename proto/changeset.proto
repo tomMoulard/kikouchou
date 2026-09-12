@@ -1,0 +1,174 @@
+syntax = "proto3";
+
+package kikouchou.sharing;
+
+// Top-level changeset message — this is what goes into the QR code.
+// Captures a guest's additions and modifications relative to a baseline snapshot.
+message TripChangeset {
+  uint32 version = 1;           // schema version (currently 1)
+  string trip_id = 2;
+  string share_id = 3;
+  string exported_by = 4;       // PersonId of the guest who exported
+  int64 exported_at = 5;        // unix timestamp ms when exported
+  int64 base_snapshot_at = 6;   // unix timestamp ms of when guest imported the trip
+
+  EntityList added = 7;         // entities the guest created
+  EntityList modified = 8;      // entities the guest modified
+  // Present on full host exports — used to merge/import by trip name on a cold device.
+  TripSnapshot trip_snapshot = 9;
+}
+
+// A collection of entities grouped by type.
+message EntityList {
+  repeated Person persons = 1;
+  repeated RoomAssignment assignments = 2;
+  repeated Transport transports = 3;
+  repeated Room rooms = 4;
+  repeated Ride rides = 5;
+  repeated Vehicle vehicles = 6;
+}
+
+// Minimal trip metadata for import when the local trip id differs from the exporter.
+message TripSnapshot {
+  string name = 1;
+  string start_date = 2;   // ISO date YYYY-MM-DD
+  string end_date = 3;     // ISO date YYYY-MM-DD
+  optional string location = 4;
+  optional string description = 5;
+  optional double coord_lat = 6;
+  optional double coord_lon = 7;
+}
+
+// A room in the lodging layout.
+message Room {
+  string id = 1;
+  string trip_id = 2;
+  string name = 3;
+  uint32 capacity = 4;
+  int32 order = 5;
+  optional string description = 6;
+  optional string icon = 7;
+}
+
+// A trip participant.
+message Person {
+  string id = 1;
+  string trip_id = 2;
+  string name = 3;
+  string color = 4;                     // hex color "#rrggbb"
+  optional string stay_start_date = 5;  // ISO date YYYY-MM-DD
+  optional string stay_end_date = 6;    // ISO date YYYY-MM-DD
+  optional string notes = 7;              // allergies, diet, etc.
+  // Real people this entry stands for (e.g. "Alice+Auré" = 2). Absent/0 = 1.
+  optional uint32 headcount = 8;
+  // Contact number, stored as typed. Reaches every member of the trip.
+  optional string phone = 9;
+  // Child restraint this guest needs in a car. Absent = none, which is the
+  // answer for every adult.
+  optional ChildSeatKind child_seat = 10;
+}
+
+// Links a person to a room for a specific date range.
+message RoomAssignment {
+  string id = 1;
+  string trip_id = 2;
+  string room_id = 3;
+  string person_id = 4;
+  string start_date = 5;   // ISO date YYYY-MM-DD
+  string end_date = 6;     // ISO date YYYY-MM-DD
+}
+
+// An arrival or departure event.
+message Transport {
+  string id = 1;
+  string trip_id = 2;
+  string person_id = 3;
+  TransportType type = 4;
+  string datetime = 5;                     // ISO datetime
+  string location = 6;
+  optional Coordinates coordinates = 7;
+  optional TransportMode transport_mode = 8;
+  optional string transport_number = 9;
+  optional string driver_id = 10;
+  bool needs_pickup = 11;
+  optional string notes = 12;
+  // Optional origin of this leg (e.g. previous station) for map routing.
+  optional string start_location = 13;
+  optional Coordinates start_coordinates = 14;
+  // The car journey carrying this leg. Membership lives here, on the leg, and
+  // not as a passenger list on Ride: the CRDT merges an array field atomically,
+  // so two guests joining one car offline would keep only one of the joins.
+  optional string ride_id = 15;
+}
+
+// A car available to the trip — someone's own, or the one hired for the week.
+message Vehicle {
+  string id = 1;
+  string trip_id = 2;
+  string name = 3;
+  optional string owner_id = 4;
+  // 5 was `is_rental`, dropped with the field itself. Reserved rather than
+  // reused: a peer on an older build still sends it, and giving the number to
+  // something else would decode their boolean as that.
+  reserved 5;
+  reserved "is_rental";
+  // People it carries, driver included. Absent = not known, never zero.
+  optional uint32 seat_count = 6;
+  // One entry per installed seat, so two boosters appear twice.
+  repeated ChildSeatKind child_seats = 7;
+  // Free text. Nothing is counted against it — there is no per-guest bag count.
+  optional string luggage_notes = 8;
+  optional string notes = 9;
+}
+
+// A car journey serving one or more Transport legs.
+message Ride {
+  string id = 1;
+  string trip_id = 2;
+  RideDirection direction = 3;
+  // When the car must be at the meeting point, ISO datetime.
+  string meet_datetime = 4;
+  string location = 5;
+  optional Coordinates coordinates = 6;
+  // Minutes before meet_datetime that the driver sets off. Absent = 30.
+  optional uint32 lead_time_minutes = 7;
+  // May also own one of the legs on this ride — that is a self-driven ride, and
+  // it is derived rather than flagged.
+  optional string driver_id = 8;
+  optional string vehicle_id = 9;
+  optional string notes = 10;
+}
+
+// GPS coordinates.
+message Coordinates {
+  double lat = 1;
+  double lon = 2;
+}
+
+enum TransportType {
+  TRANSPORT_TYPE_UNSPECIFIED = 0;
+  TRANSPORT_TYPE_ARRIVAL = 1;
+  TRANSPORT_TYPE_DEPARTURE = 2;
+}
+
+enum RideDirection {
+  RIDE_DIRECTION_UNSPECIFIED = 0;
+  RIDE_DIRECTION_PICKUP = 1;
+  RIDE_DIRECTION_DROPOFF = 2;
+}
+
+enum ChildSeatKind {
+  CHILD_SEAT_KIND_UNSPECIFIED = 0;
+  CHILD_SEAT_KIND_REAR_FACING = 1;
+  CHILD_SEAT_KIND_FORWARD_FACING = 2;
+  CHILD_SEAT_KIND_BOOSTER = 3;
+}
+
+enum TransportMode {
+  TRANSPORT_MODE_UNSPECIFIED = 0;
+  TRANSPORT_MODE_TRAIN = 1;
+  TRANSPORT_MODE_PLANE = 2;
+  TRANSPORT_MODE_CAR = 3;
+  TRANSPORT_MODE_BUS = 4;
+  TRANSPORT_MODE_OTHER = 5;
+}

@@ -1,0 +1,484 @@
+/**
+ * `lib/posthog` initialization rules.
+ *
+ * The module has no functions to call — everything it does happens at import
+ * time — so every test here stubs the environment, resets the module registry
+ * and imports it fresh.
+ *
+ * What is being defended: this project accumulated 20 PostHog people against 3
+ * Supabase accounts, 19 of them anonymous ids whose events all came from a
+ * loopback host. jsdom reports `window.location.hostname` as `localhost`, so
+ * these tests run on exactly the hostname that caused it.
+ *
+ * @module lib/__tests__/posthog.test
+ */
+
+import type { CaptureResult } from 'posthog-js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// ============================================================================
+// Test doubles
+// ============================================================================
+
+const mockInit = vi.fn();
+const mockRegister = vi.fn();
+const mockReset = vi.fn();
+const mockCapture = vi.fn();
+
+vi.mock('posthog-js', () => ({
+  default: {
+    init: (...args: unknown[]) => mockInit(...args),
+    register: (...args: unknown[]) => mockRegister(...args),
+    reset: (...args: unknown[]) => mockReset(...args),
+    capture: (...args: unknown[]) => mockCapture(...args),
+  },
+}));
+
+/** Imports the module fresh, so its import-time branch runs under the current env. */
+async function importPosthog(): Promise<typeof import('@/lib/posthog')> {
+  vi.resetModules();
+  return import('@/lib/posthog');
+}
+
+/** The configuration a real deployment has. */
+function withCredentials(): void {
+  vi.stubEnv('VITE_POSTHOG_KEY', 'phc_test_token');
+  vi.stubEnv('VITE_POSTHOG_HOST', 'https://eu.i.posthog.com');
+}
+
+beforeEach(() => {
+  mockInit.mockClear();
+  mockRegister.mockClear();
+  mockReset.mockClear();
+  mockCapture.mockClear();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+describe('lib/posthog', () => {
+  it('exports undefined and never initializes without both env vars', async () => {
+    // The suite's own default, and a fresh clone's: `vitest.config.ts` blanks
+    // both. Every call site is `posthog?.capture(...)` because of this.
+    const { default: client } = await importPosthog();
+
+    expect(client).toBeUndefined();
+    expect(mockInit).not.toHaveBeenCalled();
+  });
+
+  it('refuses to initialize on localhost even with a key configured', async () => {
+    withCredentials();
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    const { default: client } = await importPosthog();
+
+    // The guard that makes a stray key in `.env.local` harmless. Without it,
+    // every dev-server load, every Vitest run and every Playwright browser
+    // context minted a real Person in the real project.
+    expect(mockInit).not.toHaveBeenCalled();
+    expect(client).toBeUndefined();
+    expect(consoleInfo).toHaveBeenCalled();
+    consoleInfo.mockRestore();
+  });
+
+  it('initializes on localhost when the opt-in is set, so it can be debugged', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+
+    const { default: client } = await importPosthog();
+
+    expect(client).toBeDefined();
+    expect(mockInit).toHaveBeenCalledTimes(1);
+  });
+
+  it('only accepts a literal "true" as the opt-in', async () => {
+    withCredentials();
+    // A truthy-looking value must not open the door: `.env` values are strings,
+    // so `VITE_POSTHOG_ALLOW_LOCALHOST=false` would otherwise enable it.
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'false');
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    await importPosthog();
+
+    expect(mockInit).not.toHaveBeenCalled();
+    consoleInfo.mockRestore();
+  });
+
+  it.each([
+    ['192.168.1.20', 'a phone loading `vite --host` over the LAN'],
+    ['10.0.0.5', 'a private network'],
+    ['172.20.1.9', 'the other RFC 1918 range'],
+    ['169.254.4.4', 'a link-local address'],
+    ['kikouchou.local', 'mDNS'],
+    ['app.localhost', 'an RFC 6761 loopback subdomain'],
+  ])('refuses to initialize on %s — %s', async (hostname) => {
+    withCredentials();
+    vi.stubGlobal('location', { hostname });
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    await importPosthog();
+
+    // Loopback is only half of it: `vite --host` is exactly the session where
+    // somebody is poking at the app by hand, and the browser there reports a
+    // LAN address rather than `localhost`.
+    expect(mockInit).not.toHaveBeenCalled();
+    consoleInfo.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it('does initialize on a real deployment host', async () => {
+    withCredentials();
+    // The guard must not be so broad that it silences production. This is the
+    // failure mode that would cost everything the change is trying to protect.
+    vi.stubGlobal('location', { hostname: 'tommoulard.github.io' });
+
+    await importPosthog();
+
+    expect(mockInit).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it('makes a person of a visitor before they have an account', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+
+    await importPosthog();
+
+    const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
+    // The whole point of the setting. Under posthog-js's `'identified_only'`
+    // default an anonymous event carries `$process_person_profile: false`, and
+    // PostHog never folds those events into the person `identify()` creates
+    // later — so somebody who read a shared trip for a week before signing up
+    // arrives as a person whose history starts at the sign-up.
+    expect(options['person_profiles']).toBe('always');
+    // `defaults: '2026-05-30'` sets this to /^(localhost|127\.0\.0\.1)$/, and a
+    // match routes through `setPersonProperties()`, which tags the person as an
+    // internal user. That is the mechanism behind the 19 phantom people, and
+    // `'always'` above does not make it harmless: it decides *what kind* of
+    // person a dev-server load creates, not whether it creates one.
+    expect(options['internal_or_test_user_hostname']).toBeNull();
+  });
+
+  it('registers the release on every event', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+    vi.stubEnv('VITE_APP_VERSION', 'main@abc1234');
+
+    await importPosthog();
+
+    expect(mockRegister).toHaveBeenCalledWith(
+      expect.objectContaining({ app_version: 'main@abc1234' }),
+    );
+  });
+
+  it('registers how the page is displayed on every event', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+
+    await importPosthog();
+
+    // The test setup's `matchMedia` matches nothing, which is a browser tab.
+    // This property is what lets retention be split by installed and not:
+    // `pwa_install_completed` says an install happened, and until this nothing
+    // said which later events came from the installed copy.
+    expect(mockRegister).toHaveBeenCalledWith(
+      expect.objectContaining({ display_mode: 'browser' }),
+    );
+  });
+
+  it('reports standalone when the page runs as an installed app', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+    const matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({
+          matches: query === '(display-mode: standalone)',
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+
+    try {
+      await importPosthog();
+    } finally {
+      matchMedia.mockRestore();
+    }
+
+    expect(mockRegister).toHaveBeenCalledWith(
+      expect.objectContaining({ display_mode: 'standalone' }),
+    );
+  });
+
+  it('loads its own external scripts so their errors can be read', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+
+    const { readableExternalScript } = await importPosthog();
+
+    // The fix for the cause rather than the symptom. posthog-js appends a
+    // `<script>` for `recorder.js` and `surveys.js`, and those come from
+    // another origin: without `crossorigin` the browser blanks anything they
+    // throw down to the string "Script error.".
+    const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(options['prepare_external_dependency_script']).toBe(readableExternalScript);
+  });
+
+  it('marks events through the opaque-exception annotator, dropping none', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+
+    const { markOpaqueExceptions } = await importPosthog();
+
+    // The function is tested on its own below; what this asserts is that it is
+    // actually wired in. A hook nothing calls is the easy way for this to
+    // regress silently the next time the init options are edited.
+    const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(options['before_send']).toBe(markOpaqueExceptions);
+  });
+});
+
+// ============================================================================
+// readableExternalScript
+// ============================================================================
+
+describe('readableExternalScript', () => {
+  it('requests the script with CORS, and returns it so it still loads', async () => {
+    const { readableExternalScript } = await importPosthog();
+    const script = document.createElement('script');
+
+    const prepared = readableExternalScript(script);
+
+    // `anonymous` is what makes the browser keep the real message and stack of
+    // anything the script throws. The asset host answers
+    // `access-control-allow-origin: *`, so the stricter fetch still succeeds.
+    expect(prepared.crossOrigin).toBe('anonymous');
+    // Returning `null` here would tell posthog-js not to load the script at
+    // all, which would silently turn off session replay and surveys.
+    expect(prepared).toBe(script);
+  });
+});
+
+// ============================================================================
+// markOpaqueExceptions
+// ============================================================================
+
+/** Builds the `$exception` shape posthog-js hands to `before_send`. */
+function exceptionEvent(list: unknown): CaptureResult {
+  return {
+    uuid: '01a091ea-7f76-79d3-8f33-70daf1ca074c',
+    event: '$exception',
+    properties: { $exception_list: list },
+  } as CaptureResult;
+}
+
+/** One frame, enough to make a stack trace non-empty. */
+const SOME_FRAME = { filename: 'app.js', function: 'save', in_app: true };
+
+describe('markOpaqueExceptions', () => {
+  it.each(['Script error.', 'Script error', '  Script error.  '])(
+    'reports a stackless %s under one named issue',
+    async (value) => {
+      const { markOpaqueExceptions } = await importPosthog();
+
+      // The real event behind this: Mobile Safari on `/trips`, synthetic and
+      // unhandled, no file, no line, no frames. It is still sent — it carries a
+      // URL, a session, a release and a replay — but it is filed under a name
+      // that says what it is rather than under a bare `Error`.
+      const event = markOpaqueExceptions(exceptionEvent([{ type: 'Error', value }]));
+
+      expect(event).not.toBeNull();
+      expect(event?.properties['opaque_cross_origin']).toBe(true);
+      expect(event?.properties['$exception_fingerprint']).toBe('opaque-cross-origin-script');
+    },
+  );
+
+  it('marks one whose stacktrace is present but empty', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
+
+    // posthog-js normalizes an error with no usable frames to an empty array
+    // rather than omitting the key. Both spellings mean the same nothing.
+    const event = exceptionEvent([
+      { type: 'Error', value: 'Script error.', stacktrace: { frames: [] } },
+    ]);
+
+    expect(markOpaqueExceptions(event)?.properties['opaque_cross_origin']).toBe(true);
+  });
+
+  it('leaves a real error that happens to carry that message alone', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
+
+    // The message alone must never be the test. Application code is free to
+    // throw `new Error('Script error.')`, and that error arrives with frames
+    // because it came from a same-origin script. Regrouping it under the
+    // opaque fingerprint would bury a real bug in the noise bucket.
+    const event = exceptionEvent([
+      { type: 'Error', value: 'Script error.', stacktrace: { frames: [SOME_FRAME] } },
+    ]);
+
+    expect(markOpaqueExceptions(event)).toBe(event);
+    expect(event.properties['$exception_fingerprint']).toBeUndefined();
+    expect(event.properties['opaque_cross_origin']).toBeUndefined();
+  });
+
+  it('leaves an exception whose list also holds a readable entry alone', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
+
+    // A chained error: the opaque half says nothing, the other half says where.
+    // That readable half is the cause, and it is what somebody would fix, so
+    // the event keeps the grouping PostHog computes from it.
+    const event = exceptionEvent([
+      { type: 'Error', value: 'Script error.' },
+      { type: 'TypeError', value: 'x is undefined', stacktrace: { frames: [SOME_FRAME] } },
+    ]);
+
+    expect(markOpaqueExceptions(event)).toBe(event);
+    expect(event.properties['$exception_fingerprint']).toBeUndefined();
+  });
+
+  it('leaves every ordinary exception alone', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
+
+    const event = exceptionEvent([{ type: 'TypeError', value: 'x is undefined' }]);
+
+    expect(markOpaqueExceptions(event)).toBe(event);
+    expect(event.properties['opaque_cross_origin']).toBeUndefined();
+  });
+
+  it('leaves events that are not exceptions at all alone', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
+
+    // `before_send` sees every event, `$pageview` and `app_used` included. This
+    // hook has one job and must not become a general-purpose rewriter.
+    const event = { uuid: 'u', event: 'app_used', properties: {} } as CaptureResult;
+
+    expect(markOpaqueExceptions(event)).toBe(event);
+    expect(event.properties['opaque_cross_origin']).toBeUndefined();
+  });
+
+  it('never drops an event', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
+
+    // The property that matters most here: this hook reports, it does not
+    // filter. Returning `null` from `before_send` would discard the capture,
+    // and no input may ever make that happen.
+    for (const list of [
+      [{ type: 'Error', value: 'Script error.' }],
+      [{ type: 'TypeError', value: 'x is undefined' }],
+      [],
+    ]) {
+      expect(markOpaqueExceptions(exceptionEvent(list))).not.toBeNull();
+    }
+  });
+
+  it.each([
+    ['a null event', null],
+    ['a missing list', undefined],
+    ['an empty list', []],
+    ['a list that is not an array', 'Script error.'],
+    ['a list of nulls', [null]],
+    ['a list of non-objects', ['Script error.']],
+    ['an entry with no value', [{ type: 'Error' }]],
+  ])('passes %s through untouched rather than throwing', async (_label, list) => {
+    const { markOpaqueExceptions } = await importPosthog();
+
+    // posthog-js calls this on the way out of every capture, and a throw here
+    // would surface as an error inside the error reporter.
+    const event = list === null ? null : exceptionEvent(list);
+
+    expect(() => markOpaqueExceptions(event)).not.toThrow();
+    expect(markOpaqueExceptions(event)).toBe(event);
+    expect(event?.properties['opaque_cross_origin']).toBeUndefined();
+  });
+});
+
+// ============================================================================
+// resetAnalyticsIdentity
+// ============================================================================
+
+describe('resetAnalyticsIdentity', () => {
+  it('puts the release back, because reset() wipes super properties', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+    vi.stubEnv('VITE_APP_VERSION', 'main@abc1234');
+    const { resetAnalyticsIdentity } = await importPosthog();
+    mockRegister.mockClear();
+
+    resetAnalyticsIdentity();
+
+    // posthog-js's `reset()` calls `persistence.clear()`, which drops every
+    // persisted property — super properties included. A bare `reset()` would
+    // leave the rest of the session with no `app_version`, so every event after
+    // a sign-out falls out of the breakdown the project is sliced by.
+    expect(mockReset).toHaveBeenCalledTimes(1);
+    expect(mockRegister).toHaveBeenCalledWith(
+      expect.objectContaining({ app_version: 'main@abc1234', display_mode: 'browser' }),
+    );
+    expect(mockReset.mock.invocationCallOrder[0]!).toBeLessThan(
+      mockRegister.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('is a no-op when analytics is off, rather than throwing', async () => {
+    // The default in tests, in a fresh clone and in a fork's CI. Nothing in this
+    // module may throw: it is imported at module scope by `main.tsx`.
+    const { resetAnalyticsIdentity } = await importPosthog();
+
+    expect(() => resetAnalyticsIdentity()).not.toThrow();
+    expect(mockReset).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// captureUsage
+// ============================================================================
+
+describe('captureUsage', () => {
+  it('fires the domain event and the one activity event beside it', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+    const { captureUsage } = await importPosthog();
+
+    captureUsage('activity_saved', { operation: 'created' });
+
+    // The domain event is unchanged — every insight and funnel built on it
+    // keeps working, and its properties are not diluted by the second one.
+    expect(mockCapture).toHaveBeenNthCalledWith(1, 'activity_saved', {
+      operation: 'created',
+    });
+    // `app_used` is the whole reason this helper exists: PostHog's activity
+    // setting takes a single event name, and no one domain event means "this
+    // person used the app". `action` keeps the specific one addressable.
+    expect(mockCapture).toHaveBeenNthCalledWith(2, 'app_used', {
+      action: 'activity_saved',
+    });
+  });
+
+  it('sends the domain event with no properties as one, not as undefined', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+    const { captureUsage } = await importPosthog();
+
+    captureUsage('trip_updated');
+
+    expect(mockCapture).toHaveBeenNthCalledWith(1, 'trip_updated', undefined);
+    expect(mockCapture).toHaveBeenNthCalledWith(2, 'app_used', {
+      action: 'trip_updated',
+    });
+  });
+
+  it('is a no-op when analytics is off, rather than throwing', async () => {
+    // The default in tests, in a fresh clone and in a fork's CI. A call site
+    // that used to write `posthog?.capture(...)` must not lose that safety by
+    // moving to a named import.
+    const { captureUsage } = await importPosthog();
+
+    expect(() => captureUsage('trip_created')).not.toThrow();
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+});

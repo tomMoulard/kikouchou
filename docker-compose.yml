@@ -1,0 +1,76 @@
+services:
+  traefik:
+    image: traefik:v3
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.email=admin@kikouchou.app
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+
+  app:
+    build: .
+    expose:
+      - "3000"
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.app.rule=Host(`kikouchou.app`)
+      - traefik.http.routers.app.entrypoints=websecure
+      - traefik.http.routers.app.tls.certresolver=letsencrypt
+      - traefik.http.services.app.loadbalancer.server.port=3000
+
+  # share.kikouchou.app — the per-trip link preview.
+  #
+  # A share link is answered here rather than by the app: a crawler runs no
+  # JavaScript, so the trip's own name, dates and occupancy have to be in the
+  # HTML the server sends. This service reads them, draws the card, and sends a
+  # real browser on to /join/<token> in the app.
+  #
+  # SUPABASE_SERVICE_ROLE_KEY bypasses Row-Level Security. It is passed at run
+  # time and never as a build arg, so it stays out of the image and out of
+  # `docker history`. Both variables come from the shell or from a `.env` beside
+  # this file, and the `:?` form makes a missing one a refused `up` rather than
+  # a container that starts and 500s.
+  share:
+    image: tommoulard/kikoushou-share:latest
+    build:
+      context: ./server/share-preview
+      platforms:
+        - "linux/amd64"
+        - "linux/arm64"
+    expose:
+      - "8080"
+    restart: unless-stopped
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:?set SUPABASE_URL for the share preview}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?set SUPABASE_SERVICE_ROLE_KEY for the share preview}
+      SHARE_ORIGIN: https://share.kikouchou.app
+      APP_ORIGIN: https://app.kikouchou.app
+      # Trip reminders (server/share-preview/README.md, "Trip reminders").
+      # All optional: with no VAPID_PRIVATE_KEY the service sends nothing.
+      # Secrets come from the shell or the `.env` beside this file, never from
+      # a build arg.
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@kikouchou.app}
+      PUSH_WEBHOOK_SECRET: ${PUSH_WEBHOOK_SECRET:-}
+      PUSH_SEND_MODE: ${PUSH_SEND_MODE:-direct}
+      POSTHOG_KEY: ${POSTHOG_KEY:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-https://events.kikouchou.app}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.share.rule=Host(`share.kikouchou.app`)
+      - traefik.http.routers.share.entrypoints=websecure
+      - traefik.http.routers.share.tls.certresolver=letsencrypt
+      - traefik.http.services.share.loadbalancer.server.port=8080
+
+volumes:
+  letsencrypt:
