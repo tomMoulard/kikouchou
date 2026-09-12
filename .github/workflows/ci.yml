@@ -162,6 +162,52 @@ jobs:
       - name: Run unit tests with coverage
         run: bun run test:coverage
 
+      # The gate is declared twice on purpose, and the duplication is the point.
+      #
+      # `vitest.config.ts` already fails the run under its thresholds, which is
+      # what a developer hits locally. This step re-reads the summary vitest
+      # wrote and states the figure in the log, so a red build says "statements
+      # 89.4% is under the required 90%" instead of burying one line in a
+      # coverage table nobody scrolls to. It also survives a thresholds block
+      # that somebody edits down: lowering the config alone no longer lowers the
+      # gate.
+      #
+      # Statements and lines only. Branches (82.55%) and functions (88.95%) are
+      # nowhere near 90 and most of the gap is code a jsdom unit test cannot
+      # reach; a gate nobody can pass is a gate somebody deletes.
+      - name: Enforce the 90% coverage floor
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+
+            const REQUIRED = 90;
+            const summary = JSON.parse(
+              readFileSync("coverage/coverage-summary.json", "utf8"),
+            ).total;
+
+            let failed = false;
+            for (const metric of ["statements", "lines"]) {
+              const pct = summary[metric].pct;
+              const ok = pct >= REQUIRED;
+              failed ||= !ok;
+              console.log(
+                `${ok ? "ok" : "FAIL"}  ${metric}: ${pct}% (required ${REQUIRED}%)`,
+              );
+            }
+            // Reported, never gated: worth watching, not yet worth blocking.
+            for (const metric of ["branches", "functions"]) {
+              console.log(`      ${metric}: ${summary[metric].pct}% (not gated)`);
+            }
+
+            if (failed) {
+              console.error(
+                "\nCoverage dropped below the floor. Add tests for the new code — " +
+                  "do not lower the threshold.",
+              );
+              process.exit(1);
+            }
+          '
+
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         if: always()

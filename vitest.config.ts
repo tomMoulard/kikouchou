@@ -81,7 +81,10 @@ export default defineConfig({
     // Coverage configuration
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html', 'lcov'],
+      // `json-summary` is what the CI gate reads: `coverage-final.json` holds
+      // per-statement counters for every file and has to be summed to answer
+      // "what is the global figure", which is a script CI should not carry.
+      reporter: ['text', 'json', 'json-summary', 'html', 'lcov'],
       reportsDirectory: './coverage',
 
       // Files to include in coverage
@@ -122,12 +125,23 @@ export default defineConfig({
        * `router.tsx` and `sw/register.ts` (0%), the camera-dependent
        * `QRScanner.tsx`, the WebLLM worker and `useWebLLM.ts`, and the sync
        * providers `YjsProvider.tsx` and `useTripSync.ts`.
+       *
+       * Statements and lines sit at the 90% the project now gates on, rather
+       * than below the measured value like the other two. That is deliberate
+       * and it is tight: the suite measures 90.04% statements, so eight
+       * uncovered statements is the whole margin. New code without tests turns
+       * this red, which is the point — but when it goes red on a change that
+       * only moved code around, the fix is a test, never a lower number.
+       *
+       * Branches and functions cannot join them at 90 yet: they measure 82.55
+       * and 88.95, and most of what is missing is code a jsdom unit test cannot
+       * reach at all.
        */
       thresholds: {
-        statements: 88,
+        statements: 90,
         branches: 81,
         functions: 87,
-        lines: 88,
+        lines: 90,
       },
     },
 
