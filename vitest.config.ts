@@ -121,27 +121,27 @@ export default defineConfig({
        * green and a real regression goes red. Raise them as coverage grows;
        * never lower one to make a red build pass without saying what dropped.
        *
-       * What is left is concentrated in code a jsdom unit test cannot reach:
-       * `router.tsx` and `sw/register.ts` (0%), the camera-dependent
-       * `QRScanner.tsx`, the WebLLM worker and `useWebLLM.ts`, and the sync
-       * providers `YjsProvider.tsx` and `useTripSync.ts`.
+       * Measured 2026-09-12 on 365 files / 6357 tests:
+       *   statements 93.01 · branches 85.05 · functions 92.07 · lines 93.61
        *
-       * Statements and lines sit at the 90% the project now gates on, rather
+       * Statements and lines sit at the 93% the project now gates on, rather
        * than below the measured value like the other two. That is deliberate
-       * and it is tight: the suite measures 90.04% statements, so eight
+       * and it is tight: the suite measures 93.01% statements, so a couple of
        * uncovered statements is the whole margin. New code without tests turns
        * this red, which is the point — but when it goes red on a change that
        * only moved code around, the fix is a test, never a lower number.
        *
-       * Branches and functions cannot join them at 90 yet: they measure 82.55
-       * and 88.95, and most of what is missing is code a jsdom unit test cannot
-       * reach at all.
+       * Branches and functions cannot join them at 93 yet. What is left is in
+       * code a jsdom unit test cannot reach at all: the service worker
+       * registration, the lazy route chunks, the camera inside `QRScanner.tsx`,
+       * and the WebGPU device behind the assistant's pipeline — the worker's
+       * own logic is tested, but the device it talks to is not.
        */
       thresholds: {
-        statements: 90,
-        branches: 81,
-        functions: 87,
-        lines: 90,
+        statements: 93,
+        branches: 84,
+        functions: 91,
+        lines: 93,
       },
     },
 
