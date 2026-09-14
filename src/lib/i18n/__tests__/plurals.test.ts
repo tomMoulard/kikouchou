@@ -75,8 +75,8 @@ const PLURAL_CASES: readonly PluralCase[] = [
     ],
   },
   {
-    // SyncStatusBadge routes counts of 1 or fewer to `nav.syncOnlineJustYou`,
-    // so today only the `_other` form reaches a screen. The singular is still
+    // SyncStatusBadge hides the head count below two, so today only the
+    // `_other` form reaches a screen. The singular is still
     // the bundle's job to carry: a catalogue that is only correct because of a
     // guard at one call site breaks the moment that guard moves.
     key: 'nav.syncOnlineCount',
