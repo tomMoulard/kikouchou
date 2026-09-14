@@ -70,9 +70,7 @@ How a reminder travels:
    subscription lands in `push_subscriptions`.
 2. Every `REMINDER_INTERVAL_SECONDS`, the service loads every subscription,
    rebuilds each trip's document once, and asks `reminders` what is due for
-   each subscriber. For each due reminder it asks PostHog's feature flags
-   whether the kind is on (`reminder-trip-start`, `reminder-own-arrival`,
-   `reminder-pickup`; a flag that does not exist counts as on), records a row
+   each subscriber. Every kind is on. For each due reminder it records a row
    in `reminder_log`, and reports a `reminder_due` event to PostHog on the
    subscribing browser's own person.
 3. In `direct` mode the service pushes at once. In `workflow` mode it waits for
@@ -123,7 +121,7 @@ and `SELECT, INSERT, UPDATE` on `reminder_log`, granted in
 | `VAPID_SUBJECT` | no | `mailto:admin@kikouchou.app` | The VAPID `sub` claim |
 | `PUSH_WEBHOOK_SECRET` | no | | Opens `POST /push/send` to a caller presenting it |
 | `PUSH_SEND_MODE` | no | `direct` | `direct` sends at the tick; `workflow` waits for the webhook |
-| `POSTHOG_KEY` | no | | Project key, for `reminder_due`, `reminder_sent` and the flags |
+| `POSTHOG_KEY` | no | | Project key, for `reminder_due` and `reminder_sent` |
 | `POSTHOG_HOST` | no | `https://eu.i.posthog.com` | PostHog ingestion host or proxy |
 | `REMINDER_INTERVAL_SECONDS` | no | `3600` | Seconds between two passes (at least 60) |
 | `REMINDER_EVE_HOUR_UTC` | no | `17` | UTC hour from which "tomorrow" reminders go out |

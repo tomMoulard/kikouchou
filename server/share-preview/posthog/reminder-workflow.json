@@ -1,5 +1,5 @@
 {
-  "_comment": "A PostHog workflow that owns the reminder campaign. Create it as a draft from the PostHog UI or MCP (workflows-create), replace the two placeholders, test-run it against a real reminder_due event, then enable it and set PUSH_SEND_MODE=workflow on the share-preview service. While the service runs in direct mode this workflow is not needed: the three feature flags (reminder-trip-start, reminder-own-arrival, reminder-pickup) are the control.",
+  "_comment": "A PostHog workflow that owns the reminder campaign. Create it as a draft from the PostHog UI or MCP (workflows-create), replace the two placeholders, test-run it against a real reminder_due event, then enable it and set PUSH_SEND_MODE=workflow on the share-preview service. While the service runs in direct mode this workflow is not needed: the service sends every reminder it finds due.",
   "name": "Trip reminders",
   "description": "Sends each due trip reminder through the share-preview service, once. Edit this workflow to delay, condition or A/B test a kind; no deploy needed.",
   "exit_condition": "exit_only_at_end",

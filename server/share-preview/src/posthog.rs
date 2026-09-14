@@ -1,22 +1,18 @@
-//! The two things this service says to PostHog, and the one thing it asks.
+//! The two things this service says to PostHog.
 //!
 //! PostHog owns the reminder campaign. The sender reports every reminder that
 //! comes due as a `reminder_due` event and every push it delivered as
 //! `reminder_sent`, on the same person the app's own events land on when the
 //! subscribing browser passed its distinct id along. A workflow with an event
 //! trigger on `reminder_due` can then decide — delay, condition, cohort — and
-//! call `POST /push/send` back (see `push_sender`). Before reporting anything,
-//! the sender asks the feature flags whether the kind is switched on at all:
-//! `reminder-trip-start`, `reminder-own-arrival`, `reminder-pickup`.
+//! call `POST /push/send` back (see `push_sender`). Every kind is on: a
+//! reminder is dropped by the workflow or by the log, never by a flag here.
 //!
 //! Both calls use the project's public key, the same one the browser bundle
 //! carries. Nothing here needs a personal API key, and a failure to reach
 //! PostHog is a missed event, never a missed reminder or a crashed tick.
 
-use std::collections::HashMap;
-
 use reqwest::Client;
-use serde::Deserialize;
 use serde_json::{json, Value};
 
 // ============================================================================
@@ -29,12 +25,6 @@ pub struct PostHog {
     client: Client,
     host: String,
     key: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct DecideResponse {
-    #[serde(default, rename = "featureFlags")]
-    feature_flags: HashMap<String, Value>,
 }
 
 // ============================================================================
@@ -96,52 +86,6 @@ impl PostHog {
             Err(error) => eprintln!("posthog capture {event} failed: {error}"),
         }
     }
-
-    /// The feature flags for one distinct id: `Some(true|false)` for a flag
-    /// PostHog knows, `None` for one it does not.
-    ///
-    /// A flag that does not exist is not a flag that is off. Nothing has been
-    /// decided about it, so the caller treats `None` as "on": the reminders
-    /// work before anybody has created a flag, and creating one is how they
-    /// are switched off.
-    pub async fn flags(&self, distinct_id: &str) -> HashMap<String, Option<bool>> {
-        let body = json!({ "api_key": self.key, "distinct_id": distinct_id });
-        let response = match self
-            .client
-            .post(format!("{}/decide/?v=3", self.host))
-            .json(&body)
-            .send()
-            .await
-        {
-            Ok(response) if response.status().is_success() => response,
-            Ok(response) => {
-                eprintln!("posthog decide returned {}", response.status());
-                return HashMap::new();
-            }
-            Err(error) => {
-                eprintln!("posthog decide failed: {error}");
-                return HashMap::new();
-            }
-        };
-        let Ok(decided) = response.json::<DecideResponse>().await else {
-            return HashMap::new();
-        };
-        decided
-            .feature_flags
-            .into_iter()
-            .map(|(key, value)| (key, Some(flag_is_on(&value))))
-            .collect()
-    }
-}
-
-/// A multivariate flag reads as on whenever it has a variant; `false` and
-/// anything unrecognised read as off.
-pub fn flag_is_on(value: &Value) -> bool {
-    match value {
-        Value::Bool(on) => *on,
-        Value::String(variant) => !variant.is_empty() && variant != "false",
-        _ => false,
-    }
 }
 
 // ============================================================================
@@ -163,25 +107,5 @@ mod tests {
     fn trims_the_host_so_every_url_has_one_slash() {
         let posthog = PostHog::new(Some("https://events.kikouchou.app/"), Some("phc_x")).unwrap();
         assert_eq!(posthog.host, "https://events.kikouchou.app");
-    }
-
-    #[test]
-    fn reads_boolean_and_variant_flags() {
-        assert!(flag_is_on(&json!(true)));
-        assert!(!flag_is_on(&json!(false)));
-        assert!(flag_is_on(&json!("control")));
-        assert!(!flag_is_on(&json!("")));
-        assert!(!flag_is_on(&json!(null)));
-        assert!(!flag_is_on(&json!(3)));
-    }
-
-    #[test]
-    fn decodes_the_decide_payload_shape() {
-        let decided: DecideResponse = serde_json::from_str(
-            r#"{"featureFlags":{"reminder-pickup":false,"reminder-trip-start":true,"wizard":"test"},"other":1}"#,
-        )
-        .unwrap();
-        assert_eq!(decided.feature_flags.len(), 3);
-        assert!(!flag_is_on(&decided.feature_flags["reminder-pickup"]));
     }
 }

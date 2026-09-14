@@ -62,7 +62,8 @@ pub struct Config {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SendMode {
     /// This service, at the tick that found it due. The default, and the
-    /// fallback when no workflow is set up: the PostHog flags are the control.
+    /// fallback when no workflow is set up: every kind is sent, and the
+    /// `reminder_log` is the only thing that holds one back.
     Direct,
     /// Nobody, until a PostHog workflow calls `POST /push/send`.
     Workflow,
