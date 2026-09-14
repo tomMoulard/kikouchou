@@ -483,6 +483,11 @@ export type AnalyticsEvent =
   | 'trip_join_failed'
   | 'trip_link_opened'
   | 'trip_share_blocked'
+  // Trip templates: the enterprise link, and what the customer does with it
+  | 'trip_template_opened'
+  | 'trip_template_published'
+  | 'trip_template_publish_failed'
+  | 'trip_template_unpublished'
   | 'trip_sync_exported'
   | 'trip_sync_imported'
   | 'trip_sync_offline'

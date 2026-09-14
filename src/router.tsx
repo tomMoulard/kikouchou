@@ -37,6 +37,7 @@ import {
   joinRoutes,
   sharingRoutes,
   sharingSyncRoutes,
+  templateRoutes,
   tripLinkRoutes,
 } from '@/features/sharing/routes';
 import { assistantRoutes } from '@/features/assistant/routes';
@@ -351,6 +352,11 @@ export const routes: RouteObject[] = [
   // A trip's stable address: /t/:remoteTripId. Outside Layout too — reminders
   // and the iPhone install handoff open it on a device that may hold nothing.
   ...tripLinkRoutes.map((route) => ({ ...route, errorElement: <ErrorPage /> })),
+
+  // Trip template links: /template/:token. Outside Layout, because whoever
+  // follows one arrived from an enterprise's web page with no trip, no account
+  // and no idea what this app is.
+  ...templateRoutes.map((route) => ({ ...route, errorElement: <ErrorPage /> })),
 
   // Main application routes (with Layout)
   appRoutes,

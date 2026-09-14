@@ -186,6 +186,15 @@ export const joinRoutes: RouteObject[] = [
 ];
 
 /**
+ * Lazy-loaded TemplateLandingPage component (a trip template link).
+ */
+const TemplateLandingPage = lazy(() =>
+  import('./pages/TemplateLandingPage').then((module) => ({
+    default: module.TemplateLandingPage,
+  })),
+);
+
+/**
  * Route for a trip's stable link: `/t/:remoteTripId`.
  *
  * Top-level and outside the app chrome like `/join`, for the same reason: it
@@ -197,6 +206,24 @@ export const tripLinkRoutes: RouteObject[] = [
   {
     path: 't/:remoteTripId',
     element: withSuspense(TripLinkPage),
+  },
+];
+
+/**
+ * Route for a trip template link: `/template/:token`.
+ *
+ * Top-level and outside the app chrome like `/join`, and for a stronger version
+ * of the same reason: whoever follows this link has no trip, no account, and
+ * often has never heard of this app. They came from an enterprise's own web
+ * page or a message it sent, and the screen has to stand on its own.
+ *
+ * The word is spelled out rather than shortened to `/t`, which a trip's stable
+ * link already owns.
+ */
+export const templateRoutes: RouteObject[] = [
+  {
+    path: 'template/:token',
+    element: withSuspense(TemplateLandingPage),
   },
 ];
 

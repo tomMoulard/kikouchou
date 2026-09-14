@@ -11,6 +11,12 @@
  * The writes are `createTripWithDetails`, the same call the one-page form
  * makes, so the two arms differ in their screens and in nothing else.
  *
+ * It is also the screen behind a trip template link. A `prefill` carries the
+ * place, the map pin, the description, the currency and the rooms the
+ * enterprise published, the place and rooms questions come out of the flow, and
+ * the customer answers the three that are left: the name, the dates and the
+ * guests.
+ *
  * @module features/trips/components/TripCreateWizard
  */
 
@@ -38,7 +44,7 @@ import { announceStatus } from '@/lib/notifications';
 import { captureEvent, captureUsage } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 import { DEFAULT_ROOM_ICON } from '@/types';
-import type { ISODateString, Trip, TripFormData } from '@/types';
+import type { CurrencyCode, ISODateString, Trip, TripFormData } from '@/types';
 import { LocationAutocomplete, type TripImportData } from './LocationAutocomplete';
 import type { NewTripGuest, NewTripRoom } from './TripForm';
 import { createTripWithDetails, type TripCreationOutcome } from '../lib/create-trip-with-details';
@@ -47,9 +53,32 @@ import { createTripWithDetails, type TripCreationOutcome } from '../lib/create-t
 // Type Definitions
 // ============================================================================
 
+/**
+ * What a trip template hands the wizard before the first question.
+ *
+ * Everything here is already decided by whoever published the template, so the
+ * wizard neither asks for it nor shows it: the place and the rooms questions
+ * are dropped and the remaining three — the name, the dates, the guests — are
+ * the whole flow. The description and the currency have no question of their
+ * own in the wizard at all; they travel straight into the trip.
+ */
+export interface TripCreateWizardPrefill {
+  readonly description: string | null;
+  readonly location: string | null;
+  readonly coordinates: TripFormData['coordinates'];
+  readonly currency: CurrencyCode | null;
+  readonly rooms: readonly NewTripRoom[];
+}
+
 export interface TripCreateWizardProps {
   /** What to pre-fill the first guest, "you", with. */
   readonly currentUserName?: string | undefined;
+  /**
+   * A template's values, when the visitor arrived through a template link.
+   *
+   * Absent for the ordinary first-trip wizard, which asks all five questions.
+   */
+  readonly prefill?: TripCreateWizardPrefill | undefined;
   /**
    * Called the moment creation starts, before the first write.
    *
@@ -74,6 +103,14 @@ type Step = 'name' | 'dates' | 'place' | 'guests' | 'rooms' | 'done';
 // ============================================================================
 
 const QUESTIONS: readonly Step[] = ['name', 'dates', 'place', 'guests', 'rooms'];
+
+/**
+ * The questions a template leaves to ask.
+ *
+ * The place and the rooms came with the template, so asking for them again
+ * would invite the customer to overwrite what the enterprise set up.
+ */
+const TEMPLATE_QUESTIONS: readonly Step[] = ['name', 'dates', 'guests'];
 
 /** The date shape `Trip` stores. */
 const ISO_DATE_FORMAT = 'yyyy-MM-dd';
@@ -113,6 +150,7 @@ function prefersReducedMotion(): boolean {
  */
 export const TripCreateWizard = memo(function TripCreateWizard({
   currentUserName,
+  prefill,
   onCreating,
   onCreated,
   onCancel,
@@ -123,14 +161,16 @@ export const TripCreateWizard = memo(function TripCreateWizard({
   const [step, setStep] = useState<Step>('name');
   const [name, setName] = useState('');
   const [range, setRange] = useState<DateRange | undefined>(undefined);
-  const [location, setLocation] = useState('');
-  const [coordinates, setCoordinates] = useState<TripFormData['coordinates']>(undefined);
+  const [location, setLocation] = useState(() => prefill?.location ?? '');
+  const [coordinates, setCoordinates] = useState<TripFormData['coordinates']>(
+    () => prefill?.coordinates,
+  );
   const [importSource, setImportSource] = useState<TripImportData | null>(null);
   const [guests, setGuests] = useState<NewTripGuest[]>(() =>
     currentUserName ? [{ name: currentUserName, isSelf: true }] : [],
   );
   const [guestDraft, setGuestDraft] = useState('');
-  const [rooms, setRooms] = useState<NewTripRoom[]>([]);
+  const [rooms, setRooms] = useState<NewTripRoom[]>(() => [...(prefill?.rooms ?? [])]);
   const [roomDraft, setRoomDraft] = useState('');
   const [roomCapacity, setRoomCapacity] = useState(DEFAULT_ROOM_CAPACITY);
   const [problem, setProblem] = useState<string | null>(null);
@@ -177,7 +217,13 @@ export const TripCreateWizard = memo(function TripCreateWizard({
     };
   }, [step]);
 
-  const stepIndex = QUESTIONS.indexOf(step);
+  // Three questions for a template, five otherwise. Memoised on the prefill
+  // rather than read inline, so the callbacks below keep a stable identity.
+  const questions = useMemo(
+    () => (prefill === undefined ? QUESTIONS : TEMPLATE_QUESTIONS),
+    [prefill],
+  );
+  const stepIndex = questions.indexOf(step);
 
   const report = useCallback((outcome: 'next' | 'skip' | 'back', from: Step): void => {
     captureEvent('trip_wizard_step', { step: from, outcome });
@@ -194,8 +240,8 @@ export const TripCreateWizard = memo(function TripCreateWizard({
       return;
     }
     report('back', step);
-    goTo(QUESTIONS[stepIndex - 1] ?? 'name');
-  }, [goTo, onCancel, report, step, stepIndex]);
+    goTo(questions[stepIndex - 1] ?? 'name');
+  }, [goTo, onCancel, questions, report, step, stepIndex]);
 
   const create = useCallback(async (): Promise<void> => {
     if (!range?.from || !range.to) {
@@ -214,6 +260,10 @@ export const TripCreateWizard = memo(function TripCreateWizard({
           endDate: toIsoDate(range.to),
           ...(location.trim() === '' ? {} : { location: location.trim() }),
           ...(coordinates === undefined ? {} : { coordinates }),
+          // A template's own two fields. The wizard never asks for either, so
+          // they are here or they are nowhere.
+          ...(prefill?.description ? { description: prefill.description } : {}),
+          ...(prefill?.currency ? { currency: prefill.currency } : {}),
         },
         guests,
         rooms,
@@ -226,7 +276,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
         return;
       }
       captureUsage('trip_created', {
-        via: 'wizard',
+        via: prefill === undefined ? 'wizard' : 'template',
         imported_rooms: outcome.counts.importedRooms,
         guest_count: outcome.counts.guests,
         imported_guests: outcome.counts.importedGuests,
@@ -250,7 +300,35 @@ export const TripCreateWizard = memo(function TripCreateWizard({
         setIsCreating(false);
       }
     }
-  }, [coordinates, goTo, guests, importSource, location, name, onCreating, range, rooms, t]);
+  }, [
+    coordinates,
+    goTo,
+    guests,
+    importSource,
+    location,
+    name,
+    onCreating,
+    prefill,
+    range,
+    rooms,
+    t,
+  ]);
+
+  /**
+   * The question after this one, or the trip when there is none.
+   *
+   * Written against the list rather than naming each next step, because a
+   * template asks three of the five questions and a hard-coded `goTo('place')`
+   * would walk it into a screen it does not have.
+   */
+  const goToNext = useCallback((): void => {
+    const next = questions[stepIndex + 1];
+    if (next === undefined) {
+      void create();
+      return;
+    }
+    goTo(next);
+  }, [create, goTo, questions, stepIndex]);
 
   /** Enter, or the Next button: validate this question, move to the next. */
   const advance = useCallback(
@@ -262,7 +340,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
             return;
           }
           report(outcome, step);
-          goTo('dates');
+          goToNext();
           return;
         }
         case 'dates': {
@@ -273,29 +351,21 @@ export const TripCreateWizard = memo(function TripCreateWizard({
             return;
           }
           report(outcome, step);
-          goTo('place');
+          goToNext();
           return;
         }
-        case 'place': {
-          report(outcome, step);
-          goTo('guests');
-          return;
-        }
-        case 'guests': {
-          report(outcome, step);
-          goTo('rooms');
-          return;
-        }
+        case 'place':
+        case 'guests':
         case 'rooms': {
           report(outcome, step);
-          void create();
+          goToNext();
           return;
         }
         case 'done':
           return;
       }
     },
-    [create, goTo, name, range, report, step, t],
+    [goToNext, name, range, report, step, t],
   );
 
   const addGuest = useCallback((): boolean => {
@@ -363,14 +433,19 @@ export const TripCreateWizard = memo(function TripCreateWizard({
     setCoordinates(data.trip.coordinates);
   }, []);
 
+  // The last question is the one that creates the trip: 'rooms' for the full
+  // flow, 'guests' behind a template. Naming it rather than naming a step keeps
+  // the two flows from drifting.
+  const isLastQuestion = stepIndex >= 0 && stepIndex === questions.length - 1;
+
   const progressLabel = useMemo(
     () =>
       t('trips.wizard.progress', {
         step: Math.max(stepIndex, 0) + 1,
-        total: QUESTIONS.length,
+        total: questions.length,
         defaultValue: 'Step {{step}} of {{total}}',
       }),
-    [stepIndex, t],
+    [questions.length, stepIndex, t],
   );
 
   // --------------------------------------------------------------------------
@@ -426,7 +501,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-6" data-testid="trip-wizard">
       <ol className="flex justify-center gap-2" aria-label={progressLabel}>
-        {QUESTIONS.map((question, index) => (
+        {questions.map((question, index) => (
           <li
             key={question}
             aria-current={index === stepIndex ? 'step' : undefined}
@@ -673,7 +748,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
           {t('trips.wizard.back', 'Back')}
         </Button>
         <div className="flex gap-2">
-          {stepIndex >= 2 && step !== 'rooms' ? (
+          {stepIndex >= 2 && !isLastQuestion ? (
             <Button
               type="button"
               variant="ghost"
@@ -684,7 +759,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
               {t('trips.wizard.skip', 'Skip for now')}
             </Button>
           ) : null}
-          {step === 'rooms' ? (
+          {isLastQuestion ? (
             <Button type="button" disabled={isCreating} onClick={() => advance('next')}>
               <Check className="size-4" aria-hidden="true" />
               {isCreating

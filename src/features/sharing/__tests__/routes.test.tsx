@@ -56,6 +56,32 @@ Object.defineProperty(window, 'localStorage', {
   writable: true,
 });
 
+// Every provider lives above the router in `main.tsx`, so a page reaching for
+// the trip context is correct; this file mounts a route table on its own.
+vi.mock('@/contexts/TripContext', () => ({
+  useTripContext: () => ({ setCurrentTrip: vi.fn() }),
+}));
+
+// The template landing page reads one anonymous function. The route table is
+// what is under test here, so the read is a double and the page's own tests
+// cover its phases.
+vi.mock('../hooks/useTripTemplate', () => ({
+  useTripTemplate: () => ({
+    phase: {
+      kind: 'ready',
+      template: {
+        name: 'Chalet Marmotte',
+        description: null,
+        location: null,
+        coordinates: null,
+        currency: null,
+        rooms: [],
+      },
+    },
+    retry: vi.fn(),
+  }),
+}));
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -67,7 +93,7 @@ vi.mock('sonner', () => ({
 import type { ShareId, Trip, TripId } from '@/types';
 import { isoDate } from '@/test/utils';
 import { getPersonsByTripId, getTripByShareId } from '@/lib/db';
-import { sharingRoutes } from '../routes';
+import { sharingRoutes, templateRoutes } from '../routes';
 
 const mockGetTripByShareId = vi.mocked(getTripByShareId);
 const mockGetPersonsByTripId = vi.mocked(getPersonsByTripId);
@@ -90,6 +116,7 @@ beforeAll(async () => {
     import('../pages/RoomSelectionStepPage'),
     import('../pages/TransportEntryStepPage'),
     import('../pages/SummaryStepPage'),
+    import('../pages/TemplateLandingPage'),
   ]);
 }, 60000);
 
@@ -124,6 +151,11 @@ function makeTrip(): Trip {
  */
 function renderRouteAt(url: string): void {
   const router = createMemoryRouter(sharingRoutes, { initialEntries: [url] });
+  rtlRender(<RouterProvider router={router} />);
+}
+
+function renderTemplateRouteAt(url: string): void {
+  const router = createMemoryRouter(templateRoutes, { initialEntries: [url] });
   rtlRender(<RouterProvider router={router} />);
 }
 
@@ -166,5 +198,21 @@ describe('sharingRoutes', () => {
     renderRouteAt(`/share/${SHARE_ID}/${segment}`);
 
     expect(await screen.findByText(heading, undefined, FIND_TIMEOUT)).toBeInTheDocument();
+  });
+});
+
+describe('templateRoutes', () => {
+  it('renders the landing screen at /template/:token', async () => {
+    renderTemplateRouteAt('/template/tokentokentoken1');
+
+    expect(
+      await screen.findByText('Chalet Marmotte', undefined, FIND_TIMEOUT),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the word spelled out, so a trip link is not a template link', () => {
+    // `/t/:remoteTripId` is a trip's own stable address. The two must not
+    // collide, and the route table is where that is decided.
+    expect(templateRoutes.map((route) => route.path)).toEqual(['template/:token']);
   });
 });

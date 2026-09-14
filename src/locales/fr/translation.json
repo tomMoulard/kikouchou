@@ -1070,6 +1070,23 @@
     }
   },
   "sharing": {
+    "template": {
+      "title": "Mod\u00e8le de voyage",
+      "description": "Publiez ce voyage comme mod\u00e8le et partagez un seul lien. La personne qui l'ouvre cr\u00e9e son propre voyage avec ce lieu, cette description et ces chambres, puis remplit le nom, les dates et les invit\u00e9s.",
+      "publish": "Publier comme mod\u00e8le",
+      "republish": "Publier \u00e0 nouveau",
+      "unpublish": "Retirer le mod\u00e8le",
+      "linkLabel": "Le lien \u00e0 partager",
+      "republishHint": "Vos clients lisent une copie prise au moment de la publication. Publiez \u00e0 nouveau apr\u00e8s avoir modifi\u00e9 le voyage.",
+      "keepsTheLink": "Retirer un mod\u00e8le ferme toutes les copies de son lien d'un coup. Le publier \u00e0 nouveau redonne le m\u00eame lien.",
+      "needsAccount": "Publier un mod\u00e8le demande un compte, car le lien le lit depuis le serveur.",
+      "signInReason": "Connectez-vous pour publier ce voyage comme mod\u00e8le.",
+      "unavailable": "Cette copie de l'application n'a pas de serveur de synchronisation : aucun mod\u00e8le ne peut y \u00eatre publi\u00e9.",
+      "opening": "Ouverture du mod\u00e8le de voyage\u2026",
+      "notFound": "Ce mod\u00e8le de voyage n'est pas disponible.",
+      "askAgain": "Demandez un nouveau lien \u00e0 la personne qui vous l'a donn\u00e9, ou cr\u00e9ez votre propre voyage.",
+      "failed": "Impossible d'ouvrir le mod\u00e8le de voyage"
+    },
     "title": "Partager le voyage",
     "description": "Partagez ce lien avec vos amis pour qu'ils puissent voir le voyage",
     "p2pDescription": "Envoyez le voyage complet via le bouton Partager sur la page des voyages : QR ou texte copié. Pas de stockage cloud — les données vont directement d’un appareil à l’autre.",

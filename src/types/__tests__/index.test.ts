@@ -5,7 +5,13 @@
  * that provides cyclic color assignment for trip participants.
  */
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_PERSON_COLORS, getDefaultPersonColor } from '../index';
+import {
+  DEFAULT_PERSON_COLORS,
+  DEFAULT_ROOM_ICON,
+  ROOM_ICONS,
+  getDefaultPersonColor,
+  normalizeRoomIcon,
+} from '../index';
 
 // Shared regex pattern for hex color validation
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
@@ -278,5 +284,34 @@ describe('getDefaultPersonColor', () => {
         DEFAULT_PERSON_COLORS[Math.abs(1.9) % 8]
       );
     });
+  });
+});
+
+// ============================================================================
+// normalizeRoomIcon Tests
+// ============================================================================
+
+describe('normalizeRoomIcon', () => {
+  it('keeps every icon this build can draw', () => {
+    for (const icon of ROOM_ICONS) {
+      expect(normalizeRoomIcon(icon)).toBe(icon);
+    }
+  });
+
+  it('falls back to a bed for an icon it does not know', () => {
+    // A room saved by a newer build still has to render on an older one.
+    expect(normalizeRoomIcon('jacuzzi')).toBe(DEFAULT_ROOM_ICON);
+  });
+
+  it('falls back for anything that is not a string at all', () => {
+    // Remote data: a template payload, a peer document, a QR import.
+    expect(normalizeRoomIcon(undefined)).toBe(DEFAULT_ROOM_ICON);
+    expect(normalizeRoomIcon(null)).toBe(DEFAULT_ROOM_ICON);
+    expect(normalizeRoomIcon({ evil: true })).toBe(DEFAULT_ROOM_ICON);
+    expect(normalizeRoomIcon(42)).toBe(DEFAULT_ROOM_ICON);
+  });
+
+  it('lists the default among the icons it accepts', () => {
+    expect(ROOM_ICONS).toContain(DEFAULT_ROOM_ICON);
   });
 });
