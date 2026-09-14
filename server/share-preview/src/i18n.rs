@@ -194,6 +194,41 @@ impl Language {
             Self::Fr => "Aller sur Kikouchou",
         }
     }
+
+    /// The headline across the top of a template card.
+    ///
+    /// A template link is followed by somebody who has never heard of this app,
+    /// so the card says what they are about to get rather than what the app is
+    /// for.
+    pub fn template_headline(self) -> &'static str {
+        match self {
+            Self::En => "Start this trip, with the rooms already set up.",
+            Self::Fr => "Lancez ce voyage, les chambres sont déjà prêtes.",
+        }
+    }
+
+    /// `og:description` for a template, and the line under its title.
+    pub fn template_description(self) -> &'static str {
+        match self {
+            Self::En => "Open the link and fill in the name, the dates and the guests. Everything else is ready.",
+            Self::Fr => "Ouvrez le lien et remplissez le nom, les dates et les invités. Tout le reste est prêt.",
+        }
+    }
+
+    /// The small line at the foot of a template card.
+    pub fn made_with(self) -> &'static str {
+        match self {
+            Self::En => "Made with Kikouchou — kikouchou.app",
+            Self::Fr => "Fait avec Kikouchou — kikouchou.app",
+        }
+    }
+
+    pub fn open_template(self) -> &'static str {
+        match self {
+            Self::En => "Start my trip",
+            Self::Fr => "Créer mon voyage",
+        }
+    }
 }
 
 // ============================================================================

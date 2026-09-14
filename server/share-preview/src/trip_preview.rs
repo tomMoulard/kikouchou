@@ -56,6 +56,20 @@ pub struct TripPreview {
     pub room_count: usize,
 }
 
+/// Everything a template card and its meta tags are drawn from.
+///
+/// Deliberately three fields. A template link is published to the world — a web
+/// page, a printed card, a message to somebody who has never heard of this app
+/// — so the card carries what the enterprise chose to publish and nothing that
+/// belongs to the enterprise's own trip. No guest, no date, no occupancy grid,
+/// and no Yjs document is rebuilt to draw it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TemplatePreview {
+    pub name: String,
+    pub location: Option<String>,
+    pub room_count: usize,
+}
+
 /// The `trips` row, which is authoritative for the name and the dates.
 #[derive(Debug, Clone)]
 pub struct TripRow {

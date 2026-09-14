@@ -26,7 +26,7 @@ use std::fmt::Write as _;
 
 use crate::dates::{date_range, day_count, format_date_span, format_day_label};
 use crate::i18n::Language;
-use crate::trip_preview::TripPreview;
+use crate::trip_preview::{TemplatePreview, TripPreview};
 
 // ============================================================================
 // Constants
@@ -269,30 +269,14 @@ fn chip_width(label: &str) -> f64 {
 }
 
 // ============================================================================
-// Public API
+// Shared furniture
 // ============================================================================
 
-/// Renders the card for one trip, as a complete SVG document.
-pub fn render_card_svg(preview: &TripPreview, language: Language) -> String {
-    let days = date_range(&preview.start_date, &preview.end_date, MAX_COLUMNS);
-    let total_days = day_count(&preview.start_date, &preview.end_date);
-    let hidden_days = total_days.saturating_sub(days.len());
-    let guests = &preview.guests[..preview.guests.len().min(MAX_ROWS)];
-    let hidden_guests = preview.guests.len() - guests.len();
-
-    let column_step = if days.is_empty() {
-        GRID_WIDTH
-    } else {
-        GRID_WIDTH / days.len() as f64
-    };
-    let day_index: HashMap<&str, usize> = days
-        .iter()
-        .enumerate()
-        .map(|(index, day)| (day.as_str(), index))
-        .collect();
-
-    let mut body = String::with_capacity(8192);
-
+/// The white ground, the two hero glows, the header grid and the wordmark.
+///
+/// Every card this service draws starts here, so an invite card and a template
+/// card are recognisably the same object with different contents.
+fn draw_backdrop(body: &mut String, headline: &str) {
     // --- Background: white, the two hero glows, and the header grid. --------
     let _ = write!(
         body,
@@ -326,34 +310,38 @@ pub fn render_card_svg(preview: &TripPreview, language: Language) -> String {
 
     // --- Header: wordmark, headline, and where this card came from. ---------
     text(
-        &mut body,
+        body,
         56.0,
         62.0,
         "Kikouchou",
         Type::label(34.0, INK).weight(700),
     );
     text(
-        &mut body,
+        body,
         1144.0,
         62.0,
         "app.kikouchou.app",
         Type::label(22.0, TEAL).anchor(Anchor::End),
     );
     text(
-        &mut body,
+        body,
         56.0,
         104.0,
-        language.headline(),
+        headline,
         Type::label(28.0, MUTED).plain(),
     );
+}
 
+/// The app window: its shadow, its rounded title bar, its three dots, and the
+/// one line of title across it.
+fn draw_window(body: &mut String, title: &str) {
     // --- The app window. ----------------------------------------------------
     let _ = write!(
         body,
         r#"<rect x="76" y="158" width="1048" height="448" rx="24" fill="{INK}" fill-opacity="0.16" filter="url(#cardShadow)"/>"#
     );
     rect(
-        &mut body,
+        body,
         56.0,
         136.0,
         1088.0,
@@ -363,14 +351,14 @@ pub fn render_card_svg(preview: &TripPreview, language: Language) -> String {
     // The second rect squares off the bottom corners the first one rounded, so
     // only the top of the title bar is round.
     rect(
-        &mut body,
+        body,
         57.0,
         137.0,
         1086.0,
         51.0,
         Box_::new(SURFACE).round(19.0),
     );
-    rect(&mut body, 57.0, 166.0, 1086.0, 22.0, Box_::new(SURFACE));
+    rect(body, 57.0, 166.0, 1086.0, 22.0, Box_::new(SURFACE));
     let _ = write!(
         body,
         r#"<line x1="56" y1="188" x2="1144" y2="188" stroke="{BORDER}" stroke-width="1"/>"#
@@ -380,19 +368,49 @@ pub fn render_card_svg(preview: &TripPreview, language: Language) -> String {
         r##"<g fill="#cbd5e1"><circle cx="84" cy="162" r="5.5"/><circle cx="102" cy="162" r="5.5"/><circle cx="120" cy="162" r="5.5"/></g>"##
     );
 
+    text(
+        body,
+        148.0,
+        169.0,
+        &truncate(title, 19.0, 980.0),
+        Type::label(19.0, SUBTLE),
+    );
+}
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/// Renders the card for one trip, as a complete SVG document.
+pub fn render_card_svg(preview: &TripPreview, language: Language) -> String {
+    let days = date_range(&preview.start_date, &preview.end_date, MAX_COLUMNS);
+    let total_days = day_count(&preview.start_date, &preview.end_date);
+    let hidden_days = total_days.saturating_sub(days.len());
+    let guests = &preview.guests[..preview.guests.len().min(MAX_ROWS)];
+    let hidden_guests = preview.guests.len() - guests.len();
+
+    let column_step = if days.is_empty() {
+        GRID_WIDTH
+    } else {
+        GRID_WIDTH / days.len() as f64
+    };
+    let day_index: HashMap<&str, usize> = days
+        .iter()
+        .enumerate()
+        .map(|(index, day)| (day.as_str(), index))
+        .collect();
+
+    let mut body = String::with_capacity(8192);
+
+    draw_backdrop(&mut body, language.headline());
+
     let span = format_date_span(&preview.start_date, &preview.end_date, language);
     let window_title = [preview.name.as_str(), span.as_str(), language.timeline()]
         .into_iter()
         .filter(|piece| !piece.is_empty())
         .collect::<Vec<_>>()
         .join(" · ");
-    text(
-        &mut body,
-        148.0,
-        169.0,
-        &truncate(&window_title, 19.0, 980.0),
-        Type::label(19.0, SUBTLE),
-    );
+    draw_window(&mut body, &window_title);
 
     // --- The two counts above the grid. -------------------------------------
     let guest_label = language.guests(preview.guests.len());
@@ -568,9 +586,95 @@ pub fn render_card_svg(preview: &TripPreview, language: Language) -> String {
         Type::label(17.0, MUTED),
     );
 
+    wrap_svg(&body)
+}
+
+/// Wraps a drawn body in the `svg` element, with the gradients and the shadow
+/// filter every card refers to by id.
+fn wrap_svg(body: &str) -> String {
     format!(
         r##"<svg xmlns="http://www.w3.org/2000/svg" width="{CARD_WIDTH}" height="{CARD_HEIGHT}" viewBox="0 0 {CARD_WIDTH} {CARD_HEIGHT}" font-family="{FONT_STACK}"><defs><radialGradient id="glowTeal" gradientUnits="userSpaceOnUse" cx="264" cy="76" r="520"><stop offset="0" stop-color="#14b8a6" stop-opacity="0.22"/><stop offset="1" stop-color="#14b8a6" stop-opacity="0"/></radialGradient><radialGradient id="glowIndigo" gradientUnits="userSpaceOnUse" cx="984" cy="24" r="480"><stop offset="0" stop-color="#6366f1" stop-opacity="0.16"/><stop offset="1" stop-color="#6366f1" stop-opacity="0"/></radialGradient><filter id="cardShadow" x="-10%" y="-10%" width="120%" height="140%"><feGaussianBlur stdDeviation="18"/></filter></defs>{body}</svg>"##
     )
+}
+
+/// The card behind a template link.
+///
+/// The same object as an invite card — same ground, same window — with the
+/// grid replaced by the three things a template publishes: what it is called,
+/// where it is, and how many rooms it has. There is no date row and no guest
+/// row, because a template carries neither.
+pub fn render_template_card_svg(preview: &TemplatePreview, language: Language) -> String {
+    let mut body = String::with_capacity(4096);
+
+    draw_backdrop(&mut body, language.template_headline());
+    draw_window(&mut body, &preview.name);
+
+    // --- The name, the place, and one count. --------------------------------
+    text(
+        &mut body,
+        84.0,
+        286.0,
+        &truncate(&preview.name, 46.0, 1032.0),
+        Type::label(46.0, INK).weight(700),
+    );
+
+    if let Some(location) = preview.location.as_deref() {
+        text(
+            &mut body,
+            84.0,
+            336.0,
+            &truncate(location, 26.0, 1032.0),
+            Type::label(26.0, MUTED).plain(),
+        );
+    }
+
+    let rooms = language.rooms(preview.room_count);
+    chip(
+        &mut body,
+        84.0,
+        380.0,
+        chip_width(&rooms),
+        &rooms,
+        Box_::new(TEAL_TINT),
+        TEAL,
+    );
+
+    text(
+        &mut body,
+        84.0,
+        468.0,
+        &truncate(language.template_description(), 22.0, 1032.0),
+        Type::label(22.0, SUBTLE).plain(),
+    );
+
+    // --- Footer: whose app this is. -----------------------------------------
+    let _ = write!(
+        body,
+        r#"<line x1="84" y1="540" x2="1116" y2="540" stroke="{BORDER}" stroke-width="1" stroke-dasharray="6 5"/>"#
+    );
+    text(
+        &mut body,
+        84.0,
+        574.0,
+        language.made_with(),
+        Type::label(17.0, MUTED),
+    );
+
+    wrap_svg(&body)
+}
+
+/// Alt text for a template card.
+///
+/// What the picture shows, and nothing the template did not publish.
+pub fn template_card_alt_text(preview: &TemplatePreview, language: Language) -> String {
+    match preview.location.as_deref() {
+        Some(location) => format!(
+            "{} — {location}. {}.",
+            preview.name,
+            language.rooms(preview.room_count)
+        ),
+        None => format!("{}. {}.", preview.name, language.rooms(preview.room_count)),
+    }
 }
 
 /// Alt text for the card.
@@ -627,6 +731,77 @@ mod tests {
                 stay("g2", "Attic", "2026-08-13", "2026-08-15"),
             ],
         }
+    }
+
+    fn template() -> TemplatePreview {
+        TemplatePreview {
+            name: "Chalet Marmotte".to_owned(),
+            location: Some("Chamonix".to_owned()),
+            room_count: 3,
+        }
+    }
+
+    #[test]
+    fn draws_a_template_card_of_the_same_size() {
+        let svg = render_template_card_svg(&template(), Language::En);
+
+        assert!(svg.starts_with("<svg"));
+        assert!(svg.contains(r#"width="1200""#));
+        assert!(svg.contains(r#"height="630""#));
+        assert!(svg.ends_with("</svg>"));
+    }
+
+    #[test]
+    fn a_template_card_shows_the_name_the_place_and_the_rooms() {
+        let svg = render_template_card_svg(&template(), Language::En);
+
+        assert!(svg.contains("Chalet Marmotte"));
+        assert!(svg.contains("Chamonix"));
+        assert!(svg.contains("3 rooms"));
+        assert!(svg.contains("Made with Kikouchou"));
+    }
+
+    #[test]
+    fn a_template_card_carries_no_date_and_no_occupancy() {
+        let svg = render_template_card_svg(&template(), Language::En);
+
+        // The invite card draws a day axis, a guest count and an occupancy
+        // grid. None of the three has any business on a card published to
+        // strangers. The word "guests" still appears, in the line that says
+        // what the customer has left to fill in.
+        assert!(!svg.contains("2026"));
+        assert!(!svg.contains("Timeline"));
+        assert!(!svg.contains("3 guests"));
+    }
+
+    #[test]
+    fn a_template_card_escapes_a_name_somebody_typed() {
+        let mut preview = template();
+        preview.name = "Rock & <Roll>".to_owned();
+
+        let svg = render_template_card_svg(&preview, Language::En);
+
+        assert!(!svg.contains("<Roll>"));
+        assert!(svg.contains("&amp;"));
+    }
+
+    #[test]
+    fn a_template_card_survives_having_no_place() {
+        let mut preview = template();
+        preview.location = None;
+
+        let svg = render_template_card_svg(&preview, Language::Fr);
+
+        assert!(svg.contains("Chalet Marmotte"));
+        assert!(svg.contains("3 chambres"));
+    }
+
+    #[test]
+    fn template_alt_text_says_what_the_picture_shows() {
+        assert_eq!(
+            template_card_alt_text(&template(), Language::En),
+            "Chalet Marmotte — Chamonix. 3 rooms."
+        );
     }
 
     #[test]

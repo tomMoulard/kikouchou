@@ -5,6 +5,9 @@
 //!   /en/OMIMwxRIi6TF_KP6            the same page, in English
 //!   /fr/OMIMwxRIi6TF_KP6/card.png   the 1200x630 card that page points at
 //!   /OMIMwxRIi6TF_KP6               no language: 302 to the negotiated one
+//!   /fr/t/mLq8Xb2rTn4wQ1zc           a trip template, in French
+//!   /fr/t/mLq8Xb2rTn4wQ1zc/card.png  its card
+//!   /t/mLq8Xb2rTn4wQ1zc              no language: 302 to the negotiated one
 //!   /healthz                        for the container's health check
 //!   /robots.txt                     permissive; see `page.rs` on why
 //! ```
@@ -22,10 +25,12 @@ use std::future::Future;
 
 use crate::config::Config;
 use crate::i18n::{negotiate_language, Language};
-use crate::page::{render_preview_page, render_unavailable_page, PageContext};
-use crate::trip_preview::TripPreview;
+use crate::page::{
+    render_preview_page, render_template_page, render_unavailable_page, PageContext,
+};
+use crate::trip_preview::{TemplatePreview, TripPreview};
 use crate::trip_source::is_token_shaped;
-use crate::trip_source::LoadResult;
+use crate::trip_source::{LoadResult, TemplateResult};
 
 // ============================================================================
 // Types
@@ -72,6 +77,18 @@ pub trait Backend: Sync {
         language: Language,
         token: &str,
     ) -> impl Future<Output = Option<Vec<u8>>> + Send;
+
+    /// Resolves a template token to what its card shows, or to the reason
+    /// there is none.
+    fn load_template(&self, token: &str) -> impl Future<Output = TemplateResult> + Send;
+
+    /// Renders and rasterises a template card, or `None` when rendering failed.
+    fn render_template_card(
+        &self,
+        preview: &TemplatePreview,
+        language: Language,
+        token: &str,
+    ) -> impl Future<Output = Option<Vec<u8>>> + Send;
 }
 
 // ============================================================================
@@ -79,6 +96,14 @@ pub trait Backend: Sync {
 // ============================================================================
 
 const CARD_SEGMENT: &str = "card.png";
+
+/// The segment that makes a link a template link rather than an invite.
+///
+/// Two namespaces, one host. A template token and an invite token look exactly
+/// alike — same alphabet, same length — so without this the service would have
+/// to guess which table to look in, and a collision would be a security
+/// question rather than a 404.
+const TEMPLATE_SEGMENT: &str = "t";
 const HTML: &str = "text/html; charset=utf-8";
 const TEXT: &str = "text/plain; charset=utf-8";
 
@@ -240,7 +265,15 @@ pub async fn route<B: Backend>(
     // not an invite in any language, and bouncing `/wp-admin` into `/fr/wp-admin`
     // only spent a round trip to reach the same 404.
     let Some(language) = Language::parse(first) else {
-        if !is_token_shaped(first) {
+        // `/t/<token>` counts too: the segment is one character, so it is not
+        // token-shaped on its own, and without this a template link with no
+        // language in it would 404 instead of being sent to one.
+        let looks_like_a_link = is_token_shaped(first)
+            || (first == TEMPLATE_SEGMENT
+                && segments
+                    .get(1)
+                    .is_some_and(|second| is_token_shaped(second)));
+        if !looks_like_a_link {
             return unavailable(FALLBACK_LANGUAGE, "unknown-path", 404);
         }
         let language = negotiate_language(accept_language);
@@ -248,10 +281,68 @@ pub async fn route<B: Backend>(
         return redirect(format!("/{language}/{rest}"), "negotiate-language");
     };
 
-    let Some(token) = segments.get(1) else {
+    let Some(second) = segments.get(1) else {
         return redirect(config.app_origin.clone(), "language-only");
     };
 
+    // `/<lang>/t/<token>` and `/<lang>/t/<token>/card.png`: a trip template.
+    if second == TEMPLATE_SEGMENT {
+        let Some(token) = segments.get(2) else {
+            return unavailable(language, "unknown-path", 404);
+        };
+        let wants_card = segments.len() == 4 && segments[3] == CARD_SEGMENT;
+        if segments.len() > 3 && !wants_card {
+            return unavailable(language, "unknown-path", 404);
+        }
+
+        let result = backend.load_template(token).await;
+        let TemplateResult::Ok(preview) = result else {
+            // The same reasoning as a dead invite, and the same body. A
+            // template that was taken down and a token that never existed are
+            // one fact to a stranger; only a failed read differs, and only in
+            // its status, so a chat app does not cache a Supabase blip as gone.
+            let status = if matches!(result, TemplateResult::Error) {
+                503
+            } else {
+                404
+            };
+            return unavailable(language, result.outcome(), status);
+        };
+
+        if wants_card {
+            return match backend
+                .render_template_card(&preview, language, token)
+                .await
+            {
+                Some(png) => {
+                    let mut headers = base_headers();
+                    headers.push(("content-type", "image/png".to_owned()));
+                    headers.push(("content-length", png.len().to_string()));
+                    headers.push((
+                        "cache-control",
+                        format!("public, max-age={}", config.cache_seconds),
+                    ));
+                    RouteResponse {
+                        status: 200,
+                        headers,
+                        body: png,
+                        outcome: "template-card",
+                    }
+                }
+                None => respond(500, TEXT, b"Card unavailable".to_vec(), "card-failed", 0),
+            };
+        }
+
+        return respond(
+            200,
+            HTML,
+            render_template_page(&preview, &context_for(language, token)).into_bytes(),
+            "template",
+            config.cache_seconds,
+        );
+    }
+
+    let token = second;
     let wants_card = segments.len() == 3 && segments[2] == CARD_SEGMENT;
     if segments.len() > 2 && !wants_card {
         return unavailable(language, "unknown-path", 404);
@@ -357,23 +448,46 @@ mod tests {
         }
     }
 
+    fn template() -> TemplatePreview {
+        TemplatePreview {
+            name: "Chalet Marmotte".to_owned(),
+            location: Some("Chamonix".to_owned()),
+            room_count: 3,
+        }
+    }
+
     struct Stub {
         result: LoadResult,
+        template_result: TemplateResult,
         loads: AtomicUsize,
         renders: AtomicUsize,
+        template_loads: AtomicUsize,
+        template_renders: AtomicUsize,
     }
 
     impl Stub {
         fn answering(result: LoadResult) -> Self {
             Self {
                 result,
+                template_result: TemplateResult::Ok(Box::new(template())),
                 loads: AtomicUsize::new(0),
                 renders: AtomicUsize::new(0),
+                template_loads: AtomicUsize::new(0),
+                template_renders: AtomicUsize::new(0),
             }
         }
 
         fn live() -> Self {
             Self::answering(LoadResult::Ok(Box::new(preview())))
+        }
+
+        /// A stub whose invite half is dead, so a template test cannot pass by
+        /// accidentally reading the invite path.
+        fn answering_template(result: TemplateResult) -> Self {
+            Self {
+                template_result: result,
+                ..Self::answering(LoadResult::NotFound)
+            }
         }
     }
 
@@ -391,6 +505,21 @@ mod tests {
         ) -> Option<Vec<u8>> {
             self.renders.fetch_add(1, Ordering::Relaxed);
             Some(b"png-bytes".to_vec())
+        }
+
+        async fn load_template(&self, _token: &str) -> TemplateResult {
+            self.template_loads.fetch_add(1, Ordering::Relaxed);
+            self.template_result.clone()
+        }
+
+        async fn render_template_card(
+            &self,
+            _preview: &TemplatePreview,
+            _language: Language,
+            _token: &str,
+        ) -> Option<Vec<u8>> {
+            self.template_renders.fetch_add(1, Ordering::Relaxed);
+            Some(b"template-png".to_vec())
         }
     }
 
@@ -450,6 +579,102 @@ mod tests {
         assert_eq!(reply.header("cache-control"), Some("public, max-age=300"));
         assert!(reply.text().contains(r#"<html lang="fr">"#));
         assert_eq!(stub.loads.load(Ordering::Relaxed), 1);
+    }
+
+    // ------------------------------------------------------------------
+    // Trip templates
+    // ------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn renders_the_template_page_behind_the_t_segment() {
+        let stub = Stub::answering_template(TemplateResult::Ok(Box::new(template())));
+
+        let reply = get(&stub, &format!("/fr/t/{TOKEN}")).await;
+
+        assert_eq!(reply.status, 200);
+        assert_eq!(reply.outcome, "template");
+        assert!(reply.text().contains("Chalet Marmotte"));
+        assert_eq!(stub.template_loads.load(Ordering::Relaxed), 1);
+        // The invite half was never asked, which is the whole point of the
+        // separate namespace.
+        assert_eq!(stub.loads.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn a_template_page_never_carries_a_guest_or_a_date() {
+        let stub = Stub::answering_template(TemplateResult::Ok(Box::new(template())));
+
+        let body = get(&stub, &format!("/en/t/{TOKEN}")).await.text();
+
+        // `preview()` is the invite fixture: its name, its dates and its guest
+        // must not appear on a page drawn from a template.
+        assert!(!body.contains("Summer house"));
+        assert!(!body.contains("2026-08-12"));
+    }
+
+    #[tokio::test]
+    async fn serves_the_template_card_as_a_png() {
+        let stub = Stub::answering_template(TemplateResult::Ok(Box::new(template())));
+
+        let reply = get(&stub, &format!("/en/t/{TOKEN}/card.png")).await;
+
+        assert_eq!(reply.status, 200);
+        assert_eq!(reply.header("content-type"), Some("image/png"));
+        assert_eq!(reply.outcome, "template-card");
+        assert_eq!(stub.template_renders.load(Ordering::Relaxed), 1);
+        assert_eq!(stub.renders.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn sends_a_template_link_with_no_language_to_the_negotiated_one() {
+        let stub = Stub::answering_template(TemplateResult::Ok(Box::new(template())));
+
+        let reply = route(&stub, &config(), "GET", &format!("/t/{TOKEN}"), Some("fr")).await;
+
+        assert_eq!(reply.status, 302);
+        assert_eq!(reply.header("location"), Some(&*format!("/fr/t/{TOKEN}")));
+        assert_eq!(stub.template_loads.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn a_taken_down_template_gets_the_generic_page_and_a_404() {
+        let stub = Stub::answering_template(TemplateResult::NotFound);
+
+        let reply = get(&stub, &format!("/fr/t/{TOKEN}")).await;
+
+        assert_eq!(reply.status, 404);
+        assert_eq!(reply.outcome, "template-not-found");
+        assert!(!reply.text().contains("Chalet Marmotte"));
+    }
+
+    #[tokio::test]
+    async fn a_failed_template_read_is_transient_rather_than_gone() {
+        let stub = Stub::answering_template(TemplateResult::Error);
+
+        let reply = get(&stub, &format!("/fr/t/{TOKEN}")).await;
+
+        assert_eq!(reply.status, 503);
+        assert_eq!(reply.outcome, "error");
+    }
+
+    #[tokio::test]
+    async fn a_template_path_with_no_token_is_not_a_template() {
+        let stub = Stub::answering_template(TemplateResult::Ok(Box::new(template())));
+
+        let reply = get(&stub, "/fr/t").await;
+
+        assert_eq!(reply.status, 404);
+        assert_eq!(stub.template_loads.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn does_not_treat_an_unknown_template_sub_path_as_a_card() {
+        let stub = Stub::answering_template(TemplateResult::Ok(Box::new(template())));
+
+        let reply = get(&stub, &format!("/fr/t/{TOKEN}/card.jpg")).await;
+
+        assert_eq!(reply.status, 404);
+        assert_eq!(stub.template_renders.load(Ordering::Relaxed), 0);
     }
 
     #[tokio::test]

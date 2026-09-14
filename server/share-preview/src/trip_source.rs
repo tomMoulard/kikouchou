@@ -29,7 +29,7 @@ use yrs::{Doc, Transact as _, Update};
 
 use crate::config::Config;
 use crate::reminders::{ReminderKind, Subscription};
-use crate::trip_preview::{build_trip_preview, TripPreview, TripRow};
+use crate::trip_preview::{build_trip_preview, TemplatePreview, TripPreview, TripRow};
 
 // ============================================================================
 // Types
@@ -61,6 +61,45 @@ impl LoadResult {
             Self::Error => "error",
         }
     }
+}
+
+/// What a template token resolved to.
+///
+/// Three outcomes rather than six: a template is published or it is not, and
+/// why it is not is the enterprise's business. `read_trip_template` answers the
+/// same way for the same reason, and this mirrors it so the two doors into a
+/// template cannot disagree.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TemplateResult {
+    Ok(Box<TemplatePreview>),
+    /// No such token, a trip that is gone, or a template that was taken down.
+    NotFound,
+    /// The database could not be reached, or answered with something unreadable.
+    Error,
+}
+
+impl TemplateResult {
+    /// The word the access log records. Never a token, never a template name.
+    pub fn outcome(&self) -> &'static str {
+        match self {
+            Self::Ok(_) => "template",
+            Self::NotFound => "template-not-found",
+            Self::Error => "error",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct TemplateTripRow {
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TemplateRow {
+    name: String,
+    location: Option<String>,
+    /// The published rooms, read only to be counted.
+    rooms: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -354,6 +393,63 @@ impl TripSource {
                 end_date: trip.end_date,
             },
         )))
+    }
+
+    /// Resolves a template token to the card behind it.
+    ///
+    /// Two reads and no document. The first turns the token into a trip id and
+    /// is where `is_template` is enforced, so a template that was taken down is
+    /// not found from this moment on. The second reads the published payload.
+    ///
+    /// `trip_doc_snapshots` and `trip_doc_updates` are never touched, which is
+    /// the point: the guests of the enterprise's own trip live there, and this
+    /// card is drawn for strangers.
+    pub async fn load_template(&self, token: &str) -> TemplateResult {
+        if !is_token_shaped(token) {
+            return TemplateResult::NotFound;
+        }
+
+        let Some(trips) = self
+            .get::<TemplateTripRow>(
+                "trips",
+                &format!("trips?template_token=eq.{token}&is_template=is.true&select=id&limit=1"),
+            )
+            .await
+        else {
+            return TemplateResult::Error;
+        };
+        let Some(trip) = trips.into_iter().next() else {
+            return TemplateResult::NotFound;
+        };
+
+        let trip_id = &trip.id;
+        let Some(templates) = self
+            .get::<TemplateRow>(
+                "trip_templates",
+                &format!("trip_templates?trip_id=eq.{trip_id}&select=name,location,rooms&limit=1"),
+            )
+            .await
+        else {
+            return TemplateResult::Error;
+        };
+        let Some(template) = templates.into_iter().next() else {
+            // Flagged, with no payload written yet: dead to a visitor, and dead
+            // in the same word as everything else.
+            return TemplateResult::NotFound;
+        };
+
+        TemplateResult::Ok(Box::new(TemplatePreview {
+            name: template.name,
+            location: template
+                .location
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty()),
+            room_count: template
+                .rooms
+                .as_ref()
+                .and_then(|rooms| rooms.as_array())
+                .map_or(0, Vec::len),
+        }))
     }
 
     /// The `trips` row behind a server id, for the sender.
