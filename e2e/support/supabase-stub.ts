@@ -109,6 +109,26 @@ interface InviteRow {
 }
 
 /**
+ * What `read_trip_template()` hands an anonymous reader.
+ *
+ * Five fields and a name. There is deliberately no date and no guest here: the
+ * real function reads `trip_templates`, a table with no column for either, and
+ * a stub that could return one would let a leak pass a green test.
+ */
+export interface TemplatePayload {
+  readonly name: string;
+  readonly description?: string;
+  readonly location?: string;
+  readonly coordinates?: { readonly lat: number; readonly lon: number };
+  readonly currency?: string;
+  readonly rooms?: readonly {
+    readonly name: string;
+    readonly capacity: number;
+    readonly icon?: string;
+  }[];
+}
+
+/**
  * `public.guest_groups`. Per account, never per trip — there is no membership
  * to consult here, which is why every handler below narrows on `owner_id`
  * alone.
@@ -189,6 +209,15 @@ export class SupabaseStub {
   snapshots: SnapshotRow[] = [];
   guestGroups: GuestGroupRow[] = [];
   pushSubscriptions: PushSubscriptionRow[] = [];
+  /**
+   * Published trip templates, by token.
+   *
+   * A map rather than a table because that is all `read_trip_template` needs:
+   * the token is the key, and the value is the five fields the function
+   * returns. Taking a template down is deleting the entry, which is what the
+   * `is_template` flag does on the real server.
+   */
+  templates = new Map<string, TemplatePayload>();
 
   /** Requests refused, so a test can simulate an outage without going offline. */
   offline = false;
@@ -218,6 +247,8 @@ export class SupabaseStub {
     reminderSubscribes: 0,
     /** Calls to `unsubscribe_reminders`. */
     reminderUnsubscribes: 0,
+    /** Reads through `read_trip_template`. */
+    templateReads: 0,
   };
 
   private nextTrip = 1;
@@ -890,13 +921,22 @@ export class SupabaseStub {
   // --------------------------------------------------------------------------
 
   private async handleRpc(route: Route, name: string): Promise<void> {
-    const body = this.body<{ invite_token?: string; after_id?: number }>(route);
+    const body = this.body<{
+      invite_token?: string;
+      after_id?: number;
+      template_token?: string;
+    }>(route);
     const token = body.invite_token ?? '';
     const caller = this.callerId(route);
     const invite = this.invites.find((row) => row.token === token);
 
     if (name === 'read_shared_trip') {
       await this.readSharedTrip(route, invite, body.after_id ?? 0);
+      return;
+    }
+
+    if (name === 'read_trip_template') {
+      await this.readTripTemplate(route, body.template_token ?? '');
       return;
     }
 
@@ -1078,6 +1118,36 @@ export class SupabaseStub {
    * The caller's session is deliberately not consulted: the token is the whole
    * authorisation.
    */
+  /**
+   * `read_trip_template()`.
+   *
+   * One hint for every dead end, the way the real function answers: a token
+   * that was never published and one whose template was taken down are the
+   * same fact to a stranger.
+   */
+  private async readTripTemplate(route: Route, token: string): Promise<void> {
+    this.counts.templateReads += 1;
+
+    const template = this.templates.get(token);
+    if (!template) {
+      await this.json(route, 400, {
+        code: 'P0002',
+        message: 'template not found',
+        hint: 'template_not_found',
+      });
+      return;
+    }
+
+    await this.json(route, 200, {
+      name: template.name,
+      description: template.description ?? null,
+      location: template.location ?? null,
+      coordinates: template.coordinates ?? null,
+      currency: template.currency ?? null,
+      rooms: template.rooms ?? [],
+    });
+  }
+
   private async readSharedTrip(
     route: Route,
     invite: InviteRow | undefined,

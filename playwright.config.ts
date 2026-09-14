@@ -134,7 +134,7 @@ const PRODUCTION_BUILD_SPECS_PATTERN =
  * `sync` project.
  */
 const DEV_SERVER_IGNORE_PATTERN =
-  /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts|trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts/;
+  /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts|trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts|trip-template-link\.spec\.ts/;
 
 /**
  * The projects that drive this checkout, on the servers started below.
@@ -215,7 +215,8 @@ const LOCAL_PROJECTS: Projects = [
       ...devices['Desktop Chrome'],
       baseURL: SYNC_URL,
     },
-    testMatch: /trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts/,
+    testMatch:
+      /trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts|trip-template-link\.spec\.ts/,
     /**
      * Serial. Several tests drive two browser contexts against one stub, and
      * the stub is a single in-process object — parallel workers would share
