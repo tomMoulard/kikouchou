@@ -32,14 +32,14 @@ use tokio::net::TcpListener;
 
 use crate::cache::TtlCache;
 use crate::card_image::rasterise_card;
-use crate::card_svg::render_card_svg;
+use crate::card_svg::{render_card_svg, render_template_card_svg};
 use crate::config::Config;
 use crate::i18n::Language;
 use crate::posthog::PostHog;
 use crate::push_sender::PushSender;
 use crate::router::{route, Backend};
-use crate::trip_preview::TripPreview;
-use crate::trip_source::{LoadResult, TripSource};
+use crate::trip_preview::{TemplatePreview, TripPreview};
+use crate::trip_source::{LoadResult, TemplateResult, TripSource};
 
 // ============================================================================
 // Constants
@@ -58,6 +58,11 @@ struct App {
     source: Arc<TripSource>,
     trips: TtlCache<LoadResult>,
     cards: TtlCache<Vec<u8>>,
+    /// Templates and their cards, kept apart from the invite caches because the
+    /// values are different types and the two token namespaces are separate on
+    /// purpose.
+    templates: TtlCache<TemplateResult>,
+    template_cards: TtlCache<Vec<u8>>,
     config: Config,
     /// `None` without a VAPID key: `/push/send` then does not exist.
     sender: Option<Arc<PushSender>>,
@@ -107,6 +112,45 @@ impl Backend for App {
             Ok(png) => Some((*self.cards.insert(&key, png, Instant::now())).clone()),
             Err(error) => {
                 eprintln!("card render failed: {error}");
+                None
+            }
+        }
+    }
+
+    async fn load_template(&self, token: &str) -> TemplateResult {
+        if let Some(cached) = self.templates.get(token, Instant::now()) {
+            return (*cached).clone();
+        }
+
+        let result = self.source.load_template(token).await;
+
+        // A failure is not a result, for the same reason it is not one above.
+        if !matches!(result, TemplateResult::Error) {
+            self.templates.insert(token, result.clone(), Instant::now());
+        }
+        result
+    }
+
+    async fn render_template_card(
+        &self,
+        preview: &TemplatePreview,
+        language: Language,
+        token: &str,
+    ) -> Option<Vec<u8>> {
+        let key = format!("{language}:{token}");
+        if let Some(cached) = self.template_cards.get(&key, Instant::now()) {
+            return Some((*cached).clone());
+        }
+
+        let svg = render_template_card_svg(preview, language);
+        let rendered = tokio::task::spawn_blocking(move || rasterise_card(&svg))
+            .await
+            .ok()?;
+
+        match rendered {
+            Ok(png) => Some((*self.template_cards.insert(&key, png, Instant::now())).clone()),
+            Err(error) => {
+                eprintln!("template card render failed: {error}");
                 None
             }
         }
@@ -343,6 +387,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         source,
         trips: TtlCache::new(config.cache_seconds, MAX_CACHED),
         cards: TtlCache::new(config.cache_seconds, MAX_CACHED),
+        templates: TtlCache::new(config.cache_seconds, MAX_CACHED),
+        template_cards: TtlCache::new(config.cache_seconds, MAX_CACHED),
         config,
         sender,
     });

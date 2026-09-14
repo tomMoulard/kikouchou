@@ -40,10 +40,23 @@ read.
 | `/<lang>/<token>` | The preview page, then a redirect into the app |
 | `/<lang>/<token>/card.png` | The 1200x630 card |
 | `/<token>` | A 302 to the language from `Accept-Language` |
+| `/<lang>/t/<token>` | A trip template's preview page, then the app's wizard |
+| `/<lang>/t/<token>/card.png` | The 1200x630 template card |
+| `/t/<token>` | A 302 to the language from `Accept-Language` |
 | `/healthz` | `ok`, with no database behind it |
 | `/robots.txt` | Permissive |
 | `POST /push/send` | Sends one trip reminder; see [Trip reminders](#trip-reminders) |
 | anything else | 404, with the English generic card |
+
+The `t` segment is a second namespace, and it is not decoration. An invite
+token and a template token are the same 16 characters of the same alphabet, so
+without it the service would have to guess which table a token belongs to, and
+a collision would be a security question rather than a 404.
+
+A template is read from `trips` and `trip_templates` only. The Yjs document is
+never rebuilt for one, and the card carries no guest, no date and no occupancy
+grid: an invite goes to a group, a template goes on a public web page, and the
+two are different promises.
 
 A 404 speaks the language its path named, so `/fr/<revoked token>` stays French
 and carries the French card. A path that named no language — `/wp-admin`, a
@@ -176,8 +189,8 @@ refuses to start without them.
 | File | What is in it |
 | --- | --- |
 | `config.rs` | Environment, read once at startup |
-| `trip_source.rs` | The four PostgREST reads, and the invite checks |
-| `trip_preview.rs` | The Yjs document reduced to acronyms, colours and stays |
+| `trip_source.rs` | The PostgREST reads, the invite checks and the template read |
+| `trip_preview.rs` | The Yjs document reduced to acronyms, colours and stays, plus the template preview |
 | `card_svg.rs` | The card, as a dynamic `public/og-card.svg` |
 | `card_image.rs` | SVG to PNG |
 | `page.rs` | The HTML, its `og:` tags and its redirect |

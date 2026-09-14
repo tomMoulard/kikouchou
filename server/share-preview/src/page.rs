@@ -18,10 +18,10 @@
 
 use std::fmt::Write as _;
 
-use crate::card_svg::card_alt_text;
+use crate::card_svg::{card_alt_text, template_card_alt_text};
 use crate::dates::{day_count, format_date_span};
 use crate::i18n::Language;
-use crate::trip_preview::TripPreview;
+use crate::trip_preview::{TemplatePreview, TripPreview};
 
 // ============================================================================
 // Types
@@ -167,6 +167,31 @@ impl PageContext {
     pub fn card_url(&self) -> String {
         format!("{}/card.png", self.share_url())
     }
+
+    /// Where a browser is sent for a template link.
+    pub fn template_url(&self) -> String {
+        format!(
+            "{}/template/{}?lng={}",
+            self.app_origin,
+            encode_segment(&self.token),
+            self.language
+        )
+    }
+
+    /// The canonical share URL of a template, `t` segment and all.
+    pub fn template_share_url(&self) -> String {
+        format!(
+            "{}/{}/t/{}",
+            self.share_origin,
+            self.language,
+            encode_segment(&self.token)
+        )
+    }
+
+    /// Where the card for a template link lives.
+    pub fn template_card_url(&self) -> String {
+        format!("{}/card.png", self.template_share_url())
+    }
 }
 
 /// The page for a live invite: this trip's own preview, then the app.
@@ -232,6 +257,72 @@ pub fn render_preview_page(preview: &TripPreview, context: &PageContext) -> Stri
         opening = escape(language.opening()),
         target = escape(&target),
         open = escape(language.open_trip()),
+    );
+
+    document(language, &title, &head, &body, Some(&target))
+}
+
+/// The page for a live template: what the template offers, then the app.
+///
+/// Same shape as the invite page and the same hand-off, because the job is the
+/// same: a crawler reads the tags, a person is moved on. What differs is what
+/// the tags say. A template card names the place and counts the rooms; it never
+/// carries a date, a guest or an occupancy grid, because the enterprise's own
+/// trip is not what is being shared.
+pub fn render_template_page(preview: &TemplatePreview, context: &PageContext) -> String {
+    let language = context.language;
+
+    let title = match &preview.location {
+        Some(location) => format!("{} — {location}", preview.name),
+        None => preview.name.clone(),
+    };
+    let description = format!(
+        "{} · {}",
+        language.rooms(preview.room_count),
+        language.template_description()
+    );
+    let image = context.template_card_url();
+    let canonical = context.template_share_url();
+
+    let mut head = String::new();
+    meta(&mut head, "property", "og:type", "website");
+    meta(&mut head, "property", "og:site_name", "Kikouchou");
+    meta(&mut head, "property", "og:title", &title);
+    meta(&mut head, "property", "og:description", &description);
+    meta(&mut head, "property", "og:url", &canonical);
+    meta(&mut head, "property", "og:image", &image);
+    meta(&mut head, "property", "og:image:type", "image/png");
+    meta(&mut head, "property", "og:image:width", "1200");
+    meta(&mut head, "property", "og:image:height", "630");
+    meta(
+        &mut head,
+        "property",
+        "og:image:alt",
+        &template_card_alt_text(preview, language),
+    );
+    meta(&mut head, "property", "og:locale", language.og_locale());
+    meta(&mut head, "name", "description", &description);
+    meta(&mut head, "name", "twitter:card", "summary_large_image");
+    meta(&mut head, "name", "twitter:title", &title);
+    meta(&mut head, "name", "twitter:description", &description);
+    meta(&mut head, "name", "twitter:image", &image);
+    let _ = writeln!(
+        head,
+        r#"    <link rel="canonical" href="{}" />"#,
+        escape(&canonical)
+    );
+
+    let target = context.template_url();
+    let body = format!(
+        r#"      <h1 style="font-size:1.4rem;margin:0 0 .5rem">{name}</h1>
+      <p style="margin:0 0 1.5rem;color:#55637a">{place}</p>
+      <p style="margin:0 0 1.5rem;color:#55637a">{opening}</p>
+      <p><a href="{target}" style="color:#0f766e;font-weight:600">{open}</a></p>"#,
+        name = escape(&preview.name),
+        place = escape(preview.location.as_deref().unwrap_or("")),
+        opening = escape(language.opening()),
+        target = escape(&target),
+        open = escape(language.open_template()),
     );
 
     document(language, &title, &head, &body, Some(&target))
@@ -325,6 +416,72 @@ mod tests {
             ],
             stays: Vec::new(),
         }
+    }
+
+    fn template() -> TemplatePreview {
+        TemplatePreview {
+            name: "Chalet Marmotte".to_owned(),
+            location: Some("Chamonix".to_owned()),
+            room_count: 3,
+        }
+    }
+
+    #[test]
+    fn builds_the_template_urls_with_their_own_segment() {
+        let context = context();
+
+        assert_eq!(
+            context.template_share_url(),
+            "https://share.kikouchou.app/en/t/OMIMwxRIi6TF_KP6"
+        );
+        assert_eq!(
+            context.template_card_url(),
+            "https://share.kikouchou.app/en/t/OMIMwxRIi6TF_KP6/card.png"
+        );
+        assert_eq!(
+            context.template_url(),
+            "https://app.kikouchou.app/template/OMIMwxRIi6TF_KP6?lng=en"
+        );
+    }
+
+    #[test]
+    fn a_template_page_titles_the_place_and_points_at_its_own_card() {
+        let page = render_template_page(&template(), &context());
+
+        assert!(page.contains(r#"content="Chalet Marmotte — Chamonix""#));
+        assert!(page
+            .contains(r#"content="https://share.kikouchou.app/en/t/OMIMwxRIi6TF_KP6/card.png""#));
+        assert!(page.contains("https://app.kikouchou.app/template/OMIMwxRIi6TF_KP6?lng=en"));
+    }
+
+    #[test]
+    fn a_template_page_counts_rooms_and_says_what_is_left_to_fill() {
+        let page = render_template_page(&template(), &context());
+
+        assert!(page.contains("3 rooms"));
+        assert!(page.contains("the name, the dates and the guests"));
+    }
+
+    #[test]
+    fn a_template_with_no_place_is_titled_by_its_name_alone() {
+        let mut preview = template();
+        preview.location = None;
+
+        let page = render_template_page(&preview, &context());
+
+        assert!(page.contains(r#"content="Chalet Marmotte""#));
+        assert!(!page.contains("—"));
+    }
+
+    #[test]
+    fn escapes_a_template_name_somebody_typed() {
+        let mut preview = template();
+        preview.name = "<script>alert(1)</script>".to_owned();
+
+        let page = render_template_page(&preview, &context());
+
+        assert!(!page.contains("<script>alert(1)</script>"));
+        assert!(page.contains("&lt;script&gt;"));
     }
 
     #[test]
