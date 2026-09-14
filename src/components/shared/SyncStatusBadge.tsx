@@ -20,6 +20,11 @@
  * as nobody being there — so the badge falls back to the plain sync state rather
  * than claiming the trip is empty.
  *
+ * A count of one is nobody else. Editing alone is the ordinary case, and naming
+ * it reports the absence of other people, which is not news. So the head count
+ * appears only once a second person is there, and a lone editor sees the plain
+ * sync state.
+ *
  * @module components/shared/SyncStatusBadge
  */
 
@@ -66,10 +71,14 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
    * Whether the head count may take the badge over.
    *
    * Never while something is unsent or the connection is down: those are the
-   * cases where the sync state is the message.
+   * cases where the sync state is the message. And never for a count of one,
+   * because one is you on your own, which no chip has to announce.
    */
   const showCount =
-    state.onlineCount !== null && state.status !== 'offline' && pending === 0;
+    state.onlineCount !== null &&
+    state.onlineCount > 1 &&
+    state.status !== 'offline' &&
+    pending === 0;
 
   /**
    * A viewer trip that is current.
@@ -92,20 +101,17 @@ export const SyncStatusBadge = memo(function SyncStatusBadge({
         icon: <Users className="size-3.5 shrink-0" aria-hidden="true" />,
         tone: statusVariants({ tone: 'success', emphasis: 'text' }),
         dot: 'bg-success',
-        label:
-          (state.onlineCount ?? 0) <= 1
-            ? // "1 online" invites the question "online with whom?". Naming it as
-              // just you answers that, and reads as calm rather than broken.
-              t('nav.syncOnlineJustYou', 'Just you right now')
-            : t('nav.syncOnlineCount', {
-                count: state.onlineCount ?? 0,
-                // Matches the shipped strings, so the inline fallback and the
-                // locale file cannot drift apart. A counted string needs one
-                // default per plural form: a single `defaultValue` would be
-                // wrong for every count it was not written for.
-                defaultValue_one: '{{count}} person online',
-                defaultValue_other: '{{count}} people online',
-              }),
+        // `showCount` already proved the count is two or more, so the label
+        // never has to speak for a lone editor.
+        label: t('nav.syncOnlineCount', {
+          count: state.onlineCount ?? 0,
+          // Matches the shipped strings, so the inline fallback and the locale
+          // file cannot drift apart. A counted string needs one default per
+          // plural form: a single `defaultValue` would be wrong for every count
+          // it was not written for.
+          defaultValue_one: '{{count}} person online',
+          defaultValue_other: '{{count}} people online',
+        }),
       }
     : state.status === 'offline'
       ? {

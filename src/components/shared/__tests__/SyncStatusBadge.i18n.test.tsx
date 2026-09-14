@@ -144,12 +144,12 @@ describe('SyncStatusBadge counted strings', () => {
 
     await renderWithRealI18n(<SyncStatusBadge />, { withProviders: false });
 
-    // The component routes every count of 1 or fewer to `nav.syncOnlineJustYou`,
-    // so `nav.syncOnlineCount_one` and the matching `defaultValue_one` are
+    // The component hides the head count entirely below two, so
+    // `nav.syncOnlineCount_one` and the matching `defaultValue_one` are
     // unreachable from any screen. Pinned rather than left implicit: the guard
     // is a design decision, and if it ever moves, the singular form starts
     // shipping and wants a test of its own.
-    expect(screen.getByText('Just you right now')).toBeInTheDocument();
     expect(screen.queryByText(/1 person online/)).not.toBeInTheDocument();
+    expect(screen.getByText('Everyone is up to date')).toBeInTheDocument();
   });
 });

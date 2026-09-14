@@ -68,13 +68,33 @@ describe('SyncStatusBadge', () => {
     expect(screen.queryByText(/syncing/i)).not.toBeInTheDocument();
   });
 
-  it('names a lone occupant rather than saying "1 online"', () => {
+  it('says nothing about the head count when you are the only one connected', () => {
     withState({ status: 'synced', pendingCount: 0, onlineCount: 1 });
 
     render(<SyncStatusBadge />);
 
-    // "1 online" invites the question "online with whom?".
-    expect(screen.getByText('Just you right now')).toBeInTheDocument();
+    // One connection is you on your own. A chip for that reports the absence
+    // of other people, so the plain sync state shows through instead.
+    expect(screen.getByText('Everyone is up to date')).toBeInTheDocument();
+    expect(screen.queryByText(/online|just you/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps quiet about a head count of one while syncing', () => {
+    withState({ status: 'syncing', pendingCount: 0, onlineCount: 1 });
+
+    render(<SyncStatusBadge />);
+
+    // The count only outranks the sync state once there is somebody to count.
+    expect(screen.getByText('Syncing…')).toBeInTheDocument();
+    expect(screen.queryByText(/online|just you/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the head count as soon as a second guest joins the trip', () => {
+    withState({ status: 'synced', pendingCount: 0, onlineCount: 2 });
+
+    render(<SyncStatusBadge />);
+
+    expect(screen.getByText('2 people online')).toBeInTheDocument();
   });
 
   it('puts unsent changes ahead of the head count', () => {
