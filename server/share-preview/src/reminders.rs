@@ -58,15 +58,6 @@ impl ReminderKind {
     pub fn parse(value: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.as_str() == value)
     }
-
-    /// The PostHog feature flag that switches this kind off.
-    pub fn flag_key(self) -> &'static str {
-        match self {
-            Self::TripStart => "reminder-trip-start",
-            Self::OwnArrival => "reminder-own-arrival",
-            Self::Pickup => "reminder-pickup",
-        }
-    }
 }
 
 /// One row of `push_subscriptions`, as PostgREST returns it to the sender.

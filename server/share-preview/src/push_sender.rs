@@ -4,9 +4,8 @@
 //!
 //! - [`PushSender::tick`] runs on a timer (hourly by default). It loads every
 //!   subscription, rebuilds each trip's document once, asks `reminders` what is
-//!   due for each subscriber, drops what the feature flags switched off or the
-//!   log already holds, records the rest as due, and tells PostHog. In `direct`
-//!   mode it then sends at once.
+//!   due for each subscriber, drops what the log already holds, records the
+//!   rest as due, and tells PostHog. In `direct` mode it then sends at once.
 //! - [`PushSender::send_by_id`] answers `POST /push/send`: the callback a
 //!   PostHog workflow makes after its own delays and conditions. It recomputes
 //!   the reminder from the live document — so a ride deleted in the meantime is
@@ -205,15 +204,7 @@ impl PushSender {
                     .map(|row| ((row.kind, row.subject), row.sent_at))
                     .collect();
 
-                let flags = match &self.posthog {
-                    Some(posthog) => posthog.flags(distinct_id(&subscription)).await,
-                    None => HashMap::new(),
-                };
-
                 for reminder in due {
-                    if flags.get(reminder.kind.flag_key()) == Some(&Some(false)) {
-                        continue;
-                    }
                     let key = (reminder.kind.as_str().to_owned(), reminder.subject.clone());
                     if logged.contains_key(&key) {
                         continue;
