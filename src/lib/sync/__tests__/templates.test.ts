@@ -20,7 +20,6 @@ import {
   publishTemplate,
   readTemplateState,
   readTripTemplate,
-  republishTemplate,
   unpublishTemplate,
   type TripTemplatePayload,
 } from '../templates';
@@ -439,39 +438,6 @@ describe('publishTemplate', () => {
     await expect(publishTemplate(client, 'remote-1', PAYLOAD)).resolves.toEqual({
       status: 'error',
       message: 'offline',
-    });
-  });
-});
-
-describe('republishTemplate', () => {
-  it('does nothing for a trip that is not a template', async () => {
-    const { client, calls } = stubClient({
-      tripRow: { data: { is_template: false, template_token: 'tokentokentoken1' } },
-    });
-
-    await expect(republishTemplate(client, 'remote-1', PAYLOAD)).resolves.toBeNull();
-    expect(calls.upserts).toHaveLength(0);
-  });
-
-  it('rewrites the payload under the same token', async () => {
-    const { client, calls } = stubClient({
-      tripRow: { data: { is_template: true, template_token: 'tokentokentoken1' } },
-      updateRows: { data: [{ template_token: 'tokentokentoken1' }] },
-    });
-
-    await expect(republishTemplate(client, 'remote-1', PAYLOAD)).resolves.toEqual({
-      status: 'published',
-      token: 'tokentokentoken1',
-    });
-    expect(calls.upserts).toHaveLength(1);
-  });
-
-  it('passes a failed read straight back', async () => {
-    const { client } = stubClient({ tripRow: { error: { message: 'nope' } } });
-
-    await expect(republishTemplate(client, 'remote-1', PAYLOAD)).resolves.toEqual({
-      status: 'error',
-      message: 'nope',
     });
   });
 });
