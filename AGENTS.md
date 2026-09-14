@@ -388,10 +388,19 @@ or `false`; without an analytics client it is `false` at once. A screen that
 swaps experiences on a flag waits on `undefined` rather than flashing the
 control arm. `localStorage['kikouchou-flag:<key>']` = `on` | `off` forces an
 arm without a PostHog project, which is how the e2e specs reach a flagged
-experience on servers that carry no key. The first-trip wizard
-(`first-trip-wizard`) is the one flag so far; a screen behind a flag keeps
-one code path for the writes — `createTripWithDetails` here — so the arms
-differ in what they show and not in what they save.
+experience on servers that carry no key. There are two flags. The first-trip
+wizard (`first-trip-wizard`) swaps the one-page form for the wizard, and
+`ent-trip-templates` offers the publish control on a trip's settings screen to
+the static "enterprise customers" cohort. A screen behind a flag keeps one code
+path for the writes — `createTripWithDetails` in both cases — so the arms differ
+in what they show and not in what they save.
+
+`ent-trip-templates` gates the **publishing** side only, and deliberately. A
+template link handed out is followed by a customer of that enterprise, who is
+not in the cohort and never will be, so `/template/:token` is open to everyone.
+Note also that the hook settles once and stops listening: an enterprise account
+that signs in after the page loaded sees the control on the next reload. That
+was accepted on 2026-09-14 rather than fixed.
 
 ### One install prompt, and the page an iPhone installs from
 
@@ -572,7 +581,7 @@ call the REST API with that key.
   `publish_trip_snapshot` deletes from the append-only log, which clients hold no
   DELETE on. Each function checks `auth.uid()` and membership as its first act,
   because definer rights bypass the policies that would otherwise say no.
-- **`anon` holds EXECUTE on three functions and no privilege on any table.**
+- **`anon` holds EXECUTE on four functions and no privilege on any table.**
   `read_shared_trip` is the read-only door an invite link opens with no
   account: the token is the authorisation, checked the way `redeem_invite`
   checks it (revoked, expired, spent) with the same `hint` contract, and the
@@ -583,9 +592,17 @@ call the REST API with that key.
   `subscribe_trip_reminders` applies the same token checks and stores a push
   subscription for that trip; `unsubscribe_reminders` removes one by its
   endpoint, which only its holder knows. Do not add another `anon` grant
-  without deciding to; `supabase/tests/read_shared_trip_test.sql` and
-  `supabase/tests/trip_reminders_test.sql` assert every table is still closed
+  without deciding to; `supabase/tests/read_shared_trip_test.sql`,
+  `supabase/tests/trip_reminders_test.sql` and
+  `supabase/tests/trip_templates_test.sql` assert every table is still closed
   to it.
+  `read_trip_template` is the fourth, added on 2026-09-14 for enterprise trip
+  templates, and it is the narrowest of them: it answers with five published
+  fields of one trip — description, place, coordinates, currency, rooms — and
+  never the document, so the guests of the publisher's own trip cannot reach a
+  template link. That is the whole reason `trip_templates` exists as a separate
+  row rather than the read going through `read_shared_trip`. See
+  `plans/2026-09-14-enterprise-trip-templates-v1.md`.
 - **`RETURNING` is subject to the SELECT policy.** `.insert().select().single()`
   compiles to `INSERT … RETURNING`, so a row you may create but not read fails
   the insert. This broke trip creation: the owner's roster row comes from an
