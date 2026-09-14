@@ -8449,3 +8449,6 @@ These features are **NOT** part of the MVP but are documented for future referen
       it and chat apps cache what they fetch. A revoked, expired or used-up
       invite stops rendering within the service's cache TTL, and all four dead
       states return one identical page.
+
+- [ ] A IM/board for guests to communicate in a centralized way
+- [ ] a meal planner/ list of tings that needs to be bought
