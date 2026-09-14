@@ -420,6 +420,52 @@ export type RoomIcon =
 export const DEFAULT_ROOM_ICON: RoomIcon = 'bed-double';
 
 /**
+ * Every icon a room may carry, as values rather than as a type.
+ *
+ * The union above is erased at build time, so nothing can check a string
+ * against it at run time — and a room arriving from a template link, a peer or
+ * a QR import is a string until something does. The picker renders whatever
+ * this value says, so an icon added to the union belongs here too.
+ */
+export const ROOM_ICONS: readonly RoomIcon[] = [
+  'bed-double',
+  'bed-single',
+  'bath',
+  'sofa',
+  'tent',
+  'caravan',
+  'warehouse',
+  'home',
+  'door-open',
+  'baby',
+  'armchair',
+  'bunk-bed',
+  'hammock',
+  'camper-van',
+  'campsite',
+  'hotel',
+  'rocking-chair',
+  'shower',
+  'boat',
+] as const;
+
+/**
+ * Reads a stored or remote icon name, falling back to the default.
+ *
+ * An unknown icon is not an error: a room saved by a newer build and read by an
+ * older one still has to render, and it renders as a bed.
+ *
+ * @param value - Raw icon name (stored row, template payload, peer document)
+ * @returns An icon this build can draw
+ */
+export function normalizeRoomIcon(value: unknown): RoomIcon {
+  if (typeof value !== 'string') {
+    return DEFAULT_ROOM_ICON;
+  }
+  return ROOM_ICONS.includes(value as RoomIcon) ? (value as RoomIcon) : DEFAULT_ROOM_ICON;
+}
+
+/**
  * Supported application languages.
  */
 export type Language = 'en' | 'fr';

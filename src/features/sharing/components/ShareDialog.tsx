@@ -32,6 +32,7 @@ import { statusVariants } from '@/components/ui/status.variants';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { useTripContext } from '@/contexts/TripContext';
 import { SignInDialog } from '@/features/auth/components/SignInDialog';
+import { copyText } from '@/lib/utils/clipboard';
 import { useTripShareLink } from '../hooks/useTripShareLink';
 import type { Trip } from '@/types';
 import { cn } from '@/lib/utils';
@@ -89,21 +90,12 @@ const ShareDialog = memo(function ShareDialog({
 
   const handleCopy = useCallback(async () => {
     if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback for insecure contexts
-      const textarea = document.createElement('textarea');
-      textarea.value = shareUrl;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+    // `copyText` carries the insecure-context fallback, which the template
+    // link needs too; the tick of "Copied" is shown either way, because a
+    // selection that the browser refused is not worth a second message here.
+    await copyText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }, [shareUrl]);
 
   // ============================================================================

@@ -1070,6 +1070,23 @@
     }
   },
   "sharing": {
+    "template": {
+      "title": "Trip template",
+      "description": "Publish this trip as a template and share one link. Whoever opens it starts their own trip with this place, this description and these rooms, and fills in the name, the dates and the guests.",
+      "publish": "Publish as a template",
+      "republish": "Publish again",
+      "unpublish": "Take it down",
+      "linkLabel": "The link to share",
+      "republishHint": "Customers read a copy taken when you published. Publish again after you change the trip.",
+      "keepsTheLink": "Taking a template down closes every copy of its link at once. Publishing it again gives back the same link.",
+      "needsAccount": "Publishing a template needs an account, because the link reads it from the server.",
+      "signInReason": "Sign in to publish this trip as a template.",
+      "unavailable": "This copy of the app has no sync server configured, so a template cannot be published from it.",
+      "opening": "Opening the trip template\u2026",
+      "notFound": "This trip template isn't available.",
+      "askAgain": "Ask whoever gave you the link for a new one, or start a trip of your own.",
+      "failed": "Couldn't open the trip template"
+    },
     "title": "Share trip",
     "description": "Share this link with your friends so they can view the trip",
     "p2pDescription": "Send the full trip via the Share button on the trips page: QR or copied text. No cloud storage — data travels directly between devices.",

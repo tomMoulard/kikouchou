@@ -94,6 +94,15 @@ vi.mock('@/features/sharing', () => ({
     open ? <div data-testid="share-dialog">{trip?.name}</div> : null,
 }));
 
+// The template card: mounted here, driven by its own tests. Like the share
+// dialog above it reads the auth context, which this page's tests do not
+// provide, and it is behind a flag this page knows nothing about.
+vi.mock('@/features/sharing/components/TripTemplateCard', () => ({
+  TripTemplateCard: ({ trip }: { trip: { name: string } }) => (
+    <div data-testid="trip-template-card">{trip.name}</div>
+  ),
+}));
+
 // Mock ConfirmDialog to capture confirm and openChange callbacks
 vi.mock('@/components/shared/ConfirmDialog', () => ({
   ConfirmDialog: ({ open, onConfirm, onOpenChange }: { open: boolean; onConfirm: () => Promise<void>; onOpenChange?: (open: boolean) => void }) =>
@@ -119,10 +128,12 @@ describe('TripEditPage', () => {
     expect(await screen.findByTestId('edit-mode')).toBeInTheDocument();
   });
 
-  it('carries the two cards that belong to the trip', async () => {
+  it('carries the cards that belong to the trip', async () => {
     render(<TripEditPage />, { withProviders: false });
     expect(await screen.findByTestId('guest-identity-selector')).toBeInTheDocument();
     expect(screen.getByTestId('print-summary-card')).toBeInTheDocument();
+    // The card decides for itself whether the flag lets it draw anything.
+    expect(screen.getByTestId('trip-template-card')).toBeInTheDocument();
   });
 
   it('shows the facts instead of the form on a viewer trip', async () => {
@@ -134,6 +145,9 @@ describe('TripEditPage', () => {
     expect(await screen.findByText('Existing Trip')).toBeInTheDocument();
     expect(screen.getByText('viewer.description')).toBeInTheDocument();
     expect(screen.queryByTestId('trip-form')).not.toBeInTheDocument();
+    // Publishing somebody else's trip to the public web is not a thing a
+    // read-only copy may offer.
+    expect(screen.queryByTestId('trip-template-card')).not.toBeInTheDocument();
   });
 
   it('renders delete button', async () => {

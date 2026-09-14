@@ -141,6 +141,21 @@ function renderWizard(currentUserName?: string): ReturnType<typeof render> {
   );
 }
 
+/** What a trip template hands the wizard. */
+const PREFILL = {
+  description: 'Check-in after 3pm.',
+  location: 'Chamonix',
+  coordinates: { lat: 45.9237, lon: 6.8694 },
+  currency: 'EUR',
+  rooms: [{ name: 'Attic', capacity: 4, icon: 'bunk-bed' as const }],
+};
+
+function renderTemplateWizard(): ReturnType<typeof render> {
+  return render(
+    <TripCreateWizard prefill={PREFILL} onCreated={onCreated} onCancel={onCancel} />,
+  );
+}
+
 /** Answers the two required questions and lands on the place screen. */
 async function answerNameAndDates(user: ReturnType<typeof userEvent.setup>): Promise<void> {
   await user.type(screen.getByLabelText('Trip name'), 'Lake house{Enter}');
@@ -360,4 +375,83 @@ describe('TripCreateWizard', () => {
 
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
   });
+  // --------------------------------------------------------------------------
+  // Behind a trip template link
+  // --------------------------------------------------------------------------
+
+  describe('with a template', () => {
+    it('asks three questions instead of five', async () => {
+      const user = userEvent.setup();
+      renderTemplateWizard();
+
+      expect(screen.getByLabelText('Step 1 of 3')).toBeInTheDocument();
+
+      await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
+      await user.click(screen.getByRole('button', { name: 'Trip dates' }));
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+
+      // Straight to the guests: the place and the rooms came with the template.
+      expect(await screen.findByText('Who is coming?')).toBeInTheDocument();
+      expect(screen.queryByText('Where is the house?')).not.toBeInTheDocument();
+    });
+
+    it('creates the trip with the template values and the answers', async () => {
+      const user = userEvent.setup();
+      renderTemplateWizard();
+
+      await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
+      await user.click(screen.getByRole('button', { name: 'Trip dates' }));
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByText('Who is coming?');
+      await user.type(screen.getByLabelText('Guest name'), 'Alice{Enter}');
+      await user.click(screen.getByRole('button', { name: 'Create the trip' }));
+
+      await waitFor(() => {
+        expect(mockedCreate).toHaveBeenCalledWith({
+          form: {
+            name: 'Ski week',
+            startDate: '2026-07-15',
+            endDate: '2026-07-22',
+            location: 'Chamonix',
+            coordinates: { lat: 45.9237, lon: 6.8694 },
+            description: 'Check-in after 3pm.',
+            currency: 'EUR',
+          },
+          guests: [{ name: 'Alice' }],
+          rooms: [{ name: 'Attic', capacity: 4, icon: 'bunk-bed' }],
+          importSourceTripId: null,
+          selectAsCurrent: false,
+        });
+      });
+    });
+
+    it('is counted apart from the ordinary wizard', async () => {
+      const user = userEvent.setup();
+      renderTemplateWizard();
+
+      await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
+      await user.click(screen.getByRole('button', { name: 'Trip dates' }));
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByText('Who is coming?');
+      await user.click(screen.getByRole('button', { name: 'Create the trip' }));
+
+      await waitFor(() => {
+        expect(vi.mocked(captureUsage)).toHaveBeenCalledWith(
+          'trip_created',
+          expect.objectContaining({ via: 'template' }),
+        );
+      });
+    });
+
+    it('goes back through its own three questions', async () => {
+      const user = userEvent.setup();
+      renderTemplateWizard();
+
+      await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
+      await user.click(screen.getByRole('button', { name: 'Back' }));
+
+      expect(screen.getByLabelText('Step 1 of 3')).toBeInTheDocument();
+    });
+  });
+
 });

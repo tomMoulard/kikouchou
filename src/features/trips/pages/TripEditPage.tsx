@@ -33,6 +33,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { GuestIdentitySelector } from '@/features/trips/components/GuestIdentitySelector';
 import { PrintSummaryCard } from '@/features/trips/components/PrintSummaryCard';
+import { TripTemplateCard } from '@/features/sharing/components/TripTemplateCard';
 import { TripForm } from '@/features/trips/components/TripForm';
 import { ShareDialog } from '@/features/sharing';
 import { tripAccessOf } from '@/hooks/useTripAccess';
@@ -468,6 +469,11 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
         {/* Which guest this browser is — under the trip it belongs to, because
             the answer is per trip and means nothing without one. */}
         <GuestIdentitySelector />
+
+        {/* Publishing this trip as a template. Renders nothing at all outside
+            the enterprise cohort, and nothing for a trip this device may not
+            edit. */}
+        {canEdit ? <TripTemplateCard trip={trip} /> : null}
 
         {/* The printable sheet, reached from here rather than from a navigation
             entry of its own: printing is an occasional action, not a section of
