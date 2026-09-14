@@ -21,8 +21,11 @@
  * `trip_templates` when the owner publishes, and that row is all an anonymous
  * reader can reach.
  *
- * The copy is as fresh as the last publish. `republishTemplate` is what keeps
- * it current, and the trip edit screen calls it after a save.
+ * The copy is as fresh as the last publish, and refreshing it is a button the
+ * enterprise presses rather than something that happens on every edit. That is
+ * deliberate: a room is not a column of the trip row, so an automatic refresh
+ * keyed on the trip would look live while missing the edit customers notice
+ * most. The screen says so instead of implying otherwise.
  *
  * @module lib/sync/templates
  */
@@ -371,31 +374,6 @@ export async function publishTemplate(
   } catch (error: unknown) {
     return { status: 'error', message: toMessage(error) };
   }
-}
-
-/**
- * Writes the payload again for a trip that is already published.
- *
- * A no-op on a trip that is not a template, so the trip edit screen can call it
- * after every save without asking first.
- *
- * @param client - Authenticated Supabase client
- * @param remoteTripId - Server `trips.id`
- * @param payload - The five fields as they now stand
- */
-export async function republishTemplate(
-  client: TypedSupabaseClient,
-  remoteTripId: string,
-  payload: TripTemplatePayload,
-): Promise<PublishTemplateResult | null> {
-  const state = await readTemplateState(client, remoteTripId);
-  if (state.status === 'error') {
-    return { status: 'error', message: state.message };
-  }
-  if (!state.state.isTemplate || state.state.token === null) {
-    return null;
-  }
-  return publishTemplate(client, remoteTripId, payload, state.state.token);
 }
 
 /**
