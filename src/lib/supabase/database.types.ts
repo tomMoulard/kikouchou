@@ -10,13 +10,6 @@
  * differ whenever something has not been pushed, and that difference is worth
  * surfacing: a type disagreeing with production is the more useful error.
  *
- * One exception, on 2026-09-14: `trips.is_template`, `trips.template_token`,
- * the `trip_templates` table and `read_trip_template` were written here by hand
- * from `supabase/migrations/20260914090000_trip_templates.sql`, because the
- * code that uses them had to compile before anybody could push that migration.
- * Run `bun run db:types` after the push; it must produce these same lines, and
- * a diff there is the migration and the deployed schema disagreeing.
- *
  * @module lib/supabase/database.types
  */
 
@@ -304,42 +297,6 @@ export type Database = {
           },
         ]
       }
-      trips: {
-        Row: {
-          created_at: string
-          end_date: string
-          id: string
-          is_template: boolean
-          local_id: string
-          name: string
-          owner_id: string
-          start_date: string
-          template_token: string | null
-        }
-        Insert: {
-          created_at?: string
-          end_date: string
-          id?: string
-          is_template?: boolean
-          local_id: string
-          name: string
-          owner_id: string
-          start_date: string
-          template_token?: string | null
-        }
-        Update: {
-          created_at?: string
-          end_date?: string
-          id?: string
-          is_template?: boolean
-          local_id?: string
-          name?: string
-          owner_id?: string
-          start_date?: string
-          template_token?: string | null
-        }
-        Relationships: []
-      }
       trip_templates: {
         Row: {
           currency: string | null
@@ -384,6 +341,42 @@ export type Database = {
           },
         ]
       }
+      trips: {
+        Row: {
+          created_at: string
+          end_date: string
+          id: string
+          is_template: boolean
+          local_id: string
+          name: string
+          owner_id: string
+          start_date: string
+          template_token: string | null
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          id?: string
+          is_template?: boolean
+          local_id: string
+          name: string
+          owner_id: string
+          start_date: string
+          template_token?: string | null
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          id?: string
+          is_template?: boolean
+          local_id?: string
+          name?: string
+          owner_id?: string
+          start_date?: string
+          template_token?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -397,10 +390,7 @@ export type Database = {
         Args: { after_id?: number; invite_token: string }
         Returns: Json
       }
-      read_trip_template: {
-        Args: { template_token: string }
-        Returns: Json
-      }
+      read_trip_template: { Args: { template_token: string }; Returns: Json }
       redeem_invite: { Args: { invite_token: string }; Returns: string }
       revoke_invite: { Args: { invite_token: string }; Returns: undefined }
       store_push_subscription: {
