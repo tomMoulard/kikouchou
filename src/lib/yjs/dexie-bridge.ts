@@ -1,0 +1,1056 @@
+/**
+ * @fileoverview Yjs ↔ Dexie persistence bridge.
+ *
+ * Persists raw Yjs binary updates into the yjsUpdates table so the Y.Doc
+ * can be reconstructed after a page reload without needing a server.
+ * Also syncs the CRDT state back into the existing Dexie tables so the
+ * rest of the application continues reading Dexie as before.
+ *
+ * The document's shape lives in `./doc-model` — this module only moves data
+ * between it and Dexie, and owns the trust boundary in `syncDocToDexie`.
+ *
+ * @module lib/yjs/dexie-bridge
+ */
+
+import * as Y from 'yjs';
+
+import { db } from '@/lib/db/database';
+import {
+  MAX_LENGTHS,
+  normalizeChildSeats,
+  normalizeExpenseAmount,
+  normalizeExpenseSplitValue,
+  normalizeLeadTimeMinutes,
+  normalizeSeatCount,
+  sanitizeOptionalText,
+  sanitizeText,
+} from '@/lib/db/sanitize';
+import { isGuestPhoneSharingEnabled } from '@/lib/flags';
+import { hasValidCoordinates } from '@/lib/geocoding';
+import { toSharedGuest } from '@/lib/sharing/guest-privacy';
+import i18n from '@/lib/i18n';
+import { reportFailure } from '@/lib/errors/report-failure';
+import { reportError } from '@/lib/posthog';
+import {
+  DOC_SCHEMA_VERSION,
+  type DocCollectionName,
+  isDeepEqual,
+  migrateLegacyArrayCollections,
+  readDocCollection,
+  readDocSchemaVersion,
+  type ReplaceDocCollectionOptions,
+  replaceDocCollection,
+  stampDocSchemaVersion,
+} from './doc-model';
+import type {
+  Activity,
+  ChildSeatKind,
+  Expense,
+  ExpenseSplit,
+  Person,
+  Ride,
+  Room,
+  RoomAssignment,
+  ShareId,
+  Transport,
+  Trip,
+  TripId,
+  UnixTimestamp,
+  Vehicle,
+} from '@/types';
+import {
+  CHILD_SEAT_KINDS,
+  DEFAULT_EXPENSE_CATEGORY,
+  normalizeCurrency,
+  DEFAULT_EXPENSE_SPLIT_MODE,
+  EXPENSE_CATEGORIES,
+  EXPENSE_KINDS,
+  EXPENSE_SPLIT_MODES,
+  MAX_EXPENSE_SPLITS,
+  RIDE_DIRECTIONS,
+} from '@/types';
+
+const COMPACTION_THRESHOLD = 100;
+
+export const ORIGIN_DEXIE_SYNC = 'dexie-sync';
+
+export type SharedCollectionName = DocCollectionName;
+export type { DocCollectionName };
+type SharedRecord = Record<string, unknown>;
+
+function stripTripId<T extends { tripId: TripId }>(record: T): SharedRecord {
+  const nextRecord = { ...record } as Record<string, unknown>;
+  delete nextRecord.tripId;
+  return nextRecord;
+}
+
+function getMeta(doc: Y.Doc): Y.Map<unknown> {
+  return doc.getMap('meta');
+}
+
+/**
+ * @param tripId - The **locally resolved** trip. Never `meta.id`, which is
+ *   remote-controlled: using it as the write key once let any peer overwrite an
+ *   unrelated local trip.
+ */
+/**
+ * The trip's name, from the document if it has a usable one.
+ *
+ * `meta.get('name')` is peer-controlled and arrives as `unknown`, so both halves
+ * of "usable" have to be checked rather than asserted:
+ *
+ *   - **Type.** Casting it to `string` let a peer store a number in
+ *     `db.trips.name`, which is typed `string` everywhere downstream —
+ *     `previewName()` then died on `name.trim is not a function` and took the
+ *     share dialog with it.
+ *   - **Emptiness.** `??` only catches null and undefined, so an empty name was
+ *     stored verbatim and rendered as a blank card. The assistant's create-trip
+ *     action passes an unvalidated name, so this is reachable without a hostile
+ *     peer at all.
+ *
+ * Deliberately *not* clipped to `MAX_LENGTHS.tripName`. The server permits 200
+ * characters and the local form permits 100, so a name between the two is
+ * legitimate rather than hostile — and clipping it here would push the shortened
+ * value back into the document via `populateDocFromDexie` and rename the trip
+ * for the owner who chose it. See the PR for the constraint mismatch itself.
+ */
+function readTripName(meta: Y.Map<unknown>, existingTrip?: Trip): string {
+  const fromDoc = meta.get('name');
+  if (typeof fromDoc === 'string' && fromDoc.trim().length > 0) {
+    return fromDoc;
+  }
+  if (existingTrip !== undefined && existingTrip.name.trim().length > 0) {
+    return existingTrip.name;
+  }
+  return i18n.t('trips.untitled');
+}
+
+function buildTripRecord(
+  doc: Y.Doc,
+  tripId: TripId,
+  existingTrip?: Trip,
+): Trip | null {
+  const meta = getMeta(doc);
+
+  const createdAt = meta.get('createdAt');
+  const updatedAt = meta.get('updatedAt');
+
+  const trip: Trip = {
+    id: tripId,
+    // Last resort: a document that has not said what the trip is called yet.
+    // This lands in Dexie and is rendered as the trip's *name*, so it goes
+    // through i18n like any other string a user reads — a hardcoded 'Shared
+    // Trip' put an English label on a French user's trip list.
+    //
+    // It is a stored name, not a render-time placeholder, because every screen
+    // that shows a trip reads `trip.name` straight out of Dexie and an empty one
+    // would render as nothing at all. That means `populateDocFromDexie` can push
+    // it back into the document, so two devices in two languages could each
+    // write their own placeholder; the map converges and either can rename the
+    // trip. The real fix is for the bridge not to name trips at all, which needs
+    // every renderer to handle a nameless one first.
+    name: readTripName(meta, existingTrip),
+    startDate:
+      (meta.get('startDate') as Trip['startDate']) ??
+      existingTrip?.startDate ??
+      ('' as Trip['startDate']),
+    endDate:
+      (meta.get('endDate') as Trip['endDate']) ??
+      existingTrip?.endDate ??
+      ('' as Trip['endDate']),
+    // NEVER take shareId from a peer: it is a UNIQUE Dexie index, so a value
+    // colliding with another local trip aborts the whole write transaction and
+    // permanently kills sync for this trip.
+    shareId: existingTrip?.shareId ?? (tripId.slice(0, 10) as ShareId),
+    createdAt:
+      ((typeof createdAt === 'number' ? createdAt : existingTrip?.createdAt) as UnixTimestamp | undefined) ??
+      (Date.now() as UnixTimestamp),
+    updatedAt:
+      ((typeof updatedAt === 'number' ? updatedAt : existingTrip?.updatedAt) as UnixTimestamp | undefined) ??
+      (Date.now() as UnixTimestamp),
+    // Never adopted from the document: it links this trip to its server row and
+    // is established locally when the trip is shared or joined.
+    ...(existingTrip?.remoteTripId
+      ? { remoteTripId: existingTrip.remoteTripId }
+      : {}),
+    // Device-local for the same reason, and load-bearing: this projection runs
+    // on every remote update, and `put` replaces the row. Dropping the token
+    // here would silently turn a read-only viewer trip into an editable member
+    // trip on the first refresh after it was opened.
+    ...(existingTrip?.viewerToken !== undefined
+      ? { viewerToken: existingTrip.viewerToken }
+      : {}),
+  };
+
+  // Bounded, unlike the name above, and the asymmetry is the point.
+  //
+  // A name between 100 and 200 characters is *legitimate* — the server's check
+  // constraint allows it even though the local form does not — so clipping one
+  // here would corrupt a real trip. Nothing legitimate produces an over-long
+  // location or description: every local writer already caps them at
+  // `MAX_LENGTHS`, so a longer one came from a peer that did not, and healing it
+  // on the way back into the document is the wanted outcome rather than a
+  // hazard.
+  //
+  // Without this the description was the unbounded payload the whole exercise
+  // was about: `sanitizeTripData` guards the form and the repository, but a
+  // peer's 50,000-character description went straight into Dexie and was pushed
+  // back out by `populateDocFromDexie` for every other device to download.
+  const location = meta.get('location');
+  const boundedLocation = sanitizeOptionalText(
+    typeof location === 'string' ? location : undefined,
+    MAX_LENGTHS.tripLocation,
+  );
+  if (boundedLocation !== undefined) {
+    trip.location = boundedLocation;
+  }
+
+  const description = meta.get('description');
+  const boundedDescription = sanitizeOptionalText(
+    typeof description === 'string' ? description : undefined,
+    MAX_LENGTHS.tripDescription,
+  );
+  if (boundedDescription !== undefined) {
+    trip.description = boundedDescription;
+  }
+
+  // Normalised rather than adopted: the code reaches `Intl.NumberFormat`, which
+  // throws on a malformed one, so a peer sending "€€€" would blank the money
+  // page rather than merely mis-label it. A missing one stays missing, which
+  // reads as the default everywhere it is used.
+  const currency = meta.get('currency');
+  if (currency !== undefined) {
+    trip.currency = normalizeCurrency(currency);
+  }
+
+  const coordinates = meta.get('coordinates');
+  if (
+    coordinates &&
+    typeof coordinates === 'object' &&
+    typeof (coordinates as { lat?: unknown }).lat === 'number' &&
+    typeof (coordinates as { lon?: unknown }).lon === 'number'
+  ) {
+    trip.coordinates = {
+      lat: (coordinates as { lat: number }).lat,
+      lon: (coordinates as { lon: number }).lon,
+    };
+  }
+
+  return trip;
+}
+
+function readCollection(doc: Y.Doc, name: SharedCollectionName): SharedRecord[] {
+  return readDocCollection(doc, name);
+}
+
+/**
+ * Projects one guest out of the document, bounding what the server carried.
+ *
+ * The document holds other members' writes, so a guest's `phone` arrives from
+ * outside this device and has passed no form. Bounding it here — the module's
+ * trust boundary — keeps an unbounded string out of Dexie and out of the card
+ * that renders it.
+ */
+function buildGuestRecord(
+  guest: SharedRecord,
+  tripId: TripId,
+  options: { readonly localRow?: Person; readonly sharePhone: boolean },
+): Person {
+  const person = { ...guest, tripId } as Person;
+
+  // A seat kind this build does not recognise is dropped rather than stored.
+  // It reaches `tallyRequiredChildSeats`, which indexes a tally by it, so an
+  // unknown value becomes a `NaN` under a bogus key and a newer peer's seat
+  // kind would render as "NaN hoverboard" on the ride card. Dropping it costs
+  // one badge; keeping it corrupts the tally for the whole car.
+  if (
+    person.childSeat !== undefined &&
+    !(CHILD_SEAT_KINDS as readonly unknown[]).includes(person.childSeat)
+  ) {
+    delete person.childSeat;
+  }
+
+  if (person.phone !== undefined) {
+    const boundedPhone = sanitizeOptionalText(person.phone, MAX_LENGTHS.personPhone);
+    if (boundedPhone === undefined) {
+      delete person.phone;
+    } else {
+      person.phone = boundedPhone;
+    }
+  }
+
+  // A document with no phone for this guest means two different things, and
+  // reading it the wrong way costs the user the number they just typed.
+  //
+  // While `guest-phone-sharing` is off this device never publishes a phone, so
+  // the document was never going to carry one and its silence says nothing. The
+  // projection `bulkPut`s whole rows, so taking that silence at face value would
+  // have this device's own sync loop overwrite its local-only number seconds
+  // after the form saved it. Carry the local value forward instead.
+  //
+  // With the flag on the document *is* where this guest's phone lives, so an
+  // absent one is a real deletion — by this device or another member — and must
+  // land.
+  if (person.phone === undefined && !options.sharePhone && options.localRow?.phone !== undefined) {
+    person.phone = options.localRow.phone;
+  }
+
+  return person;
+}
+
+/**
+ * Coerces a peer-supplied value to a string before anything calls `.trim()`.
+ *
+ * `sanitizeText` and `sanitizeOptionalText` are written for form data, where a
+ * string is a type guarantee. The document is not form data: a peer, an older
+ * build or a newer one can put a number under `notes`, and `value.trim is not a
+ * function` thrown inside the projection's transaction rolls back the whole
+ * trip — every guest, room, assignment, transport, ride and vehicle — and the
+ * catch swallows it. The trip then silently stops receiving remote changes for
+ * as long as that one field survives.
+ *
+ * AGENTS.md states the rule this restores: drop an invalid record individually,
+ * never let one bad item abort a transaction that carries the rest.
+ */
+function boundedString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+/** {@link boundedString} for an optional field: a non-string reads as absent. */
+function optionalBoundedText(value: unknown, maxLength: number): string | undefined {
+  return typeof value === 'string'
+    ? sanitizeOptionalText(value, maxLength)
+    : undefined;
+}
+
+/**
+ * Keeps a peer-supplied pin only when it is somewhere on Earth.
+ *
+ * Delegates to `hasValidCoordinates`, which is what the trips map already
+ * filters with — rather than a fourth hand-rolled `typeof` pair, and rather
+ * than the looser `!isNaN` shape, which lets `null`, `Infinity` and a lat of
+ * 500 through. Those do not merely draw a wrong pin: they poison the centroid
+ * the map centres on and the bounds it fits, so one bad row pushes every real
+ * pin off the screen.
+ */
+function boundedCoordinates(
+  value: unknown,
+): { readonly lat: number; readonly lon: number } | undefined {
+  const candidate = value as
+    | { readonly lat?: unknown; readonly lon?: unknown }
+    | undefined;
+
+  return hasValidCoordinates(candidate)
+    ? { lat: candidate.lat, lon: candidate.lon }
+    : undefined;
+}
+
+/**
+ * Projects one leg out of the document, bounding what the log carried.
+ *
+ * Transports were the last collection still cast straight out of the document —
+ * `{ ...transport, tripId } as Transport` — while guests, rides and vehicles
+ * were each bounded. The cast is not free: `pickup-utils` already documents a
+ * row arriving with no `location` and throwing
+ * `Cannot read properties of undefined (reading 'trim')` straight into the error
+ * boundary, taking the whole transports page down rather than the one bad row.
+ * Anything that parses `datetime` fails the same way, and more surfaces parse it
+ * every time this feature grows.
+ *
+ * `datetime` decides the record's fate rather than being repaired: it is the
+ * second component of `[tripId+datetime]`, the index every transport read uses,
+ * so a non-string one is filed outside the range those reads scan — invisible to
+ * the app *and* to this projection's own delete-candidate query, which means
+ * nothing could ever remove it either.
+ *
+ * @param transport - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row, or undefined when it could never be read back
+ */
+function buildTransportRecord(
+  transport: SharedRecord,
+  tripId: TripId,
+): Transport | undefined {
+  const row = { ...transport, tripId } as Transport;
+
+  if (typeof row.datetime !== 'string' || row.datetime.length === 0) {
+    return undefined;
+  }
+
+  row.location = sanitizeText(
+    boundedString(row.location),
+    MAX_LENGTHS.transportLocation,
+  );
+  row.startLocation = optionalBoundedText(
+    row.startLocation,
+    MAX_LENGTHS.transportLocation,
+  );
+  row.transportNumber = optionalBoundedText(
+    row.transportNumber,
+    MAX_LENGTHS.transportNumber,
+  );
+  row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.transportNotes);
+  row.coordinates = boundedCoordinates(row.coordinates);
+  row.startCoordinates = boundedCoordinates(row.startCoordinates);
+
+  return row;
+}
+
+/**
+ * Projects one ride out of the document, bounding what the log carried.
+ *
+ * A ride arrives from another member's device and has passed no form of ours.
+ * Two fields do real damage unbounded, so both are pinned here at the trust
+ * boundary rather than at the components that read them:
+ *
+ * - `leadTimeMinutes` is subtracted from an instant to produce a "leave now"
+ *   time. A peer sending 10^9 puts that alert nineteen centuries in the past,
+ *   where it is permanently due and permanently on screen.
+ * - `direction` drives an icon and a phrase lookup. An unknown value from a
+ *   newer peer falls back to `pickup` rather than rendering an empty pill.
+ *
+ * @param ride - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row ready for Dexie
+ */
+function buildRideRecord(ride: SharedRecord, tripId: TripId): Ride | undefined {
+  const row = { ...ride, tripId } as Ride;
+
+  // `meetDatetime` is the second component of `[tripId+meetDatetime]`, the index
+  // every ride read in the app uses. A non-string one is not merely wrong data:
+  // IndexedDB files it outside the range those reads scan, so the row becomes
+  // invisible to the context, the repository, the analytics read *and* to
+  // `syncDocToDexie`'s own delete-candidate query — which means nothing can ever
+  // remove it either. Drop the record instead of storing an unreachable one.
+  if (typeof row.meetDatetime !== 'string' || row.meetDatetime.length === 0) {
+    return undefined;
+  }
+
+  row.location = sanitizeText(boundedString(row.location), MAX_LENGTHS.rideLocation);
+  row.leadTimeMinutes = normalizeLeadTimeMinutes(row.leadTimeMinutes);
+  row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.rideNotes);
+  row.coordinates = boundedCoordinates(row.coordinates);
+
+  if (!RIDE_DIRECTIONS.includes(row.direction)) {
+    row.direction = 'pickup';
+  }
+
+  return row;
+}
+
+/**
+ * Projects one vehicle out of the document, bounding what the log carried.
+ *
+ * `seatCount` and `childSeats` are the fields that matter. A seat count is
+ * compared against a headcount and rendered; a child-seat list is rendered one
+ * badge per entry, so an unbounded array from a peer is a rendering bomb rather
+ * than merely wrong data — the shape of the `capacity` bug this codebase
+ * already paid for once, where `Array.from({length: capacity})` killed the tab.
+ *
+ * @param vehicle - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row ready for Dexie
+ */
+function buildVehicleRecord(vehicle: SharedRecord, tripId: TripId): Vehicle {
+  const row = { ...vehicle, tripId } as Vehicle;
+
+  row.name = sanitizeText(boundedString(row.name), MAX_LENGTHS.vehicleName);
+  row.seatCount = normalizeSeatCount(row.seatCount);
+  row.luggageNotes = optionalBoundedText(
+    row.luggageNotes,
+    MAX_LENGTHS.vehicleLuggageNotes,
+  );
+  row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.vehicleNotes);
+
+  row.childSeats = Array.isArray(row.childSeats)
+    ? normalizeChildSeats(
+        row.childSeats.filter((kind): kind is ChildSeatKind =>
+          (CHILD_SEAT_KINDS as readonly unknown[]).includes(kind),
+        ),
+      )
+    : undefined;
+
+  return row;
+}
+
+/**
+ * Projects one money line out of the document, bounding what the log carried.
+ *
+ * Every field here ends up in arithmetic that the whole page is built on, so an
+ * unbounded one is not merely wrong data:
+ *
+ * - `date` is the second component of `[tripId+date]`, the index every expense
+ *   read uses. A non-string one is filed outside the range those reads scan, so
+ *   the row becomes invisible to the page, to the balances *and* to
+ *   `syncDocToDexie`'s own delete-candidate query — nothing could ever remove it
+ *   again. The record is dropped instead of stored unreachable.
+ * - `amount` and each share's `value` are multiplied and summed. One `1e308`
+ *   from a peer turns every balance on the page into `NaN`, which no arithmetic
+ *   below recovers from.
+ * - `kind`, `category` and `splitMode` drive a label, an icon and which
+ *   division runs. An unknown value from a newer peer falls back rather than
+ *   rendering an empty pill or dividing by a rule this build does not have.
+ *
+ * @param expense - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row ready for Dexie, or undefined when it is unusable
+ */
+function buildExpenseRecord(
+  expense: SharedRecord,
+  tripId: TripId,
+): Expense | undefined {
+  const row = { ...expense, tripId } as Expense;
+
+  if (typeof row.date !== 'string' || row.date.length === 0) {
+    return undefined;
+  }
+  if (typeof row.payerId !== 'string' || row.payerId.length === 0) {
+    return undefined;
+  }
+
+  row.title = sanitizeText(boundedString(row.title), MAX_LENGTHS.expenseTitle);
+  row.description = optionalBoundedText(
+    row.description,
+    MAX_LENGTHS.expenseDescription,
+  );
+  row.amount = normalizeExpenseAmount(row.amount);
+
+  if (!(EXPENSE_KINDS as readonly unknown[]).includes(row.kind)) {
+    row.kind = 'expense';
+  }
+  if (!(EXPENSE_CATEGORIES as readonly unknown[]).includes(row.category)) {
+    row.category = DEFAULT_EXPENSE_CATEGORY;
+  }
+  if (!(EXPENSE_SPLIT_MODES as readonly unknown[]).includes(row.splitMode)) {
+    row.splitMode = DEFAULT_EXPENSE_SPLIT_MODE;
+  }
+
+  row.splits = Array.isArray(row.splits)
+    ? row.splits
+        .filter(
+          (split): split is ExpenseSplit =>
+            typeof (split as ExpenseSplit | undefined)?.personId === 'string' &&
+            (split as ExpenseSplit).personId.length > 0,
+        )
+        .slice(0, MAX_EXPENSE_SPLITS)
+        .map((split) => ({
+          personId: split.personId,
+          value: normalizeExpenseSplitValue(split.value),
+        }))
+    : [];
+
+  return row;
+}
+
+async function replaceTripScopedRows<T extends { id: string; tripId: TripId }>(
+  currentRows: readonly T[],
+  nextRows: readonly T[],
+  putMany: (rows: T[]) => Promise<unknown>,
+  removeMany: (ids: string[]) => Promise<unknown>,
+): Promise<void> {
+  if (nextRows.length > 0) {
+    await putMany([...nextRows]);
+  }
+
+  const nextIds = new Set(nextRows.map((row) => row.id));
+  const idsToDelete = currentRows
+    .filter((row) => !nextIds.has(row.id))
+    .map((row) => row.id);
+
+  if (idsToDelete.length > 0) {
+    await removeMany(idsToDelete);
+  }
+}
+
+export async function loadPersistedUpdates(doc: Y.Doc, tripId: TripId): Promise<void> {
+  const rows = await db.yjsUpdates.where('tripId').equals(tripId).toArray();
+
+  Y.transact(doc, () => {
+    for (const row of rows) {
+      Y.applyUpdate(doc, row.update);
+    }
+  });
+
+  // A document persisted by an older build stores its collections as arrays.
+  // Convert before anything reads it, so the first projection to Dexie sees the
+  // trip's real contents rather than five empty maps. Idempotent, and safe to
+  // run on every device: the conversion is keyed on each record's own id.
+  if (readDocSchemaVersion(doc) < DOC_SCHEMA_VERSION) {
+    migrateLegacyArrayCollections(doc);
+  }
+
+  if (rows.length >= COMPACTION_THRESHOLD) {
+    await compactUpdates(doc, tripId);
+  }
+}
+
+/**
+ * Which trips this document has successfully projected into Dexie.
+ *
+ * A `WeakMap` on the document, so the answer resets whenever the document is
+ * recreated — a trip switch, a reload, a fresh join. That is the right lifetime:
+ * a new document has not yet shown that Dexie mirrors it, so it must earn the
+ * right to prune again rather than inherit it.
+ *
+ * This is what stops an invitee's empty Dexie deleting the owner's trip. Until a
+ * projection has actually landed, Dexie is not known to be a complete mirror, so
+ * nothing derived from it may delete.
+ */
+const projectedTrips = new WeakMap<Y.Doc, Set<string>>();
+
+function markProjected(doc: Y.Doc, tripId: TripId): void {
+  const trips = projectedTrips.get(doc) ?? new Set<string>();
+  trips.add(tripId);
+  projectedTrips.set(doc, trips);
+}
+
+/**
+ * Whether Dexie can be trusted as a complete mirror of this document's trip.
+ *
+ * Exported so the caller that syncs Dexie back into the document can ask rather
+ * than assume.
+ */
+export function isDexieTrustedMirror(doc: Y.Doc, tripId: TripId): boolean {
+  return projectedTrips.get(doc)?.has(tripId) === true;
+}
+
+export function subscribeToUpdates(doc: Y.Doc, tripId: TripId): () => void {
+  let updateCount = 0;
+
+  const handleUpdate = (update: Uint8Array, origin: unknown): void => {
+    void db.yjsUpdates.add({ tripId, update }).catch((error) => {
+      console.error('[yjs-bridge] Failed to persist update:', error);
+    });
+
+    updateCount += 1;
+    if (updateCount >= COMPACTION_THRESHOLD) {
+      updateCount = 0;
+      void compactUpdates(doc, tripId).catch((error) => {
+        console.error('[yjs-bridge] Failed to compact updates:', error);
+      });
+    }
+
+    if (origin !== ORIGIN_DEXIE_SYNC) {
+      void syncDocToDexie(doc, tripId).catch((error: unknown) => {
+        // Its own failures are handled inside; this catches anything thrown
+        // outside that try, which would otherwise be an unhandled rejection on
+        // every document update.
+        reportError(error, { source: 'dexie-bridge.subscribeToUpdates' });
+      });
+    }
+  };
+
+  doc.on('update', handleUpdate);
+  return () => {
+    doc.off('update', handleUpdate);
+  };
+}
+
+export async function compactUpdates(doc: Y.Doc, tripId: TripId): Promise<void> {
+  const snapshot = Y.encodeStateAsUpdate(doc);
+
+  await db.transaction('rw', db.yjsUpdates, async () => {
+    await db.yjsUpdates.where('tripId').equals(tripId).delete();
+    await db.yjsUpdates.add({ tripId, update: snapshot });
+  });
+}
+
+/**
+ * Projects a document into Dexie.
+ *
+ * @param tripId - Which local trip this document is for. The caller resolves it
+ *   locally — from the selected trip — and it is the **only** id used as a write
+ *   key, which is what stops a document ever reaching a trip it was not opened
+ *   for. Nothing in the payload is an address.
+ *
+ * This used to additionally refuse a document whose `meta.id` did not equal
+ * `tripId`, which looked like defence in depth and was in fact a data-loss bug.
+ * Local trip ids are per-device nanoids: when an invitee joins,
+ * `materialiseJoinedTrip` mints a new one, so a document authored by the owner
+ * carries the owner's id and can never equal the invitee's. The comparison
+ * therefore refused every remote update for every joined trip — and it was a
+ * race rather than a clean failure, because both devices write `meta.id` when
+ * they populate the document from Dexie, so the two ids fought over one key by
+ * last-writer-wins and whichever device lost silently stopped projecting.
+ *
+ * The security property it appeared to provide is provided by the write key
+ * instead, and `meta.id` is no longer written or read at all.
+ */
+export async function syncDocToDexie(
+  doc: Y.Doc,
+  tripId: TripId,
+): Promise<TripId | null> {
+  const ownerTrip = await db.trips.get(tripId);
+  if (!ownerTrip) {
+    // Projection updates a trip that already exists; it never creates one.
+    // Creation is `materialiseJoinedTrip`'s job on the join path and the user's
+    // otherwise, both of which establish the local id before any document is
+    // opened for it. Without this, a document could conjure a trip row under any
+    // id a caller passed — which is the constraint the old `meta.id` comparison
+    // was incidentally providing, restored here in a form that does not depend
+    // on two devices agreeing on a local id they cannot agree on.
+    return null;
+  }
+
+  // A document written by an older build keeps its collections in `Y.Array`s,
+  // so every `…ById` map reads as legitimately empty. Projecting that would
+  // delete every guest, room, assignment, transport and activity of a trip
+  // whose data is intact — the emptiness is a schema mismatch, not a deletion.
+  // `loadPersistedUpdates` converts local documents on open; this guards the
+  // remaining case, a peer that has not upgraded yet.
+  const schemaVersion = readDocSchemaVersion(doc);
+  if (schemaVersion < DOC_SCHEMA_VERSION) {
+    console.warn(
+      '[yjs] refusing remote update: doc schema v%d predates v%d',
+      schemaVersion,
+      DOC_SCHEMA_VERSION,
+    );
+    return null;
+  }
+
+  const nextTrip = buildTripRecord(doc, tripId, ownerTrip);
+  if (!nextTrip) {
+    return null;
+  }
+
+  try {
+    await db.transaction(
+      'rw',
+      [
+        db.trips,
+        db.persons,
+        db.rooms,
+        db.roomAssignments,
+        db.transports,
+        db.rides,
+        db.vehicles,
+        db.activities,
+        db.expenses,
+      ],
+      async () => {
+        await db.trips.put(nextTrip);
+
+        const currentGuests = await db.persons.where('tripId').equals(tripId).toArray();
+        const currentRooms = await db.rooms
+          .where('[tripId+order]')
+          .between([tripId, -Infinity], [tripId, Infinity])
+          .toArray();
+        const currentAssignments = await db.roomAssignments
+          .where('[tripId+startDate]')
+          .between([tripId, ''], [tripId, '\uffff'])
+          .toArray();
+        const currentTransport = await db.transports
+          .where('[tripId+datetime]')
+          .between([tripId, ''], [tripId, '\uffff'])
+          .toArray();
+        const currentRides = await db.rides
+          .where('[tripId+meetDatetime]')
+          .between([tripId, ''], [tripId, '\uffff'])
+          .toArray();
+        const currentVehicles = await db.vehicles
+          .where('tripId')
+          .equals(tripId)
+          .toArray();
+        const currentActivities = await db.activities
+          .where('[tripId+startDatetime]')
+          .between([tripId, ''], [tripId, '\uffff'])
+          .toArray();
+        const currentExpenses = await db.expenses
+          .where('[tripId+date]')
+          .between([tripId, ''], [tripId, '\uffff'])
+          .toArray();
+
+        const sharePhone = isGuestPhoneSharingEnabled();
+        const localGuestsById = new Map(currentGuests.map((row) => [row.id as string, row]));
+        const nextGuests = readCollection(doc, 'guests').map((guest) =>
+          buildGuestRecord(guest, tripId, {
+            localRow: localGuestsById.get(String(guest.id)),
+            sharePhone,
+          }),
+        );
+        const nextRooms = readCollection(doc, 'rooms').map(
+          (room) => ({ ...room, tripId } as Room),
+        );
+        const nextAssignments = readCollection(doc, 'roomAssignments').map(
+          (assignment) => ({ ...assignment, tripId } as RoomAssignment),
+        );
+        const nextTransport = readCollection(doc, 'transport')
+          .map((transport) => buildTransportRecord(transport, tripId))
+          .filter((transport): transport is Transport => transport !== undefined);
+        const nextRides = readCollection(doc, 'rides')
+          .map((ride) => buildRideRecord(ride, tripId))
+          .filter((ride): ride is Ride => ride !== undefined);
+        const nextVehicles = readCollection(doc, 'vehicles').map((vehicle) =>
+          buildVehicleRecord(vehicle, tripId),
+        );
+        const nextActivities = readCollection(doc, 'activities').map(
+          (activity) => ({ ...activity, tripId } as Activity),
+        );
+        const nextExpenses = readCollection(doc, 'expenses')
+          .map((expense) => buildExpenseRecord(expense, tripId))
+          .filter((expense): expense is Expense => expense !== undefined);
+
+        await replaceTripScopedRows(
+          currentGuests,
+          nextGuests,
+          (rows) => db.persons.bulkPut(rows),
+          (ids) => db.persons.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
+          currentRooms,
+          nextRooms,
+          (rows) => db.rooms.bulkPut(rows),
+          (ids) => db.rooms.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
+          currentAssignments,
+          nextAssignments,
+          (rows) => db.roomAssignments.bulkPut(rows),
+          (ids) => db.roomAssignments.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
+          currentTransport,
+          nextTransport,
+          (rows) => db.transports.bulkPut(rows),
+          (ids) => db.transports.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
+          currentRides,
+          nextRides,
+          (rows) => db.rides.bulkPut(rows),
+          (ids) => db.rides.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
+          currentVehicles,
+          nextVehicles,
+          (rows) => db.vehicles.bulkPut(rows),
+          (ids) => db.vehicles.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
+          currentActivities,
+          nextActivities,
+          (rows) => db.activities.bulkPut(rows),
+          (ids) => db.activities.bulkDelete([...ids]),
+        );
+        await replaceTripScopedRows(
+          currentExpenses,
+          nextExpenses,
+          (rows) => db.expenses.bulkPut(rows),
+          (ids) => db.expenses.bulkDelete([...ids]),
+        );
+      },
+    );
+  } catch (error) {
+    // Not projected, so not marked. This used to log and fall through to
+    // `markProjected` below, which handed out the right to delete on the
+    // strength of a projection that had just failed — the precise situation
+    // the flag exists to withhold it in. A half-written or aborted transaction
+    // leaves Dexie holding less than the document does, and the next
+    // Dexie-to-document sync would then read those absences as deletions and
+    // remove the rows from the shared trip.
+    reportFailure(
+      'dexie-bridge.syncDocToDexie',
+      error,
+      i18n.t('errors.syncFailed', 'Could not save the trip to this device'),
+      { trip_id: tripId },
+    );
+    return tripId;
+  }
+
+  // Dexie now mirrors this document for this trip, which is the only basis on
+  // which anything derived from Dexie may delete from it.
+  markProjected(doc, tripId);
+
+  return tripId;
+}
+
+export const applyDocToDexie = syncDocToDexie;
+
+export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<void> {
+  const [
+    trip,
+    guests,
+    rooms,
+    assignments,
+    transport,
+    rides,
+    vehicles,
+    activities,
+    expenses,
+  ] = await Promise.all([
+      db.trips.get(tripId),
+      db.persons.where('tripId').equals(tripId).toArray(),
+      db.rooms
+        .where('[tripId+order]')
+        .between([tripId, -Infinity], [tripId, Infinity])
+        .toArray(),
+      db.roomAssignments
+        .where('[tripId+startDate]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+      db.transports
+        .where('[tripId+datetime]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+      db.rides
+        .where('[tripId+meetDatetime]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+      db.vehicles.where('tripId').equals(tripId).toArray(),
+      db.activities
+        .where('[tripId+startDatetime]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+      db.expenses
+        .where('[tripId+date]')
+        .between([tripId, ''], [tripId, '\uffff'])
+        .toArray(),
+    ]);
+
+  if (!trip) {
+    return;
+  }
+
+  Y.transact(doc, () => {
+    const meta = getMeta(doc);
+    // Deliberately no `id`. It was this device's local trip id, which differs
+    // per device for a shared trip, so writing it made two devices contend over
+    // one key for no reader's benefit — and pushed that contention to the
+    // server as a real edit.
+    meta.set('name', trip.name);
+    meta.set('startDate', trip.startDate);
+    meta.set('endDate', trip.endDate);
+    meta.set('shareId', trip.shareId);
+    meta.set('createdAt', trip.createdAt);
+    meta.set('updatedAt', trip.updatedAt);
+    if (trip.currency !== undefined) meta.set('currency', trip.currency);
+    if (trip.location !== undefined) meta.set('location', trip.location);
+    if (trip.description !== undefined) meta.set('description', trip.description);
+    if (trip.coordinates !== undefined) meta.set('coordinates', trip.coordinates);
+
+    stampDocSchemaVersion(doc);
+
+    const sources: readonly [
+      DocCollectionName,
+      readonly { id: string; tripId: TripId }[],
+    ][] = [
+      // Redacted on the way out, never on the way into Dexie: the phone stays
+      // in this device's IndexedDB whatever the flag says.
+      [
+        'guests',
+        guests.map((guest) => toSharedGuest(guest, { sharePhone: isGuestPhoneSharingEnabled() })),
+      ],
+      ['rooms', rooms],
+      ['roomAssignments', assignments],
+      ['transport', transport],
+      ['rides', rides],
+      ['vehicles', vehicles],
+      ['activities', activities],
+      ['expenses', expenses],
+    ];
+
+    for (const [name, rows] of sources) {
+      // Seeding, never reconciling. This runs on mount with whatever Dexie
+      // happens to hold, which on a freshly joined device is nothing while the
+      // document may already carry the owner's whole trip. Pruning here deleted
+      // it for everybody.
+      replaceDocCollection(
+        doc,
+        name,
+        rows.map((row) => stripTripId(row) as SharedRecord & { id: string }),
+        { allowDeletions: false },
+      );
+    }
+  });
+}
+
+/**
+ * Pushes a Dexie collection into the document, upserting each row and — only
+ * when the mirror is trustworthy — removing the ids that are gone.
+ *
+ * This used to clear the whole `Y.Array` and rebuild it, which made every local
+ * change collide with every concurrent remote one: the merge kept both peers'
+ * deletions and both peers' inserts, and `bulkPut` then silently dropped an
+ * edit or restored a deleted row. Per-entity writes keep unrelated edits out of
+ * each other's way — see `./doc-model`.
+ *
+ * The removal half is gated on this document having actually projected into
+ * Dexie for this trip. Before that, Dexie is not known to mirror the document,
+ * and pruning it would delete the owner's rooms and guests for every member —
+ * an invitee whose projection was refused, or had not run yet, has an empty
+ * Dexie and a full document, and the difference is not a deletion anyone asked
+ * for.
+ *
+ * The decision is the caller's, not this function's: whoever holds the trip id
+ * asks {@link isDexieTrustedMirror} and passes the answer. Hiding that policy in
+ * here would make it invisible at the call sites whose data it protects, and
+ * would leave a legitimately synced device unable to state that it is one.
+ */
+export function syncDexieToDoc(
+  doc: Y.Doc,
+  table: SharedCollectionName,
+  items: SharedRecord[],
+  { allowDeletions }: ReplaceDocCollectionOptions,
+): void {
+  const identified = items.filter(
+    (item): item is SharedRecord & { id: string } =>
+      typeof item.id === 'string' && item.id.length > 0,
+  );
+
+  // Applied here rather than at the call site on purpose. This is the narrow
+  // waist every live Dexie change passes through on its way to the document and
+  // therefore to the server, so redacting here is the one edit a future caller
+  // cannot forget to make.
+  const entities =
+    table === 'guests'
+      ? identified.map((guest) =>
+          toSharedGuest(guest, { sharePhone: isGuestPhoneSharingEnabled() }),
+        )
+      : identified;
+
+  if (!allowDeletions && entities.length === 0) {
+    // Nothing to add and no standing to remove: the whole call is a no-op, and
+    // saying so beats writing an empty transaction on every live-query tick.
+    return;
+  }
+
+  Y.transact(
+    doc,
+    () => {
+      replaceDocCollection(doc, table, entities, { allowDeletions });
+    },
+    ORIGIN_DEXIE_SYNC,
+  );
+}
+
+export function syncTripMetaToDoc(doc: Y.Doc, updates: Record<string, unknown>): void {
+  const meta = getMeta(doc);
+  const entries = Object.entries(updates).filter(
+    ([key]) => key !== 'id' && key !== 'shareId' && key !== 'createdAt',
+  );
+
+  const hasChanges = entries.some(([key, value]) => {
+    if (value === undefined) {
+      return meta.has(key);
+    }
+    return !isDeepEqual(meta.get(key), value);
+  });
+
+  if (!hasChanges) {
+    return;
+  }
+
+  Y.transact(
+    doc,
+    () => {
+      for (const [key, value] of entries) {
+        if (value === undefined) {
+          meta.delete(key);
+        } else {
+          meta.set(key, value);
+        }
+      }
+    },
+    ORIGIN_DEXIE_SYNC,
+  );
+}
