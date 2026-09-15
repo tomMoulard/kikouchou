@@ -5,7 +5,7 @@
  * @module router
  */
 
-import { type ReactElement, Suspense, lazy, useEffect } from 'react';
+import { type ReactElement, Suspense, lazy, useEffect, useState } from 'react';
 import {
   Navigate,
   Outlet,
@@ -22,6 +22,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { reportError } from '@/lib/posthog';
+import { recoverFromStaleBuild } from '@/lib/pwa/stale-build';
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
 
 // Feature route imports
@@ -165,6 +166,51 @@ function ErrorPage(): ReactElement {
 }
 
 // ============================================================================
+// Unknown Route
+// ============================================================================
+
+/**
+ * The catch-all, for a path that may only look unknown.
+ *
+ * The service worker answers every navigation from the `index.html` it
+ * precached, so a device runs the build it installed until a newer worker takes
+ * over. A link to a route that shipped after that build lands on a router which
+ * has never heard of it, and this catch-all is what the visitor gets: the error
+ * page, inside the app chrome, over a path the origin serves perfectly well.
+ * `/template/<token>` did exactly that the day template links shipped — opened
+ * from a phone that still held the previous build, the link showed "something
+ * went wrong" with the trip already on that phone still named in the header,
+ * and the same link worked minutes later once the worker had rotated.
+ *
+ * So the path is asked about before it is refused. A newer build reloads onto
+ * itself; a genuinely wrong path finds no update and falls straight through.
+ *
+ * @returns The error page, or the wait before it
+ */
+function UnknownRoute(): ReactElement {
+  const [refused, setRefused] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void recoverFromStaleBuild().then((reloading) => {
+      // `reloading` leaves the wait on screen on purpose: the page is about to
+      // be replaced, and an error page that flashes first is a worse answer
+      // than a spinner nobody sees.
+      if (!cancelled && !reloading) {
+        setRefused(true);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return refused ? <ErrorPage /> : <LoadingState variant="fullPage" />;
+}
+
+// ============================================================================
 // Layout Wrapper with Outlet
 // ============================================================================
 
@@ -291,7 +337,7 @@ export const appRoutes: RouteObject = {
     // Catch-all 404 route - must be last
     {
       path: '*',
-      element: <ErrorPage />,
+      element: <UnknownRoute />,
     },
   ],
 };
