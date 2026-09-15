@@ -7,6 +7,7 @@
  * - Custom fallback
  * - Retry functionality
  * - onError/onReset callbacks
+ * - Reloading the tab by itself when a lazy chunk is gone
  *
  * @module components/shared/__tests__/ErrorBoundary.test
  */
@@ -18,6 +19,23 @@ import { Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import type { ReactElement } from 'react';
 
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
+
+// The helper's own decisions — the once-per-tab guard, the storage failures —
+// are covered in `src/lib/pwa/__tests__/stale-chunk.test.ts`. What matters here
+// is that the boundary asks it, without waiting for a click, and only for the
+// errors a reload can actually fix.
+vi.mock('@/lib/pwa/stale-chunk', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/pwa/stale-chunk')>();
+  return { ...actual, reloadForStaleChunk: vi.fn(() => true) };
+});
+
+/** The mocked helper, typed for assertions. */
+const reloadMock = vi.mocked(reloadForStaleChunk);
+
+/** The message Chrome throws when a deploy has removed the chunk. */
+const STALE_CHUNK_MESSAGE =
+  'Failed to fetch dynamically imported module: https://app.kikouchou.app/assets/TripEditPage-CfPSMXkw.js';
 
 // ============================================================================
 // Test Helpers
@@ -156,6 +174,51 @@ describe('ErrorBoundary', () => {
       await user.click(retryButton);
 
       expect(onReset).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Stale chunk recovery', () => {
+    beforeEach(() => {
+      reloadMock.mockClear();
+      reloadMock.mockReturnValue(true);
+    });
+
+    it('reloads the tab without waiting for a click', () => {
+      render(
+        <ErrorBoundary>
+          <ThrowingComponent message={STALE_CHUNK_MESSAGE} />
+        </ErrorBoundary>,
+        { withProviders: false }
+      );
+
+      expect(reloadMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves an ordinary error to the retry button', () => {
+      render(
+        <ErrorBoundary>
+          <ThrowingComponent message="Trip not found" />
+        </ErrorBoundary>,
+        { withProviders: false }
+      );
+
+      expect(reloadMock).not.toHaveBeenCalled();
+    });
+
+    it('keeps the fallback on screen when the reload is held back', () => {
+      reloadMock.mockReturnValue(false);
+
+      render(
+        <ErrorBoundary>
+          <ThrowingComponent message={STALE_CHUNK_MESSAGE} />
+        </ErrorBoundary>,
+        { withProviders: false }
+      );
+
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /common.retry/i })
+      ).toBeInTheDocument();
     });
   });
 

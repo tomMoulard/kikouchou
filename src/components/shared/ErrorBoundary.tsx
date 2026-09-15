@@ -18,6 +18,7 @@ import { type TFunction } from 'i18next';
 
 import { cn } from '@/lib/utils';
 import { reportError } from '@/lib/posthog';
+import { isModuleLoadError, reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
 import { Button } from '@/components/ui/button';
 
 // ============================================================================
@@ -73,26 +74,6 @@ interface ErrorBoundaryState {
 /**
  * Initial state for the error boundary.
  */
-/**
- * Whether an error is a failed dynamic `import()` of an app chunk.
- *
- * Browsers word this differently, hence the several needles.
- *
- * @param error - The caught error, if any
- * @returns True when a reload is the only way to recover
- */
-function isModuleLoadError(error: Error | null): boolean {
-  if (!error) return false;
-  const message = `${error.name} ${error.message}`.toLowerCase();
-  return (
-    message.includes('dynamically imported module') ||
-    message.includes('importing a module script failed') ||
-    message.includes('failed to fetch dynamically') ||
-    message.includes('error loading chunk') ||
-    message.includes('chunkloaderror')
-  );
-}
-
 const INITIAL_STATE: ErrorBoundaryState = {
   hasError: false,
   error: null,
@@ -182,6 +163,16 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
       source: 'ErrorBoundary',
       component_stack: errorInfo.componentStack ?? undefined,
     });
+
+    // A chunk the origin no longer serves is not the user's problem to solve,
+    // and the retry button is the only way out of it: reload here rather than
+    // asking for a tap. Reported first, so the reload never costs the one
+    // record error tracking gets of a bad deploy. `reloadForStaleChunk` keeps
+    // the once-per-tab guard; when it declines, the fallback below stays on
+    // screen with its button, exactly as before.
+    if (isModuleLoadError(error)) {
+      reloadForStaleChunk();
+    }
   }
 
   /**
@@ -202,9 +193,10 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
 
     // A failed dynamic import cannot be retried in place: React caches the
     // rejected promise on the module-level lazy() reference forever, so
-    // re-rendering re-throws the identical error. This is the common case after
-    // a deploy, because the service worker claims the tab while it still holds
-    // the old chunk names. Only a reload can recover.
+    // re-rendering re-throws the identical error. Only a reload can recover.
+    // `componentDidCatch` has normally taken that reload already; this is the
+    // path for the case where the guard held it back, so the tap is deliberate
+    // and goes straight to `reload()` without consulting the guard again.
     if (isModuleLoadError(this.state.error)) {
       window.location.reload();
       return;
