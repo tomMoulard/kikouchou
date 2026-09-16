@@ -422,6 +422,33 @@ export function resetAnalyticsIdentity(): void {
   posthogClient.register(BASE_SUPER_PROPERTIES);
 }
 
+/**
+ * Writes properties onto the person this browser already is.
+ *
+ * The one channel in this app for something a person typed about themselves,
+ * and it is deliberately narrow. A person property belongs to the person: it
+ * can be read back as a list, it is overwritten rather than duplicated on a
+ * second write, and it leaves with the person when the person is deleted. An
+ * address put on an *event* instead would be copied onto every event forever,
+ * with no way to honour a later "forget me" short of deleting the events.
+ *
+ * So: identity a person deliberately handed over goes here, and nothing else
+ * does. The rule for events is unchanged and is the rule the whole project runs
+ * on — counts and enum values, never user content, and nothing about a trip
+ * guest, who is a domain record rather than an identity.
+ *
+ * `AuthContext` does not call this: an account's own identity goes through
+ * `identify()`, which also merges the anonymous person into the account. This
+ * is for the person who is not signed in and has given an address anyway, which
+ * today means the paid-tier waiting list in `features/upgrade`.
+ *
+ * Safe with no client, like everything else here: the properties are dropped
+ * and nothing throws.
+ */
+export function setPersonProperties(properties: Record<string, string>): void {
+  posthogClient?.setPersonProperties(properties);
+}
+
 // ============================================================================
 // Capture
 // ============================================================================
@@ -471,6 +498,12 @@ export type AnalyticsEvent =
   // Preferences
   | 'language_changed'
   | 'theme_changed'
+  // Would anybody pay? The fake-door test — see `features/upgrade`
+  | 'upgrade_intent_declared'
+  | 'upgrade_plan_clicked'
+  | 'upgrade_prompt_dismissed'
+  | 'upgrade_prompt_opened'
+  | 'upgrade_prompt_shown'
   // Sharing, joining and syncing
   | 'own_trip_prompt_accepted'
   | 'own_trip_prompt_dismissed'
