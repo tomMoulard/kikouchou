@@ -22,7 +22,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useOfflineAwareNotify, useUnsavedChanges } from '@/hooks';
-import { Eye, Share2, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Eye, Share2, Trash2 } from 'lucide-react';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -39,7 +39,7 @@ import { ShareDialog } from '@/features/sharing';
 import { tripAccessOf } from '@/hooks/useTripAccess';
 import { useTripContext } from '@/contexts/TripContext';
 
-import { deleteTrip, getTripById, updateTrip } from '@/lib/db';
+import { deleteTrip, getTripById, setTripArchived, updateTrip } from '@/lib/db';
 import { captureDeletion, captureUsage, reportError } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import type { Trip, TripFormData, TripId } from '@/types';
@@ -94,6 +94,7 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
 
   // ============================================================================
   // Unsaved Changes Guard
@@ -323,6 +324,50 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   }, [currentTrip?.id, navigate, setCurrentTrip, skipNextBlock, notifySuccess, t, tripId]);
 
   /**
+   * Archives the trip, or takes it back out.
+   *
+   * No confirmation dialog, unlike delete: archiving destroys nothing and the
+   * button that did it undoes it. The page stays where it is and the label
+   * flips, so the undo is one tap away in the place the action was taken.
+   *
+   * `setTrip` rather than a reload, because this page loads its trip once into
+   * state. The write has already succeeded by then, and the stored flag is the
+   * one the next visit reads.
+   */
+  const handleArchiveToggle = useCallback(async (): Promise<void> => {
+    if (!trip || isArchiving) {
+      return;
+    }
+
+    const nextArchived = trip.archived !== true;
+    setIsArchiving(true);
+    try {
+      await setTripArchived(trip.id, nextArchived);
+
+      if (!isMountedRef.current) {
+        return;
+      }
+      setTrip((previous) =>
+        previous === null ? previous : { ...previous, archived: nextArchived },
+      );
+      notifySuccess(
+        nextArchived
+          ? t('trips.archived.done', 'Trip archived')
+          : t('trips.archived.undone', 'Trip taken out of the archive'),
+      );
+    } catch (error) {
+      console.error('Failed to change the archived state of a trip:', error);
+      if (isMountedRef.current) {
+        notify.error(t('errors.saveFailed', 'Failed to save'));
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsArchiving(false);
+      }
+    }
+  }, [trip, isArchiving, notifySuccess, t]);
+
+  /**
    * Handles opening the delete confirmation dialog.
    */
   const handleOpenDeleteDialog = useCallback(() => {
@@ -419,6 +464,26 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
               <Share2 className="mr-2 size-4" aria-hidden="true" />
               {t('nav.share')}
             </Button>
+            {/* Members only. Archiving writes the flag into the shared
+                document, and a device reading the trip through an invite link
+                has nothing to write with — the same rule the form follows. */}
+            {canEdit && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleArchiveToggle()}
+                disabled={isArchiving}
+              >
+                {trip.archived === true ? (
+                  <ArchiveRestore className="mr-2 size-4" aria-hidden="true" />
+                ) : (
+                  <Archive className="mr-2 size-4" aria-hidden="true" />
+                )}
+                {trip.archived === true
+                  ? t('trips.unarchive')
+                  : t('trips.archive')}
+              </Button>
+            )}
             <Button variant="destructive" onClick={handleOpenDeleteDialog}>
               <Trash2 className="mr-2 size-4" aria-hidden="true" />
               {t('common.delete')}

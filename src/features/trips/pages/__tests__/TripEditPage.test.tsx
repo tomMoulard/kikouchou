@@ -48,14 +48,21 @@ vi.mock('@/contexts/TripContext', () => ({
 const mockGetTripById = vi.fn().mockResolvedValue(mockTrip);
 const mockUpdateTrip = vi.fn().mockResolvedValue(undefined);
 const mockDeleteTrip = vi.fn().mockResolvedValue(undefined);
+const mockSetTripArchived = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@/lib/db', () => ({
   getTripById: (...args: unknown[]) => mockGetTripById(...args),
   updateTrip: (...args: unknown[]) => mockUpdateTrip(...args),
   deleteTrip: (...args: unknown[]) => mockDeleteTrip(...args),
+  setTripArchived: (...args: unknown[]) => mockSetTripArchived(...args),
 }));
 
 const mockSuccessToast = vi.fn();
+const mockErrorToast = vi.fn();
+
+vi.mock('@/lib/notifications', () => ({
+  notify: { error: (...args: unknown[]) => mockErrorToast(...args) },
+}));
 
 vi.mock('@/hooks', () => ({
   useUnsavedChanges: () => ({
@@ -330,5 +337,77 @@ describe('TripEditPage', () => {
     const backBtn = screen.getByRole('button', { name: /common\.back/i });
     await user.click(backBtn);
     expect(mockNavigate).toHaveBeenCalledWith('/trips');
+  });
+
+  describe('archiving', () => {
+    it('archives the trip from the header, with no confirmation to sit through', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<TripEditPage />, { withProviders: false });
+
+      await user.click(await screen.findByRole('button', { name: /trips\.archive/i }));
+
+      expect(mockSetTripArchived).toHaveBeenCalledWith('trip-1', true);
+      expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument();
+      // Still on the settings page: archiving is not leaving.
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it('flips the button to the undo once the trip is archived', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<TripEditPage />, { withProviders: false });
+
+      await user.click(await screen.findByRole('button', { name: /trips\.archive/i }));
+
+      expect(
+        await screen.findByRole('button', { name: /trips\.unarchive/i }),
+      ).toBeInTheDocument();
+      expect(mockSuccessToast).toHaveBeenCalledWith('trips.archived.done');
+    });
+
+    it('takes an archived trip back out', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      mockGetTripById.mockResolvedValue({ ...mockTrip, archived: true });
+      render(<TripEditPage />, { withProviders: false });
+
+      await user.click(await screen.findByRole('button', { name: /trips\.unarchive/i }));
+
+      expect(mockSetTripArchived).toHaveBeenCalledWith('trip-1', false);
+      expect(mockSuccessToast).toHaveBeenCalledWith('trips.archived.undone');
+    });
+
+    it('keeps the button out of a read-only copy of the trip', async () => {
+      // A device reading the trip through an invite link has nothing to write
+      // the flag with, and the form is hidden from it for the same reason.
+      mockGetTripById.mockResolvedValue({ ...mockTrip, viewerToken: 'token-1' });
+      render(<TripEditPage />, { withProviders: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('trips.settings')).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByRole('button', { name: /trips\.archive/i }),
+      ).not.toBeInTheDocument();
+      // Delete stays: it removes this device's copy, which a viewer may do.
+      expect(screen.getByText('common.delete')).toBeInTheDocument();
+    });
+
+    it('says so when the write fails, and leaves the label alone', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      mockSetTripArchived.mockRejectedValueOnce(new Error('Dexie is closed'));
+      render(<TripEditPage />, { withProviders: false });
+
+      await user.click(await screen.findByRole('button', { name: /trips\.archive/i }));
+
+      await waitFor(() => {
+        expect(mockErrorToast).toHaveBeenCalledWith('errors.saveFailed');
+      });
+      expect(
+        screen.getByRole('button', { name: /trips\.archive/i }),
+      ).toBeInTheDocument();
+    });
   });
 });

@@ -217,7 +217,9 @@
       "title_one": "Archivés ({{count}})",
       "title_other": "Archivés ({{count}})",
       "listLabel": "Voyages archivés",
-      "allArchived": "Tous les voyages sont archivés. Ouvrez la section ci-dessous pour en ressortir un."
+      "allArchived": "Tous les voyages sont archivés. Ouvrez la section ci-dessous pour en ressortir un.",
+      "done": "Voyage archivé",
+      "undone": "Voyage sorti des archives"
     },
     "importSuggestion": "Lieu déjà utilisé",
     "importConfirm": "Importer depuis \"{{tripName}}\" ?",
