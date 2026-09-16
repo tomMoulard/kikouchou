@@ -23,12 +23,14 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { syncAccountTrips } from '@/lib/sync/account-sync';
+import { populateDocFromDexie } from '@/lib/yjs/dexie-bridge';
 import { isoDate } from '@/test/utils';
-import type { Trip } from '@/types';
+import type { Person, PersonId, Trip, TripId } from '@/types';
 
 // ============================================================================
 // Test doubles
@@ -56,8 +58,10 @@ interface ServerTrip {
  */
 class FakeQuery<Row> implements PromiseLike<{ data: Row[] | null; error: unknown }> {
   private readonly filters: [string, unknown][] = [];
+  private readonly above: [string, number][] = [];
   private readonly error: unknown;
   private readonly rows: Row[];
+  private cap: number | undefined;
 
   constructor(rows: Row[], error: unknown = null) {
     this.rows = rows;
@@ -72,7 +76,8 @@ class FakeQuery<Row> implements PromiseLike<{ data: Row[] | null; error: unknown
     return this;
   }
 
-  limit(): this {
+  limit(count?: number): this {
+    this.cap = count;
     return this;
   }
 
@@ -81,12 +86,24 @@ class FakeQuery<Row> implements PromiseLike<{ data: Row[] | null; error: unknown
     return this;
   }
 
+  /** Paging the log is `id > cursor`, so the fake has to model it. */
+  gt(column: string, value: number): this {
+    this.above.push([column, value]);
+    return this;
+  }
+
   private matches(): Row[] {
-    return this.rows.filter((row) =>
-      this.filters.every(
-        ([column, value]) => (row as Record<string, unknown>)[column] === value,
-      ),
+    const matched = this.rows.filter(
+      (row) =>
+        this.filters.every(
+          ([column, value]) => (row as Record<string, unknown>)[column] === value,
+        ) &&
+        this.above.every(([column, value]) => {
+          const actual = (row as Record<string, unknown>)[column];
+          return typeof actual === 'number' && actual > value;
+        }),
     );
+    return this.cap === undefined ? matched : matched.slice(0, this.cap);
   }
 
   then<TResult1 = { data: Row[] | null; error: unknown }, TResult2 = never>(
@@ -122,7 +139,7 @@ class FakeQuery<Row> implements PromiseLike<{ data: Row[] | null; error: unknown
  */
 class FakeServer {
   readonly trips: ServerTrip[] = [];
-  readonly docUpdates: { trip_id: string; update: string }[] = [];
+  readonly docUpdates: { id: number; trip_id: string; update: string }[] = [];
   /** Trip ids whose INSERT should fail, to strand one trip and not the rest. */
   readonly refuseInsertFor = new Set<string>();
 
@@ -136,6 +153,19 @@ class FakeServer {
   /** Trips this caller may see, which is what RLS narrows a SELECT to. */
   private visibleTrips(): ServerTrip[] {
     return this.trips.filter((trip) => trip.owner_id === this.callerId);
+  }
+
+  /** Puts an owner's document in the log, the way an owner's device would. */
+  seedDocument(remoteTripId: string, state: Uint8Array): void {
+    let binary = '';
+    for (const byte of state) {
+      binary += String.fromCharCode(byte);
+    }
+    this.docUpdates.push({
+      id: this.docUpdates.length + 1,
+      trip_id: remoteTripId,
+      update: btoa(binary),
+    });
   }
 
   seedTrip(trip: Omit<ServerTrip, 'id'> & { id?: string }): ServerTrip {
@@ -185,9 +215,9 @@ class FakeServer {
 
         if (table === 'trip_doc_updates') {
           return {
-            select: () => new FakeQuery(this.docUpdates.map((_, index) => ({ id: index }))),
+            select: () => new FakeQuery(this.docUpdates),
             insert: (values: { trip_id: string; update: string }) => {
-              this.docUpdates.push(values);
+              this.docUpdates.push({ id: this.docUpdates.length + 1, ...values });
               return Promise.resolve({ error: null });
             },
           };
@@ -210,6 +240,41 @@ async function makeLocalTrip(name: string): Promise<Trip> {
     startDate: isoDate('2026-07-15'),
     endDate: isoDate('2026-07-22'),
   });
+}
+
+/**
+ * The document an owner's device would have pushed for a trip.
+ *
+ * Built through `populateDocFromDexie` rather than by writing Yjs maps by hand,
+ * so it stays a real document if the shape ever changes. The trip it is built
+ * from is deleted again: the point of the assertions is that everything came off
+ * the wire.
+ */
+async function ownerDocument(): Promise<Uint8Array> {
+  const owner = await createTrip({
+    name: 'Corsica',
+    startDate: isoDate('2026-08-01'),
+    endDate: isoDate('2026-08-08'),
+    location: 'Ajaccio',
+    coordinates: { lat: 41.92, lon: 8.73 },
+  });
+  await db.persons.add({
+    id: 'person-1' as PersonId,
+    tripId: owner.id,
+    name: 'Alice',
+    color: '#ff0000' as Person['color'],
+  });
+
+  const doc = new Y.Doc();
+  try {
+    await populateDocFromDexie(doc, owner.id);
+    const state = Y.encodeStateAsUpdate(doc);
+    await db.persons.where('tripId').equals(owner.id).delete();
+    await db.trips.delete(owner.id);
+    return state;
+  } finally {
+    doc.destroy();
+  }
 }
 
 // ============================================================================
@@ -389,6 +454,78 @@ describe('syncAccountTrips', () => {
       const result = await syncAccountTrips(null, USER);
 
       expect(result).toEqual({ uploaded: 0, downloaded: 0, upgraded: 0, failed: 0 });
+    });
+  });
+
+  describe('what a downloaded trip actually contains', () => {
+    it('brings down the guests, the place and the map, not just the name', async () => {
+      // The reported bug: sign in on a new device and every card in the trip
+      // list shows a name and a date range, with no guests, no place and no map,
+      // until the trip is opened one at a time. The card reads `db.persons` and
+      // `trip.location` / `trip.coordinates`, and all three live in the document
+      // rather than in any column of the preview row.
+      const row = server.seedTrip({
+        local_id: 'their-local-id',
+        owner_id: USER,
+        name: 'Corsica',
+        start_date: '2026-08-01',
+        end_date: '2026-08-08',
+      });
+      server.seedDocument(row.id, await ownerDocument());
+
+      await syncAccountTrips(server.client, USER);
+
+      const local = (await db.trips.toArray())[0];
+      expect(local?.location).toBe('Ajaccio');
+      expect(local?.coordinates).toEqual({ lat: 41.92, lon: 8.73 });
+      expect(
+        (await db.persons.where('tripId').equals(local?.id as TripId).toArray()).map(
+          (guest) => guest.name,
+        ),
+      ).toEqual(['Alice']);
+    });
+
+    it('repairs a placeholder an earlier sweep left behind', async () => {
+      // Every device that signed in before this existed is already full of
+      // these, and they are not "missing locally", so the pull half never looks
+      // at them again.
+      const row = server.seedTrip({
+        local_id: 'their-local-id',
+        owner_id: USER,
+        name: 'Corsica',
+        start_date: '2026-08-01',
+        end_date: '2026-08-08',
+      });
+      server.seedDocument(row.id, await ownerDocument());
+      const placeholder = await makeLocalTrip('Corsica');
+      await db.trips.update(placeholder.id, { remoteTripId: row.id });
+
+      const result = await syncAccountTrips(server.client, USER);
+
+      expect(result.downloaded).toBe(0);
+      expect(result.failed).toBe(0);
+      expect((await db.trips.get(placeholder.id))?.location).toBe('Ajaccio');
+      expect(await db.persons.where('tripId').equals(placeholder.id).count()).toBe(1);
+    });
+
+    it('leaves a trip this device has already opened alone', async () => {
+      // It holds its own document, so the provider owns every later pull and
+      // this must not reach in and project a second copy over it.
+      const row = server.seedTrip({
+        local_id: 'their-local-id',
+        owner_id: USER,
+        name: 'Corsica',
+        start_date: '2026-08-01',
+        end_date: '2026-08-08',
+      });
+      server.seedDocument(row.id, await ownerDocument());
+      const opened = await makeLocalTrip('Corsica');
+      await db.trips.update(opened.id, { remoteTripId: row.id });
+      await db.yjsUpdates.add({ tripId: opened.id, update: new Uint8Array([0]) });
+
+      await syncAccountTrips(server.client, USER);
+
+      expect(await db.persons.where('tripId').equals(opened.id).count()).toBe(0);
     });
   });
 
