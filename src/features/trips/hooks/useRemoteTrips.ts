@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { downloadTripDocument } from '@/lib/sync/download-document';
 import { materialiseJoinedTrip } from '@/lib/sync/join-trip';
 import { listRemoteTripsMissingLocally } from '@/lib/sync/remote-trip';
 import type { TripId } from '@/types';
@@ -97,6 +98,16 @@ export function useRemoteTrips(localTripCount: number): {
         if (result.status === 'error') {
           console.error('[trips] failed to download a joined trip:', result.message);
           return null;
+        }
+
+        // The row is a name and two dates; the guests, the place and the map are
+        // in the document. Without this the button puts a card on the list that
+        // stays half-empty until the trip is opened, which is not what *Download*
+        // says it does. A failure here is not a failed download: the trip is on
+        // the device and opening it still hydrates it the old way.
+        const hydrated = await downloadTripDocument(client, result.tripId, remoteTripId);
+        if (hydrated.status === 'error') {
+          console.warn('[trips] downloaded a trip without its document:', hydrated.message);
         }
         // Drop it from the "elsewhere" list straight away rather than waiting
         // for the effect to re-run.
