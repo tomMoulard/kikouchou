@@ -828,9 +828,14 @@ test.describe('Keyboard Navigation', () => {
     // Focus on the trip card using Tab
     await page.keyboard.press('Tab');
 
-    // Keep tabbing until we reach the trip card (may need multiple tabs)
+    // Keep tabbing until we reach the trip card (may need multiple tabs).
+    // The budget is a ceiling on an arbitrary walk, not a claim about the page:
+    // the sidebar, the header, the view switcher and whatever cards the list
+    // carries all sit before the grid, and the upgrade prompt added three more
+    // controls to that run. What is asserted is still that the card is reached
+    // and focused, below.
     let isTripCardFocused = false;
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < 40; i++) {
       const focused = await page.evaluate(() => {
         const active = document.activeElement;
         return active?.getAttribute('aria-label') ?? active?.textContent ?? '';
