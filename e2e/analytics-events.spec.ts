@@ -65,6 +65,11 @@ const LABELS = {
   dark: /^dark$|^sombre$/i,
   language: /^language$|^langue$/i,
   next: /^next$|^suivant$/i,
+  upgradeOpen: /see what it would include|voir ce que cela comprendrait/i,
+  upgradeConfirm: /i would pay for this|je paierais pour cela/i,
+  upgradeEmail: /your email address|votre adresse e-mail/i,
+  upgradeUnlimited: /19 € per month|19 € par mois/i,
+  upgradeCancel: /^no thanks$|^non merci$/i,
   skip: /skip for now|passer pour l'instant/i,
   letsGo: /let's go|c'est parti/i,
 } as const;
@@ -362,5 +367,79 @@ test.describe('Analytics events: the two preferences', () => {
     expect(await waitForCapturedProperties(page, 'language_changed')).toEqual({
       language: wasFrench ? 'en' : 'fr',
     });
+  });
+});
+
+// ============================================================================
+// Would anybody pay?
+// ============================================================================
+
+test.describe('Analytics events: the paid-tier fake door', () => {
+  /*
+   * The whole sequence in one test rather than four, on purpose: they are one
+   * path a person walks, and a step asserted from a fresh page would prove
+   * nothing about the step before it. The card is the same component on all
+   * three screens, so settings is enough to cover the clicks; the placement
+   * property is what differs, and the unit test owns that.
+   */
+  test('seeing, opening and answering the offer are captured', async ({ page }) => {
+    await clearIndexedDB(page);
+    await page.evaluate(() => {
+      // This card hides itself once it has an answer, and a leftover dismissal
+      // would make the impression below never happen.
+      window.localStorage.removeItem('kikouchou-upgrade-prompt-dismissed');
+      window.localStorage.removeItem('kikouchou-upgrade-intent-declared');
+      // The button that opens the full offer is behind `ent-trip-templates`,
+      // and these servers carry no PostHog key, so the flag would answer no.
+      // Same override every other flagged spec uses — see `useFeatureFlag`.
+      window.localStorage.setItem('kikouchou-flag:ent-trip-templates', 'on');
+    });
+    await openRoute(page, '/settings');
+
+    expect(await waitForCapturedProperties(page, 'upgrade_prompt_shown')).toEqual({
+      placement: 'settings',
+      price_eur_monthly: 3,
+      free_active_trip_limit: 3,
+      already_declared: false,
+    });
+
+    // The prices answer for everybody, flag or no flag. A price click also
+    // opens the offer, so the dialog is closed again before the card is used.
+    await page.getByRole('button', { name: LABELS.upgradeUnlimited }).click();
+    expect(await waitForCapturedProperties(page, 'upgrade_plan_clicked')).toMatchObject({
+      placement: 'settings',
+      plan: 'unlimited_monthly',
+      plan_price_eur: 19,
+    });
+    await page.getByRole('button', { name: LABELS.upgradeCancel }).click();
+
+    await page.getByRole('button', { name: LABELS.upgradeOpen }).click();
+    expect(await waitForCapturedProperties(page, 'upgrade_prompt_opened')).toMatchObject({
+      placement: 'settings',
+    });
+
+    // The answer is an address, not a click: an empty form records nothing.
+    await page.getByRole('button', { name: LABELS.upgradeConfirm }).click();
+    expect(await capturedEventNames(page)).not.toContain('upgrade_intent_declared');
+
+    await page.getByLabel(LABELS.upgradeEmail).fill('reader@example.com');
+    await page.getByRole('button', { name: LABELS.upgradeConfirm }).click();
+    expect(await waitForCapturedProperties(page, 'upgrade_intent_declared')).toMatchObject({
+      placement: 'settings',
+      has_email: true,
+    });
+
+    // The card is untouched by the answer, and the same button reopens the
+    // same offer. The reopen is marked so it cannot inflate the interest step.
+    await page.getByRole('button', { name: LABELS.upgradeOpen }).click();
+    expect(await waitForCapturedProperties(page, 'upgrade_prompt_opened')).toMatchObject({
+      already_declared: true,
+    });
+    await expect(page.getByLabel(LABELS.upgradeEmail)).toBeHidden();
+
+    // Nothing is for sale: the app must not have navigated anywhere, and
+    // answering a question is not using the app, so no activity is counted.
+    expect(new URL(page.url()).pathname).toMatch(/\/settings$/);
+    expect(await capturedEventNames(page)).not.toContain('app_used');
   });
 });

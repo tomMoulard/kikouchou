@@ -1514,6 +1514,37 @@
     "printSummary": "Print the trip summary",
     "printSummaryNoTrip": "Open a trip to print its summary."
   },
+  "upgrade": {
+    "card": {
+      "title": "Would you pay for Kikouchou?",
+      "description": "We are thinking about a paid plan for people who organise a lot. Tell us whether it is worth building.",
+      "action": "See what it would include",
+      "notNow": "Not now",
+      "locked": "The full offer is open to enterprise accounts for now. The prices above still take your answer."
+    },
+    "dialog": {
+      "title": "Kikouchou Pro",
+      "description": "About {{price}} € per month. The free app would keep {{limit}} active trips, and Pro would lift that limit.",
+      "cancel": "No thanks",
+      "confirm": "I would pay for this",
+      "close": "Close",
+      "emailLabel": "Your email address",
+      "emailPlaceholder": "you@example.com",
+      "emailInvalid": "Please type an email address we can reach you at.",
+      "alreadyDeclared": "Thanks for letting us know that you are interested.",
+      "disclaimer": "Nothing is on sale yet and nothing is charged. We keep your address only to tell you if this is built, and we send nothing else."
+    },
+    "plans": {
+      "per_trip": "{{price}} € per trip",
+      "unlimited_monthly": "{{price}} € per month, unlimited trips"
+    },
+    "features": {
+      "unlimitedTrips": "As many active trips as you want, instead of {{limit}}",
+      "analytics": "The analytics pages, for one trip and across all of them",
+      "export": "Export a trip to your calendar and to a file, without limits",
+      "support": "Answers from the people who build the app"
+    }
+  },
   "confirm": {
     "deleteTrip": "Delete this trip?",
     "deleteTripDescription": "This will permanently delete the trip and all its rooms, participants, transports, and room assignments.",
