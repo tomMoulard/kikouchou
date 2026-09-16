@@ -23,6 +23,7 @@ import {
 } from '@/features/sharing';
 import { useTripContext } from '@/contexts/TripContext';
 import { setTripArchived } from '@/lib/db';
+import { UpgradePrompt } from '@/features/upgrade';
 import { ArchivedTripsSection } from '../components/ArchivedTripsSection';
 import { PlanOwnTripPrompt } from '../components/PlanOwnTripPrompt';
 import { RemoteTripsSection } from '../components/RemoteTripsSection';
@@ -441,6 +442,11 @@ const TripListPage = memo(function TripListPage() {
         {/* Above the view, not inside the list branch: a guest who left the
             page on the map view is the same person the invitation is for. */}
         <PlanOwnTripPrompt trips={activeTrips} onCreateTrip={handleCreateClick} />
+
+        {/* Below the invitation to plan a trip, not above it: somebody who has
+            not organised anything yet is being asked to start, and an offer to
+            pay is the wrong second sentence. See `features/upgrade`. */}
+        <UpgradePrompt placement="trips" />
 
         {/* Every trip is archived. The page is not empty — the section below
             holds them all — so the first-run empty state would be a lie, and an

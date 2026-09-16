@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { AnalyticsScopeSelector } from '@/features/analytics/components/AnalyticsScopeSelector';
 import { StatCard } from '@/features/analytics/components/StatCard';
 import { useMoneyFormat } from '@/features/money/hooks/useMoneyFormat';
+import { UpgradePrompt } from '@/features/upgrade';
 import { useAnalyticsClock } from '@/features/analytics/hooks/useAnalyticsClock';
 import {
   MIXED_CURRENCIES,
@@ -241,6 +242,11 @@ const AllTripsAnalyticsPage = memo(function AllTripsAnalyticsPage(): ReactElemen
       <AnalyticsScopeSelector active="all" tripHref={tripScopeHref} />
 
       <p className="mb-6 text-sm text-muted-foreground">{t('analytics.allTripsDescription')}</p>
+
+      {/* On the page whose own existence is one of the proposed paid features,
+          and only on the loaded branch: an offer over an error or a spinner
+          asks for money for something the reader cannot see. */}
+      <UpgradePrompt placement="analytics" />
 
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
