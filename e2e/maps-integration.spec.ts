@@ -932,8 +932,18 @@ test.describe('Maps under modal dialogs', () => {
     await page.waitForLoadState('load');
 
     // Card previews are lazy; wait for the markers the assertion probes.
-    await expect(page.locator('.leaflet-marker-icon').first()).toBeVisible({
-      timeout: 15000,
+    const marker = page.locator('.leaflet-marker-icon').first();
+    await expect(marker).toBeVisible({ timeout: 15000 });
+
+    // Put that marker in the middle of the viewport before anything opens. The
+    // probe below can only read what is on screen, and how far down the first
+    // map preview sits depends on whatever the list carries above the grid --
+    // a phone viewport had it below the fold, which failed the guard on the
+    // list having nothing to probe rather than on the stacking under test.
+    // Radix locks the scroll while the dialog is open, so this has to happen
+    // first, and the share button sits above the preview inside the same card.
+    await marker.evaluate((element) => {
+      element.scrollIntoView({ block: 'center' });
     });
 
     await page.getByRole('button', { name: /share trip/i }).first().click();
