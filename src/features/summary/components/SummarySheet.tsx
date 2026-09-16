@@ -17,6 +17,7 @@
 import { type ReactElement, memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Locale } from 'date-fns';
+import { QRCodeSVG } from 'qrcode.react';
 
 import { toLocalISODateString } from '@/lib/db/utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
@@ -42,6 +43,14 @@ interface SummarySheetProps {
   readonly summary: TripSummary;
   /** The day the sheet was printed, so paper on a wall says how old it is. */
   readonly printedOn: Date;
+  /**
+   * The invite link this trip can be opened with, or null when there is none.
+   *
+   * Null is the common case on paper printed from a device with no account, and
+   * it hides the block: a QR code that leads nowhere is worse than no QR code,
+   * because paper cannot be corrected once it is on a wall.
+   */
+  readonly shareUrl?: string | null;
 }
 
 /**
@@ -249,12 +258,13 @@ const GuestRow = memo(function GuestRow({
  *
  * @example
  * ```tsx
- * <SummarySheet summary={summary} printedOn={new Date()} />
+ * <SummarySheet summary={summary} printedOn={new Date()} shareUrl={url} />
  * ```
  */
 export const SummarySheet = memo(function SummarySheet({
   summary,
   printedOn,
+  shareUrl = null,
 }: SummarySheetProps): ReactElement {
   const { t, i18n } = useTranslation();
   const dateLocale = useMemo(() => getDateLocale(i18n.language), [i18n.language]);
@@ -364,6 +374,33 @@ export const SummarySheet = memo(function SummarySheet({
           </ul>
         )}
       </section>
+
+      {/* ==================================================================== */}
+      {/* How to open the trip from the paper */}
+      {/* ==================================================================== */}
+      {shareUrl === null ? null : (
+        <section
+          aria-labelledby="summary-share"
+          className="flex break-inside-avoid items-center gap-4 border-t border-border pt-3"
+        >
+          {/* eslint-disable-next-line kikouchou/no-raw-palette-class -- Literal white, not `bg-card`: a QR code needs a light quiet zone to scan, on screen in either theme and on paper. */}
+          <div className="shrink-0 rounded-lg bg-white p-2">
+            <QRCodeSVG value={shareUrl} size={96} level="M" />
+          </div>
+          <div className="min-w-0">
+            <h2 id="summary-share" className="text-sm font-semibold">
+              {t('summary.shareQr', 'Scan to open this trip')}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {t(
+                'summary.shareQrHint',
+                'The phone that scans it gets the live plan, with every later change.',
+              )}
+            </p>
+            <p className="break-all text-xs text-muted-foreground">{shareUrl}</p>
+          </div>
+        </section>
+      )}
 
       <footer className="border-t border-border pt-2 text-xs text-muted-foreground">
         {t('summary.printedOn', 'Printed on {{date}}', {

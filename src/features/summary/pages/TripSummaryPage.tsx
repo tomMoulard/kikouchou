@@ -29,6 +29,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { readAnalytics } from '@/features/analytics/lib/trip-stats';
 import { SummarySheet } from '@/features/summary/components/SummarySheet';
 import { loadTripSummary } from '@/features/summary/lib/trip-summary';
+import { useTripShareLink } from '@/features/sharing/hooks/useTripShareLink';
 import { useTripContext } from '@/contexts/TripContext';
 import type { TripId } from '@/types';
 import { captureEvent } from '@/lib/posthog';
@@ -95,6 +96,16 @@ const TripSummaryPage = memo(function TripSummaryPage(): ReactElement {
   // the screen shows and what the printer receives.
   const [printedOn] = useState(() => new Date());
 
+  // The link the sheet's QR code points at.
+  //
+  // Enabled as soon as the page is open, because the reader's next move is the
+  // print dialog and the code has to be on the sheet by then. Every outcome but
+  // `invite` leaves the sheet without the block: a build with no server, a
+  // device with no account and a failed mint all print the same paper they
+  // printed before, which is the whole point of a summary that needs neither.
+  const { state: shareLinkState } = useTripShareLink(trip, true);
+  const shareUrl = shareLinkState.kind === 'invite' ? shareLinkState.url : null;
+
   const backLink = tripIdFromUrl ? `/trips/${tripIdFromUrl}/calendar` : '/trips';
 
   const handleBack = useCallback((): void => {
@@ -120,9 +131,11 @@ const TripSummaryPage = memo(function TripSummaryPage(): ReactElement {
       room_count: summary?.rooms.length ?? 0,
       travel_count: summary?.travels.length ?? 0,
       guests_without_room: summary?.guestsWithoutRoom.length ?? 0,
+      // Whether the paper carries a way back to the app at all.
+      has_share_qr: shareUrl !== null,
     });
     window.print();
-  }, [summary]);
+  }, [summary, shareUrl]);
 
   const isLoading =
     isTripLoading || (tripIdFromUrl !== undefined && result === undefined);
@@ -212,7 +225,7 @@ const TripSummaryPage = memo(function TripSummaryPage(): ReactElement {
         />
       </div>
 
-      <SummarySheet summary={summary} printedOn={printedOn} />
+      <SummarySheet summary={summary} printedOn={printedOn} shareUrl={shareUrl} />
     </div>
   );
 });
