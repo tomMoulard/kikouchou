@@ -74,8 +74,16 @@ vi.mock('@/contexts/TripContext', () => ({
   useTripContext: vi.fn(),
 }));
 
+// The share link has its own tests, and it reads the session from a provider
+// this page is rendered without here. What the page owes it is the state it
+// turns into paper: a link, or no block at all.
+vi.mock('@/features/sharing/hooks/useTripShareLink', () => ({
+  useTripShareLink: vi.fn(),
+}));
+
 import { TripSummaryPage } from '../TripSummaryPage';
 import { useTripContext } from '@/contexts/TripContext';
+import { useTripShareLink } from '@/features/sharing/hooks/useTripShareLink';
 
 // ============================================================================
 // Helpers
@@ -95,6 +103,12 @@ function mockTripContext(
   } as ReturnType<typeof useTripContext>);
 }
 
+function mockShareLink(
+  state: ReturnType<typeof useTripShareLink>['state'] = { kind: 'unavailable' },
+): void {
+  vi.mocked(useTripShareLink).mockReturnValue({ state, refresh: vi.fn() });
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -105,6 +119,39 @@ describe('TripSummaryPage', () => {
     mockSetCurrentTrip.mockResolvedValue(undefined);
     mockCheckConnection.mockResolvedValue(undefined);
     mockTripContext();
+    mockShareLink();
+  });
+
+  it('prints the invite link as a QR code once there is one', async () => {
+    mockShareLink({
+      kind: 'invite',
+      token: 'token-123',
+      url: 'https://app.example/j/token-123',
+    });
+    await db.trips.put(TRIP_A_ROW);
+
+    render(<TripSummaryPage />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('https://app.example/j/token-123'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('prints no QR code when this build has no link to give', async () => {
+    // A build with no server, a device with no account and a failed mint all
+    // print the paper they printed before.
+    await db.trips.put(TRIP_A_ROW);
+
+    render(<TripSummaryPage />, { withProviders: false });
+
+    await waitFor(() => {
+      expect(screen.getByText('summary.noRooms')).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole('region', { name: 'summary.shareQr' }),
+    ).not.toBeInTheDocument();
   });
 
   it('prints the trip named in the URL, rooms, travel and guests', async () => {

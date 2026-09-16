@@ -882,6 +882,8 @@
     "title": "Récapitulatif du séjour",
     "description": "Une page à coller sur le frigo : qui dort où, qui arrive quand, qui conduit.",
     "print": "Imprimer",
+    "shareQr": "Scannez pour ouvrir le séjour",
+    "shareQrHint": "Le téléphone qui le scanne reçoit le plan à jour, avec toutes les modifications.",
     "headcount_one": "{{count}} personne attendue",
     "headcount_other": "{{count}} personnes attendues",
     "headcountSuffix_one": "({{count}} personne)",

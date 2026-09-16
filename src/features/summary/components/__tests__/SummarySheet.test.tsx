@@ -204,6 +204,34 @@ describe('SummarySheet', () => {
     expect(screen.getByText('summary.noGuests')).toBeInTheDocument();
   });
 
+  it('prints a QR code for the link the trip can be opened with', () => {
+    render(
+      <SummarySheet
+        summary={buildSummary()}
+        printedOn={PRINTED_ON}
+        shareUrl="https://app.example/j/token-123"
+      />,
+    );
+
+    const share = within(screen.getByRole('region', { name: 'summary.shareQr' }));
+
+    expect(share.getByText('https://app.example/j/token-123')).toBeInTheDocument();
+    // The code itself: `qrcode.react` draws an SVG, and paper needs it to be there.
+    expect(
+      screen.getByRole('region', { name: 'summary.shareQr' }).querySelector('svg'),
+    ).not.toBeNull();
+  });
+
+  it('leaves the QR block off when there is no link to print', () => {
+    // A code that leads nowhere is worse than no code: paper cannot be
+    // corrected once it is on the wall.
+    render(<SummarySheet summary={buildSummary()} printedOn={PRINTED_ON} />);
+
+    expect(
+      screen.queryByRole('region', { name: 'summary.shareQr' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('dates the sheet, so paper on a wall says how old it is', () => {
     render(<SummarySheet summary={buildSummary()} printedOn={PRINTED_ON} />);
 

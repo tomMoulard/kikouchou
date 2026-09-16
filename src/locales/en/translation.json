@@ -882,6 +882,8 @@
     "title": "Trip summary",
     "description": "One page for the fridge door: who sleeps where, who arrives when, who drives.",
     "print": "Print",
+    "shareQr": "Scan to open this trip",
+    "shareQrHint": "The phone that scans it gets the live plan, with every later change.",
     "headcount_one": "{{count}} person expected",
     "headcount_other": "{{count}} people expected",
     "headcountSuffix_one": "({{count}} person)",
