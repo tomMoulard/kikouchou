@@ -49,6 +49,7 @@
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
 
 import { db } from '@/lib/db/database';
+import { downloadTripDocument } from './download-document';
 import { materialiseJoinedTrip } from './join-trip';
 import { ensureRemoteTrip, listRemoteTripsMissingLocally } from './remote-trip';
 import { uploadTripDocument } from './upload-document';
@@ -124,6 +125,52 @@ async function upgradeViewerTrips(
 }
 
 /**
+ * Hydrates the trips that arrived as a row and never got their document.
+ *
+ * Every sweep before this one left placeholders behind, so a device that signed
+ * in yesterday is already full of them and would stay that way: the pull half
+ * only looks at trips that are *missing* locally, and a placeholder is not
+ * missing. Without this pass the fix would only ever reach trips joined from
+ * here on, and the list somebody is looking at right now would still need every
+ * card opened by hand.
+ *
+ * Cheap enough to run every time. The only trips it considers are the ones with
+ * no persisted document at all, `downloadTripDocument` re-checks that itself,
+ * and one successful hydration takes a trip out of the set permanently.
+ *
+ * It runs before the push half on purpose: at this point a `remoteTripId` can
+ * only have been written by an earlier session, so a trip this sweep is about to
+ * upload is never downloaded back a moment later.
+ */
+async function hydratePlaceholderTrips(
+  client: TypedSupabaseClient,
+): Promise<AccountSyncResult> {
+  const linked = (await db.trips.toArray()).filter(
+    (trip) => trip.remoteTripId !== undefined,
+  );
+
+  let failed = 0;
+
+  for (const trip of linked) {
+    const held = await db.yjsUpdates.where('tripId').equals(trip.id).count();
+    if (held > 0) {
+      continue;
+    }
+
+    const result = await downloadTripDocument(
+      client,
+      trip.id,
+      trip.remoteTripId as string,
+    );
+    if (result.status === 'error') {
+      failed += 1;
+    }
+  }
+
+  return { uploaded: 0, downloaded: 0, upgraded: 0, failed };
+}
+
+/**
  * Uploads the trips on this device that have never been on the server.
  *
  * Sequential on purpose. A device with a dozen trips would otherwise open a
@@ -178,6 +225,13 @@ async function pushLocalTrips(
  * The same work the *Download* button does, for every trip at once. It stays a
  * button as well: this can only run while online, and somebody who signed in on
  * a train still needs a way in when the connection comes back.
+ *
+ * The row is not the trip, which is the same thing the push half had to learn.
+ * `materialiseJoinedTrip` writes a placeholder built from the server's preview —
+ * a name and two dates — and everything the trip list actually shows on a card
+ * lives in the document: the guests, the place, the coordinates behind the map.
+ * Without the download below, signing in on a new device produced a list of
+ * cards that each had to be opened, one at a time, before they showed anything.
  */
 async function pullRemoteTrips(
   client: TypedSupabaseClient,
@@ -194,9 +248,20 @@ async function pullRemoteTrips(
       continue;
     }
     // `already-local` is neither a download nor a failure: another tab, or the
-    // *Download* button, got there first.
-    if (result.status === 'joined') {
-      downloaded += 1;
+    // *Download* button, got there first — and that tab is hydrating the trip.
+    if (result.status !== 'joined') {
+      continue;
+    }
+
+    downloaded += 1;
+
+    // Counted as a failure, and the trip still stays: the row on its own is a
+    // trip somebody can open to repair, which is where this was before, so the
+    // count is the honest report of a half-finished download rather than a
+    // reason to undo one.
+    const hydrated = await downloadTripDocument(client, result.tripId, remote.id);
+    if (hydrated.status === 'error') {
+      failed += 1;
     }
   }
 
@@ -235,6 +300,10 @@ export async function syncAccountTrips(
     // second copy of a trip that is already here.
     const upgraded = await upgradeViewerTrips(client, userId);
 
+    // Then the trips an earlier sweep left as a name and two dates, before the
+    // push half can mistake an unopened placeholder for anything else.
+    const repaired = await hydratePlaceholderTrips(client);
+
     // Then up. The trips already on this device are the ones the person can
     // see, so getting them onto the account is what makes the *other* device
     // useful — and doing it first leaves the pull below a settled picture of
@@ -246,7 +315,7 @@ export async function syncAccountTrips(
       uploaded: pushed.uploaded,
       downloaded: pulled.downloaded,
       upgraded: upgraded.upgraded,
-      failed: upgraded.failed + pushed.failed + pulled.failed,
+      failed: upgraded.failed + repaired.failed + pushed.failed + pulled.failed,
     };
   } catch (error: unknown) {
     // Belt and braces: everything above reports rather than throws, so reaching
