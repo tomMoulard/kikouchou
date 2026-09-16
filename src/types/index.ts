@@ -658,6 +658,23 @@ export interface Trip extends Identifiable, WithTimestamps {
    * Device-local, like `remoteTripId`: it never travels in the document.
    */
   viewerToken?: string;
+
+  /**
+   * Whether the trip has been put away.
+   *
+   * An archived trip keeps all of its data and stays reachable — it moves to
+   * its own section of the trip list instead of sitting among the trips the
+   * group is still planning. Archiving is reversible and deletes nothing.
+   *
+   * Absent means "not archived": every trip written before the flag existed
+   * reads as an ordinary one, so `archived === true` is the only state the
+   * list treats as put away.
+   *
+   * Shared, not device-local: it rides in the document's `meta` map beside the
+   * name and the dates, so a trip archived on one device is archived on every
+   * device and for every member of the trip.
+   */
+  archived?: boolean;
 }
 
 /**

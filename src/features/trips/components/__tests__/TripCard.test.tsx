@@ -897,3 +897,90 @@ describe('TripCard Keyboard while disabled', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 });
+
+// ============================================================================
+// Archive Tests
+// ============================================================================
+
+describe('TripCard archiving', () => {
+  it('shows no menu when the card has no menu action at all', () => {
+    const trip = createTestTrip();
+
+    render(<TripCard trip={trip} persons={[]} onClick={vi.fn()} />);
+
+    expect(
+      screen.queryByRole('button', { name: /common\.openMenu/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens the menu for the archive action alone', async () => {
+    const user = userEvent.setup();
+    const trip = createTestTrip();
+
+    // The trip list passes this one callback and neither edit nor delete, which
+    // used to mean no menu at all.
+    render(
+      <TripCard
+        trip={trip}
+        persons={[]}
+        onClick={vi.fn()}
+        onArchiveToggle={vi.fn()}
+      />,
+    );
+
+    const menuTrigger = screen.getByRole('button', { name: /common\.openMenu/i });
+    await user.click(menuTrigger);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', { name: /trips\.archive/i }),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole('menuitem', { name: /common\.delete/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers to take an archived trip back out', async () => {
+    const user = userEvent.setup();
+    const trip = createTestTrip({ archived: true });
+
+    render(
+      <TripCard
+        trip={trip}
+        persons={[]}
+        onClick={vi.fn()}
+        onArchiveToggle={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /common\.openMenu/i }));
+
+    expect(
+      await screen.findByRole('menuitem', { name: /trips\.unarchive/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('passes the trip to onArchiveToggle', async () => {
+    const user = userEvent.setup();
+    const onArchiveToggle = vi.fn();
+    const trip = createTestTrip();
+
+    render(
+      <TripCard
+        trip={trip}
+        persons={[]}
+        onClick={vi.fn()}
+        onArchiveToggle={onArchiveToggle}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /common\.openMenu/i }));
+    await user.click(
+      await screen.findByRole('menuitem', { name: /trips\.archive/i }),
+    );
+
+    expect(onArchiveToggle).toHaveBeenCalledTimes(1);
+    expect(onArchiveToggle).toHaveBeenCalledWith(trip);
+  });
+});

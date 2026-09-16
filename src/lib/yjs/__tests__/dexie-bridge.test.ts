@@ -441,6 +441,41 @@ describe('buildTripRecord — remote field validation', () => {
 
     expect((await db.trips.get(trip.id))?.description).toBeUndefined();
   });
+
+  it('archives the trip when a member archived it elsewhere', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ name: 'Brittany', archived: true }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.archived).toBe(true);
+  });
+
+  it('takes the trip back out when the flag is gone from the document', async () => {
+    const trip = await makeTrip();
+    await syncDocToDexie(makeDoc({ name: 'Brittany', archived: true }), trip.id);
+
+    await syncDocToDexie(makeDoc({ name: 'Brittany' }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.archived).toBeUndefined();
+  });
+
+  it('reads an explicit false as not archived', async () => {
+    const trip = await makeTrip();
+
+    await syncDocToDexie(makeDoc({ name: 'Brittany', archived: false }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.archived).toBeUndefined();
+  });
+
+  it('refuses to archive a trip on a truthy value that is not true', async () => {
+    const trip = await makeTrip();
+
+    // Anything but a literal `true` leaves the trip where the group can see it:
+    // hiding a live trip because a peer sent 'yes' is the worse failure.
+    await syncDocToDexie(makeDoc({ name: 'Brittany', archived: 'yes' }), trip.id);
+
+    expect((await db.trips.get(trip.id))?.archived).toBeUndefined();
+  });
 });
 
 describe('syncDocToDexie — rows the document no longer holds', () => {

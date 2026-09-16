@@ -22,6 +22,8 @@ import {
   ShareDialog,
 } from '@/features/sharing';
 import { useTripContext } from '@/contexts/TripContext';
+import { setTripArchived } from '@/lib/db';
+import { ArchivedTripsSection } from '../components/ArchivedTripsSection';
 import { PlanOwnTripPrompt } from '../components/PlanOwnTripPrompt';
 import { RemoteTripsSection } from '../components/RemoteTripsSection';
 import { cn } from '@/lib/utils';
@@ -91,6 +93,27 @@ const TripListPage = memo(function TripListPage() {
     },
     [setSearchParams],
   );
+  /**
+   * The two lists this page shows.
+   *
+   * Split here rather than in two Dexie queries: `TripContext` already holds
+   * every trip in start-date order, and archiving has to move a card from one
+   * section to the other the moment the flag changes — including when it
+   * changes on somebody else's device. One sorted array, partitioned, does that
+   * for free.
+   *
+   * `archived === true` is the test, not truthiness: every trip written before
+   * the flag existed has no `archived` key at all and belongs in the main grid.
+   */
+  const activeTrips = useMemo(
+    () => trips.filter((trip) => trip.archived !== true),
+    [trips],
+  );
+  const archivedTrips = useMemo(
+    () => trips.filter((trip) => trip.archived === true),
+    [trips],
+  );
+
   const [importQrOpen, setImportQrOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharedTripId, setSharedTripId] = useState<TripId | null>(null);
@@ -196,6 +219,22 @@ const TripListPage = memo(function TripListPage() {
 
   const handleShareDialogOpenChange = useCallback((open: boolean) => {
     setShareDialogOpen(open);
+  }, []);
+
+  /**
+   * Archives a trip, or takes it back out — the card decides which by reading
+   * its own `archived` flag, so both directions arrive here.
+   *
+   * Nothing is awaited by the caller and nothing is set in state: the write
+   * goes to Dexie, and the live query behind `TripContext` moves the card. A
+   * failure is logged rather than surfaced, the way selecting a trip already
+   * handles its own, because the visible outcome of a failed archive is a card
+   * that stayed where it was.
+   */
+  const handleArchiveToggle = useCallback((trip: Trip) => {
+    void setTripArchived(trip.id, trip.archived !== true).catch((err: unknown) => {
+      console.error('Failed to change the archived state of a trip:', err);
+    });
   }, []);
 
   const headerAction = useMemo(
@@ -330,7 +369,7 @@ const TripListPage = memo(function TripListPage() {
   // Render: Empty State
   // ============================================================================
 
-  if (trips.length === 0) {
+  if (activeTrips.length === 0 && archivedTrips.length === 0) {
     return (
       <>
         {/* One FAB only, so `<main>`'s own `pb-bottom-stack` is the whole
@@ -401,11 +440,20 @@ const TripListPage = memo(function TripListPage() {
 
         {/* Above the view, not inside the list branch: a guest who left the
             page on the map view is the same person the invitation is for. */}
-        <PlanOwnTripPrompt trips={trips} onCreateTrip={handleCreateClick} />
+        <PlanOwnTripPrompt trips={activeTrips} onCreateTrip={handleCreateClick} />
+
+        {/* Every trip is archived. The page is not empty — the section below
+            holds them all — so the first-run empty state would be a lie, and an
+            empty grid with no words in it would be a bug. */}
+        {activeTrips.length === 0 && (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            {t('trips.archived.allArchived')}
+          </p>
+        )}
 
         {currentView === 'map' ? (
           <div>
-            <TripsLocationMap trips={trips} height={MAP_VIEW_HEIGHT} asCard={false} />
+            <TripsLocationMap trips={activeTrips} height={MAP_VIEW_HEIGHT} asCard={false} />
           </div>
         ) : (
           /* Trip grid */
@@ -418,19 +466,31 @@ const TripListPage = memo(function TripListPage() {
             role="list"
             aria-label={t('trips.title')}
           >
-            {trips.map((trip) => (
+            {activeTrips.map((trip) => (
               <div key={trip.id} role="listitem">
                 <TripCard
                   trip={trip}
                   persons={personsByTrip.get(trip.id) ?? []}
                   onClick={handleTripSelect}
                   onShare={handleShareTrip}
+                  onArchiveToggle={handleArchiveToggle}
                   isDisabled={isNavigating}
                 />
               </div>
             ))}
           </div>
         )}
+
+        {/* Below both views, not inside the list branch: the map shows where the
+            active trips are, and an archived one is not a place the group is
+            going — but it is still reachable from here either way. */}
+        <ArchivedTripsSection
+          trips={archivedTrips}
+          personsByTrip={personsByTrip}
+          onSelect={handleTripSelect}
+          onUnarchive={handleArchiveToggle}
+          isDisabled={isNavigating}
+        />
 
         <RemoteTripsSection localTripCount={trips.length} />
 

@@ -223,6 +223,15 @@ function buildTripRecord(
     trip.currency = normalizeCurrency(currency);
   }
 
+  // Only a literal `true` archives a trip. A peer on an older build sends no
+  // key at all, and a peer on a broken one could send anything; both read as
+  // "not archived", which is the state that keeps the trip visible. The field
+  // is left off the record entirely in that case rather than written as
+  // `false`, so a trip nobody ever archived carries no flag.
+  if (meta.get('archived') === true) {
+    trip.archived = true;
+  }
+
   const coordinates = meta.get('coordinates');
   if (
     coordinates &&
@@ -927,6 +936,10 @@ export async function populateDocFromDexie(doc: Y.Doc, tripId: TripId): Promise<
     if (trip.location !== undefined) meta.set('location', trip.location);
     if (trip.description !== undefined) meta.set('description', trip.description);
     if (trip.coordinates !== undefined) meta.set('coordinates', trip.coordinates);
+    // Written only when the trip is archived: a `false` here would be this
+    // device claiming, on every document it populates, that the trip is not
+    // put away — which is an edit that could undo another member's archive.
+    if (trip.archived === true) meta.set('archived', true);
 
     stampDocSchemaVersion(doc);
 

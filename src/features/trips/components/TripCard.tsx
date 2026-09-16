@@ -14,7 +14,17 @@ import {
   useMemo,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Calendar, MapPin, MoreHorizontal, Pencil, Share2, Trash2, Users } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  Calendar,
+  MapPin,
+  MoreHorizontal,
+  Pencil,
+  Share2,
+  Trash2,
+  Users,
+} from 'lucide-react';
 
 // Lazy load the map component for performance
 const TripLocationMap = lazy(() =>
@@ -69,6 +79,11 @@ interface TripCardProps {
   readonly onDelete?: () => void;
   /** Opens share dialog (link + QR) for this trip — e.g. from the trip list */
   readonly onShare?: (trip: Trip) => void;
+  /**
+   * Archives the trip, or takes it back out. The card reads `trip.archived` to
+   * decide which of the two the menu item offers, so one callback covers both.
+   */
+  readonly onArchiveToggle?: (trip: Trip) => void;
   /** Whether the card interaction is currently disabled    */
   readonly isDisabled?: boolean;
   readonly persons: readonly Person[];
@@ -107,6 +122,7 @@ const TripCard = memo(function TripCard({
   onEdit,
   onDelete,
   onShare,
+  onArchiveToggle,
   isDisabled = false,
   persons,
 }: TripCardProps) {
@@ -199,13 +215,22 @@ const TripCard = memo(function TripCard({
       onShare?.(trip);
     },
     [isDisabled, onShare, trip],
-  );
+  ),
+
+  /**
+   * Handles the Archive / Unarchive menu item.
+   */
+   handleArchiveClick = useCallback(() => {
+    onArchiveToggle?.(trip);
+  }, [onArchiveToggle, trip]);
 
   // ============================================================================
   // Render
   // ============================================================================
 
-  const showCornerMenu = Boolean(onEdit && onDelete);
+  // The menu appears for either pair of actions: the list page passes only the
+  // archive toggle, while the pages that can edit and delete pass those two.
+  const showCornerMenu = Boolean((onEdit && onDelete) || onArchiveToggle);
   const showCornerActions = Boolean(onShare || showCornerMenu);
 
   return (
@@ -280,14 +305,30 @@ const TripCard = memo(function TripCard({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={handleEditClick}>
-              <Pencil className="mr-2 size-4" aria-hidden="true" />
-              {t('common.edit')}
-            </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onSelect={handleDeleteClick}>
-              <Trash2 className="mr-2 size-4" aria-hidden="true" />
-              {t('common.delete')}
-            </DropdownMenuItem>
+            {onEdit && (
+              <DropdownMenuItem onSelect={handleEditClick}>
+                <Pencil className="mr-2 size-4" aria-hidden="true" />
+                {t('common.edit')}
+              </DropdownMenuItem>
+            )}
+            {onArchiveToggle && (
+              <DropdownMenuItem onSelect={handleArchiveClick}>
+                {trip.archived === true ? (
+                  <ArchiveRestore className="mr-2 size-4" aria-hidden="true" />
+                ) : (
+                  <Archive className="mr-2 size-4" aria-hidden="true" />
+                )}
+                {trip.archived === true
+                  ? t('trips.unarchive')
+                  : t('trips.archive')}
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem variant="destructive" onSelect={handleDeleteClick}>
+                <Trash2 className="mr-2 size-4" aria-hidden="true" />
+                {t('common.delete')}
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         )}
