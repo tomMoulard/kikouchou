@@ -14,6 +14,7 @@ import {
   getTripById,
   getTripByShareId,
   updateTrip,
+  setTripArchived,
   deleteTrip,
   getTripsByLocation,
 } from '@/lib/db/repositories/trip-repository';
@@ -22,7 +23,7 @@ import { createPerson } from '@/lib/db/repositories/person-repository';
 import { createAssignment } from '@/lib/db/repositories/assignment-repository';
 import { createTransport } from '@/lib/db/repositories/transport-repository';
 import * as dbUtils from '@/lib/db/utils';
-import type { TripFormData, TripId, ShareId } from '@/types';
+import type { Trip, TripFormData, TripId, ShareId } from '@/types';
 import { isoDate, hexColor } from '@/test/utils';
 
 // ============================================================================
@@ -439,6 +440,70 @@ describe('updateTrip', () => {
     const updated = await getTripById(trip.id);
     expect(updated?.startDate).toBe('2025-01-01');
     expect(updated?.endDate).toBe('2025-01-15');
+  });
+});
+
+// ============================================================================
+// setTripArchived Tests
+// ============================================================================
+
+describe('setTripArchived', () => {
+  it('leaves a new trip unarchived', async () => {
+    const trip = await createTrip(createValidTripData());
+
+    expect(trip.archived).toBeUndefined();
+  });
+
+  it('archives a trip', async () => {
+    const trip = await createTrip(createValidTripData());
+
+    await setTripArchived(trip.id, true);
+
+    const found = await getTripById(trip.id);
+    expect(found?.archived).toBe(true);
+  });
+
+  it('takes an archived trip back out', async () => {
+    const trip = await createTrip(createValidTripData());
+    await setTripArchived(trip.id, true);
+
+    await setTripArchived(trip.id, false);
+
+    const found = await getTripById(trip.id);
+    expect(found?.archived).toBe(false);
+  });
+
+  it('keeps every other field, so archiving deletes nothing', async () => {
+    const trip = await createTrip(createValidTripData());
+    const room = await createRoom(trip.id, { name: 'Attic', capacity: 2 });
+
+    await setTripArchived(trip.id, true);
+
+    const found = await getTripById(trip.id);
+    expect(found?.name).toBe(trip.name);
+    expect(found?.location).toBe(trip.location);
+    expect(found?.startDate).toBe(trip.startDate);
+    expect(found?.endDate).toBe(trip.endDate);
+    expect(found?.shareId).toBe(trip.shareId);
+    expect(await db.rooms.get(room.id)).toBeDefined();
+  });
+
+  it('stamps updatedAt', async () => {
+    const trip = await createTrip(createValidTripData());
+    vi.spyOn(dbUtils, 'updateTimestamp').mockReturnValue({
+      updatedAt: (trip.updatedAt + 1000) as Trip['updatedAt'],
+    });
+
+    await setTripArchived(trip.id, true);
+
+    const found = await getTripById(trip.id);
+    expect(found?.updatedAt).toBe(trip.updatedAt + 1000);
+  });
+
+  it('throws for a trip that does not exist', async () => {
+    await expect(
+      setTripArchived('missing-trip' as TripId, true),
+    ).rejects.toThrow('not found');
   });
 });
 

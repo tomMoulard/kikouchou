@@ -211,6 +211,14 @@
     "moreGuests_one": "{{count}} more guest",
     "moreGuests_other": "{{count}} more guests",
     "untitled": "Untitled trip",
+    "archive": "Archive",
+    "unarchive": "Unarchive",
+    "archived": {
+      "title_one": "Archived ({{count}})",
+      "title_other": "Archived ({{count}})",
+      "listLabel": "Archived trips",
+      "allArchived": "Every trip is archived. Open the section below to bring one back."
+    },
     "importSuggestion": "Previously used location",
     "importConfirm": "Import from \"{{tripName}}\"?",
     "importConfirmDescription": "This will pre-fill the location, description, and copy {{roomCount}} room(s) to your new trip.",

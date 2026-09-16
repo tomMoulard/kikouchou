@@ -312,6 +312,44 @@ export async function getTripsByLocation(query: string): Promise<Trip[]> {
   return results;
 }
 
+/**
+ * Puts a trip away, or takes it back out.
+ *
+ * Archiving changes one boolean and nothing else: the rooms, the guests, the
+ * assignments and the money all stay where they are, and the same call with
+ * `false` undoes it. The trip list reads the flag to decide which of its two
+ * sections the trip belongs in.
+ *
+ * Kept out of {@link updateTrip} on purpose. That function takes
+ * `Partial<TripFormData>`, which is what the trip *form* edits, and it runs the
+ * date-shift pass over every room assignment on the way through. Archiving is
+ * neither: it is one flag toggled from a menu on the list, and it has no
+ * business walking the assignments of a trip nobody opened.
+ *
+ * @param id - The trip's unique identifier
+ * @param archived - `true` to archive the trip, `false` to restore it
+ * @throws {Error} If no trip with that id exists
+ *
+ * @example
+ * ```typescript
+ * await setTripArchived(tripId, true);  // moves it to the archived section
+ * await setTripArchived(tripId, false); // brings it back
+ * ```
+ */
+export async function setTripArchived(
+  id: TripId,
+  archived: boolean,
+): Promise<void> {
+  const updatedCount = await db.trips.update(id, {
+    archived,
+    ...updateTimestamp(),
+  });
+
+  if (updatedCount === 0) {
+    throw new Error(`Trip with id "${id}" not found`);
+  }
+}
+
 export async function deleteTrip(id: TripId): Promise<void> {
   await db.transaction(
     'rw',

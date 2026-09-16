@@ -68,6 +68,7 @@ export {
   getTripById,
   getTripByShareId,
   updateTrip,
+  setTripArchived,
   deleteTrip,
   getTripsByLocation,
 } from './repositories/trip-repository';

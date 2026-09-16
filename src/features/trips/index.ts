@@ -46,6 +46,9 @@ export { GuestIdentitySelector } from './components/GuestIdentitySelector';
 
 export { PrintSummaryCard } from './components/PrintSummaryCard';
 
+export { ArchivedTripsSection } from './components/ArchivedTripsSection';
+export type { ArchivedTripsSectionProps } from './components/ArchivedTripsSection';
+
 export { PlanOwnTripPrompt } from './components/PlanOwnTripPrompt';
 export type { PlanOwnTripPromptProps } from './components/PlanOwnTripPrompt';
 

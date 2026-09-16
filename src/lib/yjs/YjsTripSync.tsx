@@ -218,10 +218,15 @@ const YjsSyncObserver = memo(function YjsSyncObserver({
       description: trip.description,
       coordinates: trip.coordinates,
       currency: trip.currency,
+      // Whether the trip has been put away. `undefined` removes the key, which
+      // is how a trip nobody ever archived stays free of it; `false` is a real
+      // write that says a member took it back out.
+      archived: trip.archived,
     });
   }, [
     readOnly,
     trip,
+    trip?.archived,
     trip?.coordinates,
     trip?.currency,
     trip?.description,

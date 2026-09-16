@@ -109,6 +109,12 @@ vi.mock('../../components/RemoteTripsSection', () => ({
   RemoteTripsSection: () => <div data-testid="remote-trips-section" />,
 }));
 
+const mockSetTripArchived = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('@/lib/db', () => ({
+  setTripArchived: (...args: unknown[]) => mockSetTripArchived(...args),
+}));
+
 vi.mock('@/lib/db/database', () => ({
   db: {
     persons: {
@@ -120,6 +126,8 @@ vi.mock('@/lib/db/database', () => ({
     },
   },
 }));
+
+import userEvent from '@testing-library/user-event';
 
 import { TripListPage } from '../TripListPage';
 import { useTripContext } from '@/contexts/TripContext';
@@ -538,6 +546,131 @@ describe('TripListPage', () => {
 
       expect(screen.getByText('trips.empty')).toBeInTheDocument();
       expect(screen.queryByRole('radio', { name: 'trips.view.map' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('archiving', () => {
+    const archivedTrip: Trip = {
+      ...mockTrip,
+      id: 'trip-2' as Trip['id'],
+      shareId: 'share-2' as Trip['shareId'],
+      name: 'Last summer',
+      archived: true,
+    };
+
+    it('keeps an archived trip out of the main grid', async () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        trips: [mockTrip, archivedTrip],
+        isLoading: false,
+        error: null,
+        currentTrip: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        checkConnection: mockCheckConnection,
+      });
+
+      render(<TripListPage />, { withProviders: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Trip')).toBeInTheDocument();
+      });
+      // Still on the page, behind its own heading, but not among the trips the
+      // group is still planning.
+      expect(screen.queryByText('Last summer')).not.toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /trips\.archived\.title/i }),
+      ).toBeInTheDocument();
+    });
+
+    it('offers no archived section when nothing is archived', async () => {
+      render(<TripListPage />, { withProviders: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Trip')).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByRole('button', { name: /trips\.archived\.title/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('says so when every trip is archived, rather than looking empty', async () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        trips: [archivedTrip],
+        isLoading: false,
+        error: null,
+        currentTrip: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        checkConnection: mockCheckConnection,
+      });
+
+      render(<TripListPage />, { withProviders: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('trips.archived.allArchived')).toBeInTheDocument();
+      });
+      // Not the first-run empty state: this account has a trip.
+      expect(screen.queryByText('trips.empty')).not.toBeInTheDocument();
+    });
+
+    it('archives a trip from its card menu', async () => {
+      const user = userEvent.setup();
+      render(<TripListPage />, { withProviders: false });
+
+      await waitFor(() => {
+        expect(screen.getByText('Test Trip')).toBeInTheDocument();
+      });
+      await user.click(screen.getByRole('button', { name: /common\.openMenu/i }));
+      await user.click(
+        await screen.findByRole('menuitem', { name: /trips\.archive/i }),
+      );
+
+      expect(mockSetTripArchived).toHaveBeenCalledWith('trip-1', true);
+    });
+
+    it('takes an archived trip back out', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useTripContext).mockReturnValue({
+        trips: [archivedTrip],
+        isLoading: false,
+        error: null,
+        currentTrip: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        checkConnection: mockCheckConnection,
+      });
+
+      render(<TripListPage />, { withProviders: false });
+
+      await user.click(
+        await screen.findByRole('button', { name: /trips\.archived\.title/i }),
+      );
+      await user.click(screen.getByRole('button', { name: /common\.openMenu/i }));
+      await user.click(
+        await screen.findByRole('menuitem', { name: /trips\.unarchive/i }),
+      );
+
+      expect(mockSetTripArchived).toHaveBeenCalledWith('trip-2', false);
+    });
+
+    it('leaves the map to the trips the group is still taking', async () => {
+      vi.mocked(useTripContext).mockReturnValue({
+        trips: [mockTrip, archivedTrip],
+        isLoading: false,
+        error: null,
+        currentTrip: null,
+        setCurrentTrip: mockSetCurrentTrip,
+        checkConnection: mockCheckConnection,
+      });
+
+      render(<TripListPage />, {
+        withProviders: false,
+        initialEntries: ['/trips?view=map'],
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('trips-location-map')).toHaveAttribute(
+          'data-trip-count',
+          '1',
+        );
+      });
     });
   });
 

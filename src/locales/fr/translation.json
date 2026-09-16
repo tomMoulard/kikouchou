@@ -211,6 +211,14 @@
     "moreGuests_one": "{{count}} invité de plus",
     "moreGuests_other": "{{count}} invités de plus",
     "untitled": "Voyage sans titre",
+    "archive": "Archiver",
+    "unarchive": "Désarchiver",
+    "archived": {
+      "title_one": "Archivés ({{count}})",
+      "title_other": "Archivés ({{count}})",
+      "listLabel": "Voyages archivés",
+      "allArchived": "Tous les voyages sont archivés. Ouvrez la section ci-dessous pour en ressortir un."
+    },
     "importSuggestion": "Lieu déjà utilisé",
     "importConfirm": "Importer depuis \"{{tripName}}\" ?",
     "importConfirmDescription": "Cela pré-remplira le lieu, la description, et copiera {{roomCount}} chambre(s) dans votre nouveau voyage.",
