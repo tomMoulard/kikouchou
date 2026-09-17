@@ -1091,6 +1091,8 @@
       "linkLabel": "Le lien \u00e0 partager",
       "republishHint": "Vos clients lisent une copie prise au moment de la publication. Publiez \u00e0 nouveau apr\u00e8s avoir modifi\u00e9 le voyage.",
       "keepsTheLink": "Retirer un mod\u00e8le ferme toutes les copies de son lien d'un coup. Le publier \u00e0 nouveau redonne le m\u00eame lien.",
+      "notOwner": "Seule la personne qui a cr\u00e9\u00e9 ce voyage peut le publier comme mod\u00e8le.",
+      "notOwnerPublished": "Ce voyage est publi\u00e9 comme mod\u00e8le. Seule la personne qui l'a cr\u00e9\u00e9 peut le modifier ou le retirer.",
       "needsAccount": "Publier un mod\u00e8le demande un compte, car le lien le lit depuis le serveur.",
       "signInReason": "Connectez-vous pour publier ce voyage comme mod\u00e8le.",
       "unavailable": "Cette copie de l'application n'a pas de serveur de synchronisation : aucun mod\u00e8le ne peut y \u00eatre publi\u00e9.",

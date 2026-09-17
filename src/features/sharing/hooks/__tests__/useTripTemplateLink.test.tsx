@@ -103,7 +103,7 @@ beforeEach(() => {
   vi.mocked(getRoomsByTripId).mockResolvedValue([]);
   vi.mocked(readTemplateState).mockResolvedValue({
     status: 'ok',
-    state: { isTemplate: false, token: null },
+    state: { isTemplate: false, token: null, ownerId: 'user-1' },
   });
   vi.mocked(publishTemplate).mockResolvedValue({
     status: 'published',
@@ -137,7 +137,7 @@ describe('useTripTemplateLink', () => {
   it('builds the preview link for a trip that is published', async () => {
     vi.mocked(readTemplateState).mockResolvedValue({
       status: 'ok',
-      state: { isTemplate: true, token: 'tokentokentoken1' },
+      state: { isTemplate: true, token: 'tokentokentoken1', ownerId: 'user-1' },
     });
 
     const { result } = renderHook(() => useTripTemplateLink(TRIP, true));
@@ -148,6 +148,37 @@ describe('useTripTemplateLink', () => {
         token: 'tokentokentoken1',
         url: 'https://share.kikouchou.app/fr/t/tokentokentoken1',
       });
+    });
+  });
+
+  it('offers no action on a trip somebody else owns', async () => {
+    vi.mocked(readTemplateState).mockResolvedValue({
+      status: 'ok',
+      state: { isTemplate: true, token: 'tokentokentoken1', ownerId: 'someone-else' },
+    });
+
+    const { result } = renderHook(() => useTripTemplateLink(TRIP, true));
+
+    // The link still shows: a member may hand it on. Only the two writes are
+    // the owner's, and Row-Level Security is what says so.
+    await waitFor(() => {
+      expect(result.current.state).toEqual({
+        kind: 'not-owner',
+        url: 'https://share.kikouchou.app/fr/t/tokentokentoken1',
+      });
+    });
+  });
+
+  it('has no link to show when somebody else has not published their trip', async () => {
+    vi.mocked(readTemplateState).mockResolvedValue({
+      status: 'ok',
+      state: { isTemplate: false, token: null, ownerId: 'someone-else' },
+    });
+
+    const { result } = renderHook(() => useTripTemplateLink(TRIP, true));
+
+    await waitFor(() => {
+      expect(result.current.state).toEqual({ kind: 'not-owner', url: null });
     });
   });
 
@@ -250,7 +281,7 @@ describe('useTripTemplateLink', () => {
   it('republishes under the token the trip already has', async () => {
     vi.mocked(readTemplateState).mockResolvedValue({
       status: 'ok',
-      state: { isTemplate: true, token: 'alreadyhanded001' },
+      state: { isTemplate: true, token: 'alreadyhanded001', ownerId: 'user-1' },
     });
     vi.mocked(publishTemplate).mockResolvedValue({
       status: 'published',
@@ -314,7 +345,7 @@ describe('useTripTemplateLink', () => {
   it('takes a template down', async () => {
     vi.mocked(readTemplateState).mockResolvedValue({
       status: 'ok',
-      state: { isTemplate: true, token: 'tokentokentoken1' },
+      state: { isTemplate: true, token: 'tokentokentoken1', ownerId: 'user-1' },
     });
 
     const { result } = renderHook(() => useTripTemplateLink(TRIP, true));
@@ -333,7 +364,7 @@ describe('useTripTemplateLink', () => {
   it('reports a take-down the server refused', async () => {
     vi.mocked(readTemplateState).mockResolvedValue({
       status: 'ok',
-      state: { isTemplate: true, token: 'tokentokentoken1' },
+      state: { isTemplate: true, token: 'tokentokentoken1', ownerId: 'user-1' },
     });
     vi.mocked(unpublishTemplate).mockResolvedValue({ status: 'error', message: 'rls' });
 
@@ -352,7 +383,7 @@ describe('useTripTemplateLink', () => {
   it('survives a take-down that throws', async () => {
     vi.mocked(readTemplateState).mockResolvedValue({
       status: 'ok',
-      state: { isTemplate: true, token: 'tokentokentoken1' },
+      state: { isTemplate: true, token: 'tokentokentoken1', ownerId: 'user-1' },
     });
     vi.mocked(unpublishTemplate).mockRejectedValue(new Error('boom'));
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -373,7 +404,7 @@ describe('useTripTemplateLink', () => {
   it('does nothing when the take-down finds no server row', async () => {
     vi.mocked(readTemplateState).mockResolvedValue({
       status: 'ok',
-      state: { isTemplate: true, token: 'tokentokentoken1' },
+      state: { isTemplate: true, token: 'tokentokentoken1', ownerId: 'user-1' },
     });
 
     const { result } = renderHook(() => useTripTemplateLink(TRIP, true));

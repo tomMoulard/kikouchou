@@ -45,6 +45,14 @@ export type TemplateLinkState =
   | { readonly kind: 'published'; readonly url: string; readonly token: string }
   /** The trip can be published, and is not. */
   | { readonly kind: 'unpublished' }
+  /**
+   * Somebody else owns this trip on the server.
+   *
+   * Every member of a trip can read whether it is published, and only the owner
+   * can change it. So a member is shown the link when there is one, and never a
+   * button whose write the server would refuse.
+   */
+  | { readonly kind: 'not-owner'; readonly url: string | null }
   /** Publishing needs an account; the screen offers to sign in. */
   | { readonly kind: 'needs-account' }
   /** No backend in this build: there is nothing to publish to. */
@@ -184,7 +192,14 @@ export function useTripTemplateLink(
         setState({ kind: 'error', message: result.message });
         return;
       }
-      const { isTemplate, token } = result.state;
+      const { isTemplate, token, ownerId } = result.state;
+      if (ownerId !== null && ownerId !== userId) {
+        setState({
+          kind: 'not-owner',
+          url: isTemplate && token !== null ? urlFor(token) : null,
+        });
+        return;
+      }
       setState(
         isTemplate && token !== null
           ? { kind: 'published', url: urlFor(token), token }

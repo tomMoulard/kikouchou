@@ -316,12 +316,12 @@ const PAYLOAD_WITH_BUNK: TripTemplatePayload = {
 describe('readTemplateState', () => {
   it('reads the flag and the token', async () => {
     const { client } = stubClient({
-      tripRow: { data: { is_template: true, template_token: 'tokentokentoken1' } },
+      tripRow: { data: { is_template: true, template_token: 'tokentokentoken1', owner_id: 'user-1' } },
     });
 
     await expect(readTemplateState(client, 'remote-1')).resolves.toEqual({
       status: 'ok',
-      state: { isTemplate: true, token: 'tokentokentoken1' },
+      state: { isTemplate: true, token: 'tokentokentoken1', ownerId: 'user-1' },
     });
   });
 
@@ -330,7 +330,7 @@ describe('readTemplateState', () => {
 
     await expect(readTemplateState(client, 'remote-1')).resolves.toEqual({
       status: 'ok',
-      state: { isTemplate: false, token: null },
+      state: { isTemplate: false, token: null, ownerId: null },
     });
   });
 

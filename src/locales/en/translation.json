@@ -1091,6 +1091,8 @@
       "linkLabel": "The link to share",
       "republishHint": "Customers read a copy taken when you published. Publish again after you change the trip.",
       "keepsTheLink": "Taking a template down closes every copy of its link at once. Publishing it again gives back the same link.",
+      "notOwner": "Only the person who created this trip can publish it as a template.",
+      "notOwnerPublished": "This trip is published as a template. Only the person who created it can change that or take it down.",
       "needsAccount": "Publishing a template needs an account, because the link reads it from the server.",
       "signInReason": "Sign in to publish this trip as a template.",
       "unavailable": "This copy of the app has no sync server configured, so a template cannot be published from it.",
