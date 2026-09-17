@@ -26,6 +26,11 @@
  * enterprise cohort's flag: disabled while the flag is not an explicit yes,
  * with a line saying so. The two price buttons are not gated, because a price
  * nobody outside the cohort can answer measures the cohort and not the market.
+ * Opening the offer therefore also reports `$feature_interaction` for that
+ * flag, which is how PostHog itself counts people who acted on an enabled
+ * experience rather than people the flag was merely evaluated for. The price
+ * buttons do not report it, and must not: they are outside the gate, so a
+ * click on one is not evidence of anything about the flag.
  *
  * Every one of them carries the placement, the price and the free-tier limit,
  * so the funnel breaks down by screen and stays readable if the offer changes.
@@ -82,7 +87,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
-import { captureEvent, setPersonProperties } from '@/lib/posthog';
+import { captureEvent, captureFeatureInteraction, setPersonProperties } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 import {
   FREE_ACTIVE_TRIP_LIMIT,
@@ -172,6 +177,15 @@ export const UpgradePrompt = memo(function UpgradePrompt({
 
   const handleOpen = useCallback((): void => {
     setPlan(null);
+    /*
+     * The one place in this component that is behind `ent-trip-templates`, so
+     * the one place a flag interaction can honestly be reported: the button is
+     * disabled for everybody the flag has not said yes to, which means a click
+     * here is somebody inside the cohort acting on the enabled experience.
+     * PostHog shows it on the flag's own page against the people the flag was
+     * merely evaluated for. See `captureFeatureInteraction`.
+     */
+    captureFeatureInteraction(UPGRADE_OFFER_FLAG);
     captureEvent('upgrade_prompt_opened', {
       ...upgradeEventProperties(placement),
       // False is the interest step of the funnel. True is somebody rereading

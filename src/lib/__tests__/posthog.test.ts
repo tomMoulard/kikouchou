@@ -24,6 +24,7 @@ const mockInit = vi.fn();
 const mockRegister = vi.fn();
 const mockReset = vi.fn();
 const mockCapture = vi.fn();
+const mockSetPersonProperties = vi.fn();
 
 vi.mock('posthog-js', () => ({
   default: {
@@ -31,6 +32,7 @@ vi.mock('posthog-js', () => ({
     register: (...args: unknown[]) => mockRegister(...args),
     reset: (...args: unknown[]) => mockReset(...args),
     capture: (...args: unknown[]) => mockCapture(...args),
+    setPersonProperties: (...args: unknown[]) => mockSetPersonProperties(...args),
   },
 }));
 
@@ -51,6 +53,7 @@ beforeEach(() => {
   mockRegister.mockClear();
   mockReset.mockClear();
   mockCapture.mockClear();
+  mockSetPersonProperties.mockClear();
 });
 
 afterEach(() => {
@@ -480,5 +483,35 @@ describe('captureUsage', () => {
 
     expect(() => captureUsage('trip_created')).not.toThrow();
     expect(mockCapture).not.toHaveBeenCalled();
+  });
+});
+
+describe('captureFeatureInteraction', () => {
+  it('sends PostHog its own interaction event and the cohort property', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+    const { captureFeatureInteraction } = await importPosthog();
+
+    captureFeatureInteraction('ent-trip-templates');
+
+    // The name and the property spelling are PostHog's, not this project's:
+    // the flag's own page reads them, and a different spelling is a private
+    // event that looks right and counts nothing.
+    expect(mockCapture).toHaveBeenCalledWith('$feature_interaction', {
+      feature_flag: 'ent-trip-templates',
+    });
+    // What makes "people who interacted with this feature" a cohort somebody
+    // picks from a list rather than an insight they have to build.
+    expect(mockSetPersonProperties).toHaveBeenCalledWith({
+      '$feature_interaction/ent-trip-templates': true,
+    });
+  });
+
+  it('is a no-op when analytics is off, rather than throwing', async () => {
+    const { captureFeatureInteraction } = await importPosthog();
+
+    expect(() => captureFeatureInteraction('ent-trip-templates')).not.toThrow();
+    expect(mockCapture).not.toHaveBeenCalled();
+    expect(mockSetPersonProperties).not.toHaveBeenCalled();
   });
 });
