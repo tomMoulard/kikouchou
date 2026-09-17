@@ -1086,6 +1086,8 @@
       "title": "Mod\u00e8le de voyage",
       "description": "Publiez ce voyage comme mod\u00e8le et partagez un seul lien. La personne qui l'ouvre cr\u00e9e son propre voyage avec ce lieu, cette description et ces chambres, puis remplit le nom, les dates et les invit\u00e9s.",
       "publish": "Publier comme mod\u00e8le",
+      "locked": "Publier un mod\u00e8le est r\u00e9serv\u00e9 aux comptes entreprise pour le moment. Dites-nous que vous le voulez et nous saurons qu'il faut l'ouvrir \u00e0 tout le monde.",
+      "askForIt": "Je paierais pour cela",
       "republish": "Publier \u00e0 nouveau",
       "unpublish": "Retirer le mod\u00e8le",
       "linkLabel": "Le lien \u00e0 partager",

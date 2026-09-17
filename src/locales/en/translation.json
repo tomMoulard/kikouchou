@@ -1086,6 +1086,8 @@
       "title": "Trip template",
       "description": "Publish this trip as a template and share one link. Whoever opens it starts their own trip with this place, this description and these rooms, and fills in the name, the dates and the guests.",
       "publish": "Publish as a template",
+      "locked": "Publishing a template is open to enterprise accounts for now. Tell us you want it and we will know to build it for everybody.",
+      "askForIt": "I would pay for this",
       "republish": "Publish again",
       "unpublish": "Take it down",
       "linkLabel": "The link to share",
