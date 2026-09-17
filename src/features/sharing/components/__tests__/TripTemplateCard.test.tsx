@@ -150,6 +150,28 @@ describe('TripTemplateCard', () => {
     expect(unpublish).toHaveBeenCalledTimes(1);
   });
 
+  it('offers neither button on a trip somebody else owns', () => {
+    answering({ kind: 'not-owner', url: 'https://x.test/t/a' });
+
+    render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
+
+    expect(screen.getByDisplayValue('https://x.test/t/a')).toBeInTheDocument();
+    expect(screen.getByText(/Only the person who created it can change that/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Take it down' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Publish again' })).not.toBeInTheDocument();
+  });
+
+  it('says who may publish, on a trip somebody else has not published', () => {
+    answering({ kind: 'not-owner', url: null });
+
+    render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
+
+    expect(screen.getByText(/Only the person who created this trip can publish it/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Publish as a template' }),
+    ).not.toBeInTheDocument();
+  });
+
   it('offers a sign in rather than a button that would fail', () => {
     answering({ kind: 'needs-account' });
 

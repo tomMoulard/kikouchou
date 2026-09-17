@@ -74,7 +74,10 @@ export const TripTemplateCard = memo(function TripTemplateCard({
   const [copied, setCopied] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
 
-  const url = state.kind === 'published' ? state.url : null;
+  // A member of somebody else's trip sees the same link and the same copy
+  // button, and none of the controls behind it.
+  const url =
+    state.kind === 'published' ? state.url : state.kind === 'not-owner' ? state.url : null;
 
   const handleCopy = useCallback(async (): Promise<void> => {
     if (url === null) {
@@ -152,7 +155,21 @@ export const TripTemplateCard = memo(function TripTemplateCard({
           </p>
         ) : null}
 
-        {state.kind === 'published' ? (
+        {state.kind === 'not-owner' ? (
+          <p className="text-sm text-muted-foreground">
+            {state.url === null
+              ? t(
+                  'sharing.template.notOwner',
+                  'Only the person who created this trip can publish it as a template.',
+                )
+              : t(
+                  'sharing.template.notOwnerPublished',
+                  'This trip is published as a template. Only the person who created it can change that or take it down.',
+                )}
+          </p>
+        ) : null}
+
+        {url !== null ? (
           <div className="flex flex-col gap-3">
             <label className="text-sm font-medium" htmlFor="template-link">
               {t('sharing.template.linkLabel', 'The link to share')}
@@ -162,7 +179,7 @@ export const TripTemplateCard = memo(function TripTemplateCard({
                 id="template-link"
                 className="min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 text-sm"
                 readOnly
-                value={state.url}
+                value={url}
                 onFocus={(event) => event.currentTarget.select()}
               />
               <Button
@@ -178,12 +195,14 @@ export const TripTemplateCard = memo(function TripTemplateCard({
                 )}
               </Button>
             </div>
-            <p className="text-sm text-muted-foreground">
-              {t(
-                'sharing.template.republishHint',
-                'Customers read a copy taken when you published. Publish again after you change the trip.',
-              )}
-            </p>
+            {state.kind === 'published' ? (
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  'sharing.template.republishHint',
+                  'Customers read a copy taken when you published. Publish again after you change the trip.',
+                )}
+              </p>
+            ) : null}
           </div>
         ) : null}
 

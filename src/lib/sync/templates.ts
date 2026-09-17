@@ -88,10 +88,19 @@ export interface TripTemplatePayload {
   readonly rooms: readonly TemplateRoom[];
 }
 
-/** Whether a trip is published, and under which token. */
+/** Whether a trip is published, under which token, and who may change that. */
 export interface TemplateState {
   readonly isTemplate: boolean;
   readonly token: string | null;
+  /**
+   * The account that owns the server row, or null when the row is gone.
+   *
+   * Read because publishing is owner-only while reading is open to every member
+   * of the trip: a member who is offered the two buttons gets a write that
+   * Row-Level Security matches against no row, which reads as a broken app.
+   * The screen compares this with the signed-in account instead.
+   */
+  readonly ownerId: string | null;
 }
 
 export type ReadTemplateStateResult =
@@ -270,7 +279,7 @@ function parsePayload(data: unknown): TripTemplatePayload | null {
 // ============================================================================
 
 /**
- * Whether a trip is published as a template, and under which token.
+ * Whether a trip is published as a template, under which token, and who owns it.
  *
  * @param client - Authenticated Supabase client
  * @param remoteTripId - Server `trips.id`
@@ -282,7 +291,7 @@ export async function readTemplateState(
   try {
     const { data, error } = await client
       .from('trips')
-      .select('is_template, template_token')
+      .select('is_template, template_token, owner_id')
       .eq('id', remoteTripId)
       .maybeSingle();
 
@@ -292,13 +301,14 @@ export async function readTemplateState(
     if (!data) {
       // The owner's own trip is readable by its own policy, so no row means the
       // trip was deleted from another device between the two reads.
-      return { status: 'ok', state: { isTemplate: false, token: null } };
+      return { status: 'ok', state: { isTemplate: false, token: null, ownerId: null } };
     }
     return {
       status: 'ok',
       state: {
         isTemplate: data.is_template === true,
         token: typeof data.template_token === 'string' ? data.template_token : null,
+        ownerId: typeof data.owner_id === 'string' ? data.owner_id : null,
       },
     };
   } catch (error: unknown) {
