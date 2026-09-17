@@ -31,10 +31,12 @@ const storage = installLocalStorageDouble();
 // because `vi.mock`'s factory is lifted above every `const`.
 const mockCapture = vi.hoisted(() => vi.fn());
 const mockSetPersonProperties = vi.hoisted(() => vi.fn());
+const mockFeatureInteraction = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/posthog', () => ({
   reportError: vi.fn(),
   default: { capture: mockCapture },
   captureEvent: mockCapture,
+  captureFeatureInteraction: mockFeatureInteraction,
   setPersonProperties: mockSetPersonProperties,
 }));
 
@@ -73,6 +75,7 @@ describe('UpgradePrompt', () => {
     storage.setThrowing(false);
     mockCapture.mockClear();
     mockSetPersonProperties.mockClear();
+    mockFeatureInteraction.mockClear();
     flag.mockReturnValue(true);
   });
 
@@ -224,6 +227,27 @@ describe('UpgradePrompt', () => {
 
     expect(container).toBeEmptyDOMElement();
     expect(captureFor('upgrade_prompt_dismissed')).toBeDefined();
+  });
+
+  it('reports a flag interaction when the gated offer is opened', async () => {
+    const { user } = render(<UpgradePrompt placement="settings" />, {
+      withProviders: false,
+    });
+    await user.click(screen.getByText('upgrade.card.action'));
+
+    // PostHog's own name for it, sent from the one control the flag gates.
+    expect(mockFeatureInteraction).toHaveBeenCalledWith('ent-trip-templates');
+  });
+
+  it('reports no flag interaction for a price, which is outside the gate', async () => {
+    const { user } = render(<UpgradePrompt placement="settings" />, {
+      withProviders: false,
+    });
+    await user.click(screen.getByText('upgrade.plans.per_trip'));
+
+    // A price answers for everybody, flag or no flag, so a click on one is not
+    // evidence of anything about the flag and must not be reported as such.
+    expect(mockFeatureInteraction).not.toHaveBeenCalled();
   });
 
   it('offers both prices, and says which one was clicked', async () => {

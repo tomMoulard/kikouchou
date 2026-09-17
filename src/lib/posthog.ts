@@ -449,6 +449,43 @@ export function setPersonProperties(properties: Record<string, string>): void {
   posthogClient?.setPersonProperties(properties);
 }
 
+/**
+ * Reports that somebody used a feature a flag had to let them into.
+ *
+ * `$feature_interaction` is PostHog's own name for this, and the reason to send
+ * it rather than only an app event is what PostHog does with it: the flag's own
+ * page counts the people who *acted* on the enabled experience, beside the
+ * people the flag merely answered yes for. `$feature_flag_called` — which
+ * posthog-js sends by itself on every evaluation — says the flag was asked. It
+ * cannot say anybody did anything, and the gap between those two numbers is the
+ * whole question a flagged rollout is asking.
+ *
+ * The person property goes with it, spelled the way PostHog reads it:
+ * `$feature_interaction/<flag>`. That is what makes "people who interacted with
+ * this feature" a cohort somebody can pick from a list, rather than an insight
+ * they have to build from events first.
+ *
+ * Captured through the client rather than through {@link captureEvent}, for the
+ * same reason `$ai_generation` is: the name belongs to PostHog's schema, and
+ * {@link AnalyticsEvent} is a list of names *this app* invented. A `$`-prefixed
+ * name in that union would claim ownership of something this project does not
+ * own. One consequence to know about: the end-to-end suite watches the log
+ * `captureEvent` fills, so it cannot see this, exactly as it cannot see
+ * `$pageview`.
+ *
+ * Call it when somebody acts on the gated experience, never when a page merely
+ * renders one. An interaction that fires on render measures traffic and then
+ * reads, misleadingly, as engagement.
+ *
+ * Safe with no client, like everything else here.
+ *
+ * @param flag - The flag key, as it is spelled in PostHog
+ */
+export function captureFeatureInteraction(flag: string): void {
+  posthogClient?.capture('$feature_interaction', { feature_flag: flag });
+  posthogClient?.setPersonProperties({ [`$feature_interaction/${flag}`]: true });
+}
+
 // ============================================================================
 // Capture
 // ============================================================================
