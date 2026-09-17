@@ -57,51 +57,32 @@
  * field that asks for one. A fake door that lies to a reader buys a number that
  * a real reader paid for.
  *
+ * The offer itself, and the `upgrade_intent_declared` step that answers it,
+ * live in `UpgradeOfferDialog`. `TripTemplateCard` opens the same dialog when
+ * the enterprise flag says no, so the price and the feature list a reader sees
+ * are the same wherever the question reached them.
+ *
  * @module features/upgrade/components/UpgradePrompt
  */
 
-import {
-  type ChangeEvent,
-  type FormEvent,
-  type ReactElement,
-  memo,
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from 'react';
+import { type ReactElement, memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Check, Sparkles, X } from 'lucide-react';
+import { Sparkles, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
-import { captureEvent, captureFeatureInteraction, setPersonProperties } from '@/lib/posthog';
+import { captureEvent, captureFeatureInteraction } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 import {
-  FREE_ACTIVE_TRIP_LIMIT,
-  UPGRADE_FEATURE_KEYS,
   UPGRADE_OFFER_FLAG,
   UPGRADE_PLANS,
-  UPGRADE_PRICE_EUR_MONTHLY,
-  UPGRADE_WAITLIST_EMAIL_PROPERTY,
   type UpgradePlacement,
   type UpgradePlanKey,
-  isPlausibleEmail,
   upgradeEventProperties,
 } from '../constants';
 import { useUpgradeInterest } from '../hooks/useUpgradeInterest';
+import { UpgradeOfferDialog } from './UpgradeOfferDialog';
 
 // ============================================================================
 // Type Definitions
@@ -148,10 +129,6 @@ export const UpgradePrompt = memo(function UpgradePrompt({
   const isOfferOpen = offerFlag === true;
   const [isDialogOpen, setIsDialogOpen] = useState<boolean>(false);
   const [plan, setPlan] = useState<UpgradePlanKey | null>(null);
-  const [email, setEmail] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-  const fieldId = useId();
-  const errorId = useId();
 
   /**
    * Whether the impression has already been reported.
@@ -217,53 +194,10 @@ export const UpgradePrompt = memo(function UpgradePrompt({
     [hasDeclared, placement],
   );
 
-  const handleEmailChange = useCallback((event: ChangeEvent<HTMLInputElement>): void => {
-    setEmail(event.target.value);
-    setError(null);
-  }, []);
-
-  const handleSubmit = useCallback(
-    (event: FormEvent<HTMLFormElement>): void => {
-      event.preventDefault();
-
-      const address = email.trim();
-      if (!isPlausibleEmail(address)) {
-        // Said in the page rather than counted: a typo is not an answer, and an
-        // event for it would read as somebody declining.
-        setError(t('upgrade.dialog.emailInvalid'));
-        return;
-      }
-
-      /*
-       * The address goes on the person, the event says only that there is one.
-       * That ordering matters if this is ever unwound: deleting the person
-       * takes the address with it and leaves the funnel intact.
-       */
-      setPersonProperties({ [UPGRADE_WAITLIST_EMAIL_PROPERTY]: address });
-      captureEvent('upgrade_intent_declared', {
-        ...upgradeEventProperties(placement),
-        has_email: true,
-        // Null when the offer was opened from the main button rather than from
-        // a price. Kept as a property rather than dropped, so the split between
-        // the one-off and the subscription survives into the intent step.
-        plan,
-      });
-
-      declare();
-      setIsDialogOpen(false);
-      setError(null);
-    },
-    [declare, email, placement, plan, t],
-  );
-
   const handleDismiss = useCallback((): void => {
     captureEvent('upgrade_prompt_dismissed', upgradeEventProperties(placement));
     dismiss();
   }, [dismiss, placement]);
-
-  const handleClose = useCallback((): void => {
-    setIsDialogOpen(false);
-  }, []);
 
   if (!isVisible) {
     return null;
@@ -350,83 +284,14 @@ export const UpgradePrompt = memo(function UpgradePrompt({
         </CardContent>
       </Card>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('upgrade.dialog.title')}</DialogTitle>
-            <DialogDescription>
-              {t('upgrade.dialog.description', {
-                price: UPGRADE_PRICE_EUR_MONTHLY,
-                limit: FREE_ACTIVE_TRIP_LIMIT,
-              })}
-            </DialogDescription>
-          </DialogHeader>
-
-          <ul className="space-y-2 text-sm">
-            {UPGRADE_FEATURE_KEYS.map((key) => (
-              <li key={key} className="flex items-start gap-2">
-                <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-                <span>
-                  {t(`upgrade.features.${key}`, { limit: FREE_ACTIVE_TRIP_LIMIT })}
-                </span>
-              </li>
-            ))}
-          </ul>
-
-          {/* Says plainly that nothing is for sale and what the address is for.
-              A reader who types one has to have been told that first. */}
-          <p className="text-xs text-muted-foreground">{t('upgrade.dialog.disclaimer')}</p>
-
-          {/* The one thing that knows the question was answered. The form is
-              replaced by a line saying so, and by nothing else: reciting the
-              address back, or when it was given, would be this app telling a
-              reader what it has on file about them for no reason they asked
-              for. Somebody rereading the offer is simply not asked twice. */}
-          {hasDeclared ? (
-            <>
-              <p className="flex items-start gap-2 rounded-md bg-muted p-3 text-sm" role="status">
-                <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-                <span>{t('upgrade.dialog.alreadyDeclared')}</span>
-              </p>
-              <DialogFooter>
-                <Button onClick={handleClose}>{t('upgrade.dialog.close')}</Button>
-              </DialogFooter>
-            </>
-          ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-2" noValidate>
-              <Label htmlFor={fieldId}>{t('upgrade.dialog.emailLabel')}</Label>
-              <Input
-                id={fieldId}
-                type="email"
-                value={email}
-                onChange={handleEmailChange}
-                autoComplete="email"
-                inputMode="email"
-                placeholder={t('upgrade.dialog.emailPlaceholder')}
-                aria-invalid={error !== null}
-                aria-describedby={error !== null ? errorId : undefined}
-              />
-              {error !== null ? (
-                <p
-                  id={errorId}
-                  role="alert"
-                  className="flex items-start gap-2 text-sm text-destructive"
-                >
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                  <span>{error}</span>
-                </p>
-              ) : null}
-
-              <DialogFooter>
-                <Button type="button" variant="ghost" onClick={handleClose}>
-                  {t('upgrade.dialog.cancel')}
-                </Button>
-                <Button type="submit">{t('upgrade.dialog.confirm')}</Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
+      <UpgradeOfferDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        placement={placement}
+        plan={plan}
+        hasDeclared={hasDeclared}
+        onDeclare={declare}
+      />
     </>
   );
 });
