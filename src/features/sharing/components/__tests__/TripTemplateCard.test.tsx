@@ -1,10 +1,12 @@
 /**
  * @fileoverview Tests for TripTemplateCard.
  *
- * The property under defence is the gate. This is an enterprise feature behind
- * a static PostHog cohort, so a person outside it must see nothing at all — not
- * a disabled button, not an empty card, not a flash of one while the flag is
- * still being decided.
+ * The property under defence is the gate, and what the gate now decides. The
+ * card describes the feature to everybody, so a person outside the static
+ * PostHog cohort reads what a template is and meets a publish button that does
+ * not work — never one that does, and never one while the flag is still being
+ * decided. The second button in that arm is the paid-tier question, and it must
+ * be the same offer the upgrade card opens.
  *
  * @module features/sharing/components/__tests__/TripTemplateCard.test
  */
@@ -14,6 +16,7 @@ import { screen, waitFor } from '@testing-library/react';
 
 import { TripTemplateCard } from '../TripTemplateCard';
 import { render } from '@/test/utils';
+import { captureEvent } from '@/lib/posthog';
 import { copyText } from '@/lib/utils/clipboard';
 import { useTripTemplateLink } from '../../hooks/useTripTemplateLink';
 import type { ISODateString, ShareId, Trip, TripId } from '@/types';
@@ -26,6 +29,11 @@ const flag = vi.fn<() => boolean | undefined>(() => true);
 vi.mock('@/hooks/useFeatureFlag', () => ({ useFeatureFlag: () => flag() }));
 
 vi.mock('@/lib/utils/clipboard', () => ({ copyText: vi.fn(async () => true) }));
+
+vi.mock('@/lib/posthog', () => ({
+  captureEvent: vi.fn(),
+  setPersonProperties: vi.fn(),
+}));
 
 const signInDialog = vi.fn();
 vi.mock('@/features/auth/components/SignInDialog', () => ({
@@ -42,9 +50,13 @@ vi.mock('../../hooks/useTripTemplateLink', () => ({
   useTripTemplateLink: vi.fn(),
 }));
 
+// The card passes a fallback string; the shared upgrade dialog passes an
+// interpolation bag instead. Returning the bag would hand React an object to
+// render, so only a string counts as a fallback here.
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, fallback?: string) => fallback ?? _key,
+    t: (key: string, fallback?: unknown) =>
+      typeof fallback === 'string' ? fallback : key,
   }),
 }));
 
@@ -78,24 +90,69 @@ beforeEach(() => {
 // ============================================================================
 
 describe('TripTemplateCard', () => {
-  it('renders nothing for a person outside the cohort', () => {
+  it('describes the feature to a person outside the cohort', () => {
     flag.mockReturnValue(false);
 
-    const { container } = render(<TripTemplateCard trip={TRIP} />, {
-      withProviders: false,
-    });
+    render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
 
-    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByText('Trip template')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Publishing a template is open to enterprise accounts/),
+    ).toBeInTheDocument();
   });
 
-  it('renders nothing while the flag is still being decided', () => {
+  it('offers a publish button that cannot publish, outside the cohort', async () => {
+    flag.mockReturnValue(false);
+
+    const { user } = render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
+    const button = screen.getByRole('button', { name: 'Publish as a template' });
+
+    expect(button).toBeDisabled();
+
+    await user.click(button);
+
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it('keeps the publish button dead while the flag is still being decided', () => {
     flag.mockReturnValue(undefined);
 
-    const { container } = render(<TripTemplateCard trip={TRIP} />, {
-      withProviders: false,
-    });
+    render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
 
-    expect(container).toBeEmptyDOMElement();
+    // Undecided reads as off: a live button that goes dead a moment later is
+    // worse than one that was never live.
+    expect(screen.getByRole('button', { name: 'Publish as a template' })).toBeDisabled();
+  });
+
+  it('opens the paid-tier offer from the locked arm', async () => {
+    flag.mockReturnValue(false);
+
+    const { user } = render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
+    await user.click(screen.getByRole('button', { name: 'I would pay for this' }));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('upgrade.dialog.disclaimer')).toBeInTheDocument();
+  });
+
+  it('counts the open as the same funnel step the upgrade card counts', async () => {
+    flag.mockReturnValue(false);
+
+    const { user } = render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
+    await user.click(screen.getByRole('button', { name: 'I would pay for this' }));
+
+    expect(vi.mocked(captureEvent)).toHaveBeenCalledWith(
+      'upgrade_prompt_opened',
+      expect.objectContaining({ placement: 'settings', already_declared: false }),
+    );
+  });
+
+  it('shows no publish controls to the cohort arm when the flag is off', () => {
+    flag.mockReturnValue(false);
+
+    render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
+
+    expect(screen.queryByRole('button', { name: 'Take it down' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
   });
 
   it('offers to publish a trip that is not a template', () => {

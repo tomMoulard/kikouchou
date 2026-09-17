@@ -402,6 +402,16 @@ Note also that the hook settles once and stops listening: an enterprise account
 that signs in after the page loaded sees the control on the next reload. That
 was accepted on 2026-09-14 rather than fixed.
 
+The card itself is shown to everybody, and the flag picks which arm it renders.
+On, the publish controls work. Off, or still undecided, the same card carries a
+disabled publish button, the reason it is disabled, and a second button that
+opens `UpgradeOfferDialog` — the same paid-tier offer the "Would you pay for
+Kikouchou?" card opens, reporting the same `upgrade_prompt_opened` and
+`upgrade_intent_declared` events at placement `settings`. A feature nobody
+outside the cohort can see is a feature nobody outside the cohort can ask for,
+and asking is what this measures. Undecided reads as off, so a publish button
+never goes live and then dead under somebody's cursor.
+
 ### One install prompt, and the page an iPhone installs from
 
 `useInstallPrompt` captures the browser's one `beforeinstallprompt` and reports
