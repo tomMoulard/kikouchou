@@ -2,7 +2,7 @@
  * @fileoverview Tests for the Needle inference worker.
  *
  * The worker's job is not generation — that is one synchronous WASM call — but
- * everything around it: caching the weights, narrowing the catalogue, refusing
+ * everything around it: caching the weights, offering the catalogue, refusing
  * a call the model is not confident in, and turning a tool call into the block
  * the executor already understands. All of that is testable in jsdom with the
  * runtime replaced, which is what this file does.
@@ -15,28 +15,26 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ACTION_SCHEMAS } from '../../action-schema';
+
 // ============================================================================
 // Test doubles
 // ============================================================================
 
 interface FakeEngine {
-  contrastive_dim: ReturnType<typeof vi.fn>;
-  retrieve_tools: ReturnType<typeof vi.fn>;
   generate: ReturnType<typeof vi.fn>;
   run_json: ReturnType<typeof vi.fn>;
   confidence_for: ReturnType<typeof vi.fn>;
   free: ReturnType<typeof vi.fn>;
 }
 
-/** What `NeedleV2Wasm.load` hands back, set per test. */
+/** What `NeedleV3Wasm.load` hands back, set per test. */
 let fakeEngine: FakeEngine | undefined;
 /** Bytes the fake `load` was called with. */
 let loadedBytes: Uint8Array | null = null;
 
 function makeEngine(overrides: Partial<FakeEngine> = {}): FakeEngine {
   return {
-    contrastive_dim: vi.fn(() => 128),
-    retrieve_tools: vi.fn(() => '[[0,0.9]]'),
     generate: vi.fn(
       () => 'room it is <tool_call>[{"name":"addRoom","arguments":{"name":"Attic"}}]</tool_call>',
     ),
@@ -49,7 +47,7 @@ function makeEngine(overrides: Partial<FakeEngine> = {}): FakeEngine {
 
 vi.mock('needle-rs', () => ({
   default: vi.fn(async () => undefined),
-  NeedleV2Wasm: {
+  NeedleV3Wasm: {
     load: vi.fn((bytes: Uint8Array) => {
       loadedBytes = bytes;
       return fakeEngine;
@@ -70,8 +68,8 @@ const LOAD = {
   requestId: 'r-load',
   config: {
     engine: 'needle' as const,
-    modelId: 'Cactus-Compute/needle2',
-    weightsUrl: 'https://example.test/needle2.cact',
+    modelId: 'Cactus-Compute/needle3',
+    weightsUrl: 'https://example.test/needle3.cact',
     cacheName: 'needle-cache',
   },
 };
@@ -79,7 +77,7 @@ const LOAD = {
 const GENERATE = {
   type: 'generate',
   requestId: 'r-generate',
-  modelId: 'Cactus-Compute/needle2',
+  modelId: 'Cactus-Compute/needle3',
   messages: [
     { role: 'system' as const, content: 'You are helping with a trip.' },
     { role: 'user' as const, content: 'add an attic room' },
@@ -304,34 +302,27 @@ describe('needle worker — generating', () => {
       0,
       0,
       true,
+      true,
     );
   });
 
-  it('narrows the catalogue to what retrieval ranked', async () => {
+  it('offers the whole catalogue, because nothing ranks it any more', async () => {
+    // Needle 3 exports no retrieval head. A slice of the catalogue here would
+    // be an arbitrary one, and the actions it left out would be uncallable.
     const handler = await loadedWorker();
     await send(handler, GENERATE);
 
     const toolsJson = String(fakeEngine?.generate.mock.calls[0]?.[1]);
-    expect(JSON.parse(toolsJson)).toHaveLength(1);
+    expect(JSON.parse(toolsJson)).toHaveLength(ACTION_SCHEMAS.length);
   });
 
-  it('offers the whole catalogue when retrieval is unavailable', async () => {
-    fakeEngine = makeEngine({ contrastive_dim: vi.fn(() => 0) });
+  it('asks for the int8 key/value cache', async () => {
+    // The f32 cache at this context length is the largest allocation in the
+    // worker after the container itself, and a browser tab pays for it.
     const handler = await loadedWorker();
     await send(handler, GENERATE);
 
-    const toolsJson = String(fakeEngine.generate.mock.calls[0]?.[1]);
-    expect(JSON.parse(toolsJson).length).toBeGreaterThan(1);
-    expect(fakeEngine.retrieve_tools).not.toHaveBeenCalled();
-  });
-
-  it('offers the whole catalogue when retrieval matched nothing', async () => {
-    fakeEngine = makeEngine({ retrieve_tools: vi.fn(() => '[[0,0.001]]') });
-    const handler = await loadedWorker();
-    await send(handler, GENERATE);
-
-    const toolsJson = String(fakeEngine.generate.mock.calls[0]?.[1]);
-    expect(JSON.parse(toolsJson).length).toBeGreaterThan(1);
+    expect(fakeEngine?.generate.mock.calls[0]?.[6]).toBe(true);
   });
 
   it('withholds a call the model is not confident in', async () => {
@@ -367,7 +358,7 @@ describe('needle worker — generating', () => {
 
   it('keeps the engine after a failed run', async () => {
     // The handle has no session to invalidate: one bad run says nothing about
-    // the next, so the client must not be told to reload 13.7 MB.
+    // the next, so the client must not be told to reload 35.3 MB.
     fakeEngine = makeEngine({
       generate: vi.fn(() => {
         throw new Error('decode failed');
@@ -380,64 +371,6 @@ describe('needle worker — generating', () => {
       fatal: false,
       message: 'decode failed',
     });
-  });
-});
-
-describe('needle worker — ranking for another engine', () => {
-  async function loadedWorker(): Promise<MessageHandler> {
-    mockCaches(undefined);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(weightsResponse(new Uint8Array([1, 2, 3]))),
-    );
-    const handler = await loadWorker();
-    await send(handler, LOAD);
-    posted.length = 0;
-    return handler;
-  }
-
-  const RETRIEVE = {
-    type: 'retrieve',
-    requestId: 'r-retrieve',
-    modelId: 'Cactus-Compute/needle2',
-    query: 'add an attic room',
-    topK: 12,
-  };
-
-  it('answers with the action names it ranked', async () => {
-    const handler = await loadedWorker();
-    await send(handler, RETRIEVE);
-
-    const text = String(lastOfType('done')?.text);
-    expect(JSON.parse(text)).toEqual(['createTrip']);
-  });
-
-  it('asks for as many as the caller wanted', async () => {
-    const handler = await loadedWorker();
-    await send(handler, RETRIEVE);
-
-    expect(fakeEngine?.retrieve_tools).toHaveBeenCalledWith(
-      'add an attic room',
-      expect.any(String),
-      12,
-    );
-  });
-
-  it('answers empty when there is no retrieval head to ask', async () => {
-    // Empty means "could not narrow", which the caller reads as "offer
-    // everything" — never as "offer nothing".
-    fakeEngine = makeEngine({ contrastive_dim: vi.fn(() => 0) });
-    const handler = await loadedWorker();
-    await send(handler, RETRIEVE);
-
-    expect(JSON.parse(String(lastOfType('done')?.text))).toEqual([]);
-  });
-
-  it('refuses to rank before a model is loaded', async () => {
-    const handler = await loadWorker();
-    await send(handler, RETRIEVE);
-
-    expect(lastOfType('error')).toMatchObject({ fatal: true });
   });
 });
 

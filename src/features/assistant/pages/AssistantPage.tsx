@@ -71,7 +71,6 @@ import {
 import { useTripActions } from '../hooks/useTripActions';
 import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
 import { splitReasoning } from '../reasoning';
-import { narrowActionsForRequest, releaseActionRetrieval } from '../action-retrieval';
 import { ACTION_SCHEMAS } from '../action-schema';
 import { useWebGPUSupport } from '../hooks/useWebGPUSupport';
 import type { WebGPUSupport } from '../webgpu';
@@ -840,15 +839,6 @@ function AssistantPageComponent(): ReactElement {
     };
   }, []);
 
-  // The retrieval engine is a convenience for the next turn, not something
-  // worth holding 23 MB of WASM memory for in a tab that has left the page.
-  useEffect(
-    () => () => {
-      void releaseActionRetrieval();
-    },
-    [],
-  );
-
   // Restore LLM turn history from persisted UI messages (see runTurn for live updates).
   useLayoutEffect(() => {
     chatHistoryRef.current = messagesToLLMChatHistory(messages);
@@ -971,20 +961,12 @@ function AssistantPageComponent(): ReactElement {
         { id: assistantId, role: 'assistant', content: '' },
       ]);
 
-      // Most of the system prompt is the action catalogue, and most of that
-      // catalogue has nothing to do with what was just asked. Needle ranks it
-      // against the request in one pass, which buys back prefill memory on
-      // every turn; anything that goes wrong there returns the full catalogue,
-      // so a narrowing that cannot run costs a longer prompt and never a
-      // missing action.
-      //
-      // The router preset does this inside its own worker against the tools it
-      // is handed, so asking again here would only load a second copy of the
-      // same weights.
-      const actions =
-        selectedModelRef.current.engine === 'transformers'
-          ? await narrowActionsForRequest(text)
-          : ACTION_SCHEMAS;
+      // Every action, every turn. The catalogue used to be ranked against the
+      // request by Needle 2's retrieval head, which Needle 3 does not carry —
+      // so the prose presets are back to documenting the whole of
+      // `ACTION_SCHEMAS` in their system prompt, and that prompt is what the
+      // character budget in `action-schema.test.ts` guards.
+      const actions = ACTION_SCHEMAS;
 
       // Built before the try/catch so a rejected generate() can still report
       // it in the $ai_generation failure capture below.

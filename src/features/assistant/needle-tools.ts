@@ -120,7 +120,7 @@ export function buildNeedleTools(
 }
 
 /**
- * The catalogue as the JSON string both `run` and `retrieve_tools` take.
+ * The catalogue as the JSON string `run` and `generate` take.
  *
  * Needle compacts tool schemas internally, so formatting has no effect on the
  * output — this stays minified only to keep the WASM copy small.
@@ -129,66 +129,6 @@ export function buildNeedleToolsJson(
   defs: readonly ActionDef[] = ACTION_SCHEMAS,
 ): string {
   return JSON.stringify(buildNeedleTools(defs));
-}
-
-/**
- * Descriptions for `retrieve_tools`, index-aligned with `defs`.
- *
- * The ranking reads a description, not a schema, so each entry carries the
- * action name as well as its label: the name is often the most on-topic word
- * the catalogue has ("addRoom" against "add a room").
- */
-export function buildNeedleToolDescriptionsJson(
-  defs: readonly ActionDef[] = ACTION_SCHEMAS,
-): string {
-  return JSON.stringify(defs.map((def) => `${def.action}: ${def.label}`));
-}
-
-// ============================================================================
-// Retrieval
-// ============================================================================
-
-/**
- * Reads a `retrieve_tools` result into the actions it points at.
- *
- * The result is a JSON array of `[index, score]` pairs in descending score
- * order. An index outside the catalogue, or a malformed payload, yields an
- * empty list — the caller then falls back to the whole catalogue rather than to
- * a silently truncated one.
- *
- * @param payload - Raw `retrieve_tools` output
- * @param defs - The catalogue the indices refer to
- * @param minScore - Pairs scoring below this are dropped
- */
-export function parseRetrievedActions(
-  payload: string,
-  defs: readonly ActionDef[] = ACTION_SCHEMAS,
-  minScore = 0,
-): readonly ActionDef[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(payload);
-  } catch {
-    return [];
-  }
-
-  if (!Array.isArray(parsed)) return [];
-
-  const picked: ActionDef[] = [];
-  for (const entry of parsed) {
-    if (!Array.isArray(entry) || entry.length < 2) continue;
-    const [index, score] = entry as [unknown, unknown];
-    if (typeof index !== 'number' || typeof score !== 'number') continue;
-    if (score < minScore) continue;
-
-    const def = defs[index];
-    if (def === undefined) continue;
-    if (picked.includes(def)) continue;
-
-    picked.push(def);
-  }
-
-  return picked;
 }
 
 // ============================================================================

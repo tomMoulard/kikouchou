@@ -14,13 +14,11 @@ import { describe, expect, it } from 'vitest';
 
 import { ACTION_SCHEMAS } from '../action-schema';
 import {
-  buildNeedleToolDescriptionsJson,
   buildNeedleTools,
   buildNeedleToolsJson,
   extractNeedleReasoning,
   needleToolCallsToActionBlocks,
   parseNeedleToolCalls,
-  parseRetrievedActions,
 } from '../needle-tools';
 
 const addRoom = ACTION_SCHEMAS.find((def) => def.action === 'addRoom')!;
@@ -80,43 +78,23 @@ describe('buildNeedleTools', () => {
     );
   });
 
-  it('serialises to JSON both Needle entry points accept', () => {
+  it('serialises to JSON the Needle entry points accept', () => {
     expect(() => JSON.parse(buildNeedleToolsJson())).not.toThrow();
-    expect(() => JSON.parse(buildNeedleToolDescriptionsJson())).not.toThrow();
   });
 
-  it('keeps the descriptions index-aligned with the catalogue', () => {
-    // `retrieve_tools` answers with indices into this array, so a shift here
-    // would route every request to the wrong action.
-    const descriptions = JSON.parse(
-      buildNeedleToolDescriptionsJson(),
-    ) as string[];
+  it('offers every action, because nothing ranks them any more', () => {
+    // Needle 3 exports no retrieval head, so the catalogue handed to a run is
+    // the whole catalogue: a tool missing from this JSON is a tool the model
+    // cannot call at all.
+    const tools = JSON.parse(buildNeedleToolsJson()) as { name: string }[];
 
-    expect(descriptions).toHaveLength(ACTION_SCHEMAS.length);
-    expect(descriptions[0]).toContain(ACTION_SCHEMAS[0]!.action);
-  });
-});
-
-describe('parseRetrievedActions', () => {
-  it('reads the ranked pairs back into actions, in order', () => {
-    const picked = parseRetrievedActions('[[2,0.9],[0,0.5]]');
-
-    expect(picked).toEqual([ACTION_SCHEMAS[2], ACTION_SCHEMAS[0]]);
-  });
-
-  it('drops anything below the score floor', () => {
-    expect(parseRetrievedActions('[[2,0.9],[0,0.05]]', ACTION_SCHEMAS, 0.1)).toEqual([
-      ACTION_SCHEMAS[2],
-    ]);
-  });
-
-  it('returns nothing it cannot trust, so the caller offers the full set', () => {
-    expect(parseRetrievedActions('not json')).toEqual([]);
-    expect(parseRetrievedActions('{}')).toEqual([]);
-    expect(parseRetrievedActions('[[9999,0.9]]')).toEqual([]);
-    expect(parseRetrievedActions('[["two",0.9]]')).toEqual([]);
+    expect(tools).toHaveLength(ACTION_SCHEMAS.length);
+    expect(tools.map((tool) => tool.name)).toEqual(
+      ACTION_SCHEMAS.map((def) => def.action),
+    );
   });
 });
+
 
 describe('parseNeedleToolCalls', () => {
   it('reads a call and its arguments', () => {

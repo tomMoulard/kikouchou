@@ -17,7 +17,7 @@ import {
 describe('assistant model presets', () => {
   it('exposes the supported presets in increasing size order', () => {
     expect(ASSISTANT_MODEL_PRESETS.map((preset) => preset.id)).toEqual([
-      'needle-v2',
+      'needle-v3',
       'gemma-3-1b',
       'gemma-4-e2b',
       'gemma-4-e4b',
@@ -62,9 +62,31 @@ describe('assistant model presets', () => {
   });
 
   it('validates persisted model ids', () => {
+    expect(isAssistantModelId('needle-v3')).toBe(true);
     expect(isAssistantModelId('gemma-3-1b')).toBe(true);
     expect(isAssistantModelId('gemma-4-e2b')).toBe(true);
     expect(isAssistantModelId('gemma-4-e4b')).toBe(true);
     expect(isAssistantModelId('not-a-real-model')).toBe(false);
+  });
+
+  it('carries one Needle preset, on the v3 container', () => {
+    const needlePresets = ASSISTANT_MODEL_PRESETS.filter(
+      (preset) => preset.engine === 'needle',
+    );
+
+    expect(needlePresets).toHaveLength(1);
+    expect(needlePresets[0]?.id).toBe('needle-v3');
+    // The worker hands these bytes to `NeedleV3Wasm.load`, which returns
+    // undefined for a v2 container rather than misreading it — so a v2 URL
+    // here is a preset that can never load.
+    expect(needlePresets[0]?.weightsUrl).toContain('needle3.cact');
+  });
+
+  it('resolves the retired needle-v2 setting to its replacement', () => {
+    // Somebody who chose the small CPU preset must not be silently moved to a
+    // 3 GB WebGPU one because the id they stored no longer exists.
+    expect(
+      getAssistantModelPreset('needle-v2' as Parameters<typeof getAssistantModelPreset>[0]).id,
+    ).toBe('needle-v3');
   });
 });
