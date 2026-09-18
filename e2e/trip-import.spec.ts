@@ -211,7 +211,10 @@ test.describe('Trip Import Feature', () => {
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
     );
 
-    await page.goto('/');
+    // `/trips`, not `/`: the root sends a first launch with no trips to the
+    // create form (see `TripsEntryRedirect`), and these tests start on the
+    // trip list.
+    await page.goto('/trips');
     // Wait for the app to load
     await page.waitForLoadState('load');
   });
@@ -226,7 +229,7 @@ test.describe('Trip Import Feature', () => {
     await page.waitForURL(/\/calendar/);
 
     // Step 2: Navigate back to create another trip
-    await page.goto('/');
+    await page.goto('/trips');
     await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
 
@@ -248,7 +251,7 @@ test.describe('Trip Import Feature', () => {
     await page.waitForURL(/\/calendar/);
 
     // Step 2: Navigate to create another trip
-    await page.goto('/');
+    await page.goto('/trips');
     await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
 
@@ -289,7 +292,7 @@ test.describe('Trip Import Feature', () => {
     await addRooms(page, ROOMS);
 
     // Step 3: Navigate to create another trip
-    await page.goto('/');
+    await page.goto('/trips');
     await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
 
@@ -343,7 +346,7 @@ test.describe('Trip Import Feature', () => {
     await page.waitForURL(/\/calendar/);
 
     // Step 2: Navigate to create another trip
-    await page.goto('/');
+    await page.goto('/trips');
     await page.getByRole('button', { name: /create.*trip|new.*trip|add/i }).first().click();
     await page.waitForURL(/\/trips\/new/);
 

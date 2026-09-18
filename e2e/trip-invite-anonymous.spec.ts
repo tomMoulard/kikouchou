@@ -64,7 +64,7 @@ async function addGuest(page: Page, name: string): Promise<void> {
 }
 
 async function openShareDialog(page: Page): Promise<void> {
-  await page.goto('/');
+  await page.goto('/trips');
   await page.getByRole('button', { name: /share trip/i }).first().click();
   await expect(page.getByRole('dialog', { name: /share/i })).toBeVisible({
     timeout: 10_000,
@@ -92,7 +92,7 @@ async function shareTripWithGuests(
   stub: SupabaseStub,
 ): Promise<{ token: string; ownerPage: Page }> {
   const ownerPage = await newDevice(browser, stub, OWNER);
-  await ownerPage.goto('/');
+  await ownerPage.goto('/trips');
   await createTrip(ownerPage, TRIP.name);
   await addGuest(ownerPage, 'Alice');
   await addGuest(ownerPage, 'Bob');
