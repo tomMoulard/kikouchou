@@ -59,6 +59,12 @@ let pipelineInstance: any = null;
 /** Hugging Face model ID backing {@link pipelineInstance}. */
 let loadedModelId: string | null = null;
 
+/**
+ * Chat-template variables the loaded preset asked for, replayed on every
+ * generation because the template runs once per turn, not once per load.
+ */
+let chatTemplateOptions: Readonly<Record<string, boolean>> = {};
+
 /** Set by an `interrupt` message; cleared at the start of every generation. */
 let shouldStop = false;
 
@@ -78,6 +84,7 @@ async function disposeLoadedPipeline(): Promise<void> {
   const instance = pipelineInstance;
   pipelineInstance = null;
   loadedModelId = null;
+  chatTemplateOptions = {};
 
   if (instance !== null) {
     try {
@@ -127,6 +134,7 @@ async function handleLoad(
       },
     });
     loadedModelId = config.modelId;
+    chatTemplateOptions = config.chatTemplateOptions ?? {};
 
     post({ type: 'loaded', requestId });
   } catch (error) {
@@ -178,6 +186,10 @@ async function handleGenerate(
       temperature: 0.7,
       do_sample: true,
       return_full_text: false,
+      // Reaches `apply_chat_template` as template variables, which is the only
+      // way to answer a hybrid thinking model's `enable_thinking` switch from
+      // here. A template that does not name them renders the same either way.
+      tokenizer_encode_kwargs: chatTemplateOptions,
       ...(streamer ? { streamer } : {}),
       // Called per generation step; throwing aborts the loop early.
       callback_function: () => {

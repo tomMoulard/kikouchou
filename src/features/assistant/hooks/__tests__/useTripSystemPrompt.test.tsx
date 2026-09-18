@@ -510,12 +510,12 @@ describe('useTripSystemPrompt', () => {
   /**
    * The floor — the prompt for a trip holding almost nothing — is paid on every
    * turn before any trip data, and prefill memory on the browser models is
-   * linear in prompt length: `gemma-3-1b`'s ONNX export has no
-   * `num_logits_to_keep` input, so it materialises `prompt_tokens × 262144`
+   * linear in prompt length: `qwen3-1-7b`'s ONNX export has no
+   * `num_logits_to_keep` input, so it materialises `prompt_tokens × 151936`
    * logits and hands them back to the CPU in one buffer. At ~3.6 chars per
-   * token this budget keeps the floor around 1500 tokens, roughly 780 MiB of
+   * token this budget keeps the floor around 1500 tokens, roughly 435 MiB of
    * readback, against the ~1.9 GiB that failed with "Failed to allocate memory
-   * for buffer mapping".
+   * for buffer mapping" on the Gemma 3 1B preset this replaced.
    *
    * It was 5000 until the money actions landed. Most of the floor is the action
    * catalogue, so a new entity that the assistant can both read and change is

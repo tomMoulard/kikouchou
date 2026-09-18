@@ -272,15 +272,17 @@ describe('action-schema', () => {
  * The action prompt is paid on **every** turn, before a single byte of trip
  * data, and it is the largest fixed cost in the system prompt.
  *
- * On a model whose ONNX export does not slice the logits — `gemma-3-1b` has no
- * `num_logits_to_keep` input — prefill computes logits for *every* prompt
- * position, so each prompt token costs `vocab_size` floats of GPU-to-CPU
- * readback. At Gemma's 262144-token vocabulary that is half a mebibyte per
- * prompt token in fp16, and a 2401-token prompt is what took the WebGPU device
- * down with "Failed to allocate memory for buffer mapping".
+ * On a model whose ONNX export does not slice the logits — `qwen3-1-7b` has no
+ * `num_logits_to_keep` input, and neither did the Gemma 3 1B preset it
+ * replaced — prefill computes logits for *every* prompt position, so each
+ * prompt token costs `vocab_size` floats of GPU-to-CPU readback. At Qwen3's
+ * 151936-token vocabulary that is 297 KiB per prompt token in fp16, against the
+ * half a mebibyte Gemma charged, and a 2401-token prompt at the Gemma rate is
+ * what took the WebGPU device down with "Failed to allocate memory for buffer
+ * mapping". The budget was not raised to spend the difference.
  *
  * Characters rather than tokens, so the guard runs without downloading a
- * tokenizer; the Gemma tokenizer averages ~3.6 chars per token on this text,
+ * tokenizer; these tokenizers average ~3.6 chars per token on this text,
  * which puts this budget at roughly 1000 tokens — down from the ~1650 that
  * spelling out every optional field of all sixteen actions used to cost.
  *
