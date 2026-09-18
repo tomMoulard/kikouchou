@@ -98,6 +98,17 @@ async function handleLoad(
   requestId: string,
   config: WorkerModelConfig,
 ): Promise<void> {
+  if (config.engine !== 'transformers') {
+    post({
+      type: 'error',
+      requestId,
+      message:
+        'The Transformers.js worker was handed a configuration it cannot run.',
+      fatal: true,
+    });
+    return;
+  }
+
   if (pipelineInstance !== null && loadedModelId === config.modelId) {
     post({ type: 'loaded', requestId });
     return;

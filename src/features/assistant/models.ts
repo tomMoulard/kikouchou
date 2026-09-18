@@ -14,20 +14,49 @@ import type { AssistantModelId } from '@/types';
 // ============================================================================
 
 /**
+ * Which runtime executes the preset.
+ *
+ * `transformers` is a Hugging Face ONNX text-generation pipeline: it writes
+ * prose and emits action blocks inside it. `needle` is the Needle WASM runtime,
+ * a tool-calling router with no chat channel at all — it turns one request into
+ * one action and cannot answer a question in words. Anything that reads a
+ * preset and expects an answer has to branch on this.
+ */
+export type AssistantEngine = 'transformers' | 'needle';
+
+/**
  * Runtime configuration for one assistant model preset.
  */
 export interface AssistantModelPreset {
   /** Stable app-level identifier persisted in settings. */
   readonly id: AssistantModelId;
-  /** Hugging Face model identifier used by Transformers.js. */
+  /** Which runtime loads and runs this preset. */
+  readonly engine: AssistantEngine;
+  /** Hugging Face model identifier — the repository the weights come from. */
   readonly modelId: string;
-  /** Quantization / precision option passed to Transformers.js. */
-  readonly dtype: 'fp32' | 'q4' | 'q4f16';
+  /**
+   * Quantization / precision option passed to Transformers.js.
+   * Absent on `needle`, whose single `.cact` image carries its own precision.
+   */
+  readonly dtype?: 'fp32' | 'q4' | 'q4f16';
   /**
    * Optional execution device.
-   * When omitted, Transformers.js uses the browser default (WASM/CPU).
+   * When omitted, the runtime uses the browser default (WASM/CPU) — which is
+   * also what tells the page not to gate this preset behind a WebGPU check.
    */
   readonly device?: 'webgpu';
+  /**
+   * Direct URL of the weights file, for engines that fetch it themselves
+   * rather than resolving a repository. Required on `needle`.
+   */
+  readonly weightsUrl?: string;
+  /**
+   * Cache Storage bucket holding this preset's downloaded files, so the
+   * "already downloaded" probe looks where the files actually landed:
+   * Transformers.js owns `transformers-cache`, and the Needle worker writes
+   * its one `.cact` into a bucket of its own.
+   */
+  readonly cacheName: string;
   /** Translation key for the preset display name. */
   readonly nameKey: string;
   /** Translation key for the preset description. */
@@ -60,6 +89,12 @@ export interface AssistantModelPreset {
 // Constants
 // ============================================================================
 
+/** Cache Storage bucket Transformers.js downloads its own files into. */
+export const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
+
+/** Cache Storage bucket the Needle worker writes its `.cact` image into. */
+export const NEEDLE_CACHE_NAME = 'needle-cache';
+
 /**
  * Keep the current shipping model as the default so existing users keep the
  * same quality/performance profile unless they explicitly opt into another one.
@@ -70,12 +105,41 @@ export const DEFAULT_ASSISTANT_MODEL_ID: AssistantModelId = 'gemma-4-e2b';
  * Available assistant model presets, ordered from smallest to largest.
  *
  * Notes:
- * - All presets currently target WebGPU for practical browser-side generation.
- * - Gemma 3 1B is the lightest option in the curated lineup requested by the user.
+ * - Every Gemma preset targets WebGPU for practical browser-side generation.
+ *   Needle does not: it is small enough to run on the CPU through WASM, which
+ *   is why it is also the only preset a device without WebGPU can use.
+ * - Needle is first because it is the smallest by two orders of magnitude, and
+ *   last in capability: it performs actions and never answers in words.
  */
 export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
   {
+    id: 'needle-v2',
+    engine: 'needle',
+    cacheName: NEEDLE_CACHE_NAME,
+    modelId: 'Cactus-Compute/needle2',
+    weightsUrl:
+      'https://huggingface.co/Cactus-Compute/needle2/resolve/main/needle2.cact',
+    // No `device`: the runtime is single-threaded WASM on the CPU by design,
+    // and leaving this unset is what stops the page gating the preset behind a
+    // WebGPU check it does not need.
+    //
+    // needle2.cact carries the weights, the geometry and the tokenizer in one
+    // file. The 423 KB WASM runtime ships in the app bundle, so it is not part
+    // of the first download the user is warned about.
+    approxDownloadBytes: 13_700_000,
+    nameKey: 'assistant.models.needle-v2.name',
+    descriptionKey: 'assistant.models.needle-v2.description',
+    hintKey: 'assistant.models.needle-v2.hint',
+    fallbackName: 'Tiny',
+    fallbackDescription:
+      'Performs changes only — it cannot answer questions in words.',
+    fallbackHint:
+      'Runs on any device, no WebGPU needed, and downloads about 60x less than the Light preset.',
+  },
+  {
     id: 'gemma-3-1b',
+    engine: 'transformers',
+    cacheName: TRANSFORMERS_CACHE_NAME,
     modelId: 'onnx-community/gemma-3-1b-it-ONNX',
     // q4f16 rather than q4, and not for the download size.
     //
@@ -104,6 +168,8 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
   },
   {
     id: 'gemma-4-e2b',
+    engine: 'transformers',
+    cacheName: TRANSFORMERS_CACHE_NAME,
     modelId: 'onnx-community/gemma-4-E2B-it-ONNX',
     dtype: 'q4f16',
     device: 'webgpu',
@@ -118,6 +184,8 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
   },
   {
     id: 'gemma-4-e4b',
+    engine: 'transformers',
+    cacheName: TRANSFORMERS_CACHE_NAME,
     modelId: 'onnx-community/gemma-4-E4B-it-ONNX',
     dtype: 'q4f16',
     device: 'webgpu',

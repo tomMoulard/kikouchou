@@ -94,17 +94,29 @@ import type { AssistantModelId } from '@/types';
 // Model Selection UI
 // ============================================================================
 
-const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
-
+/**
+ * Which presets already have their files on the device.
+ *
+ * Each engine downloads into its own Cache Storage bucket, so the buckets are
+ * opened once each and every preset is matched inside the one its own
+ * `cacheName` names — looking for a Needle image in the Transformers.js bucket
+ * would report every tiny model as never downloaded.
+ */
 async function getCachedAssistantModelIds(): Promise<Set<AssistantModelId>> {
   const cached = new Set<AssistantModelId>();
   if (typeof caches === 'undefined') return cached;
 
-  try {
-    const cache = await caches.open(TRANSFORMERS_CACHE_NAME);
-    const keys = await cache.keys();
+  const keysByCache = new Map<string, readonly Request[]>();
 
-    for (const preset of ASSISTANT_MODEL_PRESETS) {
+  for (const preset of ASSISTANT_MODEL_PRESETS) {
+    try {
+      let keys = keysByCache.get(preset.cacheName);
+      if (keys === undefined) {
+        const cache = await caches.open(preset.cacheName);
+        keys = await cache.keys();
+        keysByCache.set(preset.cacheName, keys);
+      }
+
       const encoded = preset.modelId.replace('/', '%2F');
       const found = keys.some(
         (req) => req.url.includes(encoded) || req.url.includes(preset.modelId),
@@ -112,9 +124,9 @@ async function getCachedAssistantModelIds(): Promise<Set<AssistantModelId>> {
       if (found) {
         cached.add(preset.id);
       }
+    } catch {
+      // Ignore cache read failures and leave this preset out.
     }
-  } catch {
-    // Ignore cache read failures and keep empty set.
   }
 
   return cached;
