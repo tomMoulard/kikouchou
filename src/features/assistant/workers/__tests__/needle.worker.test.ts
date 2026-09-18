@@ -383,6 +383,64 @@ describe('needle worker — generating', () => {
   });
 });
 
+describe('needle worker — ranking for another engine', () => {
+  async function loadedWorker(): Promise<MessageHandler> {
+    mockCaches(undefined);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(weightsResponse(new Uint8Array([1, 2, 3]))),
+    );
+    const handler = await loadWorker();
+    await send(handler, LOAD);
+    posted.length = 0;
+    return handler;
+  }
+
+  const RETRIEVE = {
+    type: 'retrieve',
+    requestId: 'r-retrieve',
+    modelId: 'Cactus-Compute/needle2',
+    query: 'add an attic room',
+    topK: 12,
+  };
+
+  it('answers with the action names it ranked', async () => {
+    const handler = await loadedWorker();
+    await send(handler, RETRIEVE);
+
+    const text = String(lastOfType('done')?.text);
+    expect(JSON.parse(text)).toEqual(['createTrip']);
+  });
+
+  it('asks for as many as the caller wanted', async () => {
+    const handler = await loadedWorker();
+    await send(handler, RETRIEVE);
+
+    expect(fakeEngine?.retrieve_tools).toHaveBeenCalledWith(
+      'add an attic room',
+      expect.any(String),
+      12,
+    );
+  });
+
+  it('answers empty when there is no retrieval head to ask', async () => {
+    // Empty means "could not narrow", which the caller reads as "offer
+    // everything" — never as "offer nothing".
+    fakeEngine = makeEngine({ contrastive_dim: vi.fn(() => 0) });
+    const handler = await loadedWorker();
+    await send(handler, RETRIEVE);
+
+    expect(JSON.parse(String(lastOfType('done')?.text))).toEqual([]);
+  });
+
+  it('refuses to rank before a model is loaded', async () => {
+    const handler = await loadWorker();
+    await send(handler, RETRIEVE);
+
+    expect(lastOfType('error')).toMatchObject({ fatal: true });
+  });
+});
+
 describe('needle worker — unloading', () => {
   it('frees the engine and says so', async () => {
     mockCaches(undefined);

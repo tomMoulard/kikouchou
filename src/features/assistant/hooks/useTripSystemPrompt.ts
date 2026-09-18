@@ -64,7 +64,7 @@ import {
   type Vehicle,
 } from '@/types';
 
-import { generateActionPrompt } from '../action-schema';
+import { ACTION_SCHEMAS, generateActionPrompt, type ActionDef } from '../action-schema';
 
 // ============================================================================
 // Type Definitions
@@ -76,6 +76,16 @@ import { generateActionPrompt } from '../action-schema';
 export interface UseTripSystemPromptReturn {
   /** The complete system prompt incorporating trip context */
   readonly systemPrompt: string;
+  /**
+   * The same prompt, documenting only the actions given.
+   *
+   * The trip context is identical either way — what changes is the length of
+   * the action catalogue, which is most of the prompt and all of the part that
+   * does not depend on the trip. A caller that can narrow the catalogue to the
+   * request buys back GPU memory with it; calling this with every action
+   * returns exactly {@link systemPrompt}.
+   */
+  buildSystemPrompt: (actions: readonly ActionDef[]) => string;
   /** Whether we have a trip loaded to provide context */
   readonly hasTripContext: boolean;
 }
@@ -527,7 +537,12 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     );
   }, [i18n.language]);
 
-  const systemPrompt = useMemo((): string => {
+  // The builder rather than the string: everything below depends on the trip
+  // and nothing on the action list, so narrowing the catalogue must not
+  // recompute the trip context.
+  const buildSystemPrompt = useMemo((): ((
+    actions: readonly ActionDef[],
+  ) => string) => (actions: readonly ActionDef[]): string => {
     const todayLine = `Today's date is ${todayIso}. Resolve any relative date the user mentions ("today", "tonight", "tomorrow", "this weekend") against it.`;
 
     const tripsListLines =
@@ -552,7 +567,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
         ...tripsListLines,
         '',
         'Use **createTrip** to create a new trip (the app will select it automatically), or **selectTrip** with a trip id from the list above to work on an existing trip.',
-        ...generateActionPrompt(),
+        ...generateActionPrompt(actions),
       ].join('\n');
     }
 
@@ -774,7 +789,7 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     }
 
     // Modification action instructions — generated from the shared schema
-    parts.push(...generateActionPrompt());
+    parts.push(...generateActionPrompt(actions));
 
     return parts.join('\n');
   }, [
@@ -793,8 +808,14 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
     languageName,
   ]);
 
+  const systemPrompt = useMemo(
+    () => buildSystemPrompt(ACTION_SCHEMAS),
+    [buildSystemPrompt],
+  );
+
   return {
     systemPrompt,
+    buildSystemPrompt,
     hasTripContext: currentTrip !== null,
   };
 }

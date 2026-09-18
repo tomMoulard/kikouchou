@@ -631,3 +631,51 @@ describe('action-schema restraint rules', () => {
     expect(prompt).toContain('Never invent an id, a name or a date');
   });
 });
+
+/**
+ * The prompt is the part of a turn the device pays for in GPU memory, and most
+ * of its length is a catalogue of actions the request could not possibly need.
+ * `generateActionPrompt` therefore documents whatever list it is given — the
+ * full one by default, so every caller that does not narrow keeps exactly the
+ * prompt it had.
+ */
+describe('generateActionPrompt narrowing', () => {
+  it('documents every action when it is given no list', () => {
+    const prompt = generateActionPrompt().join('\n');
+
+    for (const def of ACTION_SCHEMAS) {
+      expect(prompt).toContain(def.action);
+    }
+  });
+
+  it('documents only the actions it was given', () => {
+    const picked = ACTION_SCHEMAS.filter((def) =>
+      ['addRoom', 'removeRoom'].includes(def.action),
+    );
+
+    const prompt = generateActionPrompt(picked).join('\n');
+
+    expect(prompt).toContain('addRoom');
+    expect(prompt).toContain('removeRoom');
+    expect(prompt).not.toContain('addActivity');
+  });
+
+  it('keeps the standing rules, which do not depend on the catalogue', () => {
+    const narrowed = generateActionPrompt(
+      ACTION_SCHEMAS.filter((def) => def.action === 'addRoom'),
+    ).join('\n');
+
+    expect(narrowed).toContain('Never invent an id, a name or a date');
+    expect(narrowed).toContain(
+      'Questions, greetings and small talk get no block at all',
+    );
+  });
+
+  it('is shorter for a narrowed list than for the whole catalogue', () => {
+    const narrowed = generateActionPrompt(
+      ACTION_SCHEMAS.filter((def) => def.action === 'addRoom'),
+    ).join('\n');
+
+    expect(narrowed.length).toBeLessThan(generateActionPrompt().join('\n').length);
+  });
+});
