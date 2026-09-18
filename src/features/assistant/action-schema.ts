@@ -998,8 +998,8 @@ function typeHint(type: FieldType): string {
  * prompt used to pay ~100 characters per action to repeat it. They are printed
  * as one line each under a single shared example instead.
  *
- * The test that this saves for is not a style guard: `gemma-3-1b` allocates
- * `prompt_tokens × 262144` logits, so the catalogue is measured in GPU memory.
+ * The test that this saves for is not a style guard: `qwen3-1-7b` allocates
+ * `prompt_tokens × 151936` logits, so the catalogue is measured in GPU memory.
  * Roughly half the catalogue is this shape, which is why the saving is worth a
  * second rendering path.
  *

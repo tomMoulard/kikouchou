@@ -1376,11 +1376,11 @@
       "needle-v3": {
         "name": "Minuscule",
         "description": "Fait les modifications seulement, et r\u00e9fl\u00e9chit d'abord \u2014 il ne sait pas r\u00e9pondre avec des mots.",
-        "hint": "Fonctionne sur tout appareil, sans WebGPU, et t\u00e9l\u00e9charge environ 20 fois moins que L\u00e9ger."
+        "hint": "Fonctionne sur tout appareil, sans WebGPU, et t\u00e9l\u00e9charge environ 40 fois moins que L\u00e9ger."
       },
-      "gemma-3-1b": {
+      "qwen3-1-7b": {
         "name": "Léger",
-        "description": "L'option la plus petite de la sélection, pensée pour les appareils plus modestes.",
+        "description": "L'option la plus petite qui répond avec des mots, pensée pour les appareils plus modestes.",
         "hint": "Nécessite WebGPU. C'est celle qui a le plus de chances d'être fluide sur un matériel limité."
       },
       "gemma-4-e2b": {

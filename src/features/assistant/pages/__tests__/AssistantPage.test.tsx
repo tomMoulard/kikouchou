@@ -401,13 +401,13 @@ describe('AssistantPage', () => {
       screen.getByRole('combobox', { name: 'assistant.modelLabel' }),
     );
     await user.click(
-      await screen.findByText(/assistant\.models\.gemma-3-1b\.name/),
+      await screen.findByText(/assistant\.models\.qwen3-1-7b\.name/),
     );
 
     await waitFor(() => {
       expect(mockUnload).toHaveBeenCalledTimes(1);
       expect(mockUpdateSettings).toHaveBeenCalledWith({
-        assistantModelId: 'gemma-3-1b',
+        assistantModelId: 'qwen3-1-7b',
       });
     });
   });

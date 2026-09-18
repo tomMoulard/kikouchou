@@ -242,7 +242,7 @@ describe('useWebLLM model load failures', () => {
   it('captures the caught load failure to PostHog', async () => {
     const { keys } = createCacheStorageMock();
     keys.mockResolvedValue([]);
-    const preset = getAssistantModelPreset('gemma-3-1b');
+    const preset = getAssistantModelPreset('qwen3-1-7b');
 
     const { result } = await renderFreshHook(preset);
     await waitFor(() => {
@@ -301,7 +301,7 @@ describe('useWebLLM model load failures', () => {
   it('cancels a load in flight by terminating the worker', async () => {
     const { keys } = createCacheStorageMock();
     keys.mockResolvedValue([]);
-    const preset = getAssistantModelPreset('gemma-3-1b');
+    const preset = getAssistantModelPreset('qwen3-1-7b');
 
     const { result } = await renderFreshHook(preset);
     await waitFor(() => {
@@ -345,7 +345,7 @@ describe('useWebLLM model load failures', () => {
   it('loads again on a new worker after a cancelled load', async () => {
     const { keys } = createCacheStorageMock();
     keys.mockResolvedValue([]);
-    const preset = getAssistantModelPreset('gemma-3-1b');
+    const preset = getAssistantModelPreset('qwen3-1-7b');
 
     const { result } = await renderFreshHook(preset);
     await waitFor(() => {
@@ -389,7 +389,7 @@ describe('useWebLLM model load failures', () => {
   it('captures nothing when the model loads', async () => {
     const { keys } = createCacheStorageMock();
     keys.mockResolvedValue([]);
-    const preset = getAssistantModelPreset('gemma-3-1b');
+    const preset = getAssistantModelPreset('qwen3-1-7b');
 
     const { result } = await renderFreshHook(preset);
     await waitFor(() => {

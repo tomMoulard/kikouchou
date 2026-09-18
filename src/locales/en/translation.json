@@ -1376,11 +1376,11 @@
       "needle-v3": {
         "name": "Tiny",
         "description": "Makes changes only, and reasons first \u2014 it cannot answer questions in words.",
-        "hint": "Runs on any device, no WebGPU needed, and downloads about 20x less than Light."
+        "hint": "Runs on any device, no WebGPU needed, and downloads about 40x less than Light."
       },
-      "gemma-3-1b": {
+      "qwen3-1-7b": {
         "name": "Light",
-        "description": "Smallest option in the lineup, aimed at lighter devices.",
+        "description": "Smallest option that answers in words, aimed at lighter devices.",
         "hint": "Needs WebGPU. Best chance of running smoothly on modest hardware."
       },
       "gemma-4-e2b": {

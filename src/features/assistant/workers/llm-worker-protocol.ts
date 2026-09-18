@@ -48,6 +48,12 @@ export type WorkerModelConfig =
       readonly modelId: string;
       readonly dtype: 'fp32' | 'q4' | 'q4f16';
       readonly device?: 'webgpu';
+      /**
+       * Extra variables for the repository's Jinja chat template, carried on
+       * `load` because that is where the preset is known, and applied on every
+       * `generate` because that is where the template runs.
+       */
+      readonly chatTemplateOptions?: Readonly<Record<string, boolean>>;
     }
   | {
       readonly engine: 'needle';

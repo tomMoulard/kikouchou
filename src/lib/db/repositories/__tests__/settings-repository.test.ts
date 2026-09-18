@@ -384,7 +384,7 @@ describe('resetSettings', () => {
       id: 'settings',
       language: 'en',
       currentTripId: tripId,
-      assistantModelId: 'gemma-3-1b',
+      assistantModelId: 'qwen3-1-7b',
     });
 
     await resetSettings();

@@ -174,12 +174,13 @@ date, which the prompt states from `useToday()` — extend that line rather than
 letting the model guess.
 
 **Say it once, and say it short.** The prompt is not free text: the model runs on
-the user's own GPU, and prefill memory grows with prompt length. `gemma-3-1b`'s
+the user's own GPU, and prefill memory grows with prompt length. `qwen3-1-7b`'s
 ONNX export has no `num_logits_to_keep` input, so it computes logits for *every*
-prompt position and reads back `prompt_tokens × 262144` values in one buffer —
-half a mebibyte per prompt token. A 2401-token prompt asked WebGPU for 2.34 GiB
-and got "Failed to allocate memory for buffer mapping", which kills the session,
-not just the answer. Two guards keep that honest, and both are meant to be
+prompt position and reads back `prompt_tokens × 151936` values in one buffer —
+297 KiB per prompt token. The Gemma 3 1B preset it replaced charged half a
+mebibyte, and a 2401-token prompt asked WebGPU for 2.34 GiB and got "Failed to
+allocate memory for buffer mapping", which kills the session, not just the
+answer. The newer preset is cheaper per token, not cheap. Two guards keep that honest, and both are meant to be
 rewritten to fit rather than raised:
 
 - `action-schema.test.ts` caps the generated action prompt (~1000 tokens).
@@ -197,11 +198,13 @@ change it, from the prompt alone?* If not, the feature is not finished.
 The presets in `models.ts` run on two different runtimes, and the `engine` field
 says which:
 
-- `transformers` — the Gemma presets. A chat model: it answers in words and puts
-  its changes in a ```action block inside that answer.
+- `transformers` — the Qwen3 and Gemma 4 presets. A chat model: it answers in
+  words and puts its changes in a ```action block inside that answer. `qwen3-1-7b`
+  is a hybrid thinking model and would open a `<think>` block on every turn, so
+  its preset turns thinking off through `chatTemplateOptions`.
 - `needle` — the `needle-v3` preset. A tool-calling router in 35.3 MB. One
   request plus a tool catalogue in, one JSON call out, and **no prose at all**.
-  It has no system channel either, so the trip context the Gemma presets read is
+  It has no system channel either, so the trip context the chat presets read is
   not available to it: it fills arguments from the words in the request, and an
   action needing an id the user did not say is one it cannot complete.
 
@@ -222,7 +225,7 @@ given is always `ACTION_SCHEMAS`. Needle 2 used to rank the catalogue against th
 request first, in one pass of its contrastive head; Needle 3 exports no such
 head, so that narrowing is gone and the prose presets carry every action in
 their system prompt again. The prompt therefore has a character budget, enforced
-by `action-schema.test.ts`, and `gemma-3-1b` is the preset that runs out of GPU
+by `action-schema.test.ts`, and `qwen3-1-7b` is the preset that runs out of GPU
 first when it grows. Adding an action costs every turn a little more prompt: keep
 its `label` and field descriptions short.
 

@@ -494,6 +494,9 @@ function toWorkerModelConfig(preset: AssistantModelPreset): WorkerModelConfig {
     modelId: preset.modelId,
     dtype: preset.dtype ?? 'q4f16',
     ...(preset.device ? { device: preset.device } : {}),
+    ...(preset.chatTemplateOptions
+      ? { chatTemplateOptions: preset.chatTemplateOptions }
+      : {}),
   };
 }
 

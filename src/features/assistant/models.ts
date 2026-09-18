@@ -54,6 +54,21 @@ export interface AssistantModelPreset {
    */
   readonly weightsUrl?: string;
   /**
+   * Extra variables handed to the repository's Jinja chat template.
+   *
+   * Transformers.js forwards `tokenizer_encode_kwargs` into
+   * `apply_chat_template`, which spreads whatever it does not recognise into
+   * the template's render context. A template ignores a variable it never
+   * names, so this is safe to leave set on a preset whose template does not
+   * read it.
+   *
+   * What it exists for is `enable_thinking`. Qwen3 emits a `<think>` block by
+   * default and that block is not free: generation is capped at 1024 new
+   * tokens, and a chain of thought that long leaves nothing for the ```action
+   * block the app parses, so the turn ends having reasoned and done nothing.
+   */
+  readonly chatTemplateOptions?: Readonly<Record<string, boolean>>;
+  /**
    * Cache Storage bucket holding this preset's downloaded files, so the
    * "already downloaded" probe looks where the files actually landed:
    * Transformers.js owns `transformers-cache`, and the Needle worker writes
@@ -72,8 +87,9 @@ export interface AssistantModelPreset {
    * Transformers.js loads a `text-generation` pipeline, so it fetches the
    * text-only sessions of the repository plus the tokenizer: `embed_tokens`
    * and `decoder_model_merged` at the preset `dtype` for the Gemma 4 presets,
-   * and the single `model` file for Gemma 3 1B. The vision and audio encoders
-   * stay on the server. Numbers come from the Hugging Face blob sizes of those
+   * and the single `model` file for Qwen3 1.7B, which is text-only and exports
+   * one session. The Gemma vision and audio encoders stay on the server.
+   * Numbers come from the Hugging Face blob sizes of those
    * files, so they move when a repository is re-exported: they are a size
    * order to warn the user with, not a promise. Rendered with `formatBytes`,
    * the same helper the download counter uses, so the announced size and the
@@ -108,9 +124,10 @@ export const DEFAULT_ASSISTANT_MODEL_ID: AssistantModelId = 'gemma-4-e2b';
  * Available assistant model presets, ordered from smallest to largest.
  *
  * Notes:
- * - Every Gemma preset targets WebGPU for practical browser-side generation.
- *   Needle does not: it is small enough to run on the CPU through WASM, which
- *   is why it is also the only preset a device without WebGPU can use.
+ * - Every `transformers` preset targets WebGPU for practical browser-side
+ *   generation. Needle does not: it is small enough to run on the CPU through
+ *   WASM, which is why it is also the only preset a device without WebGPU can
+ *   use.
  * - Needle is first because it is the smallest by two orders of magnitude, and
  *   last in capability: it performs actions and never answers in words.
  */
@@ -144,36 +161,46 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
     fallbackDescription:
       'Makes changes only, and reasons first — it cannot answer questions in words.',
     fallbackHint:
-      'Runs on any device, no WebGPU needed, and downloads about 20x less than the Light preset.',
+      'Runs on any device, no WebGPU needed, and downloads about 40x less than the Light preset.',
   },
   {
-    id: 'gemma-3-1b',
+    // `qwen3-1-7b`, not `qwen3-1.7b`: the id is spliced into the translation
+    // keys below, and i18next reads a dot as one more level of nesting — so the
+    // dotted spelling looks up `models.qwen3-1.7b.name` and finds nothing.
+    id: 'qwen3-1-7b',
     engine: 'transformers',
     cacheName: TRANSFORMERS_CACHE_NAME,
-    modelId: 'onnx-community/gemma-3-1b-it-ONNX',
+    modelId: 'onnx-community/Qwen3-1.7B-ONNX',
+    // Replaces `gemma-3-1b`, which held this slot and answered badly enough to
+    // be worth 650 MB more download.
+    //
     // q4f16 rather than q4, and not for the download size.
     //
-    // This export has no `num_logits_to_keep` graph input — unlike the two
-    // Gemma 4 decoders below — so Transformers.js cannot ask it for the last
-    // token's logits only (see `decoder_forward` in modeling_utils.js). Prefill
-    // therefore materialises logits for *every* prompt position and hands the
-    // whole `prompt_tokens × 262144` tensor back to the CPU in one buffer.
-    // Under q4 those are fp32: 1 MiB per prompt token, so a 2401-token prompt
-    // asked WebGPU for a 2.34 GiB mappable buffer and got "Failed to allocate
-    // memory for buffer mapping", killing the session. q4f16 halves it.
+    // This export has no `num_logits_to_keep` graph input — the same gap the
+    // Gemma 3 1B export had, and unlike the two Gemma 4 decoders below — so
+    // Transformers.js cannot ask it for the last token's logits only (see
+    // `decoder_forward` in modeling_utils.js). Prefill therefore materialises
+    // logits for *every* prompt position and hands the whole
+    // `prompt_tokens × 151936` tensor back to the CPU in one buffer. Under q4
+    // those are fp32: 594 KiB per prompt token. q4f16 halves it to 297 KiB,
+    // against 512 KiB for Gemma 3 1B at the same dtype, because this vocabulary
+    // is 151936 entries rather than 262144.
     //
-    // Halving is not a licence to grow the prompt again: this preset is still
+    // More headroom is not a licence to grow the prompt: this preset is still
     // the one that runs out of GPU first, which is why the system prompt has a
     // character budget (action-schema.test.ts) and the history has a cap.
     dtype: 'q4f16',
     device: 'webgpu',
-    // onnx/model_q4f16.onnx(_data) + tokenizer.json
-    approxDownloadBytes: 784_000_000,
-    nameKey: 'assistant.models.gemma-3-1b.name',
-    descriptionKey: 'assistant.models.gemma-3-1b.description',
-    hintKey: 'assistant.models.gemma-3-1b.hint',
+    // Qwen3 is a hybrid thinking model and thinks by default. See
+    // `chatTemplateOptions` above for why this preset does not.
+    chatTemplateOptions: { enable_thinking: false },
+    // onnx/model_q4f16.onnx + tokenizer.json. One file, no `_data` sidecar.
+    approxDownloadBytes: 1_435_000_000,
+    nameKey: 'assistant.models.qwen3-1-7b.name',
+    descriptionKey: 'assistant.models.qwen3-1-7b.description',
+    hintKey: 'assistant.models.qwen3-1-7b.hint',
     fallbackName: 'Light',
-    fallbackDescription: 'Smallest option in the lineup, aimed at lighter devices.',
+    fallbackDescription: 'Smallest option that answers in words, aimed at lighter devices.',
     fallbackHint: 'Needs WebGPU. Best chance of running smoothly on modest hardware.',
   },
   {
@@ -222,10 +249,16 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
  * falls back to the default — a multi-gigabyte WebGPU preset, handed to the one
  * user who explicitly chose the small CPU one. The stored value is left alone;
  * only what it resolves to changes.
+ *
+ * `gemma-3-1b` held the Light slot and lost it to Qwen3 1.7B for the same
+ * reason: one small preset, replaced rather than kept beside its successor.
+ * A user who picked Light keeps Light, and pays a larger second download the
+ * first time the new one loads.
  */
 const REPLACED_ASSISTANT_MODEL_IDS: Readonly<Record<string, AssistantModelId>> =
   {
     'needle-v2': 'needle-v3',
+    'gemma-3-1b': 'qwen3-1-7b',
   };
 
 /**

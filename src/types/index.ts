@@ -478,7 +478,7 @@ export type Language = 'en' | 'fr';
  */
 export type AssistantModelId =
   | 'needle-v3'
-  | 'gemma-3-1b'
+  | 'qwen3-1-7b'
   | 'gemma-4-e2b'
   | 'gemma-4-e4b';
 

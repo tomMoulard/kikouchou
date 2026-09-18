@@ -18,7 +18,7 @@ describe('assistant model presets', () => {
   it('exposes the supported presets in increasing size order', () => {
     expect(ASSISTANT_MODEL_PRESETS.map((preset) => preset.id)).toEqual([
       'needle-v3',
-      'gemma-3-1b',
+      'qwen3-1-7b',
       'gemma-4-e2b',
       'gemma-4-e4b',
     ]);
@@ -56,14 +56,14 @@ describe('assistant model presets', () => {
     expect(formatBytes(getAssistantModelPreset('gemma-4-e2b').approxDownloadBytes)).toBe(
       '2.92 GB',
     );
-    expect(formatBytes(getAssistantModelPreset('gemma-3-1b').approxDownloadBytes)).toBe(
-      '748 MB',
+    expect(formatBytes(getAssistantModelPreset('qwen3-1-7b').approxDownloadBytes)).toBe(
+      '1.34 GB',
     );
   });
 
   it('validates persisted model ids', () => {
     expect(isAssistantModelId('needle-v3')).toBe(true);
-    expect(isAssistantModelId('gemma-3-1b')).toBe(true);
+    expect(isAssistantModelId('qwen3-1-7b')).toBe(true);
     expect(isAssistantModelId('gemma-4-e2b')).toBe(true);
     expect(isAssistantModelId('gemma-4-e4b')).toBe(true);
     expect(isAssistantModelId('not-a-real-model')).toBe(false);
@@ -88,5 +88,25 @@ describe('assistant model presets', () => {
     expect(
       getAssistantModelPreset('needle-v2' as Parameters<typeof getAssistantModelPreset>[0]).id,
     ).toBe('needle-v3');
+  });
+
+  it('resolves the retired gemma-3-1b setting to its replacement', () => {
+    // Same bargain as needle-v2: the Light slot changed model, and somebody who
+    // picked the smallest talking preset keeps the smallest talking preset.
+    expect(
+      getAssistantModelPreset('gemma-3-1b' as Parameters<typeof getAssistantModelPreset>[0]).id,
+    ).toBe('qwen3-1-7b');
+  });
+
+  it('turns thinking off for the hybrid preset, and leaves the others alone', () => {
+    // Qwen3 thinks by default. A `<think>` block can eat the whole 1024-token
+    // budget in `llm.worker.ts`, leaving no room for the ```action block the
+    // app actually reads, so the turn reasons and changes nothing.
+    expect(getAssistantModelPreset('qwen3-1-7b').chatTemplateOptions).toEqual({
+      enable_thinking: false,
+    });
+    expect(
+      getAssistantModelPreset('gemma-4-e2b').chatTemplateOptions,
+    ).toBeUndefined();
   });
 });
