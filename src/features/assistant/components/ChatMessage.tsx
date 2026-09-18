@@ -6,7 +6,7 @@
 
 import { memo, useMemo, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, Clock3 } from 'lucide-react';
+import { Brain, ChevronRight, Clock3 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -28,6 +28,20 @@ export interface ChatMessageData {
   readonly id: string;
   readonly role: MessageRole;
   readonly content: string;
+  /**
+   * What the model showed of its thinking, already separated from `content` by
+   * `splitReasoning`. Shown in a collapsed section above the answer.
+   *
+   * It is display only: the history replayed to the model carries the answer
+   * alone, so a model never reads back its own reasoning as if it were speech.
+   */
+  readonly reasoning?: string;
+  /**
+   * The reasoning is still arriving — its closing tag has not streamed in yet.
+   * The section stays open while this holds, so the user sees something happen
+   * before the first word of the answer exists.
+   */
+  readonly thinking?: boolean;
   /** Number of actions executed from this message */
   readonly actionsExecuted?: number;
   /** Human-readable line per applied action (enables expandable details) */
@@ -95,6 +109,8 @@ const ChatMessage = memo(function ChatMessage({
 
   const isUser = message.role === 'user';
 
+  const hasReasoning = !isUser && (message.reasoning ?? '').length > 0;
+
   const appliedCount =
     message.actionSummaries?.length ?? message.actionsExecuted ?? 0;
   const hasExpandableDetails =
@@ -119,10 +135,37 @@ const ChatMessage = memo(function ChatMessage({
             'border border-destructive/40 bg-destructive/10 text-destructive',
         )}
       >
+        {hasReasoning && (
+          <details
+            open={message.thinking === true}
+            className="mb-1.5 border-b border-border pb-1.5 open:[&_svg.chevron]:rotate-90"
+          >
+            <summary
+              className={cn(
+                'flex cursor-pointer list-none items-center gap-2 rounded-sm text-xs font-medium text-muted-foreground outline-none [&::-webkit-details-marker]:hidden',
+                'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+              )}
+            >
+              <ChevronRight
+                className="chevron size-3.5 shrink-0 transition-transform"
+                aria-hidden="true"
+              />
+              <Brain className="size-3.5 shrink-0" aria-hidden="true" />
+              <span>
+                {message.thinking === true
+                  ? t('assistant.reasoningInProgress', 'Thinking…')
+                  : t('assistant.reasoningLabel', 'Reasoning')}
+              </span>
+            </summary>
+            <div className="mt-2 whitespace-pre-wrap border-l-2 border-muted-foreground/25 pl-3 text-xs font-normal leading-snug text-muted-foreground">
+              {message.reasoning}
+            </div>
+          </details>
+        )}
         {isUser ? (
           displayContent || '...'
         ) : (
-          <MarkdownText content={displayContent || '...'} />
+          <MarkdownText content={displayContent || (hasReasoning ? '' : '...')} />
         )}
         {message.queued && (
           <div

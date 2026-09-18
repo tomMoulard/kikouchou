@@ -47,6 +47,7 @@ function isChatMessageData(value: unknown): value is ChatMessageData {
   if (typeof o.id !== 'string') return false;
   if (o.role !== 'user' && o.role !== 'assistant') return false;
   if (typeof o.content !== 'string') return false;
+  if (o.reasoning !== undefined && typeof o.reasoning !== 'string') return false;
   if (
     o.actionsExecuted !== undefined &&
     typeof o.actionsExecuted !== 'number'
@@ -87,7 +88,10 @@ export function loadAssistantChatMessages(): ChatMessageData[] {
  */
 function isPersistableMessage(message: ChatMessageData): boolean {
   if (message.queued === true || message.failed === true) return false;
-  return message.role !== 'assistant' || message.content.length > 0;
+  if (message.role !== 'assistant') return true;
+  // An answer that is only reasoning still happened: the Needle preset says
+  // what it decided there and nowhere else.
+  return message.content.length > 0 || (message.reasoning ?? '').length > 0;
 }
 
 /**
@@ -160,6 +164,9 @@ export function messagesToLLMChatHistory(
       answer.failed === true ||
       answer.content.length === 0
     ) {
+      // An answer with reasoning and no words is skipped too: replaying an
+      // empty assistant turn breaks the strict alternation Gemma's chat
+      // template demands, and the reasoning is display only.
       continue;
     }
 

@@ -70,6 +70,7 @@ import {
 } from '../chat-storage';
 import { useTripActions } from '../hooks/useTripActions';
 import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
+import { splitReasoning } from '../reasoning';
 import { useWebGPUSupport } from '../hooks/useWebGPUSupport';
 import type { WebGPUSupport } from '../webgpu';
 import {
@@ -959,10 +960,20 @@ function AssistantPageComponent(): ReactElement {
 
       try {
         const response = await generateRef.current(fullMessages, (chunk) => {
-          // Update the assistant message with streaming content
+          // Split on every chunk rather than once at the end: while a reasoning
+          // block is still open the answer is empty, and showing the thinking
+          // live is the difference between a working bubble and a blank one.
+          const streamed = splitReasoning(chunk);
           setMessages((prev) =>
             prev.map((msg) =>
-              msg.id === assistantId ? { ...msg, content: chunk } : msg,
+              msg.id === assistantId
+                ? {
+                    ...msg,
+                    content: streamed.answer,
+                    reasoning: streamed.reasoning,
+                    thinking: streamed.thinking,
+                  }
+                : msg,
             ),
           );
         });
@@ -971,12 +982,28 @@ function AssistantPageComponent(): ReactElement {
         // appending the answer would leave a reply with nothing to reply to.
         if (!isSameConversation()) return 'abandoned';
 
+        // The reasoning is display only: the history keeps the answer alone, so
+        // the model never reads its own thinking back as something it said.
+        const { reasoning, answer } = splitReasoning(response);
+
         // Add to chat history
-        chatHistoryRef.current.push({ role: 'assistant', content: response });
+        chatHistoryRef.current.push({ role: 'assistant', content: answer });
 
         // Execute any action blocks in the response
         const { count: actionsExecuted, summaries: actionSummaries } =
-          await executeActionsRef.current(response);
+          await executeActionsRef.current(answer);
+
+        // A router preset answers with actions and a rationale and never with
+        // words, so an empty answer there is the normal shape of "nothing to
+        // do" rather than a failure — say so instead of showing an empty
+        // bubble.
+        const content =
+          answer.length === 0 && reasoning.length === 0
+            ? tRef.current('assistant.noActionTaken', {
+                defaultValue:
+                  'Nothing in that matched a change I can make to the trip.',
+              })
+            : answer;
 
         // Update message with final content and action count
         setMessages((prev) =>
@@ -984,7 +1011,9 @@ function AssistantPageComponent(): ReactElement {
             msg.id === assistantId
               ? {
                   ...msg,
-                  content: response,
+                  content,
+                  reasoning,
+                  thinking: false,
                   actionsExecuted,
                   actionSummaries,
                 }

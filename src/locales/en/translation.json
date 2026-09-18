@@ -1370,6 +1370,11 @@
     "invalidActivity": "Those activity details are invalid, nothing was saved.",
     "tripSwitched": "Switched to {{name}}",
     "models": {
+      "needle-v2": {
+        "name": "Tiny",
+        "description": "Makes changes only \u2014 it cannot answer questions in words.",
+        "hint": "Runs on any device, no WebGPU needed, and downloads about 60x less than Light."
+      },
       "gemma-3-1b": {
         "name": "Light",
         "description": "Smallest option in the lineup, aimed at lighter devices.",
