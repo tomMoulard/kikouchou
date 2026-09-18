@@ -44,11 +44,27 @@ export function useRemoteTrips(localTripCount: number): {
   /** Downloads one, returning its new local id. */
   readonly download: (remoteTripId: string) => Promise<TripId | null>;
   readonly isDownloading: string | null;
+  /**
+   * True while the answer is still unknown.
+   *
+   * The section below a trip list does not need this — an empty list renders
+   * as nothing, and rows appearing a moment later is the whole point. What
+   * needs it is a caller that must act on "there is nothing anywhere", such as
+   * the root redirect in `pages/TripsEntryRedirect`: for that one, an empty
+   * array before the lookup has answered and an empty array after it are two
+   * different facts.
+   *
+   * Signed out or offline it is false from the first effect: there is nothing
+   * to look up, and that is an answer rather than a wait.
+   */
+  readonly isChecking: boolean;
 } {
   const { session } = useAuth();
   const { isOnline } = useOnlineStatus();
   const [remoteOnly, setRemoteOnly] = useState<readonly RemoteOnlyTrip[]>([]);
   const [isDownloading, setIsDownloading] = useState<string | null>(null);
+  /** True until the first effect below settles — see the return type. */
+  const [isChecking, setIsChecking] = useState(true);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -65,19 +81,35 @@ export function useRemoteTrips(localTripCount: number): {
       // Signed out or offline: there is nothing to add, and the local list is
       // still perfectly renderable.
       setRemoteOnly([]);
+      setIsChecking(false);
       return;
     }
 
     let cancelled = false;
 
+    setIsChecking(true);
     void (async () => {
-      const client = await getSupabaseClient();
-      if (cancelled || !client || !isMountedRef.current) {
-        return;
-      }
-      const missing = await listRemoteTripsMissingLocally(client);
-      if (!cancelled && isMountedRef.current) {
-        setRemoteOnly(missing);
+      try {
+        const client = await getSupabaseClient();
+        if (cancelled || !client || !isMountedRef.current) {
+          return;
+        }
+        const missing = await listRemoteTripsMissingLocally(client);
+        if (!cancelled && isMountedRef.current) {
+          setRemoteOnly(missing);
+        }
+      } catch (err) {
+        // Logged rather than thrown: an unreachable server is the ordinary
+        // reason this fails, the local list renders without it, and an
+        // unhandled rejection here would be the only thing anybody saw.
+        console.error('[trips] failed to list the trips this account has elsewhere:', err);
+      } finally {
+        // In a `finally` so a failed lookup ends the wait too: a caller that
+        // blocks on `isChecking` must not block forever because the client
+        // could not be built or the query threw.
+        if (!cancelled && isMountedRef.current) {
+          setIsChecking(false);
+        }
       }
     })();
 
@@ -124,5 +156,5 @@ export function useRemoteTrips(localTripCount: number): {
     [],
   );
 
-  return { remoteOnly, download, isDownloading };
+  return { remoteOnly, download, isDownloading, isChecking };
 }

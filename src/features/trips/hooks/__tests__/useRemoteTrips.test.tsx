@@ -104,6 +104,58 @@ describe('useRemoteTrips', () => {
     expect(mockedListMissing).not.toHaveBeenCalled();
   });
 
+  it('is done checking straight away while signed out', async () => {
+    mockedUseAuth.mockReturnValue(signedOut);
+
+    const { result } = renderHook(() => useRemoteTrips(0));
+
+    await waitFor(() => {
+      expect(result.current.isChecking).toBe(false);
+    });
+    expect(result.current.remoteOnly).toEqual([]);
+  });
+
+  it('is still checking until the lookup answers', async () => {
+    let release: (value: typeof elsewhere) => void = () => {};
+    mockedListMissing.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }) as never,
+    );
+
+    const { result } = renderHook(() => useRemoteTrips(0));
+
+    await waitFor(() => {
+      expect(mockedListMissing).toHaveBeenCalled();
+    });
+    // The empty list here is "not known yet", not "nothing elsewhere" — which
+    // is the distinction `isChecking` exists to make.
+    expect(result.current.remoteOnly).toEqual([]);
+    expect(result.current.isChecking).toBe(true);
+
+    await act(async () => {
+      release(elsewhere);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isChecking).toBe(false);
+    });
+    expect(result.current.remoteOnly).toEqual(elsewhere);
+  });
+
+  it('ends the wait when the lookup throws', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockedListMissing.mockRejectedValue(new Error('server said no'));
+
+    const { result } = renderHook(() => useRemoteTrips(0));
+
+    await waitFor(() => {
+      expect(result.current.isChecking).toBe(false);
+    });
+    expect(result.current.remoteOnly).toEqual([]);
+    expect(consoleError).toHaveBeenCalled();
+  });
+
   it('asks again when the local trip list changes', async () => {
     const { rerender } = renderHook(({ count }) => useRemoteTrips(count), {
       initialProps: { count: 0 },
