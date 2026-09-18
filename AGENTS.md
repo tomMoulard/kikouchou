@@ -199,7 +199,7 @@ says which:
 
 - `transformers` — the Gemma presets. A chat model: it answers in words and puts
   its changes in a ```action block inside that answer.
-- `needle` — the `needle-v2` preset. A tool-calling router in 13.7 MB. One
+- `needle` — the `needle-v3` preset. A tool-calling router in 35.3 MB. One
   request plus a tool catalogue in, one JSON call out, and **no prose at all**.
   It has no system channel either, so the trip context the Gemma presets read is
   not available to it: it fills arguments from the words in the request, and an
@@ -211,19 +211,20 @@ reads a preset and expects an answer in words has to branch on `engine`.
 Two things follow for the steps above. A new action reaches Needle through
 `needle-tools.ts`, which derives the tool catalogue from `ACTION_SCHEMAS` — so
 you get it for free, as long as the action's `label` reads like something a user
-would say, because that label is also what the retrieval head ranks. And its
-output comes back as the same ```action block, so `validateAction()` stays the
-only gate on what reaches the database.
+would say, because that label is what the router matches the request against.
+And its output comes back as the same ```action block, so `validateAction()`
+stays the only gate on what reaches the database.
 
-### The action prompt is ranked before it is sent
+### Every turn is offered the whole action catalogue
 
-`generateActionPrompt(defs)` documents whatever list it is given.
-`action-retrieval.ts` runs Needle's retrieval head against the request before
-every Gemma turn and hands it the dozen actions the request is about, which is
-the cheapest way to hold the prompt budget below. Every failure there returns
-the full catalogue: a narrowing that cannot run costs a longer prompt, never a
-missing action. Do not build a caller that treats an empty ranking as "offer
-nothing".
+`generateActionPrompt(defs)` documents whatever list it is given, and what it is
+given is always `ACTION_SCHEMAS`. Needle 2 used to rank the catalogue against the
+request first, in one pass of its contrastive head; Needle 3 exports no such
+head, so that narrowing is gone and the prose presets carry every action in
+their system prompt again. The prompt therefore has a character budget, enforced
+by `action-schema.test.ts`, and `gemma-3-1b` is the preset that runs out of GPU
+first when it grows. Adding an action costs every turn a little more prompt: keep
+its `label` and field descriptions short.
 
 ---
 

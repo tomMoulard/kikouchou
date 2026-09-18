@@ -21,6 +21,9 @@ import type { AssistantModelId } from '@/types';
  * a tool-calling router with no chat channel at all — it turns one request into
  * one action and cannot answer a question in words. Anything that reads a
  * preset and expects an answer has to branch on this.
+ *
+ * `needle` means Needle 3 specifically: it is the generation this app ships,
+ * and its container is the only one `NeedleV3Wasm` loads.
  */
 export type AssistantEngine = 'transformers' | 'needle';
 
@@ -113,28 +116,35 @@ export const DEFAULT_ASSISTANT_MODEL_ID: AssistantModelId = 'gemma-4-e2b';
  */
 export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
   {
-    id: 'needle-v2',
+    id: 'needle-v3',
     engine: 'needle',
     cacheName: NEEDLE_CACHE_NAME,
-    modelId: 'Cactus-Compute/needle2',
+    modelId: 'Cactus-Compute/needle3',
     weightsUrl:
-      'https://huggingface.co/Cactus-Compute/needle2/resolve/main/needle2.cact',
+      'https://huggingface.co/Cactus-Compute/needle3/resolve/main/needle3.cact',
     // No `device`: the runtime is single-threaded WASM on the CPU by design,
     // and leaving this unset is what stops the page gating the preset behind a
     // WebGPU check it does not need.
     //
-    // needle2.cact carries the weights, the geometry and the tokenizer in one
-    // file. The 423 KB WASM runtime ships in the app bundle, so it is not part
+    // needle3.cact carries the weights, the geometry and the tokenizer in one
+    // file. The 537 KB WASM runtime ships in the app bundle, so it is not part
     // of the first download the user is warned about.
-    approxDownloadBytes: 13_700_000,
-    nameKey: 'assistant.models.needle-v2.name',
-    descriptionKey: 'assistant.models.needle-v2.description',
-    hintKey: 'assistant.models.needle-v2.hint',
+    //
+    // 121M parameters, an 8192-token context, and a reasoning trace on
+    // essentially every request. What it does not carry is a contrastive head,
+    // so there is no tool ranking to be had from this engine at any size of
+    // catalogue: every request is offered the whole of `ACTION_SCHEMAS`.
+    //
+    // The weights are Apache-2.0; the runtime is MIT.
+    approxDownloadBytes: 35_300_000,
+    nameKey: 'assistant.models.needle-v3.name',
+    descriptionKey: 'assistant.models.needle-v3.description',
+    hintKey: 'assistant.models.needle-v3.hint',
     fallbackName: 'Tiny',
     fallbackDescription:
-      'Performs changes only — it cannot answer questions in words.',
+      'Makes changes only, and reasons first — it cannot answer questions in words.',
     fallbackHint:
-      'Runs on any device, no WebGPU needed, and downloads about 60x less than the Light preset.',
+      'Runs on any device, no WebGPU needed, and downloads about 20x less than the Light preset.',
   },
   {
     id: 'gemma-3-1b',
@@ -205,6 +215,20 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
 // ============================================================================
 
 /**
+ * Preset IDs that no longer exist, and what they became.
+ *
+ * `needle-v2` was the Needle 2 preset, which this app replaced with Needle 3
+ * rather than kept beside it. Without this the setting reads as unknown and
+ * falls back to the default — a multi-gigabyte WebGPU preset, handed to the one
+ * user who explicitly chose the small CPU one. The stored value is left alone;
+ * only what it resolves to changes.
+ */
+const REPLACED_ASSISTANT_MODEL_IDS: Readonly<Record<string, AssistantModelId>> =
+  {
+    'needle-v2': 'needle-v3',
+  };
+
+/**
  * Type guard for values restored from settings/UI events.
  */
 export function isAssistantModelId(value: string): value is AssistantModelId {
@@ -213,12 +237,19 @@ export function isAssistantModelId(value: string): value is AssistantModelId {
 
 /**
  * Resolves a preset by ID, falling back to the app default when missing.
+ *
+ * Settings restored from a device that ran an older build can name a preset
+ * this build no longer has, so a replaced ID resolves to its successor before
+ * the fallback is reached.
  */
 export function getAssistantModelPreset(
   id: AssistantModelId | undefined,
 ): AssistantModelPreset {
+  const resolvedId =
+    id !== undefined ? (REPLACED_ASSISTANT_MODEL_IDS[id] ?? id) : id;
+
   return (
-    ASSISTANT_MODEL_PRESETS.find((preset) => preset.id === id) ??
+    ASSISTANT_MODEL_PRESETS.find((preset) => preset.id === resolvedId) ??
     ASSISTANT_MODEL_PRESETS.find(
       (preset) => preset.id === DEFAULT_ASSISTANT_MODEL_ID,
     )!

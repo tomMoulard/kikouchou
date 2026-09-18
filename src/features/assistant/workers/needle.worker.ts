@@ -13,17 +13,14 @@
  * @module features/assistant/workers/needle.worker
  */
 
-import init, { NeedleV2Wasm } from 'needle-rs';
+import init, { NeedleV3Wasm } from 'needle-rs';
 
 import {
-  buildNeedleToolDescriptionsJson,
   buildNeedleToolsJson,
   extractNeedleReasoning,
   needleToolCallsToActionBlocks,
   parseNeedleToolCalls,
-  parseRetrievedActions,
 } from '../needle-tools';
-import { ACTION_SCHEMAS, type ActionDef } from '../action-schema';
 import type {
   LLMWorkerRequest,
   LLMWorkerResponse,
@@ -36,24 +33,24 @@ import type {
 // ============================================================================
 
 /**
- * Actions offered to the model for one request.
+ * Tokens one call may produce. A tool call is short; a runaway one is a bug.
  *
- * The catalogue is ranked against the request first and cut to this many, which
- * is what `retrieve_tools` exists for: the constrained decoder walks every tool
- * name it was given, so a short, on-topic list is both faster and more accurate
- * than the full set. Ten leaves room for the near-misses a 121M router needs to
- * choose between.
+ * Wider than a call needs because Needle 3 reasons on essentially every
+ * request: the `<think>` block is spent before the first character of the call,
+ * so a budget cut to the call alone ends most runs mid-thought, with nothing to
+ * execute.
  */
-const MAX_TOOLS_PER_REQUEST = 10;
+const MAX_NEW_TOKENS = 512;
 
 /**
- * Below this retrieval score a tool is treated as unrelated to the request.
- * Zero would keep the whole ranked list, which defeats the narrowing.
+ * Store the key/value cache at 8-bit.
+ *
+ * This is the width the container declares and upstream's own engine runs, and
+ * it is what keeps a browser tab's working set sane: at the full 8192-token
+ * context the f32 cache is the largest thing in the worker after the 35 MB
+ * container itself.
  */
-const MIN_RETRIEVAL_SCORE = 0.1;
-
-/** Tokens one call may produce. A tool call is short; a runaway one is a bug. */
-const MAX_NEW_TOKENS = 128;
+const V3_KV_INT8 = true;
 
 /**
  * Confidence below which the call is reported but not emitted as an action.
@@ -70,7 +67,7 @@ const MIN_ACTION_CONFIDENCE = 0.5;
 // ============================================================================
 
 /** Loaded engine, or `null` when nothing is loaded. */
-let engine: NeedleV2Wasm | null = null;
+let engine: NeedleV3Wasm | null = null;
 
 /** Model ID backing {@link engine}. */
 let loadedModelId: string | null = null;
@@ -177,8 +174,8 @@ async function fetchWeights(
 /**
  * The request Needle routes: the last thing the user said.
  *
- * Needle v2 has no system channel — `run` takes one query and the tools — so
- * the trip context that the prose presets get in their system prompt is not
+ * Needle has no system channel — `run` takes one query and the tools — so the
+ * trip context that the prose presets get in their system prompt is not
  * available here. That is the preset's standing limit: it fills arguments from
  * the words in the request, and an action needing an id the user did not say
  * is one it cannot complete.
@@ -189,41 +186,6 @@ function toQuery(messages: readonly WorkerChatMessage[]): string {
     if (message?.role === 'user') return message.content;
   }
   return '';
-}
-
-/**
- * Ranks the action catalogue against the request and keeps the top slice.
- *
- * Retrieval needs the contrastive head, which the published v2 checkpoint
- * carries and v1 does not. Without it — or when the ranking returns nothing
- * usable — the whole catalogue is offered rather than an arbitrary slice of it.
- */
-function rankActions(
-  instance: NeedleV2Wasm,
-  query: string,
-  topK: number,
-): readonly ActionDef[] {
-  if (instance.contrastive_dim() <= 0) return [];
-
-  try {
-    const ranked = instance.retrieve_tools(
-      query,
-      buildNeedleToolDescriptionsJson(),
-      topK,
-    );
-    return parseRetrievedActions(ranked, ACTION_SCHEMAS, MIN_RETRIEVAL_SCORE);
-  } catch (error) {
-    console.error('Needle tool retrieval failed:', error);
-    return [];
-  }
-}
-
-/**
- * The catalogue offered for one request, narrowed when the ranking is usable.
- */
-function selectTools(instance: NeedleV2Wasm, query: string): string {
-  const picked = rankActions(instance, query, MAX_TOOLS_PER_REQUEST);
-  return picked.length > 0 ? buildNeedleToolsJson(picked) : buildNeedleToolsJson();
 }
 
 /**
@@ -290,12 +252,12 @@ async function handleLoad(
 
     post({ type: 'progress', requestId, event: { status: 'done', file: fileKey } });
 
-    const instance = NeedleV2Wasm.load(weights);
+    const instance = NeedleV3Wasm.load(weights);
     if (instance === undefined) {
       // `load` returns null rather than throwing, so an image the runtime does
       // not understand arrives here as a silent failure unless it is checked.
       throw new Error(
-        'The Needle runtime could not read this model file. It may be a newer format than this engine supports.',
+        'The Needle runtime could not read this model file. It may be a Needle 2 container, or a newer format than this engine supports.',
       );
     }
 
@@ -333,7 +295,12 @@ function handleGenerate(
 
   try {
     const query = toQuery(messages);
-    const toolsJson = selectTools(instance, query);
+
+    // The whole catalogue, every time. Needle 3 exports no contrastive head, so
+    // there is nothing to rank it with here, and its 8192-token context is what
+    // makes that affordable: the constrained decoder walks every tool name it
+    // was given, which costs time rather than correctness.
+    const toolsJson = buildNeedleToolsJson();
 
     // Greedy and schema-constrained: an action that goes to the database should
     // not vary between two identical requests, and the grammar is what keeps
@@ -345,6 +312,7 @@ function handleGenerate(
       0,
       0,
       true,
+      V3_KV_INT8,
     );
 
     // The run is synchronous, so an interrupt can only arrive before it starts
@@ -392,49 +360,6 @@ function handleGenerate(
   }
 }
 
-/**
- * Ranks the catalogue for a caller that generates somewhere else.
- *
- * This is what lets a Gemma preset pay for a short action prompt with one
- * contrastive pass: the ranking is the same one the router uses on itself, and
- * an empty answer means "could not narrow", which the caller reads as "offer
- * everything" rather than "offer nothing".
- */
-function handleRetrieve(
-  requestId: string,
-  modelId: string,
-  query: string,
-  topK: number,
-): void {
-  const instance = engine;
-  if (instance === null || loadedModelId !== modelId) {
-    post({
-      type: 'error',
-      requestId,
-      message: 'Model not loaded. Call loadModel() first.',
-      fatal: true,
-    });
-    return;
-  }
-
-  try {
-    const names = rankActions(instance, query, topK).map((def) => def.action);
-    post({
-      type: 'done',
-      requestId,
-      text: JSON.stringify(names),
-      interrupted: false,
-    });
-  } catch (error) {
-    post({
-      type: 'error',
-      requestId,
-      message: toErrorMessage(error, 'Tool retrieval failed'),
-      fatal: false,
-    });
-  }
-}
-
 function handleUnload(requestId: string): void {
   shouldStop = true;
   try {
@@ -463,14 +388,6 @@ self.addEventListener('message', (event: MessageEvent<LLMWorkerRequest>) => {
       break;
     case 'generate':
       handleGenerate(request.requestId, request.modelId, request.messages);
-      break;
-    case 'retrieve':
-      handleRetrieve(
-        request.requestId,
-        request.modelId,
-        request.query,
-        request.topK,
-      );
       break;
     case 'interrupt':
       shouldStop = true;

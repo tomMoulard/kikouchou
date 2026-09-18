@@ -477,7 +477,7 @@ export type Language = 'en' | 'fr';
  * Hugging Face model IDs live in the assistant feature module.
  */
 export type AssistantModelId =
-  | 'needle-v2'
+  | 'needle-v3'
   | 'gemma-3-1b'
   | 'gemma-4-e2b'
   | 'gemma-4-e4b';
