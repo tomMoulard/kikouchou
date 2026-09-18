@@ -114,7 +114,7 @@ async function addGuest(page: Page, name: string): Promise<void> {
  * that instead — which looks like a share dialog failing to render.
  */
 async function openShareDialog(page: Page): Promise<void> {
-  await page.goto('/');
+  await page.goto('/trips');
   await page.getByRole('button', { name: /share trip/i }).first().click();
   await expect(page.getByRole('dialog', { name: /share/i })).toBeVisible({
     timeout: 10_000,
@@ -227,7 +227,7 @@ test.describe('sharing a trip', () => {
     const stub = new SupabaseStub();
     await stub.install(page);
 
-    await page.goto('/');
+    await page.goto('/trips');
     await createTrip(page, TRIP.name);
     await openShareDialog(page);
 
@@ -244,7 +244,7 @@ test.describe('sharing a trip', () => {
     await stub.install(page);
     await stub.signIn(page, OWNER);
 
-    await page.goto('/');
+    await page.goto('/trips');
     await createTrip(page, TRIP.name);
     await openShareDialog(page);
 
@@ -264,7 +264,7 @@ test.describe('sharing a trip', () => {
     await stub.install(page);
     await stub.signIn(page, OWNER);
 
-    await page.goto('/');
+    await page.goto('/trips');
     await createTrip(page, TRIP.name);
     await openShareDialog(page);
 
@@ -290,14 +290,14 @@ test.describe('sharing a trip', () => {
     await stub.install(page);
     await stub.signIn(page, OWNER);
 
-    await page.goto('/');
+    await page.goto('/trips');
     await createTrip(page, 'Brittany');
     await addGuest(page, 'Alice');
 
     // A second trip, which becomes the open one. Now the trip about to be
     // shared is not the current trip — the ordinary case when someone shares
     // from the list rather than from inside the trip.
-    await page.goto('/');
+    await page.goto('/trips');
     await createTrip(page, 'Corsica');
 
     // Scoped to Brittany's own card, and asserted to be exactly one: `.first()`
@@ -309,7 +309,7 @@ test.describe('sharing a trip', () => {
     // button overlaying the card, sibling to the share button rather than parent
     // of it — the fix for `nested-interactive` — so `getByRole('button')` here
     // resolves to that overlay, which contains nothing to click.
-    await page.goto('/');
+    await page.goto('/trips');
     const brittanyCard = page.getByRole('listitem').filter({ hasText: 'Brittany' });
     await expect(brittanyCard).toHaveCount(1);
     await brittanyCard.getByRole('button', { name: /share trip/i }).click();
@@ -335,7 +335,7 @@ test.describe('sharing a trip', () => {
     await stub.install(page);
     await stub.signIn(page, OWNER);
 
-    await page.goto('/');
+    await page.goto('/trips');
     await createTrip(page, TRIP.name);
 
     await openShareDialog(page);
@@ -355,7 +355,7 @@ test.describe('sharing a trip', () => {
     // No stub installed and no session: `isSupabaseConfigured()` is still true
     // for this project, so the request fails rather than being absent. Either
     // way the dialog must say something instead of loading forever.
-    await page.goto('/');
+    await page.goto('/trips');
     await createTrip(page, TRIP.name);
     await openShareDialog(page);
 
@@ -377,7 +377,7 @@ test.describe('joining a trip', () => {
     const stub = new SupabaseStub();
     const ownerPage = await newDevice(browser, stub, OWNER);
 
-    await ownerPage.goto('/');
+    await ownerPage.goto('/trips');
     await createTrip(ownerPage, TRIP.name);
     await addGuest(ownerPage, 'Alice');
     await addGuest(ownerPage, 'Bob');
@@ -446,7 +446,7 @@ test.describe('joining a trip', () => {
     // No guests at all. The reported case: the owner shares a trip before adding
     // anyone, which is the natural order — you share it *so that* people get
     // added.
-    await ownerPage.goto('/');
+    await ownerPage.goto('/trips');
     await createTrip(ownerPage, TRIP.name);
 
     await openShareDialog(ownerPage);
@@ -474,7 +474,7 @@ test.describe('joining a trip', () => {
     const stub = new SupabaseStub();
     const ownerPage = await newDevice(browser, stub, OWNER);
 
-    await ownerPage.goto('/');
+    await ownerPage.goto('/trips');
     await createTrip(ownerPage, TRIP.name);
     await addGuest(ownerPage, 'Alice');
     await addGuest(ownerPage, 'Bob');
@@ -644,7 +644,7 @@ test.describe('two devices on one trip', () => {
     const stub = new SupabaseStub();
     const ownerPage = await newDevice(browser, stub, OWNER);
 
-    await ownerPage.goto('/');
+    await ownerPage.goto('/trips');
     await createTrip(ownerPage, TRIP.name);
     await addGuest(ownerPage, 'Alice');
 
@@ -696,7 +696,7 @@ test.describe('two devices on one trip', () => {
     const stub = new SupabaseStub();
     const ownerPage = await newDevice(browser, stub, OWNER);
 
-    await ownerPage.goto('/');
+    await ownerPage.goto('/trips');
     await createTrip(ownerPage, TRIP.name);
     await openShareDialog(ownerPage);
     await expect(ownerPage.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
@@ -784,14 +784,14 @@ test.describe('one account, two devices', () => {
 
     // The phone: signed in, makes a trip, never opens the share dialog.
     const phone = await newDevice(browser, stub, OWNER);
-    await phone.goto('/');
+    await phone.goto('/trips');
     await createTrip(phone, TRIP.name);
     await addGuest(phone, 'Alice');
     await waitForNameOnServer(stub, 'Alice');
 
     // The laptop: same account, nothing local, no link to follow.
     const laptop = await newDevice(browser, stub, OWNER);
-    await laptop.goto('/');
+    await laptop.goto('/trips');
 
     await expect(laptop.getByText(TRIP.name).first()).toBeVisible({ timeout: 30_000 });
 
@@ -820,7 +820,7 @@ test.describe('one account, two devices', () => {
     // trip is created with no session at all, which is the local-only mode the
     // whole app is built around.
     const phone = await newDevice(browser, stub);
-    await phone.goto('/');
+    await phone.goto('/trips');
     await createTrip(phone, TRIP.name);
     expect(stub.trips).toHaveLength(0);
 
@@ -834,7 +834,7 @@ test.describe('one account, two devices', () => {
       .toBe(1);
 
     const laptop = await newDevice(browser, stub, OWNER);
-    await laptop.goto('/');
+    await laptop.goto('/trips');
     await expect(laptop.getByText(TRIP.name).first()).toBeVisible({ timeout: 30_000 });
   });
 
@@ -844,7 +844,7 @@ test.describe('one account, two devices', () => {
     const stub = new SupabaseStub();
 
     const phone = await newDevice(browser, stub, OWNER);
-    await phone.goto('/');
+    await phone.goto('/trips');
     await createTrip(phone, TRIP.name);
     await expect
       .poll(() => stub.trips.length, { timeout: 30_000, intervals: [250] })
@@ -889,7 +889,7 @@ test.describe('the trip preview on the server', () => {
     await stub.install(page);
     await stub.signIn(page, OWNER);
 
-    await page.goto('/');
+    await page.goto('/trips');
     await createTrip(page, TRIP.name);
     await openShareDialog(page);
     await expect(page.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
@@ -913,7 +913,7 @@ test.describe('the trip preview on the server', () => {
     await stub.install(page);
     await stub.signIn(page, OWNER);
 
-    await page.goto('/');
+    await page.goto('/trips');
     await createTrip(page, TRIP.name);
     await openShareDialog(page);
     await expect(page.getByTestId('share-url')).toBeVisible({ timeout: 20_000 });
@@ -943,7 +943,7 @@ test.describe('the trip preview on the server', () => {
     const stub = new SupabaseStub();
     const ownerPage = await newDevice(browser, stub, OWNER);
 
-    await ownerPage.goto('/');
+    await ownerPage.goto('/trips');
     await createTrip(ownerPage, TRIP.name);
     await addGuest(ownerPage, 'Alice');
 
@@ -1008,7 +1008,7 @@ test.describe('the trip preview on the server', () => {
     await stub.install(page);
     await stub.signIn(page, OWNER);
 
-    await page.goto('/');
+    await page.goto('/trips');
     await createTrip(page, TRIP.name);
     await addGuest(page, 'Alice');
     await openShareDialog(page);
