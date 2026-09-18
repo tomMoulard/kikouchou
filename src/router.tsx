@@ -7,7 +7,6 @@
 
 import { type ReactElement, Suspense, lazy, useEffect, useState } from 'react';
 import {
-  Navigate,
   Outlet,
   type RouteObject,
   createBrowserRouter,
@@ -27,6 +26,7 @@ import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/c
 
 // Feature route imports
 import { tripRoutes } from '@/features/trips/routes';
+import { TripsEntryRedirect } from '@/features/trips/pages/TripsEntryRedirect';
 import { calendarRoutes } from '@/features/calendar/routes';
 import { roomRoutes } from '@/features/rooms/routes';
 import { personRoutes } from '@/features/persons/routes';
@@ -283,10 +283,11 @@ export const appRoutes: RouteObject = {
   element: <LayoutWrapper />,
   errorElement: <ErrorPage />,
   children: [
-    // Index redirect to trips list
+    // Index redirect: the trip list, or the create form on a first launch with
+    // nothing to open. See `features/trips/pages/TripsEntryRedirect`.
     {
       index: true,
-      element: <Navigate to="/trips" replace />,
+      element: <TripsEntryRedirect />,
     },
 
     // Trip management routes
@@ -368,6 +369,7 @@ const publicRoutes: RouteObject = {
  * - `/t/:remoteTripId` - A trip's stable link: open, download, or ask to sign in
  * - `/share/:shareId` - Public sharing page (no navigation)
  * - `/` - Main app root (with navigation)
+ *   - `/` - The trip list, or the create form on a first launch with no trips
  *   - `/trips` - Trip list
  *   - `/trips/new` - Create trip
  *   - `/trips/:tripId/edit` - The trip's own settings: name, dates, who you are, delete
