@@ -1,0 +1,580 @@
+/**
+ * @fileoverview Location picker component using OpenStreetMap Nominatim API.
+ * Provides autocomplete suggestions for place search with keyboard navigation.
+ * Enhanced with map preview for confirming and fine-tuning selected locations.
+ *
+ * @module components/shared/LocationPicker
+ */
+
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { Loader2, MapPin, TextCursorInput, X } from 'lucide-react';
+
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { LocationMapPicker } from '@/components/shared/LocationMapPicker';
+import { cn } from '@/lib/utils';
+import {
+  GEOCODING_DEBOUNCE_MS,
+  GEOCODING_MIN_QUERY_LENGTH,
+  GeocodingError,
+  type Coordinates,
+  type GeocodingPlace,
+  searchPlaces,
+} from '@/lib/geocoding';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+/**
+ * Props for the LocationPicker component.
+ */
+export interface LocationPickerProps {
+  /** Current location value (display name) */
+  readonly value: string;
+  /** Callback when location is selected or cleared */
+  readonly onChange: (location: string, coordinates?: Coordinates) => void;
+  /** Placeholder text */
+  readonly placeholder?: string;
+  /** Whether the picker is disabled */
+  readonly disabled?: boolean;
+  /** Additional CSS classes */
+  readonly className?: string;
+  /** Input id for form association */
+  readonly id?: string;
+  /** Input name for form association */
+  readonly name?: string;
+  /** ARIA label for accessibility */
+  readonly 'aria-label'?: string;
+  /** Error state for validation */
+  readonly hasError?: boolean;
+}
+
+/**
+ * The place whose pin the map is currently showing.
+ */
+interface PinnedPlace {
+  displayName: string;
+  coordinates: Coordinates;
+}
+
+// ============================================================================
+// Main Component
+// ============================================================================
+
+/**
+ * Location picker with OpenStreetMap Nominatim autocomplete.
+ *
+ * @example
+ * ```tsx
+ * const [location, setLocation] = useState('');
+ * const [coords, setCoords] = useState<Coordinates>();
+ *
+ * <LocationPicker
+ *   value={location}
+ *   onChange={(loc, coordinates) => {
+ *     setLocation(loc);
+ *     setCoords(coordinates);
+ *   }}
+ *   placeholder="Search for a location..."
+ * />
+ * ```
+ */
+export const LocationPicker = memo(function LocationPicker({
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+  className,
+  id,
+  name,
+  'aria-label': ariaLabel,
+  hasError = false,
+}: LocationPickerProps) {
+  const { t } = useTranslation();
+
+  // ============================================================================
+  // State
+  // ============================================================================
+
+  const [inputValue, setInputValue] = useState(value);
+  const [results, setResults] = useState<readonly GeocodingPlace[]>([]);
+  const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Pending selection - shown in map preview before confirmation
+  // The place currently pinned on the map, if any. Not a proposal: it has
+  // already been reported through `onChange`. This component is not told the
+  // parent's coordinates, so it has to remember which place its map is showing.
+  const [pinnedPlace, setPinnedPlace] = useState<PinnedPlace | null>(null);
+
+  // ============================================================================
+  // Refs
+  // ============================================================================
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // ============================================================================
+  // Sync input with external value
+  // ============================================================================
+
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
+
+  // ============================================================================
+  // Search Function
+  // ============================================================================
+
+  const search = useCallback(async (query: string) => {
+    if (query.length < GEOCODING_MIN_QUERY_LENGTH) {
+      setResults([]);
+      // Still opened for anything the user has actually typed, because the
+      // "use what I typed" row lives in this list and a two-letter place name
+      // is exactly the kind the geocoder was never going to know.
+      setIsOpen(query.trim().length > 0);
+      setHighlightedIndex(-1);
+      return;
+    }
+
+    // Cancel any pending request
+    abortControllerRef.current?.abort();
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const places = await searchPlaces(query, { signal: controller.signal });
+      setResults(places);
+      // Keep dropdown open to show results or "no results" message
+      setIsOpen(true);
+      setHighlightedIndex(-1);
+    } catch (err) {
+      if (err instanceof GeocodingError && err.kind === 'aborted') {
+        // Superseded by a newer query, or the component went away.
+        return;
+      }
+      const message =
+        err instanceof GeocodingError && err.kind === 'timeout'
+          ? t('locationPicker.timeoutError', 'Search timed out. Please try again.')
+          : t('locationPicker.searchError', 'Search failed. Please try again.');
+      if (!(err instanceof GeocodingError)) {
+        console.error('Location search error:', err);
+      }
+      setError(message);
+      setResults([]);
+      setIsOpen(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [t]);
+
+  // ============================================================================
+  // Debounced Search
+  // ============================================================================
+
+  const debouncedSearch = useCallback(
+    (query: string) => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+
+      debounceRef.current = setTimeout(() => {
+        void search(query);
+      }, GEOCODING_DEBOUNCE_MS);
+    },
+    [search]
+  );
+
+  // ============================================================================
+  // Cleanup
+  // ============================================================================
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  // ============================================================================
+  // Event Handlers
+  // ============================================================================
+
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value;
+      setInputValue(newValue);
+      debouncedSearch(newValue);
+    },
+    [debouncedSearch]
+  );
+
+  /**
+   * What "use what I typed" would commit, or empty when there is nothing.
+   *
+   * Trimmed, because the value is stored and rendered as a place name and a
+   * trailing space is not part of one.
+   */
+  const typedValue = inputValue.trim();
+
+  /**
+   * How many rows the dropdown is offering, the typed one included.
+   *
+   * The keyboard walks this, not `results`: the typed row sits at index
+   * `results.length`, so arrowing past the last place reaches it.
+   */
+  const optionCount = results.length + (typedValue.length > 0 ? 1 : 0);
+
+  const handleSelect = useCallback(
+    (place: GeocodingPlace) => {
+      // Saved here, not after a confirm step: picking the place is the answer.
+      // The map that follows is for nudging the pin, and each nudge saves too.
+      setPinnedPlace({
+        displayName: place.label,
+        coordinates: place.coordinates,
+      });
+      setInputValue(place.label);
+      setIsOpen(false);
+      setResults([]);
+      setHighlightedIndex(-1);
+      onChange(place.label, place.coordinates);
+    },
+    [onChange]
+  );
+
+  /**
+   * Saves the new pin position when the user drags the marker or clicks the map.
+   */
+  const handleCoordinatesChange = useCallback(
+    (coordinates: Coordinates) => {
+      if (!pinnedPlace) {
+        return;
+      }
+      setPinnedPlace({ ...pinnedPlace, coordinates });
+      onChange(pinnedPlace.displayName, coordinates);
+    },
+    [onChange, pinnedPlace]
+  );
+
+  const handleClear = useCallback(() => {
+    setInputValue('');
+    setResults([]);
+    setIsOpen(false);
+    setHighlightedIndex(-1);
+    setPinnedPlace(null);
+    onChange('', undefined);
+    inputRef.current?.focus();
+  }, [onChange]);
+
+  /**
+   * Commits the typed text as the location, with no coordinates.
+   *
+   * The map confirmation step is skipped deliberately: it exists to let the
+   * user nudge a pin the geocoder placed, and there is no pin. A location
+   * without coordinates is a first-class state everywhere downstream — it is
+   * what every transport had before geocoding existed — so this loses nothing
+   * except the map.
+   */
+  const handleUseTyped = useCallback(() => {
+    if (typedValue.length === 0) {
+      return;
+    }
+    setInputValue(typedValue);
+    setResults([]);
+    setIsOpen(false);
+    setHighlightedIndex(-1);
+    onChange(typedValue, undefined);
+  }, [onChange, typedValue]);
+
+  const handleInputFocus = useCallback(() => {
+    if (optionCount > 0) {
+      setIsOpen(true);
+    }
+  }, [optionCount]);
+
+  const handleInputBlur = useCallback(() => {
+    // Delay closing to allow click on results
+    setTimeout(() => {
+      setIsOpen(false);
+      setHighlightedIndex(-1);
+    }, 200);
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (!isOpen || optionCount === 0) {
+        return;
+      }
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          setHighlightedIndex((prev) => (prev < optionCount - 1 ? prev + 1 : 0));
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : optionCount - 1));
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (highlightedIndex < 0) {
+            break;
+          }
+          if (highlightedIndex < results.length) {
+            const result = results[highlightedIndex];
+            if (result) {
+              handleSelect(result);
+            }
+            break;
+          }
+          // Past the last place is the typed row.
+          handleUseTyped();
+          break;
+        case 'Escape':
+          e.preventDefault();
+          setIsOpen(false);
+          setHighlightedIndex(-1);
+          break;
+      }
+    },
+    [isOpen, results, optionCount, highlightedIndex, handleSelect, handleUseTyped]
+  );
+
+  // ============================================================================
+  // Scroll highlighted item into view
+  // ============================================================================
+
+  useEffect(() => {
+    if (highlightedIndex >= 0 && listRef.current) {
+      const item = listRef.current.children[highlightedIndex] as HTMLElement | undefined;
+      item?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightedIndex]);
+
+  // ============================================================================
+  // Computed Values
+  // ============================================================================
+
+  const showClear = inputValue.length > 0 && !disabled;
+  const inputId = id ?? 'location-picker';
+  const listboxId = `${inputId}-listbox`;
+
+  const defaultPlaceholder = useMemo(
+    () => t('locationPicker.placeholder', 'Search for a location...'),
+    [t]
+  );
+
+  const defaultAriaLabel = useMemo(
+    () => t('locationPicker.ariaLabel', 'Location search'),
+    [t]
+  );
+
+  // ============================================================================
+  // Render
+  // ============================================================================
+
+  return (
+    <div className={cn('relative', className)}>
+      {/* Input with icon and clear button */}
+      <div className="relative">
+        <MapPin
+          className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none"
+          aria-hidden="true"
+        />
+        <Input
+          ref={inputRef}
+          id={inputId}
+          name={name}
+          type="text"
+          role="combobox"
+          aria-label={ariaLabel ?? defaultAriaLabel}
+          aria-expanded={isOpen}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={
+            highlightedIndex >= 0 ? `${inputId}-option-${highlightedIndex}` : undefined
+          }
+          aria-invalid={hasError}
+          autoComplete="off"
+          value={inputValue}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder ?? defaultPlaceholder}
+          disabled={disabled}
+          className={cn(
+            'pl-9',
+            showClear && 'pr-16',
+            isLoading && 'pr-20'
+          )}
+        />
+        {/* Loading indicator */}
+        {isLoading && (
+          <Loader2
+            className="absolute right-10 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin"
+            aria-hidden="true"
+          />
+        )}
+        {/* Clear button */}
+        {showClear && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 p-0 md:h-7 md:w-7"
+            onClick={handleClear}
+            aria-label={t('locationPicker.clear', 'Clear location')}
+          >
+            <X className="size-4" />
+          </Button>
+        )}
+      </div>
+
+      {/* Error message */}
+      {error && (
+        <p className="mt-1 text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      )}
+
+      {/* Results dropdown */}
+      {isOpen && optionCount > 0 && (
+        <ul
+          ref={listRef}
+          id={listboxId}
+          role="listbox"
+          aria-label={t('locationPicker.resultsLabel', 'Search results')}
+          className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border bg-popover shadow-md"
+        >
+          {results.map((place, index) => (
+            <li
+              key={place.id}
+              id={`${inputId}-option-${index}`}
+              data-testid="location-search-result"
+              role="option"
+              aria-selected={highlightedIndex === index}
+              className={cn(
+                'cursor-pointer px-3 py-2 text-sm',
+                highlightedIndex === index
+                  ? 'bg-accent text-accent-foreground'
+                  : 'hover:bg-accent/50'
+              )}
+              onMouseDown={() => handleSelect(place)}
+              onMouseEnter={() => setHighlightedIndex(index)}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate font-medium">{place.label}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {place.typeLabel}
+                </span>
+              </div>
+              {place.detail && (
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {place.detail}
+                </p>
+              )}
+            </li>
+          ))}
+
+          {/*
+            Take the text as written.
+
+            Not every meeting point is in OpenStreetMap — "chez Mamie", a car
+            park entrance, a friend's flat — and until this row existed those
+            were simply not enterable: `onChange` only ever fired when a search
+            result was confirmed, so typing a place and saving submitted an
+            empty location and the form said "Required". It also happens to be
+            the only way to enter anything at all while offline.
+
+            Last rather than first: when the geocoder does know the place, its
+            answer carries coordinates and belongs at the top. `onMouseDown`,
+            not `onClick`, to match the rows above — the input's blur handler
+            closes this list, and a click fires after that.
+
+            Both kinds of row carry a test id, because they are told apart by
+            *when* they appear rather than by what they say: this one is there
+            the moment there is text, a geocoded one only once the search comes
+            back. A browser test picking "the first option" silently gets
+            whichever won that race.
+          */}
+          {typedValue.length > 0 && (
+            <li
+              id={`${inputId}-option-${results.length}`}
+              data-testid="location-use-typed"
+              role="option"
+              aria-selected={highlightedIndex === results.length}
+              className={cn(
+                'cursor-pointer border-t px-3 py-2 text-sm',
+                highlightedIndex === results.length
+                  ? 'bg-accent text-accent-foreground'
+                  : 'hover:bg-accent/50',
+              )}
+              onMouseDown={handleUseTyped}
+              onMouseEnter={() => setHighlightedIndex(results.length)}
+            >
+              <div className="flex items-center gap-2">
+                <TextCursorInput className="size-4 shrink-0" aria-hidden="true" />
+                <span className="truncate font-medium">
+                  {t('locationPicker.useTyped', { value: typedValue })}
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t('locationPicker.useTypedHint')}
+              </p>
+            </li>
+          )}
+        </ul>
+      )}
+
+      {/* No results message */}
+      {isOpen &&
+        results.length === 0 &&
+        !isLoading &&
+        typedValue.length === 0 &&
+        inputValue.length >= GEOCODING_MIN_QUERY_LENGTH && (
+        <div
+          className="absolute z-50 mt-1 w-full rounded-md border bg-popover p-3 text-sm text-muted-foreground shadow-md"
+          role="status"
+        >
+          {t('locationPicker.noResults', 'No locations found')}
+        </div>
+      )}
+
+      {/* The pin as it stands. Dragging it saves; there is nothing to confirm. */}
+      {pinnedPlace && (
+        <LocationMapPicker
+          coordinates={pinnedPlace.coordinates}
+          onCoordinatesChange={handleCoordinatesChange}
+        />
+      )}
+    </div>
+  );
+});
+
+// ============================================================================
+// Exports
+// ============================================================================
+
+// Re-exported so existing `import { type Coordinates } from '.../LocationPicker'`
+// call sites keep working now that the type lives in lib/geocoding.
+export type { Coordinates };
