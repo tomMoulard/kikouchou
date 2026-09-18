@@ -1370,6 +1370,11 @@
     "invalidActivity": "Ces informations d'activité sont invalides, rien n'a été enregistré.",
     "tripSwitched": "Passage à {{name}}",
     "models": {
+      "needle-v2": {
+        "name": "Minuscule",
+        "description": "Fait les modifications seulement \u2014 il ne sait pas r\u00e9pondre avec des mots.",
+        "hint": "Fonctionne sur tout appareil, sans WebGPU, et t\u00e9l\u00e9charge environ 60 fois moins que L\u00e9ger."
+      },
       "gemma-3-1b": {
         "name": "Léger",
         "description": "L'option la plus petite de la sélection, pensée pour les appareils plus modestes.",
