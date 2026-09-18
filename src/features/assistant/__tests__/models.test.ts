@@ -17,6 +17,7 @@ import {
 describe('assistant model presets', () => {
   it('exposes the supported presets in increasing size order', () => {
     expect(ASSISTANT_MODEL_PRESETS.map((preset) => preset.id)).toEqual([
+      'needle-v2',
       'gemma-3-1b',
       'gemma-4-e2b',
       'gemma-4-e4b',
@@ -42,7 +43,7 @@ describe('assistant model presets', () => {
     // A preset with no size would render "0.0 GB" next to its name, which is
     // worse than the silence this replaced.
     for (const size of sizes) {
-      expect(size).toBeGreaterThan(100_000_000);
+      expect(size).toBeGreaterThan(1_000_000);
     }
     expect([...sizes].sort((a, b) => a - b)).toEqual(sizes);
   });

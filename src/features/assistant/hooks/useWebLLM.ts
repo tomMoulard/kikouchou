@@ -16,11 +16,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import i18n from '@/lib/i18n';
 import posthog, { captureEvent } from '@/lib/posthog';
 import { formatBytes } from '@/lib/utils/format-bytes';
-import type { AssistantModelPreset } from '../models';
+import type { AssistantEngine, AssistantModelPreset } from '../models';
 import type {
   HubProgressEvent,
   LLMWorkerRequest,
   LLMWorkerResponse,
+  WorkerModelConfig,
 } from '../workers/llm-worker-protocol';
 
 // ============================================================================
@@ -175,11 +176,6 @@ export interface UseWebLLMReturn {
   unload: () => Promise<void>;
 }
 
-/**
- * Cache name used by @huggingface/transformers to store downloaded model files.
- */
-const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
-
 interface FileEntry {
   fileName: string;
   progress: number;
@@ -308,15 +304,21 @@ function getInitialLoaderText(loadingFromCache: boolean): string {
 // ============================================================================
 
 /**
- * Checks whether the model files are already cached in the browser's Cache API.
- * Looks for entries under the transformers-cache that match our MODEL_ID.
+ * Checks whether the model files are already in the browser's Cache Storage.
+ *
+ * The bucket differs per engine — Transformers.js owns one and the Needle
+ * worker writes its own — so the preset names it rather than this function
+ * assuming it.
  *
  * @returns `true` if cached files are found, `false` otherwise
  */
-async function isModelCached(modelId: string): Promise<boolean> {
+async function isModelCached(
+  modelId: string,
+  cacheName: string,
+): Promise<boolean> {
   try {
     if (typeof caches === 'undefined') return false;
-    const cache = await caches.open(TRANSFORMERS_CACHE_NAME);
+    const cache = await caches.open(cacheName);
     const keys = await cache.keys();
     // Check if at least one cached entry belongs to our model
     return keys.some(
@@ -337,6 +339,16 @@ async function isModelCached(modelId: string): Promise<boolean> {
  * strict-mode double-mounts and model switches.
  */
 let workerInstance: Worker | null = null;
+
+/**
+ * Which runtime {@link workerInstance} was built for.
+ *
+ * The two engines are separate worker modules on purpose: the Needle preset is
+ * 13.7 MB of weights behind a 423 KB runtime, and loading it should not also
+ * pull in the ONNX runtime it never calls. Switching preset across engines
+ * therefore replaces the worker rather than reconfiguring it.
+ */
+let workerEngine: AssistantEngine | null = null;
 
 /**
  * Hugging Face model ID the worker currently holds a pipeline for.
@@ -415,6 +427,7 @@ function handleWorkerMessage(event: MessageEvent<LLMWorkerResponse>): void {
 function terminateWorker(reason: Error): void {
   const worker = workerInstance;
   workerInstance = null;
+  workerEngine = null;
   loadedModelId = null;
   settleAllPending(reason);
   worker?.terminate();
@@ -427,21 +440,61 @@ function handleWorkerError(event: ErrorEvent): void {
   );
 }
 
-function getWorker(): Worker {
-  if (workerInstance !== null) return workerInstance;
+function getWorker(engine: AssistantEngine): Worker {
+  if (workerInstance !== null && workerEngine === engine) return workerInstance;
 
   if (typeof Worker === 'undefined') {
     throw new Error('Web Workers are not supported in this browser.');
   }
 
-  const worker = new Worker(
-    new URL('../workers/llm.worker.ts', import.meta.url),
-    { type: 'module' },
-  );
+  if (workerInstance !== null) {
+    // A different engine: the old worker still holds its model in memory and
+    // will never be asked for it again.
+    terminateWorker(new Error('Switched to a model with a different runtime.'));
+  }
+
+  const worker =
+    engine === 'needle'
+      ? new Worker(new URL('../workers/needle.worker.ts', import.meta.url), {
+          type: 'module',
+        })
+      : new Worker(new URL('../workers/llm.worker.ts', import.meta.url), {
+          type: 'module',
+        });
   worker.addEventListener('message', handleWorkerMessage);
   worker.addEventListener('error', handleWorkerError);
   workerInstance = worker;
+  workerEngine = engine;
   return worker;
+}
+
+/**
+ * Narrows a preset into the configuration its worker expects.
+ *
+ * The preset type keeps the engine-specific fields optional so the UI can read
+ * one shape; the protocol does not, so this is where the two meet and where a
+ * preset missing the field its engine needs fails loudly rather than loading a
+ * model with an undefined weights URL.
+ */
+function toWorkerModelConfig(preset: AssistantModelPreset): WorkerModelConfig {
+  if (preset.engine === 'needle') {
+    if (!preset.weightsUrl) {
+      throw new Error(`Preset ${preset.id} has no weights URL to load.`);
+    }
+    return {
+      engine: 'needle',
+      modelId: preset.modelId,
+      weightsUrl: preset.weightsUrl,
+      cacheName: preset.cacheName,
+    };
+  }
+
+  return {
+    engine: 'transformers',
+    modelId: preset.modelId,
+    dtype: preset.dtype ?? 'q4f16',
+    ...(preset.device ? { device: preset.device } : {}),
+  };
 }
 
 /**
@@ -453,13 +506,14 @@ type TrackedWorkerRequest = Extract<LLMWorkerRequest, { requestId: string }>;
  * Posts a request and resolves when the worker settles that same request id.
  */
 function sendRequest(
+  engine: AssistantEngine,
   request: TrackedWorkerRequest,
   handlers: Pick<PendingRequest, 'onProgress' | 'onChunk'> = {},
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     let worker: Worker;
     try {
-      worker = getWorker();
+      worker = getWorker(engine);
     } catch (error) {
       reject(
         error instanceof Error ? error : new Error('Failed to start worker'),
@@ -511,22 +565,25 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   /** Per-file download state for Transformers.js Hub progress (key = full `file` URL/path). */
   const downloadFilesRef = useRef<Map<string, FileEntry>>(new Map());
 
-  const refreshCacheStatus = useCallback((modelId: string): void => {
-    activeModelIdRef.current = modelId;
-    const probeVersion = cacheProbeVersionRef.current + 1;
-    cacheProbeVersionRef.current = probeVersion;
+  const refreshCacheStatus = useCallback(
+    (modelId: string, cacheName: string): void => {
+      activeModelIdRef.current = modelId;
+      const probeVersion = cacheProbeVersionRef.current + 1;
+      cacheProbeVersionRef.current = probeVersion;
 
-    void isModelCached(modelId).then((cached) => {
-      if (cacheProbeVersionRef.current !== probeVersion) {
-        return;
-      }
-      if (activeModelIdRef.current !== modelId) {
-        return;
-      }
+      void isModelCached(modelId, cacheName).then((cached) => {
+        if (cacheProbeVersionRef.current !== probeVersion) {
+          return;
+        }
+        if (activeModelIdRef.current !== modelId) {
+          return;
+        }
 
-      setIsCached(cached);
-    });
-  }, []);
+        setIsCached(cached);
+      });
+    },
+    [],
+  );
 
   // Track the selected preset and cache availability.
   useEffect(() => {
@@ -545,8 +602,8 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     setError(null);
     setIsCached(null);
 
-    refreshCacheStatus(preset.modelId);
-  }, [preset.modelId, refreshCacheStatus]);
+    refreshCacheStatus(preset.modelId, preset.cacheName);
+  }, [preset.cacheName, preset.modelId, refreshCacheStatus]);
 
   useEffect(
     () => () => {
@@ -580,14 +637,11 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
 
     try {
       await sendRequest(
+        preset.engine,
         {
           type: 'load',
           requestId: nextRequestId(),
-          config: {
-            modelId: preset.modelId,
-            dtype: preset.dtype,
-            ...(preset.device ? { device: preset.device } : {}),
-          },
+          config: toWorkerModelConfig(preset),
         },
         {
           onProgress: (event) => {
@@ -633,7 +687,8 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       captureEvent('assistant_model_load_failed', {
         reason: classifyModelLoadFailure(message),
         model_id: preset.modelId,
-        dtype: preset.dtype,
+        engine: preset.engine,
+        dtype: preset.dtype ?? 'none',
         device: preset.device ?? 'default',
         // Separates a download that broke from a session that would not build
         // on weights already sitting in the browser cache.
@@ -653,7 +708,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     } finally {
       loadingRef.current = false;
     }
-  }, [isCached, preset.device, preset.dtype, preset.modelId]);
+  }, [isCached, preset]);
 
   // ------------------------------------------------------------------
   // cancelLoad
@@ -686,6 +741,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
 
       try {
         const response = await sendRequest(
+          preset.engine,
           {
             type: 'generate',
             requestId: nextRequestId(),
@@ -707,7 +763,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
         throw err;
       }
     },
-    [preset.modelId],
+    [preset.engine, preset.modelId],
   );
 
   // ------------------------------------------------------------------
@@ -724,7 +780,10 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   const unload = useCallback(async (): Promise<void> => {
     if (workerInstance !== null) {
       try {
-        await sendRequest({ type: 'unload', requestId: nextRequestId() });
+        await sendRequest(preset.engine, {
+          type: 'unload',
+          requestId: nextRequestId(),
+        });
       } catch (unloadError) {
         console.error('Failed to unload assistant model:', unloadError);
       }
@@ -736,8 +795,8 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     setLoadProgress(null);
     setError(null);
     setIsCached(null);
-    refreshCacheStatus(preset.modelId);
-  }, [preset.modelId, refreshCacheStatus]);
+    refreshCacheStatus(preset.modelId, preset.cacheName);
+  }, [preset.cacheName, preset.engine, preset.modelId, refreshCacheStatus]);
 
   return {
     status,

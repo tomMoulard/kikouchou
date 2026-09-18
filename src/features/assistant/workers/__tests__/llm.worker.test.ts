@@ -116,7 +116,12 @@ interface PipelineRunOptions {
 const LOAD = {
   type: 'load',
   requestId: 'r-load',
-  config: { modelId: 'model-a', dtype: 'q4', device: 'webgpu' },
+  config: {
+    engine: 'transformers' as const,
+    modelId: 'model-a',
+    dtype: 'q4' as const,
+    device: 'webgpu' as const,
+  },
 };
 
 function lastOfType(type: string): Record<string, unknown> | undefined {
@@ -194,7 +199,11 @@ describe('llm worker — loading a model', () => {
     await send(handler, {
       type: 'load',
       requestId: 'r-load-b',
-      config: { modelId: 'model-b', dtype: 'q4' },
+      config: {
+        engine: 'transformers' as const,
+        modelId: 'model-b',
+        dtype: 'q4' as const,
+      },
     });
 
     expect(first.dispose).toHaveBeenCalled();

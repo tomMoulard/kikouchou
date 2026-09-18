@@ -1,7 +1,12 @@
 /**
- * @fileoverview Message protocol shared by the assistant LLM worker and its
- * main-thread client. Type-only on purpose: importing this file must never pull
- * the Transformers.js runtime into the main bundle.
+ * @fileoverview Message protocol shared by the assistant inference workers and
+ * their main-thread client. Type-only on purpose: importing this file must
+ * never pull the Transformers.js or the Needle runtime into the main bundle.
+ *
+ * Both workers speak this protocol, so `useWebLLM` swaps one for the other on a
+ * preset change without a second client. What differs is inside `generate`:
+ * a Transformers.js worker streams prose, and the Needle worker returns
+ * reasoning plus action blocks it assembled itself.
  *
  * @module features/assistant/workers/llm-worker-protocol
  */
@@ -31,13 +36,27 @@ export interface HubProgressEvent {
 }
 
 /**
- * Runtime options needed to instantiate a text-generation pipeline.
+ * Runtime options needed to build an inference session.
+ *
+ * A discriminated union rather than optional fields: the two workers need
+ * disjoint configuration, and each one should fail to compile if it reaches for
+ * the other's.
  */
-export interface WorkerModelConfig {
-  readonly modelId: string;
-  readonly dtype: 'fp32' | 'q4' | 'q4f16';
-  readonly device?: 'webgpu';
-}
+export type WorkerModelConfig =
+  | {
+      readonly engine: 'transformers';
+      readonly modelId: string;
+      readonly dtype: 'fp32' | 'q4' | 'q4f16';
+      readonly device?: 'webgpu';
+    }
+  | {
+      readonly engine: 'needle';
+      readonly modelId: string;
+      /** Direct URL of the `.cact` image the worker fetches and caches. */
+      readonly weightsUrl: string;
+      /** Cache Storage bucket the image is read from and written to. */
+      readonly cacheName: string;
+    };
 
 /**
  * Messages sent from the main thread to the worker.
