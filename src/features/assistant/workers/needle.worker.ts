@@ -23,7 +23,7 @@ import {
   parseNeedleToolCalls,
   parseRetrievedActions,
 } from '../needle-tools';
-import { ACTION_SCHEMAS } from '../action-schema';
+import { ACTION_SCHEMAS, type ActionDef } from '../action-schema';
 import type {
   LLMWorkerRequest,
   LLMWorkerResponse,
@@ -198,25 +198,32 @@ function toQuery(messages: readonly WorkerChatMessage[]): string {
  * carries and v1 does not. Without it — or when the ranking returns nothing
  * usable — the whole catalogue is offered rather than an arbitrary slice of it.
  */
-function selectTools(instance: NeedleV2Wasm, query: string): string {
-  if (instance.contrastive_dim() <= 0) return buildNeedleToolsJson();
+function rankActions(
+  instance: NeedleV2Wasm,
+  query: string,
+  topK: number,
+): readonly ActionDef[] {
+  if (instance.contrastive_dim() <= 0) return [];
 
   try {
     const ranked = instance.retrieve_tools(
       query,
       buildNeedleToolDescriptionsJson(),
-      MAX_TOOLS_PER_REQUEST,
+      topK,
     );
-    const picked = parseRetrievedActions(
-      ranked,
-      ACTION_SCHEMAS,
-      MIN_RETRIEVAL_SCORE,
-    );
-    return picked.length > 0 ? buildNeedleToolsJson(picked) : buildNeedleToolsJson();
+    return parseRetrievedActions(ranked, ACTION_SCHEMAS, MIN_RETRIEVAL_SCORE);
   } catch (error) {
     console.error('Needle tool retrieval failed:', error);
-    return buildNeedleToolsJson();
+    return [];
   }
+}
+
+/**
+ * The catalogue offered for one request, narrowed when the ranking is usable.
+ */
+function selectTools(instance: NeedleV2Wasm, query: string): string {
+  const picked = rankActions(instance, query, MAX_TOOLS_PER_REQUEST);
+  return picked.length > 0 ? buildNeedleToolsJson(picked) : buildNeedleToolsJson();
 }
 
 /**
@@ -385,6 +392,49 @@ function handleGenerate(
   }
 }
 
+/**
+ * Ranks the catalogue for a caller that generates somewhere else.
+ *
+ * This is what lets a Gemma preset pay for a short action prompt with one
+ * contrastive pass: the ranking is the same one the router uses on itself, and
+ * an empty answer means "could not narrow", which the caller reads as "offer
+ * everything" rather than "offer nothing".
+ */
+function handleRetrieve(
+  requestId: string,
+  modelId: string,
+  query: string,
+  topK: number,
+): void {
+  const instance = engine;
+  if (instance === null || loadedModelId !== modelId) {
+    post({
+      type: 'error',
+      requestId,
+      message: 'Model not loaded. Call loadModel() first.',
+      fatal: true,
+    });
+    return;
+  }
+
+  try {
+    const names = rankActions(instance, query, topK).map((def) => def.action);
+    post({
+      type: 'done',
+      requestId,
+      text: JSON.stringify(names),
+      interrupted: false,
+    });
+  } catch (error) {
+    post({
+      type: 'error',
+      requestId,
+      message: toErrorMessage(error, 'Tool retrieval failed'),
+      fatal: false,
+    });
+  }
+}
+
 function handleUnload(requestId: string): void {
   shouldStop = true;
   try {
@@ -413,6 +463,14 @@ self.addEventListener('message', (event: MessageEvent<LLMWorkerRequest>) => {
       break;
     case 'generate':
       handleGenerate(request.requestId, request.modelId, request.messages);
+      break;
+    case 'retrieve':
+      handleRetrieve(
+        request.requestId,
+        request.modelId,
+        request.query,
+        request.topK,
+      );
       break;
     case 'interrupt':
       shouldStop = true;

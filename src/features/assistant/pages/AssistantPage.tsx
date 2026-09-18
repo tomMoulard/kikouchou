@@ -71,6 +71,8 @@ import {
 import { useTripActions } from '../hooks/useTripActions';
 import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
 import { splitReasoning } from '../reasoning';
+import { narrowActionsForRequest, releaseActionRetrieval } from '../action-retrieval';
+import { ACTION_SCHEMAS } from '../action-schema';
 import { useWebGPUSupport } from '../hooks/useWebGPUSupport';
 import type { WebGPUSupport } from '../webgpu';
 import {
@@ -755,7 +757,7 @@ function AssistantPageComponent(): ReactElement {
     interrupt,
     unload,
   } = useWebLLM(selectedModel);
-  const { systemPrompt } = useTripSystemPrompt();
+  const { systemPrompt, buildSystemPrompt } = useTripSystemPrompt();
   const { executeActions } = useTripActions();
 
   // Asked before the assistant offers a multi-gigabyte download, not after it
@@ -799,6 +801,8 @@ function AssistantPageComponent(): ReactElement {
   // was queued.
   const systemPromptRef = useRef(systemPrompt);
   systemPromptRef.current = systemPrompt;
+  const buildSystemPromptRef = useRef(buildSystemPrompt);
+  buildSystemPromptRef.current = buildSystemPrompt;
   const generateRef = useRef(generate);
   generateRef.current = generate;
   const executeActionsRef = useRef(executeActions);
@@ -835,6 +839,15 @@ function AssistantPageComponent(): ReactElement {
       cancelled = true;
     };
   }, []);
+
+  // The retrieval engine is a convenience for the next turn, not something
+  // worth holding 23 MB of WASM memory for in a tab that has left the page.
+  useEffect(
+    () => () => {
+      void releaseActionRetrieval();
+    },
+    [],
+  );
 
   // Restore LLM turn history from persisted UI messages (see runTurn for live updates).
   useLayoutEffect(() => {
@@ -958,6 +971,21 @@ function AssistantPageComponent(): ReactElement {
         { id: assistantId, role: 'assistant', content: '' },
       ]);
 
+      // Most of the system prompt is the action catalogue, and most of that
+      // catalogue has nothing to do with what was just asked. Needle ranks it
+      // against the request in one pass, which buys back prefill memory on
+      // every turn; anything that goes wrong there returns the full catalogue,
+      // so a narrowing that cannot run costs a longer prompt and never a
+      // missing action.
+      //
+      // The router preset does this inside its own worker against the tools it
+      // is handed, so asking again here would only load a second copy of the
+      // same weights.
+      const actions =
+        selectedModelRef.current.engine === 'transformers'
+          ? await narrowActionsForRequest(text)
+          : ACTION_SCHEMAS;
+
       // Built before the try/catch so a rejected generate() can still report
       // it in the $ai_generation failure capture below.
       //
@@ -966,7 +994,7 @@ function AssistantPageComponent(): ReactElement {
       // uncapped history eventually fails to allocate rather than just slowing
       // down — hence the trim to the most recent exchanges.
       const fullMessages: LLMChatMessage[] = [
-        { role: 'system', content: systemPromptRef.current },
+        { role: 'system', content: buildSystemPromptRef.current(actions) },
         ...trimChatHistoryForPrompt(chatHistoryRef.current),
       ];
 

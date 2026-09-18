@@ -76,6 +76,21 @@ export type LLMWorkerRequest =
       readonly modelId: string;
       readonly messages: readonly WorkerChatMessage[];
     }
+  /**
+   * Ranks the action catalogue against one request, without generating.
+   *
+   * Only the Needle worker answers this: the ranking is a single pass through
+   * its contrastive head, which is cheap enough to run before every turn. The
+   * reply is a `done` whose `text` is a JSON array of action names, most
+   * relevant first.
+   */
+  | {
+      readonly type: 'retrieve';
+      readonly requestId: string;
+      readonly modelId: string;
+      readonly query: string;
+      readonly topK: number;
+    }
   /** Fire-and-forget: aborts the generation currently in flight, if any. */
   | { readonly type: 'interrupt' }
   | { readonly type: 'unload'; readonly requestId: string };

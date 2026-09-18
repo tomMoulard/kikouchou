@@ -192,6 +192,39 @@ fields only — the `optional:` line documents the rest.
 Done check: *could the assistant both answer a question about this feature and
 change it, from the prompt alone?* If not, the feature is not finished.
 
+### Two engines, and only one of them talks
+
+The presets in `models.ts` run on two different runtimes, and the `engine` field
+says which:
+
+- `transformers` — the Gemma presets. A chat model: it answers in words and puts
+  its changes in a ```action block inside that answer.
+- `needle` — the `needle-v2` preset. A tool-calling router in 13.7 MB. One
+  request plus a tool catalogue in, one JSON call out, and **no prose at all**.
+  It has no system channel either, so the trip context the Gemma presets read is
+  not available to it: it fills arguments from the words in the request, and an
+  action needing an id the user did not say is one it cannot complete.
+
+Each engine has its own worker and its own Cache Storage bucket. Anything that
+reads a preset and expects an answer in words has to branch on `engine`.
+
+Two things follow for the steps above. A new action reaches Needle through
+`needle-tools.ts`, which derives the tool catalogue from `ACTION_SCHEMAS` — so
+you get it for free, as long as the action's `label` reads like something a user
+would say, because that label is also what the retrieval head ranks. And its
+output comes back as the same ```action block, so `validateAction()` stays the
+only gate on what reaches the database.
+
+### The action prompt is ranked before it is sent
+
+`generateActionPrompt(defs)` documents whatever list it is given.
+`action-retrieval.ts` runs Needle's retrieval head against the request before
+every Gemma turn and hands it the dozen actions the request is about, which is
+the cheapest way to hold the prompt budget below. Every failure there returns
+the full catalogue: a narrowing that cannot run costs a longer prompt, never a
+missing action. Do not build a caller that treats an empty ranking as "offer
+nothing".
+
 ---
 
 ## Invariants — Learned The Hard Way

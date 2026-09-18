@@ -1028,9 +1028,15 @@ function isIdOnlyAction(def: ActionDef): boolean {
  * Generate the "Modification Actions" section of the system prompt
  * directly from the schema definitions.
  *
+ * @param defs - Actions to document; defaults to every action. A caller that
+ *   already knows which actions a request could possibly need passes the
+ *   narrowed list, which is the cheapest way to shrink a prompt whose length
+ *   the device pays for in GPU memory.
  * @returns An array of prompt lines to be joined with `\n`.
  */
-export function generateActionPrompt(): string[] {
+export function generateActionPrompt(
+  defs: readonly ActionDef[] = ACTION_SCHEMAS,
+): string[] {
   const lines: string[] = [
     '',
     '## Modification Actions',
@@ -1059,7 +1065,7 @@ export function generateActionPrompt(): string[] {
   // classifier runs once per action rather than twice.
   const idOnly: ActionDef[] = [];
   const detailed: ActionDef[] = [];
-  for (const def of ACTION_SCHEMAS) {
+  for (const def of defs) {
     (isIdOnlyAction(def) ? idOnly : detailed).push(def);
   }
 

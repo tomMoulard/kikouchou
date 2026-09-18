@@ -63,6 +63,7 @@ vi.mock('@/lib/db', () => ({
 vi.mock('../../hooks/useTripSystemPrompt', () => ({
   useTripSystemPrompt: () => ({
     systemPrompt: 'system-prompt',
+    buildSystemPrompt: () => 'system-prompt',
   }),
 }));
 
