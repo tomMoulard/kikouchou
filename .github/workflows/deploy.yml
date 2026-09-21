@@ -117,6 +117,25 @@ jobs:
       - name: Strip any remaining source maps
         run: find dist -name '*.map' -type f -print -delete
 
+      # A Pages deploy publishes a full snapshot, so it *deletes* the previous
+      # build's hashed chunks. A tab that booted on the old build then asks for
+      # a file nothing serves any more and `import()` rejects — five sessions
+      # hit that between 2026-09-14 and 2026-09-20. This downloads the last two
+      # builds' assets from the live site and ships them again inside the new
+      # artifact, so those tabs keep working instead of needing a reload.
+      #
+      # After the source-map steps deliberately: carried files already carry
+      # the chunk IDs of the deploy that built them, and their maps were
+      # uploaded then. Re-injecting them would break the stack traces PostHog
+      # matches by those IDs.
+      #
+      # Never fails the deploy. An unreachable site or a missing file is a
+      # warning, and the build ships with whatever was reachable.
+      - name: Carry the previous deploys' assets
+        run: node scripts/carry-previous-assets.js dist
+        env:
+          DEPLOY_ORIGIN: https://app.kikouchou.app
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
