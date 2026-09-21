@@ -52,6 +52,7 @@ import { cn } from '@/lib/utils';
 import { formatDateRange } from '@/lib/utils/date-format';
 import type { Person, Trip } from '@/types';
 import { PersonBadge } from '@/components/shared/PersonBadge';
+import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 
 // ============================================================================
 // Utility Functions
@@ -410,21 +411,34 @@ const TripCard = memo(function TripCard({
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
-            <Suspense
-              fallback={
-                // The one content-shaped loading state in the app; everything
-                // else spins. It is deliberately kept: the placeholder is
-                // exactly the height the map will be, so the card does not jump
-                // when the chunk lands.
-                <div className="h-20 w-full rounded-md bg-muted animate-pulse" />
-              }
-            >
-              <TripLocationMap
-                location={trip.location ?? trip.name}
-                coordinates={trip.coordinates}
-                previewHeight={80}
-              />
-            </Suspense>
+            {/*
+              The boundary is outside the `Suspense` one on purpose: a chunk
+              that fails to load throws on render, and a boundary *inside*
+              `Suspense` would never see it. Without it the throw travelled up
+              to the route boundary and a preview nobody asked for took the
+              whole trip list with it — PostHog issue
+              `01a0be39-9bb1-7792-ad03-63460ab2f2fe`. The fallback is nothing
+              at all: a card with no map still says everything a card says,
+              and the boundary has already reported the error and asked for
+              the one reload that can recover a missing chunk.
+            */}
+            <ErrorBoundary fallback={null}>
+              <Suspense
+                fallback={
+                  // The one content-shaped loading state in the app;
+                  // everything else spins. It is deliberately kept: the
+                  // placeholder is exactly the height the map will be, so the
+                  // card does not jump when the chunk lands.
+                  <div className="h-20 w-full rounded-md bg-muted animate-pulse" />
+                }
+              >
+                <TripLocationMap
+                  location={trip.location ?? trip.name}
+                  coordinates={trip.coordinates}
+                  previewHeight={80}
+                />
+              </Suspense>
+            </ErrorBoundary>
           </div>
         )}
       </CardContent>

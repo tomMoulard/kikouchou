@@ -494,12 +494,19 @@ describe('TripCard Map Preview', () => {
       />
     );
 
-    // Wait for lazy-loaded component
-    await waitFor(() => {
-      const mapPreviewButton = findMapPreviewButton();
-      expect(mapPreviewButton).toBeDefined();
-      expect(mapPreviewButton).toBeInTheDocument();
-    });
+    // Wait for lazy-loaded component. This is the first test in the file to
+    // pull the map chunk in, so it pays for the whole import graph — Leaflet,
+    // the error boundary around it and their dependencies — and the default
+    // one-second budget is not always enough on a cold module cache. The
+    // dialog test below already waits two seconds for the same reason.
+    await waitFor(
+      () => {
+        const mapPreviewButton = findMapPreviewButton();
+        expect(mapPreviewButton).toBeDefined();
+        expect(mapPreviewButton).toBeInTheDocument();
+      },
+      { timeout: 2000 }
+    );
   });
 
   it('does not trigger card onClick when map preview is clicked', async () => {
