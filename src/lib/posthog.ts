@@ -177,6 +177,84 @@ function isOpaqueCrossOriginException(entry: ExceptionListEntry): boolean {
 const OPAQUE_EXCEPTION_FINGERPRINT = 'opaque-cross-origin-script';
 
 /**
+ * In-app browsers, by the token each one writes into the user agent.
+ *
+ * An in-app browser injects its own JavaScript into every page it opens, and
+ * that script is not served from this origin — so when it throws, the app is
+ * blamed for an error it did not cause and cannot fix. Four of the five
+ * occurrences behind the opaque issue came from one: Android, referred by
+ * m.facebook.com, thrown as the page was being torn down.
+ *
+ * Sniffing the user agent is guesswork, and the property this fills in is
+ * labelled as a hint for whoever reads the issue. Nothing in the app may branch
+ * on it.
+ */
+const IN_APP_BROWSERS: readonly (readonly [string, RegExp])[] = [
+  ['facebook', /\bFBAN\/|\bFBAV\/|\bFB_IAB\//],
+  ['instagram', /\bInstagram\b/],
+  ['tiktok', /\bBytedanceWebview\b|\bmusical_ly\b/],
+  ['snapchat', /\bSnapchat\b/],
+  ['linkedin', /\bLinkedInApp\b/],
+  ['line', /\bLine\//],
+  ['pinterest', /\bPinterest\b/],
+  ['twitter', /\bTwitter\b/],
+  ['wechat', /\bMicroMessenger\b/],
+];
+
+/**
+ * Which in-app browser this looks like, or `null` for an ordinary browser.
+ *
+ * Reads `navigator` defensively for the same reason {@link isDevelopmentHost}
+ * reads `window` defensively: this runs inside the error reporter, in
+ * environments that are not guaranteed to have a DOM.
+ */
+export function inAppBrowser(): string | null {
+  const ua = typeof navigator === 'undefined' ? '' : (navigator.userAgent ?? '');
+  for (const [name, pattern] of IN_APP_BROWSERS) {
+    if (pattern.test(ua)) {
+      return name;
+    }
+  }
+  return null;
+}
+
+/**
+ * Every origin other than this one currently serving a `<script>` to the page.
+ *
+ * The shortlist of suspects for an error with no stack. Read at capture time
+ * rather than at load, because the scripts that matter most are the ones
+ * nothing in this repository put on the page: a browser extension's content
+ * script, or the JavaScript an in-app browser injects after the document is
+ * parsed. A known origin is information too — it says the throw came from a
+ * dependency rather than from something riding along with the visitor.
+ *
+ * Exported for tests; called from {@link markOpaqueExceptions}.
+ */
+export function foreignScriptOrigins(): string[] {
+  if (typeof document === 'undefined' || typeof location === 'undefined') {
+    return [];
+  }
+  const origins: string[] = [];
+  for (const script of Array.from(document.getElementsByTagName('script'))) {
+    const src = script.src;
+    if (!src) {
+      continue;
+    }
+    let origin: string;
+    try {
+      origin = new URL(src, location.href).origin;
+    } catch {
+      continue;
+    }
+    if (origin === location.origin || origins.includes(origin)) {
+      continue;
+    }
+    origins.push(origin);
+  }
+  return origins;
+}
+
+/**
  * Marks an exception the browser refused to describe, and sends it anyway.
  *
  * The issue behind this is one unhandled, synthetic `Error: Script error.` from
@@ -195,9 +273,12 @@ const OPAQUE_EXCEPTION_FINGERPRINT = 'opaque-cross-origin-script';
  * the fingerprint collapses them into one named issue instead of leaving them
  * to blur into whatever else PostHog decides they resemble.
  *
- * Only an exception whose *every* entry is opaque is marked. One with a
- * readable entry beside an opaque one keeps its own grouping, because that
- * readable entry is the cause and it is what somebody would fix.
+ * Only an exception whose *every* entry is opaque is marked with those two.
+ * One with a readable entry beside an opaque one keeps its own grouping,
+ * because that readable entry is the cause and it is what somebody would fix.
+ * The two environment properties are attached either way: an exception that
+ * arrived with a perfectly good stack is still worth knowing was thrown inside
+ * a Facebook webview with three foreign scripts on the page.
  *
  * Must not throw: posthog-js calls this on the way out of every capture, so a
  * throw here would be an error raised by the error reporter. Every unexpected
@@ -206,10 +287,16 @@ const OPAQUE_EXCEPTION_FINGERPRINT = 'opaque-cross-origin-script';
  * Exported for tests; wired in as `before_send` below.
  */
 export function markOpaqueExceptions(event: CaptureResult | null): CaptureResult | null {
-  if (!event || event.event !== '$exception') {
+  if (!event || event.event !== '$exception' || !event.properties) {
     return event;
   }
-  const list: unknown = event.properties?.['$exception_list'];
+  // On every exception, readable or not. These two are what separate "our bug"
+  // from "somebody else's script in somebody else's browser", and that question
+  // cannot be answered after the fact — the page is gone.
+  event.properties['in_app_browser'] = inAppBrowser();
+  event.properties['foreign_script_origins'] = foreignScriptOrigins();
+
+  const list: unknown = event.properties['$exception_list'];
   if (!Array.isArray(list) || list.length === 0) {
     return event;
   }
@@ -363,9 +450,21 @@ if (!posthogKey || !posthogHost) {
     capture_exceptions: {
       capture_unhandled_errors: true,
       capture_unhandled_rejections: true,
-      // Console errors are noisy and cost ingestion; unhandled errors and
-      // rejections are the signal worth paying for.
-      capture_console_errors: false,
+      /**
+       * On, having been off for costing ingestion without paying for itself.
+       *
+       * What changed is the opaque issue: an error the browser refuses to
+       * describe arrives with no message, no file, no line and no frames, and
+       * a `console.error` logged beside it is frequently the only readable
+       * account of what the page was doing. Paying for those is worth it
+       * precisely in the case where nothing else can be read.
+       *
+       * This is noisier than what it replaced. If the volume stops being worth
+       * it, the thing to reach for first is a PostHog suppression rule on the
+       * specific message, not this flag — turning it back off would take the
+       * useful ones with it.
+       */
+      capture_console_errors: true,
     },
 
     /**
@@ -381,10 +480,11 @@ if (!posthogKey || !posthogHost) {
      * The last gate before an event leaves the browser. Nothing is dropped
      * here.
      *
-     * Only {@link markOpaqueExceptions} runs, and it only ever adds two
-     * properties, to the one exception shape a browser refuses to describe. See
-     * it for what is left once the cause above is fixed, and why that remainder
-     * is worth reporting rather than discarding.
+     * Only {@link markOpaqueExceptions} runs, and it only ever adds properties:
+     * where the exception was thrown, on every one of them, plus a name and a
+     * grouping for the shape a browser refuses to describe. See it for what is
+     * left once the cause above is fixed, and why that remainder is worth
+     * reporting rather than discarding.
      */
     before_send: markOpaqueExceptions,
   });
