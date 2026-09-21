@@ -70,6 +70,25 @@ describe('isModuleLoadError', () => {
     ).toBe(true);
   });
 
+  /**
+   * PostHog issue `01a0be39-9bb1-7792-ad03-63460ab2f2fe`, seen twice on build
+   * `d7ae137`: a mobile session lost the network for a moment while the lazy
+   * Leaflet chunk loaded, and Vite's preload helper rejected with this
+   * message. The stylesheet was still served with a 200 minutes later, and in
+   * one of the two sessions a dynamic `import()` of `vendor-supabase` failed
+   * 129 ms later. That second message matched, so it reloaded; this one did
+   * not, so the error boundary kept its fallback on screen for good.
+   *
+   * RED before the fix: `expected false to be true`.
+   */
+  it('recognises the message Vite throws for a stylesheet preload', () => {
+    const error = new Error(
+      'Unable to preload CSS for /assets/leaflet-CIGW-MKW.css',
+    );
+
+    expect(isModuleLoadError(error)).toBe(true);
+  });
+
   it('leaves an ordinary application error alone', () => {
     expect(isModuleLoadError(new Error('Trip not found'))).toBe(false);
   });
