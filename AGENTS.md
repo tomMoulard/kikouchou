@@ -841,6 +841,29 @@ stays the analytics this product is understood through.
   `main.tsx` imports it at module scope, so a throw blanks the app instead of
   losing an ad event.
 
+## Google tags — a container is not just another tag
+
+`lib/google-tag` loads the two tags the landing page carries in its `<head>`:
+the GTM container (`VITE_GTM_CONTAINER_ID`) and the Google Ads tag
+(`VITE_GOOGLE_ADS_ID`), in that order, because Google asks for it and the two
+share `dataLayer`. Same contract as `lib/meta-pixel`: guarded by
+`isDevelopmentHost()`, off when the ids are absent, never throws.
+
+- **The install is reported three times**, from one `appinstalled` handler:
+  `pwa_install_completed` to PostHog, `AppInstalled` to Meta, and the
+  conversion in `VITE_GOOGLE_ADS_INSTALL_CONVERSION` to Google Ads. Each
+  answers a question the other two cannot.
+- **The container runs code this repository never saw.** Whoever holds access
+  to the GTM UI can inject a script into the app without a deploy, so that
+  access is part of this app's security boundary — which is why the Ads tag is
+  configured in code beside it rather than inside it, and why a leak onto a dev
+  server matters more here than for the other two trackers.
+- **A conversion is a whole `send_to`**, `AW-…/<label>`, never an account and a
+  label joined at the call site. A half-built identifier fails silently in an
+  ad platform.
+- **No value and no currency from the app.** Set them on the conversion action
+  in Google Ads, where changing them does not need a deploy.
+
 ## Styling
 
 - Tailwind CSS utility classes only — no inline styles, no CSS modules.

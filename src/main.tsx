@@ -23,6 +23,9 @@ import '@/lib/posthog';
 // pasted into index.html: the module decides whether to load at all, so a dev
 // server never reports to the ad account. See lib/meta-pixel.
 import '@/lib/meta-pixel';
+// And the Google pair — the GTM container and the Google Ads tag — which the
+// landing page carries in its <head> and this app loads the same guarded way.
+import '@/lib/google-tag';
 // After lib/posthog, which must have initialised before anything captures, and
 // before App.tsx pulls in the router — this reads a query parameter the router
 // is free to normalise away. See lib/notifications/opened.

@@ -40,6 +40,20 @@ vi.mock('@/lib/meta-pixel', () => ({
   default: undefined,
 }));
 
+const mockReportGoogleAdsInstallConversion = vi.fn();
+
+/* The third reporter of one install, mocked for the same reason as the other
+   two: the real module loads nothing without an Ads id, so an assertion on it
+   would pass whether or not the hook called it. */
+vi.mock('@/lib/google-tag', () => ({
+  reportGoogleAdsInstallConversion: (...args: unknown[]) =>
+    mockReportGoogleAdsInstallConversion(...args),
+  reportGoogleAdsConversion: vi.fn(),
+  trackGoogleTagEvent: vi.fn(),
+  isGoogleAdsTagEnabled: () => false,
+  default: undefined,
+}));
+
 function dispatchBeforeInstallPrompt(
   outcome: 'accepted' | 'dismissed' = 'accepted',
 ) {
@@ -741,6 +755,31 @@ describe('useInstallPrompt', () => {
         via_prompt: false,
         from_install_link: true,
       });
+    });
+
+    it('reports the install to Google Ads as well', () => {
+      /*
+        Three reporters, one event: PostHog for the product, Meta and Google
+        for the two platforms the campaigns run on. Dropping any one of them
+        leaves a question unanswerable rather than merely un-duplicated.
+      */
+      renderHook(() => useInstallPrompt());
+
+      act(() => {
+        window.dispatchEvent(new Event('appinstalled'));
+      });
+
+      expect(mockReportGoogleAdsInstallConversion).toHaveBeenCalledTimes(1);
+    });
+
+    it('tells Google nothing when no install happened', () => {
+      renderHook(() => useInstallPrompt());
+
+      act(() => {
+        dispatchBeforeInstallPrompt('dismissed');
+      });
+
+      expect(mockReportGoogleAdsInstallConversion).not.toHaveBeenCalled();
     });
 
     it('tells the pixel nothing when no install happened', () => {

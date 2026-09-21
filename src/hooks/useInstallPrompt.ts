@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { reportGoogleAdsInstallConversion } from '@/lib/google-tag';
 import { trackMetaPixelCustomEvent } from '@/lib/meta-pixel';
 import { captureEvent } from '@/lib/posthog';
 import { STANDALONE_MEDIA_QUERY, isRunningStandalone } from '@/lib/pwa/display-mode';
@@ -436,6 +437,16 @@ export function useInstallPrompt(): UseInstallPromptResult {
         via_prompt: viaPrompt,
         from_install_link: fromInstallLink,
       });
+
+      /*
+        And to Google Ads, which is the other platform the campaigns run on.
+
+        No properties: a Google Ads conversion carries a value and a currency
+        rather than dimensions, and the two flags above are for the tools that
+        can slice by them. See `lib/google-tag` for why the value is set on the
+        conversion action rather than here.
+      */
+      reportGoogleAdsInstallConversion();
 
       if (isMountedRef.current) {
         setIsInstalled(true);

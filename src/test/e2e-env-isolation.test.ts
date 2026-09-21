@@ -55,6 +55,10 @@ const CLIENT_VARIABLES = [
   // The Meta Pixel, added for the same reason and with the same failure mode:
   // an id reaching a web server reports loopback traffic to a live ad account.
   'VITE_META_PIXEL_ID',
+  // The Google pair. A container id is the widest of the four: it runs
+  // whatever the GTM UI holds, in whatever browser loads the page.
+  'VITE_GTM_CONTAINER_ID',
+  'VITE_GOOGLE_ADS_ID',
 ] as const;
 
 const { webServer } = playwrightConfig;
@@ -88,6 +92,8 @@ describe('playwright web server environments', () => {
     expect(builder?.env?.VITE_POSTHOG_KEY).toBe('');
     expect(builder?.env?.VITE_POSTHOG_HOST).toBe('');
     expect(builder?.env?.VITE_META_PIXEL_ID).toBe('');
+    expect(builder?.env?.VITE_GTM_CONTAINER_ID).toBe('');
+    expect(builder?.env?.VITE_GOOGLE_ADS_ID).toBe('');
   });
 
   for (const [index, server] of servers.entries()) {
@@ -115,6 +121,9 @@ describe('playwright web server environments', () => {
         expect(env.VITE_POSTHOG_HOST).toBe('');
         // Same rule for the ad pixel — see `lib/meta-pixel`.
         expect(env.VITE_META_PIXEL_ID).toBe('');
+        // And for the Google pair — see `lib/google-tag`.
+        expect(env.VITE_GTM_CONTAINER_ID).toBe('');
+        expect(env.VITE_GOOGLE_ADS_ID).toBe('');
       });
 
       it('never points at a Supabase host that could resolve', () => {

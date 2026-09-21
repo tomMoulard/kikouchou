@@ -76,6 +76,37 @@ interface ImportMetaEnv {
   readonly VITE_META_PIXEL_ALLOW_LOCALHOST?: string;
 
   /**
+   * Google Tag Manager container, e.g. `GTM-THNTTWRZ`. Absent means no
+   * container is loaded.
+   *
+   * A container can inject arbitrary scripts into this app without a deploy,
+   * so whoever holds access to it holds access to the page. See
+   * `lib/google-tag`.
+   */
+  readonly VITE_GTM_CONTAINER_ID?: string;
+
+  /**
+   * Google Ads account for `gtag.js`, e.g. `AW-18455477906`. Absent means no
+   * Ads tag and no conversions.
+   */
+  readonly VITE_GOOGLE_ADS_ID?: string;
+
+  /**
+   * The Google Ads conversion a PWA install counts as, whole: `AW-…/<label>`.
+   *
+   * Absent means the install reports no conversion; the tag still loads.
+   */
+  readonly VITE_GOOGLE_ADS_INSTALL_CONVERSION?: string;
+
+  /**
+   * Load the Google tags on a dev server. `'true'` and nothing else.
+   *
+   * Off for the same reason as the two flags above it: traffic from a
+   * developer's machine is real traffic in a real ad account.
+   */
+  readonly VITE_GOOGLE_TAG_ALLOW_LOCALHOST?: string;
+
+  /**
    * Origin of the link preview service, e.g. `https://share.kikouchou.app`.
    *
    * Set it and the share dialog hands out `<origin>/<lang>/<token>`, which is
