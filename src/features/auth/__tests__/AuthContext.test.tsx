@@ -24,6 +24,7 @@ import {
   getCapturedAuthError,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
 
 // ============================================================================
 // Test doubles
@@ -62,6 +63,15 @@ vi.mock('@/lib/supabase/auth-callback', () => ({
   getCapturedAuthError: vi.fn(() => null),
 }));
 
+// Only the reload is faked. `isModuleLoadError` stays real, so these tests pin
+// the provider against the same needles the ErrorBoundary matches rather than
+// against a second, drifting copy of them.
+vi.mock('@/lib/pwa/stale-chunk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/pwa/stale-chunk')>()),
+  reloadForStaleChunk: vi.fn(() => true),
+}));
+
+const mockedReloadForStaleChunk = vi.mocked(reloadForStaleChunk);
 const mockedGetClient = vi.mocked(getSupabaseClient);
 const mockedIsConfigured = vi.mocked(isSupabaseConfigured);
 const mockedCapturedCode = vi.mocked(consumeAuthCode);
@@ -759,6 +769,50 @@ describe('AuthProvider — state', () => {
     await waitFor(() => {
       expect(result.current.isResolved).toBe(true);
     });
+
+    consoleError.mockRestore();
+  });
+
+  /**
+   * The Supabase client is imported outside any render, in an effect, so no
+   * React boundary ever sees this rejection: `ErrorBoundary.componentDidCatch`
+   * and its guarded reload are unreachable from here. On 2026-09-20 a session
+   * on build `d7ae137` asked for `assets/vendor-supabase-uUMQlnk1.js`, a deploy
+   * had replaced it, and the tab kept running with sign-in dead for the rest of
+   * its life — PostHog recorded the throw under `AuthContext.getSupabaseClient`
+   * and nothing recovered it.
+   */
+  it('reloads the tab when the client chunk is one the origin no longer serves', async () => {
+    mockedIsConfigured.mockReturnValue(true);
+    mockedGetClient.mockRejectedValue(
+      new TypeError(
+        'Failed to fetch dynamically imported module: https://app.kikouchou.app/assets/vendor-supabase-uUMQlnk1.js',
+      ),
+    );
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(mockedReloadForStaleChunk).toHaveBeenCalled();
+    });
+
+    consoleError.mockRestore();
+  });
+
+  it('leaves the tab alone when the client failed for any other reason', async () => {
+    mockedIsConfigured.mockReturnValue(true);
+    mockedGetClient.mockRejectedValue(new Error('network unreachable'));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    // A reload cannot fix a network that is down, and it would cost the user
+    // whatever they had on screen.
+    await waitFor(() => {
+      expect(result.current.isResolved).toBe(true);
+    });
+    expect(mockedReloadForStaleChunk).not.toHaveBeenCalled();
 
     consoleError.mockRestore();
   });
