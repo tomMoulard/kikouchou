@@ -44,13 +44,17 @@ import playwrightConfig from '../../playwright.config';
  * Every variable `vite build` would inline, and that a leak would carry out.
  *
  * The two PostHog ones are here because they cost the project 19 phantom people
- * before anyone noticed the Supabase pair had a sibling.
+ * before anyone noticed the Supabase pair had a sibling. The Meta Pixel id is
+ * the newest sibling, and the one whose leak is billed by an ad auction.
  */
 const CLIENT_VARIABLES = [
   'VITE_SUPABASE_URL',
   'VITE_SUPABASE_PUBLISHABLE_KEY',
   'VITE_POSTHOG_KEY',
   'VITE_POSTHOG_HOST',
+  // The Meta Pixel, added for the same reason and with the same failure mode:
+  // an id reaching a web server reports loopback traffic to a live ad account.
+  'VITE_META_PIXEL_ID',
 ] as const;
 
 const { webServer } = playwrightConfig;
@@ -83,6 +87,7 @@ describe('playwright web server environments', () => {
     expect(builder?.env?.VITE_SUPABASE_PUBLISHABLE_KEY).toBe('');
     expect(builder?.env?.VITE_POSTHOG_KEY).toBe('');
     expect(builder?.env?.VITE_POSTHOG_HOST).toBe('');
+    expect(builder?.env?.VITE_META_PIXEL_ID).toBe('');
   });
 
   for (const [index, server] of servers.entries()) {
@@ -108,6 +113,8 @@ describe('playwright web server environments', () => {
         // init on a development host, and both halves are meant to stay.
         expect(env.VITE_POSTHOG_KEY).toBe('');
         expect(env.VITE_POSTHOG_HOST).toBe('');
+        // Same rule for the ad pixel — see `lib/meta-pixel`.
+        expect(env.VITE_META_PIXEL_ID).toBe('');
       });
 
       it('never points at a Supabase host that could resolve', () => {

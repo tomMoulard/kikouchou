@@ -24,6 +24,22 @@ vi.mock('@/lib/posthog', () => ({
   captureEvent: (...args: unknown[]) => mockCapture(...args),
 }));
 
+const mockTrackMetaPixelCustomEvent = vi.fn();
+
+/*
+  The Meta Pixel is the second reporter of the same install, and it is mocked
+  for the same reason PostHog is: the real module loads nothing without
+  `VITE_META_PIXEL_ID`, so an assertion on it would pass whether or not the
+  hook called it.
+*/
+vi.mock('@/lib/meta-pixel', () => ({
+  trackMetaPixelCustomEvent: (...args: unknown[]) =>
+    mockTrackMetaPixelCustomEvent(...args),
+  trackMetaPixelEvent: vi.fn(),
+  isMetaPixelEnabled: () => false,
+  default: undefined,
+}));
+
 function dispatchBeforeInstallPrompt(
   outcome: 'accepted' | 'dismissed' = 'accepted',
 ) {
@@ -686,6 +702,55 @@ describe('useInstallPrompt', () => {
         via_prompt: false,
         from_install_link: false,
       });
+    });
+
+    it('reports the same install to the Meta Pixel as well', () => {
+      /*
+        Both reporters, not either. The pixel is what an ad campaign optimises
+        against and PostHog is what the product is understood through, so a
+        change that drops one of the two calls leaves a question unanswerable
+        rather than merely duplicated. `AppInstalled` is a custom event because
+        Meta's standard list has no web install in it.
+      */
+      renderHook(() => useInstallPrompt());
+
+      act(() => {
+        window.dispatchEvent(new Event('appinstalled'));
+      });
+
+      expect(mockTrackMetaPixelCustomEvent).toHaveBeenCalledWith('AppInstalled', {
+        via_prompt: false,
+        from_install_link: false,
+      });
+      expect(mockCapture).toHaveBeenCalledWith('pwa_install_completed', {
+        via_prompt: false,
+        from_install_link: false,
+      });
+    });
+
+    it('carries the same flags to the pixel as to PostHog', () => {
+      visit('/?install=1');
+
+      renderHook(() => useInstallPrompt());
+
+      act(() => {
+        window.dispatchEvent(new Event('appinstalled'));
+      });
+
+      expect(mockTrackMetaPixelCustomEvent).toHaveBeenCalledWith('AppInstalled', {
+        via_prompt: false,
+        from_install_link: true,
+      });
+    });
+
+    it('tells the pixel nothing when no install happened', () => {
+      renderHook(() => useInstallPrompt());
+
+      act(() => {
+        dispatchBeforeInstallPrompt('dismissed');
+      });
+
+      expect(mockTrackMetaPixelCustomEvent).not.toHaveBeenCalled();
     });
 
     it('marks an install the app own prompt produced', async () => {

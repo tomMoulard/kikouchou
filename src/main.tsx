@@ -19,6 +19,10 @@ import { createRoot } from 'react-dom/client';
 
 import { ensureSettings } from '@/lib/db';
 import '@/lib/posthog';
+// Beside lib/posthog, and for the same reason it is imported here rather than
+// pasted into index.html: the module decides whether to load at all, so a dev
+// server never reports to the ad account. See lib/meta-pixel.
+import '@/lib/meta-pixel';
 // After lib/posthog, which must have initialised before anything captures, and
 // before App.tsx pulls in the router — this reads a query parameter the router
 // is free to normalise away. See lib/notifications/opened.

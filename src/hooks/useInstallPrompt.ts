@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { trackMetaPixelCustomEvent } from '@/lib/meta-pixel';
 import { captureEvent } from '@/lib/posthog';
 import { STANDALONE_MEDIA_QUERY, isRunningStandalone } from '@/lib/pwa/display-mode';
 
@@ -405,13 +406,35 @@ export function useInstallPrompt(): UseInstallPromptResult {
         second listener and count the install twice — read the context, do
         not call this hook.
       */
+      // Whether the app's own Install button produced this, as against
+      // something in the browser's UI that we never see.
+      const viaPrompt = hasPromptedRef.current;
+      // Whether this visit arrived on the landing page's install link, which
+      // is what makes that CTA measurable at all.
+      const fromInstallLink = installIntent;
+
       captureEvent('pwa_install_completed', {
-        // Whether the app's own Install button produced this, as against
-        // something in the browser's UI that we never see.
-        via_prompt: hasPromptedRef.current,
-        // Whether this visit arrived on the landing page's install link, which
-        // is what makes that CTA measurable at all.
-        from_install_link: installIntent,
+        via_prompt: viaPrompt,
+        from_install_link: fromInstallLink,
+      });
+
+      /*
+        The same install, reported to Meta as well.
+
+        Both, not either: PostHog is how this project understands its own
+        product, and the pixel is how an ad campaign is optimised, and neither
+        can answer the other's question. The names differ because each tool
+        has its own convention — PostHog wants `noun_verb_past`, Events
+        Manager shows the string as written — and `AppInstalled` is a custom
+        event because Meta's standard list has no web install in it.
+
+        A no-op unless `VITE_META_PIXEL_ID` is set on a deployed host, so a dev
+        server and the e2e suite report nothing. Nothing here names a trip, a
+        guest or a place; the two flags are the whole payload.
+      */
+      trackMetaPixelCustomEvent('AppInstalled', {
+        via_prompt: viaPrompt,
+        from_install_link: fromInstallLink,
       });
 
       if (isMountedRef.current) {

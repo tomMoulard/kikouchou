@@ -84,6 +84,12 @@ jobs:
           # by design, and a missing secret would fail silently back to the old
           # link — which is exactly what happened on the first deploy of this.
           VITE_SHARE_ORIGIN: https://share.kikouchou.app
+          # The Meta Pixel id, for ad measurement. A literal for the same
+          # reason as the line above: it is public by design — Meta own
+          # snippet puts it in the page source — so a secret would buy nothing
+          # and a missing one would turn the pixel off without saying so.
+          # src/lib/meta-pixel.ts loads nothing when it is absent.
+          VITE_META_PIXEL_ID: '2066436523976108'
           # Trip reminders over Web Push. The public half of the VAPID pair —
           # public by design: every browser sends it to its push service and it
           # ships in the bundle. The private half is the one that matters, and

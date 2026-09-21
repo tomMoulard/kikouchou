@@ -810,6 +810,37 @@ every unit test.
   is deliberately not named after "activity" — in this app an *Activity* is an
   itinerary item, which is a different thing entirely.
 
+## Meta Pixel — a second reporter, never a replacement
+
+`lib/meta-pixel` loads Meta's `fbevents.js` when `VITE_META_PIXEL_ID` is set
+and the host is not a development one, and exports two no-ops otherwise. It
+exists so an ad campaign can be optimised against what a visitor does; PostHog
+stays the analytics this product is understood through.
+
+- **An event worth reporting is reported to both.** The PWA install is the
+  first one: `useInstallPrompt` fires `pwa_install_completed` to PostHog and
+  `AppInstalled` to the pixel from the same `appinstalled` handler, with the
+  same two flags. Dropping either call leaves a question unanswerable rather
+  than merely un-duplicated.
+- **The install is a custom event, because Meta has no standard one for it.**
+  `fbq` knows about app installs only through Meta's iOS and Android SDKs, and
+  a web page cannot produce one. A custom event is still a first-class thing in
+  Events Manager: it becomes a custom conversion and an ad set optimises
+  against it.
+- **Never paste Meta's snippet into `index.html`.** A `<script>` there runs on
+  every load of every build, `bun run dev` and the Playwright servers included,
+  and loopback traffic in an ad account is the accident that gave PostHog
+  nineteen phantom people. The module reads the same `isDevelopmentHost()` the
+  PostHog client does — `lib/analytics/development-host`, one copy, imported by
+  both.
+- **Counts, flags and enum values only.** Meta is an advertising network rather
+  than an analytics tool this project controls, so the exception `lib/posthog`
+  makes for `assistant_prompt_sent` has no counterpart here. No guest name, no
+  trip name, no place.
+- **The module must never throw**, for the same reason `lib/posthog` must not:
+  `main.tsx` imports it at module scope, so a throw blanks the app instead of
+  losing an ad event.
+
 ## Styling
 
 - Tailwind CSS utility classes only — no inline styles, no CSS modules.
