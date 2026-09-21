@@ -11,6 +11,8 @@ import { Camera, CameraOff, ClipboardPaste } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { classifyCameraFailure } from '@/lib/utils/camera-failure';
+import type { CameraFailure } from '@/lib/utils/camera-failure';
 
 // ============================================================================
 // Type Definitions
@@ -91,6 +93,38 @@ function patchScannerVideo(region: HTMLElement): void {
   video.style.setProperty('display', 'block', 'important');
 }
 
+/** What the tile says for each failure, as `[key, fallback]` pairs. */
+const CAMERA_FAILURE_COPY: Record<
+  CameraFailure,
+  { readonly title: readonly [string, string]; readonly hint: readonly [string, string] }
+> = {
+  blocked: {
+    title: ['sharing.sync.cameraBlockedTitle', 'Camera access is blocked'],
+    hint: [
+      'sharing.sync.cameraBlockedHint',
+      'Allow the camera for this site in your browser, then try again. On iPhone it is in the "aA" menu next to the address, elsewhere behind the padlock.',
+    ],
+  },
+  missing: {
+    title: ['sharing.sync.cameraMissingTitle', 'No camera found'],
+    hint: [
+      'sharing.sync.cameraMissingHint',
+      'This device has no camera the browser can use. Paste the data instead.',
+    ],
+  },
+  busy: {
+    title: ['sharing.sync.cameraBusyTitle', 'The camera is already in use'],
+    hint: [
+      'sharing.sync.cameraBusyHint',
+      'Another app or tab is using the camera. Close it, then try again.',
+    ],
+  },
+  unknown: {
+    title: ['sharing.sync.cameraFailedTitle', 'The camera could not start'],
+    hint: ['sharing.sync.cameraFailedHint', 'Try again, or paste the data instead.'],
+  },
+};
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -112,7 +146,7 @@ export const QRScanner = memo(function QRScanner({
   const scannerElRef = useRef<HTMLDivElement | null>(null);
   const disposedRef = useRef(false);
   const [isStarted, setIsStarted] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraFailure, setCameraFailure] = useState<CameraFailure | null>(null);
   const [showPaste, setShowPaste] = useState(false);
   const [pasteValue, setPasteValue] = useState('');
   const isMountedRef = useRef(true);
@@ -123,6 +157,21 @@ export const QRScanner = memo(function QRScanner({
       isMountedRef.current = false;
     };
   }, []);
+
+  /**
+   * The translator, kept off `startScanner`'s dependency list.
+   *
+   * `startScanner` is a dependency of the effect that owns the camera, so
+   * anything that changes its identity stops the camera and starts it again.
+   * `t` changes identity on a language change — and, under the test harness,
+   * on every render — which turned the scanner into a restart loop that never
+   * reached a playing video. The ref carries the newest translator without
+   * making the callback new.
+   */
+  const translateRef = useRef(t);
+  useEffect(() => {
+    translateRef.current = t;
+  }, [t]);
 
   const stopScanner = useCallback(async () => {
     // Let an in-flight start finish first. It only resolves once the camera
@@ -211,15 +260,25 @@ export const QRScanner = memo(function QRScanner({
 
       if (isMountedRef.current && !disposedRef.current) {
         setIsStarted(true);
-        setCameraError(null);
+        setCameraFailure(null);
       }
     } catch (error) {
-      console.error('Failed to start QR scanner:', error);
+      const failure = classifyCameraFailure(error);
+      // A denied permission, a missing camera and a camera another app is
+      // holding are all things the visitor did, not faults of this app. PostHog
+      // captures `console.error` (see `capture_exceptions` in `lib/posthog`),
+      // so logging those three at that level files an issue nobody can act on.
+      // Only an unrecognised failure is worth reporting.
+      if (failure === 'unknown') {
+        console.error('Failed to start QR scanner:', error);
+      } else {
+        console.warn('QR scanner camera unavailable:', failure, error);
+      }
       html5QrCodeRef.current = null;
       if (isMountedRef.current) {
-        const message = error instanceof Error ? error.message : 'Camera access denied';
-        setCameraError(message);
-        onError?.(message);
+        setCameraFailure(failure);
+        const [titleKey, titleFallback] = CAMERA_FAILURE_COPY[failure].title;
+        onError?.(translateRef.current(titleKey, titleFallback));
       }
     } finally {
       startingRef.current = false;
@@ -276,7 +335,7 @@ export const QRScanner = memo(function QRScanner({
   // Library pins <video> to an initial clientWidth (inline px). Wider containers leave a
   // bg-muted strip; keep width/object-fit in sync on resize and when nodes mount.
   useEffect(() => {
-    if (!isStarted || showPaste || cameraError || !containerRef.current) return;
+    if (!isStarted || showPaste || cameraFailure || !containerRef.current) return;
 
     const container = containerRef.current;
     const region = container.querySelector<HTMLElement>(`#${scannerRegionId}`);
@@ -306,7 +365,7 @@ export const QRScanner = memo(function QRScanner({
       resizeObserver.disconnect();
       mutationObserver.disconnect();
     };
-  }, [isStarted, showPaste, cameraError, scannerRegionId]);
+  }, [isStarted, showPaste, cameraFailure, scannerRegionId]);
 
   const handlePasteSubmit = useCallback(() => {
     const trimmed = pasteValue.trim();
@@ -318,6 +377,30 @@ export const QRScanner = memo(function QRScanner({
   const togglePasteMode = useCallback(() => {
     setShowPaste(prev => !prev);
   }, []);
+
+  /**
+   * Asks for the camera again.
+   *
+   * Often the browser answers the same way without prompting anybody: a denial
+   * is remembered per site on iOS Safari and on Chrome, so the tile says where
+   * to lift it rather than promising that a second tap is enough. It is still
+   * worth offering — a dismissed prompt, a camera that has since been freed and
+   * a permission just changed in the settings all start working on this tap.
+   */
+  const handleRetryCamera = useCallback(() => {
+    setCameraFailure(null);
+    // Published on the same ref the start/stop effect uses, so a teardown
+    // arriving mid-retry still awaits this start before detaching the video.
+    const started = startScanner();
+    startPromiseRef.current = started;
+    void started.finally(() => {
+      if (startPromiseRef.current === started) {
+        startPromiseRef.current = null;
+      }
+    });
+  }, [startScanner]);
+
+  const failureCopy = cameraFailure === null ? null : CAMERA_FAILURE_COPY[cameraFailure];
 
   return (
     <div
@@ -335,26 +418,45 @@ export const QRScanner = memo(function QRScanner({
           'relative mx-auto w-full min-w-0 max-w-sm rounded-lg overflow-hidden bg-muted',
           // Stable height so video % height resolves; loading state centers inside the same box
           !showPaste && 'min-h-[280px]',
-          !isStarted && !cameraError && !showPaste && 'flex items-center justify-center',
+          !isStarted && !cameraFailure && !showPaste && 'flex items-center justify-center',
           // Collapse scanner slot in paste mode so library-injected nodes cannot widen the dialog
           showPaste &&
             'pointer-events-none absolute left-0 top-0 -z-10 h-0 max-h-0 min-h-0 w-0 max-w-0 overflow-hidden border-0 p-0 opacity-0',
         )}
       >
-        {!isStarted && !cameraError && !showPaste && (
+        {!isStarted && !cameraFailure && !showPaste && (
           <div className="flex flex-col items-center gap-2 text-muted-foreground">
-            <Camera className="h-8 w-8 animate-pulse" />
+            <Camera className="h-8 w-8 animate-pulse" aria-hidden="true" />
             <p className="text-sm">{t('sharing.sync.scannerLoading', 'Starting camera...')}</p>
           </div>
         )}
-      </div>
 
-      {!showPaste && cameraError && (
-        <div className="flex flex-col items-center gap-3 p-4 rounded-lg bg-destructive/10 text-destructive">
-          <CameraOff className="h-8 w-8" />
-          <p className="text-sm text-center">{cameraError}</p>
-        </div>
-      )}
+        {/* The failure takes over the scanner's own box rather than adding a
+            red panel under it: a camera the visitor turned down is a state of
+            this control, not an error the page has to shout about. The whole
+            tile is the retry target, which is the only affordance a phone
+            makes obvious. */}
+        {!showPaste && failureCopy && (
+          <button
+            type="button"
+            onClick={handleRetryCamera}
+            className={cn(
+              'absolute inset-0 flex h-full w-full flex-col items-center justify-center gap-2 p-4',
+              'text-center text-muted-foreground',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            )}
+          >
+            <CameraOff className="h-8 w-8" aria-hidden="true" />
+            <p className="text-sm font-medium text-foreground">
+              {t(failureCopy.title[0], failureCopy.title[1])}
+            </p>
+            <p className="max-w-xs text-xs">{t(failureCopy.hint[0], failureCopy.hint[1])}</p>
+            <span className="text-xs font-medium text-primary">
+              {t('sharing.sync.cameraRetry', 'Tap to try again')}
+            </span>
+          </button>
+        )}
+      </div>
 
       {showPaste && (
         <div className="flex min-w-0 w-full max-w-full flex-col gap-3 overflow-hidden">

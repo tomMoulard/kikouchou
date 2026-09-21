@@ -205,9 +205,12 @@ const ImportTripQrDialog = memo(function ImportTripQrDialog({
             {t('trips.importFromQrDescription')}
           </DialogDescription>
         </DialogHeader>
+        {/* No `onError`: the scanner now shows a camera it could not start in
+            its own box, inside this dialog, with the way to allow it again. A
+            toast on top of that said the same thing twice, in the words the
+            library used. */}
         <QRScanner
           onScan={handleScan}
-          onError={(message) => notify.error(message)}
           active={open && !isImporting}
           className="mt-2"
         />

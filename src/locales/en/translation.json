@@ -1262,7 +1262,16 @@
       "mergeSuccess_one": "Merged {{count}} change successfully",
       "mergeSuccess_other": "Merged {{count}} changes successfully",
       "mergeError": "Failed to apply changes",
-      "scanAnother": "Scan another"
+      "scanAnother": "Scan another",
+      "cameraBlockedTitle": "Camera access is blocked",
+      "cameraBlockedHint": "Allow the camera for this site in your browser, then try again. On iPhone it is in the \"aA\" menu next to the address, elsewhere behind the padlock.",
+      "cameraMissingTitle": "No camera found",
+      "cameraMissingHint": "This device has no camera the browser can use. Paste the data instead.",
+      "cameraBusyTitle": "The camera is already in use",
+      "cameraBusyHint": "Another app or tab is using the camera. Close it, then try again.",
+      "cameraFailedTitle": "The camera could not start",
+      "cameraFailedHint": "Try again, or paste the data instead.",
+      "cameraRetry": "Tap to try again"
     },
     "p2p": {
       "copyLinkAction": "Copy link",
