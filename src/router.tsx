@@ -105,8 +105,19 @@ function ErrorPage(): ReactElement {
    * does not report the same failure twice.
    *
    * A 404 is not reported: it is a route that does not exist, not a fault.
+   *
+   * Neither is an absent error. `UnknownRoute` renders this page directly
+   * rather than as an `errorElement`, and outside that boundary
+   * `useRouteError()` returns the `RouteErrorContext` default, which is `null`.
+   * That is not a route error response, so the 404 rule above never saw it: the
+   * catch-all filed `Error: "null"` — a stack with no message behind it — for
+   * every path the running build does not know, which is the exact case the
+   * rule exists to stay quiet about.
    */
   useEffect(() => {
+    if (error === null || error === undefined) {
+      return;
+    }
     if (isRouteErrorResponse(error) && error.status === 404) {
       return;
     }
