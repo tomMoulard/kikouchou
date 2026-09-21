@@ -1262,7 +1262,16 @@
       "mergeSuccess_one": "{{count}} modification fusionnée avec succès",
       "mergeSuccess_other": "{{count}} modifications fusionnées avec succès",
       "mergeError": "Echec de l'application des modifications",
-      "scanAnother": "Scanner un autre"
+      "scanAnother": "Scanner un autre",
+      "cameraBlockedTitle": "L'accès à la caméra est bloqué",
+      "cameraBlockedHint": "Autorisez la caméra pour ce site dans votre navigateur, puis réessayez. Sur iPhone, c'est dans le menu « aA » à côté de l'adresse, ailleurs derrière le cadenas.",
+      "cameraMissingTitle": "Aucune caméra détectée",
+      "cameraMissingHint": "Cet appareil n'a pas de caméra utilisable par le navigateur. Collez les données à la place.",
+      "cameraBusyTitle": "La caméra est déjà utilisée",
+      "cameraBusyHint": "Une autre application ou un autre onglet utilise la caméra. Fermez-le, puis réessayez.",
+      "cameraFailedTitle": "La caméra n'a pas pu démarrer",
+      "cameraFailedHint": "Réessayez, ou collez les données à la place.",
+      "cameraRetry": "Touchez pour réessayer"
     },
     "p2p": {
       "copyLinkAction": "Copier le lien",
