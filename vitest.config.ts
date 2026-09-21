@@ -55,6 +55,8 @@ export default defineConfig({
       VITE_POSTHOG_KEY: '',
       VITE_POSTHOG_HOST: '',
       VITE_META_PIXEL_ID: '',
+      VITE_GTM_CONTAINER_ID: '',
+      VITE_GOOGLE_ADS_ID: '',
     },
 
     /**

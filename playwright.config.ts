@@ -298,6 +298,15 @@ const ANALYTICS_HOSTS: readonly string[] = [
   '*.facebook.com',
   'facebook.net',
   '*.facebook.net',
+  // The Google tags: `googletagmanager.com` serves both `gtm.js` and
+  // `gtag/js`, and `google.com`/`googleadservices.com` receive the conversion
+  // beacons a loaded Ads tag sends.
+  'googletagmanager.com',
+  '*.googletagmanager.com',
+  'googleadservices.com',
+  '*.googleadservices.com',
+  'google-analytics.com',
+  '*.google-analytics.com',
 ];
 
 /**
@@ -519,6 +528,10 @@ export default defineConfig({
         // The Meta Pixel is the same hazard one account further out: a build
         // with an id reports every browser context to a live ad account.
         VITE_META_PIXEL_ID: '',
+        // The Google pair, blanked for the same reason: a container id here
+        // would run whatever the GTM UI holds inside every browser context.
+        VITE_GTM_CONTAINER_ID: '',
+        VITE_GOOGLE_ADS_ID: '',
       },
     },
     {
@@ -554,6 +567,10 @@ export default defineConfig({
         // The Meta Pixel is the same hazard one account further out: a build
         // with an id reports every browser context to a live ad account.
         VITE_META_PIXEL_ID: '',
+        // The Google pair, blanked for the same reason: a container id here
+        // would run whatever the GTM UI holds inside every browser context.
+        VITE_GTM_CONTAINER_ID: '',
+        VITE_GOOGLE_ADS_ID: '',
       },
     },
 
@@ -580,6 +597,10 @@ export default defineConfig({
         // The Meta Pixel is the same hazard one account further out: a build
         // with an id reports every browser context to a live ad account.
         VITE_META_PIXEL_ID: '',
+        // The Google pair, blanked for the same reason: a container id here
+        // would run whatever the GTM UI holds inside every browser context.
+        VITE_GTM_CONTAINER_ID: '',
+        VITE_GOOGLE_ADS_ID: '',
         // A public VAPID key, so the reminder card exists. Any P-256 point
         // will do: the stub's fake PushManager never sends anything anywhere.
         VITE_VAPID_PUBLIC_KEY:

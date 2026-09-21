@@ -33,6 +33,20 @@ export const POSTHOG_URL_PATTERN = /^https?:\/\/[^/]*\bposthog\.(com|io)\b/i;
 export const META_PIXEL_URL_PATTERN =
   /^https?:\/\/[^/]*\bfacebook\.(com|net)\b/i;
 
+/**
+ * The Google tags: `googletagmanager.com` serves `gtm.js` and `gtag/js`, and a
+ * loaded Ads tag beacons conversions at `googleadservices.com` and
+ * `google-analytics.com`.
+ *
+ * Third layer under the same two guards the others have — `lib/google-tag`
+ * refuses to load on a development host, and the web servers blank
+ * `VITE_GTM_CONTAINER_ID` and `VITE_GOOGLE_ADS_ID`. The container is the
+ * widest of the three trackers: it runs whatever the GTM UI holds, so a leak
+ * here executes code this repository never saw.
+ */
+export const GOOGLE_TAG_URL_PATTERN =
+  /^https?:\/\/[^/]*\b(googletagmanager|googleadservices|google-analytics)\.com\b/i;
+
 // ============================================================================
 // Stubs
 // ============================================================================
@@ -89,6 +103,10 @@ export async function stubAnalyticsIngestion(page: Page): Promise<void> {
   await page.route(META_PIXEL_URL_PATTERN, (route) =>
     route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }),
   );
+  // The Google tags, on the same terms.
+  await page.route(GOOGLE_TAG_URL_PATTERN, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }),
+  );
 }
 
 // ============================================================================
@@ -96,8 +114,8 @@ export async function stubAnalyticsIngestion(page: Page): Promise<void> {
 // ============================================================================
 
 /**
- * Records every PostHog and Meta Pixel URL the page attempts, so a spec can
- * assert on the empty list.
+ * Records every PostHog, Meta Pixel and Google tag URL the page attempts, so a
+ * spec can assert on the empty list.
  *
  * Returns the live array: read it *after* the interaction under test, not
  * before. Attach this before {@link stubAnalyticsIngestion} or after — routing
@@ -108,7 +126,11 @@ export function recordAnalyticsRequests(page: Page): readonly string[] {
   const urls: string[] = [];
   page.on('request', (request: Request) => {
     const url = request.url();
-    if (POSTHOG_URL_PATTERN.test(url) || META_PIXEL_URL_PATTERN.test(url)) {
+    if (
+      POSTHOG_URL_PATTERN.test(url) ||
+      META_PIXEL_URL_PATTERN.test(url) ||
+      GOOGLE_TAG_URL_PATTERN.test(url)
+    ) {
       urls.push(url);
     }
   });

@@ -90,6 +90,16 @@ jobs:
           # and a missing one would turn the pixel off without saying so.
           # src/lib/meta-pixel.ts loads nothing when it is absent.
           VITE_META_PIXEL_ID: '2066436523976108'
+          # The Google pair, the same two the landing page loads: the Tag
+          # Manager container and the Google Ads tag. Literals for the reason
+          # the pixel id is one — both are public by construction, and Google's
+          # own instructions put them in the page source.
+          VITE_GTM_CONTAINER_ID: 'GTM-THNTTWRZ'
+          VITE_GOOGLE_ADS_ID: 'AW-18455477906'
+          # The conversion action a PWA install counts as. Whole rather than a
+          # label appended to the account above: a half-built identifier fails
+          # silently in an ad platform.
+          VITE_GOOGLE_ADS_INSTALL_CONVERSION: 'AW-18455477906/KKbVCKuNgfocEJL9oOBE'
           # Trip reminders over Web Push. The public half of the VAPID pair —
           # public by design: every browser sends it to its push service and it
           # ships in the bundle. The private half is the one that matters, and
