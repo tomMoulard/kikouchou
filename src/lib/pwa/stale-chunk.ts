@@ -46,6 +46,14 @@ export const STALE_CHUNK_RELOAD_KEY = 'kikouchou:stale-chunk-reload',
    * "Importing a module script failed", Firefox "error loading dynamically
    * imported module"; bundler-level wrappers add a chunk-load error of their
    * own. All are matched lower-cased.
+   *
+   * A chunk brings its stylesheet with it, and that half fails on its own
+   * wording: Vite's preload helper rejects with "Unable to preload CSS for
+   * <href>" when the `<link>` it inserted errors. It is the same failure with
+   * the same cure, and it used to fall through — see the 2026-09-20 session in
+   * PostHog issue `01a0be39-9bb1-7792-ad03-63460ab2f2fe`, where the Leaflet
+   * stylesheet and a `vendor-supabase` import failed 129 ms apart and only the
+   * second one reloaded.
    */
   MODULE_LOAD_NEEDLES = [
     'dynamically imported module',
@@ -53,6 +61,7 @@ export const STALE_CHUNK_RELOAD_KEY = 'kikouchou:stale-chunk-reload',
     'failed to fetch dynamically',
     'error loading chunk',
     'chunkloaderror',
+    'unable to preload css',
   ] as const;
 
 // ============================================================================

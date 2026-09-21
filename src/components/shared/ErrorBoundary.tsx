@@ -13,7 +13,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useLocation } from 'react-router-dom';
+import { useInRouterContext, useLocation } from 'react-router-dom';
 import { type TFunction } from 'i18next';
 
 import { cn } from '@/lib/utils';
@@ -389,22 +389,44 @@ function ErrorBoundary({
   onReset,
   className,
 }: ErrorBoundaryProps): React.ReactElement {
-  const { t } = useTranslation();
-  // Route identity, so a caught error does not outlive the page it came from.
+  const { t } = useTranslation(),
+    // `useLocation` throws outside a router, and this boundary is no longer
+    // only a route element: `TripCard` wraps its lazy map preview in one, and
+    // a card renders wherever a list puts it. A tree with no router has no
+    // route identity to reset on, which is what an absent `resetKey` means.
+    inRouter = useInRouterContext();
+
+  const props: ErrorBoundaryClassProps = {
+    t,
+    children,
+    fallback,
+    onError,
+    onReset,
+    className,
+  };
+
+  return inRouter ? (
+    <RouteScopedErrorBoundary {...props} />
+  ) : (
+    <ErrorBoundaryClass {...props} />
+  );
+}
+
+/**
+ * The boundary, scoped to the route it is rendered on.
+ *
+ * A component of its own because `useLocation` may only be called under a
+ * router, and {@link ErrorBoundary} has to work on both sides of that line.
+ *
+ * @param props - The boundary's props, translation function included
+ * @returns The boundary, with `resetKey` set to the current path
+ */
+function RouteScopedErrorBoundary(
+  props: ErrorBoundaryClassProps,
+): React.ReactElement {
   const { pathname } = useLocation();
 
-  return (
-    <ErrorBoundaryClass
-      t={t}
-      resetKey={pathname}
-      fallback={fallback}
-      onError={onError}
-      onReset={onReset}
-      className={className}
-    >
-      {children}
-    </ErrorBoundaryClass>
-  );
+  return <ErrorBoundaryClass {...props} resetKey={pathname} />;
 }
 
 // ============================================================================
