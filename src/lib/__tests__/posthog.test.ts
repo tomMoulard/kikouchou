@@ -232,6 +232,24 @@ describe('lib/posthog', () => {
     expect(options['prepare_external_dependency_script']).toBe(readableExternalScript);
   });
 
+  it('captures console errors, because an opaque throw leaves nothing else', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+
+    await importPosthog();
+
+    // This was off for costing ingestion without paying for itself, and is on
+    // because of the opaque issue: when the exception carries no message, no
+    // file and no frames, a `console.error` beside it is often the only
+    // readable account of what the page was doing.
+    const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(options['capture_exceptions']).toEqual({
+      capture_unhandled_errors: true,
+      capture_unhandled_rejections: true,
+      capture_console_errors: true,
+    });
+  });
+
   it('marks events through the opaque-exception annotator, dropping none', async () => {
     withCredentials();
     vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
@@ -364,6 +382,40 @@ describe('markOpaqueExceptions', () => {
     expect(event.properties['opaque_cross_origin']).toBeUndefined();
   });
 
+  it('says where every exception was thrown, opaque or not', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(FACEBOOK_ANDROID_UA);
+
+    // A readable TypeError, with a stack and a grouping of its own. It still
+    // gets the environment, because "thrown inside a Facebook webview" changes
+    // what somebody does about it and cannot be recovered once the page closes.
+    const event = exceptionEvent([
+      { type: 'TypeError', value: 'x is undefined', stacktrace: { frames: [SOME_FRAME] } },
+    ]);
+
+    markOpaqueExceptions(event);
+
+    expect(event.properties['in_app_browser']).toBe('facebook');
+    expect(event.properties['foreign_script_origins']).toEqual([]);
+    // Unchanged: the environment is context, not a regrouping.
+    expect(event.properties['$exception_fingerprint']).toBeUndefined();
+    vi.restoreAllMocks();
+  });
+
+  it('adds nothing to an event that is not an exception', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
+
+    // The environment is only worth its bytes on an exception. Every
+    // `$pageview` and `app_used` carrying a list of script origins would be
+    // ingestion spent on a question nobody asks of them.
+    const event = { uuid: 'u', event: '$pageview', properties: {} } as CaptureResult;
+
+    markOpaqueExceptions(event);
+
+    expect(event.properties['in_app_browser']).toBeUndefined();
+    expect(event.properties['foreign_script_origins']).toBeUndefined();
+  });
+
   it('never drops an event', async () => {
     const { markOpaqueExceptions } = await importPosthog();
 
@@ -403,6 +455,92 @@ describe('markOpaqueExceptions', () => {
 // ============================================================================
 // resetAnalyticsIdentity
 // ============================================================================
+
+// ============================================================================
+// Exception environment
+// ============================================================================
+
+/** The user agent Facebook's Android in-app browser sends. */
+const FACEBOOK_ANDROID_UA =
+  'Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+  'Chrome/151.0.0.0 Mobile Safari/537.36 [FBAN/EMA;FBLC/fr_FR;FBAV/524.0.0.35.108;]';
+
+/** An ordinary desktop browser, for the negative case. */
+const PLAIN_CHROME_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+  'Chrome/151.0.0.0 Safari/537.36';
+
+/** Points `navigator.userAgent` at one string for the length of a test. */
+function withUserAgent(ua: string): void {
+  vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(ua);
+}
+
+describe('inAppBrowser', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('names the webview four of the five opaque errors came from', async () => {
+    const { inAppBrowser } = await importPosthog();
+    withUserAgent(FACEBOOK_ANDROID_UA);
+
+    // The whole point of the property: this string reports itself as Chrome
+    // 151 on Android, which is what PostHog recorded and what made the events
+    // look like an ordinary mobile browser rather than an embedded one.
+    expect(inAppBrowser()).toBe('facebook');
+  });
+
+  it('says nothing about an ordinary browser', async () => {
+    const { inAppBrowser } = await importPosthog();
+    withUserAgent(PLAIN_CHROME_UA);
+
+    // `null` rather than a guess. A wrong attribution here would send somebody
+    // looking for a webview bug that does not exist.
+    expect(inAppBrowser()).toBeNull();
+  });
+});
+
+describe('foreignScriptOrigins', () => {
+  afterEach(() => {
+    document.querySelectorAll('script[data-test-script]').forEach((node) => {
+      node.remove();
+    });
+  });
+
+  /** Puts a `<script src>` on the page, as a third party would. */
+  function addScript(src: string): void {
+    const script = document.createElement('script');
+    script.dataset.testScript = 'true';
+    script.src = src;
+    document.head.appendChild(script);
+  }
+
+  it('lists each other origin once, and never this one', async () => {
+    const { foreignScriptOrigins } = await importPosthog();
+    addScript('https://www.googletagmanager.com/gtag/js?id=AW-1');
+    addScript('https://www.googletagmanager.com/gtag/js?id=AW-2');
+    addScript('https://eu-assets.i.posthog.com/static/recorder.js');
+    addScript('/src/main.tsx');
+
+    const origins = foreignScriptOrigins();
+
+    // Deduplicated, because two tags from one origin are one suspect. The
+    // same-origin bundle is dropped: it is never the source of an error the
+    // browser refuses to describe.
+    expect(origins).toEqual([
+      'https://www.googletagmanager.com',
+      'https://eu-assets.i.posthog.com',
+    ]);
+  });
+
+  it('returns nothing rather than throwing when the page has no foreign script', async () => {
+    const { foreignScriptOrigins } = await importPosthog();
+
+    // This runs inside the error reporter. An empty page must produce an empty
+    // list, not an exception raised while reporting an exception.
+    expect(foreignScriptOrigins()).toEqual([]);
+  });
+});
 
 describe('resetAnalyticsIdentity', () => {
   it('puts the release back, because reset() wipes super properties', async () => {
