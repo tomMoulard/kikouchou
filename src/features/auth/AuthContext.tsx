@@ -54,6 +54,7 @@ import {
   getCapturedAuthError,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
+import { isModuleLoadError, reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
 import posthog, { captureEvent, reportError, resetAnalyticsIdentity } from '@/lib/posthog';
 
 import { getAccountDisplayName } from './display-name';
@@ -581,6 +582,20 @@ export function AuthProvider({
         // service worker. Sign-in is unavailable; everything else is unaffected.
         console.error('[auth] failed to load the Supabase client:', error);
         reportError(error, { source: 'AuthContext.getSupabaseClient' });
+
+        // A deploy replaces every hashed file under `assets/`, and this import
+        // runs in an effect rather than in a render, so no ErrorBoundary is on
+        // the stack to take the reload that recovers a lazy route chunk. Left
+        // alone, a tab that booted on the old build keeps running with sign-in
+        // dead for the rest of its life: `getSupabaseClient` clears its pending
+        // promise so later callers retry, but they retry the same chunk name
+        // the origin stopped serving. The guard inside `reloadForStaleChunk` is
+        // what makes this safe — a chunk missing from the new build too would
+        // otherwise reload forever — and when it declines, the degraded state
+        // below is exactly what the user gets today.
+        if (isModuleLoadError(error instanceof Error ? error : null)) {
+          reloadForStaleChunk();
+        }
 
         // Resolved means "we know the answer", not "there is a session". This
         // used to return without setting it, so `isResolved` stayed false for
