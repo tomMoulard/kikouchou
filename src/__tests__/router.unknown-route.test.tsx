@@ -31,9 +31,11 @@ vi.mock('@/lib/pwa/stale-build', () => ({
 }));
 
 import { recoverFromStaleBuild } from '@/lib/pwa/stale-build';
+import { reportError } from '@/lib/posthog';
 import { appRoutes } from '../router';
 
-const mockedRecover = vi.mocked(recoverFromStaleBuild);
+const mockedRecover = vi.mocked(recoverFromStaleBuild),
+ mockedReportError = vi.mocked(reportError);
 
 // ============================================================================
 // Helpers
@@ -76,6 +78,20 @@ describe('the catch-all route', () => {
 
     expect(await screen.findByText('errors.generic')).toBeInTheDocument();
     expect(screen.getByText('errors.loadingFailed')).toBeInTheDocument();
+  });
+
+  it('does not report the refusal to error tracking', async () => {
+    renderUnknownRoute();
+
+    await screen.findByText('errors.generic');
+
+    // The catch-all renders the error page directly rather than through an
+    // `errorElement`, so `useRouteError()` answers with its context default of
+    // `null` and there is no error to report. Reporting one anyway filed a
+    // stack with no message behind it — `Error: "null"` — for every path this
+    // build does not know, which is the one case the page means to stay quiet
+    // about.
+    expect(mockedReportError).not.toHaveBeenCalled();
   });
 
   it('waits instead of refusing while a newer build takes the page over', async () => {
