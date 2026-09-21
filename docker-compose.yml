@@ -16,8 +16,35 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - letsencrypt:/letsencrypt
 
+  # kikouchou.app — the app itself.
+  #
+  # Everything the bundle needs is passed at build time, because `vite build`
+  # inlines it: a variable added to `environment:` here would reach nginx and
+  # nothing else. Values come from the shell or from a `.env` beside this file,
+  # and each one defaults to empty, which builds the local-only offline app.
+  #
+  # VITE_APP_VERSION is the one to remember. Without it every event from this
+  # deployment reports its release as `dev`, and an exception cannot be tied to
+  # the commit that shipped it:
+  #
+  #   VITE_APP_VERSION=$(git rev-parse HEAD) docker compose build app
   app:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:-}
+        VITE_POSTHOG_KEY: ${VITE_POSTHOG_KEY:-}
+        VITE_POSTHOG_HOST: ${VITE_POSTHOG_HOST:-https://events.kikouchou.app}
+        VITE_APP_VERSION: ${VITE_APP_VERSION:-}
+        VITE_SHARE_ORIGIN: ${VITE_SHARE_ORIGIN:-https://share.kikouchou.app}
+        VITE_VAPID_PUBLIC_KEY: ${VITE_VAPID_PUBLIC_KEY:-}
+      # A personal API key, so it is a secret rather than a build arg: a build
+      # arg is recorded in `docker history`. Unset, the Dockerfile skips the
+      # source-map upload with a warning and the build still succeeds — the
+      # cost is that every stack trace from this image stays minified.
+      secrets:
+        - posthog_cli_api_key
     expose:
       - "3000"
     restart: unless-stopped
@@ -71,6 +98,13 @@ services:
       - traefik.http.routers.share.entrypoints=websecure
       - traefik.http.routers.share.tls.certresolver=letsencrypt
       - traefik.http.services.share.loadbalancer.server.port=8080
+
+secrets:
+  # Read from the environment rather than from a file, so it never lands on
+  # disk beside the compose file. Empty when POSTHOG_CLI_API_KEY is unset,
+  # which the Dockerfile treats as "no upload configured".
+  posthog_cli_api_key:
+    environment: POSTHOG_CLI_API_KEY
 
 volumes:
   letsencrypt:
