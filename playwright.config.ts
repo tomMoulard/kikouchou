@@ -289,6 +289,15 @@ const ANALYTICS_HOSTS: readonly string[] = [
   'posthog.io',
   '*.posthog.io',
   'events.kikouchou.app',
+  // The Meta Pixel: `connect.facebook.net` serves the library and
+  // `facebook.com/tr` receives the events. The deployed bundle carries a real
+  // pixel id, so a live run would report a few hundred pageviews and any
+  // install it manages to trigger into the ad account.
+  'connect.facebook.net',
+  'facebook.com',
+  '*.facebook.com',
+  'facebook.net',
+  '*.facebook.net',
 ];
 
 /**
@@ -507,6 +516,9 @@ export default defineConfig({
         VITE_SUPABASE_PUBLISHABLE_KEY: '',
         VITE_POSTHOG_KEY: '',
         VITE_POSTHOG_HOST: '',
+        // The Meta Pixel is the same hazard one account further out: a build
+        // with an id reports every browser context to a live ad account.
+        VITE_META_PIXEL_ID: '',
       },
     },
     {
@@ -539,6 +551,9 @@ export default defineConfig({
         VITE_SUPABASE_PUBLISHABLE_KEY: '',
         VITE_POSTHOG_KEY: '',
         VITE_POSTHOG_HOST: '',
+        // The Meta Pixel is the same hazard one account further out: a build
+        // with an id reports every browser context to a live ad account.
+        VITE_META_PIXEL_ID: '',
       },
     },
 
@@ -562,6 +577,9 @@ export default defineConfig({
         // would put a fake account in it. See the dev server above.
         VITE_POSTHOG_KEY: '',
         VITE_POSTHOG_HOST: '',
+        // The Meta Pixel is the same hazard one account further out: a build
+        // with an id reports every browser context to a live ad account.
+        VITE_META_PIXEL_ID: '',
         // A public VAPID key, so the reminder card exists. Any P-256 point
         // will do: the stub's fake PushManager never sends anything anywhere.
         VITE_VAPID_PUBLIC_KEY:

@@ -20,6 +20,19 @@ import type { Page, Request } from '@playwright/test';
  */
 export const POSTHOG_URL_PATTERN = /^https?:\/\/[^/]*\bposthog\.(com|io)\b/i;
 
+/**
+ * Every host the Meta Pixel talks to: `connect.facebook.net` serves
+ * `fbevents.js` and `www.facebook.com/tr` receives the events.
+ *
+ * Same job and same shape as {@link POSTHOG_URL_PATTERN}, because the pixel is
+ * the same hazard: `lib/meta-pixel` refuses to load on a development host and
+ * the web servers blank `VITE_META_PIXEL_ID`, and this is the third layer under
+ * both. A leak here is not merely a stray event — it is loopback traffic in a
+ * live ad account, training a campaign on people who do not exist.
+ */
+export const META_PIXEL_URL_PATTERN =
+  /^https?:\/\/[^/]*\bfacebook\.(com|net)\b/i;
+
 // ============================================================================
 // Stubs
 // ============================================================================
@@ -70,6 +83,12 @@ export async function stubAnalyticsIngestion(page: Page): Promise<void> {
   await page.route(POSTHOG_URL_PATTERN, (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"status":1}' }),
   );
+  // The Meta Pixel, fulfilled rather than aborted for the same reason. An empty
+  // body is a valid answer for both halves of it: `fbevents.js` evaluates to
+  // nothing, and `/tr` is a beacon whose response nobody reads.
+  await page.route(META_PIXEL_URL_PATTERN, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }),
+  );
 }
 
 // ============================================================================
@@ -77,8 +96,8 @@ export async function stubAnalyticsIngestion(page: Page): Promise<void> {
 // ============================================================================
 
 /**
- * Records every PostHog URL the page attempts, so a spec can assert on the
- * empty list.
+ * Records every PostHog and Meta Pixel URL the page attempts, so a spec can
+ * assert on the empty list.
  *
  * Returns the live array: read it *after* the interaction under test, not
  * before. Attach this before {@link stubAnalyticsIngestion} or after — routing
@@ -89,7 +108,7 @@ export function recordAnalyticsRequests(page: Page): readonly string[] {
   const urls: string[] = [];
   page.on('request', (request: Request) => {
     const url = request.url();
-    if (POSTHOG_URL_PATTERN.test(url)) {
+    if (POSTHOG_URL_PATTERN.test(url) || META_PIXEL_URL_PATTERN.test(url)) {
       urls.push(url);
     }
   });

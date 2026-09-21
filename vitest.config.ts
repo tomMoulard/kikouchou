@@ -54,6 +54,7 @@ export default defineConfig({
       VITE_SUPABASE_PUBLISHABLE_KEY: '',
       VITE_POSTHOG_KEY: '',
       VITE_POSTHOG_HOST: '',
+      VITE_META_PIXEL_ID: '',
     },
 
     /**

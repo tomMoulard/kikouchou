@@ -45,57 +45,8 @@
 import posthog from 'posthog-js';
 import type { CaptureResult } from 'posthog-js';
 
+import { isDevelopmentHost } from '@/lib/analytics/development-host';
 import { readDisplayMode } from '@/lib/pwa/display-mode';
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/**
- * Exact hostnames that mean "this is somebody's machine, not the deployed app".
- */
-const DEVELOPMENT_HOSTNAMES: readonly string[] = ['localhost', '::1', '[::1]', '0.0.0.0'];
-
-/**
- * Hostname shapes that mean the same thing.
- *
- * Loopback is only half of it. `vite --host` binds to the LAN so a phone can
- * load the app, and that phone sees `192.168.1.20`, not `localhost` — which is
- * exactly the session where somebody is most likely to be poking at the app by
- * hand. `.localhost` resolves to loopback by RFC 6761 and `.local` is mDNS, so
- * both are a machine on a desk rather than a deployment.
- *
- * Nothing here can match the deployment host, which is the property that
- * matters: a false positive costs a day of analytics, a false negative costs
- * the project another nineteen people.
- */
-const DEVELOPMENT_HOSTNAME_PATTERNS: readonly RegExp[] = [
-  /\.localhost$/,
-  /\.local$/,
-  /^127\./, // loopback, all of 127.0.0.0/8
-  /^10\./, // RFC 1918 private
-  /^192\.168\./, // RFC 1918 private
-  /^172\.(1[6-9]|2\d|3[01])\./, // RFC 1918 private
-  /^169\.254\./, // link-local, e.g. an ad-hoc connection
-];
-
-/**
- * Whether this document is being served from a developer's own machine.
- *
- * Reads `window` defensively: this module is evaluated at import time and must
- * never throw, and it is imported by unit tests whose environment is not
- * guaranteed to have a DOM.
- */
-function isDevelopmentHost(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  const { hostname } = window.location;
-  return (
-    DEVELOPMENT_HOSTNAMES.includes(hostname) ||
-    DEVELOPMENT_HOSTNAME_PATTERNS.some((pattern) => pattern.test(hostname))
-  );
-}
 
 // ============================================================================
 // Exception handling

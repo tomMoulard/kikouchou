@@ -60,6 +60,22 @@ interface ImportMetaEnv {
   readonly VITE_POSTHOG_ALLOW_LOCALHOST?: string;
 
   /**
+   * Meta Pixel id from Events Manager, e.g. `2066436523976108`. Absent means
+   * the pixel is off entirely — `lib/meta-pixel` loads no script and every
+   * track call is a no-op.
+   */
+  readonly VITE_META_PIXEL_ID?: string;
+
+  /**
+   * Opt in to the Meta Pixel on a dev server. `'true'` and nothing else.
+   *
+   * Off for the same reason as `VITE_POSTHOG_ALLOW_LOCALHOST`: traffic from a
+   * developer's machine is real traffic in a real ad account, and it trains
+   * the campaign on people who were never going to convert.
+   */
+  readonly VITE_META_PIXEL_ALLOW_LOCALHOST?: string;
+
+  /**
    * Origin of the link preview service, e.g. `https://share.kikouchou.app`.
    *
    * Set it and the share dialog hands out `<origin>/<lang>/<token>`, which is
