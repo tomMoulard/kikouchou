@@ -147,13 +147,9 @@ describe('writing only what changed', () => {
     upsertDocEntity(doc, 'rooms', { id: 'r2', name: 'Barn', capacity: 3, order: 1 });
     await syncDocToDexie(doc, tripId);
 
-    const puts: string[][] = [];
-    const bulkPut = vi
-      .spyOn(db.rooms, 'bulkPut')
-      .mockImplementation(async (rows: readonly { id: string }[]) => {
-        puts.push(rows.map((row) => row.id));
-        return '' as never;
-      });
+    // Spied, not stubbed: the real write still has to happen, because the next
+    // projection compares against what Dexie holds.
+    const bulkPut = vi.spyOn(db.rooms, 'bulkPut');
 
     // One room's name changes. The projection used to `bulkPut` every row of
     // all nine trip tables on every remote update, so one guest's name arriving
@@ -162,7 +158,10 @@ describe('writing only what changed', () => {
     upsertDocEntity(doc, 'rooms', { ...VALID_ROOM, name: 'Loft' });
     await syncDocToDexie(doc, tripId);
 
-    expect(puts).toEqual([['r1']]);
+    const written = bulkPut.mock.calls.map((call) =>
+      [...call[0]].map((room) => room.id),
+    );
+    expect(written).toEqual([['r1']]);
     bulkPut.mockRestore();
   });
 
