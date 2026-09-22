@@ -1,14 +1,11 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@/test/utils';
 
-import type { ManualInstallPlatform } from '@/hooks/useInstallPrompt';
-
 const mockCanInstall = vi.fn(() => false);
 const mockInstall = vi.fn().mockResolvedValue(true);
 const mockIsInstalling = vi.fn(() => false);
 const mockIsInstalled = vi.fn(() => false);
 const mockInstallIntent = vi.fn(() => false);
-const mockManualInstallPlatform = vi.fn((): ManualInstallPlatform => 'generic');
 
 // The banner reads the app's one install prompt through the context, which is
 // where `useInstallPrompt` runs; the context is what gets doubled here.
@@ -19,8 +16,6 @@ vi.mock('@/contexts/InstallPromptContext', () => ({
     isInstalling: mockIsInstalling(),
     isInstalled: mockIsInstalled(),
     installIntent: mockInstallIntent(),
-    manualInstallPlatform: mockManualInstallPlatform(),
-    requestInstall: vi.fn(),
   }),
 }));
 
@@ -86,7 +81,6 @@ describe('InstallPrompt', () => {
     mockIsInstalling.mockReturnValue(false);
     mockIsInstalled.mockReturnValue(false);
     mockInstallIntent.mockReturnValue(false);
-    mockManualInstallPlatform.mockReturnValue('generic');
   });
 
   afterEach(() => {
@@ -316,9 +310,8 @@ describe('InstallPrompt', () => {
       // Dismissed this week, nothing requested on arrival: silent.
       installMemoryStorage();
       localStorage.setItem(DISMISSAL_KEY, String(Date.now() - 60_000));
-      mockCanInstall.mockReturnValue(false);
+      mockCanInstall.mockReturnValue(true);
       mockInstallIntent.mockReturnValue(false);
-      mockManualInstallPlatform.mockReturnValue('ios');
 
       const { rerender } = render(<InstallPrompt className="before" />, {
         withProviders: false,
@@ -326,8 +319,7 @@ describe('InstallPrompt', () => {
       await act(async () => { vi.advanceTimersByTime(1100); });
       expect(screen.queryByRole('region')).not.toBeInTheDocument();
 
-      // The nudge on a shared trip's calendar raises the request through the
-      // context while the banner is already mounted: the steps come up at
+      // A request raised while the banner is already mounted brings it up at
       // once, and the standing dismissal does not apply — the visitor asked.
       // (A context change re-renders through `memo`; a mocked hook does not,
       // so the prop changes to stand in for it.)
@@ -336,73 +328,20 @@ describe('InstallPrompt', () => {
       await act(async () => { vi.advanceTimersByTime(0); });
 
       expect(screen.getByRole('region')).toBeInTheDocument();
-      expect(screen.getByText('pwa.manualInstall.ios')).toBeInTheDocument();
     });
 
-    it('shows the browser own steps when no beforeinstallprompt was captured', () => {
+    it('stays silent when no beforeinstallprompt was captured', async () => {
+      // An iPhone, or Firefox: `beforeinstallprompt` is Chromium's alone, so
+      // there is nothing to fire. The banner used to answer that with a list
+      // of menu steps. A list of steps is not an install button, so now the
+      // request goes unanswered rather than half-answered.
       mockCanInstall.mockReturnValue(false);
       mockInstallIntent.mockReturnValue(true);
-      mockManualInstallPlatform.mockReturnValue('ios');
 
-      render(<InstallPrompt />, { withProviders: false });
+      const { container } = render(<InstallPrompt />, { withProviders: false });
+      await act(async () => { vi.advanceTimersByTime(1100); });
 
-      expect(screen.getByRole('region')).toBeInTheDocument();
-      expect(screen.getByText('pwa.manualInstall.ios')).toBeInTheDocument();
-    });
-
-    it('offers no install button in the manual card', () => {
-      mockCanInstall.mockReturnValue(false);
-      mockInstallIntent.mockReturnValue(true);
-      mockManualInstallPlatform.mockReturnValue('ios');
-
-      render(<InstallPrompt />, { withProviders: false });
-
-      // There is no captured event to fire, so a button that reads "Install
-      // app" would do nothing but report a failure.
-      expect(screen.queryByText('pwa.install')).not.toBeInTheDocument();
-      expect(screen.getByText('pwa.manualInstall.title')).toBeInTheDocument();
-    });
-
-    it('names the steps of the browser it was told about', () => {
-      mockCanInstall.mockReturnValue(false);
-      mockInstallIntent.mockReturnValue(true);
-      mockManualInstallPlatform.mockReturnValue('firefoxWindows');
-
-      render(<InstallPrompt />, { withProviders: false });
-
-      expect(
-        screen.getByText('pwa.manualInstall.firefoxWindows'),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText('pwa.manualInstall.ios'),
-      ).not.toBeInTheDocument();
-    });
-
-    it('prefers the native prompt over the steps once the event arrives', () => {
-      mockCanInstall.mockReturnValue(true);
-      mockInstallIntent.mockReturnValue(true);
-      mockManualInstallPlatform.mockReturnValue('generic');
-
-      render(<InstallPrompt />, { withProviders: false });
-
-      // One tap beats a list of instructions whenever the browser offers one.
-      expect(
-        screen.queryByText('pwa.manualInstall.generic'),
-      ).not.toBeInTheDocument();
-      expect(screen.getAllByText('pwa.install').length).toBeGreaterThanOrEqual(2);
-    });
-
-    it('can be dismissed like the banner', async () => {
-      mockCanInstall.mockReturnValue(false);
-      mockInstallIntent.mockReturnValue(true);
-      mockManualInstallPlatform.mockReturnValue('ios');
-
-      render(<InstallPrompt />, { withProviders: false });
-      const gotIt = screen.getByText('pwa.manualInstall.gotIt');
-      await act(async () => { gotIt.click(); });
-      await act(async () => { vi.advanceTimersByTime(400); });
-
-      expect(screen.queryByRole('region')).not.toBeInTheDocument();
+      expect(container.innerHTML).toBe('');
     });
 
     it('renders nothing at all when the app is already installed', async () => {
@@ -410,12 +349,11 @@ describe('InstallPrompt', () => {
       mockCanInstall.mockReturnValue(false);
       mockIsInstalled.mockReturnValue(true);
       mockInstallIntent.mockReturnValue(true);
-      mockManualInstallPlatform.mockReturnValue('ios');
 
       const { container } = render(<InstallPrompt />, { withProviders: false });
       await act(async () => { vi.advanceTimersByTime(1100); });
 
-      // Nothing is left to ask for, so neither the steps…
+      // Nothing is left to ask for, so neither the card…
       expect(container.innerHTML).toBe('');
       /*
         …nor the confirmation, which belongs to an install that happened here.

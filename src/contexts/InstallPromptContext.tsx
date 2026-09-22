@@ -8,25 +8,10 @@
  * banner, the nudge on a shared trip's calendar — reads the result from this
  * context.
  *
- * The context also owns something the hook cannot: an install request raised
- * *after* the page loaded. The hook reads `?install=1` once, on arrival. The
- * nudge sends an iPhone to the invite page to install from there, and that is a
- * client-side navigation with nothing to re-read, so it raises the request
- * through `requestInstall()` and the banner answers it with the browser's own
- * steps exactly as if the visit had started with the parameter.
- *
  * @module contexts/InstallPromptContext
  */
 
-import {
-  type ReactElement,
-  type ReactNode,
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useState,
-} from 'react';
+import { type ReactElement, type ReactNode, createContext, useContext } from 'react';
 
 import { type UseInstallPromptResult, useInstallPrompt } from '@/hooks/useInstallPrompt';
 
@@ -35,22 +20,16 @@ import { type UseInstallPromptResult, useInstallPrompt } from '@/hooks/useInstal
 // ============================================================================
 
 /**
- * What the hook reports, plus the one thing a component can ask of it.
+ * What the hook reports, shared by every component that offers the install.
  */
-export interface InstallPromptState extends UseInstallPromptResult {
-  /**
-   * Treats the rest of this visit as an install request, as `?install=1` on
-   * arrival would have. Idempotent.
-   */
-  readonly requestInstall: () => void;
-}
+export type InstallPromptState = UseInstallPromptResult;
 
 // ============================================================================
 // Context
 // ============================================================================
 
 /**
- * What a component sees outside any provider: nothing to install, no request.
+ * What a component sees outside any provider: nothing to install.
  *
  * A default rather than a throw so a component that *can* offer the install —
  * the layout, a page — renders unchanged in a test tree or a storybook without
@@ -61,9 +40,7 @@ const NO_INSTALL: InstallPromptState = {
   isInstalled: false,
   isInstalling: false,
   installIntent: false,
-  manualInstallPlatform: 'generic',
   install: async () => false,
-  requestInstall: () => {},
 };
 
 const InstallPromptContext = createContext<InstallPromptState>(NO_INSTALL);
@@ -85,22 +62,8 @@ interface InstallPromptProviderProps {
  */
 export function InstallPromptProvider({ children }: InstallPromptProviderProps): ReactElement {
   const prompt = useInstallPrompt();
-  const [requested, setRequested] = useState(false);
 
-  const requestInstall = useCallback((): void => {
-    setRequested(true);
-  }, []);
-
-  const value = useMemo<InstallPromptState>(
-    () => ({
-      ...prompt,
-      installIntent: prompt.installIntent || requested,
-      requestInstall,
-    }),
-    [prompt, requested, requestInstall],
-  );
-
-  return <InstallPromptContext.Provider value={value}>{children}</InstallPromptContext.Provider>;
+  return <InstallPromptContext.Provider value={prompt}>{children}</InstallPromptContext.Provider>;
 }
 
 // ============================================================================
@@ -108,7 +71,7 @@ export function InstallPromptProvider({ children }: InstallPromptProviderProps):
 // ============================================================================
 
 /**
- * The app's one install prompt, and the request flag.
+ * The app's one install prompt.
  *
  * @returns The shared install state; "nothing to install" outside a provider
  */

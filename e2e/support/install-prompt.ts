@@ -24,11 +24,6 @@ import type { Page } from '@playwright/test';
 export const INSTALL_REGION_LABEL = /installation/i,
 
 /**
- * The button that acknowledges hand-written install steps, in both languages.
- */
- MANUAL_STEPS_BUTTON_LABEL = /got it|j'ai compris/i,
-
-/**
  * Where `InstallPrompt` records a dismissal, and for how long it honours one.
  */
  DISMISSAL_STORAGE_KEY = 'kikouchou-install-dismissed';

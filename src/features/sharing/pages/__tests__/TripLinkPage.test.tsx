@@ -80,9 +80,7 @@ function installState(overrides: { installIntent?: boolean; isInstalled?: boolea
     isInstalled: false,
     isInstalling: false,
     installIntent: false,
-    manualInstallPlatform: 'ios',
     install: vi.fn(async () => false),
-    requestInstall: vi.fn(),
     ...overrides,
   });
 }

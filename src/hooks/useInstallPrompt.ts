@@ -52,23 +52,6 @@ declare global {
 }
 
 /**
- * The route a browser leaves for installing a web app when it never fires
- * `beforeinstallprompt` — which is every browser that is not Chromium.
- *
- * One member per set of instructions rather than one per browser: every engine
- * on iOS installs through the same share sheet, and Firefox's three desktop
- * platforms are three genuinely different answers, one of which is "you
- * cannot".
- */
-export type ManualInstallPlatform =
-  | 'ios'
-  | 'firefoxAndroid'
-  | 'firefoxWindows'
-  | 'firefoxLinux'
-  | 'firefoxMac'
-  | 'generic';
-
-/**
  * Return type for the useInstallPrompt hook.
  */
 export interface UseInstallPromptResult {
@@ -97,12 +80,6 @@ export interface UseInstallPromptResult {
    * one is an ordinary visit.
    */
   readonly installIntent: boolean;
-
-  /**
-   * Which hand-written steps to show when there is no captured prompt to fire.
-   * Fixed for the life of the page.
-   */
-  readonly manualInstallPlatform: ManualInstallPlatform;
 
   /**
    * Triggers the native install prompt.
@@ -173,45 +150,6 @@ function spendInstallRequest(): void {
 }
 
 /**
- * Works out which hand-written install route this browser leaves.
- *
- * Feature detection wherever there is a feature to detect, user agent only
- * where there is not — and here there is not: Firefox exposes nothing that says
- * "I can pin a tab to the taskbar" (`InstallTrigger` was removed in 128), and
- * iPadOS deliberately claims to be a Mac.
- *
- * @returns The platform whose steps apply
- */
-function detectManualInstallPlatform(): ManualInstallPlatform {
-  if (typeof navigator === 'undefined') {return 'generic';}
-
-  const ua = navigator.userAgent,
-
-  // iPadOS 13+ sends a desktop Safari user agent. The touch points are what is
-  // left to tell an iPad from a Mac.
-   isIOS =
-    /iPad|iPhone|iPod/.test(ua) ||
-    (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-
-  // Every engine on iOS is WebKit, so the platform decides before the browser
-  // does: Chrome and Firefox there install through the same share sheet, and
-  // neither has the menu item their desktop builds do.
-  if (isIOS) {return 'ios';}
-
-  if (/Firefox\//.test(ua)) {
-    if (/Android/.test(ua)) {return 'firefoxAndroid';}
-    // Taskbar tabs ship on Windows (142+), sit behind
-    // `browser.taskbarTabs.enabled` on Linux, and do not exist on macOS — so
-    // that last one is told the truth rather than given a step to hunt for.
-    if (/Windows/.test(ua)) {return 'firefoxWindows';}
-    if (/Macintosh|Mac OS X/.test(ua)) {return 'firefoxMac';}
-    if (/X11|Linux/.test(ua)) {return 'firefoxLinux';}
-  }
-
-  return 'generic';
-}
-
-/**
  * Checks if the app is installed using getInstalledRelatedApps API.
  * This API is only available in some browsers (Chrome on Android).
  *
@@ -248,7 +186,6 @@ async function checkInstalledRelatedApps(): Promise<boolean> {
  * - Detects if the app is already installed
  * - Provides an install function that triggers the native prompt
  * - Reads and then spends an `?install=1` request from the landing page
- * - Names the browser's own install route for when there is no prompt to fire
  * - Properly cleans up event listeners on unmount
  * - Uses isMountedRef pattern for async safety
  *
@@ -302,14 +239,6 @@ export function useInstallPrompt(): UseInstallPromptResult {
    * the components rendering from it.
    */
    [installIntent] = useState<boolean>(readInstallRequest),
-
-  /**
-   * The browser's own install route, for when no prompt is ever captured.
-   * Constant for the life of the page: the user agent does not change.
-   */
-   [manualInstallPlatform] = useState<ManualInstallPlatform>(
-    detectManualInstallPlatform,
-   ),
 
   // ============================================================================
   // Refs
@@ -395,10 +324,10 @@ export function useInstallPrompt(): UseInstallPromptResult {
 
         This capture used to sit on the Install button's own success, which only
         ever fires for Chromium's native prompt — an install through the
-        browser's own menu, or through the share sheet the manual steps
-        describe, was invisible to it. `appinstalled` is fired by the browser
-        however the app got installed, so the button's involvement is now a
-        property of this event rather than the thing that triggers it.
+        browser's own menu, or through an iPhone's share sheet, was invisible
+        to it. `appinstalled` is fired by the browser however the app got
+        installed, so the button's involvement is now a property of this event
+        rather than the thing that triggers it.
 
         One capture per install rests on this hook having one consumer:
         `InstallPromptProvider`, which `App` mounts once and which hands the
@@ -568,7 +497,6 @@ export function useInstallPrompt(): UseInstallPromptResult {
     isInstalled,
     isInstalling,
     installIntent,
-    manualInstallPlatform,
     install,
   };
 }
