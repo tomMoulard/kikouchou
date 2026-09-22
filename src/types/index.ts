@@ -1595,6 +1595,19 @@ export interface GuestGroup extends Identifiable, WithTimestamps {
    * pushed is not evidence that anything was deleted, so it is never pruned.
    */
   remoteGroupId?: string;
+
+  /**
+   * The account `remoteGroupId` was issued by.
+   *
+   * Recorded alongside it because the prune is scoped to one account: the pull
+   * asks the server for `owner_id = <the signed-in account>`, so a group this
+   * device uploaded under a *different* account is missing from that answer for
+   * a reason that has nothing to do with deletion. Without this field, signing
+   * in as a second person on a shared browser deleted the first person's guest
+   * groups off the device — and guest groups are deliberately outside the trip
+   * cascade precisely because they are meant to outlive things.
+   */
+  remoteOwnerId?: string;
 }
 
 /**
