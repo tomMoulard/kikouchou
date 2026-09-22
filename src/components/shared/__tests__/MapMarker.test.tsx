@@ -40,7 +40,13 @@ interface MockMarkerProps {
     click?: () => void;
     keydown?: (e: unknown) => void;
   };
-  'aria-label'?: string;
+  /**
+   * Leaflet's marker `alt` option, which is what it writes onto the marker
+   * element as its accessible name. `aria-label` is not a marker option and
+   * never reached the DOM, so a mock accepting it was testing a prop the real
+   * library ignores.
+   */
+  alt?: string;
   title?: string;
 }
 
@@ -51,7 +57,7 @@ vi.mock('react-leaflet', () => ({
     position,
     icon,
     eventHandlers,
-    'aria-label': ariaLabel,
+    alt,
     title,
   }: MockMarkerProps) => {
     mocks.markerRenders.count += 1;
@@ -64,7 +70,7 @@ vi.mock('react-leaflet', () => ({
         data-icon-html={
           (icon as { __leafletDivIcon?: { html?: string } })?.__leafletDivIcon?.html ?? ''
         }
-        aria-label={ariaLabel}
+        aria-label={alt}
         title={title}
         onClick={eventHandlers?.click}
         onKeyDown={eventHandlers?.keydown}
@@ -175,11 +181,24 @@ describe('MapMarker Basic Rendering', () => {
     expect(element).toHaveAttribute('data-position', '[51.5074,-0.1278]');
   });
 
-  it('renders marker with aria-label', () => {
+  it('gives the marker an accessible name through Leaflet\'s alt', () => {
     const marker = createTestMarker({ label: 'London' });
     render(<MapMarker marker={marker} />, { withProviders: false });
 
     expect(screen.getByLabelText('London')).toBeInTheDocument();
+  });
+
+  it('leaves the glyph as presentation, so the marker is one tab stop', () => {
+    const marker = createTestMarker({ label: 'London' });
+    render(<MapMarker marker={marker} />, { withProviders: false });
+
+    // The icon html is rendered inside Leaflet's own focusable marker element.
+    // A `tabindex` and a `role` on the inner div gave every pin a second tab
+    // stop with no accessible name at all — the glyph is `aria-hidden`, so a
+    // screen reader announced "button" and stopped.
+    const html = screen.getByTestId('mock-marker').getAttribute('data-icon-html') ?? '';
+    expect(html).not.toContain('tabindex');
+    expect(html).not.toContain('role="button"');
   });
 
   it('renders marker with title', () => {
@@ -319,7 +338,10 @@ describe('MapMarker Popup', () => {
     render(<MapMarker marker={marker} />, { withProviders: false });
 
     const popup = screen.getByRole('dialog');
-    expect(popup).toHaveAttribute('aria-label', 'Details for Test Location');
+    // i18next is mocked, so `t()` echoes the key: what matters is that the
+    // label goes through it at all. It used to be a hardcoded English string,
+    // announced in English to a French user.
+    expect(popup).toHaveAttribute('aria-label', 'map.popupDetails');
   });
 });
 

@@ -57,6 +57,17 @@ export interface LocationPickerProps {
   readonly 'aria-label'?: string;
   /** Error state for validation */
   readonly hasError?: boolean;
+  /**
+   * Id of the element describing the current error.
+   *
+   * The picker renders its own input, so a caller that writes an error
+   * paragraph next to it has no way to link the two: `aria-describedby` set on
+   * `<LocationPicker>` is an unknown prop and reaches no DOM node. Every form
+   * that tried announced its location error once, through `role="alert"`, and
+   * then had nothing pointing at it — so a screen-reader user who tabbed back
+   * to the field to correct it heard the label and no reason.
+   */
+  readonly 'aria-describedby'?: string;
 }
 
 /**
@@ -99,6 +110,7 @@ export const LocationPicker = memo(function LocationPicker({
   name,
   'aria-label': ariaLabel,
   hasError = false,
+  'aria-describedby': describedBy,
 }: LocationPickerProps) {
   const { t } = useTranslation();
 
@@ -414,6 +426,7 @@ export const LocationPicker = memo(function LocationPicker({
             highlightedIndex >= 0 ? `${inputId}-option-${highlightedIndex}` : undefined
           }
           aria-invalid={hasError}
+          aria-describedby={describedBy}
           autoComplete="off"
           value={inputValue}
           onChange={handleInputChange}
