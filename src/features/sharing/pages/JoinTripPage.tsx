@@ -459,7 +459,7 @@ function ViewerWelcome({ trip, installRequested }: ViewerWelcomeProps): ReactEle
     <div
       className={cn(
         'flex min-h-svh items-center justify-center p-4',
-        // The global banner is showing the install steps along the bottom of
+        // The global banner may be sitting along the bottom of
         // the screen — `bottom-above-stack` puts its top about 20rem up on a
         // phone. Room for it, so the card's own button stays reachable.
         installRequested && 'pb-96',

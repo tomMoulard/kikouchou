@@ -457,6 +457,14 @@ never goes live and then dead under somebody's cursor.
 trip's calendar — reads `useInstallPromptState()`. A second `useInstallPrompt`
 would hold a second copy of the deferred prompt and count one install twice.
 
+**No prompt, no offer.** `beforeinstallprompt` is Chromium's alone, so on an
+iPhone and in Firefox `canInstall` never turns true. Both the banner and the
+nudge render nothing there. The app used to answer that case with the browser's
+own menu steps — "Tap the Share button, then Add to Home Screen" — and a "Got
+it" button; that is homework rather than an offer, and a card that cannot
+install anything is one more thing to dismiss. Do not bring it back: an install
+offer is a button that installs, or it is absent.
+
 An installed iPhone app has storage separate from Safari's, so it must open on
 a page that can fetch the trip again with nothing stored. The build emits
 `manifest-here.webmanifest`, the manifest without `start_url`, and the two

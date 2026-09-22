@@ -260,7 +260,7 @@ test.describe('an invite opened with no account', () => {
     expect(stub.counts.updateAttempts).toBe(stub.counts.updateInserts);
   });
 
-  test('suggests installing on a phone, and hands off to the invite page', async ({
+  test('says nothing about installing where the browser offers no prompt', async ({
     browser,
   }) => {
     const stub = new SupabaseStub();
@@ -271,31 +271,16 @@ test.describe('an invite opened with no account', () => {
     await phone.goto(`/join/${token}`);
     await phone.getByRole('button', { name: /alice/i }).click({ timeout: 30_000 });
     await expect(phone).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+    await expect(phone.getByTestId('viewer-unlock-card')).toBeVisible({ timeout: 20_000 });
 
-    // The one place the app asks to be installed, and the reason it gives.
-    const nudge = phone.getByTestId('install-nudge-card');
-    await expect(nudge).toBeVisible({ timeout: 20_000 });
-    await expect(nudge).toContainText(/remind you before Shared Brittany starts/i);
-
-    // Playwright's Chromium never fires `beforeinstallprompt`, so the button is
-    // the manual route: back to the invite page, which is the page to install
-    // *from* so the installed app opens on this trip.
-    await nudge.getByRole('button', { name: /show me how/i }).click();
-    await expect(phone).toHaveURL(new RegExp(`/join/${token}\\?install=1`), { timeout: 20_000 });
-    await expect(phone.getByTestId('install-here-hint')).toBeVisible({ timeout: 20_000 });
-    // The manifest swap that makes the handoff work is a production-build
-    // property — the dev server injects no manifest link at all — so it is
-    // asserted in `pwa.spec.ts`, not here.
-    // The browser's own steps, from the global banner — the generic ones,
-    // since Playwright's Chromium is neither an iPhone nor Firefox.
-    const banner = phone.getByRole('region', { name: /app installation prompt/i });
-    await expect(banner).toBeVisible({ timeout: 20_000 });
-    await expect(banner).toContainText(/add to home screen/i);
-
-    // A returning viewer is not asked who they are again; one tap goes back —
-    // and the banner along the bottom must not be sitting on that tap.
-    await phone.getByRole('button', { name: /open the trip/i }).click();
-    await expect(phone).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 20_000 });
+    // Playwright's Chromium never fires `beforeinstallprompt`, which is the
+    // iPhone and Firefox case too: there is no prompt to fire. The app used to
+    // answer that with a card whose button walked the visitor to a list of
+    // menu taps. Menu taps are not an install button, so now there is nothing.
+    await expect(phone.getByTestId('install-nudge-card')).toHaveCount(0);
+    await expect(
+      phone.getByRole('region', { name: /app installation prompt/i }),
+    ).toHaveCount(0);
   });
 
   test('offers reminders where a push can arrive, and registers the device', async ({

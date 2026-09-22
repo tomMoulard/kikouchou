@@ -24,7 +24,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { useInstallPromptState } from '@/contexts/InstallPromptContext';
-import { MANUAL_INSTALL_STEPS } from '@/lib/pwa/manual-install-steps';
 import { cn } from '@/lib/utils';
 import { notify } from '@/lib/notifications';
 
@@ -102,7 +101,6 @@ function storeDismissal(): void {
  * - Only renders when installation is available
  * - Respects user dismissal for 7 days via localStorage
  * - Answers an explicit `?install=1` request at once, dismissal and delay aside
- * - Falls back to the browser's own steps where there is no prompt to fire
  * - Shows success feedback after installation
  * - Fully accessible with ARIA attributes
  * - Mobile-responsive design
@@ -133,7 +131,6 @@ export const InstallPrompt = memo(function InstallPrompt({
     isInstalling,
     isInstalled,
     installIntent,
-    manualInstallPlatform,
    } = useInstallPromptState(),
 
   // ============================================================================
@@ -293,33 +290,17 @@ export const InstallPrompt = memo(function InstallPrompt({
   }, []);
 
   // ============================================================================
-  // Derived Values
-  // ============================================================================
-
-  /**
-   * Whether to show the browser's own steps instead of an Install button.
-   *
-   * `beforeinstallprompt` is Chromium's alone, so on an iPhone or in Firefox
-   * `canInstall` never becomes true and there is nothing to fire — which is
-   * exactly the case where a visitor who tapped "Install on your phone" got
-   * nothing at all. The steps stand in for the button there, and only there:
-   * one tap beats a list of instructions wherever the browser offers one, and
-   * an app that is already installed needs neither.
-   */
-  const showManualSteps = installIntent && !canInstall && !isInstalled,
-
-   manualSteps = MANUAL_INSTALL_STEPS[manualInstallPlatform];
-
-  // ============================================================================
   // Render
   // ============================================================================
 
   // Don't render if:
-  // - Can't install (no prompt available or already installed) and there is no
-  //   request to answer with steps
+  // - There is no captured prompt to fire. `beforeinstallprompt` is Chromium's
+  //   alone, so on an iPhone and in Firefox this card never appears — and that
+  //   is the whole offer. A list of menu steps is not an install button, and a
+  //   card that cannot install anything is one more thing to dismiss.
   // - User has dismissed recently
   // - Not yet visible (initial delay)
-  if ((!canInstall && !showManualSteps) || isDismissed || !isVisible) {
+  if (!canInstall || isDismissed || !isVisible) {
     return null;
   }
 
@@ -364,59 +345,36 @@ export const InstallPrompt = memo(function InstallPrompt({
             {/* Content */}
             <div className="flex-1 min-w-0">
               <CardTitle className="text-base font-semibold">
-                {showManualSteps
-                  ? t('pwa.manualInstall.title', 'Add Kikouchou to your device')
-                  : t('pwa.install', 'Install app')}
+                {t('pwa.install', 'Install app')}
               </CardTitle>
               <CardDescription className="mt-1 text-sm">
-                {showManualSteps
-                  ? t(manualSteps.key, manualSteps.fallback)
-                  : t(
-                      'pwa.installDescription',
-                      'Install Kikouchou on your device for quick access',
-                    )}
+                {t(
+                  'pwa.installDescription',
+                  'Install Kikouchou on your device for quick access',
+                )}
               </CardDescription>
 
               {/* Action Buttons */}
               <div className="mt-3 flex items-center gap-2">
-                {showManualSteps ? (
-                  /*
-                    No Install button here: there is no captured event to fire,
-                    so a button reading "Install app" would do nothing but
-                    report a failure. Acknowledging the steps is the only
-                    action left.
-                  */
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleDismiss}
-                    className="flex-1 sm:flex-none h-11 md:h-8"
-                  >
-                    {t('pwa.manualInstall.gotIt', 'Got it')}
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={handleInstall}
-                      disabled={isInstalling}
-                      className="flex-1 sm:flex-none h-11 md:h-8"
-                    >
-                      {isInstalling
-                        ? t('common.loading', 'Loading...')
-                        : t('pwa.install', 'Install app')}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleDismiss}
-                      disabled={isInstalling}
-                      className="h-11 md:h-8"
-                    >
-                      {t('pwa.notNow', 'Not now')}
-                    </Button>
-                  </>
-                )}
+                <Button
+                  size="sm"
+                  onClick={handleInstall}
+                  disabled={isInstalling}
+                  className="flex-1 sm:flex-none h-11 md:h-8"
+                >
+                  {isInstalling
+                    ? t('common.loading', 'Loading...')
+                    : t('pwa.install', 'Install app')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleDismiss}
+                  disabled={isInstalling}
+                  className="h-11 md:h-8"
+                >
+                  {t('pwa.notNow', 'Not now')}
+                </Button>
               </div>
             </div>
 

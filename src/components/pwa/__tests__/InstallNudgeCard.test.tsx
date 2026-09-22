@@ -9,7 +9,6 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { InstallNudgeCard } from '../InstallNudgeCard';
-import { installHandoffUrl } from '@/lib/pwa/install-handoff';
 import { useInstallPromptState } from '@/contexts/InstallPromptContext';
 import { usePhoneViewport } from '@/hooks/usePhoneViewport';
 import { captureEvent } from '@/lib/posthog';
@@ -37,9 +36,6 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-const navigate = vi.fn();
-vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
-
 vi.mock('@/contexts/InstallPromptContext', () => ({ useInstallPromptState: vi.fn() }));
 vi.mock('@/hooks/usePhoneViewport', () => ({ usePhoneViewport: vi.fn() }));
 vi.mock('@/lib/notifications', () => ({ notify: { success: vi.fn(), error: vi.fn() } }));
@@ -60,19 +56,16 @@ const mockedPhone = vi.mocked(usePhoneViewport);
 const capture = vi.mocked(captureEvent);
 
 const install = vi.fn(async () => true);
-const requestInstall = vi.fn();
 
 function installState(
   overrides: Partial<ReturnType<typeof useInstallPromptState>> = {},
 ): void {
   mockedState.mockReturnValue({
-    canInstall: false,
+    canInstall: true,
     isInstalled: false,
     isInstalling: false,
     installIntent: false,
-    manualInstallPlatform: 'ios',
     install,
-    requestInstall,
     ...overrides,
   });
 }
@@ -126,17 +119,6 @@ afterEach(() => {
 // Tests
 // ============================================================================
 
-describe('installHandoffUrl', () => {
-  it('sends a viewer to the invite and a member to the trip link', () => {
-    expect(installHandoffUrl(VIEWER_TRIP)).toBe('/join/tokentokentoken1?install=1');
-    expect(installHandoffUrl(MEMBER_TRIP)).toBe('/t/remote-2?install=1');
-  });
-
-  it('has nowhere to send a trip that lives on this device only', () => {
-    expect(installHandoffUrl(LOCAL_TRIP)).toBeNull();
-  });
-});
-
 describe('InstallNudgeCard', () => {
   it('pitches reminders for a shared trip on a phone', () => {
     render(<InstallNudgeCard trip={VIEWER_TRIP} />);
@@ -145,7 +127,6 @@ describe('InstallNudgeCard', () => {
     expect(screen.getByText(/remind you before Brittany starts/)).toBeInTheDocument();
     expect(capture).toHaveBeenCalledWith('install_nudge_shown', {
       trip_access: 'viewer',
-      can_prompt: false,
     });
   });
 
@@ -154,7 +135,7 @@ describe('InstallNudgeCard', () => {
 
     const { container } = render(<InstallNudgeCard trip={VIEWER_TRIP} />);
 
-    // Nobody installs a web app on a desktop, and Firefox on macOS cannot.
+    // Nobody installs a web app on a desktop.
     expect(container).toBeEmptyDOMElement();
     expect(capture).not.toHaveBeenCalled();
   });
@@ -175,40 +156,25 @@ describe('InstallNudgeCard', () => {
   });
 
   it('fires the browser prompt where one was captured', async () => {
-    installState({ canInstall: true });
     const user = userEvent.setup();
     render(<InstallNudgeCard trip={MEMBER_TRIP} />);
 
     await user.click(screen.getByRole('button', { name: 'Install app' }));
 
     expect(install).toHaveBeenCalledTimes(1);
-    expect(capture).toHaveBeenCalledWith('install_nudge_accepted', { via: 'prompt' });
-    expect(navigate).not.toHaveBeenCalled();
+    expect(capture).toHaveBeenCalledWith('install_nudge_accepted');
   });
 
-  it('hands an iPhone viewer to the invite page to install from', async () => {
-    const user = userEvent.setup();
-    render(<InstallNudgeCard trip={VIEWER_TRIP} />);
+  it('stays away where the browser captured no prompt', () => {
+    installState({ canInstall: false });
 
-    await user.click(screen.getByRole('button', { name: 'Show me how' }));
+    const { container } = render(<InstallNudgeCard trip={VIEWER_TRIP} />);
 
-    // The installed app has its own storage: it must open on a page that can
-    // fetch the trip again, and the invite page can.
-    expect(requestInstall).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith('/join/tokentokentoken1?install=1');
-    expect(capture).toHaveBeenCalledWith('install_nudge_accepted', {
-      via: 'handoff',
-      platform: 'ios',
-    });
-  });
-
-  it("hands an iPhone member to the trip's own link", async () => {
-    const user = userEvent.setup();
-    render(<InstallNudgeCard trip={MEMBER_TRIP} />);
-
-    await user.click(screen.getByRole('button', { name: 'Show me how' }));
-
-    expect(navigate).toHaveBeenCalledWith('/t/remote-2?install=1');
+    // An iPhone, or Firefox. There is no prompt to fire, and a card whose only
+    // button reads "find Add to Home Screen in a menu" is homework, not an
+    // offer to install.
+    expect(container).toBeEmptyDOMElement();
+    expect(capture).not.toHaveBeenCalled();
   });
 
   it('goes away for 30 days on "Not now"', async () => {

@@ -265,7 +265,7 @@ export function TripLinkPage(): ReactElement {
     <div
       className={cn(
         'flex min-h-svh items-center justify-center p-4',
-        // Room for the global banner's install steps along the bottom.
+        // Room for the global banner along the bottom.
         installRequested && 'pb-96',
         onboardingSurface,
       )}
@@ -287,7 +287,7 @@ export function TripLinkPage(): ReactElement {
                 <Smartphone className="size-6" aria-hidden="true" />
               </div>
               <CardTitle className="text-lg">
-                {t('pwa.manualInstall.title', 'Add Kikouchou to your device')}
+                {t('pwa.installHereTitle', 'Add Kikouchou to your device')}
               </CardTitle>
               <CardDescription>
                 {t(
