@@ -11,7 +11,7 @@
  * @module lib/yjs/__tests__/room-doc-projection.test
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
@@ -136,6 +136,47 @@ describe('rooms crossing the trust boundary', () => {
 
     expect(await db.rooms.get('r1')).toBeDefined();
     expect(await db.rooms.get('r2')).toBeUndefined();
+  });
+});
+
+describe('writing only what changed', () => {
+  it('leaves a row alone when the document did not touch it', async () => {
+    const tripId = await makeTrip();
+    const doc = makeDoc();
+    upsertDocEntity(doc, 'rooms', VALID_ROOM);
+    upsertDocEntity(doc, 'rooms', { id: 'r2', name: 'Barn', capacity: 3, order: 1 });
+    await syncDocToDexie(doc, tripId);
+
+    const puts: string[][] = [];
+    const bulkPut = vi
+      .spyOn(db.rooms, 'bulkPut')
+      .mockImplementation(async (rows: readonly { id: string }[]) => {
+        puts.push(rows.map((row) => row.id));
+        return '' as never;
+      });
+
+    // One room's name changes. The projection used to `bulkPut` every row of
+    // all nine trip tables on every remote update, so one guest's name arriving
+    // over sync rewrote hundreds of rows and woke every `useLiveQuery` watching
+    // them.
+    upsertDocEntity(doc, 'rooms', { ...VALID_ROOM, name: 'Loft' });
+    await syncDocToDexie(doc, tripId);
+
+    expect(puts).toEqual([['r1']]);
+    bulkPut.mockRestore();
+  });
+
+  it('writes nothing at all when nothing changed', async () => {
+    const tripId = await makeTrip();
+    const doc = makeDoc();
+    upsertDocEntity(doc, 'rooms', VALID_ROOM);
+    await syncDocToDexie(doc, tripId);
+
+    const bulkPut = vi.spyOn(db.rooms, 'bulkPut');
+    await syncDocToDexie(doc, tripId);
+
+    expect(bulkPut).not.toHaveBeenCalled();
+    bulkPut.mockRestore();
   });
 });
 

@@ -728,14 +728,35 @@ function buildExpenseRecord(
   return row;
 }
 
+/**
+ * Writes only what actually changed, and deletes what the document dropped.
+ *
+ * The `bulkPut` used to be unconditional, so one guest's name arriving over
+ * sync rewrote every row of all nine trip tables: a trip with sixty guests,
+ * rooms, assignments, transports, rides, vehicles, activities and money lines
+ * wrote several hundred rows to answer a change to one. That is not only the
+ * IndexedDB write — every `useLiveQuery` watching those tables fires, so each
+ * context republished its array and the whole page re-rendered, on every update
+ * from every member.
+ *
+ * `isDeepEqual` is the same comparison `doc-model` uses when deciding whether a
+ * document entry needs replacing, so the two halves of the bridge agree about
+ * what "unchanged" means.
+ */
 async function replaceTripScopedRows<T extends { id: string; tripId: TripId }>(
   currentRows: readonly T[],
   nextRows: readonly T[],
   putMany: (rows: T[]) => Promise<unknown>,
   removeMany: (ids: string[]) => Promise<unknown>,
 ): Promise<void> {
-  if (nextRows.length > 0) {
-    await putMany([...nextRows]);
+  const currentById = new Map(currentRows.map((row) => [row.id, row]));
+  const changed = nextRows.filter((row) => {
+    const existing = currentById.get(row.id);
+    return existing === undefined || !isDeepEqual(existing, row);
+  });
+
+  if (changed.length > 0) {
+    await putMany(changed);
   }
 
   const nextIds = new Set(nextRows.map((row) => row.id));

@@ -35,7 +35,7 @@
  * @see {@link https://www.i18next.com/ | i18next documentation}
  */
 
-import i18n, { type InitOptions, type Resource } from 'i18next';
+import i18n, { type InitOptions } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector, {
   type DetectorOptions,
@@ -79,17 +79,52 @@ export const LANGUAGE_STORAGE_KEY = 'i18nextLng';
 // ============================================================================
 
 /**
- * Translation resources imported from JSON files.
+ * Translation resources, one dynamic import per language.
  *
  * @remarks
- * These files contain all UI strings for their respective languages.
- * The JSON files are statically imported and bundled with the application.
+ * Only the language actually on screen is fetched. `main.tsx` already awaits
+ * {@link i18nReady} before it renders, so the first paint still has its strings
+ * — the gate was there for the database and now covers this too.
  *
  * @see {@link src/locales/en/translation.json} English translations
  * @see {@link src/locales/fr/translation.json} French translations
  */
-import enTranslations from '@/locales/en/translation.json';
-import frTranslations from '@/locales/fr/translation.json';
+const TRANSLATION_LOADERS: Record<Language, () => Promise<{ default: Record<string, unknown> }>> = {
+  en: () => import('@/locales/en/translation.json'),
+  fr: () => import('@/locales/fr/translation.json'),
+};
+
+/**
+ * Loads one language's bundle, once, and registers it with i18next.
+ *
+ * Both bundles used to be static imports, which put 200 KB of JSON — 94 KB of
+ * English and 106 KB of French — into the entry chunk. That chunk is the
+ * render-blocking `<script>`, so every visitor downloaded, parsed and kept in
+ * memory the whole of a language they will never read.
+ *
+ * Idempotent: `hasResourceBundle` makes a second call for a language already
+ * present a no-op, so the settings screen switching back and forth costs one
+ * fetch per language for the life of the page.
+ */
+/**
+ * The supported language a raw i18next tag stands for.
+ *
+ * Handles `en-US` and an unknown tag the same way {@link getCurrentLanguage}
+ * does, but without its "not initialised yet" branch: this runs from inside
+ * `init()`'s own promise, where the detector has already settled.
+ */
+function toSupportedLanguage(tag: string | undefined): Language {
+  const base = tag?.split('-')[0];
+  return base !== undefined && isLanguageSupported(base) ? base : DEFAULT_LANGUAGE;
+}
+
+async function loadLanguage(language: Language): Promise<void> {
+  if (i18n.hasResourceBundle(language, 'translation')) {
+    return;
+  }
+  const bundle = await TRANSLATION_LOADERS[language]();
+  i18n.addResourceBundle(language, 'translation', bundle.default, true, true);
+}
 
 // ============================================================================
 // Type Definitions
@@ -118,14 +153,11 @@ type I18nResources = {
  * I18next resources configuration.
  * Maps each supported language to its translation namespace.
  */
-const resources: I18nResources = {
-  en: {
-    translation: enTranslations,
-  },
-  fr: {
-    translation: frTranslations,
-  },
-} satisfies Resource,
+// Deliberately empty, and it must stay that way. `hasResourceBundle` is what
+// `loadLanguage` checks before fetching, and a namespace declared here — even
+// as `{}` — answers `true`, so a seeded entry made every load a no-op and the
+// app rendered raw keys. `supportedLngs` below is what restricts the languages.
+const resources: I18nResources = {} as I18nResources,
 
 /**
  * Language detector configuration.
@@ -272,10 +304,22 @@ function syncDocumentLanguage(): void {
 // `.then()` below repeats the call for the case where it emits neither.
 i18n.on('languageChanged', syncDocumentLanguage);
 
+// A safety net for a switch that did not come through `changeLanguage` above —
+// the detector settling on a second language, or a direct
+// `i18n.changeLanguage`. Registered before `init()` for the same reason the
+// line above is.
+i18n.on('languageChanged', (language: string) => {
+  void loadLanguage(toSupportedLanguage(language));
+});
+
 export const i18nReady: Promise<void> = i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init(initOptions)
+  // The language is only known once the detector has run, so the bundle is
+  // fetched here rather than imported at module scope. `main.tsx` awaits this
+  // before the first render, so nothing ever paints a raw key.
+  .then(() => loadLanguage(toSupportedLanguage(i18n.resolvedLanguage)))
   .then(() => {
     syncDocumentLanguage();
   });
@@ -328,6 +372,15 @@ export function isI18nInitialized(): boolean {
  *       Consider adding a listener to sync localStorage ↔ IndexedDB.
  */
 export async function changeLanguage(language: Language): Promise<void> {
+  // The bundle first, then the switch. Bundles are fetched on demand now, so
+  // changing language before its strings have arrived would repaint the whole
+  // app in raw keys for as long as the chunk takes to load.
+  //
+  // Through `toSupportedLanguage`, because a caller may hand over a tag this
+  // app ships nothing for — `supportedLngs` normalises it to the French
+  // fallback, and the load has to normalise it the same way rather than look up
+  // a loader that does not exist.
+  await loadLanguage(toSupportedLanguage(language));
   await i18n.changeLanguage(language);
 }
 
