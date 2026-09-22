@@ -134,6 +134,29 @@ describe('lib/meta-pixel', () => {
     ]);
   });
 
+  it('leaves the library script without crossorigin, which Meta cannot serve', async () => {
+    withPixelId();
+    vi.stubGlobal('location', { hostname: 'app.kikouchou.app' });
+
+    await importPixel();
+
+    // The opposite of `lib/google-tag`'s expectation, on purpose. An error
+    // thrown inside a cross-origin script with no `crossorigin` attribute
+    // reaches `window.onerror` as the bare string "Script error." with no
+    // file, line or stack, and this pixel is one of the scripts that lands in
+    // the `opaque-cross-origin-script` issue because of it. The attribute is
+    // still wrong here: it makes the browser send a CORS request, and
+    // `connect.facebook.net` returns `fbevents.js` with no
+    // `access-control-allow-origin` header, so the script would be refused and
+    // the pixel would report nothing at all. This test exists so that the
+    // one-line "fix" fails here rather than in production.
+    const scripts = [...document.querySelectorAll('script')];
+    expect(scripts.map((script) => script.src)).toEqual([
+      'https://connect.facebook.net/en_US/fbevents.js',
+    ]);
+    expect(scripts.map((script) => script.crossOrigin)).toEqual([null]);
+  });
+
   it('reports a custom event, which is how the PWA install is measured', async () => {
     withPixelId();
     vi.stubGlobal('location', { hostname: 'app.kikouchou.app' });

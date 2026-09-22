@@ -122,6 +122,14 @@ function loadPixelLibrary(): Fbq {
 
   const script = document.createElement('script');
   script.async = true;
+  // No `crossOrigin` here, unlike `lib/google-tag` and `lib/posthog`'s
+  // `readableExternalScript`. The attribute is what makes a cross-origin
+  // script's errors readable instead of the bare string `Script error.`, and
+  // adding it looks like the same one-line fix — but it turns the request into
+  // a CORS request, and `connect.facebook.net` answers `fbevents.js` with no
+  // `access-control-allow-origin` header at all. The browser would then refuse
+  // the script outright and the pixel would stop loading, which costs more than
+  // an unreadable error. See the test that pins this.
   script.src = FBEVENTS_SRC;
   document.head.appendChild(script);
 
