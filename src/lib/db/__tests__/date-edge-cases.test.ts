@@ -271,14 +271,15 @@ describe('DST (Daylight Saving Time) Transitions', () => {
       expect(assignment.startDate).toBe('2024-03-08');
       expect(assignment.endDate).toBe('2024-03-12');
 
-      // Verify conflict detection works across DST boundary
-      const hasConflict = await checkAssignmentConflict(
-        tripId,
-        personId,
-        '2024-03-10', // Spring forward day
-        '2024-03-10'
-      );
-      expect(hasConflict).toBe(true);
+      // Conflict detection across the DST boundary, in the nights model: a
+      // check-in and check-out on the 10th covers no night, so it claims
+      // nothing. A real night inside the stay still conflicts.
+      expect(
+        await checkAssignmentConflict(tripId, personId, '2024-03-10', '2024-03-10')
+      ).toBe(false);
+      expect(
+        await checkAssignmentConflict(tripId, personId, '2024-03-10', '2024-03-11')
+      ).toBe(true);
     });
 
     it('creates assignment spanning EU fall back', async () => {
@@ -700,7 +701,7 @@ describe('Date Range Overlaps', () => {
   });
 
   describe('Ranges that touch but might not overlap (boundary conditions)', () => {
-    it('detects conflict when ranges share a single day (Jan 1-5 and Jan 5-10)', async () => {
+    it('allows a room move on a shared boundary day (Jan 1-5 and Jan 5-10)', async () => {
       const tripId = await createTestTrip();
       const roomId = await createTestRoom(tripId);
       const personId = await createTestPerson(tripId);
@@ -721,7 +722,7 @@ describe('Date Range Overlaps', () => {
         '2024-01-05',
         '2024-01-10'
       );
-      expect(hasConflict).toBe(true);
+      expect(hasConflict).toBe(false);
     });
 
     it('no conflict when ranges are adjacent (Jan 1-5 and Jan 6-10)', async () => {
@@ -770,7 +771,7 @@ describe('Date Range Overlaps', () => {
       expect(hasConflict).toBe(false);
     });
 
-    it('detects conflict when new ends on existing start (Jan 5-10 existing, Jan 1-5 new)', async () => {
+    it('allows a stay ending where another begins (Jan 5-10 existing, Jan 1-5 new)', async () => {
       const tripId = await createTestTrip();
       const roomId = await createTestRoom(tripId);
       const personId = await createTestPerson(tripId);
@@ -791,7 +792,7 @@ describe('Date Range Overlaps', () => {
         '2024-01-01',
         '2024-01-05'
       );
-      expect(hasConflict).toBe(true);
+      expect(hasConflict).toBe(false);
     });
 
     it('no conflict when new ends before existing starts (Jan 5-10 existing, Jan 1-4 new)', async () => {
@@ -819,7 +820,7 @@ describe('Date Range Overlaps', () => {
   });
 
   describe('Single-day ranges', () => {
-    it('detects conflict between two identical single-day ranges', async () => {
+    it('treats two identical zero-night ranges as claiming nothing', async () => {
       const tripId = await createTestTrip();
       const roomId = await createTestRoom(tripId);
       const personId = await createTestPerson(tripId);
@@ -839,10 +840,10 @@ describe('Date Range Overlaps', () => {
         '2024-07-15',
         '2024-07-15'
       );
-      expect(hasConflict).toBe(true);
+      expect(hasConflict).toBe(false);
     });
 
-    it('detects conflict: single day within range', async () => {
+    it('no conflict for a zero-night probe inside a range', async () => {
       const tripId = await createTestTrip();
       const roomId = await createTestRoom(tripId);
       const personId = await createTestPerson(tripId);
@@ -862,7 +863,7 @@ describe('Date Range Overlaps', () => {
         '2024-07-17',
         '2024-07-17'
       );
-      expect(hasConflict).toBe(true);
+      expect(hasConflict).toBe(false);
     });
 
     it('no conflict: single day before range', async () => {
@@ -1089,10 +1090,13 @@ describe('Date Comparison Edge Cases', () => {
       });
 
       // Edge case: new starts exactly on existing end
-      expect(await checkAssignmentConflict(tripId, personId, '2024-07-20', '2024-07-25')).toBe(true);
+      // Checking out on the 20th and in again on the 20th is a room move.
+      expect(await checkAssignmentConflict(tripId, personId, '2024-07-20', '2024-07-25')).toBe(false);
 
       // Edge case: new ends exactly on existing start
-      expect(await checkAssignmentConflict(tripId, personId, '2024-07-10', '2024-07-15')).toBe(true);
+      expect(await checkAssignmentConflict(tripId, personId, '2024-07-10', '2024-07-15')).toBe(false);
+      // A night genuinely inside the stay is still a conflict.
+      expect(await checkAssignmentConflict(tripId, personId, '2024-07-10', '2024-07-16')).toBe(true);
 
       // No overlap: new is entirely before
       expect(await checkAssignmentConflict(tripId, personId, '2024-07-01', '2024-07-14')).toBe(false);

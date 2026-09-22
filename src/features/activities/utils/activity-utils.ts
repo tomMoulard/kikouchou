@@ -40,8 +40,32 @@ const DAY_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 export function toActivityInstant(
   value: string,
 ): ISODateTimeString | undefined {
-  const date = new Date(value);
+  // A bare `yyyy-MM-dd` is read as the user's own midnight, not as UTC's.
+  //
+  // `new Date('2026-07-16')` is specified to parse a date-only form as UTC,
+  // while every other form it accepts is local. The form never sends a bare day
+  // here — its input is `datetime-local` — but the assistant does: "add a
+  // market on the 16th" produces exactly this string. West of Greenwich that
+  // UTC midnight is the evening *before*, so the activity appeared on the 15th
+  // in the agenda, on the timeline and on the calendar.
+  //
+  // Reading it locally also makes this agree with `toAllDayActivityInstant`
+  // beside it, which already snaps a bare day to the local one.
+  const date = DAY_KEY_PATTERN.test(value)
+    ? localMidnight(value)
+    : new Date(value);
+
   return isValid(date) ? (date.toISOString() as ISODateTimeString) : undefined;
+}
+
+/** Midnight of a `yyyy-MM-dd` day, in the zone the user is reading it in. */
+function localMidnight(dayKey: string): Date {
+  const [year, month, day] = dayKey.split('-').map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  return new Date(year, month - 1, day, 0, 0, 0, 0);
 }
 
 /**

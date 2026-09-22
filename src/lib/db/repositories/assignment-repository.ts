@@ -7,6 +7,7 @@
  * @module lib/db/repositories/assignment-repository
  */
 
+import { stayNightsOverlap } from '@/features/rooms/utils/capacity-utils';
 import { db } from '@/lib/db/database';
 import { createRoomAssignmentId } from '@/lib/db/utils';
 import type {
@@ -267,19 +268,26 @@ export async function checkAssignmentConflict(
     .equals([tripId, personId])
     .toArray();
 
-  // Check for overlapping date ranges
-  // Two ranges overlap if: start1 <= end2 AND end1 >= start2
+  // Through `stayNightsOverlap`, which is the app's nights model, rather than
+  // the closed-interval comparison this used to do for itself.
+  //
+  // `endDate` is the check-out day and not a night slept — `capacity-utils`
+  // says so, every occupancy figure is computed that way, and the room timeline
+  // draws it that way. A closed-interval test therefore refused the ordinary
+  // room move: a guest checking out of the Attic on the 5th and into the Barn
+  // on the 5th sleeps one night in each, and was told they were double-booked.
   for (const existing of assignments) {
     // Skip the excluded assignment (when editing)
     if (excludeId && existing.id === excludeId) {
       continue;
     }
 
-    // Check for overlap using string comparison (works for ISO dates)
-    const overlaps =
-      startDate <= existing.endDate && endDate >= existing.startDate;
-
-    if (overlaps) {
+    if (
+      stayNightsOverlap(
+        { startDate: startDate as ISODateString, endDate: endDate as ISODateString },
+        existing,
+      )
+    ) {
       return true;
     }
   }

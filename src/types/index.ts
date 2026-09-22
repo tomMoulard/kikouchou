@@ -895,16 +895,25 @@ export interface RoomAssignment extends Identifiable, TripScoped {
   personId: PersonId;
 
   /**
-   * First night of the assignment in ISO format (YYYY-MM-DD).
-   * Must be within the trip's date range and on or before endDate.
+   * Check-in day in ISO format (YYYY-MM-DD): the first night slept.
+   * Must be within the trip's date range and before endDate.
    * @example "2024-07-15"
    */
   startDate: ISODateString;
 
   /**
-   * Last night of the assignment in ISO format (YYYY-MM-DD).
-   * Must be within the trip's date range and on or after startDate.
-   * @example "2024-07-19"
+   * Check-out day in ISO format (YYYY-MM-DD), **exclusive**: the guest leaves
+   * that morning and does not sleep that night.
+   *
+   * The half-open reading is the app's, not a convention of this file: every
+   * occupancy figure comes from `listStayNights` / `isDateInStayRange` in
+   * `features/rooms/utils/capacity-utils`, both of which stop before it, and
+   * the room timeline draws it that way. It is documented here because the
+   * doc-comment used to say "last night", and the repository's conflict check
+   * was written against that reading — which refused the ordinary room move,
+   * where a guest checks out of one room and into another on the same day.
+   *
+   * @example "2024-07-19" — four nights from the 15th, leaving on the 19th
    */
   endDate: ISODateString;
 }

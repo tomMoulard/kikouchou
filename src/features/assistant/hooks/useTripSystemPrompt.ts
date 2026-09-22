@@ -688,8 +688,11 @@ export function useTripSystemPrompt(): UseTripSystemPromptReturn {
       for (const assignment of assignments) {
         const person = persons.find((p) => p.id === assignment.personId);
         const room = rooms.find((r) => r.id === assignment.roomId);
+        // Leads with the id, like every other section: `removeAssignment`
+        // takes an `assignmentId` and nothing else, so without it the model
+        // could read every assignment and undo none of them.
         parts.push(
-          `- ${person ? toPromptText(person.name) : 'Unknown'} → ${room ? toPromptText(room.name) : 'Unknown'} (${assignment.startDate} to ${assignment.endDate})`,
+          `- id: ${assignment.id} — ${person ? toPromptText(person.name) : 'Unknown'} → ${room ? toPromptText(room.name) : 'Unknown'} (${assignment.startDate} to ${assignment.endDate})`,
         );
       }
     } else {
