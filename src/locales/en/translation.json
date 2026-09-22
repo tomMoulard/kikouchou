@@ -1374,6 +1374,7 @@
     "conversationCleared": "Chat cleared",
     "changesApplied_one": "1 change applied",
     "changesApplied_other": "{{count}} changes applied",
+    "invalidDate": "That date could not be read. Use a day like 2026-07-15.",
     "noTripForAction": "Select or create a trip first.",
     "selectTripNotFound": "That trip was not found.",
     "activityNotFound": "That activity was not found.",

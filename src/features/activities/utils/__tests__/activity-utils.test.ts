@@ -16,6 +16,7 @@ import {
   getActivityStartDayKey,
   groupActivitiesByDate,
   isActivityPast,
+  toActivityInstant,
 } from '../activity-utils';
 
 // ============================================================================
@@ -43,6 +44,41 @@ function makeActivity(overrides: Partial<Activity> = {}): Activity {
 // ============================================================================
 // Tests
 // ============================================================================
+
+describe('toActivityInstant', () => {
+  it('reads a bare day as the local day, not as UTC', () => {
+    // `new Date('2026-07-16')` is specified to parse a date-only form as UTC
+    // while every other form is local. West of Greenwich that midnight is the
+    // evening before, so an assistant-created activity landed on the 15th.
+    // The assertion is offset-independent: whatever zone this runs in, the
+    // stored instant has to render back as the day that was asked for.
+    const stored = toActivityInstant('2026-07-16');
+
+    expect(stored).toBeDefined();
+    const asLocalDay = new Date(stored as string);
+    expect(asLocalDay.getFullYear()).toBe(2026);
+    expect(asLocalDay.getMonth()).toBe(6);
+    expect(asLocalDay.getDate()).toBe(16);
+  });
+
+  it('agrees with the all-day helper about which day a bare day is', () => {
+    expect(getActivityStartDayKey({
+      startDatetime: toActivityInstant('2026-07-16') as Activity['startDatetime'],
+    } as Activity)).toBe('2026-07-16');
+  });
+
+  it('keeps reading a datetime-local value as local, which the form sends', () => {
+    const stored = toActivityInstant('2026-07-16T09:30');
+
+    const back = new Date(stored as string);
+    expect(back.getHours()).toBe(9);
+    expect(back.getMinutes()).toBe(30);
+  });
+
+  it('answers undefined for something that is not a date at all', () => {
+    expect(toActivityInstant('next friday')).toBeUndefined();
+  });
+});
 
 describe('activity-utils', () => {
   describe('getActivityEndInstant', () => {

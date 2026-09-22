@@ -21,6 +21,7 @@ import { tripAccessOf } from '@/hooks/useTripAccess';
 import { useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
 import { toCanonicalDatetime } from '@/lib/db/transport-datetime';
+import { isCalendarDayString } from '@/lib/db/sanitize';
 import {
   MAX_ROOMS_PER_SAVE,
   createActivity,
@@ -554,6 +555,15 @@ export function useTripActions(): UseTripActionsReturn {
                 notify.error(t('assistant.selectTripNotFound'));
                 break;
               }
+              // Re-checked here, not only on the batch's own trip. This case is
+              // what makes `activeTripId` mutable, so every action after it
+              // writes to whatever it selected — and selecting a viewer trip
+              // walked the rest of the batch straight past the guard above,
+              // into the one document nothing on this device may write.
+              if (tripAccessOf(trip) === 'viewer') {
+                notify.error(t('assistant.readOnlyTrip'));
+                break;
+              }
               activeTripId = trip.id;
               await setCurrentTrip(trip.id);
               // Deliberately a raw confirmation: switching trips changes which trip
@@ -589,6 +599,21 @@ export function useTripActions(): UseTripActionsReturn {
               if (keys.length === 0) {
                 break;
               }
+              // The model writes these, and it writes them from words: "move the
+              // trip to next Friday" has produced `startDate: 'next Friday'`.
+              // An unparseable day reaches `parseISO` in the calendar, the room
+              // timeline and the night split, and then `format()`, which throws
+              // RangeError inside a render and takes the page down with the
+              // error boundary. The repository refuses a window that runs
+              // backwards; this refuses one that is not a day at all.
+              const badDate = (['startDate', 'endDate'] as const).find(
+                (k) => d[k] !== undefined && !isCalendarDayString(d[k]),
+              );
+              if (badDate !== undefined) {
+                notify.error(t('assistant.invalidDate'));
+                break;
+              }
+
               const fields = keys
                 .map((k) =>
                   t(`assistant.actionDetails.tripField.${k}`, {

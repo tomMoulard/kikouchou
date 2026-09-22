@@ -894,7 +894,34 @@ describe('checkAssignmentConflict', () => {
       expect(hasConflict).toBe(true);
     });
 
-    it('returns true when assignments share single boundary date - start', async () => {
+    it('lets a guest move rooms on the day they check out', async () => {
+      // The user-facing shape of the bug: Marie is in the Attic until the 5th
+      // and wants the Barn from the 5th. One night in each, no night shared —
+      // and the form told her she was already assigned for those dates.
+      const tripId = await createTestTrip();
+      const attic = await createTestRoom(tripId);
+      const personId = await createTestPerson(tripId);
+
+      await createAssignment(
+        tripId,
+        createTestAssignmentData(attic, personId, {
+          startDate: isoDate('2024-07-01'),
+          endDate: isoDate('2024-07-05'),
+        })
+      );
+
+      expect(
+        await checkAssignmentConflict(tripId, personId, '2024-07-05', '2024-07-09')
+      ).toBe(false);
+
+      // And a genuine double booking is still caught: back into the Attic on
+      // the 4th, a night the existing stay already claims.
+      expect(
+        await checkAssignmentConflict(tripId, personId, '2024-07-04', '2024-07-09')
+      ).toBe(true);
+    });
+
+    it('allows a room move on the check-out day - start', async () => {
       const tripId = await createTestTrip();
       const roomId = await createTestRoom(tripId);
       const personId = await createTestPerson(tripId);
@@ -908,7 +935,11 @@ describe('checkAssignmentConflict', () => {
         })
       );
 
-      // New: July 19-22 (starts on existing's end date)
+      // New: July 19-22, starting on the day the existing stay checks out.
+      // `endDate` is the check-out day and not a night slept, so these two
+      // share no night: the guest sleeps in the first room up to the 18th and
+      // in the second from the 19th. Reported as a double booking, this refused
+      // the ordinary room move.
       const hasConflict = await checkAssignmentConflict(
         tripId,
         personId,
@@ -916,10 +947,10 @@ describe('checkAssignmentConflict', () => {
         '2024-07-22'
       );
 
-      expect(hasConflict).toBe(true);
+      expect(hasConflict).toBe(false);
     });
 
-    it('returns true when assignments share single boundary date - end', async () => {
+    it('allows a room move on the check-out day - end', async () => {
       const tripId = await createTestTrip();
       const roomId = await createTestRoom(tripId);
       const personId = await createTestPerson(tripId);
@@ -933,7 +964,8 @@ describe('checkAssignmentConflict', () => {
         })
       );
 
-      // New: July 15-20 (ends on existing's start date)
+      // New: July 15-20, checking out on the day the existing stay checks in.
+      // The mirror of the case above, and no night is shared either way.
       const hasConflict = await checkAssignmentConflict(
         tripId,
         personId,
@@ -941,7 +973,7 @@ describe('checkAssignmentConflict', () => {
         '2024-07-20'
       );
 
-      expect(hasConflict).toBe(true);
+      expect(hasConflict).toBe(false);
     });
 
     it('returns true when assignments are exactly the same dates', async () => {
@@ -1177,7 +1209,7 @@ describe('checkAssignmentConflict', () => {
       expect(conflictBoth).toBe(true);
     });
 
-    it('handles single day assignments', async () => {
+    it('treats a zero-night assignment as claiming nothing', async () => {
       const tripId = await createTestTrip();
       const roomId = await createTestRoom(tripId);
       const personId = await createTestPerson(tripId);
@@ -1191,23 +1223,28 @@ describe('checkAssignmentConflict', () => {
         })
       );
 
-      // Exact same single day - conflict
+      // An assignment that checks in and out on the same day covers no night:
+      // `listStayNights` returns nothing for it and every occupancy figure
+      // already counts it as nobody. Reporting it as a conflict was the one
+      // place in the app that read it as a stay.
       const exactConflict = await checkAssignmentConflict(
         tripId,
         personId,
         '2024-07-17',
         '2024-07-17'
       );
-      expect(exactConflict).toBe(true);
+      expect(exactConflict).toBe(false);
 
-      // Overlapping single day - conflict
+      // A real stay running up to the 17th checks out that morning, so it
+      // claims the nights of the 15th and 16th and still shares none with the
+      // zero-night row above.
       const overlapConflict = await checkAssignmentConflict(
         tripId,
         personId,
         '2024-07-15',
         '2024-07-17'
       );
-      expect(overlapConflict).toBe(true);
+      expect(overlapConflict).toBe(false);
 
       // Day before - no conflict
       const beforeNoConflict = await checkAssignmentConflict(

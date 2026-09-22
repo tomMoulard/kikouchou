@@ -1374,6 +1374,7 @@
     "conversationCleared": "Conversation effacée",
     "changesApplied_one": "1 modification appliquée",
     "changesApplied_other": "{{count}} modifications appliquées",
+    "invalidDate": "Cette date n'a pas pu être lue. Utilisez un jour comme 2026-07-15.",
     "noTripForAction": "Sélectionnez ou créez d'abord un voyage.",
     "selectTripNotFound": "Ce voyage est introuvable.",
     "activityNotFound": "Cette activité est introuvable.",
