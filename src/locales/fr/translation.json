@@ -429,6 +429,7 @@
   },
   "persons": {
     "title": "Participants",
+    "unnamed": "Participant sans nom",
     "new": "Nouveau participant",
     "edit": "Modifier le participant",
     "name": "Nom",
@@ -1599,6 +1600,7 @@
   "validation": {
     "invalidDate": "Date invalide",
     "capacityMin": "Minimum {{min}} lit",
+    "capacityMax": "Maximum {{max}} lits",
     "endDateBeforeStart": "La date de fin doit être identique ou postérieure à la date de début"
   },
   "errors": {

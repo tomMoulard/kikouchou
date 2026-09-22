@@ -30,7 +30,11 @@ import {
   TransportSchema,
   TripChangesetSchema,
 } from '@/gen/changeset_pb';
-import { MAX_LENGTHS, sanitizeOptionalText } from '@/lib/db/sanitize';
+import {
+  MAX_LENGTHS,
+  normalizeRoomCapacity,
+  sanitizeOptionalText,
+} from '@/lib/db/sanitize';
 import { normalizePersonHeadcount } from '@/types';
 import type {
   ChildSeatKind,
@@ -361,14 +365,21 @@ export function protoToTransport(proto: ProtoTransport): Transport {
 
 /**
  * Converts a protobuf Room to an app Room.
+ *
+ * `capacity` is normalised rather than adopted. A changeset is scanned off a
+ * stranger's screen, so the number is as untrusted as a peer's document, and it
+ * reaches `Array.from({ length: capacity - 1 })` in `RoomOccupancyTimeline` —
+ * the unbounded-capacity OOM AGENTS.md records. Clamping keeps the room, which
+ * is what the importer wanted; dropping it would lose a real bedroom over a
+ * number the app can repair.
  */
 export function protoToRoom(proto: ProtoRoom): Room {
   return {
     id: proto.id as RoomId,
     tripId: proto.tripId as TripId,
     name: proto.name,
-    capacity: proto.capacity,
-    order: proto.order,
+    capacity: normalizeRoomCapacity(proto.capacity),
+    order: Number.isFinite(proto.order) ? proto.order : 0,
     description: proto.description,
     icon: parseRoomIcon(proto.icon),
   };

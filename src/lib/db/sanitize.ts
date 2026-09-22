@@ -18,8 +18,10 @@ import {
   MAX_EXPENSE_SPLIT_VALUE,
   MAX_GUEST_GROUP_MEMBERS,
   MAX_LEAD_TIME_MINUTES,
+  MAX_ROOM_CAPACITY,
   MAX_VEHICLE_SEAT_COUNT,
   MIN_LEAD_TIME_MINUTES,
+  MIN_ROOM_CAPACITY,
   MIN_VEHICLE_SEAT_COUNT,
   normalizeCurrency,
   normalizePersonHeadcount,
@@ -475,6 +477,72 @@ export function normalizeSeatCount(value: number | undefined): number | undefine
   }
 
   return rounded > MAX_VEHICLE_SEAT_COUNT ? MAX_VEHICLE_SEAT_COUNT : rounded;
+}
+
+/**
+ * Clamps a raw room capacity to a whole number of beds inside its bounds.
+ *
+ * Unlike {@link normalizeSeatCount} this never answers "not known".
+ * `Room.capacity` is required, every occupancy figure subtracts from it, and
+ * the room timeline draws one element per bed — so an absent or hostile value
+ * has to become a real number here rather than reach a renderer as `undefined`
+ * or as `1e9`. A room that says it holds nothing readable holds one bed, which
+ * is the smallest claim that keeps the room on screen.
+ *
+ * @param value - Raw capacity (form input, imported changeset, peer document)
+ * @returns A whole number between {@link MIN_ROOM_CAPACITY} and {@link MAX_ROOM_CAPACITY}
+ */
+export function normalizeRoomCapacity(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return MIN_ROOM_CAPACITY;
+  }
+
+  const rounded = Math.round(value);
+  if (rounded < MIN_ROOM_CAPACITY) {
+    return MIN_ROOM_CAPACITY;
+  }
+
+  return rounded > MAX_ROOM_CAPACITY ? MAX_ROOM_CAPACITY : rounded;
+}
+
+/**
+ * Whether a peer-supplied value is a calendar day this app can read back.
+ *
+ * `YYYY-MM-DD` is the whole contract: it is what `toISODateString` produces,
+ * what `[tripId+startDate]` and `[tripId+date]` are keyed on, and what
+ * `parseISO` is handed all over the app. A value of another shape does not
+ * merely display wrongly — it is filed outside the range every trip query
+ * scans, so the row is invisible to the app *and* to the projection's own
+ * delete-candidate query, and nothing can ever remove it again.
+ *
+ * The month and day ranges are checked as well as the shape, because
+ * `parseISO('2026-13-45')` answers `Invalid Date` and every `format()` below it
+ * throws.
+ */
+export function isCalendarDayString(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  return month >= 1 && month <= 12 && day >= 1 && day <= 31;
+}
+
+/**
+ * Whether a peer-supplied value is an instant this app can read back.
+ *
+ * Same reasoning as {@link isCalendarDayString}, one field wider: an activity's
+ * `startDatetime` and a transport's `datetime` are ISO 8601 instants, and they
+ * are the second component of the index their reads scan. Anything `Date` can
+ * parse is accepted, which is deliberately looser than a pattern — peers write
+ * both `Z`-suffixed and offset-carrying forms — but `Invalid Date` is not.
+ */
+export function isInstantString(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    !Number.isNaN(Date.parse(value))
+  );
 }
 
 /**

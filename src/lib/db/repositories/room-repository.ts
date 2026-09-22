@@ -14,6 +14,7 @@ import {
 import { db } from '@/lib/db/database';
 import { sanitizeRoomData } from '@/lib/db/sanitize';
 import { createRoomId } from '@/lib/db/utils';
+import { MAX_ROOM_CAPACITY, MIN_ROOM_CAPACITY } from '@/types';
 import type { Room, RoomFormData, RoomId, TripId } from '@/types';
 import { repositoryError } from '@/lib/db/repository-error';
 
@@ -36,14 +37,26 @@ export const MAX_ROOMS_PER_SAVE = 20;
 // ============================================================================
 
 /**
- * Validates that a room's capacity is a positive integer.
+ * Validates that a room's capacity is a whole number of beds inside its bounds.
+ *
+ * The upper bound is not cosmetic. `RoomOccupancyTimeline` renders one element
+ * per bed, so a capacity of `1e9` reaching Dexie allocates until the tab dies —
+ * and keeps dying on every reload, because the row is stored. The document
+ * projection clamps a peer's value; this rejects a local one, so the two write
+ * paths agree on what a room may hold.
  *
  * @param capacity - The capacity value to validate
- * @throws {Error} If capacity is not a positive integer
+ * @throws {Error} If capacity is not a whole number within the room bounds
  */
 function validateCapacity(capacity: number): void {
-  if (capacity < 1 || !Number.isInteger(capacity)) {
-    throw new Error('Room capacity must be a positive integer');
+  if (
+    !Number.isInteger(capacity) ||
+    capacity < MIN_ROOM_CAPACITY ||
+    capacity > MAX_ROOM_CAPACITY
+  ) {
+    throw new Error(
+      `Room capacity must be a whole number from ${MIN_ROOM_CAPACITY} to ${MAX_ROOM_CAPACITY}`,
+    );
   }
 }
 

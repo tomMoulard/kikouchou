@@ -429,6 +429,7 @@
   },
   "persons": {
     "title": "Guests",
+    "unnamed": "Unnamed guest",
     "new": "New guest",
     "edit": "Edit guest",
     "name": "Name",
@@ -1599,6 +1600,7 @@
   "validation": {
     "invalidDate": "Invalid date",
     "capacityMin": "Minimum {{min}} bed",
+    "capacityMax": "Maximum {{max}} beds",
     "endDateBeforeStart": "End date must be on or after start date"
   },
   "errors": {
