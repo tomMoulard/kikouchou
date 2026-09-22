@@ -292,11 +292,16 @@ export default defineConfig({
           '**/llm.worker*.js',
           // Byte-identical to index.html; see githubPagesSpaFallback above.
           '404.html',
-          // The link preview card. Only ever fetched by a crawler resolving
-          // `og:image`, never by the app, so precaching it would spend ~115KB of
+          // The link preview cards. Only ever fetched by a crawler resolving
+          // `og:image`, never by the app, so precaching one spends ~115KB of
           // every installed user's cache budget on bytes they will not request.
-          'og-card.png',
-          'og-card.svg',
+          //
+          // A glob, not two names. The two exact names missed `og-card.fr.png`
+          // and `og-card.fr.svg` entirely — the French card was precached on
+          // every install, which is the whole cost this entry was written to
+          // avoid, and adding a third language would have missed that one too.
+          'og-card*.png',
+          'og-card*.svg',
           // Imported by the worker itself (see `importScripts` above), which
           // means the browser stores it alongside the worker's own script
           // resource and re-fetches it when the worker updates. A precache
