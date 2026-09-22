@@ -1942,6 +1942,7 @@
     "enabling": "En attente de votre réponse…",
     "bestEffort": "Les alertes de trajet viennent de cet appareil : elles partent pendant que l\u2019application tourne ou vient d\u2019être utilisée. Les rappels du séjour viennent du serveur : activez-les depuis le calendrier d\u2019un séjour et ils vous parviennent même application fermée.",
     "deniedHint": "Votre navigateur bloque les notifications pour Kikouchou. L’application ne peut plus les demander — autorisez-les pour ce site dans les réglages de votre navigateur ou de votre système.",
+    "turnOffFailed": "Impossible de désactiver les rappels. Vérifiez votre connexion et réessayez.",
     "unsupportedHint": "Ce navigateur ne peut pas afficher de notifications. Sur iPhone, ajoutez d’abord Kikouchou à l’écran d’accueil. Les alertes trajets restent visibles dans l’application.",
     "calendarFallback": "Pour les trajets que vous conduisez, ouvrez la page transports d’un voyage et choisissez « Ajouter mes trajets à mon agenda ». L’agenda du téléphone sonne alors à l’heure, même quand Kikouchou est fermé."
   },

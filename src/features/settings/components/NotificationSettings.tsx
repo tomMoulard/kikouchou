@@ -34,6 +34,7 @@ import {
   getReminderState,
   type ReminderState,
 } from '@/lib/notifications/push';
+import { notify } from '@/lib/notifications';
 import { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient } from '@/lib/supabase/client';
 
@@ -142,22 +143,36 @@ export const NotificationSettings = memo(function NotificationSettings(): ReactE
       return;
     }
     setIsTurningOff(true);
+    let turnedOff = false;
     try {
       const client = await getSupabaseClient();
       if (client) {
-        await disableTripReminders(client, currentTrip.id);
-        captureEvent('reminders_disabled', {
-          trip_access: currentTrip.viewerToken !== undefined ? 'viewer' : 'member',
-        });
+        turnedOff = await disableTripReminders(client, currentTrip.id);
+        if (turnedOff) {
+          captureEvent('reminders_disabled', {
+            trip_access: currentTrip.viewerToken !== undefined ? 'viewer' : 'member',
+          });
+        }
       }
+    } catch (error) {
+      console.error('Failed to turn off trip reminders:', error);
     } finally {
       if (isMountedRef.current) {
-        // The storage record is gone; this re-render is what reads it back.
-        setTurnedOffTripId(currentTrip.id);
+        // Only claimed when the server actually forgot the endpoint. Reporting
+        // it regardless left the card saying "off" while the sender went on
+        // pushing the trip's pickup places and times to this device, and there
+        // was no way back: the button had nothing left to do.
+        if (turnedOff) {
+          setTurnedOffTripId(currentTrip.id);
+        } else {
+          notify.error(
+            t('notifications.turnOffFailed'),
+          );
+        }
         setIsTurningOff(false);
       }
     }
-  }, [currentTrip]);
+  }, [currentTrip, t]);
 
   /** Effective state: a turn-off this render already knows about wins. */
   const effectiveReminderState: ReminderState | null =

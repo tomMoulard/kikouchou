@@ -199,6 +199,18 @@ export const ReminderCard = memo(function ReminderCard({
       }
       setState(getReminderState(trip.id));
       setProblem(explain(result));
+    } catch (error) {
+      // `enableTripReminders` reaches the network, the push service and the
+      // service worker, and any of the three can throw rather than answer. The
+      // button went back to saying "Turn on reminders" with nothing else
+      // happening — pressed again, it did the same, and a person could not tell
+      // a refusal from a dead button.
+      console.error('Failed to turn on trip reminders:', error);
+      if (isMountedRef.current) {
+        setProblem(
+          t('reminders.failed', 'Reminders could not be turned on. Try again in a moment.'),
+        );
+      }
     } finally {
       if (isMountedRef.current) {
         setIsWorking(false);

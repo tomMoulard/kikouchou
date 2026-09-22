@@ -135,8 +135,12 @@ vi.mock('@/lib/utils/download', async (importOriginal) => ({
   downloadTextFile: vi.fn(() => true),
 }));
 
-vi.mock('sonner', () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+// The facade, not `sonner`. It is what decides where a message goes — a
+// confirmation to an OS notification, an error to an in-page toast — and
+// mocking `sonner` under it asserted a delivery this component no longer picks.
+vi.mock('@/lib/notifications', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/notifications')>()),
+  notify: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 
 import { AddRunsToCalendarButton } from '../AddRunsToCalendarButton';
@@ -146,7 +150,7 @@ import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useTripIdentity } from '@/hooks/useTripIdentity';
 import { downloadTextFile } from '@/lib/utils/download';
-import { toast } from 'sonner';
+import { notify } from '@/lib/notifications';
 
 // ============================================================================
 // Helpers
@@ -277,7 +281,7 @@ describe('AddRunsToCalendarButton', () => {
 
     await user.click(screen.getByRole('button'));
 
-    expect(toast.error).toHaveBeenCalled();
-    expect(toast.success).not.toHaveBeenCalled();
+    expect(notify.error).toHaveBeenCalled();
+    expect(notify.success).not.toHaveBeenCalled();
   });
 });
