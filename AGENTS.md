@@ -325,6 +325,20 @@ dev-time mount → cleanup → mount cycle latches it `false` forever, turning e
 guarded `setState` into a silent no-op — dialogs that never close, prompts that
 never appear. Ten files had this.
 
+### An assignment's `endDate` is the check-out day, not the last night
+
+`listStayNights` and `isDateInStayRange` (`features/rooms/utils/capacity-utils`)
+both stop before it, every occupancy figure is computed that way, and the room
+timeline draws it that way. The `RoomAssignment` doc-comment used to say "last
+night", and `checkAssignmentConflict` was written against that reading — a
+closed-interval overlap — so the ordinary room move was refused: a guest
+checking out of the Attic on the 5th and into the Barn on the 5th sleeps one
+night in each and was told they were double-booked.
+
+Compare stay windows with `stayNightsOverlap` rather than re-deriving the
+comparison. A window with `startDate === endDate` covers no night and claims
+nothing, which is what the occupancy maths already said about it.
+
 ### Count people, not rows
 
 `Person.headcount` means one guest row can stand for a couple or a family. Any
@@ -491,6 +505,15 @@ defensive:
   *written* by another device, so every field is bounded on the way in and an
   invalid member is dropped on its own rather than taking its group with it.
 
+### A projection writes what changed, not everything it read
+
+`replaceTripScopedRows` bulk-put unconditionally, so one guest's name arriving
+over sync rewrote every row of all nine trip tables. The cost is not the
+IndexedDB write: every `useLiveQuery` watching those tables fires, so each
+context republishes its array and the whole page re-renders — on every update
+from every member. It diffs with `isDeepEqual`, the same comparison the document
+half of the bridge uses, so the two agree about what "unchanged" means.
+
 ### Reuse the helper; do not fork it
 
 Before writing a date formatter, a lane packer, a locale lookup or a storage-key
@@ -510,6 +533,20 @@ Test nested routes through the real parent.
 neither `tsc`, ESLint, nor the tests catch it — the test harness mocks i18next to
 echo keys back. When you add a `t()` call, add the key to **both**
 `en` and `fr`. Screen-reader-only text is user-facing text.
+
+**Only the active locale is loaded.** Both bundles used to be static imports,
+which put 200 KB of JSON into the render-blocking entry chunk so every visitor
+downloaded a language they never read. Each is a dynamic import now, fetched
+inside `i18nReady` — which `main.tsx` already awaits before the first render, so
+nothing paints a raw key — and `changeLanguage` awaits the bundle before it
+switches. Two consequences worth knowing:
+
+- The `resources` map passed to `init()` **must stay empty**. A namespace
+  declared there, even as `{}`, makes `hasResourceBundle` answer `true` and every
+  load a silent no-op. `supportedLngs` is what restricts the languages.
+- There is no cross-locale fallback any more. A key missing from `fr` renders as
+  the key rather than quietly in English, which is the failure this section is
+  about — so the "add it to both" rule is now load-bearing rather than tidy.
 
 ### A third-party z-index only stays put inside a stacking context
 
@@ -573,6 +610,21 @@ different `base` than every `page.goto('/…')` assumed, 404-ing all 108 of them
 If you touch `vite.config.ts`'s `base`, `playwright.config.ts`'s `webServer`, or
 a `validate`/CI script, prove the gate still fails on a deliberate error.
 
+A fifth, and the widest: **the deploy did not wait for any of them.**
+`deploy.yml` ran `on: push` to main, and there is no cross-workflow `needs:`, so
+a merge that broke the build shipped to production while the CI run that would
+have said so was still going. It triggers on CI's completion now and refuses
+anything but `success` — a `workflow_run` fires on failure too — and it checks
+out `workflow_run.head_sha` rather than `github.sha`, which on that event is the
+branch head at trigger time rather than the commit that was tested.
+
+A sixth, cheaper to miss than any of them: `POSTHOG_URL_PATTERN` in
+`e2e/support/external-services.ts` matched `posthog.com` and `posthog.io`. A
+configured build sends every event to `events.kikouchou.app`, the proxy
+`VITE_POSTHOG_HOST` names, so the privacy assertion held whether or not the app
+was reporting. **A gate whose pattern does not match production traffic is not a
+gate.**
+
 The E2E job was the third: `timeout-minutes: 30` killed it on every run since
 the workflow was written, so the suite had never finished in CI and the
 `production` and `sync` projects had never run there at all. A job that always
@@ -626,10 +678,28 @@ call the REST API with that key.
 - **Every table gets RLS enabled in the migration that creates it.** Not a
   follow-up migration. A table without it is world-writable to anyone who reads
   the bundle.
-- **Grants are revoke-first.** Supabase's default `grant all` means an additive
-  `grant select, insert` leaves `delete` and `truncate` in place. Two pgTAP tests
-  expecting `42501` got no exception at all before this was fixed:
-  `revoke all on <table> from anon, authenticated;` then grant what is wanted.
+- **Grants are revoke-first, and that means naming the roles.** Supabase's
+  default `grant all` means an additive `grant select, insert` leaves `delete`
+  and `truncate` in place. Two pgTAP tests expecting `42501` got no exception at
+  all before this was fixed: `revoke all on <table> from anon, authenticated;`
+  then grant what is wanted.
+  **`from public` is not enough, and this is the trap that caught four
+  functions.** Postgres grants EXECUTE to PUBLIC, *and* this project's default
+  privileges grant it to `anon`, `authenticated` and `service_role` besides, so
+  `revoke all on function f from public` leaves all three role grants exactly
+  where they were. `store_push_subscription` — the internal writer both
+  `subscribe_*_reminders` call *after* authorising the caller, and which
+  therefore carries no check of its own — was reachable over
+  `/rest/v1/rpc/` by anyone holding the publishable key, who could subscribe any
+  endpoint to any trip's reminders. Always
+  `revoke all on function f(args) from public, anon, authenticated;` then grant
+  what is wanted. The same applies to a **sequence**: the one behind
+  `trip_doc_updates` kept its default grant, so a client held `setval()` on the
+  counter every sync cursor is compared against.
+  `supabase/tests/function_exposure_test.sql` asserts the whole catalogue in one
+  statement rather than a list of names, so a function added tomorrow is covered
+  by a test written today — the old per-name form passed green for a year while
+  four functions were open.
 - **A privileged write users must be able to make goes in a `security definer`
   function, never a policy.** `redeem_invite` writes `trip_members`, which has no
   INSERT policy — joining requires a token, and that *is* the security property.
@@ -724,6 +794,16 @@ every unit test.
   routinely names a trip's guests and where they are sleeping, and those people
   are not users of this app. `prompt_length` rides alongside so dropping `prompt`
   costs no other insight. Do not add a second exception without deciding to.
+  Three had arrived by default rather than by decision, and each is now closed:
+  `$ai_generation` shipped the assistant's whole prompt, which opens with the
+  trip system prompt — every guest's name, phone, notes and money
+  (`features/assistant/ai-telemetry.ts` keeps the user's own turns and replaces
+  the rest with `[redacted: N chars]`); posthog-js **autocapture** sent a clicked
+  guest's name as `$el_text`, and is off, since every interaction worth a number
+  already has a named event; and `$current_url` carried invite and template
+  tokens plus the fragment a share link keeps its encryption key in, which
+  `before_send` now redacts to `/join/[redacted]`. A bearer token in an analytics
+  property is a credential in a system nothing here can revoke.
 - **Mock it to test a capture.** The real export is `undefined` in tests, so an
   assertion on `capture` passes vacuously without
   `vi.mock('@/lib/posthog', () => ({ default: { capture: … } }))`. Find the call
