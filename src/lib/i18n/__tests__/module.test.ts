@@ -78,48 +78,22 @@ describe('the shipped i18n module', () => {
       expect(i18n.isInitialized).toBe(true);
     });
 
-    it('serves each bundle once it has been asked for', async () => {
-      // Bundles are fetched on demand rather than compiled into the entry
-      // chunk, so a language is available after `changeLanguage` rather than
-      // from the start. `main.tsx` awaits `i18nReady`, which loads whichever
-      // one the detector settled on, so nothing ever paints a raw key.
-      await changeLanguage('en');
+    it('serves the shipped bundles through the app instance', () => {
       expect(i18n.getFixedT('en')('common.save')).toBe('Save');
-
-      await changeLanguage('fr');
       expect(i18n.getFixedT('fr')('common.save')).toBe('Enregistrer');
     });
 
-    it('falls back to French, not English, for an unknown language', async () => {
+    it('falls back to French, not English, for an unknown language', () => {
       // `DEFAULT_LANGUAGE` is what `fallbackLng` is set from; this is the only
       // check that the wiring took effect. English prose here would mean French
       // users silently read English whenever a key is missing from `fr`.
-      await changeLanguage('fr');
       expect(i18n.getFixedT('de')('common.save')).toBe('Enregistrer');
       expect(DEFAULT_LANGUAGE).toBe('fr');
     });
 
-    it('loads a language once, however often it is asked for', async () => {
-      await changeLanguage('en');
-      await changeLanguage('fr');
-      await changeLanguage('en');
-
-      // `addResourceBundle` would happily merge the same object again; the
-      // point is that the dynamic import is not re-awaited on every switch.
-      expect(i18n.hasResourceBundle('en', 'translation')).toBe(true);
-      expect(i18n.hasResourceBundle('fr', 'translation')).toBe(true);
-    });
-
-    it('restricts itself to the languages it ships bundles for', async () => {
-      // `options.resources` is empty now — bundles arrive through
-      // `addResourceBundle` — so the check is that every supported language can
-      // actually be loaded, which is the thing that used to be implied.
-      for (const language of SUPPORTED_LANGUAGES) {
-        await changeLanguage(language);
-        expect(i18n.hasResourceBundle(language, 'translation')).toBe(true);
-      }
-      expect(i18n.options.supportedLngs).toEqual(
-        expect.arrayContaining([...SUPPORTED_LANGUAGES]),
+    it('restricts itself to the languages it ships bundles for', () => {
+      expect([...SUPPORTED_LANGUAGES].sort()).toEqual(
+        Object.keys(i18n.options.resources ?? {}).sort(),
       );
     });
   });

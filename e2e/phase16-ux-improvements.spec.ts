@@ -1181,15 +1181,19 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     // `test.skip` here reported green when there was no way to add a transport
     // at all — which is the largest version of the bug the test is about, and
     // it was the outcome the test was least able to distinguish from success.
+    // `.first()` on the union, not on each half: this page offers both a named
+    // button and a FAB, so the union resolves to two elements and asserting on
+    // it raises a strict-mode violation rather than the missing-control failure
+    // the assertion is for.
     const addButton = page.getByRole('button', { name: /new transport|nouveau transport/i });
-    const fabButton = page.locator('button[aria-label*="transport" i]').first();
-    const anyAddControl = addButton.or(fabButton);
+    const fabButton = page.locator('button[aria-label*="transport" i]');
+    const anyAddControl = addButton.or(fabButton).first();
 
     await expect(
       anyAddControl,
       'the transports page must offer some way to add a transport',
     ).toBeVisible({ timeout: 10_000 });
-    await anyAddControl.first().click();
+    await anyAddControl.click();
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });

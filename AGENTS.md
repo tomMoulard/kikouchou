@@ -534,19 +534,22 @@ neither `tsc`, ESLint, nor the tests catch it — the test harness mocks i18next
 echo keys back. When you add a `t()` call, add the key to **both**
 `en` and `fr`. Screen-reader-only text is user-facing text.
 
-**Only the active locale is loaded.** Both bundles used to be static imports,
-which put 200 KB of JSON into the render-blocking entry chunk so every visitor
-downloaded a language they never read. Each is a dynamic import now, fetched
-inside `i18nReady` — which `main.tsx` already awaits before the first render, so
-nothing paints a raw key — and `changeLanguage` awaits the bundle before it
-switches. Two consequences worth knowing:
+**Both locale bundles are static imports, and an attempt to make them lazy was
+reverted.** They are 200 KB of JSON in the render-blocking entry chunk — 94 KB
+of English and 106 KB of French — so every visitor downloads a language they
+never read, and splitting them measured at 52 KB off the gzipped entry script.
+It was still reverted, and the reason is worth keeping: a dynamic
+`import('@/locales/<lng>/translation.json')` makes the Vite **dev** server
+reload the page when it first executes, which lands in the middle of whichever
+Playwright test is running and kills it with
+`page.evaluate: Resulting promise was garbage collected`. Measured over full
+suite runs: 0 such errors on main, 11 and 13 on two runs of the split, with a
+different set of 14-15 tests failing each time. `import.meta.glob`, which is
+statically analysed, did not stop it.
 
-- The `resources` map passed to `init()` **must stay empty**. A namespace
-  declared there, even as `{}`, makes `hasResourceBundle` answer `true` and every
-  load a silent no-op. `supportedLngs` is what restricts the languages.
-- There is no cross-locale fallback any more. A key missing from `fr` renders as
-  the key rather than quietly in English, which is the failure this section is
-  about — so the "add it to both" rule is now load-bearing rather than tidy.
+So the prize is real and so is the cost. Anyone trying again needs to make the
+dev server stop reloading *first*, and prove it by running `bun run test:e2e`
+twice and counting `garbage collected` — a green single run means nothing here.
 
 ### A third-party z-index only stays put inside a stacking context
 
