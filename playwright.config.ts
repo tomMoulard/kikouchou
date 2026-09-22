@@ -268,16 +268,20 @@ const LIVE_URL = process.env.PW_LIVE_URL ?? 'https://app.kikouchou.app';
  *     whose analytics are working perfectly.
  *   - `sharing.spec.ts` asserts the share dialog explains that no sync server
  *     is configured. The deployment has one, so the assertion is inverted there.
- *   - `trip-sharing-sync.spec.ts` and `trip-invite-anonymous.spec.ts` sign in
- *     and write trips, guests and previews through the backend. Against the
- *     deployment those writes would land in the real Supabase project instead
- *     of `support/supabase-stub`.
+ *   - `trip-sharing-sync.spec.ts`, `trip-invite-anonymous.spec.ts` and
+ *     `trip-template-link.spec.ts` drive the backend through
+ *     `support/supabase-stub`: the first two sign in and write trips, guests
+ *     and previews, and the third answers `read_trip_template` with a payload
+ *     the stub invents. Against the deployment those calls reach the real
+ *     Supabase project — writes into real rows for the first two, and for the
+ *     third a `read_trip_template` for a token that does not exist there, so
+ *     it asserts the stub's answer against production's refusal.
  *   - `performance.spec.ts` compares durations against thresholds calibrated on
  *     a loopback dev server. Over the public internet those numbers measure the
  *     tester's link, not the app.
  */
 const LIVE_EXCLUDED_SPECS_PATTERN =
-  /analytics-privacy\.spec\.ts|analytics-events\.spec\.ts|sharing\.spec\.ts|trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts|performance\.spec\.ts/;
+  /analytics-privacy\.spec\.ts|analytics-events\.spec\.ts|sharing\.spec\.ts|trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts|trip-template-link\.spec\.ts|performance\.spec\.ts/;
 
 /**
  * Every host the deployed build sends analytics to: PostHog's own domains and

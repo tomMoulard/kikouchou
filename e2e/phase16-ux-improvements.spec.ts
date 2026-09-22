@@ -1177,15 +1177,19 @@ test.describe('Bug Fix: Timezone Display (BUG-2)', () => {
     await page.waitForLoadState('load');
     await waitForRoute(page);
 
+    // Opened through whichever control this layout offers, and never skipped.
+    // `test.skip` here reported green when there was no way to add a transport
+    // at all — which is the largest version of the bug the test is about, and
+    // it was the outcome the test was least able to distinguish from success.
     const addButton = page.getByRole('button', { name: /new transport|nouveau transport/i });
-    const fabButton = page.locator('button[aria-label*="transport" i]');
-    if (await addButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await addButton.click();
-    } else if (await fabButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await fabButton.first().click();
-    } else {
-      test.skip(true, 'No add-transport control on this layout');
-    }
+    const fabButton = page.locator('button[aria-label*="transport" i]').first();
+    const anyAddControl = addButton.or(fabButton);
+
+    await expect(
+      anyAddControl,
+      'the transports page must offer some way to add a transport',
+    ).toBeVisible({ timeout: 10_000 });
+    await anyAddControl.first().click();
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible({ timeout: 5000 });
