@@ -266,6 +266,120 @@ export function markOpaqueExceptions(event: CaptureResult | null): CaptureResult
 }
 
 // ============================================================================
+// URL redaction
+// ============================================================================
+
+/**
+ * Path segments whose *next* segment is a bearer credential.
+ *
+ * `/join/:token` and `/template/:token` are read by anyone holding the link:
+ * the token is the whole authorisation, checked by `redeem_invite`,
+ * `read_shared_trip` and `read_trip_template`. `/share/:shareId` and
+ * `/t/:remoteTripId` name a trip that an invite link opens with no account.
+ *
+ * posthog-js puts the full URL on every event as `$current_url`, and again as
+ * `$initial_current_url` on the person. A token sitting in an analytics
+ * property is a credential in a third-party system that nothing here can
+ * revoke, so it never leaves the browser.
+ */
+const CREDENTIAL_PATH_SEGMENTS = new Set(['join', 'template', 'share', 't']);
+
+/** Query parameters that carry a credential or a person's own text. */
+const REDACTED_QUERY_PARAMS = new Set(['token', 'key', 'invite', 'q']);
+
+const REDACTED = '[redacted]';
+
+/**
+ * Removes every credential from a URL, keeping the shape that makes it useful.
+ *
+ * `/join/AbCd1234` becomes `/join/[redacted]`, so "how many people opened an
+ * invite" stays answerable while the invite itself does not travel. The
+ * fragment goes entirely: a share link carries its encryption key there, and
+ * nothing in this project reports on fragments.
+ *
+ * Returns the input unchanged when it is not a URL this can parse — a
+ * best-effort redaction must never be the thing that throws inside
+ * `before_send`.
+ */
+export function redactUrl(value: unknown): unknown {
+  if (typeof value !== 'string' || value.length === 0) {
+    return value;
+  }
+
+  try {
+    const url = new URL(value, 'https://placeholder.invalid');
+    const segments = url.pathname.split('/');
+
+    for (let i = 0; i < segments.length - 1; i += 1) {
+      const segment = segments[i];
+      if (segment !== undefined && CREDENTIAL_PATH_SEGMENTS.has(segment)) {
+        segments[i + 1] = REDACTED;
+      }
+    }
+    url.pathname = segments.join('/');
+
+    // Rebuilt by hand rather than through `searchParams.set`, which
+    // percent-encodes the marker into `%5Bredacted%5D` and makes every
+    // breakdown in PostHog harder to read than the thing it replaced.
+    const params = [...url.searchParams.entries()].map(([name, paramValue]) =>
+      REDACTED_QUERY_PARAMS.has(name)
+        ? `${encodeURIComponent(name)}=${REDACTED}`
+        : `${encodeURIComponent(name)}=${encodeURIComponent(paramValue)}`,
+    );
+    const search = params.length > 0 ? `?${params.join('&')}` : '';
+
+    url.hash = '';
+    url.search = '';
+
+    return value.startsWith('/')
+      ? `${url.pathname}${search}`
+      : `${url.origin}${url.pathname}${search}`;
+  } catch {
+    return value;
+  }
+}
+
+/** Every property posthog-js fills with a URL, on an event or on a person. */
+const URL_PROPERTIES = [
+  '$current_url',
+  '$pathname',
+  '$referrer',
+  '$initial_current_url',
+  '$initial_pathname',
+  '$initial_referrer',
+  '$session_entry_url',
+  '$session_entry_pathname',
+  '$session_entry_referrer',
+] as const;
+
+/**
+ * Strips credentials out of every URL on an event, then hands it on.
+ *
+ * Wraps {@link markOpaqueExceptions} rather than replacing it: `before_send`
+ * takes one function, and both jobs have to happen on every event.
+ */
+export function redactAndMark(event: CaptureResult | null): CaptureResult | null {
+  if (event?.properties) {
+    for (const key of URL_PROPERTIES) {
+      if (event.properties[key] !== undefined) {
+        event.properties[key] = redactUrl(event.properties[key]);
+      }
+    }
+    const setOnce: unknown = event.properties['$set_once'];
+    if (setOnce && typeof setOnce === 'object') {
+      const bag = setOnce as Record<string, unknown>;
+      for (const key of URL_PROPERTIES) {
+        if (bag[key] !== undefined) {
+          bag[key] = redactUrl(bag[key]);
+        }
+      }
+    }
+  }
+
+  return markOpaqueExceptions(event);
+}
+
+// ============================================================================
 // Initialization
 // ============================================================================
 
@@ -428,16 +542,35 @@ if (!posthogKey || !posthogHost) {
     prepare_external_dependency_script: readableExternalScript,
 
     /**
+     * Element text is a guest's name.
+     *
+     * With autocapture on, clicking a guest card sends `$el_text` — and on this
+     * app that string is "Marie Dupont", a person who is not a user here and
+     * has agreed to nothing. The same goes for a room name, a place and a trip
+     * name. That is the rule this project states as "send counts and enum
+     * values, not user content", with exactly one exception decided on
+     * deliberately (`assistant_prompt_sent`); autocapture would be a second
+     * one, arrived at by leaving a default alone.
+     *
+     * Nothing is lost that this project actually reads. Every interaction worth
+     * a number already has a named `noun_verb_past` event, and the nine that
+     * count as activity go through `captureUsage`. A `$autocapture` event is
+     * not in any of those definitions.
+     */
+    autocapture: false,
+
+    /**
      * The last gate before an event leaves the browser. Nothing is dropped
      * here.
      *
-     * Only {@link markOpaqueExceptions} runs, and it only ever adds properties:
-     * where the exception was thrown, on every one of them, plus a name and a
-     * grouping for the shape a browser refuses to describe. See it for what is
-     * left once the cause above is fixed, and why that remainder is worth
-     * reporting rather than discarding.
+     * {@link redactAndMark} runs two jobs. It strips bearer tokens and share
+     * keys out of every URL property — an invite token in `$current_url` is a
+     * read credential for a trip's guest names and stay dates, living in a
+     * third-party system nothing here can revoke. Then
+     * {@link markOpaqueExceptions} adds where an exception was thrown, plus a
+     * name and a grouping for the shape a browser refuses to describe.
      */
-    before_send: markOpaqueExceptions,
+    before_send: redactAndMark,
   });
   // Attached to every event from here on, so any question can be sliced by
   // release without each call site having to remember to pass it. Set at init
@@ -566,6 +699,7 @@ export type AnalyticsEvent =
   | 'assistant_answer_failed'
   | 'assistant_answer_received'
   | 'assistant_device_unsupported'
+  | 'assistant_model_load_cancelled'
   | 'assistant_model_load_failed'
   // Reading what the app worked out
   | 'analytics_viewed'

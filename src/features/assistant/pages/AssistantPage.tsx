@@ -70,6 +70,7 @@ import {
 } from '../chat-storage';
 import { useTripActions } from '../hooks/useTripActions';
 import { useTripSystemPrompt } from '../hooks/useTripSystemPrompt';
+import { redactAiMessages, redactAiOutput } from '../ai-telemetry';
 import { splitReasoning } from '../reasoning';
 import { ACTION_SCHEMAS } from '../action-schema';
 import { useWebGPUSupport } from '../hooks/useWebGPUSupport';
@@ -1056,8 +1057,8 @@ function AssistantPageComponent(): ReactElement {
           $ai_session_id: sessionIdRef.current,
           $ai_model: selectedModelRef.current.modelId,
           $ai_provider: 'huggingface',
-          $ai_input: fullMessages,
-          $ai_output_choices: [{ role: 'assistant', content: response }],
+          $ai_input: redactAiMessages(fullMessages),
+          $ai_output_choices: redactAiOutput(response),
           $ai_latency: (Date.now() - startedAt) / 1000,
           $ai_stream: true,
           // Runs fully on-device via Transformers.js — there is no vendor
@@ -1108,7 +1109,7 @@ function AssistantPageComponent(): ReactElement {
           $ai_session_id: sessionIdRef.current,
           $ai_model: selectedModelRef.current.modelId,
           $ai_provider: 'huggingface',
-          $ai_input: fullMessages,
+          $ai_input: redactAiMessages(fullMessages),
           $ai_latency: (Date.now() - startedAt) / 1000,
           $ai_stream: true,
           $ai_is_error: true,

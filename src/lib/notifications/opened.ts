@@ -64,14 +64,30 @@ const CLICK_MESSAGE_TYPE = 'notification-click';
 const UNKNOWN_KIND = 'unknown';
 
 /**
- * How long a kind is allowed to be before it is discarded.
+ * Every kind of notification this app sends, and the only values reported.
  *
  * The value reaches us from a URL, so it is attacker-supplied in the same sense
- * every query parameter is: a link with `?from_notification=<10kB>` would
- * otherwise mint a property value of that size on the project's event schema.
- * Every real kind is under twenty characters.
+ * every query parameter is. Bounding its *length* kept a 10 kB property off the
+ * project's event schema but still let a link mint an arbitrary value, so a
+ * shared `?from_notification=…` could fill the breakdown with categories that
+ * describe nothing — and this project's rule is that an event carries enum
+ * values, not strings a visitor chose.
+ *
+ * A kind absent from this set is reported as {@link UNKNOWN_KIND}, which is
+ * also what a notification carrying no kind at all reports. Adding a kind of
+ * notification means adding it here, or its clicks all count as unknown.
  */
-const MAX_KIND_LENGTH = 32;
+const KNOWN_KINDS: ReadonlySet<string> = new Set([
+  // From the server's reminder sender (`push_sender.rs`).
+  'trip_start',
+  'own_arrival',
+  'pickup',
+  // From a ride notice on the device.
+  'leave',
+  'moved',
+  // An in-app confirmation that the operating system now owns.
+  'status',
+]);
 
 // ============================================================================
 // Internal helpers
@@ -84,9 +100,7 @@ const MAX_KIND_LENGTH = 32;
  * @returns The kind, or {@link UNKNOWN_KIND}
  */
 function toKind(value: unknown): string {
-  return typeof value === 'string' &&
-    value !== '' &&
-    value.length <= MAX_KIND_LENGTH
+  return typeof value === 'string' && KNOWN_KINDS.has(value)
     ? value
     : UNKNOWN_KIND;
 }

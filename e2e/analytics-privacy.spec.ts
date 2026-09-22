@@ -32,8 +32,18 @@ import { waitForRoute } from './support/routes';
 // Constants
 // ============================================================================
 
-/** Where a configured build would send its events. */
-const INGESTION_URL = 'https://eu.i.posthog.com/e/';
+/**
+ * Where a configured build really sends its events.
+ *
+ * `VITE_POSTHOG_HOST` is `events.kikouchou.app`, a reverse proxy in front of
+ * PostHog's EU ingestion, so this — not `eu.i.posthog.com` — is the host a leak
+ * would appear at. The self-check below drives both, because a recorder that
+ * only knows PostHog's own domains would watch traffic the app never makes.
+ */
+const INGESTION_URL = 'https://events.kikouchou.app/e/';
+
+/** PostHog's own ingestion host, which assets and the toolbar still use. */
+const POSTHOG_DIRECT_URL = 'https://eu.i.posthog.com/e/';
 
 /**
  * How long to let a leak happen before declaring there was none.
@@ -103,20 +113,26 @@ test.describe('Analytics stays off the wire', () => {
     await page.goto('/trips');
     await page.waitForLoadState('load');
 
-    const status = await page.evaluate(async (url: string) => {
-      const response = await fetch(url, { method: 'POST', body: '{}' });
-      return response.status;
-    }, INGESTION_URL);
+    const statuses = await page.evaluate(async (urls: readonly string[]) => {
+      const results: number[] = [];
+      for (const url of urls) {
+        const response = await fetch(url, { method: 'POST', body: '{}' });
+        results.push(response.status);
+      }
+      return results;
+    }, [INGESTION_URL, POSTHOG_DIRECT_URL]);
 
     // Fulfilled by the route stub rather than by PostHog — which also proves
-    // the route pattern covers the ingestion host, since an unmatched request
+    // the route pattern covers both ingestion hosts, since an unmatched request
     // would have gone to the network and come back differently, or not at all.
-    expect(status).toBe(200);
+    expect(statuses).toEqual([200, 200]);
 
     // `some`, not a count: this test is about the recorder noticing, and must
     // not also fail for the reason the test above exists to catch.
-    await expect
-      .poll(() => attempts.some((url) => url.startsWith(INGESTION_URL)))
-      .toBe(true);
+    for (const url of [INGESTION_URL, POSTHOG_DIRECT_URL]) {
+      await expect
+        .poll(() => attempts.some((attempt) => attempt.startsWith(url)))
+        .toBe(true);
+    }
   });
 });

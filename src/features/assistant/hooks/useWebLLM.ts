@@ -667,7 +667,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       if (isLoadCancelledError(err)) {
         // The user asked for this, so it is not an error: no capture, no red
         // card, and a status the auto-load effect will not immediately undo.
-        posthog?.capture('assistant_model_load_cancelled', {
+        captureEvent('assistant_model_load_cancelled', {
           model_id: preset.modelId,
           from_cache: loadingFromCache,
         });
