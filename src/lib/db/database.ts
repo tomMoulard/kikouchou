@@ -668,6 +668,47 @@ export class KikouchouDatabase extends Dexie {
       tripMembers: '[tripId+userId], tripId, userId',
     });
 
+    /**
+     * Schema Version 12 - A plain `tripId` on the three tables that lacked one
+     *
+     * `rooms`, `roomAssignments` and `transports` were reachable only through a
+     * compound index — `[tripId+order]`, `[tripId+startDate]`, `[tripId+datetime]`.
+     * IndexedDB does not index a record at all when any component of a compound
+     * keyPath is missing, so a row that arrived without its second component was
+     * invisible to every trip query *and* to `deleteTrip`'s cascade: it outlived
+     * the trip forever, and nothing in the app could ever see it to remove it.
+     *
+     * This is the rule AGENTS.md states — "give every trip-scoped table a plain
+     * `tripId` index, not only a compound one" — applied to the three tables
+     * that predate it. `guestGroups` is still deliberately outside it: a guest
+     * group belongs to the account rather than to a trip.
+     *
+     * Bumping the version re-indexes the existing store, so rows already
+     * stranded on a device are picked up by the new index and swept by the next
+     * `deleteTrip`. No data migration is needed: no field changes.
+     */
+    this.version(12).stores({
+      trips: 'id, &shareId, remoteTripId, startDate, createdAt',
+      rooms: 'id, tripId, [tripId+order]',
+      persons: 'id, tripId, [tripId+name]',
+      roomAssignments:
+        'id, tripId, roomId, personId, [tripId+startDate], [tripId+personId], [tripId+roomId]',
+      transports:
+        'id, tripId, personId, driverId, rideId, [tripId+datetime], [tripId+personId], [tripId+type]',
+      rides: 'id, tripId, driverId, vehicleId, [tripId+meetDatetime]',
+      vehicles: 'id, tripId, ownerId',
+      activities:
+        'id, tripId, organizerId, *participantIds, [tripId+startDatetime], [tripId+category]',
+      expenses: 'id, tripId, payerId, [tripId+date]',
+      settings: 'id',
+      guestGroups: 'id, name, remoteGroupId',
+      rideNotices: 'key, tripId',
+      yjsUpdates: '++id, tripId',
+      yjsOutbox: '++id, tripId',
+      syncCursors: 'tripId',
+      tripMembers: '[tripId+userId], tripId, userId',
+    });
+
     // An idle tab holding an older schema version blocks a newer tab's upgrade
     // transaction indefinitely. Without these two handlers the newer tab's
     // db.open() never resolves *or rejects*, so a caller awaiting it hangs

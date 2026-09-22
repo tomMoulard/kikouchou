@@ -23,6 +23,26 @@ import type { Trip, TripFormData, TripId } from '@/types';
 const MAX_ID_RETRIES = 3;
 
 /**
+ * Refuses a trip window that runs backwards.
+ *
+ * The form's Zod schema already says `endDate >= startDate`, but the repository
+ * is reached by three writers that never see it: the assistant's `updateTrip`
+ * action, a QR changeset import, and the sync projection. An inverted window is
+ * not merely odd data — `buildTripDayColumns` iterates from start to end, so it
+ * yields no days at all, and the calendar, the room timeline and the night
+ * split each render an empty trip that nothing in the UI explains.
+ *
+ * @param startDate - First day of the trip
+ * @param endDate - Last day of the trip
+ * @throws {Error} If the trip ends before it starts
+ */
+function validateTripWindow(startDate: string, endDate: string): void {
+  if (startDate.length > 0 && endDate.length > 0 && endDate < startDate) {
+    throw new Error('Trip end date must be on or after its start date');
+  }
+}
+
+/**
  * Creates a new trip in the database.
  *
  * Generates unique IDs for the trip and share link, sets creation timestamps,
@@ -47,6 +67,7 @@ const MAX_ID_RETRIES = 3;
 export async function createTrip(data: TripFormData): Promise<Trip> {
   // Sanitize input data (trim whitespace, enforce max lengths)
   const sanitizedData = sanitizeTripData(data);
+  validateTripWindow(sanitizedData.startDate, sanitizedData.endDate);
   let lastError: unknown;
 
   for (let attempt = 0; attempt < MAX_ID_RETRIES; attempt++) {
@@ -189,6 +210,16 @@ export async function updateTrip(
     // that spanned exactly the old trip was a whole-trip booking, and that is
     // knowable only here. See `planTripDateShiftAssignmentUpdates`.
     const previous = await db.trips.get(id);
+
+    // Checked against the merged window rather than the patch: a caller moving
+    // only `endDate` can still invert a trip, and this repository is what the
+    // assistant and the importers write through.
+    if (previous) {
+      validateTripWindow(
+        sanitizedData.startDate ?? previous.startDate,
+        sanitizedData.endDate ?? previous.endDate,
+      );
+    }
 
     // Use update() return value to check existence atomically (avoids TOCTOU race)
     const updatedCount = await db.trips.update(id, {

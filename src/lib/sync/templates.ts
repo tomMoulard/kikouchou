@@ -34,6 +34,7 @@ import { nanoid } from 'nanoid';
 
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import {
+  MAX_ROOM_CAPACITY,
   normalizeCurrency,
   normalizeRoomIcon,
   type CurrencyCode,
@@ -63,9 +64,11 @@ const TEMPLATE_SHARE_SEGMENT = 't';
 const MAX_NAME = 200;
 const MAX_DESCRIPTION = 2_000;
 const MAX_LOCATION = 200;
+// `MAX_ROOM_CAPACITY` is imported from `@/types` rather than restated: a
+// template and a CRDT projection disagreeing about what a room may hold is how
+// one boundary ends up looser than the other.
 const MAX_ROOMS = 50;
 const MAX_ROOM_NAME = 100;
-const MAX_ROOM_CAPACITY = 50;
 
 // ============================================================================
 // Type Definitions

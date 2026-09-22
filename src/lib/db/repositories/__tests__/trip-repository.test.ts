@@ -23,7 +23,7 @@ import { createPerson } from '@/lib/db/repositories/person-repository';
 import { createAssignment } from '@/lib/db/repositories/assignment-repository';
 import { createTransport } from '@/lib/db/repositories/transport-repository';
 import * as dbUtils from '@/lib/db/utils';
-import type { Trip, TripFormData, TripId, ShareId } from '@/types';
+import type { ISODateString, Trip, TripFormData, TripId, ShareId } from '@/types';
 import { isoDate, hexColor } from '@/test/utils';
 
 // ============================================================================
@@ -31,16 +31,30 @@ import { isoDate, hexColor } from '@/test/utils';
 // ============================================================================
 
 /**
- * Creates valid trip form data with optional overrides.
+ * A trip the repository will accept.
+ *
+ * The end date follows an overridden start date unless the caller names one.
+ * Overriding only `startDate` used to leave the fixture ending five months
+ * before it began, which the repository now refuses — an inverted window yields
+ * no trip days at all, so the calendar and the room timeline render an empty
+ * trip nothing in the UI explains.
  */
 function createValidTripData(overrides?: Partial<TripFormData>): TripFormData {
+  const startDate = overrides?.startDate ?? isoDate('2024-07-15');
   return {
     name: 'Test Trip',
     location: 'Beach House, Brittany',
-    startDate: isoDate('2024-07-15'),
-    endDate: isoDate('2024-07-22'),
+    startDate,
+    endDate: addDaysToIsoDate(startDate, 7),
     ...overrides,
   };
+}
+
+/** Moves an ISO day forward without touching a `Date`, so no offset leaks in. */
+function addDaysToIsoDate(day: ISODateString, days: number): ISODateString {
+  const shifted = new Date(`${day}T00:00:00Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().slice(0, 10) as ISODateString;
 }
 
 // ============================================================================
@@ -67,6 +81,17 @@ afterEach(() => {
 // ============================================================================
 
 describe('createTrip', () => {
+  it('refuses a window that runs backwards', async () => {
+    await expect(
+      createTrip(
+        createValidTripData({
+          startDate: isoDate('2024-07-15'),
+          endDate: isoDate('2024-07-01'),
+        }),
+      ),
+    ).rejects.toThrow(/end date must be on or after/i);
+  });
+
   it('creates trip with all required fields', async () => {
     const data = createValidTripData();
 
@@ -310,6 +335,17 @@ describe('getTripByShareId', () => {
 // ============================================================================
 
 describe('updateTrip', () => {
+  it('refuses a window that runs backwards', async () => {
+    const trip = await createTrip(createValidTripData());
+
+    await expect(
+      updateTrip(trip.id, { endDate: isoDate('2024-01-01') }),
+    ).rejects.toThrow(/end date must be on or after/i);
+
+    // The whole update is in one transaction, so nothing partial survives.
+    expect((await getTripById(trip.id))?.endDate).toBe(trip.endDate);
+  });
+
   // Reported from the app: create a guest with no dates, give them a room, then
   // edit the trip's dates. The booking was made across the whole trip — that is
   // what an undated guest's stay is taken to be — but it is stored as two fixed

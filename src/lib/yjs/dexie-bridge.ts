@@ -17,10 +17,14 @@ import * as Y from 'yjs';
 import { db } from '@/lib/db/database';
 import {
   MAX_LENGTHS,
+  isCalendarDayString,
+  isInstantString,
   normalizeChildSeats,
   normalizeExpenseAmount,
   normalizeExpenseSplitValue,
   normalizeLeadTimeMinutes,
+  normalizeMaxParticipants,
+  normalizeRoomCapacity,
   normalizeSeatCount,
   sanitizeOptionalText,
   sanitizeText,
@@ -59,6 +63,7 @@ import type {
   Vehicle,
 } from '@/types';
 import {
+  ACTIVITY_CATEGORIES,
   CHILD_SEAT_KINDS,
   DEFAULT_EXPENSE_CATEGORY,
   normalizeCurrency,
@@ -66,8 +71,11 @@ import {
   EXPENSE_CATEGORIES,
   EXPENSE_KINDS,
   EXPENSE_SPLIT_MODES,
+  MAX_ACTIVITY_PARTICIPANTS,
   MAX_EXPENSE_SPLITS,
+  normalizePersonHeadcount,
   RIDE_DIRECTIONS,
+  ROOM_ICONS,
 } from '@/types';
 
 const COMPACTION_THRESHOLD = 100;
@@ -125,6 +133,26 @@ function readTripName(meta: Y.Map<unknown>, existingTrip?: Trip): string {
   return i18n.t('trips.untitled');
 }
 
+/**
+ * One end of the trip's window, from the document if it is a usable day.
+ *
+ * Same shape as {@link readTripName}: the document is peer-controlled, so the
+ * value arrives as `unknown` and has to be checked. It falls back to what this
+ * device already had before it falls back to empty, so a peer on a build that
+ * stopped writing the field cannot erase a window the owner set.
+ */
+function readTripDay(
+  meta: Y.Map<unknown>,
+  key: 'startDate' | 'endDate',
+  existing: Trip['startDate'] | undefined,
+): Trip['startDate'] {
+  const fromDoc = meta.get(key);
+  if (isCalendarDayString(fromDoc)) {
+    return fromDoc as Trip['startDate'];
+  }
+  return existing ?? ('' as Trip['startDate']);
+}
+
 function buildTripRecord(
   doc: Y.Doc,
   tripId: TripId,
@@ -150,14 +178,16 @@ function buildTripRecord(
     // trip. The real fix is for the bridge not to name trips at all, which needs
     // every renderer to handle a nameless one first.
     name: readTripName(meta, existingTrip),
-    startDate:
-      (meta.get('startDate') as Trip['startDate']) ??
-      existingTrip?.startDate ??
-      ('' as Trip['startDate']),
-    endDate:
-      (meta.get('endDate') as Trip['endDate']) ??
-      existingTrip?.endDate ??
-      ('' as Trip['endDate']),
+    // Checked, not cast. `??` only catches null and undefined, so a peer — or a
+    // build that wrote the field differently — could put a number or an
+    // unparseable string here, and the trip window is not display data: the
+    // calendar, the money page and `buildTripDayColumns` all hand these two
+    // straight to `parseISO` and then to `format()`, which throws
+    // `RangeError: Invalid time value` inside a render and takes the page down
+    // with the error boundary. An unreadable value reads as "not set yet",
+    // which every screen already handles.
+    startDate: readTripDay(meta, 'startDate', existingTrip?.startDate),
+    endDate: readTripDay(meta, 'endDate', existingTrip?.endDate),
     // NEVER take shareId from a peer: it is a UNIQUE Dexie index, so a value
     // colliding with another local trip aborts the whole write transaction and
     // permanently kills sync for this trip.
@@ -266,6 +296,21 @@ function buildGuestRecord(
   options: { readonly localRow?: Person; readonly sharePhone: boolean },
 ): Person {
   const person = { ...guest, tripId } as Person;
+
+  // `name` and `notes` were the two fields this builder still adopted verbatim
+  // while it bounded `phone` beside them. Both are rendered — the name on every
+  // card, chip and timeline row, the notes in the guest sheet — so a peer's
+  // 50,000-character value is a layout bomb that `populateDocFromDexie` then
+  // republishes to every other device. An empty name is the same blank card
+  // `readTripName` guards the trip against, so it falls back to the local row's
+  // name before it falls back to a placeholder.
+  const boundedName = sanitizeText(boundedString(person.name), MAX_LENGTHS.personName);
+  person.name =
+    boundedName.length > 0
+      ? boundedName
+      : (options.localRow?.name ?? i18n.t('persons.unnamed'));
+  person.notes = optionalBoundedText(person.notes, MAX_LENGTHS.personNotes);
+  person.headcount = normalizePersonHeadcount(person.headcount);
 
   // A seat kind this build does not recognise is dropped rather than stored.
   // It reaches `tallyRequiredChildSeats`, which indexes a tally by it, so an
@@ -460,6 +505,138 @@ function buildRideRecord(ride: SharedRecord, tripId: TripId): Ride | undefined {
  * @param tripId - The local trip id, which is the only write key
  * @returns A bounded row ready for Dexie
  */
+/**
+ * Projects one room out of the document, bounding what the log carried.
+ *
+ * Rooms were the last collection still cast straight out of the document, and
+ * they are the one AGENTS.md names: `capacity` reaches
+ * `Array.from({ length: capacity - 1 })` in `RoomOccupancyTimeline`, so a peer
+ * sending `1e9` allocates until the tab dies — and, because the row is now in
+ * IndexedDB, dies again on every reload of the rooms page.
+ *
+ * `order` decides the record's fate rather than being repaired, for the same
+ * reason `datetime` does on a transport: it is the second component of
+ * `[tripId+order]`, the index the rooms page and this projection's own
+ * delete-candidate query both scan, so a non-numeric one is filed outside that
+ * range — invisible to the app and impossible to ever remove.
+ *
+ * @param room - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row, or undefined when it could never be read back
+ */
+function buildRoomRecord(room: SharedRecord, tripId: TripId): Room | undefined {
+  const row = { ...room, tripId } as Room;
+
+  if (typeof row.order !== 'number' || !Number.isFinite(row.order)) {
+    return undefined;
+  }
+
+  row.name = sanitizeText(boundedString(row.name), MAX_LENGTHS.roomName);
+  row.description = optionalBoundedText(row.description, MAX_LENGTHS.roomDescription);
+  row.capacity = normalizeRoomCapacity(row.capacity);
+
+  if (row.icon !== undefined && !(ROOM_ICONS as readonly unknown[]).includes(row.icon)) {
+    delete row.icon;
+  }
+
+  return row;
+}
+
+/**
+ * Projects one room assignment out of the document.
+ *
+ * An assignment is two calendar days and two ids, and every one of the four is
+ * load-bearing. `startDate` is the second component of `[tripId+startDate]`, so
+ * a non-day value is unreachable and unremovable in exactly the way a
+ * transport's `datetime` is. Both dates are then handed to `parseISO` by the
+ * calendar, the room timeline and the occupancy maths, where an unparseable one
+ * throws out of a render and takes the page down rather than the row.
+ *
+ * An inverted window is repaired rather than dropped: `endDate` before
+ * `startDate` makes every night loop iterate zero times, so the guest silently
+ * has no bed. Collapsing it to a single night keeps the assignment visible and
+ * lets a member correct it.
+ *
+ * @param assignment - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row, or undefined when it could never be read back
+ */
+function buildAssignmentRecord(
+  assignment: SharedRecord,
+  tripId: TripId,
+): RoomAssignment | undefined {
+  const row = { ...assignment, tripId } as RoomAssignment;
+
+  if (!isCalendarDayString(row.startDate) || !isCalendarDayString(row.endDate)) {
+    return undefined;
+  }
+  if (typeof row.roomId !== 'string' || row.roomId.length === 0) {
+    return undefined;
+  }
+  if (typeof row.personId !== 'string' || row.personId.length === 0) {
+    return undefined;
+  }
+
+  if (row.endDate < row.startDate) {
+    row.endDate = row.startDate;
+  }
+
+  return row;
+}
+
+/**
+ * Projects one activity out of the document, bounding what the log carried.
+ *
+ * `startDatetime` decides the record's fate — second component of
+ * `[tripId+startDatetime]`, same unreachable-and-unremovable hazard as
+ * everywhere else in this file — and `maxParticipants` and `participantIds` are
+ * the rendering bombs: the cap is compared against a count and the list is
+ * rendered one avatar per entry.
+ *
+ * @param activity - The record as the document holds it
+ * @param tripId - The local trip id, which is the only write key
+ * @returns A bounded row, or undefined when it could never be read back
+ */
+function buildActivityRecord(
+  activity: SharedRecord,
+  tripId: TripId,
+): Activity | undefined {
+  const row = { ...activity, tripId } as Activity;
+
+  if (!isInstantString(row.startDatetime)) {
+    return undefined;
+  }
+  if (row.endDatetime !== undefined && !isInstantString(row.endDatetime)) {
+    row.endDatetime = undefined;
+  }
+
+  row.title = sanitizeText(boundedString(row.title), MAX_LENGTHS.activityTitle);
+  row.location = optionalBoundedText(row.location, MAX_LENGTHS.activityLocation);
+  row.notes = optionalBoundedText(row.notes, MAX_LENGTHS.activityNotes);
+  row.coordinates = boundedCoordinates(row.coordinates);
+  row.allDay = row.allDay === true;
+  row.maxParticipants = normalizeMaxParticipants(row.maxParticipants);
+
+  if (!(ACTIVITY_CATEGORIES as readonly unknown[]).includes(row.category)) {
+    row.category = 'other';
+  }
+
+  row.participantIds = Array.isArray(row.participantIds)
+    ? row.participantIds
+        .filter(
+          (id): id is Activity['participantIds'][number] =>
+            typeof id === 'string' && id.length > 0,
+        )
+        .slice(0, MAX_ACTIVITY_PARTICIPANTS)
+    : [];
+
+  if (typeof row.organizerId !== 'string' || row.organizerId.length === 0) {
+    delete row.organizerId;
+  }
+
+  return row;
+}
+
 function buildVehicleRecord(vehicle: SharedRecord, tripId: TripId): Vehicle {
   const row = { ...vehicle, tripId } as Vehicle;
 
@@ -740,33 +917,35 @@ export async function syncDocToDexie(
         await db.trips.put(nextTrip);
 
         const currentGuests = await db.persons.where('tripId').equals(tripId).toArray();
-        const currentRooms = await db.rooms
-          .where('[tripId+order]')
-          .between([tripId, -Infinity], [tripId, Infinity])
-          .toArray();
+        // Read through the plain `tripId` index (schema 12), not the compound
+        // one. IndexedDB leaves a record out of a compound index entirely when
+        // any component is missing, so a row stranded without its `order`,
+        // `startDate` or `datetime` was invisible to this delete-candidate
+        // query — the projection could never remove what it could not see.
+        const currentRooms = await db.rooms.where('tripId').equals(tripId).toArray();
         const currentAssignments = await db.roomAssignments
-          .where('[tripId+startDate]')
-          .between([tripId, ''], [tripId, '\uffff'])
+          .where('tripId')
+          .equals(tripId)
           .toArray();
         const currentTransport = await db.transports
-          .where('[tripId+datetime]')
-          .between([tripId, ''], [tripId, '\uffff'])
+          .where('tripId')
+          .equals(tripId)
           .toArray();
         const currentRides = await db.rides
-          .where('[tripId+meetDatetime]')
-          .between([tripId, ''], [tripId, '\uffff'])
+          .where('tripId')
+          .equals(tripId)
           .toArray();
         const currentVehicles = await db.vehicles
           .where('tripId')
           .equals(tripId)
           .toArray();
         const currentActivities = await db.activities
-          .where('[tripId+startDatetime]')
-          .between([tripId, ''], [tripId, '\uffff'])
+          .where('tripId')
+          .equals(tripId)
           .toArray();
         const currentExpenses = await db.expenses
-          .where('[tripId+date]')
-          .between([tripId, ''], [tripId, '\uffff'])
+          .where('tripId')
+          .equals(tripId)
           .toArray();
 
         const sharePhone = isGuestPhoneSharingEnabled();
@@ -777,12 +956,12 @@ export async function syncDocToDexie(
             sharePhone,
           }),
         );
-        const nextRooms = readCollection(doc, 'rooms').map(
-          (room) => ({ ...room, tripId } as Room),
-        );
-        const nextAssignments = readCollection(doc, 'roomAssignments').map(
-          (assignment) => ({ ...assignment, tripId } as RoomAssignment),
-        );
+        const nextRooms = readCollection(doc, 'rooms')
+          .map((room) => buildRoomRecord(room, tripId))
+          .filter((room): room is Room => room !== undefined);
+        const nextAssignments = readCollection(doc, 'roomAssignments')
+          .map((assignment) => buildAssignmentRecord(assignment, tripId))
+          .filter((assignment): assignment is RoomAssignment => assignment !== undefined);
         const nextTransport = readCollection(doc, 'transport')
           .map((transport) => buildTransportRecord(transport, tripId))
           .filter((transport): transport is Transport => transport !== undefined);
@@ -792,9 +971,9 @@ export async function syncDocToDexie(
         const nextVehicles = readCollection(doc, 'vehicles').map((vehicle) =>
           buildVehicleRecord(vehicle, tripId),
         );
-        const nextActivities = readCollection(doc, 'activities').map(
-          (activity) => ({ ...activity, tripId } as Activity),
-        );
+        const nextActivities = readCollection(doc, 'activities')
+          .map((activity) => buildActivityRecord(activity, tripId))
+          .filter((activity): activity is Activity => activity !== undefined);
         const nextExpenses = readCollection(doc, 'expenses')
           .map((expense) => buildExpenseRecord(expense, tripId))
           .filter((expense): expense is Expense => expense !== undefined);

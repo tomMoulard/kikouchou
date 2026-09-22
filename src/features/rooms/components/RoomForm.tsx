@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RoomIconDialog } from '@/components/shared/RoomIconDialog';
 import { cn } from '@/lib/utils';
+import { MAX_ROOM_CAPACITY, MIN_ROOM_CAPACITY } from '@/types';
 import type { Room, RoomFormData, RoomIcon } from '@/types';
 
 // ============================================================================
@@ -66,7 +67,16 @@ const DEFAULT_CAPACITY = 1;
 /**
  * Minimum allowed capacity for a room.
  */
-const MIN_CAPACITY = 1;
+const MIN_CAPACITY = MIN_ROOM_CAPACITY;
+
+/**
+ * Largest capacity the form will save.
+ *
+ * Shared with the repository, the Zod schema and the CRDT projection, so the
+ * four write boundaries cannot disagree. The room timeline draws one element
+ * per bed, which is why this is a guard and not a taste judgement.
+ */
+const MAX_CAPACITY = MAX_ROOM_CAPACITY;
 
 // ============================================================================
 // Component
@@ -174,6 +184,9 @@ const RoomForm = memo(function RoomForm({
     (value: number): string | undefined => {
       if (!Number.isInteger(value) || value < MIN_CAPACITY) {
         return t('validation.capacityMin', { min: MIN_CAPACITY, defaultValue: `Minimum ${MIN_CAPACITY} bed` });
+      }
+      if (value > MAX_CAPACITY) {
+        return t('validation.capacityMax', { max: MAX_CAPACITY });
       }
       return undefined;
     },
@@ -367,6 +380,7 @@ const RoomForm = memo(function RoomForm({
           onValueChange={handleCapacityChange}
           onBlur={handleCapacityBlur}
           min={MIN_CAPACITY}
+          max={MAX_CAPACITY}
           decrementLabel={t('rooms.bedsDecrease', 'Remove a bed')}
           incrementLabel={t('rooms.bedsIncrease', 'Add a bed')}
           aria-invalid={Boolean(errors.capacity)}

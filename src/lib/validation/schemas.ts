@@ -20,9 +20,11 @@ import {
   MAX_GUEST_GROUP_MEMBERS,
   MAX_LEAD_TIME_MINUTES,
   MAX_PERSON_HEADCOUNT,
+  MAX_ROOM_CAPACITY,
   MAX_VEHICLE_SEAT_COUNT,
   MIN_LEAD_TIME_MINUTES,
   MIN_PERSON_HEADCOUNT,
+  MIN_ROOM_CAPACITY,
   MIN_VEHICLE_SEAT_COUNT,
 } from '@/types';
 import type {
@@ -269,7 +271,11 @@ export const RoomFormDataSchema = z.object({
   capacity: z
     .number()
     .int('Capacity must be a whole number')
-    .min(1, 'Capacity must be at least 1'),
+    .min(MIN_ROOM_CAPACITY, `Capacity must be at least ${MIN_ROOM_CAPACITY}`)
+    // Bounded as well as floored: the room timeline renders one element per
+    // bed, so an unbounded capacity is a rendering bomb rather than merely a
+    // wrong number. Same bound as the repository and the CRDT projection.
+    .max(MAX_ROOM_CAPACITY, `Capacity must be ${MAX_ROOM_CAPACITY} or less`),
   description: z
     .string()
     .max(500, 'Description must be 500 characters or less')

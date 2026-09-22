@@ -173,6 +173,22 @@ export const MIN_VEHICLE_SEAT_COUNT = 1;
 export const MAX_VEHICLE_SEAT_COUNT = 99;
 
 /**
+ * Bounds for {@link Room.capacity}.
+ *
+ * This is the bound AGENTS.md's "unbounded `capacity` reached
+ * `Array.from({length: capacity})` and OOM'd the tab permanently" paragraph is
+ * about. The room timeline still renders one element per bed
+ * (`RoomOccupancyTimeline`), so the value has to be a real number of beds
+ * before it is stored, not merely before it is drawn.
+ *
+ * `lib/sync/templates.ts` carried a private copy of the upper bound; both
+ * boundaries read this one, so a template and a CRDT projection cannot disagree
+ * about what a room may hold.
+ */
+export const MIN_ROOM_CAPACITY = 1;
+export const MAX_ROOM_CAPACITY = 50;
+
+/**
  * Kind of shared activity planned during a trip.
  *
  * Categories drive the icon and colour used on the activity list, the
