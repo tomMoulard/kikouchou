@@ -6,6 +6,7 @@
  */
 
 import { memo, useCallback, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Marker, Popup, Tooltip } from 'react-leaflet';
 import { divIcon, type LatLngExpression } from 'leaflet';
 
@@ -175,8 +176,17 @@ function createMarkerIcon(
     ? ` style="background-color:${customColor}"`
     : '';
 
+  // Presentation only: no `tabindex` and no `role`.
+  //
+  // This html is rendered *inside* Leaflet's own marker element, which is
+  // already a focusable `role="button"` carrying the marker's `alt` as its
+  // accessible name and this component's `keydown` handler. Making the inner
+  // div a second button gave every marker two tab stops, and the inner one had
+  // no name at all — the glyph is `aria-hidden`, so a screen reader announced
+  // "button" and nothing else. A map of twelve pins was twenty-four stops, half
+  // of them silent.
   const html = `
-    <div class="${MARKER_BASE_CLASSES} ${colorClasses}"${colorStyle} data-marker-type="${type}" tabindex="0" role="button">
+    <div class="${MARKER_BASE_CLASSES} ${colorClasses}"${colorStyle} data-marker-type="${type}">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="16"
@@ -261,6 +271,7 @@ export const MapMarker = memo(function MapMarker({
   onClick,
   onKeyDown,
 }: MapMarkerProps): React.ReactElement | null {
+  const { t } = useTranslation();
   const { id, position, label, type = 'default', color, popupContent, tooltipContent } = marker;
   const [lat, lon] = position;
 
@@ -315,7 +326,10 @@ export const MapMarker = memo(function MapMarker({
         click: handleClick,
         keydown: handleKeyDown as unknown as () => void,
       }}
-      aria-label={label}
+      // `alt` is what Leaflet writes onto the marker element as its accessible
+      // name; `aria-label` is not a Leaflet marker option and never reached the
+      // DOM. `title` is the hover tooltip, and is kept for the pointer.
+      alt={label}
       title={label}
     >
       {tooltipContent && (
@@ -330,7 +344,7 @@ export const MapMarker = memo(function MapMarker({
           <div
             className="map-marker-popup"
             role="dialog"
-            aria-label={`Details for ${label}`}
+            aria-label={t('map.popupDetails', { label })}
           >
             {popupContent}
           </div>

@@ -122,7 +122,8 @@ describe('TripForm — importing an earlier trip', () => {
     expect(onImportSourceChange).toHaveBeenCalledWith(SOURCE_TRIP.id);
     // The badge names the trip and how many rooms come with it.
     expect(screen.getByText(/trips.importedFrom/)).toBeInTheDocument();
-    expect(screen.getByText(/2 rooms/)).toBeInTheDocument();
+    // Through the plural key now, not a hardcoded English literal.
+    expect(screen.getByText(/rooms\.roomCount/)).toBeInTheDocument();
   });
 
   it('leaves a description that was already typed alone', async () => {

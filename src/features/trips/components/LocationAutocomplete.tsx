@@ -19,6 +19,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
 } from 'react';
@@ -63,6 +64,18 @@ const MIN_SEARCH_LENGTH = 2;
 
 /** Number of map places offered alongside previous trips */
 const MAX_PLACE_RESULTS = 5;
+
+/**
+ * The keys cmdk handles on its own root, and which therefore have to be sent
+ * on to it while focus stays in the input.
+ */
+const FORWARDED_KEYS: ReadonlySet<string> = new Set([
+  'ArrowDown',
+  'ArrowUp',
+  'Home',
+  'End',
+  'Enter',
+]);
 
 // ============================================================================
 // Type Definitions
@@ -133,6 +146,8 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
   const abortControllerRef = useRef<AbortController | null>(null);
   const tripSearchIdRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const commandRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
 
   // ============================================================================
   // Search Logic
@@ -363,6 +378,42 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
   // and a slow one filling in later never re-opens a dropdown the user closed.
   const isOpen = !isDismissed && hasSuggestions;
 
+  /**
+   * Sends the list-navigation keys on to cmdk, which never sees them otherwise.
+   *
+   * The combobox is an `Input` outside the `Command`, and the popover
+   * deliberately does not take focus when it opens — moving focus into the list
+   * would stop the user typing. cmdk listens for these keys on its own root, so
+   * with focus still in the input the whole list was mouse-only: no arrow key
+   * moved the highlight and Enter submitted the surrounding form instead of
+   * choosing a suggestion.
+   *
+   * Re-dispatching the event is cmdk's own pattern for an external input.
+   * `preventDefault` first, so ArrowDown does not also move the caret and Enter
+   * does not also submit.
+   */
+  const handleInputKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (!isOpen) {
+        return;
+      }
+      if (!FORWARDED_KEYS.has(event.key)) {
+        return;
+      }
+
+      event.preventDefault();
+      commandRef.current?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: event.key,
+          code: event.code,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    },
+    [isOpen],
+  );
+
   return (
     <div className="space-y-2">
       <Popover open={isOpen} onOpenChange={handleOpenChange}>
@@ -394,6 +445,7 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
               type="text"
               value={value}
               onChange={handleInputChange}
+              onKeyDown={handleInputKeyDown}
               placeholder={placeholder}
               disabled={disabled}
               autoComplete="off"
@@ -401,6 +453,7 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
               aria-expanded={isOpen}
               aria-haspopup="listbox"
               aria-autocomplete="list"
+              aria-controls={isOpen ? listboxId : undefined}
               className={cn(isSearching && 'pr-10')}
             />
             {isSearching && (
@@ -419,7 +472,7 @@ const LocationAutocomplete = memo(function LocationAutocomplete({
             e.preventDefault();
           }}
         >
-          <Command shouldFilter={false}>
+          <Command ref={commandRef} shouldFilter={false} id={listboxId}>
             <CommandList>
               {!isSearching && !hasSuggestions && (
                 <CommandEmpty>{t('trips.noMatchingLocations')}</CommandEmpty>
@@ -537,7 +590,7 @@ const ImportBadge = memo(function ImportBadge({
         {t('trips.importedFrom', { tripName })}
         {roomCount > 0 && (
           <span className="text-muted-foreground">
-            {' '}({roomCount} {roomCount === 1 ? 'room' : 'rooms'})
+            {' '}({t('rooms.roomCount', { count: roomCount })})
           </span>
         )}
       </span>

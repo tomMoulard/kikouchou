@@ -885,6 +885,9 @@ const TransportForm = memo(function TransportForm({
           placeholder={t('transports.locationPlaceholder')}
           hasError={Boolean(errors.location)}
           aria-label={t('transports.location')}
+          aria-describedby={
+            errors.location ? 'transport-location-error' : undefined
+          }
           disabled={isSubmitting}
         />
         {errors.location && (

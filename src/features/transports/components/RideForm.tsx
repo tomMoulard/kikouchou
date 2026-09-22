@@ -637,6 +637,7 @@ const RideForm = memo(function RideForm({
           placeholder={t('rides.locationPlaceholder')}
           hasError={Boolean(errors.location)}
           aria-label={t('rides.location')}
+          aria-describedby={errors.location ? 'ride-location-error' : undefined}
           disabled={isSubmitting}
         />
         {errors.location && (

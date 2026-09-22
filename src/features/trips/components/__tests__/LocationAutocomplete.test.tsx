@@ -504,7 +504,10 @@ describe('ImportBadge', () => {
     );
 
     expect(screen.getByText(/trips\.importedFrom/)).toBeInTheDocument();
-    expect(screen.getByText(/3 rooms/)).toBeInTheDocument();
+    // i18next is mocked, so `t()` echoes the key. The count used to be built
+    // from a hardcoded `roomCount === 1 ? 'room' : 'rooms'`, which rendered
+    // English inside a French badge.
+    expect(screen.getByText(/rooms\.roomCount/)).toBeInTheDocument();
   });
 
   it('calls onRemove when remove button is clicked', async () => {
@@ -541,7 +544,7 @@ describe('ImportBadge', () => {
     expect(removeButton).toBeDisabled();
   });
 
-  it('shows singular room text for 1 room', () => {
+  it('counts one room through the plural key rather than an English literal', () => {
     const onRemove = vi.fn();
 
     render(
@@ -552,6 +555,6 @@ describe('ImportBadge', () => {
       />,
     );
 
-    expect(screen.getByText(/1 room\b/)).toBeInTheDocument();
+    expect(screen.getByText(/rooms\.roomCount/)).toBeInTheDocument();
   });
 });
