@@ -796,6 +796,42 @@ describe('reconciliation', () => {
     expect(guestNames(rebuilt)).toEqual(['Alice', 'Bob']);
   });
 
+  it('keeps a queue row the reconcile diff did not cover', async () => {
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+
+    // A fresh provider reconciles on start: the diff is the whole document, and
+    // a first upload over mobile takes seconds. Hold that write open.
+    const release = server.gateWrites();
+    const provider = track(makeProvider(server, doc));
+    const started = provider.start();
+    await settle(4);
+
+    // Two edits arrive during that window. The first queues and starts its own
+    // flush, which blocks on the same gate. The second queues and finds that
+    // flush already running, so no flush of its own ever reads its row.
+    addGuest(doc, 'p2', 'Bob');
+    await settle(2);
+    addGuest(doc, 'p3', 'Carol');
+    await settle(2);
+
+    release();
+    await started;
+    await settle(24);
+
+    // Neither edit is in the diff that was sent — it was taken before they
+    // existed. Clearing the whole outbox afterwards deleted Carol's row, and
+    // the provider then reported `synced` with nothing pending while Carol
+    // never reached another member for the rest of the session.
+    const rebuilt = new Y.Doc();
+    for (const row of server.rows) {
+      Y.applyUpdate(rebuilt, Uint8Array.from(atob(row.update), (c) => c.charCodeAt(0)));
+    }
+    expect(guestNames(rebuilt)).toEqual(['Alice', 'Bob', 'Carol']);
+    expect(await outbox.pendingCount(TRIP_ID)).toBe(0);
+  });
+
   it('does not record server state when the push failed', async () => {
     const server = new FakeServer();
     const doc = new Y.Doc();

@@ -691,6 +691,23 @@ export class SupabaseYjsProvider {
 
   private async reconcileOnce(): Promise<void> {
     const cursor = await readCursor(this.tripId);
+
+    // Read *before* the diff is taken, and retire only these afterwards.
+    //
+    // A row present now was enqueued after its document update had already
+    // landed, so the diff below necessarily carries it. A row that arrives
+    // while `insertUpdate` is in flight — seconds, on a first upload over
+    // mobile — is not in that diff, and clearing the whole queue used to
+    // delete it: the edit was then in the document and in no queue, `flush()`
+    // found nothing to send, and the provider reported `synced` with nothing
+    // pending while the edit never reached another member for the rest of the
+    // session.
+    const queuedBefore = (await outbox.pending(this.tripId))
+      .map((row) => row.id)
+      .filter((id): id is number => id !== undefined);
+    // Same snapshot, for the claims that never reached the queue at all.
+    const claimsCovered = this.unqueued;
+
     const localVector = Y.encodeStateVector(this.doc);
 
     // Already in step: nothing to compute or send.
@@ -705,7 +722,7 @@ export class SupabaseYjsProvider {
       // Nothing to say. Recording the vector still matters: it is what makes the
       // next start recognise this trip as already uploaded.
       await recordServerState(this.tripId, localVector);
-      this.unqueued = 0;
+      this.unqueued = Math.max(this.unqueued - claimsCovered, 0);
       this.publishStatus();
       return;
     }
@@ -714,11 +731,13 @@ export class SupabaseYjsProvider {
       await this.insertUpdate(missing);
       // Only now is it true that the server holds this state.
       await recordServerState(this.tripId, localVector);
-      // Anything queued is necessarily included in the diff just sent, and so is
-      // anything that never reached the queue — the diff came from the document,
-      // not from the queue, which is what makes this the backstop.
-      await outbox.clear(this.tripId);
-      this.unqueued = 0;
+      // Retire exactly what the diff covered. `localVector` was taken before
+      // the send, so it covers every update emitted up to that point,
+      // including one whose enqueue failed — which is what makes this the
+      // backstop. It does not cover an edit made during the send, and that
+      // edit keeps both its queue row and its claim.
+      await outbox.acknowledge(queuedBefore);
+      this.unqueued = Math.max(this.unqueued - claimsCovered, 0);
       this.pushHealthy = true;
       this.failures = 0;
     } catch (error: unknown) {
@@ -727,6 +746,9 @@ export class SupabaseYjsProvider {
     }
 
     await this.refreshPending();
+    // An edit made while the diff was in flight kept its queue row, so send it
+    // now rather than leaving it for whatever happens to call `flush()` next.
+    await this.flush();
   }
 
   /** Queues a local update, then tries to send the queue. */

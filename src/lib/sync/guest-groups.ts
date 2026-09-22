@@ -257,9 +257,13 @@ async function pullGuestGroups(
       if (current && current.updatedAt >= incoming.updatedAt) {
         // Still record where the row lives, so a device that created the group
         // offline learns it has been uploaded and becomes prunable.
-        if (current.remoteGroupId !== incoming.remoteGroupId) {
+        if (
+          current.remoteGroupId !== incoming.remoteGroupId ||
+          current.remoteOwnerId !== userId
+        ) {
           await db.guestGroups.update(current.id, {
             remoteGroupId: incoming.remoteGroupId,
+            remoteOwnerId: userId,
           });
         }
         continue;
@@ -267,17 +271,28 @@ async function pullGuestGroups(
 
       await db.guestGroups.put({
         ...incoming,
+        remoteOwnerId: userId,
         // Keep the original local creation time when there is one.
         createdAt: current?.createdAt ?? incoming.createdAt,
       });
       pulled += 1;
     }
 
-    // The narrow deletion rule: only a group this device uploaded, and that the
-    // server no longer lists, is gone. Everything else is kept.
+    // The narrow deletion rule: only a group this device uploaded **to this
+    // account**, and that the account no longer lists, is gone. Everything else
+    // is kept.
+    //
+    // The account half is not a detail. The query above is scoped to
+    // `owner_id = userId`, so every group uploaded under a different account is
+    // absent from the answer — signing in as a second person on a shared
+    // browser used to delete the first person's groups off the device. A group
+    // with no recorded owner predates this field, and is left alone rather than
+    // guessed about.
     const vanished = local.filter(
       (group) =>
-        group.remoteGroupId !== undefined && !remoteIds.has(group.remoteGroupId),
+        group.remoteGroupId !== undefined &&
+        group.remoteOwnerId === userId &&
+        !remoteIds.has(group.remoteGroupId),
     );
 
     if (vanished.length > 0) {
@@ -337,7 +352,10 @@ async function pushGuestGroups(
   // Record the server ids. Until a group carries one, a pull can never prune it
   // — which is the safe direction, and why this is not fire-and-forget.
   for (const row of data ?? []) {
-    await db.guestGroups.update(row.local_id, { remoteGroupId: row.id });
+    await db.guestGroups.update(row.local_id, {
+      remoteGroupId: row.id,
+      remoteOwnerId: userId,
+    });
   }
 
   return payload.length;

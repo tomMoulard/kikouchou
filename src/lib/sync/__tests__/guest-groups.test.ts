@@ -230,7 +230,11 @@ describe('pulling', () => {
 describe('pruning', () => {
   it('drops a group this device uploaded that the server no longer lists', async () => {
     await db.guestGroups.add(
-      localGroup({ id: 'group-9' as GuestGroupId, remoteGroupId: 'remote-9' }),
+      localGroup({
+        id: 'group-9' as GuestGroupId,
+        remoteGroupId: 'remote-9',
+        remoteOwnerId: USER_ID,
+      }),
     );
     const { client } = fakeClient([]);
 
@@ -250,6 +254,38 @@ describe('pruning', () => {
 
     expect(result).toMatchObject({ pruned: 0 });
     expect(await db.guestGroups.get('group-local')).toBeDefined();
+  });
+
+  it('never drops a group that belongs to another account', async () => {
+    // The pull asks for `owner_id = <the signed-in account>`, so a group
+    // uploaded under a different one is missing from the answer for a reason
+    // that has nothing to do with deletion. Signing in as a second person on a
+    // shared browser used to delete the first person's groups off the device.
+    await db.guestGroups.add(
+      localGroup({
+        id: 'group-other' as GuestGroupId,
+        remoteGroupId: 'remote-other',
+        remoteOwnerId: 'user-2',
+      }),
+    );
+    const { client } = fakeClient([]);
+
+    const result = await syncGuestGroups(client, USER_ID);
+
+    expect(result).toMatchObject({ pruned: 0 });
+    expect(await db.guestGroups.get('group-other')).toBeDefined();
+  });
+
+  it('never drops a group uploaded before the owner was recorded', async () => {
+    // A row written by an older build carries a remote id and no owner. Nothing
+    // is known about which account issued it, so nothing is inferred.
+    await db.guestGroups.add(
+      localGroup({ id: 'group-old' as GuestGroupId, remoteGroupId: 'remote-old' }),
+    );
+    const { client } = fakeClient([]);
+
+    expect(await syncGuestGroups(client, USER_ID)).toMatchObject({ pruned: 0 });
+    expect(await db.guestGroups.get('group-old')).toBeDefined();
   });
 
   it('keeps a group the server still lists', async () => {
