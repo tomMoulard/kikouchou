@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@/test/utils';
+import { MAX_ROOM_CAPACITY } from '@/types';
 import type { Room } from '@/types';
 
 vi.mock('@/hooks', () => ({
@@ -255,30 +256,38 @@ describe('RoomForm', () => {
   // Additional branch coverage tests
   // ============================================================================
 
-  it('clears capacity input and shows validation on blur', async () => {
+  it('refuses to save a room whose stored capacity is over the bound', async () => {
+    // Reachable through the edit form rather than through the stepper, which
+    // clamps: a room that arrived over sync before the bound existed loads its
+    // capacity straight into the form's state. The test that used to sit here
+    // asserted `alerts.length >= 0`, which held whether or not the component
+    // validated anything at all.
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
     const room: Room = {
       id: 'r1' as Room['id'],
       tripId: 't1' as Room['tripId'],
-      name: 'Room',
-      capacity: 3,
+      name: 'Dormitory',
+      capacity: 5_000,
       order: 0,
     };
     render(
-      <RoomForm room={room} onSubmit={vi.fn()} onCancel={vi.fn()} />,
+      <RoomForm room={room} onSubmit={onSubmit} onCancel={vi.fn()} />,
       { withProviders: false },
     );
-    const capacityInput = screen.getByLabelText(/rooms.capacity/);
-    // Clear the field
-    await user.clear(capacityInput);
-    await user.tab();
-    // Should show validation error for empty capacity
-    const alerts = screen.queryAllByRole('alert');
-    expect(alerts.length).toBeGreaterThanOrEqual(0);
+
+    await user.click(screen.getByRole('button', { name: /common.save/i }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent('validation.capacityMax');
+    expect(screen.getByLabelText(/rooms.capacity/)).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
   });
 
-  it('handles non-numeric capacity input', async () => {
+  it('will not let the stepper go past the bound', async () => {
     const { userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     render(
@@ -286,10 +295,19 @@ describe('RoomForm', () => {
       { withProviders: false },
     );
     const capacityInput = screen.getByLabelText(/rooms.capacity/);
+
     await user.clear(capacityInput);
-    await user.type(capacityInput, 'abc');
-    // NaN input should be handled gracefully
-    expect(capacityInput).toBeInTheDocument();
+    await user.type(capacityInput, '5000');
+    await user.tab();
+
+    // An out-of-range figure never reaches the form's state, so the field
+    // snaps back to what was committed once the draft is dropped on blur.
+    // `RoomOccupancyTimeline` renders one element per bed, which is why this
+    // is a guard and not a taste judgement.
+    expect(capacityInput).toHaveAttribute('max', String(MAX_ROOM_CAPACITY));
+    expect(Number((capacityInput as HTMLInputElement).value)).toBeLessThanOrEqual(
+      MAX_ROOM_CAPACITY,
+    );
   });
 
   it('handles capacity change to valid value', async () => {

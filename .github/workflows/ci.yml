@@ -37,8 +37,14 @@ jobs:
       - name: Run code generation
         run: bun run generate-proto
 
+      # `git diff` only sees files git already tracks, so adding a message to a
+      # .proto and committing everything *but* the file it generates passed
+      # this check: the new file was untracked and invisible to the diff. The
+      # gate is about drift between the .proto files and `src/gen/`, and a
+      # missing file is the largest drift there is.
       - name: Check for uncommitted changes
         run: |
+          git add --intent-to-add -- src/gen/
           if ! git diff --exit-code -- src/gen/; then
             echo "::error::Generated code is out of date. Run 'bun run generate-proto' and commit the changes."
             exit 1

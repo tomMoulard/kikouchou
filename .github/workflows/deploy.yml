@@ -1,7 +1,17 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
+  # Gated on CI rather than on the push itself.
+  #
+  # `on: push` deployed whatever landed on main, green or red — there is no
+  # cross-workflow `needs:`, so nothing was waiting for the tests, the type
+  # check, the coverage floor, the pgTAP suite or the e2e run. A merge that
+  # broke the build shipped to production while the CI run that would have said
+  # so was still going. The `if:` below is what makes this a gate: a
+  # `workflow_run` fires on failure too.
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
     branches:
       - main
 
@@ -22,6 +32,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # A manual dispatch deploys on request; a CI run deploys only when it
+    # passed. Without this half the trigger above is not a gate at all, because
+    # `workflow_run` fires whatever the conclusion was.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     # Lifted to the job so the source-map step can test it in an `if:` — the
     # `secrets` context is not available there, but `env` is.
     env:
@@ -29,9 +45,20 @@ jobs:
       # The public half of the VAPID pair, for trip reminders. Lifted here for
       # the same reason: the step below warns when it is missing.
       VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+      # The commit this deploy is actually built from. On a `workflow_run`,
+      # `github.sha` is the default branch's head at trigger time rather than
+      # the commit CI tested, so `app_version` and the PostHog release would
+      # name a build nobody deployed.
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # The commit CI tested, not whatever main happens to be now. A
+          # `workflow_run` checkout defaults to the default branch's head, so a
+          # second merge landing while CI ran would otherwise be deployed
+          # having been tested by nobody.
+          ref: ${{ env.DEPLOY_SHA }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -61,7 +88,7 @@ jobs:
       - name: Build
         run: bun run build
         env:
-          VITE_APP_VERSION: ${{ github.ref_name }}@${{ github.sha }}
+          VITE_APP_VERSION: ${{ github.ref_name }}@${{ env.DEPLOY_SHA }}
           # Secret names keep their NEXT_PUBLIC_ prefix in GitHub; Vite only
           # exposes VITE_* to import.meta.env, so map them here rather than
           # renaming the secrets.
@@ -124,7 +151,7 @@ jobs:
           # This project lives on EU cloud; the input wants the app host, not
           # the ingestion host that VITE_POSTHOG_HOST points at.
           host: https://eu.posthog.com
-          release-version: ${{ github.sha }}
+          release-version: ${{ env.DEPLOY_SHA }}
           delete-after-upload: 'true'
 
       # Safety net: source maps must never reach GitHub Pages, which serves the
