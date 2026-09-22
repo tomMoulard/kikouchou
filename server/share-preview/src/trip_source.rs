@@ -471,12 +471,19 @@ impl TripSource {
         })
     }
 
-    /// Every push subscription there is, ordered by trip so the sender loads
-    /// each document once.
+    /// Every push subscription still authorised, ordered by trip so the sender
+    /// loads each document once.
+    ///
+    /// Reads `live_push_subscriptions` rather than the table. A viewer
+    /// subscribed with an invite token, and the invite can be revoked, expire
+    /// or run out of uses afterwards — revocation deletes the row, but expiry
+    /// and exhaustion are conditions that become true with nobody present, so
+    /// they have to be re-applied at send time. Reading the table sent a
+    /// withdrawn link's holder the trip's pickup places and times forever.
     pub async fn list_subscriptions(&self) -> Option<Vec<Subscription>> {
         self.get::<Subscription>(
-            "push_subscriptions",
-            "push_subscriptions\
+            "live_push_subscriptions",
+            "live_push_subscriptions\
              ?select=id,trip_id,person_id,endpoint,p256dh,auth,locale,analytics_id\
              &order=trip_id.asc,id.asc",
         )
@@ -484,14 +491,17 @@ impl TripSource {
     }
 
     /// One push subscription by id, for the webhook.
+    ///
+    /// Through the same view, so a webhook replayed after the invite was
+    /// withdrawn finds nothing rather than sending one more.
     pub async fn load_subscription(&self, subscription_id: &str) -> Option<Subscription> {
         if !is_uuid_shaped(subscription_id) {
             return None;
         }
         self.get::<Subscription>(
-            "push_subscriptions",
+            "live_push_subscriptions",
             &format!(
-                "push_subscriptions?id=eq.{subscription_id}\
+                "live_push_subscriptions?id=eq.{subscription_id}\
                  &select=id,trip_id,person_id,endpoint,p256dh,auth,locale,analytics_id&limit=1"
             ),
         )
