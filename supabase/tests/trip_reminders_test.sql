@@ -8,7 +8,7 @@
 -- Run with:  bunx supabase test db
 
 begin;
-select plan(24);
+select plan(29);
 
 -- ===========================================================================
 -- Fixtures
@@ -242,6 +242,70 @@ select is(
   '11111111-1111-1111-1111-111111111111'::uuid,
   'a member row carries the account'
 );
+
+-- ===========================================================================
+-- An invite that stops being live stops the reminders it authorised
+-- ===========================================================================
+
+-- The subscription outlived the invite: revoking a link — the act of un-sharing
+-- a trip — left the row in place, and the sender went on delivering that trip's
+-- pickup places and times to the device forever. Expiring and exhausting the
+-- invite did the same.
+
+select is(
+  (select invite_token from public.push_subscriptions
+   where endpoint = 'https://push.example.test/send/viewer-1'),
+  'token-still-valid-01',
+  'a viewer''s subscription records the invite that authorised it'
+);
+
+select is(
+  (select count(*) from public.live_push_subscriptions
+   where endpoint = 'https://push.example.test/send/viewer-1'),
+  1::bigint,
+  'and the sender can still push to it while the invite is live'
+);
+
+-- Expiry is a condition that becomes true with nobody present, so the row stays
+-- and the view is what re-applies the check on every tick.
+update public.trip_invites
+set expires_at = now() - interval '1 hour'
+where token = 'token-still-valid-01';
+
+select is(
+  (select count(*) from public.live_push_subscriptions
+   where endpoint = 'https://push.example.test/send/viewer-1'),
+  0::bigint,
+  'an expired invite takes its subscription out of the sender''s reach'
+);
+
+update public.trip_invites set expires_at = null where token = 'token-still-valid-01';
+
+-- Revocation is an act, so it can delete rather than merely hide.
+select tests.act_as('11111111-1111-1111-1111-111111111111');
+select public.revoke_invite('token-still-valid-01');
+select tests.act_as_postgres();
+
+select is(
+  (select count(*) from public.push_subscriptions
+   where endpoint = 'https://push.example.test/send/viewer-1'),
+  0::bigint,
+  'revoking the invite deletes the subscription it authorised'
+);
+
+-- Put it back for the unsubscribe section below, which is about the endpoint.
+update public.trip_invites set revoked_at = null where token = 'token-still-valid-01';
+select tests.act_as_anon();
+select isnt(
+  public.subscribe_trip_reminders(
+    'token-still-valid-01',
+    tests.subscription('https://push.example.test/send/viewer-1'),
+    'person-alice', 'en', 'ph-anon-1'
+  ),
+  null,
+  'and the same device can subscribe again once the link is live again'
+);
+select tests.act_as_postgres();
 
 -- ===========================================================================
 -- Unsubscribing

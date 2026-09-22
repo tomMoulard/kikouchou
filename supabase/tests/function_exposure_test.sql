@@ -8,7 +8,7 @@
 -- Run with:  bunx supabase test db
 
 begin;
-select plan(13);
+select plan(22);
 
 -- ===========================================================================
 -- Where the functions live
@@ -83,6 +83,89 @@ select ok(
 select ok(
   not has_function_privilege('anon', 'public.revoke_invite(text)', 'execute'),
   'an unauthenticated caller cannot revoke an invite'
+);
+
+-- ===========================================================================
+-- The whole surface, not four functions of it
+-- ===========================================================================
+
+-- This file used to name only the four functions the 2026-08-31 hardening
+-- migration touched, so it passed green while every function written since
+-- kept the project's default `grant all`. Measured on a fresh stack:
+-- `store_push_subscription`, `trip_behind_live_invite`, `publish_trip_snapshot`
+-- and `subscribe_member_reminders` were all reachable by `anon`, and the first
+-- of those carries no authorisation of its own — an unauthenticated caller
+-- could subscribe any endpoint to any trip's reminders.
+--
+-- One assertion over the whole catalogue rather than one per function, so a
+-- function added tomorrow is covered by a test written today.
+select is(
+  (select coalesce(string_agg(p.proname, ', ' order by p.proname), '')
+   from pg_proc p
+   join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and p.prokind = 'f'
+     and has_function_privilege('anon', p.oid, 'execute')),
+  'read_shared_trip, read_trip_template, subscribe_trip_reminders, unsubscribe_reminders',
+  'anon can execute exactly the four doors an invite link opens, and nothing else'
+);
+
+select ok(
+  not has_function_privilege(
+    'anon',
+    'public.store_push_subscription(uuid, uuid, jsonb, text, text, text, text)',
+    'execute'
+  ),
+  'the internal subscription writer, which authorises nobody, is closed to anon'
+);
+
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'public.store_push_subscription(uuid, uuid, jsonb, text, text, text, text)',
+    'execute'
+  ),
+  'and to authenticated: its callers do the authorising, not it'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.trip_behind_live_invite(text)', 'execute'),
+  'the token oracle is not a client endpoint'
+);
+
+select ok(
+  not has_function_privilege('anon', 'public.publish_trip_snapshot(uuid, text, bigint)', 'execute'),
+  'an unauthenticated caller cannot publish a snapshot over the append-only log'
+);
+
+select ok(
+  has_function_privilege('authenticated', 'public.publish_trip_snapshot(uuid, text, bigint)', 'execute'),
+  'a signed-in member still can'
+);
+
+-- ===========================================================================
+-- No client privilege on any table, view or sequence
+-- ===========================================================================
+
+select is(
+  (select coalesce(string_agg(c.relname, ', ' order by c.relname), '')
+   from pg_class c
+   join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public'
+     and c.relkind in ('r', 'v')
+     and has_table_privilege('anon', c.oid, 'select, insert, update, delete')),
+  '',
+  'anon holds no privilege on any table or view: the functions are the whole surface'
+);
+
+select ok(
+  not has_sequence_privilege('anon', 'public.trip_doc_updates_id_seq', 'usage, select, update'),
+  'the log sequence is closed to anon — setval() moves what every cursor is compared against'
+);
+
+select ok(
+  not has_sequence_privilege('authenticated', 'public.trip_doc_updates_id_seq', 'usage, select, update'),
+  'and to authenticated: rows are inserted through the table policy, which takes the default as owner'
 );
 
 -- ===========================================================================
