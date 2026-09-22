@@ -440,4 +440,58 @@ describe('TripCreatePage', () => {
     expect(mockNavigate).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
   });
+  describe('a phone held sideways', () => {
+    /**
+     * Answers only the short-landscape query, as `Layout` is doing beside it.
+     */
+    function setShortLandscape(isShort: boolean): void {
+      vi.mocked(window.matchMedia).mockImplementation(
+        (query: string) =>
+          ({
+            matches: query.includes('orientation: landscape') ? isShort : false,
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+          }) as unknown as MediaQueryList,
+      );
+    }
+
+    /** The page's outermost element, the one carrying the vertical padding. */
+    function getFrame(): Element | null {
+      return document.querySelector('.container');
+    }
+
+    it('spends less height on its own frame', () => {
+      setShortLandscape(true);
+
+      render(<TripCreatePage />, { withProviders: false });
+
+      expect(getFrame()).toHaveClass('py-2');
+      expect(getFrame()).not.toHaveClass('py-6');
+    });
+
+    it('keeps the usual frame once the phone is upright', () => {
+      setShortLandscape(false);
+
+      render(<TripCreatePage />, { withProviders: false });
+
+      expect(getFrame()).toHaveClass('py-6');
+      expect(getFrame()).not.toHaveClass('py-2');
+    });
+
+    it('still shows the form and the way back out', () => {
+      setShortLandscape(true);
+
+      render(<TripCreatePage />, { withProviders: false });
+
+      // The shell's own back affordances are gone at this viewport, so the
+      // page's heading link is the only one left.
+      expect(screen.getByTestId('trip-form')).toBeInTheDocument();
+      expect(screen.getByText('trips.new')).toBeInTheDocument();
+    });
+  });
 });

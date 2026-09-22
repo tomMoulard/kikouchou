@@ -1057,4 +1057,74 @@ describe('Layout', () => {
       expect(getGlancePanel()).toBeInTheDocument();
     });
   });
+  // ============================================================================
+  // The Shell On A Phone Held Sideways
+  // ============================================================================
+
+  describe('Focused form on a short landscape viewport', () => {
+    /**
+     * Answers only the short-landscape query, the way a sideways phone does.
+     */
+    function setShortLandscape(isShort: boolean): void {
+      vi.mocked(window.matchMedia).mockImplementation(
+        (query: string) =>
+          ({
+            matches: query.includes('orientation: landscape') ? isShort : false,
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+          }) as unknown as MediaQueryList,
+      );
+    }
+
+    it('drops the header, the sidebar and the bottom bar on /trips/new', () => {
+      setShortLandscape(true);
+
+      renderLayoutAt('/trips/new');
+
+      expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+      expect(getSidebar()).not.toBeInTheDocument();
+      expect(getMobileNav()).not.toBeInTheDocument();
+    });
+
+    it('still renders the page itself', () => {
+      setShortLandscape(true);
+
+      renderLayoutAt('/trips/new', <div data-testid="test-content">Test Content</div>);
+
+      expect(screen.getByTestId('test-content')).toBeInTheDocument();
+    });
+
+    it('keeps the shell on the same route once the phone is upright', () => {
+      setShortLandscape(false);
+
+      renderLayoutAt('/trips/new');
+
+      expect(screen.queryByRole('banner')).toBeInTheDocument();
+      expect(getMobileNav()).toBeInTheDocument();
+    });
+
+    it('keeps the shell on every other route, sideways or not', () => {
+      setShortLandscape(true);
+
+      renderLayoutAt('/trips');
+
+      // The trip list is a list: the nav bar is how you leave it, and hiding
+      // it would strand a short viewport on whichever page it landed on.
+      expect(screen.queryByRole('banner')).toBeInTheDocument();
+      expect(getMobileNav()).toBeInTheDocument();
+    });
+
+    it('treats a trailing slash as the same route', () => {
+      setShortLandscape(true);
+
+      renderLayoutAt('/trips/new/');
+
+      expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+    });
+  });
 });
