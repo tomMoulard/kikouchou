@@ -17,7 +17,6 @@
 
 import { type ReactElement, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 import { CalendarPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -30,6 +29,7 @@ import { useTripContext } from '@/contexts/TripContext';
 // component throw on an export the stub never listed.
 import { useTripIdentity } from '@/hooks/useTripIdentity';
 import { getDateLocale } from '@/lib/i18n/date-locale';
+import { notify } from '@/lib/notifications';
 import { buildIcsCalendar, ICS_MIME_TYPE } from '@/lib/calendar/ics';
 import { captureEvent } from '@/lib/posthog';
 import { downloadTextFile, toFilenameSegment } from '@/lib/utils/download';
@@ -156,7 +156,7 @@ export const AddRunsToCalendarButton = memo(function AddRunsToCalendarButton({
     });
 
     if (!started) {
-      toast.error(
+      notify.error(
         t(
           'transports.calendar.failed',
           'This browser cannot save the file. Open Kikouchou in another browser to export your runs.',
@@ -170,18 +170,19 @@ export const AddRunsToCalendarButton = memo(function AddRunsToCalendarButton({
       alarm_minutes_before: RIDE_ALARM_MINUTES_BEFORE,
     });
 
-    toast.success(
-      t('transports.calendar.downloaded', {
+    // Through the facade, which sends a confirmation to the operating system
+    // rather than to a card over the content. `sonner`'s `description` has no
+    // counterpart there, so the hint joins the message: an OS notification is
+    // one body, and this one still has to say what to do with the file.
+    notify.success(
+      `${t('transports.calendar.downloaded', {
         defaultValue: 'One run saved to a calendar file',
         defaultValue_other: '{{count}} runs saved to a calendar file',
         count: events.length,
-      }),
-      {
-        description: t(
-          'transports.calendar.downloadedHint',
-          'Open the file to add the runs to your own calendar. Its alarm rings with Kikouchou closed.',
-        ),
-      },
+      })} ${t(
+        'transports.calendar.downloadedHint',
+        'Open the file to add the runs to your own calendar. Its alarm rings with Kikouchou closed.',
+      )}`,
     );
   }, [myRuns, currentTrip, dateLocale, nowMs, t]);
 

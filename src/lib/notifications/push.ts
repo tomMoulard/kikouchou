@@ -373,12 +373,25 @@ export async function disableTripReminders(
   tripId: string,
 ): Promise<boolean> {
   const stored = readReminderSubscription(tripId);
-  clearReminderSubscription(tripId);
   if (stored === undefined) {
     return true;
   }
 
   const { error } = await client.rpc('unsubscribe_reminders', { endpoint: stored.endpoint });
+
+  // Cleared only once the server has actually forgotten the endpoint.
+  //
+  // It used to be cleared first. The endpoint is the only handle on that
+  // server row — the sender pushes to it, and `unsubscribe_reminders` takes it
+  // as its whole argument — so a failed call destroyed the one thing needed to
+  // try again, while the server went on delivering the trip's pickup places
+  // and times to the device. There was no path back: the card read the local
+  // record, found nothing, and showed the reminders as off.
+  if (error) {
+    return false;
+  }
+
+  clearReminderSubscription(tripId);
 
   if (!anyOtherTripSubscribed(tripId) && isPushSupported()) {
     try {
@@ -390,5 +403,5 @@ export async function disableTripReminders(
     }
   }
 
-  return !error;
+  return true;
 }

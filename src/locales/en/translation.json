@@ -1942,6 +1942,7 @@
     "enabling": "Waiting for your answer…",
     "bestEffort": "Ride alerts come from this device, so they are sent while the app is running or was used recently. Trip reminders come from the server: turn them on from a trip\u2019s calendar and they reach you with the app closed.",
     "deniedHint": "Your browser is blocking notifications for Kikouchou. The app cannot ask again — allow them for this site in your browser or system settings.",
+    "turnOffFailed": "Could not turn reminders off. Check your connection and try again.",
     "unsupportedHint": "This browser cannot show notifications. On an iPhone, add Kikouchou to the Home Screen first. Ride alerts still appear inside the app.",
     "calendarFallback": "For the runs you drive, open a trip\u2019s transport page and choose \u201cAdd my runs to my calendar\u201d. The phone\u2019s own calendar then rings on time, with Kikouchou closed."
   },

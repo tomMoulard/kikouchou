@@ -303,6 +303,29 @@ describe('RoomFormDataSchema', () => {
 // ============================================================================
 
 describe('PersonFormDataSchema', () => {
+  it('keeps the guest\'s notes, which the schema used to strip', () => {
+    // Zod drops an unknown key rather than complaining, and `notes` was absent
+    // from this schema although `PersonFormData` has always had it. Every parse
+    // at a write boundary silently lost the guest's allergies and diet.
+    const parsed = PersonFormDataSchema.parse({
+      name: 'Marie',
+      color: '#ef4444',
+      notes: 'Peanut allergy — no satay',
+    });
+
+    expect(parsed.notes).toBe('Peanut allergy — no satay');
+  });
+
+  it('bounds notes at the length the sanitizer and the projection use', () => {
+    expect(
+      PersonFormDataSchema.safeParse({
+        name: 'Marie',
+        color: '#ef4444',
+        notes: 'x'.repeat(2_001),
+      }).success,
+    ).toBe(false);
+  });
+
   const validPerson = {
     name: 'Marie',
     color: '#ef4444',
@@ -397,6 +420,23 @@ describe('RoomAssignmentFormDataSchema', () => {
 // ============================================================================
 
 describe('TransportFormDataSchema', () => {
+  it('accepts notes the rest of the app stores', () => {
+    // Capped at 500 here against `MAX_LENGTHS.transportNotes` of 1000, so the
+    // form refused text the sanitizer, the repository and the CRDT projection
+    // all keep.
+    expect(
+      TransportFormDataSchema.safeParse({
+        personId: 'p1',
+        type: 'arrival',
+        mode: 'train',
+        datetime: '2026-07-15T10:00:00.000Z',
+        location: 'Gare Montparnasse',
+        needsPickup: false,
+        notes: 'x'.repeat(900),
+      }).success,
+    ).toBe(true);
+  });
+
   const validTransport = {
     personId: 'person123' as PersonId,
     type: 'arrival' as const,

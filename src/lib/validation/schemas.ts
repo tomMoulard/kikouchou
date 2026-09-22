@@ -8,6 +8,8 @@
  */
 
 import { z } from 'zod';
+
+import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import {
   ACTIVITY_CATEGORIES,
   EXPENSE_CATEGORIES,
@@ -292,6 +294,7 @@ export const RoomFormDataSchema = z.object({
  * - stayStartDate: optional, valid ISO date
  * - stayEndDate: optional, valid ISO date
  * - If both stay dates provided, stayEndDate must be >= stayStartDate
+ * - notes: optional, max 2000 characters
  * - phone: optional, max 32 characters
  * - headcount: optional, whole number between 1 and 99
  */
@@ -304,6 +307,17 @@ export const PersonFormDataSchema = z
     color: hexColorSchema,
     stayStartDate: isoDateStringSchema.optional(),
     stayEndDate: isoDateStringSchema.optional(),
+    // Missing from this schema until now, and `PersonFormData` has always had
+    // it. Zod strips an unknown key rather than complaining, so every parse at
+    // a write boundary silently dropped the guest's allergies and diet — the
+    // field's whole purpose — and nothing anywhere said so.
+    notes: z
+      .string()
+      .max(
+        MAX_LENGTHS.personNotes,
+        `Notes must be ${MAX_LENGTHS.personNotes} characters or less`,
+      )
+      .optional(),
     // Length is the only constraint. A pattern would reject valid numbers long
     // before it caught an invalid one — extensions, national prefixes and the
     // "(0)" French numbers carry are all legitimate and all differently shaped.
@@ -369,7 +383,7 @@ export const RoomAssignmentFormDataSchema = z
  * - coordinates: optional GPS coordinates (end point)
  * - startLocation: optional starting place label
  * - startCoordinates: optional GPS coordinates for start
- * - notes: optional, max 500 characters
+ * - notes: optional, max 1000 characters
  */
 export const TransportFormDataSchema = z.object({
   personId: personIdSchema,
@@ -393,9 +407,15 @@ export const TransportFormDataSchema = z.object({
   driverId: personIdSchema.optional(),
   rideId: rideIdSchema.optional(),
   needsPickup: z.boolean(),
+  // Against `MAX_LENGTHS.transportNotes`, the limit the sanitizer and the CRDT
+  // projection both use. This said 500 — half of it — so the schema refused
+  // text the rest of the app stores, keeps and syncs quite happily.
   notes: z
     .string()
-    .max(500, 'Notes must be 500 characters or less')
+    .max(
+      MAX_LENGTHS.transportNotes,
+      `Notes must be ${MAX_LENGTHS.transportNotes} characters or less`,
+    )
     .optional(),
 });
 
