@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { UsersRound } from 'lucide-react';
 import { useOfflineAwareNotify, useUnsavedChanges } from '@/hooks';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
+import { useShortLandscapeViewport } from '@/hooks/usePhoneViewport';
 
 import { LoadingState } from '@/components/shared/LoadingState';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -38,6 +39,7 @@ import {
 import { setCurrentTrip } from '@/lib/db';
 import { captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
+import { cn } from '@/lib/utils';
 import type { Trip, TripFormData, TripId } from '@/types';
 import { reportError } from '@/lib/posthog';
 
@@ -82,6 +84,21 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const { user } = useAuth();
   const { trips, isLoading: tripsLoading } = useTripContext();
   const wizardFlag = useFeatureFlag(FIRST_TRIP_WIZARD_FLAG);
+
+  /**
+   * How much vertical room the page may spend on its own frame.
+   *
+   * `Layout` drops the header, the sidebar and the bottom bar on this route at
+   * this viewport; spending the height it just gave back on the page's own
+   * padding and heading would undo half of it. Same query on both sides, so
+   * the two decisions cannot disagree.
+   */
+  const isShortLandscape = useShortLandscapeViewport();
+  const containerClass = cn(
+    'container mx-auto max-w-2xl',
+    isShortLandscape ? 'py-2' : 'py-6 md:py-8',
+  );
+  const headerClass = isShortLandscape ? 'gap-2 pb-2 md:pb-2' : undefined;
 
   /**
    * Which experience this visit gets.
@@ -308,8 +325,8 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
 
   if (decidingWizard) {
     return (
-      <div className="container mx-auto max-w-2xl py-6 md:py-8">
-        <PageHeader title={t('trips.new')} backLink="/trips" />
+      <div className={containerClass}>
+        <PageHeader title={t('trips.new')} backLink="/trips" className={headerClass} />
         <LoadingState variant="inline" />
       </div>
     );
@@ -317,10 +334,14 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
 
   if (showWizard) {
     return (
-      <div className="container mx-auto max-w-2xl py-6 md:py-8">
-        <PageHeader title={t('trips.wizard.title', 'Your first trip')} backLink="/trips" />
+      <div className={containerClass}>
+        <PageHeader
+          title={t('trips.wizard.title', 'Your first trip')}
+          backLink="/trips"
+          className={headerClass}
+        />
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className={isShortLandscape ? 'pt-4' : 'pt-6'}>
             <TripCreateWizard
               currentUserName={currentUserName}
               onCreating={handleWizardCreating}
@@ -336,11 +357,11 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   }
 
   return (
-    <div className="container mx-auto max-w-2xl py-6 md:py-8">
-      <PageHeader title={t('trips.new')} backLink="/trips" />
+    <div className={containerClass}>
+      <PageHeader title={t('trips.new')} backLink="/trips" className={headerClass} />
 
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className={isShortLandscape ? 'pt-4' : 'pt-6'}>
           <TripForm
             ref={formRef}
             onSubmit={handleSubmit}

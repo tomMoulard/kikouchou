@@ -54,7 +54,7 @@ import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useToday } from '@/hooks/useToday';
-import { useWideViewport } from '@/hooks/usePhoneViewport';
+import { useShortLandscapeViewport, useWideViewport } from '@/hooks/usePhoneViewport';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
@@ -228,6 +228,32 @@ function hasGlancePanel(pathname: string, tripId: string | null): boolean {
   }
   const suffix = pathname.slice(prefix.length).replace(/\/$/, '');
   return GLANCE_PATH_SUFFIXES.includes(suffix);
+}
+
+/**
+ * The routes that drop the shell when the viewport has no height to spare.
+ *
+ * One entry, and it is the whole of the first visit: `/trips/new` is a form
+ * from its first pixel to its last, and a phone held sideways gives it 402px
+ * to live in. The sticky header, the top padding and the bottom bar take a
+ * quarter of that before a single field is drawn, which put the first question
+ * below the fold and left people swiping at a page that does not scroll — a
+ * `$dead_swipe` and two `$dead_click`s on the recording that prompted this.
+ *
+ * Nothing is lost by hiding them here. The page carries its own back link, the
+ * form its own cancel, and neither the nav bar nor the sidebar can go anywhere
+ * useful from a trip that does not exist yet.
+ */
+const FOCUSED_FORM_PATHS: readonly string[] = ['/trips/new'] as const;
+
+/**
+ * Whether this path is one of {@link FOCUSED_FORM_PATHS}.
+ *
+ * A trailing slash is the same route, so it is trimmed before the comparison.
+ */
+function isFocusedFormPath(pathname: string): boolean {
+  const path = pathname.length > 1 ? pathname.replace(/\/$/, '') : pathname;
+  return FOCUSED_FORM_PATHS.includes(path);
 }
 
 /**
@@ -1084,6 +1110,7 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
    { currentTrip } = useTripContext(),
    location = useLocation(),
    isWideViewport = useWideViewport(),
+   isShortLandscape = useShortLandscapeViewport(),
    [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false),
 
   // Memoize derived values to prevent unnecessary re-renders
@@ -1132,7 +1159,17 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
    *
    * See {@link GLANCE_PATH_SUFFIXES} for which pages it sits beside.
    */
-   showGlancePanel = isWideViewport && hasGlancePanel(location.pathname, tripId);
+   showGlancePanel = isWideViewport && hasGlancePanel(location.pathname, tripId),
+
+  /**
+   * Whether this render drops the shell and leaves the page alone on screen.
+   *
+   * Both halves are required. The route has to be one that is nothing but a
+   * form ({@link FOCUSED_FORM_PATHS}), and the viewport has to be short enough
+   * that the furniture costs more than it is worth. A phone turned upright
+   * puts every piece of it straight back.
+   */
+   showFocusedForm = isShortLandscape && isFocusedFormPath(location.pathname);
 
   return (
     // `min-h-svh`, not `min-h-screen` (`100vh`): on a phone `100vh` is the tall
@@ -1156,15 +1193,17 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
       </a>
 
       {/* Header */}
-      <Header tripName={tripName} />
+      {showFocusedForm ? null : <Header tripName={tripName} />}
 
       {/* Desktop sidebar */}
-      <DesktopSidebar
-        isCollapsed={isSidebarCollapsed}
-        onToggle={toggleSidebar}
-        tripId={tripId}
-        trip={currentTrip}
-      />
+      {showFocusedForm ? null : (
+        <DesktopSidebar
+          isCollapsed={isSidebarCollapsed}
+          onToggle={toggleSidebar}
+          tripId={tripId}
+          trip={currentTrip}
+        />
+      )}
 
       {/* Main content area */}
       <main
@@ -1175,9 +1214,12 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
           // lives. `pb-20` here cleared the `h-16` nav bar and nothing else, so
           // the last row of every list sat inside the FAB's 80-136px band and
           // four pages had each pasted their own compensation on top of it.
-          'pb-bottom-stack pt-4 transition-all duration-300',
+          // With the shell gone there is no nav bar and no FAB to clear, and
+          // the padding that cleared them is the height the form needs back.
+          showFocusedForm ? 'pt-2 pb-4' : 'pb-bottom-stack pt-4',
+          'transition-all duration-300',
           // Adjust left margin based on sidebar state (desktop only)
-          isSidebarCollapsed ? 'md:ml-16' : 'md:ml-60',
+          showFocusedForm ? '' : isSidebarCollapsed ? 'md:ml-16' : 'md:ml-60',
           'px-4 md:px-6',
           // Remove focus outline when programmatically focused via skip link
           'focus:outline-none',
@@ -1213,7 +1255,7 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
       </main>
 
       {/* Mobile bottom navigation */}
-      <MobileNav tripId={tripId} />
+      {showFocusedForm ? null : <MobileNav tripId={tripId} />}
     </div>
   );
 }
