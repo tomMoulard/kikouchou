@@ -12,13 +12,21 @@ import type { Page, Request } from '@playwright/test';
 
 /**
  * Every host PostHog talks to: `*.i.posthog.com` for ingestion, `*.posthog.com`
- * for assets and the toolbar, `*.posthog.io` for the legacy asset CDN.
+ * for assets and the toolbar, `*.posthog.io` for the legacy asset CDN, and
+ * `events.kikouchou.app`, the reverse proxy `VITE_POSTHOG_HOST` names.
+ *
+ * The proxy is the one that matters and it is the one that was missing. A
+ * configured build sends **every** event to it and none to `posthog.com`, so
+ * the pattern matched exactly the traffic a leak would not produce: the privacy
+ * assertion held whether or not the app was reporting, which is the shape of
+ * gate this repository keeps finding.
  *
  * A regexp rather than a glob because it has to serve two jobs — matching a
  * route and classifying an observed request — and the two must not be able to
  * disagree about what counts.
  */
-export const POSTHOG_URL_PATTERN = /^https?:\/\/[^/]*\bposthog\.(com|io)\b/i;
+export const POSTHOG_URL_PATTERN =
+  /^https?:\/\/[^/]*(\bposthog\.(com|io)\b|\bevents\.kikouchou\.app\b)/i;
 
 /**
  * Every host the Meta Pixel talks to: `connect.facebook.net` serves

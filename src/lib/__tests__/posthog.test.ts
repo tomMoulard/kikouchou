@@ -250,17 +250,109 @@ describe('lib/posthog', () => {
     });
   });
 
-  it('marks events through the opaque-exception annotator, dropping none', async () => {
+  it('redacts and marks every event, dropping none', async () => {
     withCredentials();
     vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
 
-    const { markOpaqueExceptions } = await importPosthog();
+    const { redactAndMark } = await importPosthog();
 
     // The function is tested on its own below; what this asserts is that it is
     // actually wired in. A hook nothing calls is the easy way for this to
     // regress silently the next time the init options are edited.
     const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
-    expect(options['before_send']).toBe(markOpaqueExceptions);
+    expect(options['before_send']).toBe(redactAndMark);
+  });
+
+  it('leaves autocapture off, because element text is a guest name', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+
+    await importPosthog();
+
+    // With it on, clicking a guest card sends `$el_text` — the name of somebody
+    // who is not a user of this app. Every interaction worth a number already
+    // has a named event.
+    const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(options['autocapture']).toBe(false);
+  });
+});
+
+// ============================================================================
+// redactUrl
+// ============================================================================
+
+describe('redactUrl', () => {
+  it.each([
+    ['/join/AbCd1234', '/join/[redacted]'],
+    ['/template/SeCrEt', '/template/[redacted]'],
+    ['/share/tripshare1', '/share/[redacted]'],
+    ['/t/remote-trip-id', '/t/[redacted]'],
+  ])('takes the bearer credential out of %s', async (input, expected) => {
+    const { redactUrl } = await importPosthog();
+    expect(redactUrl(input)).toBe(expected);
+  });
+
+  it('drops the fragment, where a share link carries its encryption key', async () => {
+    const { redactUrl } = await importPosthog();
+    expect(redactUrl('https://app.kikouchou.app/share/abc#k=secretkey')).toBe(
+      'https://app.kikouchou.app/share/[redacted]',
+    );
+  });
+
+  it('keeps a path that carries no credential', async () => {
+    const { redactUrl } = await importPosthog();
+    expect(redactUrl('https://app.kikouchou.app/trips/new')).toBe(
+      'https://app.kikouchou.app/trips/new',
+    );
+  });
+
+  it('redacts a token passed as a query parameter', async () => {
+    const { redactUrl } = await importPosthog();
+    expect(redactUrl('/trips?token=abc&view=list')).toBe(
+      '/trips?token=[redacted]&view=list',
+    );
+  });
+
+  it('hands back anything it cannot read, rather than throwing in before_send', async () => {
+    const { redactUrl } = await importPosthog();
+    expect(redactUrl(undefined)).toBeUndefined();
+    expect(redactUrl(42)).toBe(42);
+  });
+});
+
+// ============================================================================
+// redactAndMark
+// ============================================================================
+
+describe('redactAndMark', () => {
+  it('redacts every URL property posthog-js fills in', async () => {
+    const { redactAndMark } = await importPosthog();
+
+    const event = redactAndMark({
+      event: '$pageview',
+      properties: {
+        $current_url: 'https://app.kikouchou.app/join/tok123',
+        $pathname: '/join/tok123',
+        $referrer: 'https://app.kikouchou.app/template/tpl456',
+        $set_once: { $initial_current_url: 'https://app.kikouchou.app/join/tok123' },
+      },
+    } as never) as { properties: Record<string, unknown> };
+
+    expect(event.properties['$current_url']).toBe(
+      'https://app.kikouchou.app/join/[redacted]',
+    );
+    expect(event.properties['$pathname']).toBe('/join/[redacted]');
+    expect(event.properties['$referrer']).toBe(
+      'https://app.kikouchou.app/template/[redacted]',
+    );
+    expect(
+      (event.properties['$set_once'] as Record<string, unknown>)['$initial_current_url'],
+    ).toBe('https://app.kikouchou.app/join/[redacted]');
+  });
+
+  it('drops nothing', async () => {
+    const { redactAndMark } = await importPosthog();
+    expect(redactAndMark(null)).toBeNull();
   });
 });
 
