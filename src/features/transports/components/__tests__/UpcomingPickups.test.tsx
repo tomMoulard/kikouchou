@@ -762,6 +762,35 @@ describe('UpcomingPickups', () => {
     expect(screen.getByText('Bob')).toBeInTheDocument();
   });
 
+  it('drops the resolving card two seconds after the volunteer is saved', async () => {
+    vi.useRealTimers();
+
+    const user = userEvent.setup();
+
+    await mockAliceAndBob();
+    await mockUpcomingPickups([pickup('t1')]);
+
+    render(<UpcomingPickups />);
+    await user.click(screen.getByText('pickups.volunteerDrive'));
+    await chooseDriver(user, 'Bob');
+    await user.click(screen.getByRole('button', { name: 'common.confirm' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('pickups.volunteerDrive')).not.toBeInTheDocument();
+    });
+
+    // The driver's name is shown for a moment, then the timer takes it away.
+    // Waited for on purpose: left to the end of some other test, whether this
+    // callback ran depended on the runner's speed, and the coverage floor
+    // moved with it.
+    await waitFor(
+      () => {
+        expect(screen.queryByText('Bob')).not.toBeInTheDocument();
+      },
+      { timeout: 4_000 },
+    );
+  });
+
   it('gives the driverless car the leg already sits in its volunteer', async () => {
     vi.useRealTimers();
 

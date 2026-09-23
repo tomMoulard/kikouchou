@@ -450,6 +450,37 @@ describe('AssistantPage — request queue', () => {
     expect(properties.queue_depth).toBe(0);
   });
 
+  it('saves the conversation on this device once the debounce has run', async () => {
+    // Its own storage and scroll stub: the `AssistantPage` block above leaves
+    // both in whatever state its mocks were restored to, and a test run on its
+    // own with `-t` never sees that block's setup at all.
+    const saved = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => saved.get(key) ?? null,
+      setItem: (key: string, value: string) => void saved.set(key, value),
+      removeItem: (key: string) => void saved.delete(key),
+    });
+    Element.prototype.scrollIntoView = vi.fn();
+
+    try {
+      const { user } = render(<AssistantPage />, { withProviders: false });
+
+      await sendPrompt(user, 'who drives on Friday?', 'assistant.send');
+
+      // Waited for on purpose: left to the end of some other test, whether the
+      // 400 ms save ran depended on the runner's speed, and the coverage floor
+      // moved with it.
+      await waitFor(
+        () => {
+          expect(saved.get('kikouchou.assistant.chat.v1')).toContain('who drives on Friday?');
+        },
+        { timeout: 2_000 },
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('accepts a prompt while answering and keeps it out of the answer in flight', async () => {
     const calls = useDeferredGenerate();
     const { user } = render(<AssistantPage />, { withProviders: false });
