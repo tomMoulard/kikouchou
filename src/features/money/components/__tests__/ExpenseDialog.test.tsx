@@ -258,6 +258,35 @@ describe('ExpenseDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('deletes the line it asked about, even when the parent has let go of it', async () => {
+    const { user, rerender, onDelete } = renderDialog({ expense: existingExpense });
+
+    await user.click(screen.getByRole('button', { name: 'money.expense.delete' }));
+    expect(screen.getByText('confirm.deleteExpense')).toBeInTheDocument();
+
+    // What CI did: the press on the confirm closed the dialog under it, and
+    // the page cleared the line it was editing before the confirm handler ran.
+    // The confirm then found no line, returned, and closed as if it had
+    // deleted one.
+    rerender(
+      <ExpenseDialog
+        open={false}
+        onOpenChange={vi.fn()}
+        persons={[marie]}
+        personNights={new Map([[marie.id, 3]])}
+        currency="EUR"
+        onSave={vi.fn()}
+        onDelete={onDelete}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'common.delete' }));
+
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledWith(existingExpense);
+    });
+  });
+
   it('keeps the line when the delete prompt is dismissed', async () => {
     const { user, onDelete } = renderDialog({ expense: existingExpense });
 
