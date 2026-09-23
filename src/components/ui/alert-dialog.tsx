@@ -8,15 +8,19 @@
  * question. A plain `role="dialog"` announces "Delete this trip?" exactly as it
  * announces "Edit room".
  *
- * Built on the alert-dialog primitive already vendored inside the `radix-ui`
- * umbrella package — no new dependency — and dressed from
- * `dialog.variants.ts` so it cannot drift away from `Dialog`.
+ * Built on `@radix-ui/react-alert-dialog` and dressed from
+ * `dialog.variants.ts` so it cannot drift away from `Dialog`. It imports the
+ * scoped package, like every other primitive here, and not the `radix-ui`
+ * umbrella: two entry points let the dev server pre-bundle them in separate
+ * passes, each with its own copy of the layer stack. A confirm opened over a
+ * dialog then read as a click outside that dialog, which closed it and
+ * cleared the record the confirm was about.
  *
  * @module components/ui/alert-dialog
  */
 
 import * as React from 'react';
-import { AlertDialog as AlertDialogPrimitive } from 'radix-ui';
+import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog';
 
 import { cn } from '@/lib/utils';
 import {
