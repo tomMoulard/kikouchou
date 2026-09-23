@@ -124,9 +124,14 @@ const PREVIEW_URL = `http://127.0.0.1:${PREVIEW_PORT}`;
  * once so the projects that must run them and the projects that must skip them
  * cannot drift apart, which is how `pwa.spec.ts` ended up running against the
  * dev server and failing all 23 of its tests.
+ *
+ * `performance.spec.ts` is here because its thresholds are about the app a
+ * user loads. On the dev server each full `page.goto` fetched hundreds of
+ * unbundled modules, and a CI runner took 1.3 to 2.1 s against a 1.5 s limit:
+ * the test measured the runner, and failed by it.
  */
 const PRODUCTION_BUILD_SPECS_PATTERN =
-  /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts/;
+  /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts|performance\.spec\.ts/;
 
 /**
  * Everything the two dev-server projects must not pick up: the production-build
@@ -134,7 +139,7 @@ const PRODUCTION_BUILD_SPECS_PATTERN =
  * `sync` project.
  */
 const DEV_SERVER_IGNORE_PATTERN =
-  /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts|trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts|trip-template-link\.spec\.ts/;
+  /offline-first\.spec\.ts|pwa\.spec\.ts|maps-offline\.spec\.ts|performance\.spec\.ts|trip-sharing-sync\.spec\.ts|trip-invite-anonymous\.spec\.ts|trip-template-link\.spec\.ts/;
 
 /**
  * The projects that drive this checkout, on the servers started below.
