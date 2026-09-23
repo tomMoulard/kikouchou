@@ -82,6 +82,11 @@ test.describe('the first-trip wizard', () => {
     });
     await expect(guestCards(page).getByText('Bob')).toBeVisible();
     await page.getByRole('link', { name: /^(rooms|chambres)$/i }).first().click();
+    // In the cards view, where a room's name is always printed. A phone opens
+    // on the timeline, and on a day inside the trip it scrolls to now and
+    // folds the label column: the name then lives only in the row's
+    // aria-label, so the assertion passed or failed by the date.
+    await page.getByRole('radio', { name: /^(cards|cartes)$/i }).click();
     await expect(roomCards(page).getByText('Attic')).toBeVisible({ timeout: 15_000 });
   });
 
