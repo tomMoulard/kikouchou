@@ -94,6 +94,14 @@ const ExpenseDialog = memo(function ExpenseDialog({
   const [isDirty, setIsDirty] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // The line the delete prompt is about, taken when the prompt opens. The
+  // `expense` prop cannot be trusted by then: when the edit dialog closes
+  // under the prompt, the page clears the line it was editing, and a confirm
+  // that read the prop found nothing, returned, and closed as if it had
+  // deleted it.
+  const [expensePendingDelete, setExpensePendingDelete] = useState<Expense | undefined>(
+    undefined,
+  );
 
   // Reset dirty state when the dialog opens (prevents stale state carrying over)
   /* eslint-disable react-hooks/set-state-in-effect -- Intentional reset on dialog open */
@@ -151,8 +159,9 @@ const ExpenseDialog = memo(function ExpenseDialog({
   }, []);
 
   const handleDeleteClick = useCallback(() => {
+    setExpensePendingDelete(expense);
     setShowDeleteConfirm(true);
-  }, []);
+  }, [expense]);
 
   const handleDeleteCancel = useCallback((newOpen: boolean) => {
     if (!newOpen) {
@@ -161,14 +170,15 @@ const ExpenseDialog = memo(function ExpenseDialog({
   }, []);
 
   const handleDeleteConfirm = useCallback(async () => {
-    if (!expense) {
+    if (!expensePendingDelete) {
       return;
     }
-    await onDelete(expense);
+    await onDelete(expensePendingDelete);
+    setExpensePendingDelete(undefined);
     setShowDeleteConfirm(false);
     setIsDirty(false);
     onOpenChange(false);
-  }, [expense, onDelete, onOpenChange]);
+  }, [expensePendingDelete, onDelete, onOpenChange]);
 
   return (
     <>
