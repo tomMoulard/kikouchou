@@ -345,16 +345,28 @@ jobs:
   # E2E Tests - Run Playwright end-to-end tests
   # ============================================================================
   e2e:
-    name: E2E Tests
+    name: E2E Tests (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    # 30 was not enough and the job was killed at that mark on every single run
-    # since this workflow was written, which reads as a failure and hid whatever
-    # the suite was actually saying. A green run of all 214 tests takes ~13 min
-    # on a developer laptop at CI's `workers: 1`, and a GitHub runner is
-    # slower — so this leaves real headroom rather than sitting just above the
-    # measured time.
-    timeout-minutes: 45
+    # The suite runs in four shards, one runner each. Playwright's `--shard`
+    # splits the test list itself, so a new spec lands in whichever shard has
+    # room, and no hand-kept list of files per job can go stale. One job used to
+    # run all of it one test at a time (`workers: 1`) and took 25 to 32 minutes.
+    #
+    # Each shard keeps `workers: 1`, because parallel workers on one runner
+    # compete for its CPU and turn timeouts into flakes. Each shard also pays
+    # the fixed cost of the install and the three web servers, the production
+    # build included, which is why the count is four and not more.
+    #
+    # The limit sits well above a shard's run time. A job that always dies at
+    # its limit reads as a failure and hides what the tests were saying: that
+    # happened here with the old single job at 30 minutes.
+    timeout-minutes: 30
     needs: [build]
+    strategy:
+      # Every shard runs to the end, so one red shard does not hide the others.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -377,24 +389,65 @@ jobs:
       - name: Install Playwright browsers
         run: bunx playwright install --with-deps chromium
 
+      # `blob` writes the shard's results for `e2e-report` to merge; `list`
+      # keeps the results readable in this job's own log.
       - name: Run E2E tests
-        run: bun run test:e2e
+        run: bun run test:e2e --shard=${{ matrix.shard }}/4 --reporter=blob,list
         env:
           CI: true
 
-      - name: Upload Playwright report
+      - name: Upload blob report
         uses: actions/upload-artifact@v4
-        if: always()
+        if: ${{ !cancelled() }}
         with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 7
+          name: blob-report-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 1
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: test-results
+          name: test-results-${{ matrix.shard }}
           path: test-results/
           retention-days: 7
 
+  # ============================================================================
+  # E2E Report - One HTML report from the four shards
+  # ============================================================================
+  e2e-report:
+    name: E2E Report
+    runs-on: ubuntu-latest
+    # Runs when a shard failed too, because that is when the report is read.
+    # The shards decide whether CI is green; this job only publishes.
+    if: ${{ !cancelled() }}
+    needs: [e2e]
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v4
+        with:
+          path: all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge into one HTML report
+        run: bunx playwright merge-reports --reporter=html ./all-blob-reports
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

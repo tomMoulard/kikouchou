@@ -37,6 +37,7 @@ supabase/.temp
 coverage/
 playwright-report/
 test-results/
+blob-report/
 public/icons/
 public/favicon.ico
 .opencode/node_modules
