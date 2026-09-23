@@ -332,11 +332,14 @@ const RoomCard = memo(function RoomCard({
         )}
 
         {/* Dropdown Menu - positioned absolutely in top-right corner. Absent on
-            a read-only trip: there is nothing it could do. */}
+            a read-only trip: there is nothing it could do. `z-30`, one above
+            the room name: the name is `z-20` too and comes later in the
+            document, so at equal rank its `pr-12` corner painted over this
+            button and took every click meant for the menu. */}
         {!readOnly && (
         // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- The div has no behaviour of its own: the handlers only stop propagation so the full-card activation button underneath does not swallow a click meant for the menu. The interactive elements are the ones inside it.
         <div
-          className="absolute top-2 right-2 z-20"
+          className="absolute top-2 right-2 z-30"
           onClick={handleMenuAreaClick}
           onKeyDown={handleMenuAreaKeyDown}
         >
