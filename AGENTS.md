@@ -988,6 +988,37 @@ is a utility class. Nearby, `bg-white`/`text-white` similarly survive only where
 literal is the requirement rather than a theme choice: a QR code's quiet zone, and text
 laid over a user-chosen colour where neither `--foreground` nor `--background` applies.
 
+### Do not bring back the stock AI-generated look
+
+The app and the landing page (`kikouchou-LP`) follow the same rules. Do not add these
+patterns, in English or in French.
+
+1. Do not use Inter or a system default as the main typeface. Body text uses Instrument
+   Sans (`font-sans`). Headings and component titles use Bricolage Grotesque
+   (`font-display`). Both are self-hosted in `src/assets/fonts/` and declared at the
+   top of `src/index.css`. Do not load fonts from a third-party server, because the app
+   must show its fonts offline.
+2. Do not put a rounded "New" or "Beta" pill above a heading. If something is news,
+   put it in the heading.
+3. Do not put a grid, dot or line pattern behind a page header.
+4. Do not add a numbered "1, 2, 3" walkthrough. Show the task itself, or a checklist
+   with icons, as `TripSetupChecklist` does.
+5. Do not put three identical cards in a row. When you add a set of items, vary their
+   size or their count.
+6. Do not use the em dash (U+2014) in user-facing text: the locale files, the `t()`
+   fallbacks, `index.html` and labels built in code. Use a comma, a colon or two
+   sentences. To join two values in a label, use ` · `. For an empty value or a
+   "nothing chosen" option, use a hyphen `-`. Do not use the en dash
+   (U+2013) either.
+7. Do not write slogans in threes, such as "Free, open source, offline". Say each fact
+   once, as a plain sentence.
+
+Before you finish a change to the copy, run this command. It must print nothing:
+
+```bash
+grep -n -e '—' -e '–' -e '\\u201[34]' src/locales/*/translation.json index.html
+```
+
 ---
 
 ## Error Handling
