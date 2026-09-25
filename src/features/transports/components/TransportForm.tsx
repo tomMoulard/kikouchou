@@ -946,7 +946,7 @@ const TransportForm = memo(function TransportForm({
             <SelectValue placeholder={t('transports.ridePlaceholder')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={NO_SELECTION}>—</SelectItem>
+            <SelectItem value={NO_SELECTION}>-</SelectItem>
             {rideOptions.map((ride) => (
               <SelectItem key={ride.id} value={ride.id}>
                 <div className="flex flex-col items-start">
@@ -1006,7 +1006,7 @@ const TransportForm = memo(function TransportForm({
                   <SelectValue placeholder={t('transports.mode')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_SELECTION}>—</SelectItem>
+                  <SelectItem value={NO_SELECTION}>-</SelectItem>
                   {TRANSPORT_MODES.map((mode) => (
                     <SelectItem key={mode} value={mode}>
                       {t(`transports.modes.${mode}`)}
@@ -1042,7 +1042,7 @@ const TransportForm = memo(function TransportForm({
                   <SelectValue placeholder={t('transports.driverPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_SELECTION}>—</SelectItem>
+                  <SelectItem value={NO_SELECTION}>-</SelectItem>
                   {driverOptions.map((person) => (
                     <SelectItem key={person.id} value={person.id}>
                       <div className="flex items-center gap-2">

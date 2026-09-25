@@ -159,7 +159,7 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
     hintKey: 'assistant.models.needle-v3.hint',
     fallbackName: 'Tiny',
     fallbackDescription:
-      'Makes changes only, and reasons first — it cannot answer questions in words.',
+      'Makes changes only, and reasons first. It cannot answer questions in words.',
     fallbackHint:
       'Runs on any device, no WebGPU needed, and downloads about 40x less than the Light preset.',
   },

@@ -247,7 +247,7 @@ export const NotificationSettings = memo(function NotificationSettings(): ReactE
           <p className="text-sm text-muted-foreground">
             {t(
               'notifications.deniedHint',
-              'Your browser is blocking notifications for Kikouchou. The app cannot ask again — allow them for this site in your browser or system settings.',
+              'Your browser is blocking notifications for Kikouchou. The app cannot ask again. Allow them for this site in your browser or system settings.',
             )}
           </p>
         )}

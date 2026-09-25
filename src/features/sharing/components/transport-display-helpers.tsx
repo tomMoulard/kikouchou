@@ -48,5 +48,5 @@ export function formatDatetime(datetime: string, locale?: string): string {
     getDateLocale(locale ?? ''),
     'fullDayAndTime',
   );
-  return formatted || datetime || '—';
+  return formatted || datetime || '-';
 }

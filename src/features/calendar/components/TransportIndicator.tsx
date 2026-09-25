@@ -51,7 +51,7 @@ const TransportIndicator = memo(function TransportIndicator({
       ? undefined
       : driverName === undefined
         ? t('rides.partOfRide', 'Part of a shared ride')
-        : t('rides.partOfRideWithDriver', 'Part of a shared ride — {{name}} driving', {
+        : t('rides.partOfRideWithDriver', 'Part of a shared ride, {{name}} driving', {
             name: driverName,
           });
 
@@ -74,12 +74,12 @@ const TransportIndicator = memo(function TransportIndicator({
         });
 
   const ariaLabel =
-    rideLabel === undefined ? baseAriaLabel : `${baseAriaLabel} — ${rideLabel}`;
+    rideLabel === undefined ? baseAriaLabel : `${baseAriaLabel} · ${rideLabel}`;
 
   // Full tooltip with all details
   const baseTooltipText = `${time} ${transport.personName}${location ? ` - ${location}` : ''}`;
   const tooltipText =
-    rideLabel === undefined ? baseTooltipText : `${baseTooltipText} — ${rideLabel}`;
+    rideLabel === undefined ? baseTooltipText : `${baseTooltipText} · ${rideLabel}`;
 
   // Handle click
   const handleClick = useCallback(() => {

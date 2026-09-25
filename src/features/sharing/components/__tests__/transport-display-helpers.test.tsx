@@ -52,7 +52,7 @@ describe('formatDatetime', () => {
   });
 
   it('returns dash for empty string', () => {
-    expect(formatDatetime('', 'en-US')).toBe('—');
+    expect(formatDatetime('', 'en-US')).toBe('-');
   });
 
   it('returns raw datetime for invalid date string', () => {

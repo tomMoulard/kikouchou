@@ -585,7 +585,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
         result.push({
           id: `${transport.id}-start`,
           position: [startCoords.lat, startCoords.lon] as readonly [number, number],
-          label: `${person?.name ?? t('common.unknown')} — ${t('transports.legStart', 'Start')}`,
+          label: `${person?.name ?? t('common.unknown')} · ${t('transports.legStart', 'Start')}`,
           type: 'default',
           color: person?.color,
           tooltipContent: (
@@ -594,7 +594,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
                 {t('transports.legStart', 'Start')}
               </div>
               <div className="text-muted-foreground truncate max-w-[220px]">
-                {transport.startLocation ?? '—'}
+                {transport.startLocation ?? '-'}
               </div>
             </div>
           ),
@@ -659,7 +659,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
           number,
           number,
         ],
-        label: `${t('rides.meetingPoint', 'Meeting point')} — ${journey.location}`,
+        label: `${t('rides.meetingPoint', 'Meeting point')} · ${journey.location}`,
         type: 'default',
         tooltipContent: (
           <div className="space-y-0.5">

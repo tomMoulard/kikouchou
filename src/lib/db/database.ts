@@ -721,7 +721,7 @@ export class KikouchouDatabase extends Dexie {
 
     this.on('blocked', () => {
       console.warn(
-        '[db] upgrade blocked by another open tab — close other Kikouchou tabs',
+        '[db] upgrade blocked by another open tab: close other Kikouchou tabs',
       );
     });
   }

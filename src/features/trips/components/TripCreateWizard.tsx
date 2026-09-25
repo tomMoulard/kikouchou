@@ -523,7 +523,7 @@ export const TripCreateWizard = memo(function TripCreateWizard({
           <p className="text-muted-foreground">
             {t(
               'trips.wizard.nameHint',
-              'The house, the town, the occasion — whatever the group calls it.',
+              'The house, the town, the occasion, whatever the group calls it.',
             )}
           </p>
           <Label htmlFor="wizard-trip-name" className="sr-only">

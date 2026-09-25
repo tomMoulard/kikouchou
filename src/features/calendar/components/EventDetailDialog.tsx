@@ -307,7 +307,7 @@ const AssignmentDetails = memo(function AssignmentDetails({ event, dateLocale }:
                     <TransportIcon mode={mode} className="size-3.5 shrink-0 text-muted-foreground" />
                     <span>
                       {modeLabel}
-                      {tr.transportNumber ? ` — ${tr.transportNumber}` : ''}
+                      {tr.transportNumber ? ` · ${tr.transportNumber}` : ''}
                     </span>
                   </div>
                   {tr.location ? (

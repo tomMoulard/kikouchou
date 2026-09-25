@@ -677,7 +677,7 @@ const TripTimelineFrame = memo(function TripTimelineFrame({
                       data-weekend={column.isWeekend ? 'true' : undefined}
                       title={
                         isOutsideTrip && outsideTripLabel
-                          ? `${column.title} — ${outsideTripLabel}`
+                          ? `${column.title} · ${outsideTripLabel}`
                           : column.title
                       }
                       {...(isToday ? { 'aria-current': 'date' as const } : {})}

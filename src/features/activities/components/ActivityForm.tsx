@@ -639,7 +639,7 @@ const ActivityForm = memo(function ActivityForm({
             <SelectValue placeholder={t('activities.organizerPlaceholder')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={NO_SELECTION}>—</SelectItem>
+            <SelectItem value={NO_SELECTION}>-</SelectItem>
             {persons.map((person) => (
               <SelectItem key={person.id} value={person.id}>
                 <div className="flex items-center gap-2">

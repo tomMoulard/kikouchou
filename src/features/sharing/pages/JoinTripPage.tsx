@@ -360,7 +360,7 @@ function IdentityStep({ tripId, remoteTripId }: IdentityStepProps): ReactElement
         <p className="text-sm text-muted-foreground">
           {t(
             'sharing.join.allTaken',
-            'Everyone on the list is already claimed. Carry on without picking one — you can still see and edit the trip.',
+            'Everyone on the list is already claimed. Carry on without picking one. You can still see and edit the trip.',
           )}
         </p>
       ) : null}

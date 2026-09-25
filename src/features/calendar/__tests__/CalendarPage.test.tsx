@@ -888,15 +888,15 @@ describe('CalendarPage', () => {
     // Both places the timeline names a leg: the 10px marker inside the stay
     // pill, and the pill's own hover text and accessible name.
     expect(
-      screen.getByTitle('Paris CDG — rides.partOfRideWithDriver'),
+      screen.getByTitle('Paris CDG · rides.partOfRideWithDriver'),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText(/↓ 14:00 — Paris CDG — rides\.partOfRideWithDriver/),
+      screen.getByLabelText(/↓ 14:00 · Paris CDG · rides\.partOfRideWithDriver/),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole('radio', { name: 'calendar.view.month' }));
 
-    const indicator = screen.getByTitle(/14:00 Alice - Paris CDG — rides\.partOfRideWithDriver/);
+    const indicator = screen.getByTitle(/14:00 Alice - Paris CDG · rides\.partOfRideWithDriver/);
     expect(indicator.querySelector('[data-testid="ride-glyph"]')).not.toBeNull();
 
     await user.click(indicator);

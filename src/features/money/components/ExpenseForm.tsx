@@ -760,7 +760,7 @@ const ExpenseForm = memo(function ExpenseForm({
             <SelectValue placeholder={payerLabel} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={NO_SELECTION}>—</SelectItem>
+            <SelectItem value={NO_SELECTION}>-</SelectItem>
             {persons.map((person) => (
               <SelectItem key={person.id} value={person.id}>
                 <div className="flex items-center gap-2">
@@ -798,7 +798,7 @@ const ExpenseForm = memo(function ExpenseForm({
               <SelectValue placeholder={t('money.expense.transferTo')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={NO_SELECTION}>—</SelectItem>
+              <SelectItem value={NO_SELECTION}>-</SelectItem>
               {persons.map((person) => (
                 <SelectItem key={person.id} value={person.id}>
                   <div className="flex items-center gap-2">
