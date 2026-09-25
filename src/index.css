@@ -3,7 +3,30 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * The same two typefaces as the landing page, so the site and the app look
+ * like one product. Self-hosted, Latin subset (it holds the French accents,
+ * œ and €), SIL Open Font License. Vite hashes the files and the service
+ * worker precaches them, so the app still has its fonts offline.
+ */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("./assets/fonts/bricolage-grotesque.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Sans";
+  src: url("./assets/fonts/instrument-sans.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme inline {
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -186,6 +209,10 @@
 }
 
 @layer base {
+  /* Headings and component titles take the display face, body text the sans. */
+  :where(h1, h2, h3, [data-slot="card-title"], [data-slot="dialog-title"], [data-slot="alert-dialog-title"], [data-slot="sheet-title"]) {
+    @apply font-display;
+  }
   * {
     @apply border-border outline-ring/50;
   }
