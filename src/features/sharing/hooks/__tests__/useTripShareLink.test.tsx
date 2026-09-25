@@ -1,0 +1,253 @@
+/**
+ * @fileoverview Tests for useTripShareLink.
+ *
+ * The property under defence is that resolving a share link settles and stays
+ * settled. The trip it is given comes from a Dexie live query, and the sync
+ * provider writes to the `trips` table whenever a remote update arrives — so the
+ * object identity changes for reasons that have nothing to do with which trip is
+ * being shared. An effect keyed on that identity restarts, and every restart
+ * puts the dialog back to `loading`: a spinner that never finishes while sync is
+ * doing its job.
+ *
+ * @module features/sharing/hooks/__tests__/useTripShareLink.test
+ */
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
+
+import { useTripShareLink } from '../useTripShareLink';
+import { ensureRemoteTrip } from '@/lib/sync/remote-trip';
+import { createInvite, listInvites } from '@/lib/sync/invites';
+import type { ISODateString, ShareId, Trip, TripId } from '@/types';
+
+// ============================================================================
+// Test doubles
+// ============================================================================
+
+vi.mock('@/lib/supabase/client', () => ({
+  getSupabaseClient: vi.fn(async () => ({}) as never),
+  isSupabaseConfigured: vi.fn(() => true),
+}));
+
+vi.mock('@/features/auth/AuthContext', () => {
+  // Stable identities, because the real `AuthProvider` memoises its value. A
+  // fresh object per call would make every render look like a sign-in.
+  const auth = {
+    user: { id: 'user-1' },
+    isAvailable: true,
+    isResolved: true,
+  };
+  return { useAuth: () => auth };
+});
+
+vi.mock('@/lib/sync/remote-trip', () => ({
+  ensureRemoteTrip: vi.fn(async () => ({
+    status: 'ready' as const,
+    remoteTripId: 'remote-1',
+  })),
+}));
+
+vi.mock('@/lib/sync/invites', () => ({
+  listInvites: vi.fn(async () => []),
+  createInvite: vi.fn(async () => ({
+    status: 'created' as const,
+    invite: { token: 'tokentokent1' },
+  })),
+  isInviteUsable: vi.fn(() => true),
+  inviteOutlastsTrip: vi.fn(() => true),
+  inviteExpiryForTrip: vi.fn(() => new Date('2026-07-29T23:59:59.999Z')),
+  // Kept in step with the real signature: the fourth argument is what decides
+  // between the preview link and the direct one, and a mock that ignored it
+  // would let the hook stop passing it without a single test noticing.
+  buildInviteUrl: (
+    origin: string,
+    base: string,
+    token: string,
+    share?: { origin: string; language: string },
+  ) =>
+    share !== undefined && share.origin !== ''
+      ? `${share.origin}/${share.language}/${token}`
+      : `${origin}${base}join/${token}`,
+}));
+
+const mockedEnsure = vi.mocked(ensureRemoteTrip);
+const mockedList = vi.mocked(listInvites);
+const mockedCreate = vi.mocked(createInvite);
+
+/** A fresh object every call, as a live query hands back. */
+function tripObject(overrides: Partial<Trip> = {}): Trip {
+  return {
+    id: 'trip-1' as TripId,
+    name: 'Brittany',
+    shareId: 'share-1234' as ShareId,
+    startDate: '2026-07-15' as ISODateString,
+    endDate: '2026-07-22' as ISODateString,
+    createdAt: 1,
+    updatedAt: 1,
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  mockedEnsure.mockClear();
+  mockedList.mockClear();
+  mockedCreate.mockClear();
+});
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+describe('useTripShareLink', () => {
+  it('resolves an invite link', async () => {
+    // Hoisted deliberately. Passing `tripObject()` inline gives the hook a new
+    // object on every render, which is not a contrived setup — it is what a
+    // live query does — and with the effect keyed on the object it spins until
+    // the worker runs out of memory. That is the bug; the tests below pin it
+    // without taking the suite down.
+    const trip = tripObject();
+    const { result } = renderHook(() => useTripShareLink(trip, true));
+
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('invite');
+    });
+    expect(result.current.state).toMatchObject({ token: 'tokentokent1' });
+  });
+
+  it('stays settled when the trip object identity changes', async () => {
+    const { result, rerender } = renderHook(
+      ({ trip }: { trip: Trip }) => useTripShareLink(trip, true),
+      { initialProps: { trip: tripObject() } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('invite');
+    });
+
+    // What a Dexie live query does after the sync provider projects a remote
+    // update: same trip, different object, and a bumped `updatedAt`.
+    rerender({ trip: tripObject({ updatedAt: 2 }) });
+    rerender({ trip: tripObject({ updatedAt: 3 }) });
+
+    // Re-entering `loading` here is the bug: the dialog shows a spinner again,
+    // and while updates keep arriving it never stops.
+    expect(result.current.state.kind).toBe('invite');
+  });
+
+  it('does not re-run the server work for the same trip', async () => {
+    const { result, rerender } = renderHook(
+      ({ trip }: { trip: Trip }) => useTripShareLink(trip, true),
+      { initialProps: { trip: tripObject() } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('invite');
+    });
+    const callsAfterFirstResolve = mockedEnsure.mock.calls.length;
+
+    rerender({ trip: tripObject({ updatedAt: 2 }) });
+    rerender({ trip: tripObject({ updatedAt: 3 }) });
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('invite');
+    });
+
+    // Each restart is a round trip to the server, and `listInvites` plus a mint
+    // per re-render is how a trip ends up littered with links.
+    expect(mockedEnsure.mock.calls.length).toBe(callsAfterFirstResolve);
+  });
+
+  it('hands out a preview link when the build is configured for one', async () => {
+    vi.stubEnv('VITE_SHARE_ORIGIN', 'https://share.kikouchou.app');
+
+    const { result } = renderHook(() => useTripShareLink(tripObject(), true));
+
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({
+        kind: 'invite',
+        url: expect.stringMatching(
+          /^https:\/\/share\.kikouchou\.app\/(en|fr)\/tokentokent1$/,
+        ),
+      });
+    });
+
+    vi.unstubAllEnvs();
+  });
+
+  it('hands out the direct link when it is not', async () => {
+    const { result } = renderHook(() => useTripShareLink(tripObject(), true));
+
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({
+        kind: 'invite',
+        url: expect.stringContaining('/join/tokentokent1'),
+      });
+    });
+  });
+
+  it('does re-run when a different trip is shared', async () => {
+    const { result, rerender } = renderHook(
+      ({ trip }: { trip: Trip }) => useTripShareLink(trip, true),
+      { initialProps: { trip: tripObject() } },
+    );
+
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('invite');
+    });
+    mockedEnsure.mockClear();
+
+    rerender({ trip: tripObject({ id: 'trip-2' as TripId }) });
+
+    await waitFor(() => {
+      expect(mockedEnsure).toHaveBeenCalledWith(
+        expect.anything(),
+        'user-1',
+        'trip-2',
+      );
+    });
+  });
+});
+
+// ============================================================================
+// Viewer trips and expiry
+// ============================================================================
+
+describe('useTripShareLink — a viewer trip', () => {
+  it('hands the viewer their own token, with no server work', async () => {
+    const trip = tripObject({ viewerToken: 'viewertoken12345', remoteTripId: 'remote-1' });
+    const { result } = renderHook(() => useTripShareLink(trip, true));
+
+    // Forwarding an invitation is what people do with one. The token already
+    // opens the trip for the next person, read-only, so the dialog shows it
+    // rather than asking a viewer for an account they do not need.
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({
+        kind: 'invite',
+        token: 'viewertoken12345',
+      });
+    });
+    expect(mockedEnsure).not.toHaveBeenCalled();
+    expect(mockedList).not.toHaveBeenCalled();
+    expect(mockedCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('useTripShareLink — how long a new link lives', () => {
+  it('mints a link that outlasts the trip rather than the old one-month default', async () => {
+    const trip = tripObject({ endDate: '2026-07-22' as ISODateString });
+    const { result } = renderHook(() => useTripShareLink(trip, true));
+
+    await waitFor(() => {
+      expect(result.current.state.kind).toBe('invite');
+    });
+
+    // A trip planned three months ahead used to outlive its own link, and
+    // every viewer reading it through the token lost their updates after a
+    // month. The expiry now follows the trip's last day.
+    expect(mockedCreate).toHaveBeenCalledWith(
+      expect.anything(),
+      'remote-1',
+      'user-1',
+      { expiresAt: new Date('2026-07-29T23:59:59.999Z') },
+    );
+  });
+});
