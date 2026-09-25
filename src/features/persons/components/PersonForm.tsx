@@ -540,7 +540,7 @@ const PersonForm = memo(function PersonForm({
             <p className="text-xs text-muted-foreground">
               {t(
                 'persons.importFromContactsHint',
-                'Your browser picks the contact — the app only sees the one you choose.',
+                'Your browser picks the contact. The app only sees the one you choose.',
               )}
             </p>
           )}
@@ -598,7 +598,7 @@ const PersonForm = memo(function PersonForm({
         <p id="person-phone-hint" className="text-xs text-muted-foreground">
           {t(
             'persons.phoneHint',
-            'Everyone you share the trip with can see this number — handy for the station pickup.',
+            'Everyone you share the trip with can see this number. It is handy for the station pickup.',
           )}
         </p>
       </div>
@@ -708,7 +708,7 @@ const PersonForm = memo(function PersonForm({
             <p id="person-headcount-hint" className="text-xs text-muted-foreground">
               {t(
                 'persons.headcountHint',
-                'How many people this entry stands for — use 2 for a couple like "Alice+Auré". Meal headcounts use this.',
+                'How many people this entry stands for. Use 2 for a couple like "Alice+Auré". Meal headcounts use this.',
               )}
             </p>
 
@@ -742,7 +742,7 @@ const PersonForm = memo(function PersonForm({
               <p id="person-child-seat-hint" className="text-xs text-muted-foreground">
                 {t(
                   'persons.childSeatHint',
-                  'Give a child who needs a seat their own guest entry — a car counts one seat per entry, whatever number of people it stands for.',
+                  'Give a child who needs a seat their own guest entry. A car counts one seat per entry, whatever number of people it stands for.',
                 )}
               </p>
               <p id="person-child-seat-disclaimer" className="text-xs text-muted-foreground">

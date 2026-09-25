@@ -363,7 +363,7 @@ export const IdentityStepPage = memo(function IdentityStepPage(): ReactElement {
                     onClick={() => { handleSelectPerson(person.id); }}
                     aria-pressed={isSelected}
                     aria-label={isSelected
-                      ? `${person.name} — ${t('sharing.identitySelected', 'Selected')}`
+                      ? `${person.name} · ${t('sharing.identitySelected', 'Selected')}`
                       : person.name}
                     className={cn(
                       'flex w-full min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border-2 p-4 text-left transition-colors',

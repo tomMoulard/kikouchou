@@ -155,14 +155,14 @@ describe('rooms.beds renders through i18next, not as a raw key', () => {
     await i18n.changeLanguage('en');
     renderTimeline([FOUR_BED]);
 
-    expect(screen.getByTitle('Master Bedroom — 4 beds')).toBeInTheDocument();
+    expect(screen.getByTitle('Master Bedroom · 4 beds')).toBeInTheDocument();
   });
 
   it('labels a one-bed room "1 bed" on the timeline', async () => {
     await i18n.changeLanguage('en');
     renderTimeline([ONE_BED]);
 
-    expect(screen.getByTitle('Box Room — 1 bed')).toBeInTheDocument();
+    expect(screen.getByTitle('Box Room · 1 bed')).toBeInTheDocument();
   });
 
   it('never leaks a rooms.beds key into the timeline DOM', async () => {
@@ -176,8 +176,8 @@ describe('rooms.beds renders through i18next, not as a raw key', () => {
     await i18n.changeLanguage('fr');
     renderTimeline([FOUR_BED, ONE_BED]);
 
-    expect(screen.getByTitle('Master Bedroom — 4 lits')).toBeInTheDocument();
-    expect(screen.getByTitle('Box Room — 1 lit')).toBeInTheDocument();
+    expect(screen.getByTitle('Master Bedroom · 4 lits')).toBeInTheDocument();
+    expect(screen.getByTitle('Box Room · 1 lit')).toBeInTheDocument();
     // No reset here: every test sets its own language before rendering, and
     // switching it while a component is still mounted trips React's act warning.
   });

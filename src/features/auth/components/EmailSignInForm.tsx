@@ -126,7 +126,7 @@ export const EmailSignInForm = memo(function EmailSignInForm({
           <span>
             {t(
               'auth.signIn.emailSent',
-              'Check your inbox — the link we sent signs you in on this device.',
+              'Check your inbox. The link we sent signs you in on this device.',
             )}{' '}
             <span className="font-medium">{sentTo}</span>
           </span>

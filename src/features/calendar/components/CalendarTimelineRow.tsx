@@ -94,7 +94,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
       const driverName = ride.driver?.name;
       return driverName === undefined
         ? t('rides.partOfRide', 'Part of a shared ride')
-        : t('rides.partOfRideWithDriver', 'Part of a shared ride — {{name}} driving', {
+        : t('rides.partOfRideWithDriver', 'Part of a shared ride, {{name}} driving', {
             name: driverName,
           });
     },
@@ -107,7 +107,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
       const rideLabel = rideLabelFor(transport);
       return rideLabel === undefined
         ? transport.location
-        : `${transport.location} — ${rideLabel}`;
+        : `${transport.location} · ${rideLabel}`;
     },
     [rideLabelFor],
   );
@@ -222,7 +222,7 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
           : '';
       let assignmentTitle =
         isAssignment && item.kind === 'assignment' && assignmentRange
-          ? t('calendar.timeline.assignmentBarTitle', '{{room}} — {{range}}', {
+          ? t('calendar.timeline.assignmentBarTitle', '{{room}}, {{range}}', {
               room: item.label,
               range: assignmentRange,
             })
@@ -255,8 +255,8 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
           .map((m) => {
             const arrow = m.transport.type === 'arrival' ? '↓' : '↑';
             const rideLabel = rideLabelFor(m.transport);
-            const base = `${arrow} ${formatTime(m.transport.datetime)} — ${m.transport.location}`;
-            return rideLabel === undefined ? base : `${base} — ${rideLabel}`;
+            const base = `${arrow} ${formatTime(m.transport.datetime)} · ${m.transport.location}`;
+            return rideLabel === undefined ? base : `${base} · ${rideLabel}`;
           })
           .join('; ');
         assignmentTitle = assignmentTitle ? `${assignmentTitle}. ${legSummaries}` : legSummaries;
@@ -295,15 +295,15 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
           title={
             isTransport
               ? transportRideLabel === undefined
-                ? `${transportLabel} — ${item.label}`
-                : `${transportLabel} — ${item.label} — ${transportRideLabel}`
+                ? `${transportLabel} · ${item.label}`
+                : `${transportLabel} · ${item.label} · ${transportRideLabel}`
               : assignmentTitle
           }
           aria-label={
             isTransport
               ? transportRideLabel === undefined
-                ? `${transportLabel} — ${item.label}`
-                : `${transportLabel} — ${item.label} — ${transportRideLabel}`
+                ? `${transportLabel} · ${item.label}`
+                : `${transportLabel} · ${item.label} · ${transportRideLabel}`
               : assignmentAria
           }
         >
@@ -535,12 +535,12 @@ const CalendarTimelineRow = memo(function CalendarTimelineRow({
 
         <TimelineOffscreenArrows
           bounds={itemBounds}
-          leftLabel={t('calendar.timeline.offscreenLeft', '{{name}} is booked earlier — scroll back', {
+          leftLabel={t('calendar.timeline.offscreenLeft', '{{name}} is booked earlier. Scroll back', {
             name: personLabel,
           })}
           rightLabel={t(
             'calendar.timeline.offscreenRight',
-            '{{name}} is booked later — scroll forward',
+            '{{name}} is booked later. Scroll forward',
             { name: personLabel },
           )}
         />

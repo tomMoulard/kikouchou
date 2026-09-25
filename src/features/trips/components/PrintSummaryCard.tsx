@@ -67,7 +67,7 @@ export const PrintSummaryCard = memo(function PrintSummaryCard(): ReactElement {
             <CardDescription>
               {t(
                 'summary.description',
-                'One page for the fridge door: who sleeps where, who arrives when, who drives.',
+                'One page for the fridge door: who sleeps where, and who drives whom from the station.',
               )}
             </CardDescription>
           </div>

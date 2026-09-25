@@ -245,7 +245,7 @@ const GuestGroupListPage = memo(function GuestGroupListPage(): ReactElement {
           title={t('guestGroups.emptyTitle', 'No groups yet')}
           description={t(
             'guestGroups.emptyDescription',
-            'Create a group for the people you invite together — a family, a band of friends — and add them to a trip without retyping anybody.',
+            'Create a group for the people you invite together, such as a family or a band of friends, and add them to a trip without retyping anybody.',
           )}
           action={{
             label: t('guestGroups.new', 'New group'),

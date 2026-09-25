@@ -426,7 +426,7 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                   row.room.name,
                   t('rooms.beds', { count: row.room.capacity }),
                   ...(onEditRoom ? [t('rooms.doubleClickToEdit')] : []),
-                ].join(' — ');
+                ].join(' · ');
 
                 return (
                   <div
@@ -552,14 +552,14 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                               }}
                               title={t(
                                 'rooms.timeline.freeBedHint',
-                                'Another bed is free in this room — drag a guest onto this row',
+                                'Another bed is free in this room. Drag a guest onto this row',
                               )}
                             />
                           ))}
 
                         {row.items.map((item) => {
                           const rangeStr = `${format(parseISO(item.displayStayStart), 'MMM d', { locale: dateLocale })} – ${format(parseISO(item.displayStayEnd), 'MMM d', { locale: dateLocale })}`;
-                          const accessibilityLabel = t('rooms.timeline.assignmentPillA11y', '{{name}} — stay {{range}}', {
+                          const accessibilityLabel = t('rooms.timeline.assignmentPillA11y', '{{name}}, stay {{range}}', {
                             name: item.label,
                             range: rangeStr,
                           });
@@ -608,12 +608,12 @@ const RoomOccupancyTimeline = memo(function RoomOccupancyTimeline({
                           }))}
                           leftLabel={t(
                             'rooms.timeline.offscreenLeft',
-                            '{{name}} is booked earlier — scroll back',
+                            '{{name}} is booked earlier. Scroll back',
                             { name: row.room.name },
                           )}
                           rightLabel={t(
                             'rooms.timeline.offscreenRight',
-                            '{{name}} is booked later — scroll forward',
+                            '{{name}} is booked later. Scroll forward',
                             { name: row.room.name },
                           )}
                         />

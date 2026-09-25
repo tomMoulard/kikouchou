@@ -782,7 +782,7 @@ describe('TransportMapPage', () => {
       // ranks coincident markers by insertion order, so pushed first the
       // headline pin renders underneath the legs and cannot be clicked.
       const popup = screen.getByTestId('marker-popup-2');
-      expect(popup).toHaveAttribute('data-label', 'rides.meetingPoint — Paris CDG');
+      expect(popup).toHaveAttribute('data-label', 'rides.meetingPoint · Paris CDG');
 
       expect(popup).toHaveTextContent('rides.directions.pickup');
       // Meeting time and the driver's own alarm clock, 30 minutes before it.
@@ -959,8 +959,8 @@ describe('TransportMapPage', () => {
       // than about one of the two cars never having been drawn at all.
       const { unmount } = render(<TransportMapPage />, { withProviders: false });
       expect(pinnedMeetingPoints()).toEqual([
-        'rides.meetingPoint — Paris CDG',
-        'rides.meetingPoint — Gare de Vannes',
+        'rides.meetingPoint · Paris CDG',
+        'rides.meetingPoint · Gare de Vannes',
       ]);
       unmount();
 
@@ -978,7 +978,7 @@ describe('TransportMapPage', () => {
 
       // Filtered on the *journey*: the pin goes with the car, so a rendez-vous
       // never outlives the passengers whose lines point at it.
-      expect(pinnedMeetingPoints()).toEqual(['rides.meetingPoint — Paris CDG']);
+      expect(pinnedMeetingPoints()).toEqual(['rides.meetingPoint · Paris CDG']);
     });
   });
 });

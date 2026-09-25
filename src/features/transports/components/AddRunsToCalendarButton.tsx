@@ -144,7 +144,7 @@ export const AddRunsToCalendarButton = memo(function AddRunsToCalendarButton({
       ics = buildIcsCalendar(events, {
         nowMs,
         name: t('transports.calendar.calendarName', {
-          defaultValue: '{{trip}} — your runs',
+          defaultValue: '{{trip}}: your runs',
           trip: tripName,
         }),
       });

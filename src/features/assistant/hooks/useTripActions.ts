@@ -873,7 +873,7 @@ export function useTripActions(): UseTripActionsReturn {
                   start: d.startDate as string,
                   end: d.endDate as string,
                   defaultValue:
-                    'Assigned {{person}} → {{room}} ({{start}} – {{end}})',
+                    'Assigned {{person}} → {{room}} ({{start}} to {{end}})',
                 }),
               );
               break;
@@ -940,7 +940,7 @@ export function useTripActions(): UseTripActionsReturn {
                   person: transportPerson.name,
                   location: d.location as string,
                   defaultValue:
-                    'Added {{type}} for {{person}} — {{location}}',
+                    'Added {{type}} for {{person}} at {{location}}',
                 }),
               );
               break;
@@ -1026,7 +1026,7 @@ export function useTripActions(): UseTripActionsReturn {
                   // has both directions translated.
                   direction: t(`rides.directions.${createdRide.direction}`),
                   location: createdRide.location,
-                  defaultValue: 'Added {{direction}} ride — {{location}}',
+                  defaultValue: 'Added {{direction}} ride at {{location}}',
                 }),
               );
               break;
@@ -1151,7 +1151,7 @@ export function useTripActions(): UseTripActionsReturn {
                   direction: t(`rides.directions.${ride.direction}`),
                   location: ride.location,
                   defaultValue:
-                    'Cancelled {{direction}} ride — {{location}} (its passengers need a lift again)',
+                    'Cancelled {{direction}} ride at {{location}} (its passengers need a lift again)',
                 }),
               );
               break;

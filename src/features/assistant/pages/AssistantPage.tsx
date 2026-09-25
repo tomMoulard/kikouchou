@@ -561,7 +561,7 @@ const ModelLoadingCard = memo(function ModelLoadingCard({
                 <p className="text-sm text-destructive/90">
                   {t(
                     'assistant.deviceUnsupportedDescription',
-                    'The assistant runs the model entirely on your own device, which needs WebGPU — and this browser cannot use it here. Open the app on a recent desktop Chrome, Edge or Safari to use it.',
+                    'The assistant runs the model entirely on your own device, which needs WebGPU, and this browser cannot use it here. Open the app on a recent desktop Chrome, Edge or Safari to use it.',
                   )}
                 </p>
               </div>
@@ -683,7 +683,7 @@ const ChatInput = memo(function ChatInput({
               isGenerating
                 ? t(
                     'assistant.placeholderQueue',
-                    'Send another request — it will be answered next...',
+                    'Send another request. It will be answered next...',
                   )
                 : t(
                     'assistant.placeholder',
@@ -1082,7 +1082,7 @@ function AssistantPageComponent(): ReactElement {
         const content = fatal
           ? tRef.current('assistant.engineCrashed', {
               defaultValue:
-                'The model ran out of GPU resources and had to restart. Reloading it now — send your request again in a moment.',
+                'The model ran out of GPU resources and had to restart. Reloading it now. Send your request again in a moment.',
             })
           : tRef.current('assistant.generationFailed', {
               defaultValue: 'Could not answer that: {{error}}',

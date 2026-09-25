@@ -407,7 +407,7 @@ const RoomCard = memo(function RoomCard({
           */}
           <CardTitle
             className="min-w-0 truncate pr-12 text-lg relative z-20 select-none"
-            title={`${room.name} — ${t('rooms.doubleClickToEdit')}`}
+            title={`${room.name} · ${t('rooms.doubleClickToEdit')}`}
             onDoubleClick={handleNameDoubleClick}
           >
             {room.name}

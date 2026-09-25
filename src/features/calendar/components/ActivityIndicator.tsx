@@ -41,7 +41,7 @@ const ActivityIndicator = memo(function ActivityIndicator({
     activity.location,
   ]
     .filter(Boolean)
-    .join(' — ');
+    .join(' · ');
 
   const ariaLabel = t(
     'calendar.viewActivityDetails',

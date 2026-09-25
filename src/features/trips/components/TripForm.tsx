@@ -1328,7 +1328,7 @@ const TripForm = memo(function TripForm({
             Clearing the row is how they say so, and it stays cleared.
           */}
           <p id="trip-guests-hint" className="text-xs text-muted-foreground">
-            {t('trips.guestsHint', 'Who is coming? Clear your own name if you are not going — you can add guests later.')}
+            {t('trips.guestsHint', 'Who is coming? Clear your own name if you are not going. You can add guests later.')}
           </p>
 
           <ul className="space-y-2">

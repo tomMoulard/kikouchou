@@ -219,7 +219,7 @@ export const ProviderList = memo(function ProviderList({
           <span>
             {t(
               'auth.signIn.offline',
-              'You are offline. Signing in needs a connection — everything else keeps working without one.',
+              'You are offline. Signing in needs a connection. Everything else keeps working without one.',
             )}
           </span>
         </div>

@@ -83,7 +83,7 @@ export const SignInDialog = memo(function SignInDialog({
         <p className="text-sm text-muted-foreground">
           {t(
             'auth.signIn.localDataKept',
-            'Nothing you have already planned is lost — this trip is uploaded as it is.',
+            'Nothing you have already planned is lost. This trip is uploaded as it is.',
           )}
         </p>
 
