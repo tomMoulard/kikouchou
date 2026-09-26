@@ -90,6 +90,32 @@ test.describe('the first-trip wizard', () => {
     await expect(roomCards(page).getByText('Attic')).toBeVisible({ timeout: 15_000 });
   });
 
+  test('keeps the guest field focused after the Add button', async ({ page, isMobile }) => {
+    await page.addInitScript(FLAG_ON);
+    await page.goto('/trips/new');
+    await page.getByLabel(/trip name/i).fill('Lake house');
+    await page.keyboard.press('Enter');
+    await pickDates(page);
+    await page.getByRole('button', { name: /^next$/i }).click();
+    await page.getByRole('button', { name: /skip for now/i }).click();
+
+    // A phone taps the button. Focus moving to it closes the keyboard, and
+    // the next name then needs a tap back into the field.
+    const field = page.getByLabel(/guest name/i);
+    const add = page.getByRole('button', { name: /^add$/i });
+    await field.fill('Alice');
+    await (isMobile ? add.tap() : add.click());
+    await expect(page.getByText('Alice')).toBeVisible();
+    await expect(field).toBeFocused();
+    await expect(field).toHaveValue('');
+
+    // So the next name is typed straight in.
+    await page.keyboard.type('Bob');
+    await (isMobile ? add.tap() : add.click());
+    await expect(page.getByText('Bob')).toBeVisible();
+    await expect(field).toBeFocused();
+  });
+
   test('is only ever for the first trip on a device', async ({ page }) => {
     await page.addInitScript(FLAG_ON);
     await page.goto('/trips/new');
