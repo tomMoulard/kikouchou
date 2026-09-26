@@ -484,7 +484,7 @@ impl TripSource {
         self.get::<Subscription>(
             "live_push_subscriptions",
             "live_push_subscriptions\
-             ?select=id,trip_id,person_id,endpoint,p256dh,auth,locale,analytics_id\
+             ?select=id,trip_id,person_id,transport,endpoint,p256dh,auth,locale,analytics_id\
              &order=trip_id.asc,id.asc",
         )
         .await
@@ -502,7 +502,7 @@ impl TripSource {
             "live_push_subscriptions",
             &format!(
                 "live_push_subscriptions?id=eq.{subscription_id}\
-                 &select=id,trip_id,person_id,endpoint,p256dh,auth,locale,analytics_id&limit=1"
+                 &select=id,trip_id,person_id,transport,endpoint,p256dh,auth,locale,analytics_id&limit=1"
             ),
         )
         .await?

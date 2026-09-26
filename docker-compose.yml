@@ -68,7 +68,7 @@ services:
   # this file, and the `:?` form makes a missing one a refused `up` rather than
   # a container that starts and 500s.
   share:
-    image: tommoulard/kikoushou-share:latest
+    image: tommoulard/kikouchou-share:latest
     build:
       context: ./server/share-preview
       platforms:
@@ -92,6 +92,16 @@ services:
       PUSH_SEND_MODE: ${PUSH_SEND_MODE:-direct}
       POSTHOG_KEY: ${POSTHOG_KEY:-}
       POSTHOG_HOST: ${POSTHOG_HOST:-https://events.kikouchou.app}
+      # The store apps (plans/2026-09-26-native-apps-v1.md). Reminders to the
+      # iPhone app go through APNs with the team's .p8 key, to the Android app
+      # through FCM with a service account. The team id and the certificate
+      # fingerprints also make /.well-known/ answer, so a tap on a share link
+      # opens the installed app. All optional.
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_PRIVATE_KEY: ${APNS_PRIVATE_KEY:-}
+      FCM_SERVICE_ACCOUNT_JSON: ${FCM_SERVICE_ACCOUNT_JSON:-}
+      ANDROID_CERT_SHA256: ${ANDROID_CERT_SHA256:-}
     labels:
       - traefik.enable=true
       - traefik.http.routers.share.rule=Host(`share.kikouchou.app`)

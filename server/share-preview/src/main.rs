@@ -6,12 +6,14 @@
 //! back what it returns. Everything worth testing lives on the other side of
 //! that call.
 
+mod app_links;
 mod cache;
 mod card_image;
 mod card_svg;
 mod config;
 mod dates;
 mod i18n;
+mod native_push;
 mod page;
 mod posthog;
 mod push_sender;

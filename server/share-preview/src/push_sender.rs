@@ -16,6 +16,10 @@
 //! is this service's own `reqwest` client, so the crate's HTTP stacks stay out
 //! of the image. A push service answering 404 or 410 means the browser is gone,
 //! and the subscription goes with it.
+//!
+//! A store app's row carries a device token instead (`transport` is `apns` or
+//! `fcm`), and [`crate::native_push`] delivers the same reminder through Apple's
+//! or Google's service. The log, the recomputation and the pruning are shared.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -29,6 +33,7 @@ use web_push::{
 };
 
 use crate::config::{Config, SendMode};
+use crate::native_push::{NativeError, NativePush};
 use crate::posthog::PostHog;
 use crate::reminders::{
     due_reminders, read_trip_facts, Clock, DueReminder, ReminderKind, Subscription,
@@ -81,8 +86,11 @@ pub struct PushSender {
     posthog: Option<PostHog>,
     http: Client,
     /// The VAPID private key, base64url without padding — the form
-    /// `scripts/generate-vapid-keys.mjs` prints.
-    vapid_private_key: String,
+    /// `scripts/generate-vapid-keys.mjs` prints. `None` when only the store
+    /// apps are configured.
+    vapid_private_key: Option<String>,
+    /// APNs and FCM, for the store apps' device tokens.
+    native: NativePush,
     /// The `sub` claim: a `mailto:` the push service can reach on abuse.
     vapid_subject: String,
     mode: SendMode,
@@ -131,10 +139,14 @@ fn event_properties(subscription: &Subscription, reminder: &DueReminder) -> serd
 // ============================================================================
 
 impl PushSender {
-    /// `None` when no VAPID key is configured: the service then previews links
-    /// and sends nothing, as before.
+    /// `None` when neither a VAPID key nor a store app's push credential is
+    /// configured: the service then previews links and sends nothing, as before.
     pub fn new(config: &Config, source: Arc<TripSource>, posthog: Option<PostHog>) -> Option<Self> {
-        let vapid_private_key = config.vapid_private_key.clone()?;
+        let vapid_private_key = config.vapid_private_key.clone();
+        let native = NativePush::new(&config.native);
+        if vapid_private_key.is_none() && !native.is_configured() {
+            return None;
+        }
         Some(Self {
             source,
             posthog,
@@ -143,6 +155,7 @@ impl PushSender {
                 .build()
                 .ok()?,
             vapid_private_key,
+            native,
             vapid_subject: config.vapid_subject.clone(),
             mode: config.push_send_mode,
             eve_hour_utc: config.reminder_eve_hour_utc,
@@ -331,19 +344,55 @@ impl PushSender {
         }
     }
 
-    /// One encrypted, signed push to one browser.
+    /// One push to one device, through whichever service its row names.
     async fn deliver(
         &self,
         subscription: &Subscription,
         reminder: &DueReminder,
     ) -> Result<(), DeliveryError> {
-        let info = SubscriptionInfo::new(
-            subscription.endpoint.clone(),
-            subscription.p256dh.clone(),
-            subscription.auth.clone(),
-        );
+        let native = match subscription.transport.as_str() {
+            "apns" => Some(
+                self.native
+                    .send_apns(
+                        &self.http,
+                        &subscription.endpoint,
+                        &subscription.trip_id,
+                        reminder,
+                        PUSH_TTL_SECS,
+                    )
+                    .await,
+            ),
+            "fcm" => Some(
+                self.native
+                    .send_fcm(&self.http, &subscription.endpoint, reminder, PUSH_TTL_SECS)
+                    .await,
+            ),
+            _ => None,
+        };
+        match native {
+            Some(Ok(())) => Ok(()),
+            Some(Err(NativeError::Gone)) => Err(DeliveryError::Gone),
+            Some(Err(NativeError::Failed(reason))) => Err(DeliveryError::Failed(reason)),
+            None => self.deliver_web_push(subscription, reminder).await,
+        }
+    }
 
-        let mut signature = VapidSignatureBuilder::from_base64(&self.vapid_private_key, &info)
+    /// One encrypted, signed push to one browser.
+    async fn deliver_web_push(
+        &self,
+        subscription: &Subscription,
+        reminder: &DueReminder,
+    ) -> Result<(), DeliveryError> {
+        let Some(vapid_private_key) = &self.vapid_private_key else {
+            return Err(DeliveryError::Failed("no vapid key configured"));
+        };
+        let (Some(p256dh), Some(auth)) = (&subscription.p256dh, &subscription.auth) else {
+            return Err(DeliveryError::Failed("web push subscription without keys"));
+        };
+        let info =
+            SubscriptionInfo::new(subscription.endpoint.clone(), p256dh.clone(), auth.clone());
+
+        let mut signature = VapidSignatureBuilder::from_base64(vapid_private_key, &info)
             .map_err(|_| DeliveryError::Failed("vapid key unusable"))?;
         signature.add_claim("sub", self.vapid_subject.clone());
         let signature = signature
@@ -406,10 +455,13 @@ mod tests {
             id: "00000000-0000-4000-8000-000000000001".to_owned(),
             trip_id: "aaaaaaaa-0000-0000-0000-000000000001".to_owned(),
             person_id: Some("alice".to_owned()),
+            transport: "webpush".to_owned(),
             endpoint: "https://push.example.test/send/abc".to_owned(),
-            p256dh: "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM"
-                .to_owned(),
-            auth: "tBHItJI5svbpez7KI4CCXg".to_owned(),
+            p256dh: Some(
+                "BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM"
+                    .to_owned(),
+            ),
+            auth: Some("tBHItJI5svbpez7KI4CCXg".to_owned()),
             locale: "fr".to_owned(),
             analytics_id: analytics_id.map(str::to_owned),
         }

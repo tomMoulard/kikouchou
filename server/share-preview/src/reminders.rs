@@ -66,14 +66,25 @@ pub struct Subscription {
     pub id: String,
     pub trip_id: String,
     pub person_id: Option<String>,
+    /// `webpush`, `apns` or `fcm`: which sender the row needs. A row read
+    /// before the column existed is a browser's.
+    #[serde(default = "Subscription::web_push")]
+    pub transport: String,
+    /// A browser's push endpoint, or a store app's device token.
     pub endpoint: String,
-    pub p256dh: String,
-    pub auth: String,
+    /// Web Push only. Absent for a device token.
+    pub p256dh: Option<String>,
+    /// Web Push only. Absent for a device token.
+    pub auth: Option<String>,
     pub locale: String,
     pub analytics_id: Option<String>,
 }
 
 impl Subscription {
+    fn web_push() -> String {
+        "webpush".to_owned()
+    }
+
     pub fn language(&self) -> Language {
         Language::parse(&self.locale).unwrap_or(crate::i18n::DEFAULT_LANGUAGE)
     }

@@ -45,6 +45,8 @@ read.
 | `/t/<token>` | A 302 to the language from `Accept-Language` |
 | `/healthz` | `ok`, with no database behind it |
 | `/robots.txt` | Permissive |
+| `/.well-known/apple-app-site-association` | The iOS app-link file; see [The store apps](#the-store-apps) |
+| `/.well-known/assetlinks.json` | The Android app-link file |
 | `POST /push/send` | Sends one trip reminder; see [Trip reminders](#trip-reminders) |
 | anything else | 404, with the English generic card |
 
@@ -107,6 +109,28 @@ Generate the key pair once with `node scripts/generate-vapid-keys.mjs`. The
 public half is the app's `VITE_VAPID_PUBLIC_KEY`; the private half is this
 service's `VAPID_PRIVATE_KEY` and goes nowhere else.
 
+## The store apps
+
+The iOS and Android apps (see `plans/2026-09-26-native-apps-v1.md`) have no
+Web Push. Their row in `push_subscriptions` carries `transport` `apns` or
+`fcm`, and `endpoint` holds the device token instead of a browser endpoint.
+`src/native_push.rs` sends the same reminder, computed the same way, through
+Apple Push Notification service or Firebase Cloud Messaging:
+
+- APNs, with an ES256 provider token signed by the team's `.p8` key. A token
+  refused as `BadDeviceToken` on the production host is tried once on the
+  sandbox host, which is where a development build's token lives. `410` or
+  `Unregistered` deletes the subscription.
+- FCM v1, with an OAuth token bought with the service account's key. `404` or
+  `UNREGISTERED` deletes the subscription. Messages go to the app's
+  `trip-reminders` notification channel.
+
+The same process answers the two `/.well-known/` files, so a tap on a share
+link opens the installed app rather than this page. Both are built from the
+configuration and claim every path except the health check, `robots.txt` and
+the card images. Without `APPLE_TEAM_ID` or `ANDROID_CERT_SHA256` the matching
+file is a 404, and links open the browser as before.
+
 ## Database privileges
 
 `service_role` bypasses Row-Level Security, which is not the same as being
@@ -139,11 +163,19 @@ and `SELECT, INSERT, UPDATE` on `reminder_log`, granted in
 | `REMINDER_INTERVAL_SECONDS` | no | `3600` | Seconds between two passes (at least 60) |
 | `REMINDER_EVE_HOUR_UTC` | no | `17` | UTC hour from which "tomorrow" reminders go out |
 | `REMINDER_PICKUP_WINDOW_MINUTES` | no | `180` | How far ahead a pickup is announced |
+| `APPLE_TEAM_ID` | no | | Apple Developer team id. Names the iOS app in the app-link file and signs APNs tokens |
+| `IOS_BUNDLE_ID` | no | `app.kikouchou` | The iOS bundle id, and the APNs topic |
+| `APNS_KEY_ID` | no | | The id of the APNs `.p8` key |
+| `APNS_PRIVATE_KEY` | no | | The `.p8` key, PEM. Line breaks may be written `\n` |
+| `FCM_SERVICE_ACCOUNT_JSON` | no | | A service account with the Firebase Cloud Messaging role |
+| `ANDROID_PACKAGE` | no | `app.kikouchou` | The Android application id |
+| `ANDROID_CERT_SHA256` | no | | Comma-separated SHA-256 fingerprints of every key an installed APK can carry |
 
 **The service role key bypasses Row-Level Security.** Pass it at run time only.
 A build arg is readable with `docker history` by anyone who pulls the image.
 Nothing in this service logs it, echoes it, or puts it in a page. The same goes
-for `VAPID_PRIVATE_KEY` and `PUSH_WEBHOOK_SECRET`.
+for `VAPID_PRIVATE_KEY`, `PUSH_WEBHOOK_SECRET`, `APNS_PRIVATE_KEY` and
+`FCM_SERVICE_ACCOUNT_JSON`.
 
 ## Privacy
 
