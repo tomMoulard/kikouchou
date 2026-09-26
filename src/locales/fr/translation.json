@@ -659,6 +659,7 @@
     "myRidesDriving": "Vous conduisez",
     "myRidesTravel": "Vos propres voyages",
     "calendar": {
+      "shareTitle": "Ajoutez vos trajets à un agenda",
       "addRuns": "Ajouter mes trajets \u00e0 mon agenda",
       "pickup": "R\u00e9cup\u00e9rer {{passengers}} \u00e0 {{location}}",
       "pickupEmpty": "R\u00e9cup\u00e9ration \u00e0 {{location}}",
@@ -1540,6 +1541,13 @@
   },
   "auth": {
     "account": {
+      "deleteConfirm": "Supprimer le compte",
+      "deleteDescription": "Un voyage que vous partagez avec d'autres personnes reste à elles. Un voyage où vous êtes seul est supprimé du serveur. Les voyages de cet appareil restent ici et ne se synchronisent plus. Cette action est définitive.",
+      "deleteTitle": "Supprimer votre compte ?",
+      "deleteAction": "Supprimer mon compte",
+      "deleteHint": "Supprimer le compte l'efface du serveur. Les voyages de cet appareil restent ici.",
+      "deleteFailed": "Le compte n'a pas pu être supprimé. Vérifiez la connexion et réessayez.",
+      "deleted": "Votre compte est supprimé.",
       "title": "Compte",
       "description": "Utile uniquement pour partager un séjour",
       "notConfigured": "Cette version n'a pas de service de comptes : les séjours restent sur cet appareil.",
@@ -1570,7 +1578,7 @@
       "emailSent": "Consultez votre boîte de réception : le lien envoyé vous connecte sur cet appareil.",
       "useAnotherEmail": "Utiliser une autre adresse",
       "withWallet": "Continuer avec votre portefeuille {{chain}}",
-      "walletStatement": "Connexion à Kikoushou. Aucune transaction n'est approuvée.",
+      "walletStatement": "Connexion à Kikouchou. Aucune transaction n'est approuvée.",
       "signupDisabled": "Ce projet n'accepte pas de nouveaux comptes pour le moment. La connexion fonctionne toujours si vous en avez déjà un.",
       "noProviders": "Aucun moyen de connexion n'est activé sur ce projet actuellement.",
       "withPasskey": "Continuer avec une clé d'accès"
@@ -1774,6 +1782,8 @@
     "openTrip": "Ouvrir le séjour"
   },
   "reminders": {
+    "blockedNative": "Les notifications sont désactivées pour Kikouchou. Activez-les dans les réglages du téléphone, puis réessayez.",
+    "channelName": "Rappels de voyage",
     "region": "Rappels du séjour",
     "title": "Recevez un rappel avant le séjour",
     "description": "{{tripName}} : un rappel la veille du début, avant votre arrivée, et avant un trajet dont vous faites partie. Rien d'autre.",

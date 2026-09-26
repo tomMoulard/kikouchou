@@ -1,0 +1,2 @@
+/* The iOS permission prompts, in English. Shown by the system, not the app. */
+"NSCameraUsageDescription" = "Kikouchou uses the camera to scan a trip's QR code.";

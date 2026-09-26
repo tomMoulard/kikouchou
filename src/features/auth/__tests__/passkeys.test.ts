@@ -10,7 +10,7 @@
  * @module features/auth/__tests__/passkeys.test
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { isPasskeySupported } from '@/features/auth/passkeys';
 
@@ -87,5 +87,22 @@ describe('isPasskeySupported', () => {
     setSecureContext(true);
 
     expect(isPasskeySupported()).toBe(false);
+  });
+});
+
+describe('isPasskeySupported in a store app', () => {
+  it('is false: a passkey is bound to the website, and the web view is not it', async () => {
+    vi.resetModules();
+    vi.doMock('@capacitor/core', () => ({
+      Capacitor: { getPlatform: () => 'ios', isPluginAvailable: () => true },
+    }));
+    Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+    Object.defineProperty(window, 'PublicKeyCredential', { configurable: true, value: function PublicKeyCredential() {} });
+
+    const { isPasskeySupported: inApp } = await import('@/features/auth/passkeys');
+
+    expect(inApp()).toBe(false);
+    vi.doUnmock('@capacitor/core');
+    Reflect.deleteProperty(window, 'PublicKeyCredential');
   });
 });

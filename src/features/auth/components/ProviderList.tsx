@@ -100,7 +100,9 @@ export const ProviderList = memo(function ProviderList({
     (outcome: SignInOutcome): void => {
       switch (outcome.status) {
         case 'error':
-          setError(outcome.message);
+          // Empty when a store app's browser sheet failed without the provider
+          // saying why.
+          setError(outcome.message || t('errors.generic', 'Something went wrong'));
           return;
         case 'unavailable':
           setError(t('auth.errors.unavailable', 'Sign-in is not configured in this build.'));
@@ -110,6 +112,7 @@ export const ProviderList = memo(function ProviderList({
           return;
         default:
           // 'redirecting': the browser is leaving; nothing to do.
+          // 'cancelled': the user closed the sign-in sheet on purpose.
           return;
       }
     },
@@ -179,7 +182,7 @@ export const ProviderList = memo(function ProviderList({
           chain,
           t(
             'auth.signIn.walletStatement',
-            'Sign in to Kikoushou. This does not approve any transaction.',
+            'Sign in to Kikouchou. This does not approve any transaction.',
           ),
         );
       } catch (error) {

@@ -17,15 +17,26 @@
  * the truth the sender uses. They can drift — a subscription the push service
  * dropped is pruned server-side — and the next `enable` simply re-subscribes.
  *
+ * The store apps take the same two RPCs with a different subscription: an APNs
+ * or FCM device token from `lib/notifications/native-push`, stored where a
+ * browser's endpoint goes, so `unsubscribe_reminders` and the local record
+ * work unchanged.
+ *
  * @module lib/notifications/push
  */
 
 import { db } from '@/lib/db/database';
+import { isNativeApp } from '@/lib/platform';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import type { Json } from '@/lib/supabase/database.types';
 import { mapInviteError } from '@/lib/sync/invites';
 import type { Trip, TripId } from '@/types';
 
+import {
+  isNativePushAvailable,
+  registerNativePush,
+  unregisterNativePush,
+} from './native-push';
 import { getNotificationState, requestNotificationPermission } from './permission';
 
 // ============================================================================
@@ -79,6 +90,11 @@ export interface EnableRemindersOptions {
   readonly locale: string;
   /** The PostHog distinct id, so server events land on the same person. */
   readonly analyticsId?: string | undefined;
+  /**
+   * The Android notification channel's name, translated: what the user sees
+   * in the system settings next to the switch that silences reminders.
+   */
+  readonly channelName?: string | undefined;
 }
 
 // ============================================================================
@@ -115,6 +131,9 @@ export function vapidPublicKey(): string | undefined {
 export function isPushSupported(): boolean {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') {
     return false;
+  }
+  if (isNativeApp()) {
+    return isNativePushAvailable();
   }
   return (
     'serviceWorker' in navigator &&
@@ -213,7 +232,9 @@ export function getReminderState(tripId: string): ReminderState {
   if (!isPushSupported()) {
     return 'unsupported';
   }
-  if (getNotificationState() === 'denied') {
+  // A store app's permission is the operating system's and can only be read
+  // asynchronously; a refusal shows up as `blocked` when the user tries.
+  if (!isNativeApp() && getNotificationState() === 'denied') {
     return 'blocked';
   }
   return readReminderSubscription(tripId) !== undefined ? 'on' : 'off';
@@ -305,12 +326,24 @@ export async function enableTripReminders(
   trip: Trip,
   options: EnableRemindersOptions,
 ): Promise<EnableRemindersResult> {
-  const publicKey = vapidPublicKey();
-  if (!isPushSupported() || publicKey === undefined) {
-    return { status: 'unsupported' };
-  }
   if (trip.viewerToken === undefined && trip.remoteTripId === undefined) {
     // Nothing on the server knows this trip, so nothing can remind about it.
+    return { status: 'unsupported' };
+  }
+
+  if (isNativeApp()) {
+    const registration = await registerNativePush(options.channelName ?? 'Trip reminders');
+    if (registration.status !== 'registered') {
+      return registration;
+    }
+    return registerWithServer(client, trip, options, {
+      endpoint: registration.subscription.token,
+      subscription: registration.subscription as unknown as Json,
+    });
+  }
+
+  const publicKey = vapidPublicKey();
+  if (!isPushSupported() || publicKey === undefined) {
     return { status: 'unsupported' };
   }
 
@@ -337,10 +370,31 @@ export async function enableTripReminders(
   }
 
   const payload = subscription.toJSON();
-  const common = {
+  if (typeof payload.endpoint !== 'string') {
+    return { status: 'error', message: 'unexpected reply' };
+  }
+  return registerWithServer(client, trip, options, {
+    endpoint: payload.endpoint,
     // `PushSubscriptionJSON` is plain data — an endpoint, a time, two keys —
     // and that is what the function stores.
     subscription: payload as unknown as Json,
+  });
+}
+
+/**
+ * Hands a subscription to the server and remembers it on this device.
+ *
+ * @param subscription.endpoint - The browser endpoint, or the device token
+ * @param subscription.subscription - What `store_push_subscription` reads
+ */
+async function registerWithServer(
+  client: TypedSupabaseClient,
+  trip: Trip,
+  options: EnableRemindersOptions,
+  subscription: { readonly endpoint: string; readonly subscription: Json },
+): Promise<EnableRemindersResult> {
+  const common = {
+    subscription: subscription.subscription,
     ...(options.personId !== undefined ? { person_id: options.personId } : {}),
     locale: options.locale.toLowerCase().startsWith('fr') ? 'fr' : 'en',
     ...(options.analyticsId !== undefined ? { analytics_id: options.analyticsId } : {}),
@@ -360,12 +414,12 @@ export async function enableTripReminders(
   if (error) {
     return mapRpcError(error);
   }
-  if (typeof data !== 'string' || typeof payload.endpoint !== 'string') {
+  if (typeof data !== 'string') {
     return { status: 'error', message: 'unexpected reply' };
   }
 
   writeReminderSubscription(trip.id, {
-    endpoint: payload.endpoint,
+    endpoint: subscription.endpoint,
     subscriptionId: data,
     enabledAt: new Date().toISOString(),
     ...(trip.remoteTripId !== undefined ? { remoteTripId: trip.remoteTripId } : {}),
@@ -419,7 +473,9 @@ export async function disableTripReminders(
 
   clearReminderSubscription(tripId);
 
-  if (!anyOtherTripSubscribed(tripId) && isPushSupported()) {
+  if (!anyOtherTripSubscribed(tripId) && isNativeApp()) {
+    await unregisterNativePush();
+  } else if (!anyOtherTripSubscribed(tripId) && isPushSupported()) {
     try {
       const registration = await navigator.serviceWorker.getRegistration();
       const subscription = await registration?.pushManager.getSubscription();

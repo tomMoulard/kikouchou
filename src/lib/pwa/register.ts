@@ -12,6 +12,10 @@
  * the page once a new worker has activated. {@link watchForUpdates} supplies
  * the other: finding out that there is one.
  *
+ * The store apps register nothing. Their files are already on the device, a
+ * WKWebView refuses a worker outside App-Bound Domains anyway, and a new build
+ * reaches them through the store rather than through `autoUpdate`.
+ *
  * Kept apart from the watcher because importing the virtual module drags in the
  * whole plugin, which only exists inside a Vite build.
  *
@@ -19,6 +23,8 @@
  */
 
 import { registerSW } from 'virtual:pwa-register';
+
+import { isNativeApp } from '@/lib/platform';
 
 import { watchForUpdates } from './update-check';
 
@@ -29,6 +35,9 @@ import { watchForUpdates } from './update-check';
  * off — so it never competes with the app's own chunks for the first paint.
  */
 export function registerServiceWorker(): void {
+  if (isNativeApp()) {
+    return;
+  }
   registerSW({
     onRegisteredSW: (_swUrl, registration) => {
       if (registration) {

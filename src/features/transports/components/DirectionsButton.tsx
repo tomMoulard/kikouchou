@@ -11,6 +11,7 @@ import { Navigation } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { openExternalUrl } from '@/lib/native/external-links';
 
 // ============================================================================
 // Types
@@ -203,8 +204,8 @@ export const DirectionsButton = memo(function DirectionsButton({
 
   // Handle button click
   const handleClick = useCallback(() => {
-    // Open in new tab (on mobile, this will trigger native app)
-    window.open(directionsUrl, '_blank', 'noopener,noreferrer');
+    // A new tab on the web, the Maps app in a store app.
+    openExternalUrl(directionsUrl);
   }, [directionsUrl]);
 
   // Button label

@@ -53,6 +53,7 @@ function authState(overrides: Partial<AuthContextValue> = {}): AuthContextValue 
     signInWithPasskey: vi.fn(async () => ({ status: 'signed-in' as const })),
     registerPasskey: vi.fn(async () => ({ status: 'enrolled' as const })),
     signOut: vi.fn(async () => undefined),
+    deleteAccount: vi.fn(async () => true),
     lastAuthError: null,
     ...overrides,
   };
@@ -228,6 +229,32 @@ describe('the email form', () => {
     });
     expect(field).toHaveAttribute('aria-invalid', 'true');
     expect(field).toHaveAccessibleDescription('email rate limit exceeded');
+  });
+});
+
+describe('a store app\'s browser sheet', () => {
+  it('re-enables the buttons quietly when the sheet was closed', async () => {
+    const signInWithProvider = vi.fn(async () => ({ status: 'cancelled' as const }));
+    mockedUseAuth.mockReturnValue(authState({ signInWithProvider }));
+    discovered({ oauth: ['google'] });
+
+    render(<ProviderList />, { withProviders: false });
+    const button = screen.getByRole('button', { name: continueWith('Google') });
+    await userEvent.click(button);
+
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('shows a generic error when the sheet failed without the provider saying why', async () => {
+    const signInWithProvider = vi.fn(async () => ({ status: 'error' as const, message: '' }));
+    mockedUseAuth.mockReturnValue(authState({ signInWithProvider }));
+    discovered({ oauth: ['google'] });
+
+    render(<ProviderList />, { withProviders: false });
+    await userEvent.click(screen.getByRole('button', { name: continueWith('Google') }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('errors.generic'));
   });
 });
 

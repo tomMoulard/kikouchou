@@ -26,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { captureEvent } from '@/lib/posthog';
 import { useAuth } from '@/features/auth/AuthContext';
 import { getCurrentLanguage } from '@/lib/i18n';
+import { resolveLinkOrigin } from '@/lib/platform';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import {
   buildInviteUrl,
@@ -118,7 +119,7 @@ export function useTripShareLink(
       setState({
         kind: 'invite',
         token: viewerToken,
-        url: buildInviteUrl(window.location.origin, import.meta.env.BASE_URL || '/', viewerToken, {
+        url: buildInviteUrl(resolveLinkOrigin(window.location.origin), import.meta.env.BASE_URL || '/', viewerToken, {
           origin: import.meta.env.VITE_SHARE_ORIGIN ?? '',
           language: getCurrentLanguage(),
         }),
@@ -244,7 +245,7 @@ export function useTripShareLink(
         // language the person sharing the trip is using, which is the best
         // available guess at the language of the chat it is pasted into.
         url: buildInviteUrl(
-          window.location.origin,
+          resolveLinkOrigin(window.location.origin),
           import.meta.env.BASE_URL || '/',
           token,
           {

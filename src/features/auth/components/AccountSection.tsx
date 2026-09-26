@@ -14,7 +14,8 @@
  *   a passkey. That last one lives here rather than on the sign-in page for a
  *   structural reason: a passkey can only be enrolled by somebody who is
  *   already signed in, and until one exists the "Continue with a passkey"
- *   button on `/signin` has nothing to find.
+ *   button on `/signin` has nothing to find. The account can be deleted from
+ *   here too, which both app stores require.
  *
  * @module features/auth/components/AccountSection
  */
@@ -25,6 +26,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, LogOut } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { DeleteAccount } from '@/features/auth/components/DeleteAccount';
 import { PasskeyEnrolment } from '@/features/auth/components/PasskeyEnrolment';
 import { useAuth } from '@/features/auth/AuthContext';
 
@@ -121,6 +123,7 @@ export const AccountSection = memo(function AccountSection(): ReactElement {
       {/* Mounted only in this branch, so the settings lookup it needs happens
           for a signed-in visitor and nobody else. */}
       <PasskeyEnrolment />
+      <DeleteAccount />
     </div>
   );
 });

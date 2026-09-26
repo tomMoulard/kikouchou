@@ -38,9 +38,10 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
-# Generated from the SVGs by scripts/generate-icons.js. favicon.ico is not:
-# it is the brand kit's 16/32/48 file, committed as a source.
-public/icons/
+# The PNGs are generated from the SVGs by `bun run generate-icons`. The SVGs
+# are the sources and are tracked. favicon.ico is not generated: it is the
+# brand kit's 16/32/48 file, committed as a source.
+public/icons/*.png
 .opencode/node_modules
 .omx/
 

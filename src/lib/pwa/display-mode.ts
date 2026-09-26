@@ -15,11 +15,16 @@
  *   app opened from the Home Screen. Kept because older iOS builds set it
  *   without matching the media query.
  *
+ * A third signal comes first: a store app (`lib/platform`) is installed by
+ * definition, whatever its web view reports for the media query.
+ *
  * Read defensively: jsdom stubs `matchMedia`, some in-app browsers ship a stub
  * that throws, and a module that reads this at import time must never throw.
  *
  * @module lib/pwa/display-mode
  */
+
+import { isNativeApp } from '@/lib/platform';
 
 // ============================================================================
 // Type Definitions
@@ -62,6 +67,10 @@ export const STANDALONE_MEDIA_QUERY = '(display-mode: standalone)';
 export function readDisplayMode(): DisplayMode {
   if (typeof window === 'undefined') {
     return 'browser';
+  }
+
+  if (isNativeApp()) {
+    return 'standalone';
   }
 
   try {

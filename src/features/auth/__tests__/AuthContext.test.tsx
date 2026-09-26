@@ -65,6 +65,7 @@ vi.mock('@/lib/supabase/auth-callback', async (importOriginal) => ({
     .isMissingCodeVerifier,
   consumeAuthCode: vi.fn(() => null),
   getCapturedAuthError: vi.fn(() => null),
+  onAuthCallback: vi.fn(() => () => undefined),
 }));
 
 // Only the reload is faked. `isModuleLoadError` stays real, so these tests pin
@@ -1180,12 +1181,12 @@ describe('signInWithWallet', () => {
     await waitForSubscription(client);
 
     await expect(
-      result.current.signInWithWallet('solana', 'Sign in to Kikoushou.'),
+      result.current.signInWithWallet('solana', 'Sign in to Kikouchou.'),
     ).resolves.toEqual({ status: 'signed-in' });
 
     expect(client.auth.signInWithWeb3).toHaveBeenCalledWith({
       chain: 'solana',
-      statement: 'Sign in to Kikoushou.',
+      statement: 'Sign in to Kikouchou.',
     });
   });
 
@@ -1195,7 +1196,7 @@ describe('signInWithWallet', () => {
 
     const { result } = renderHook(() => useAuth(), { wrapper });
     await waitForSubscription(client);
-    await result.current.signInWithWallet('ethereum', 'Sign in to Kikoushou.');
+    await result.current.signInWithWallet('ethereum', 'Sign in to Kikouchou.');
 
     expect(client.auth.signInWithWeb3.mock.calls[0]?.[0].chain).toBe('ethereum');
   });
@@ -1210,7 +1211,7 @@ describe('signInWithWallet', () => {
     await waitForSubscription(client);
 
     await expect(
-      result.current.signInWithWallet('solana', 'Sign in to Kikoushou.'),
+      result.current.signInWithWallet('solana', 'Sign in to Kikouchou.'),
     ).resolves.toEqual({ status: 'error', message: 'User rejected the request' });
 
     // Nothing navigated, so the buttons have to come back.

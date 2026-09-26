@@ -1,0 +1,2 @@
+/* Les demandes d'autorisation iOS, en français. Affichées par le système. */
+"NSCameraUsageDescription" = "Kikouchou utilise l'appareil photo pour scanner le code QR d'un voyage.";

@@ -18,6 +18,7 @@ import { InstallPrompt, OfflineIndicator } from '@/components/pwa';
 import { PetMount } from '@/features/pet/components/PetMount';
 import { applyStoredPalette } from '@/lib/palette';
 import { isTripCreationPath } from '@/lib/pwa/trip-creation-path';
+import { NativeShell } from '@/components/native/NativeShell';
 import { applyStoredTheme, THEME_STORAGE_KEY } from '@/lib/theme';
 import { router } from '@/router';
 
@@ -219,6 +220,11 @@ function App(): ReactElement {
         and drop it back at the top of the screen. It reads no trip.
       */}
       <PetMount />
+      {/*
+        The store apps' links, back button, system bars and reminder taps.
+        Renders nothing, and does nothing on the website.
+      */}
+      <NativeShell />
       </InstallPromptProvider>
     </ThemeProvider>
   );

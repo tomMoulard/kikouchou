@@ -202,6 +202,7 @@ describe('ReminderCard', () => {
         personId: 'person-alice',
         locale: 'fr',
         analyticsId: 'ph-device',
+        channelName: 'Trip reminders',
       });
     });
     expect(notify.success).toHaveBeenCalledWith('Reminders are on for this trip');
@@ -605,6 +606,7 @@ describe('ReminderCard answers', () => {
         personId: 'person-alice',
         locale: 'fr',
         analyticsId: undefined,
+        channelName: 'Trip reminders',
       });
     });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();

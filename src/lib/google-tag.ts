@@ -47,6 +47,7 @@
  */
 
 import { isDevelopmentHost } from '@/lib/analytics/development-host';
+import { isNativeApp } from '@/lib/platform';
 
 // ============================================================================
 // Type Definitions
@@ -198,6 +199,10 @@ if (!containerId && !adsId) {
   }
 } else if (typeof window === 'undefined' || typeof document === 'undefined') {
   // No DOM: a unit test that imported a module that imported this one.
+} else if (isNativeApp()) {
+  // Never in the store apps, for the reason `lib/meta-pixel` gives: an ad tag
+  // there is cross-app tracking, and the container would run code in the app
+  // that no store review ever saw.
 } else if (isDevelopmentHost() && !allowLocalhost) {
   console.info(
     '[google-tag] Disabled on %s. A dev server would report real traffic to ' +

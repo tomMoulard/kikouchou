@@ -30,6 +30,7 @@
  */
 
 import { isDevelopmentHost } from '@/lib/analytics/development-host';
+import { isNativeApp } from '@/lib/platform';
 
 // ============================================================================
 // Type Definitions
@@ -153,6 +154,11 @@ if (!pixelId) {
   }
 } else if (typeof window === 'undefined' || typeof document === 'undefined') {
   // No DOM: a unit test that imported a module that imported this one.
+} else if (isNativeApp()) {
+  // Never in the store apps. A pixel that follows somebody across apps is
+  // tracking in Apple's sense (App Store guideline 5.1.2) and needs the App
+  // Tracking Transparency prompt; the stores count their own installs. The
+  // pixel measures the website, and only the website.
 } else if (isDevelopmentHost() && !allowLocalhost) {
   // The guard that does not have to be remembered by each new entry point.
   // Blanking the id in every config file is necessary and not sufficient: a

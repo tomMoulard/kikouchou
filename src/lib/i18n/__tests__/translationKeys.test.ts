@@ -69,9 +69,11 @@ const SRC_DIR = resolve(process.cwd(), 'src'),
  /**
   * Escape hatch for a dotted literal that merely happens to start with a
   * namespace name (an analytics event id, say) and is not a translation key.
-  * Empty today; add here rather than weakening the scan.
+  * Add here rather than weakening the scan.
+  *
+  * `app.kikouchou` is the store apps' id and URL scheme (`lib/platform`).
   */
- ALLOWED_NON_KEYS = new Set<string>(),
+ ALLOWED_NON_KEYS = new Set<string>(['app.kikouchou']),
 
  /**
   * Call sites that resolve a translation. `safeTranslate` is the

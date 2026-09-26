@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kikouchou</string>
+    <string name="title_activity_main">Kikouchou</string>
+    <string name="package_name">app.kikouchou</string>
+    <string name="custom_url_scheme">app.kikouchou</string>
+</resources>

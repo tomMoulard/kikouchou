@@ -119,6 +119,16 @@ interface ImportMetaEnv {
    */
   readonly VITE_SHARE_ORIGIN?: string;
 
+  /**
+   * The website's origin, `https://app.kikouchou.app` when absent.
+   *
+   * The store apps load from `capacitor://localhost` or `https://localhost`,
+   * which nobody else can open, so every link they hand out and every sign-in
+   * return address is built from this instead (`lib/platform`). A staging
+   * build of the apps points it at the staging site.
+   */
+  readonly VITE_PUBLIC_APP_ORIGIN?: string;
+
   /** Version string shown in Settings; set by CI from the ref and SHA. */
   readonly VITE_APP_VERSION?: string;
 }

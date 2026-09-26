@@ -118,7 +118,7 @@ export const FALLBACK_AUTH_SETTINGS: AuthSettings = {
 };
 
 /** Cache key prefix; the project URL is appended. */
-const CACHE_KEY_PREFIX = 'kikoushou-auth-settings:';
+const CACHE_KEY_PREFIX = 'kikouchou-auth-settings:';
 
 // ============================================================================
 // Parsing

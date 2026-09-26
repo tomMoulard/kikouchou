@@ -163,6 +163,11 @@ additional_redirect_urls = [
   "http://localhost:5173",
   "http://localhost:5173/**",
   "https://app.kikouchou.app/**",
+  # The store apps' OAuth return: the browser sheet hands the code back to the
+  # app through its own URL scheme (src/lib/platform, NATIVE_AUTH_CALLBACK_URL).
+  # Their magic link returns to https://app.kikouchou.app/auth/native, which the
+  # line above already allows.
+  "app.kikouchou://auth/callback",
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
@@ -200,7 +205,7 @@ enabled = true
 # the account. `rp_origins` has to name the dev server exactly — the port
 # included — or the browser refuses the ceremony with a mismatch.
 [auth.webauthn]
-rp_display_name = "Kikoushou"
+rp_display_name = "Kikouchou"
 rp_id = "localhost"
 rp_origins = ["http://localhost:5173"]
 
@@ -532,9 +537,10 @@ site_url = "https://app.kikouchou.app/"
 additional_redirect_urls = [
   "http://localhost:5173/**",
   "https://app.kikouchou.app/**",
+  "app.kikouchou://auth/callback",
 ]
 
 [remotes.production.auth.webauthn]
-rp_display_name = "Kikoushou"
+rp_display_name = "Kikouchou"
 rp_id = "app.kikouchou.app"
 rp_origins = ["https://app.kikouchou.app"]

@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { type ManifestOptions, VitePWA } from 'vite-plugin-pwa'
 
+import { appleAppSiteAssociation, assetLinks } from './app-links'
 import { HERE_MANIFEST_FILENAME, withoutStartUrl } from './src/lib/pwa/manifest-variants'
 
 // The app is served from the root of its own host — `app.kikouchou.app` on
@@ -151,6 +152,17 @@ const webAppManifest: Partial<ManifestOptions> = {
   // than opening a second one. Every window shares one IndexedDB, and a second
   // one onto the same trip is a second Yjs session doing the same work.
   launch_handler: { client_mode: 'navigate-existing' },
+  // The SVGs for browsers that take them, PNGs for those that do not (Samsung
+  // Internet, older Chromium, the Play Store listing a PWA through Bubblewrap),
+  // and a monochrome silhouette that Android tints for themed icons.
+  //
+  // A manifest cannot pick an icon by light or dark appearance: no `purpose` or
+  // `media` exists for that. The icon here is the brand kit's bright mark on
+  // Nuit; its light and transparent variants (`public/icons/icon-light.svg`,
+  // `icon-transparent.svg`) are used where a platform does choose: the iOS
+  // app's icon appearances, the Android app's adaptive icon and splash, and
+  // the favicon, which switches its own colours. The variants come from
+  // `scripts/generate-app-icons.js`.
   icons: [
     {
       src: 'icons/icon.svg',
@@ -182,7 +194,31 @@ const webAppManifest: Partial<ManifestOptions> = {
       type: 'image/png',
       purpose: 'maskable',
     },
+    {
+      src: 'icons/icon-monochrome.svg',
+      sizes: 'any',
+      type: 'image/svg+xml',
+      purpose: 'monochrome',
+    },
+    {
+      src: 'icons/icon-monochrome-512.png',
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'monochrome',
+    },
   ],
+  // The store apps. Chrome offers the Play app on a phone that has it listed
+  // here, and `prefer_related_applications: false` keeps the PWA install too:
+  // the website stays a first-class way to use Kikouchou.
+  related_applications: [
+    {
+      platform: 'play',
+      url: 'https://play.google.com/store/apps/details?id=app.kikouchou',
+      id: 'app.kikouchou',
+    },
+    { platform: 'f-droid', url: 'https://f-droid.org/packages/app.kikouchou/', id: 'app.kikouchou' },
+  ],
+  prefer_related_applications: false,
 }
 
 /**
@@ -203,6 +239,72 @@ function hereManifest(): Plugin {
         fileName: HERE_MANIFEST_FILENAME,
         source: JSON.stringify(withoutStartUrl(webAppManifest), null, 2),
       })
+    },
+  }
+}
+
+/**
+ * Writes the files that let a tap on an `app.kikouchou.app` link open the
+ * store app: `/.well-known/apple-app-site-association` for iOS and
+ * `/.well-known/assetlinks.json` for Android (`app-links.ts`).
+ *
+ * The ids come from the build environment, `APPLE_TEAM_ID` and
+ * `ANDROID_CERT_SHA256` (comma-separated), which `deploy.yml` sets. A build
+ * without them writes neither file, and links keep opening the browser.
+ */
+function appLinkFiles(): Plugin {
+  return {
+    name: 'kikouchou:app-link-files',
+    apply: 'build',
+    generateBundle() {
+      const teamId = process.env.APPLE_TEAM_ID?.trim()
+      const fingerprints = (process.env.ANDROID_CERT_SHA256 ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter((value) => value !== '')
+      if (teamId) {
+        this.emitFile({
+          type: 'asset',
+          fileName: '.well-known/apple-app-site-association',
+          source: JSON.stringify(appleAppSiteAssociation(teamId)),
+        })
+      }
+      if (fingerprints.length > 0) {
+        this.emitFile({
+          type: 'asset',
+          fileName: '.well-known/assetlinks.json',
+          source: JSON.stringify(assetLinks(fingerprints)),
+        })
+      }
+    },
+  }
+}
+
+/**
+ * Safari's own banner offering the App Store app, on the website only.
+ *
+ * `IOS_APP_STORE_ID` is the numeric id App Store Connect gives the app; a
+ * build without it adds nothing. The banner installs with one tap, which is the
+ * only kind of install offer this app makes (see `AGENTS.md`). Inside the store
+ * app the same `index.html` loads in a web view, where Safari's banner does not
+ * exist, so the tag is inert there.
+ */
+function smartAppBanner(): Plugin {
+  return {
+    name: 'kikouchou:smart-app-banner',
+    apply: 'build',
+    transformIndexHtml() {
+      const appStoreId = process.env.IOS_APP_STORE_ID?.trim()
+      if (!appStoreId || !/^\d+$/.test(appStoreId)) {
+        return []
+      }
+      return [
+        {
+          tag: 'meta',
+          attrs: { name: 'apple-itunes-app', content: `app-id=${appStoreId}` },
+          injectTo: 'head',
+        },
+      ]
     },
   }
 }
@@ -273,6 +375,8 @@ export default defineConfig({
     tailwindcss(),
     react(),
     hereManifest(),
+    appLinkFiles(),
+    smartAppBanner(),
     VitePWA({
       registerType: 'autoUpdate',
       // Registered by `lib/pwa/register` instead of by the script this would

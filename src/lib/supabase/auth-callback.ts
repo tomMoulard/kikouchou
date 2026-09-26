@@ -26,6 +26,16 @@
  * authorization code that has already been spent, and the code never lingers in
  * the address bar or in browser history.
  *
+ * ## The store apps
+ *
+ * Inside the iOS and Android apps the provider does not return to this
+ * document at all. The sign-in runs in a system browser sheet, which sends the
+ * code back to the app as a link (`app.kikouchou://auth/callback?code=…`, or a
+ * universal link for the email). That link reaches the page as an event, long
+ * after import, so {@link deliverAuthCallbackUrl} hands it to whoever
+ * subscribed with {@link onAuthCallback}. The PKCE verifier is in this web
+ * view's storage, where the sign-in started, so the exchange works the same.
+ *
  * @module lib/supabase/auth-callback
  */
 
@@ -154,5 +164,97 @@ export function isMissingCodeVerifier(message: string | null | undefined): boole
 /** The provider's error for this page load, if it sent one instead of a code. */
 export function getCapturedAuthError(): string | null {
   return captured.error;
+}
+
+// ============================================================================
+// Callbacks that arrive after load (store apps)
+// ============================================================================
+
+/** A provider's answer, delivered to the page as a link rather than a load. */
+export interface DeliveredAuthCallback {
+  readonly code: string | null;
+  readonly error: string | null;
+}
+
+type AuthCallbackListener = (callback: DeliveredAuthCallback) => void;
+
+const listeners = new Set<AuthCallbackListener>();
+
+/**
+ * Codes already handed to a listener. The same link can arrive twice: once
+ * from `App.getLaunchUrl()` on a cold start and once as `appUrlOpen`.
+ */
+const deliveredCodes = new Set<string>();
+
+/**
+ * Answers that arrived before anybody subscribed. A cold start from a sign-in
+ * link reads the launch URL before `AuthProvider` has mounted.
+ */
+const pending: DeliveredAuthCallback[] = [];
+
+/**
+ * Reads the auth answer out of a link, if it carries one.
+ *
+ * @param url - The full link the operating system opened the app with
+ */
+export function readAuthCallbackUrl(url: string): DeliveredAuthCallback | null {
+  let params: URLSearchParams;
+  try {
+    params = new URL(url).searchParams;
+  } catch {
+    return null;
+  }
+  const code = params.get('code');
+  const error = params.get('error_description') ?? params.get('error');
+  if (code === null && error === null) {
+    return null;
+  }
+  return { code, error };
+}
+
+/**
+ * Hands a link's auth answer to the subscribed listeners.
+ *
+ * @param url - The full link the operating system opened the app with
+ * @returns Whether the link carried an auth answer
+ */
+export function deliverAuthCallbackUrl(url: string): boolean {
+  const callback = readAuthCallbackUrl(url);
+  if (callback === null) {
+    return false;
+  }
+  if (callback.code !== null) {
+    if (deliveredCodes.has(callback.code)) {
+      return true;
+    }
+    deliveredCodes.add(callback.code);
+  }
+  if (listeners.size === 0) {
+    pending.push(callback);
+    return true;
+  }
+  for (const listener of listeners) {
+    try {
+      listener(callback);
+    } catch (error: unknown) {
+      console.error('[auth] callback listener failed:', error);
+    }
+  }
+  return true;
+}
+
+/**
+ * Subscribes to auth answers that arrive as links.
+ *
+ * @returns The unsubscribe function
+ */
+export function onAuthCallback(listener: AuthCallbackListener): () => void {
+  listeners.add(listener);
+  for (const callback of pending.splice(0)) {
+    listener(callback);
+  }
+  return () => {
+    listeners.delete(listener);
+  };
 }
 

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- A tap on a Kikouchou link opens the app rather than the browser.
+                 Verified against /.well-known/assetlinks.json on each host, so
+                 no chooser appears. The website's paths are the ones in
+                 app-links.ts at the repository root, which a unit test holds
+                 this list to; the root stays with the website, where a web
+                 sign-in returns. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="app.kikouchou.app" />
+                <data android:pathPrefix="/join/" />
+                <data android:pathPrefix="/t/" />
+                <data android:pathPrefix="/template/" />
+                <data android:pathPrefix="/share/" />
+                <data android:pathPrefix="/trip/" />
+                <data android:pathPrefix="/trips" />
+                <data android:pathPrefix="/groups" />
+                <data android:pathPrefix="/settings" />
+                <data android:pathPrefix="/signin" />
+                <data android:pathPrefix="/auth/native" />
+            </intent-filter>
+
+            <!-- The preview service's links: every path is an invite or a template. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="share.kikouchou.app" />
+            </intent-filter>
+
+            <!-- The OAuth browser sheet returns here: app.kikouchou://auth/callback. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="@string/custom_url_scheme" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Scanning a trip's QR code. Asked for when the scanner opens, never at launch. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Trip reminders (Android 13 and later ask for it from the reminder card). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- A phone with no camera can still install the app. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+</manifest>

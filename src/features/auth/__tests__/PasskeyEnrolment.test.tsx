@@ -50,6 +50,7 @@ function authState(overrides: Partial<AuthContextValue> = {}): AuthContextValue 
     signInWithPasskey: vi.fn(async () => ({ status: 'signed-in' as const })),
     registerPasskey: vi.fn(async () => ({ status: 'enrolled' as const })),
     signOut: vi.fn(async () => undefined),
+    deleteAccount: vi.fn(async () => true),
     lastAuthError: null,
     ...overrides,
   };
