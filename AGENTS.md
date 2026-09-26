@@ -59,6 +59,14 @@ bun run db:types              # Regenerate src/lib/supabase/database.types.ts
 
 # Type check
 tsc -b                        # The ONLY form that checks anything (see below)
+
+# Store apps (Capacitor; see "Store apps" below)
+bun run build:native          # Web build, then copy it into ios/ and android/
+bunx cap open ios             # Xcode (macOS only)
+bunx cap open android         # Android Studio
+cd android && ./gradlew assemblePlayDebug                  # JDK 21 + Android SDK 36
+KIKOUCHOU_ANDROID_FLAVOR=fdroid bunx cap sync android && (cd android && ./gradlew assembleFdroidRelease)
+bun run generate-app-icons    # Every icon and splash, from one drawing
 ```
 
 > **`PW_CHANNEL=chrome` drives the machine's installed Chrome** instead of
@@ -1144,6 +1152,66 @@ share `dataLayer`. Same contract as `lib/meta-pixel`: guarded by
 - **No value and no currency from the app.** Set them on the conversion action
   in Google Ads, where changing them does not need a deploy.
 
+## Store apps: one build, three targets
+
+The website, the iOS app and the Android app are one `src/`. The two apps are
+Capacitor shells (`ios/`, `android/`, `capacitor.config.ts`) that load the same
+Vite build from files inside the app, not from `app.kikouchou.app`. The plan and
+the reasons are in `plans/2026-09-26-native-apps-v1.md`. The website stays, and
+every native difference is a branch on `lib/platform`: the web branch keeps
+what the website did before.
+
+- **The page origin in an app is `capacitor://localhost` or
+  `https://localhost`.** Nobody else can open it. A link handed to another
+  person goes through `resolveLinkOrigin()` / `getPublicAppOrigin()`, never
+  `window.location.origin`. `isDevelopmentHost()` knows a store app is not a
+  laptop, unless the build is a dev build.
+- **Sign-in leaves the web view.** Google refuses OAuth in an embedded web view,
+  so an app opens the provider in a browser sheet (`lib/native/oauth`) and gets
+  the code back on `app.kikouchou://auth/callback`; a magic link returns to
+  `/auth/native`, which the app claims as a universal link. The code exchange
+  happens in one place, `AuthProvider`'s `onAuthCallback` subscription.
+  Exchanging it anywhere else spends a single-use code twice. Passkeys and
+  wallets are not offered in the apps: a passkey is bound to the website.
+- **A link opens the app.** `app-links.ts` lists the website paths the apps
+  claim, `vite.config.ts` writes the `.well-known` files from it, and a unit
+  test holds `AndroidManifest.xml` to the same list. The root is never claimed:
+  a web sign-in returns there, and the app has no verifier for it. The share
+  host claims every path (`server/share-preview/src/app_links.rs`), and
+  `lib/native/deep-links` maps what arrives to a route.
+- **Push has three transports.** A browser stores a Web Push subscription, the
+  iPhone app an APNs token, the Android app an FCM token, all in
+  `push_subscriptions` with `transport` saying which. A token is a capability
+  exactly as an endpoint is: bounded on the way in, never returned to a client,
+  never in an event.
+- **A plugin can be missing.** The F-Droid build leaves the push plugin, and
+  with it Firebase, out. Ask `hasNativePlugin(name)`, never assume.
+- **No ad tracker in an app.** The Meta pixel and the Google tags return before
+  loading in a store app: that would be cross-app tracking, which needs Apple's
+  tracking prompt. PostHog runs, with a `platform` super property.
+- **Confirmations are toasts in an app.** A web view has no `Notification`, and
+  a system notification for "room saved" is noise in a phone's notification
+  centre. `notify` shows a short toast and taps the haptic engine instead.
+- **Files go to the share sheet.** `saveTextFile()` downloads on the web and
+  opens the system share sheet in an app, where `<a download>` does nothing.
+- **Icons come from the brand kit's mark.** `public/icons/icon.svg`,
+  `icon-maskable.svg`, `favicon.svg` and `favicon.ico` are the kit's own
+  files. `scripts/generate-app-icons.js` draws the rest from the same mark:
+  the light, transparent and monochrome variants, the iOS appearances
+  (default, dark, tinted) and the Android adaptive icon with its monochrome
+  layer and night splash screens. Edit the drawing, never a PNG.
+- **The assistant needs WebGPU.** Without it the navigation hides the entry and
+  the route redirects to the trips, on every target (decided on 2026-09-26).
+- **An account can be deleted from the app** (`delete_my_account()`, both
+  stores require it). A trip shared with other members goes to the earliest of
+  them; a trip nobody else is on is deleted; the device keeps its trips as
+  local ones.
+
+The native projects are checked by `.github/workflows/native.yml`, which also
+signs and publishes on a `v*` tag. The version the stores show is
+`package.json`'s, so bump it for every release; the Android `versionCode` is
+derived from it (`android/app/build.gradle`).
+
 ## Styling
 
 - Tailwind CSS utility classes only — no inline styles, no CSS modules.
@@ -1364,6 +1432,7 @@ src/
 ├── components/
 │   ├── ui/          # shadcn/ui primitives (do not edit directly)
 │   ├── shared/      # Layout, ErrorBoundary, LoadingState, PageHeader
+│   ├── native/      # NativeShell: the store apps' links, back button, bars
 │   └── pwa/         # InstallPrompt, OfflineIndicator
 ├── contexts/        # React Context providers + hooks
 ├── features/        # trips | rooms | persons | guest-groups | transports | activities | calendar | analytics | assistant | sharing | settings
@@ -1373,6 +1442,8 @@ src/
 │   ├── db/          # Dexie database, repositories, utils
 │   ├── i18n/        # i18next setup
 │   ├── map/         # Leaflet helpers
+│   ├── native/      # Store apps: deep links, OAuth sheet, files, external links
+│   ├── platform/    # Which target this is, and the public origin
 │   ├── posthog.ts   # Analytics client (undefined without env config)
 │   ├── supabase/    # Client, generated database.types.ts, auth callback
 │   ├── sync/        # Server sync: provider, cursors, outbox, invites, join,
@@ -1396,6 +1467,10 @@ supabase/
 e2e/
 ├── support/         # supabase-stub.ts: the REST surface, for the sync project
 └── *.spec.ts        # See playwright.config.ts for which project runs which
+ios/, android/       # The Capacitor shells; `public/` inside each is a copy of dist
+app-links.ts         # The website paths the store apps claim
+metadata/            # The F-Droid build recipe
+fastlane/metadata/   # Store listing text and icon, for F-Droid, IzzyOnDroid and Play
 ```
 
 For detailed convention rationale, see `CONVENTIONS.md`. For why the sync
