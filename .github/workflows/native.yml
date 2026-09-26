@@ -1,0 +1,366 @@
+name: Native apps
+
+# The iOS and Android store apps: the same Vite build as the website, inside
+# the Capacitor shells in ios/ and android/. See
+# plans/2026-09-26-native-apps-v1.md.
+#
+# What runs when:
+#
+# - A pull request that touches the shells, their configuration or the
+#   dependencies builds both apps, unsigned, so a change that breaks Gradle or
+#   Xcode is caught before it lands. The debug APK is attached to the run.
+# - A `v*` tag builds the signed release: an AAB and an APK for Play, an APK
+#   for F-Droid and sideloading, and an IPA for the App Store. It uploads the
+#   AAB to the Play internal track and the IPA to TestFlight, and attaches all
+#   four files to a GitHub release, which is where the F-Droid repository in
+#   deploy.yml and IzzyOnDroid read the APK from.
+# - A manual run does what a tag does, and publishes only when asked to.
+#
+# Every credential is optional. A missing one skips the step that needs it and
+# says so as a warning; it never fails the build, so a fork builds too.
+#
+# Secrets:
+#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+#   NEXT_PUBLIC_POSTHOG_KEY, NEXT_PUBLIC_POSTHOG_HOST   the web build, as deploy.yml
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+#   ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD              the Play upload key
+#   GOOGLE_SERVICES_JSON                                 Firebase, for push on Android
+#   PLAY_SERVICE_ACCOUNT_JSON                            uploads to Google Play
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8                App Store Connect API key
+# Variables (public, so not secrets):
+#   APPLE_TEAM_ID                                        the Apple Developer team
+#   PLAY_RELEASE_STATUS                                  `draft` until the first review passes
+
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'ios/**'
+      - 'capacitor.config.ts'
+      - 'app-links.ts'
+      - 'package.json'
+      - 'bun.lock'
+      - 'scripts/generate-app-icons.js'
+      - '.github/workflows/native.yml'
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Upload to Google Play and TestFlight, and create a GitHub release'
+        type: boolean
+        default: false
+
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # A release is a tag, or a manual run that asked to publish.
+  IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish == true }}
+
+jobs:
+  # ==========================================================================
+  # The web layer, built once for both shells
+  # ==========================================================================
+  web:
+    name: Web bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The version the stores show is package.json's. A tag that disagrees
+      # would ship a build whose number says something else.
+      - name: Check the tag matches package.json
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${version}."
+            exit 1
+          fi
+
+      - name: Generate icons
+        run: bun run generate-icons
+
+      # The same values the website is built with, minus the ad trackers: the
+      # store apps never load them (src/lib/meta-pixel.ts, src/lib/google-tag.ts).
+      - name: Build
+        run: bun run build
+        env:
+          VITE_APP_VERSION: ${{ github.ref_name }}@${{ github.sha }}
+          VITE_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
+          VITE_SHARE_ORIGIN: https://share.kikouchou.app
+          VITE_PUBLIC_APP_ORIGIN: https://app.kikouchou.app
+
+      # The maps stay out of the app bundle: nothing in a phone can read them,
+      # and the store listing would ship the source to anyone who unzips it.
+      - name: Strip source maps
+        run: find dist -name '*.map' -type f -delete
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-web
+          path: dist/
+          retention-days: 7
+
+  # ==========================================================================
+  # Android: Play (with Firebase) and F-Droid (without)
+  # ==========================================================================
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    needs: [web]
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # The Gradle projects of the Capacitor plugins live in node_modules.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-web
+          path: dist/
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Write the upload key
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.keystore"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/upload.keystore" >> "$GITHUB_ENV"
+
+      - name: Warn when the release is unsigned
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 == '' && env.IS_RELEASE == 'true' }}
+        run: echo "::warning title=Unsigned Android build::ANDROID_KEYSTORE_BASE64 is unset, so the release APKs are unsigned and Play will refuse the AAB."
+
+      - name: Write the Firebase configuration
+        if: ${{ env.GOOGLE_SERVICES_JSON != '' }}
+        run: echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+
+      - name: Warn when push is unconfigured
+        if: ${{ env.GOOGLE_SERVICES_JSON == '' }}
+        run: echo "::warning title=No push on Android::GOOGLE_SERVICES_JSON is unset, so this Play build registers for no reminders."
+
+      # One `cap sync` per flavor: F-Droid's leaves the push plugin, and with it
+      # Firebase, out of the Gradle project (capacitor.config.ts).
+      - name: Build the F-Droid flavor
+        env:
+          KIKOUCHOU_ANDROID_FLAVOR: fdroid
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          bunx cap sync android
+          cd android && ./gradlew --no-daemon assembleFdroidRelease
+
+      - name: Build the Play flavor
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          bunx cap sync android
+          cd android && ./gradlew --no-daemon assemblePlayDebug assemblePlayRelease bundlePlayRelease
+
+      - name: Collect the files
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          mkdir -p out
+          outputs=android/app/build/outputs
+          first() { find "$1" -maxdepth 1 -name "$2" -print -quit; }
+          cp "$(first "$outputs/apk/play/debug" '*.apk')" "out/kikouchou-${version}-debug.apk"
+          cp "$(first "$outputs/apk/play/release" '*.apk')" "out/kikouchou-${version}.apk"
+          cp "$(first "$outputs/apk/fdroid/release" '*.apk')" "out/kikouchou-${version}-fdroid.apk"
+          cp "$(first "$outputs/bundle/playRelease" '*.aab')" "out/kikouchou-${version}.aab"
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/
+          retention-days: 30
+
+      - name: Upload to the Play internal track
+        if: ${{ env.IS_RELEASE == 'true' && env.PLAY_SERVICE_ACCOUNT_JSON != '' && env.ANDROID_KEYSTORE_BASE64 != '' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: app.kikouchou
+          releaseFiles: out/*.aab
+          track: internal
+          # A new app accepts only draft releases until its first review.
+          status: ${{ vars.PLAY_RELEASE_STATUS || 'draft' }}
+
+  # ==========================================================================
+  # iOS
+  # ==========================================================================
+  ios:
+    name: iOS
+    runs-on: macos-latest
+    needs: [web]
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-web
+          path: dist/
+
+      - name: Sync the web layer into the shell
+        run: bunx cap sync ios
+
+      - name: Show the toolchain
+        run: xcodebuild -version
+
+      # No credentials needed: proves the project, the plugins and the Swift
+      # compile, on every pull request that touches them.
+      - name: Build for the simulator
+        if: ${{ env.IS_RELEASE != 'true' }}
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build
+
+      - name: Write the App Store Connect key
+        if: ${{ env.IS_RELEASE == 'true' && env.ASC_KEY_P8 != '' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8" >> "$GITHUB_ENV"
+
+      - name: Warn when the release cannot be signed
+        if: ${{ env.IS_RELEASE == 'true' && (env.ASC_KEY_P8 == '' || env.APPLE_TEAM_ID == '') }}
+        run: echo "::warning title=No iOS release::ASC_KEY_P8, ASC_KEY_ID, ASC_ISSUER_ID and the APPLE_TEAM_ID variable are needed to sign the IPA. Only the web build ran."
+
+      # Automatic signing with the API key: Xcode creates or fetches the
+      # certificate and the App Store profile itself, so no signing identity
+      # is kept in this repository or its secrets.
+      - name: Archive and export the IPA
+        if: ${{ env.IS_RELEASE == 'true' && env.ASC_KEY_P8 != '' && env.APPLE_TEAM_ID != '' }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          xcodebuild -project ios/App/App.xcodeproj -scheme App \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            MARKETING_VERSION="$version" \
+            CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" \
+            archive
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          mkdir -p out
+          cp "$RUNNER_TEMP"/export/*.ipa "out/kikouchou-${version}.ipa"
+
+      - name: Upload to TestFlight
+        if: ${{ env.IS_RELEASE == 'true' && env.ASC_KEY_P8 != '' && env.APPLE_TEAM_ID != '' }}
+        run: |
+          # altool looks for the key in ~/.appstoreconnect/private_keys.
+          mkdir -p ~/.appstoreconnect/private_keys
+          cp "$ASC_KEY_PATH" ~/.appstoreconnect/private_keys/
+          xcrun altool --upload-app --type ios --file out/*.ipa \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ env.IS_RELEASE == 'true' && env.ASC_KEY_P8 != '' && env.APPLE_TEAM_ID != '' }}
+        with:
+          name: ios
+          path: out/
+          retention-days: 30
+
+  # ==========================================================================
+  # The GitHub release: the files people download, and what F-Droid reads
+  # ==========================================================================
+  release:
+    name: GitHub release
+    runs-on: ubuntu-latest
+    needs: [android, ios]
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish == true }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          tag="v${version}"
+          # The debug APK is for testers on the run page, not for the release.
+          mapfile -t files < <(find artifacts -type f \( -name '*.apk' -o -name '*.aab' -o -name '*.ipa' \) ! -name '*-debug.apk')
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --clobber
+          else
+            gh release create "$tag" "${files[@]}" --title "Kikouchou ${version}" --generate-notes --verify-tag
+          fi

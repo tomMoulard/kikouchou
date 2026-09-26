@@ -56,6 +56,9 @@ jobs:
       # The public half of the VAPID pair, for trip reminders. Lifted here for
       # the same reason: the step below warns when it is missing.
       VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+      # The F-Droid repository's index key. Lifted here so the steps that need
+      # it can test it in an `if:`.
+      FDROID_KEYSTORE_BASE64: ${{ secrets.FDROID_KEYSTORE_BASE64 }}
       # The commit this deploy is actually built from. On a `workflow_run`,
       # `github.sha` is the default branch's head at trigger time rather than
       # the commit CI tested, so `app_version` and the PostHog release would
@@ -147,6 +150,17 @@ jobs:
           # renders and the calendar offers the install nudge instead. Nothing
           # breaks, so the step above says so out loud.
           VITE_VAPID_PUBLIC_KEY: ${{ env.VAPID_PUBLIC_KEY }}
+          # The store apps. These three are public by construction, so they are
+          # repository variables rather than secrets: the team id is in every
+          # IPA, the fingerprints are what `assetlinks.json` publishes, and the
+          # App Store id is in the listing's URL. `vite.config.ts` writes
+          # /.well-known/apple-app-site-association and assetlinks.json from
+          # the first two, so a tap on a Kikouchou link opens the installed app,
+          # and Safari's app banner from the third. Unset, links keep opening
+          # the browser, and nothing breaks.
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          ANDROID_CERT_SHA256: ${{ vars.ANDROID_CERT_SHA256 }}
+          IOS_APP_STORE_ID: ${{ vars.IOS_APP_STORE_ID }}
 
       # Rewrites the built bundles in place to carry a chunk ID, then uploads
       # the .map files to PostHog and deletes them. It must run between the
@@ -189,6 +203,20 @@ jobs:
         run: node scripts/carry-previous-assets.js dist
         env:
           DEPLOY_ORIGIN: https://app.kikouchou.app
+
+      # The self-hosted F-Droid repository, at app.kikouchou.app/fdroid/repo,
+      # built from the latest release's F-Droid APK (native.yml). Never fails
+      # the deploy: without its key or a release it is a warning.
+      - name: Install fdroidserver
+        if: ${{ env.FDROID_KEYSTORE_BASE64 != '' }}
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq fdroidserver
+
+      - name: Build the F-Droid repository
+        if: ${{ env.FDROID_KEYSTORE_BASE64 != '' }}
+        run: scripts/build-fdroid-repo.sh dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FDROID_KEYSTORE_PASSWORD: ${{ secrets.FDROID_KEYSTORE_PASSWORD }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
