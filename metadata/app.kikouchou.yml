@@ -1,0 +1,64 @@
+# The F-Droid build recipe, in fdroiddata's format.
+#
+# f-droid.org builds every app from source on its own servers. This file is
+# what gets submitted to https://gitlab.com/fdroid/fdroiddata as
+# metadata/app.kikouchou.yml, and what scripts/build-fdroid-repo.sh copies
+# into the self-hosted repository at https://app.kikouchou.app/fdroid/repo.
+#
+# The `fdroid` flavor is the Play app without Firebase Cloud Messaging, which
+# is not free software (capacitor.config.ts, android/app/build.gradle). It has
+# no trip reminders; everything else is the same app.
+#
+# f-droid.org accepts free software only. The project is MIT (LICENSE).
+
+Categories:
+  - Time
+  - Internet
+License: MIT
+AuthorName: Tom Moulard
+WebSite: https://www.kikouchou.app
+SourceCode: https://github.com/tomMoulard/kikouchou
+IssueTracker: https://github.com/tomMoulard/kikouchou/issues
+Changelog: https://github.com/tomMoulard/kikouchou/releases
+
+AutoName: Kikouchou
+
+# PostHog product analytics run in the app (src/lib/posthog.ts). They are
+# first-party and never shared with advertisers, but F-Droid asks for the flag
+# on any reporting of usage.
+AntiFeatures:
+  Tracking:
+    en-US: Reports how the app is used to the project's own PostHog analytics.
+
+RepoType: git
+Repo: https://github.com/tomMoulard/kikouchou.git
+
+Builds:
+  - versionName: 0.1.0
+    versionCode: 1000
+    commit: v0.1.0
+    subdir: android/app
+    sudo:
+      - apt-get update
+      - apt-get install -y nodejs npm
+      - npm install -g bun
+    init:
+      - cd ../..
+      - bun install --frozen-lockfile
+    prebuild:
+      - cd ../..
+      - bun run build
+      - KIKOUCHOU_ANDROID_FLAVOR=fdroid bunx cap sync android
+    scandelete:
+      - node_modules
+    gradle:
+      - fdroid
+    # The same variable the Gradle files read, so Google's services plugin
+    # never lands on the classpath.
+    env:
+      KIKOUCHOU_ANDROID_FLAVOR: fdroid
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9.]+$
+CurrentVersion: 0.1.0
+CurrentVersionCode: 1000
