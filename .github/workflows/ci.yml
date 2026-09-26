@@ -386,6 +386,15 @@ jobs:
       #
       # `needs: [build]` stays, so a broken build still fails before this runs.
 
+      # The icons are another matter. `public/icons/*.png` is generated, not
+      # committed, and the manifest lists the PNGs, so the build Playwright
+      # runs needs them or every icon URL falls through to index.html.
+      - name: Download generated icons
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-icons
+          path: public/icons/
+
       - name: Install Playwright browsers
         run: bunx playwright install --with-deps chromium
 
