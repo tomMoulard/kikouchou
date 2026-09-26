@@ -116,6 +116,8 @@ select is(
 -- by analogy with the 2026-08-31 migration. `store_push_subscription` was open
 -- to both roles on 2026-09-22; the anon half above would have caught that, and
 -- this half catches the other.
+-- `delete_my_account` joined the list on 2026-10-22: the store apps need an
+-- account to be deletable from inside the app (App Store 5.1.1(v), Google Play).
 select is(
   (select coalesce(string_agg(p.proname, ', ' order by p.proname), '')
    from pg_proc p
@@ -123,7 +125,7 @@ select is(
    where n.nspname = 'public'
      and p.prokind = 'f'
      and has_function_privilege('authenticated', p.oid, 'execute')),
-  'publish_trip_snapshot, read_shared_trip, read_trip_template, redeem_invite, revoke_invite, subscribe_member_reminders, subscribe_trip_reminders, unsubscribe_reminders',
+  'delete_my_account, publish_trip_snapshot, read_shared_trip, read_trip_template, redeem_invite, revoke_invite, subscribe_member_reminders, subscribe_trip_reminders, unsubscribe_reminders',
   'authenticated can execute exactly the doors a signed-in client calls, and nothing else'
 );
 
