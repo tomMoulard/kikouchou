@@ -56,6 +56,33 @@ pub struct Config {
     pub reminder_eve_hour_utc: u8,
     /// How far ahead a pickup is announced, in minutes.
     pub reminder_pickup_window_minutes: u64,
+
+    /// The iOS and Android store apps: their push credentials, and what the
+    /// `.well-known` files say about them.
+    pub native: NativeAppsConfig,
+}
+
+/// The store apps, as this service sees them. Every field is optional: without
+/// them the service sends Web Push only and answers no app-link file.
+#[derive(Debug, Clone, Default)]
+pub struct NativeAppsConfig {
+    /// The Apple Developer team id, e.g. `ABCDE12345`. Names the app in
+    /// `apple-app-site-association` and signs the APNs token.
+    pub apple_team_id: Option<String>,
+    /// The iOS bundle id, which is also the APNs topic.
+    pub ios_bundle_id: String,
+    /// The id of the APNs signing key (the `.p8` file's key id).
+    pub apns_key_id: Option<String>,
+    /// The `.p8` key itself, PEM. Never logged.
+    pub apns_private_key: Option<String>,
+    /// A Google service account JSON with the Firebase Cloud Messaging role.
+    /// Never logged.
+    pub fcm_service_account: Option<String>,
+    /// The Android application id.
+    pub android_package: String,
+    /// SHA-256 fingerprints of every key an installed APK can be signed with:
+    /// Play App Signing, the upload key, F-Droid's. `AB:CD:…`, upper case.
+    pub android_cert_sha256: Vec<String>,
 }
 
 /// Who sends a due reminder.
@@ -132,6 +159,25 @@ fn maybe(name: &str) -> Option<String> {
     }
 }
 
+/// A comma-separated list, blanks dropped.
+fn list(name: &str) -> Vec<String> {
+    maybe(name)
+        .map(|value| {
+            value
+                .split(',')
+                .map(|item| item.trim().to_owned())
+                .filter(|item| !item.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A PEM key pasted into a one-line variable carries `\n` where its line
+/// breaks were. Both forms are accepted.
+fn unescape_newlines(value: &str) -> String {
+    value.replace("\\n", "\n")
+}
+
 fn send_mode(name: &'static str) -> Result<SendMode, ConfigError> {
     match maybe(name).as_deref() {
         None | Some("direct") => Ok(SendMode::Direct),
@@ -163,6 +209,15 @@ impl Config {
             reminder_interval_secs: number("REMINDER_INTERVAL_SECONDS", 3600u64)?.max(60),
             reminder_eve_hour_utc: number("REMINDER_EVE_HOUR_UTC", 17u8)?.min(23),
             reminder_pickup_window_minutes: number("REMINDER_PICKUP_WINDOW_MINUTES", 180u64)?,
+            native: NativeAppsConfig {
+                apple_team_id: maybe("APPLE_TEAM_ID"),
+                ios_bundle_id: optional("IOS_BUNDLE_ID", "app.kikouchou"),
+                apns_key_id: maybe("APNS_KEY_ID"),
+                apns_private_key: maybe("APNS_PRIVATE_KEY").map(|key| unescape_newlines(&key)),
+                fcm_service_account: maybe("FCM_SERVICE_ACCOUNT_JSON"),
+                android_package: optional("ANDROID_PACKAGE", "app.kikouchou"),
+                android_cert_sha256: list("ANDROID_CERT_SHA256"),
+            },
         })
     }
 }

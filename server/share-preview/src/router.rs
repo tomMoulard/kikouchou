@@ -106,6 +106,11 @@ const CARD_SEGMENT: &str = "card.png";
 const TEMPLATE_SEGMENT: &str = "t";
 const HTML: &str = "text/html; charset=utf-8";
 const TEXT: &str = "text/plain; charset=utf-8";
+const JSON: &str = "application/json";
+
+/// An hour: the operating system re-reads an app-link file on its own
+/// schedule, and a changed key should not wait on a day-long cache.
+const APP_LINK_CACHE_SECONDS: u64 = 3600;
 
 /// The language a 404 speaks when the path did not name one.
 ///
@@ -246,6 +251,27 @@ pub async fn route<B: Backend>(
     };
     if segments.len() == 1 && first == "healthz" {
         return respond(200, TEXT, b"ok".to_vec(), "healthz", 0);
+    }
+    // The app-link files, read by iOS and Android to let a tap open the store
+    // app (`app_links`). 404 until the ids are configured.
+    if segments.len() == 2 && first == ".well-known" {
+        let document = match segments[1].as_str() {
+            "apple-app-site-association" => {
+                crate::app_links::apple_app_site_association(&config.native)
+            }
+            "assetlinks.json" => crate::app_links::asset_links(&config.native),
+            _ => None,
+        };
+        return match document {
+            Some(document) => respond(
+                200,
+                JSON,
+                document.to_string().into_bytes(),
+                "app-links",
+                APP_LINK_CACHE_SECONDS,
+            ),
+            None => respond(404, TEXT, b"Not found".to_vec(), "app-links-missing", 0),
+        };
     }
     if segments.len() == 1 && first == "robots.txt" {
         return respond(
@@ -430,6 +456,7 @@ mod tests {
             reminder_interval_secs: 3600,
             reminder_eve_hour_utc: 17,
             reminder_pickup_window_minutes: 180,
+            native: crate::config::NativeAppsConfig::default(),
         }
     }
 
