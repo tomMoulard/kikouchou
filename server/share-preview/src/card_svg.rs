@@ -2,10 +2,10 @@
 //!
 //! This is `public/og-card.svg` made dynamic. That file is the landing page hero
 //! redrawn at the aspect every consumer of `og:image` is built around, and it is
-//! the reference for every coordinate, colour and font size below: white
-//! surface, slate text, teal accent, the two blurred glows, the 64px grid behind
-//! the header, and an app window whose rows are guests and whose columns are
-//! days. Someone who saw the site recognises the card; someone who saw the
+//! the reference for every coordinate, colour and font size below: Creme
+//! paper, Encre text, Prune accent (the brand kit, "Soleil couchant"), the
+//! outlined logo lockup in the header, and an app window whose rows are guests
+//! and whose columns are days. Someone who saw the site recognises the card; someone who saw the
 //! generic card recognises this one as the same card with their own trip in it.
 //!
 //! Two things differ from the static file, both deliberately.
@@ -54,15 +54,23 @@ const COLUMN_GAP: f64 = 3.0;
 const MAX_ROWS: usize = 6;
 const MAX_COLUMNS: usize = 8;
 
-/// Landing page tokens. Named here so the card and the site cannot drift.
-const INK: &str = "#0f172a";
-const MUTED: &str = "#55637a";
-const SUBTLE: &str = "#64748b";
-const TEAL: &str = "#0f766e";
-const TEAL_TINT: &str = "#e6f6f4";
-const SURFACE: &str = "#f8fafc";
-const BORDER: &str = "#e2e8f0";
-const EMPTY_CELL: &str = "#f1f5f9";
+/// Brand and landing page tokens. Named here so the card and the site cannot
+/// drift.
+const PAPER: &str = "#f6f0e4";
+const WINDOW: &str = "#fffcf5";
+const INK: &str = "#2a1d36";
+const MUTED: &str = "#554a5e";
+const SUBTLE: &str = "#645a6b";
+const ACCENT: &str = "#7a3786";
+const ACCENT_TINT: &str = "#f0e4ee";
+const SURFACE: &str = "#f4ede0";
+const BORDER: &str = "#e3d7c2";
+const EMPTY_CELL: &str = "#efe6d4";
+
+/// The horizontal logo lockup from the brand kit: the house mark and the
+/// wordmark, with the text converted to outlines so the card needs no font for
+/// it. Scaled to 40px tall, with its top-left corner at (56, 26).
+const LOGO_LOCKUP: &str = r##"<g transform="translate(56 26) scale(0.7) translate(-4 -4)"><path d="M10.76 28Q4 28 9.13 23.6L30.37 5.39Q32 4 33.63 5.39L54.87 23.6Q60 28 53.24 28L10.76 28Z" fill="#F09A36"/><rect x="8" y="32" width="20" height="28" rx="2.5" fill="#E25E4A"/><rect x="32" y="32" width="24" height="12" rx="2.5" fill="#C4436B"/><rect x="32" y="48" width="24" height="12" rx="2.5" fill="#7A3786"/><path d="M72 60V32H78.48V44.27Q80.6 43.47 82.35 42.13Q84.11 40.8 85.44 39.14Q86.76 37.49 87.66 35.65Q88.55 33.82 88.97 32H96.35Q95.82 34.19 94.72 36.27Q93.62 38.36 92.06 40.18Q90.5 42 88.62 43.4Q86.74 44.81 84.64 45.66V46.16Q86.85 46.08 88.46 46.56Q90.07 47.04 91.21 48Q92.35 48.96 93.14 50.31Q93.92 51.65 94.51 53.33L96.79 60H89.5L87.96 54.36Q87.47 52.54 86.62 51.44Q85.77 50.33 84.42 49.83Q83.06 49.32 80.93 49.32H78.48V60H72ZM99.37 60V37.66H105.85V60H99.37ZM102.61 35.04Q100.74 35.04 99.75 34.25Q98.75 33.46 98.75 31.97Q98.75 30.43 99.75 29.64Q100.74 28.85 102.61 28.85Q104.51 28.85 105.51 29.65Q106.5 30.45 106.5 31.96Q106.5 33.44 105.51 34.24Q104.51 35.04 102.61 35.04ZM109.85 60V29.9H116.2V46.31Q117.57 45.49 118.7 44.47Q119.83 43.46 120.72 42.32Q121.61 41.19 122.26 40.01Q122.91 38.83 123.35 37.66H130.77Q130.24 39.31 129.28 40.92Q128.33 42.53 126.97 43.91Q125.6 45.29 123.79 46.32Q121.98 47.36 119.75 47.86V48.42Q122.58 47.94 124.41 48.42Q126.23 48.9 127.34 50.01Q128.45 51.13 129.07 52.66Q129.69 54.19 130.11 55.83L131.07 60H124.04L123.55 57.24Q123.18 55.43 122.65 54.04Q122.13 52.64 121.09 51.83Q120.05 51.03 118.08 51.02L116.2 51.02V60H109.85ZM143.2 60.59Q139.89 60.59 137.35 59.28Q134.81 57.97 133.37 55.35Q131.93 52.74 131.93 48.82Q131.93 44.82 133.4 42.22Q134.86 39.62 137.42 38.35Q139.98 37.07 143.24 37.07Q146.58 37.07 149.12 38.38Q151.66 39.69 153.1 42.29Q154.53 44.9 154.53 48.84Q154.53 52.88 153.05 55.49Q151.56 58.1 148.99 59.34Q146.42 60.59 143.2 60.59ZM143.39 55.81Q144.9 55.81 145.92 55.07Q146.94 54.32 147.47 52.83Q148 51.34 148 49.21Q148 46.94 147.43 45.36Q146.86 43.79 145.77 42.94Q144.69 42.09 143.07 42.09Q141.6 42.09 140.56 42.84Q139.52 43.59 139 45.08Q138.47 46.57 138.47 48.73Q138.47 52.18 139.76 53.99Q141.06 55.81 143.39 55.81ZM164.87 60.59Q161.04 60.59 159.15 57.96Q157.25 55.32 157.25 49.92V37.66H163.75V49.39Q163.75 52.39 164.61 53.75Q165.48 55.12 167.23 55.12Q168.32 55.12 169.17 54.56Q170.01 54.01 170.62 52.96Q171.23 51.9 171.54 50.4Q171.86 48.9 171.87 46.98V37.66H178.35V50.44L178.35 60H173L173 52.29H172.39Q171.92 55.2 170.99 57.03Q170.05 58.87 168.55 59.73Q167.05 60.59 164.87 60.59ZM192.86 60.59Q189.94 60.59 187.78 59.73Q185.62 58.88 184.2 57.33Q182.77 55.77 182.07 53.68Q181.36 51.58 181.36 49.1Q181.36 46.54 182.07 44.37Q182.78 42.2 184.2 40.55Q185.61 38.89 187.74 37.98Q189.87 37.07 192.69 37.07Q195.77 37.07 197.85 38.14Q199.93 39.21 201.04 41.01Q202.15 42.82 202.28 45.07L196.44 46.43Q196.4 44.98 195.88 44.01Q195.37 43.05 194.48 42.59Q193.6 42.12 192.45 42.12Q191.36 42.12 190.52 42.54Q189.68 42.96 189.1 43.81Q188.52 44.67 188.21 45.91Q187.9 47.15 187.9 48.81Q187.9 51.06 188.47 52.61Q189.03 54.17 190.16 54.97Q191.28 55.78 192.94 55.78Q194.59 55.78 195.51 55.06Q196.43 54.35 196.82 53.26Q197.21 52.17 197.21 51.06L202.99 51.92Q202.99 53.64 202.4 55.21Q201.81 56.78 200.57 57.99Q199.33 59.21 197.42 59.9Q195.52 60.59 192.86 60.59ZM205.39 60V46.94L205.39 29.92H211.88V36.33Q211.88 37.19 211.8 38.33Q211.71 39.48 211.55 40.72Q211.39 41.96 211.22 43.17Q211.06 44.37 210.89 45.38H211.61Q212.12 42.65 213.04 40.81Q213.96 38.96 215.48 38.01Q217.01 37.07 219.26 37.07Q223.06 37.07 224.93 39.75Q226.79 42.43 226.79 47.92V60H220.29V48.64Q220.29 45.54 219.41 44.05Q218.54 42.56 216.7 42.56Q215.16 42.56 214.1 43.57Q213.03 44.57 212.46 46.45Q211.89 48.32 211.87 50.94V60H205.39ZM240.78 60.59Q237.47 60.59 234.92 59.28Q232.38 57.97 230.94 55.35Q229.51 52.74 229.51 48.82Q229.51 44.82 230.97 42.22Q232.44 39.62 235 38.35Q237.56 37.07 240.81 37.07Q244.15 37.07 246.7 38.38Q249.24 39.69 250.67 42.29Q252.11 44.9 252.11 48.84Q252.11 52.88 250.62 55.49Q249.14 58.1 246.57 59.34Q244 60.59 240.78 60.59ZM240.96 55.81Q242.47 55.81 243.49 55.07Q244.52 54.32 245.05 52.83Q245.57 51.34 245.57 49.21Q245.57 46.94 245.01 45.36Q244.44 43.79 243.35 42.94Q242.26 42.09 240.64 42.09Q239.17 42.09 238.14 42.84Q237.1 43.59 236.57 45.08Q236.04 46.57 236.04 48.73Q236.04 52.18 237.34 53.99Q238.63 55.81 240.96 55.81ZM262.45 60.59Q258.62 60.59 256.72 57.96Q254.82 55.32 254.82 49.92V37.66H261.33V49.39Q261.33 52.39 262.19 53.75Q263.05 55.12 264.8 55.12Q265.9 55.12 266.74 54.56Q267.59 54.01 268.2 52.96Q268.8 51.9 269.12 50.4Q269.43 48.9 269.45 46.98V37.66H275.92V50.44L275.93 60H270.58L270.57 52.29H269.97Q269.5 55.2 268.56 57.03Q267.63 58.87 266.13 59.73Q264.63 60.59 262.45 60.59Z" fill="#2A1D36"/></g>"##;
 const WARN_TINT: &str = "#fdead9";
 const WARN_INK: &str = "#9a4a05";
 
@@ -272,56 +280,24 @@ fn chip_width(label: &str) -> f64 {
 // Shared furniture
 // ============================================================================
 
-/// The white ground, the two hero glows, the header grid and the wordmark.
+/// The Creme ground and the logo.
 ///
 /// Every card this service draws starts here, so an invite card and a template
 /// card are recognisably the same object with different contents.
 fn draw_backdrop(body: &mut String, headline: &str) {
-    // --- Background: white, the two hero glows, and the header grid. --------
     let _ = write!(
         body,
-        r##"<rect width="{CARD_WIDTH}" height="{CARD_HEIGHT}" fill="#ffffff"/>"##
-    );
-    let _ = write!(
-        body,
-        r#"<rect width="{CARD_WIDTH}" height="{CARD_HEIGHT}" fill="url(#glowTeal)"/>"#
-    );
-    let _ = write!(
-        body,
-        r#"<rect width="{CARD_WIDTH}" height="{CARD_HEIGHT}" fill="url(#glowIndigo)"/>"#
+        r#"<rect width="{CARD_WIDTH}" height="{CARD_HEIGHT}" fill="{PAPER}"/>"#
     );
 
-    let _ = write!(
-        body,
-        r#"<g stroke="{INK}" stroke-opacity="0.05" stroke-width="1">"#
-    );
-    let mut x = 64;
-    while x < CARD_WIDTH {
-        let _ = write!(body, r#"<line x1="{x}" y1="0" x2="{x}" y2="256"/>"#);
-        x += 64;
-    }
-    for y in [64, 128, 192] {
-        let _ = write!(
-            body,
-            r#"<line x1="0" y1="{y}" x2="{CARD_WIDTH}" y2="{y}"/>"#
-        );
-    }
-    body.push_str("</g>");
-
-    // --- Header: wordmark, headline, and where this card came from. ---------
-    text(
-        body,
-        56.0,
-        62.0,
-        "Kikouchou",
-        Type::label(34.0, INK).weight(700),
-    );
+    // --- Header: logo, headline, and where this card came from. -------------
+    body.push_str(LOGO_LOCKUP);
     text(
         body,
         1144.0,
         62.0,
         "app.kikouchou.app",
-        Type::label(22.0, TEAL).anchor(Anchor::End),
+        Type::label(22.0, ACCENT).anchor(Anchor::End),
     );
     text(
         body,
@@ -346,7 +322,7 @@ fn draw_window(body: &mut String, title: &str) {
         136.0,
         1088.0,
         458.0,
-        Box_::new("#ffffff").round(20.0).bordered(BORDER),
+        Box_::new(WINDOW).round(20.0).bordered(BORDER),
     );
     // The second rect squares off the bottom corners the first one rounded, so
     // only the top of the title bar is round.
@@ -365,7 +341,7 @@ fn draw_window(body: &mut String, title: &str) {
     );
     let _ = write!(
         body,
-        r##"<g fill="#cbd5e1"><circle cx="84" cy="162" r="5.5"/><circle cx="102" cy="162" r="5.5"/><circle cx="120" cy="162" r="5.5"/></g>"##
+        r##"<g fill="#cdbd9f"><circle cx="84" cy="162" r="5.5"/><circle cx="102" cy="162" r="5.5"/><circle cx="120" cy="162" r="5.5"/></g>"##
     );
 
     text(
@@ -423,8 +399,8 @@ pub fn render_card_svg(preview: &TripPreview, language: Language) -> String {
         208.0,
         chip_width(&guest_label).max(196.0),
         &guest_label,
-        Box_::new(TEAL_TINT),
-        TEAL,
+        Box_::new(ACCENT_TINT),
+        ACCENT,
     );
 
     let right_label = format!("{night_label} · {room_label}");
@@ -593,7 +569,7 @@ pub fn render_card_svg(preview: &TripPreview, language: Language) -> String {
 /// filter every card refers to by id.
 fn wrap_svg(body: &str) -> String {
     format!(
-        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{CARD_WIDTH}" height="{CARD_HEIGHT}" viewBox="0 0 {CARD_WIDTH} {CARD_HEIGHT}" font-family="{FONT_STACK}"><defs><radialGradient id="glowTeal" gradientUnits="userSpaceOnUse" cx="264" cy="76" r="520"><stop offset="0" stop-color="#14b8a6" stop-opacity="0.22"/><stop offset="1" stop-color="#14b8a6" stop-opacity="0"/></radialGradient><radialGradient id="glowIndigo" gradientUnits="userSpaceOnUse" cx="984" cy="24" r="480"><stop offset="0" stop-color="#6366f1" stop-opacity="0.16"/><stop offset="1" stop-color="#6366f1" stop-opacity="0"/></radialGradient><filter id="cardShadow" x="-10%" y="-10%" width="120%" height="140%"><feGaussianBlur stdDeviation="18"/></filter></defs>{body}</svg>"##
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="{CARD_WIDTH}" height="{CARD_HEIGHT}" viewBox="0 0 {CARD_WIDTH} {CARD_HEIGHT}" font-family="{FONT_STACK}"><defs><filter id="cardShadow" x="-10%" y="-10%" width="120%" height="140%"><feGaussianBlur stdDeviation="18"/></filter></defs>{body}</svg>"##
     )
 }
 
@@ -635,8 +611,8 @@ pub fn render_template_card_svg(preview: &TemplatePreview, language: Language) -
         380.0,
         chip_width(&rooms),
         &rooms,
-        Box_::new(TEAL_TINT),
-        TEAL,
+        Box_::new(ACCENT_TINT),
+        ACCENT,
     );
 
     text(

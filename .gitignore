@@ -38,8 +38,9 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
+# Generated from the SVGs by scripts/generate-icons.js. favicon.ico is not:
+# it is the brand kit's 16/32/48 file, committed as a source.
 public/icons/
-public/favicon.ico
 .opencode/node_modules
 .omx/
 

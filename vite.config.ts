@@ -128,7 +128,7 @@ const webAppManifest: Partial<ManifestOptions> = {
   short_name: 'Kikouchou',
   description: 'Organize your vacation house rooms and arrivals',
   theme_color: '#0f172a',
-  background_color: '#ffffff',
+  background_color: '#f6f0e4',
   display: 'standalone',
   // The app's identity, and the one manifest field a browser is not
   // allowed to guess twice. With no `id`, the computed identity falls
@@ -159,9 +159,27 @@ const webAppManifest: Partial<ManifestOptions> = {
       purpose: 'any',
     },
     {
+      src: 'icons/icon-192.png',
+      sizes: '192x192',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
+      src: 'icons/icon-512.png',
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'any',
+    },
+    {
       src: 'icons/icon-maskable.svg',
       sizes: 'any',
       type: 'image/svg+xml',
+      purpose: 'maskable',
+    },
+    {
+      src: 'icons/icon-maskable-512.png',
+      sizes: '512x512',
+      type: 'image/png',
       purpose: 'maskable',
     },
   ],
@@ -264,7 +282,7 @@ export default defineConfig({
       // `virtual:pwa-register` module is the half of `autoUpdate` that reloads
       // once a new worker activates. See that module for the production bug.
       injectRegister: null,
-      includeAssets: ['icons/*.svg', 'favicon.svg'],
+      includeAssets: ['icons/*.svg', 'icons/*.png', 'favicon.svg', 'favicon.ico'],
       // Shared with `hereManifest`, which emits the same object without
       // `start_url`; see `webAppManifest` above.
       manifest: webAppManifest,

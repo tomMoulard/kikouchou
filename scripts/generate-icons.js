@@ -21,10 +21,12 @@
  *   - public/icons/icon-maskable-192.png (192x192, maskable for Android)
  *   - public/icons/icon-maskable-512.png (512x512, maskable for Android)
  *   - public/icons/apple-touch-icon.png (180x180, for iOS home screen)
- *   - public/favicon.ico (multi-resolution, for legacy browsers)
+ *
+ * public/favicon.ico is not generated: the brand kit ships a real 16/32/48 ICO,
+ * and this script could only write a single 32px PNG over it.
  */
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -39,10 +41,10 @@ const ICON_SIZES = [
   { name: 'icon-512.png', size: 512, source: 'icon.svg' },
   { name: 'icon-maskable-192.png', size: 192, source: 'icon-maskable.svg' },
   { name: 'icon-maskable-512.png', size: 512, source: 'icon-maskable.svg' },
-  { name: 'apple-touch-icon.png', size: 180, source: 'icon.svg' },
+  // From the full-bleed icon: icon.svg has transparent rounded corners, and
+  // iOS fills those in black on the Home Screen.
+  { name: 'apple-touch-icon.png', size: 180, source: 'icon-maskable.svg' },
 ];
-
-const FAVICON_SIZES = [16, 32, 48];
 
 // Link preview cards, from public/og-card*.svg to public/og-card*.png.
 //
@@ -109,40 +111,6 @@ async function main() {
     } catch (error) {
       console.error(`   ❌ Failed to generate ${icon.name}: ${error.message}`);
     }
-  }
-
-  // Generate favicon.ico (multi-resolution)
-  console.log('\n📦 Generating favicon.ico...\n');
-  
-  try {
-    const faviconSvgPath = join(ROOT_DIR, 'public', 'favicon.svg');
-    const faviconIcoPath = join(ROOT_DIR, 'public', 'favicon.ico');
-    const svgBuffer = await readFile(faviconSvgPath);
-    
-    // Generate PNG buffers at different sizes
-    const pngBuffers = await Promise.all(
-      FAVICON_SIZES.map(async (size) => {
-        const buffer = await sharp(svgBuffer)
-          .resize(size, size)
-          .png()
-          .toBuffer();
-        return { size, buffer };
-      })
-    );
-    
-    // For proper ICO generation, we'd need a specialized library
-    // For now, we'll just use the 32x32 PNG as a single-resolution ICO
-    // This works for most browsers
-    const icoBuffer = pngBuffers.find(p => p.size === 32)?.buffer;
-    if (icoBuffer) {
-      // Note: This creates a PNG masquerading as ICO
-      // For a true multi-resolution ICO, use a tool like png-to-ico
-      await writeFile(faviconIcoPath, icoBuffer);
-      console.log(`   ✅ favicon.ico (32x32 PNG format)`);
-      console.log('   ℹ️  For true multi-resolution ICO, use: npx png-to-ico public/icons/icon-*.png > public/favicon.ico');
-    }
-  } catch (error) {
-    console.error(`   ❌ Failed to generate favicon.ico: ${error.message}`);
   }
 
   // Generate the link preview card
