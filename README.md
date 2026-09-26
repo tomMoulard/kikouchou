@@ -92,6 +92,23 @@ bun run dev
 bun run build
 ```
 
+## Store apps
+
+The same app ships to the App Store, Google Play and F-Droid, from this
+repository. The iOS and Android projects are Capacitor shells around the web
+build (`ios/`, `android/`). See `plans/2026-09-26-native-apps-v1.md` for the
+design, and the "Store apps" section of `AGENTS.md` for the rules.
+
+```bash
+bun run build:native      # Build the web app and copy it into both shells
+bunx cap open ios         # Open the iOS project in Xcode
+bunx cap open android     # Open the Android project in Android Studio
+```
+
+A `v*` tag builds, signs and publishes both apps (`.github/workflows/native.yml`)
+and attaches the APK and the IPA to a GitHub release. F-Droid users can add
+`https://app.kikouchou.app/fdroid/repo`.
+
 ## License
 
-MIT
+MIT, see [LICENSE](LICENSE).
