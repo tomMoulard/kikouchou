@@ -307,7 +307,7 @@ describe('the cached answer', () => {
 
   it('is ignored when it has been corrupted', () => {
     configure();
-    window.localStorage.setItem(`kikoushou-auth-settings:${URL}`, '{"oauth":');
+    window.localStorage.setItem(`kikouchou-auth-settings:${URL}`, '{"oauth":');
 
     // A truncated write, or an entry from a build with a different shape.
     expect(readCachedAuthSettings()).toBeNull();
@@ -316,7 +316,7 @@ describe('the cached answer', () => {
   it('is re-validated on the way out, not trusted', () => {
     configure();
     window.localStorage.setItem(
-      `kikoushou-auth-settings:${URL}`,
+      `kikouchou-auth-settings:${URL}`,
       JSON.stringify({ oauth: ['google', '<script>', 42], email: 'yes' }),
     );
 

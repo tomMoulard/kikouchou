@@ -193,3 +193,85 @@ describe('isMissingCodeVerifier', () => {
     expect(isMissingCodeVerifier(undefined)).toBe(false);
   });
 });
+
+// ============================================================================
+// Answers that arrive as links (store apps)
+// ============================================================================
+
+describe('deliverAuthCallbackUrl', () => {
+  beforeEach(() => {
+    atUrl('capacitor://localhost/trips');
+  });
+
+  it('reads a code or an error off a link, and nothing off any other link', async () => {
+    const { readAuthCallbackUrl } = await importFresh();
+
+    expect(readAuthCallbackUrl('app.kikouchou://auth/callback?code=abc')).toEqual({
+      code: 'abc',
+      error: null,
+    });
+    expect(
+      readAuthCallbackUrl('app.kikouchou://auth/callback?error=x&error_description=Refused'),
+    ).toEqual({ code: null, error: 'Refused' });
+    expect(readAuthCallbackUrl('https://app.kikouchou.app/trips')).toBeNull();
+    expect(readAuthCallbackUrl('not a url')).toBeNull();
+  });
+
+  it('hands the answer to every subscriber', async () => {
+    const { deliverAuthCallbackUrl, onAuthCallback } = await importFresh();
+    const first = vi.fn();
+    const second = vi.fn();
+    onAuthCallback(first);
+    onAuthCallback(second);
+
+    expect(deliverAuthCallbackUrl('app.kikouchou://auth/callback?code=abc')).toBe(true);
+
+    expect(first).toHaveBeenCalledWith({ code: 'abc', error: null });
+    expect(second).toHaveBeenCalledWith({ code: 'abc', error: null });
+  });
+
+  it('keeps an answer that arrives before anybody subscribed', async () => {
+    const { deliverAuthCallbackUrl, onAuthCallback } = await importFresh();
+
+    deliverAuthCallbackUrl('app.kikouchou://auth/callback?code=cold-start');
+    const listener = vi.fn();
+    onAuthCallback(listener);
+
+    expect(listener).toHaveBeenCalledWith({ code: 'cold-start', error: null });
+  });
+
+  it('hands a code out once, however often the link arrives', async () => {
+    const { deliverAuthCallbackUrl, onAuthCallback } = await importFresh();
+    const listener = vi.fn();
+    onAuthCallback(listener);
+
+    // `getLaunchUrl` and `appUrlOpen` both report a cold start's link.
+    deliverAuthCallbackUrl('app.kikouchou://auth/callback?code=same');
+    deliverAuthCallbackUrl('app.kikouchou://auth/callback?code=same');
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops delivering to a listener that unsubscribed, and survives one that throws', async () => {
+    const { deliverAuthCallbackUrl, onAuthCallback } = await importFresh();
+    const gone = vi.fn();
+    const unsubscribe = onAuthCallback(gone);
+    onAuthCallback(() => {
+      throw new Error('boom');
+    });
+    const after = vi.fn();
+    onAuthCallback(after);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    unsubscribe();
+
+    expect(deliverAuthCallbackUrl('app.kikouchou://auth/callback?code=x')).toBe(true);
+    expect(gone).not.toHaveBeenCalled();
+    expect(after).toHaveBeenCalled();
+  });
+
+  it('says a link without an answer is not one', async () => {
+    const { deliverAuthCallbackUrl } = await importFresh();
+
+    expect(deliverAuthCallbackUrl('https://app.kikouchou.app/join/abc')).toBe(false);
+  });
+});

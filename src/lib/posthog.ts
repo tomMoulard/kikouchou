@@ -47,6 +47,7 @@ import type { CaptureResult } from 'posthog-js';
 
 import { isDevelopmentHost } from '@/lib/analytics/development-host';
 import { takeLandingBootstrap } from '@/lib/analytics/landing-handoff';
+import { getAppPlatform } from '@/lib/platform';
 import { readDisplayMode } from '@/lib/pwa/display-mode';
 
 // ============================================================================
@@ -720,6 +721,12 @@ const BASE_SUPER_PROPERTIES = {
    * once at init: a page does not change how it is displayed while loaded.
    */
   display_mode: readDisplayMode(),
+  /**
+   * `web`, `ios` or `android`: which of the three targets one build ships to
+   * sent the event. The store apps are also `standalone`, so `display_mode`
+   * alone cannot tell an installed PWA from an App Store install.
+   */
+  platform: getAppPlatform(),
 } as const;
 
 let posthogClient: typeof posthog | undefined;
@@ -1012,6 +1019,7 @@ export type AnalyticsEvent =
   | 'sign_in_started'
   | 'sign_in_failed'
   | 'signed_out'
+  | 'account_deleted'
   // Assistant
   | 'assistant_answer_failed'
   | 'assistant_answer_received'

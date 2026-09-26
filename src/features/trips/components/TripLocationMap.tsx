@@ -20,6 +20,7 @@ import { MapView, type MapMarkerData } from '@/components/shared';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
 import { buildMapsUrl } from '@/lib/utils/maps-link';
 import { cn } from '@/lib/utils';
+import { openExternalUrl } from '@/lib/native/external-links';
 
 // ============================================================================
 // Types
@@ -114,7 +115,7 @@ export const TripLocationMap = memo(function TripLocationMap({
    * a phone the handoff to the native app leaves the tab behind.
    */
   const handleOpenInMaps = useCallback(() => {
-    window.open(buildMapsUrl(coordinates, location), '_blank', 'noopener,noreferrer');
+    openExternalUrl(buildMapsUrl(coordinates, location));
   }, [coordinates, location]);
 
   /**

@@ -10,6 +10,11 @@
  * @module lib/utils/download
  */
 
+import { shareTextFile, type SaveFileOutcome } from '@/lib/native/files';
+import { isNativeApp } from '@/lib/platform';
+
+export type { SaveFileOutcome } from '@/lib/native/files';
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -118,4 +123,25 @@ export function downloadTextFile(download: TextFileDownload): boolean {
   }
 
   return true;
+}
+
+/**
+ * Hands the user a text file, the way the platform expects.
+ *
+ * A browser downloads it, as {@link downloadTextFile} always did. A store app
+ * opens the share sheet on it (`lib/native/files`), where the user can pick
+ * the Calendar app for an `.ics`.
+ *
+ * @param download - The file name, content and MIME type
+ * @param shareTitle - The share sheet's title in a store app, already translated
+ * @returns `saved`, `cancelled` when the user closed the share sheet, or `failed`
+ */
+export async function saveTextFile(
+  download: TextFileDownload,
+  shareTitle: string,
+): Promise<SaveFileOutcome> {
+  if (isNativeApp()) {
+    return shareTextFile(download.filename, download.text, shareTitle);
+  }
+  return downloadTextFile(download) ? 'saved' : 'failed';
 }

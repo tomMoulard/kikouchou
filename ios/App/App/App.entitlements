@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Trip reminders over APNs. `development` here; an App Store export
+	     signs with the distribution profile, which carries `production`. -->
+	<key>aps-environment</key>
+	<string>development</string>
+	<!-- Universal links: a tap on a Kikouchou link opens the app. Each host
+	     serves /.well-known/apple-app-site-association (app-links.ts,
+	     server/share-preview/src/app_links.rs). `webcredentials` lets the app
+	     offer the passwords saved for the website. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:app.kikouchou.app</string>
+		<string>applinks:share.kikouchou.app</string>
+		<string>webcredentials:app.kikouchou.app</string>
+	</array>
+</dict>
+</plist>

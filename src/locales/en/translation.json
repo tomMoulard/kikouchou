@@ -659,6 +659,7 @@
     "myRidesDriving": "You drive",
     "myRidesTravel": "Your own travel",
     "calendar": {
+      "shareTitle": "Add your runs to a calendar",
       "addRuns": "Add my runs to my calendar",
       "pickup": "Pick up {{passengers}} at {{location}}",
       "pickupEmpty": "Pick-up at {{location}}",
@@ -1540,6 +1541,13 @@
   },
   "auth": {
     "account": {
+      "deleteConfirm": "Delete the account",
+      "deleteDescription": "A trip you share with other people stays with them. A trip nobody else is on is deleted from the server. The trips on this device stay here, and no longer sync. This cannot be undone.",
+      "deleteTitle": "Delete your account?",
+      "deleteAction": "Delete my account",
+      "deleteHint": "Deleting the account removes it from the server. The trips on this device stay here.",
+      "deleteFailed": "The account could not be deleted. Check the connection and try again.",
+      "deleted": "Your account is deleted.",
       "title": "Account",
       "description": "Needed only to share a trip",
       "notConfigured": "This build has no account backend, so trips stay on this device.",
@@ -1570,7 +1578,7 @@
       "emailSent": "Check your inbox. The link we sent signs you in on this device.",
       "useAnotherEmail": "Use a different address",
       "withWallet": "Continue with your {{chain}} wallet",
-      "walletStatement": "Sign in to Kikoushou. This does not approve any transaction.",
+      "walletStatement": "Sign in to Kikouchou. This does not approve any transaction.",
       "signupDisabled": "This project is not accepting new accounts at the moment. Signing in still works if you already have one.",
       "noProviders": "No way to sign in is enabled on this project right now.",
       "withPasskey": "Continue with a passkey"
@@ -1774,6 +1782,8 @@
     "openTrip": "Open the trip"
   },
   "reminders": {
+    "blockedNative": "Notifications are off for Kikouchou. Turn them on in the phone settings, then try again.",
+    "channelName": "Trip reminders",
     "region": "Trip reminders",
     "title": "Get a reminder before the trip",
     "description": "{{tripName}}: a nudge the evening before it starts, before your own arrival, and before a pickup you are part of. Nothing else.",

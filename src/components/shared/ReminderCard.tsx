@@ -22,6 +22,7 @@ import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/c
 import { useAuth } from '@/features/auth/AuthContext';
 import { resolveTripIdentity } from '@/lib/identity/trip-identity';
 import { notify } from '@/lib/notifications';
+import { isNativeApp } from '@/lib/platform';
 import {
   type EnableRemindersResult,
   type ReminderState,
@@ -143,10 +144,15 @@ export const ReminderCard = memo(function ReminderCard({
         case 'dismissed':
           return null;
         case 'blocked':
-          return t(
-            'reminders.blocked',
-            'Your browser is blocking notifications for Kikouchou. Allow them in your browser or system settings, then try again.',
-          );
+          return isNativeApp()
+            ? t(
+                'reminders.blockedNative',
+                'Notifications are off for Kikouchou. Turn them on in the phone settings, then try again.',
+              )
+            : t(
+                'reminders.blocked',
+                'Your browser is blocking notifications for Kikouchou. Allow them in your browser or system settings, then try again.',
+              );
         case 'not-found':
           return t('sharing.join.notFound', "This invite link isn't valid.");
         case 'revoked':
@@ -185,6 +191,7 @@ export const ReminderCard = memo(function ReminderCard({
         personId: identity.personId,
         locale: i18n.language,
         analyticsId: posthog?.get_distinct_id(),
+        channelName: t('reminders.channelName', 'Trip reminders'),
       });
       if (!isMountedRef.current) {
         return;

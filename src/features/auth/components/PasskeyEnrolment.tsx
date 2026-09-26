@@ -31,7 +31,7 @@ import { reportError } from '@/lib/posthog';
 /**
  * "Add a passkey", when the project accepts them and this browser can make one.
  *
- * Enrolment is per origin, not per account — a passkey added on `kikoushou.app`
+ * Enrolment is per origin, not per account — a passkey added on `kikouchou.app`
  * does not exist on the GitHub Pages host — so the copy says "this device"
  * rather than promising something account-wide. The button stays after a
  * success: a second device, or a second passkey on this one, is a normal thing

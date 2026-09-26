@@ -27,10 +27,12 @@
  * @module lib/notifications/notify
  */
 
+import { Haptics, NotificationType } from '@capacitor/haptics';
 import { toast, type ExternalToast } from 'sonner';
 
 import { announceStatus } from '@/lib/notifications/announcer';
 import { showOsNotification } from '@/lib/notifications/os-notification';
+import { isNativeApp } from '@/lib/platform';
 
 // ============================================================================
 // Internals
@@ -45,7 +47,29 @@ import { showOsNotification } from '@/lib/notifications/os-notification';
  */
 function confirm(message: string): void {
   announceStatus(message);
+  if (isNativeApp()) {
+    confirmInApp(message);
+    return;
+  }
   void showOsNotification(message);
+}
+
+/**
+ * How long a confirmation stays on screen in a store app. Short, because a
+ * burst (three rooms created, one per imported guest) stacks them.
+ */
+const NATIVE_CONFIRMATION_MS = 2500;
+
+/**
+ * A store app's confirmation: a short toast and a tap of the haptic engine.
+ *
+ * Not an OS notification. A WKWebView has no `Notification`, and a native app
+ * that posts a system notification for "room saved" reads as spam in the
+ * notification centre. The toast is what the platform's own apps do.
+ */
+function confirmInApp(message: string): void {
+  toast.success(message, { duration: NATIVE_CONFIRMATION_MS });
+  void Haptics.notification({ type: NotificationType.Success }).catch(() => undefined);
 }
 
 // ============================================================================

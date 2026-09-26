@@ -1,0 +1,117 @@
+apply plugin: 'com.android.application'
+
+import groovy.json.JsonSlurper
+
+// ============================================================================
+// Version: one number for the website, both stores and F-Droid
+// ============================================================================
+//
+// `versionName` is package.json's `version`. `versionCode` is derived from it,
+// major * 1_000_000 + minor * 1_000 + patch, so it only ever grows when the
+// version does, and F-Droid, which builds from a tag, computes the same number
+// Play was given. Bump `version` for every store release.
+// `ANDROID_VERSION_CODE` overrides the derived number, for a one-off rebuild.
+def packageJson = new JsonSlurper().parse(file('../../package.json'))
+def appVersion = packageJson.version as String
+def versionParts = appVersion.tokenize('.-')
+def derivedVersionCode = (versionParts[0] as int) * 1_000_000 +
+        (versionParts[1] as int) * 1_000 +
+        (versionParts[2] as int)
+def appVersionCode = System.getenv('ANDROID_VERSION_CODE')?.toInteger() ?: derivedVersionCode
+
+// ============================================================================
+// Signing: from the environment, never from the repository
+// ============================================================================
+//
+// CI decodes the upload keystore from a secret into a file and points
+// ANDROID_KEYSTORE_PATH at it. Without it the release build is unsigned, which
+// is exactly what F-Droid wants: it signs with its own key.
+def keystorePath = System.getenv('ANDROID_KEYSTORE_PATH')
+
+android {
+    namespace = "app.kikouchou"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "app.kikouchou"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode appVersionCode
+        versionName appVersion
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (keystorePath) {
+            upload {
+                storeFile file(keystorePath)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+
+    // `play` carries Firebase Cloud Messaging for trip reminders. `fdroid` is
+    // the same app without it: F-Droid ships free software only, and the web
+    // layer reports push as unsupported there (`KIKOUCHOU_ANDROID_FLAVOR` in
+    // capacitor.config.ts leaves the plugin out of `cap sync`).
+    flavorDimensions = ['distribution']
+    productFlavors {
+        play {
+            dimension 'distribution'
+        }
+        fdroid {
+            dimension 'distribution'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystorePath) {
+                signingConfig signingConfigs.upload
+            }
+        }
+    }
+
+    // A build that another person can reproduce byte for byte is what lets
+    // F-Droid ship the APK this repository signed, rather than its own.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+// Firebase for the Play build only. CI writes google-services.json from a
+// secret; a checkout without it, and every F-Droid build, skips the plugin.
+def servicesJson = file('google-services.json')
+if (System.getenv('KIKOUCHOU_ANDROID_FLAVOR') != 'fdroid' && servicesJson.exists() && servicesJson.text) {
+    apply plugin: 'com.google.gms.google-services'
+} else {
+    logger.info("google-services.json not applied: this build has no push notifications")
+}

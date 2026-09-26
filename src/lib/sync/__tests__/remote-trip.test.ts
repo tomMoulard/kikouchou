@@ -29,6 +29,7 @@ import { updateSettings } from '@/lib/db/repositories/settings-repository';
 import { readCursor, recordServerState } from '@/lib/sync/cursors';
 import {
   ensureRemoteTrip,
+  forgetAccountTrips,
   listRemoteTripsMissingLocally,
   syncRemoteTripMetadata,
 } from '@/lib/sync/remote-trip';
@@ -786,5 +787,76 @@ describe('listRemoteTripsMissingLocally, recorded', () => {
     }));
 
     expect(await listRemoteTripsMissingLocally(client)).toEqual([{ id: FRESH_ID, name: 'Alps' }]);
+  });
+});
+
+// ============================================================================
+// forgetAccountTrips
+// ============================================================================
+
+describe('forgetAccountTrips', () => {
+  it('turns every synced trip back into a local one, and keeps the trips', async () => {
+    const synced = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    await db.trips.update(synced.id, { remoteTripId: REMOTE_ID });
+    await recordServerState(synced.id, Y.encodeStateVector(new Y.Doc()));
+    await db.yjsOutbox.add({ tripId: synced.id, update: new Uint8Array([1]), queuedAt: 1 });
+    await db.tripMembers.add({ tripId: synced.id, userId: 'user-1', joinedAt: 1 });
+
+    await forgetAccountTrips('user-1');
+
+    const trip = await db.trips.get(synced.id);
+    expect(trip?.name).toBe(TRIP_NAME);
+    expect(trip?.remoteTripId).toBeUndefined();
+    expect(await db.syncCursors.get(synced.id)).toBeUndefined();
+    expect(await db.yjsOutbox.where('tripId').equals(synced.id).count()).toBe(0);
+    expect(await db.tripMembers.where('tripId').equals(synced.id).count()).toBe(0);
+  });
+
+  it('leaves a viewer trip alone: its invite token needs no account', async () => {
+    const viewed = await createTrip({
+      name: 'Shared with me',
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    await db.trips.update(viewed.id, { remoteTripId: FRESH_ID, viewerToken: 'tokentokentoken1' });
+
+    await forgetAccountTrips('user-1');
+
+    expect((await db.trips.get(viewed.id))?.remoteTripId).toBe(FRESH_ID);
+  });
+
+  it("unlinks the deleted account's guest groups and nobody else's", async () => {
+    await db.guestGroups.bulkAdd([
+      {
+        id: 'group-mine',
+        name: 'Family',
+        members: [],
+        remoteGroupId: 'server-1',
+        remoteOwnerId: 'user-1',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      {
+        id: 'group-theirs',
+        name: 'Friends',
+        members: [],
+        remoteGroupId: 'server-2',
+        remoteOwnerId: 'user-2',
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ] as never);
+
+    await forgetAccountTrips('user-1');
+
+    const mine = await db.guestGroups.get('group-mine' as never);
+    const theirs = await db.guestGroups.get('group-theirs' as never);
+    expect(mine?.remoteGroupId).toBeUndefined();
+    expect(mine?.name).toBe('Family');
+    expect(theirs?.remoteGroupId).toBe('server-2');
   });
 });

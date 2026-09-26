@@ -49,10 +49,14 @@ import {
 } from 'react';
 import type { Provider, Session, SupabaseClient, User } from '@supabase/supabase-js';
 
+import { runNativeOAuth } from '@/lib/native/oauth';
+import { forgetAccountTrips } from '@/lib/sync/remote-trip';
+import { NATIVE_AUTH_CALLBACK_URL, getPublicAppOrigin, isNativeApp } from '@/lib/platform';
 import {
   consumeAuthCode,
   getCapturedAuthError,
   isMissingCodeVerifier,
+  onAuthCallback,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import {
@@ -85,6 +89,8 @@ export type SignInOutcome =
   | { readonly status: 'email-sent' }
   /** Signed in without leaving the page — a wallet signature. */
   | { readonly status: 'signed-in' }
+  /** The user closed the store app's browser sheet before the provider answered. */
+  | { readonly status: 'cancelled' }
   /** No backend in this build, so there was nothing to try. */
   | { readonly status: 'unavailable' }
   | { readonly status: 'error'; readonly message: string };
@@ -116,6 +122,16 @@ export type PasskeyEnrolmentOutcome =
 export interface AuthContextValue {
   /** The active session, or `null` when signed out or not yet resolved. */
   readonly session: Session | null;
+
+  /**
+   * Deletes the signed-in account on the server, then signs this device out.
+   *
+   * A trip shared with other members stays with them; a trip nobody else is
+   * on is deleted (`delete_my_account`). The trips on this device stay as
+   * local trips. Resolves `false` when the server refused or was unreachable,
+   * and the account is then untouched.
+   */
+  readonly deleteAccount: () => Promise<boolean>;
 
   /** The signed-in user, or `null`. */
   readonly user: User | null;
@@ -234,6 +250,18 @@ const REGISTRATION_STORAGE_PREFIX = 'kikouchou_registered_';
 // ============================================================================
 
 /**
+ * The path a magic link sends a store app's user back to.
+ *
+ * A universal link (iOS) and a verified app link (Android) claim it, so the
+ * email opens the app rather than Safari or Chrome, where the PKCE verifier is
+ * not. The website serves the same path, for somebody who opens the email on
+ * another device. The root is left to the website on purpose: a web sign-in
+ * returns there, and a phone with the app installed must not hand that code to
+ * the app, which never started it.
+ */
+export const NATIVE_EMAIL_RETURN_PATH = '/auth/native';
+
+/**
  * Where Google should send the user back to.
  *
  * Deliberately the app **root**, not a dedicated callback route: GitHub Pages
@@ -241,9 +269,19 @@ const REGISTRATION_STORAGE_PREFIX = 'kikouchou_registered_';
  * before the service worker exists. The root is a real file on every target, and
  * `detectSessionInUrl` picks the `?code=` off whatever URL it lands on.
  *
+ * The store apps are the exception. Their page origin is `capacitor://localhost`
+ * or `https://localhost`, which the provider cannot send anybody to: an OAuth
+ * sign-in returns to the app's own URL scheme, and a magic link to
+ * {@link NATIVE_EMAIL_RETURN_PATH} on the website.
+ *
  * Read from `window` here — a component may, unlike anything under `lib/`.
  */
-function resolveRedirectTo(): string {
+function resolveRedirectTo(kind: 'oauth' | 'email' = 'oauth'): string {
+  if (isNativeApp()) {
+    return kind === 'oauth'
+      ? NATIVE_AUTH_CALLBACK_URL
+      : `${getPublicAppOrigin()}${NATIVE_EMAIL_RETURN_PATH}`;
+  }
   const { origin } = window.location;
   const base = import.meta.env.BASE_URL || '/';
   return `${origin}${base.endsWith('/') ? base : `${base}/`}`;
@@ -451,6 +489,38 @@ export function AuthProvider({
       isMountedRef.current = false;
     };
   }, []);
+
+  // A store app's sign-in comes back as a link, after the page loaded: from the
+  // OAuth browser sheet, or from a magic link the operating system opened the
+  // app with. Buffered until this subscribes, so a cold start loses nothing.
+  useEffect(() => {
+    if (!isAvailable) {
+      return undefined;
+    }
+    return onAuthCallback((callback) => {
+      void (async () => {
+        if (callback.code === null) {
+          if (isMountedRef.current) {
+            setExchangeError(callback.error);
+          }
+          return;
+        }
+        try {
+          const activeClient = await getSupabaseClient();
+          if (!activeClient) {
+            return;
+          }
+          const { error } = await activeClient.auth.exchangeCodeForSession(callback.code);
+          if (error && isMountedRef.current) {
+            console.error('[auth] code exchange failed:', error.message);
+            setExchangeError(error.message);
+          }
+        } catch (error: unknown) {
+          reportError(error, { source: 'AuthProvider.onAuthCallback' });
+        }
+      })();
+    });
+  }, [isAvailable]);
 
   useEffect(() => {
     if (!isAvailable) {
@@ -678,7 +748,11 @@ export function AuthProvider({
         // `status` rather than the provider's message: the message is written
         // by GoTrue, can carry an email address, and is not a value anybody
         // can break a chart down by.
-        if (outcome.status === 'error' || outcome.status === 'unavailable') {
+        if (
+          outcome.status === 'error' ||
+          outcome.status === 'unavailable' ||
+          outcome.status === 'cancelled'
+        ) {
           captureEvent('sign_in_failed', { method, reason: outcome.status });
         }
         // `redirecting` is the exception: the browser is on its way to the
@@ -711,7 +785,8 @@ export function AuthProvider({
   const signInWithProvider = useCallback(
     (providerId: string): Promise<SignInOutcome> =>
       runSignIn('oauth', async (activeClient) => {
-        const { error } = await activeClient.auth.signInWithOAuth({
+        const native = isNativeApp();
+        const { data, error } = await activeClient.auth.signInWithOAuth({
           // The id came from this project's own `/auth/v1/settings`, whose
           // `external` map is keyed by exactly these ids — so the cast asserts
           // something the endpoint guarantees. Narrowing it against a literal
@@ -720,12 +795,29 @@ export function AuthProvider({
           // is already benign: an id GoTrue does not know comes straight back
           // as a "provider is not enabled" error.
           provider: providerId as Provider,
-          options: { redirectTo: resolveRedirectTo() },
+          // A store app opens the provider in a browser sheet itself, because
+          // the web view cannot leave for it (see `lib/native/oauth`).
+          options: { redirectTo: resolveRedirectTo('oauth'), skipBrowserRedirect: native },
         });
 
-        return error
-          ? { status: 'error', message: error.message }
-          : { status: 'redirecting' };
+        if (error) {
+          return { status: 'error', message: error.message };
+        }
+        if (!native) {
+          return { status: 'redirecting' };
+        }
+
+        // The document stays, so the outcome is the sheet's. The session
+        // itself arrives through the exchange the mount effect subscribed to.
+        const result = await runNativeOAuth(data.url);
+        switch (result.status) {
+          case 'returned':
+            return { status: 'signed-in' };
+          case 'cancelled':
+            return { status: 'cancelled' };
+          default:
+            return { status: 'error', message: result.message ?? '' };
+        }
       }),
     [runSignIn],
   );
@@ -737,7 +829,7 @@ export function AuthProvider({
           email,
           // Same destination as the OAuth redirect, for the same reason: the
           // link has to land somewhere GitHub Pages serves on a cold load.
-          options: { emailRedirectTo: resolveRedirectTo() },
+          options: { emailRedirectTo: resolveRedirectTo('email') },
         });
 
         return error
@@ -835,8 +927,33 @@ export function AuthProvider({
     }
   }, [client]);
 
+  const deleteAccount = useCallback(async (): Promise<boolean> => {
+    const userId = session?.user.id;
+    if (!client || userId === undefined) {
+      return false;
+    }
+    const { error } = await client.rpc('delete_my_account');
+    if (error) {
+      console.error('[auth] account deletion failed:', error.message);
+      reportError(error, { source: 'AuthContext.deleteAccount' });
+      return false;
+    }
+    captureEvent('account_deleted');
+    try {
+      await forgetAccountTrips(userId);
+    } catch (forgetError: unknown) {
+      // The account is gone whatever this says. A link left behind points at a
+      // row this device can no longer read, which `ensureRemoteTrip` already
+      // recovers from.
+      reportError(forgetError, { source: 'AuthContext.deleteAccount.forget' });
+    }
+    await signOut();
+    return true;
+  }, [client, session, signOut]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
+      deleteAccount,
       session,
       user: session?.user ?? null,
       isResolved,
@@ -853,6 +970,7 @@ export function AuthProvider({
       lastAuthError: exchangeError ?? providerError,
     }),
     [
+      deleteAccount,
       exchangeError,
       providerError,
       isAvailable,

@@ -12,8 +12,16 @@
  * `main.tsx` and, transitively, by every component test, so nothing here may
  * throw.
  *
+ * A store app is the exception to the hostname rule. It serves its bundled
+ * files from `localhost` on purpose (`capacitor.config.ts`), so the hostname
+ * says nothing about whose machine it is. A production build inside the iOS or
+ * Android app is the deployed app. A dev build inside one, the live-reload
+ * shell pointed at a laptop, is still a dev host.
+ *
  * @module lib/analytics/development-host
  */
+
+import { isNativeApp } from '@/lib/platform';
 
 // ============================================================================
 // Constants
@@ -57,6 +65,9 @@ const DEVELOPMENT_HOSTNAME_PATTERNS: readonly RegExp[] = [
 export function isDevelopmentHost(): boolean {
   if (typeof window === 'undefined') {
     return false;
+  }
+  if (isNativeApp()) {
+    return import.meta.env.DEV;
   }
   const { hostname } = window.location;
   return (

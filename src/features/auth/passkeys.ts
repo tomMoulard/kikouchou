@@ -13,7 +13,7 @@
  *
  * ## The part that surprises people
  *
- * A passkey is bound to an origin. One enrolled on `kikoushou.app` does not
+ * A passkey is bound to an origin. One enrolled on `kikouchou.app` does not
  * exist on `tommoulard.github.io`, and vice versa — nothing here can paper over
  * that, and it is why the account panel offers enrolment per device rather than
  * treating a passkey as an account-wide property.
@@ -23,6 +23,8 @@
  *
  * @module features/auth/passkeys
  */
+
+import { isNativeApp } from '@/lib/platform';
 
 // ============================================================================
 // Public API
@@ -42,6 +44,12 @@
  */
 export function isPasskeySupported(): boolean {
   if (typeof window === 'undefined') {
+    return false;
+  }
+  // A passkey is bound to `app.kikouchou.app` (`rp_id` in `supabase/config.toml`),
+  // and a store app's web view runs on `localhost`. The browser API is there and
+  // every ceremony fails, so the option is not offered at all.
+  if (isNativeApp()) {
     return false;
   }
   if (!window.isSecureContext) {

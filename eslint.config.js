@@ -18,6 +18,10 @@ export default defineConfig([
     // Deno, not the browser: `Deno.*` globals and jsr:/npm: specifiers that this
     // config's parser and globals cannot resolve. Deno has its own linter.
     'supabase/functions',
+    // The native shells. Their `public/` folders are copies of `dist`, made by
+    // `cap sync`, and the rest is Swift, Kotlin and Gradle.
+    'android',
+    'ios',
   ]),
   {
     files: ['**/*.{ts,tsx}'],

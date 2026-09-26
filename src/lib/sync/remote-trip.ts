@@ -221,6 +221,39 @@ async function forgetRemoteTrip(tripId: TripId): Promise<void> {
   await db.syncCursors.delete(tripId);
 }
 
+/**
+ * Turns every trip this device synced for an account back into a local trip.
+ *
+ * Runs after the account is deleted (`delete_my_account`). A trip handed to
+ * another member now belongs to them, and one nobody else was on no longer
+ * exists on the server, so no link on this device points anywhere this device
+ * may still go. The trips themselves stay: they are the user's own copy, and
+ * deleting an account is not wiping a phone.
+ *
+ * A viewer trip is left alone. It is read through an invite token, and the
+ * token works with no account at all.
+ *
+ * @param userId - The deleted account. Only its guest groups are unlinked: a
+ *   group this device uploaded under another account is still that account's.
+ */
+export async function forgetAccountTrips(userId: string): Promise<void> {
+  const linked = await db.trips
+    .filter((trip) => trip.remoteTripId !== undefined && trip.viewerToken === undefined)
+    .toArray();
+  for (const trip of linked) {
+    await forgetRemoteTrip(trip.id);
+    await db.yjsOutbox.where('tripId').equals(trip.id).delete();
+    await db.tripMembers.where('tripId').equals(trip.id).delete();
+  }
+  // The server's copy of each guest group went with the account too.
+  await db.guestGroups
+    .filter((group) => group.remoteOwnerId === userId)
+    .modify((group) => {
+      delete group.remoteGroupId;
+      delete group.remoteOwnerId;
+    });
+}
+
 // ============================================================================
 // Public API
 // ============================================================================

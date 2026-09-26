@@ -11,7 +11,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { render, screen } from '@/test/utils';
+import { render, screen, waitFor } from '@/test/utils';
 import type {
   Person,
   PersonId,
@@ -132,7 +132,7 @@ vi.mock('@/hooks/useTripIdentity', () => ({
 
 vi.mock('@/lib/utils/download', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/utils/download')>()),
-  downloadTextFile: vi.fn(() => true),
+  saveTextFile: vi.fn(async () => 'saved' as const),
 }));
 
 // The facade, not `sonner`. It is what decides where a message goes — a
@@ -149,7 +149,7 @@ import { useRideContext } from '@/contexts/RideContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useTripIdentity } from '@/hooks/useTripIdentity';
-import { downloadTextFile } from '@/lib/utils/download';
+import { saveTextFile } from '@/lib/utils/download';
 import { notify } from '@/lib/notifications';
 
 // ============================================================================
@@ -198,7 +198,7 @@ function setIdentity(myPersonId: PersonId | undefined): void {
 
 /** The file content of the one download that was started. */
 function savedFile(): { filename: string; text: string } {
-  const call = vi.mocked(downloadTextFile).mock.calls.at(-1);
+  const call = vi.mocked(saveTextFile).mock.calls.at(-1);
 
   if (!call) {
     throw new Error('No download was started');
@@ -214,7 +214,7 @@ function savedFile(): { filename: string; text: string } {
 describe('AddRunsToCalendarButton', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(downloadTextFile).mockReturnValue(true);
+    vi.mocked(saveTextFile).mockResolvedValue('saved');
     setIdentity(guillaume.id);
     setMocks([myRun, otherRun], [aliceArrives]);
   });
@@ -275,13 +275,25 @@ describe('AddRunsToCalendarButton', () => {
   });
 
   it('says so when the browser cannot save a file', async () => {
-    vi.mocked(downloadTextFile).mockReturnValue(false);
+    vi.mocked(saveTextFile).mockResolvedValue('failed');
 
     const { user } = render(<AddRunsToCalendarButton />, { withProviders: false });
 
     await user.click(screen.getByRole('button'));
 
-    expect(notify.error).toHaveBeenCalled();
+    await waitFor(() => expect(notify.error).toHaveBeenCalled());
+    expect(notify.success).not.toHaveBeenCalled();
+  });
+
+  it('says nothing when the user closes the share sheet', async () => {
+    vi.mocked(saveTextFile).mockResolvedValue('cancelled');
+
+    const { user } = render(<AddRunsToCalendarButton />, { withProviders: false });
+
+    await user.click(screen.getByRole('button'));
+
+    await waitFor(() => expect(saveTextFile).toHaveBeenCalled());
+    expect(notify.error).not.toHaveBeenCalled();
     expect(notify.success).not.toHaveBeenCalled();
   });
 });

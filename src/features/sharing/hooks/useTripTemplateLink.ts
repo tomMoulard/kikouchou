@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/features/auth/AuthContext';
 import { getCurrentLanguage } from '@/lib/i18n';
+import { resolveLinkOrigin } from '@/lib/platform';
 import { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureRemoteTrip } from '@/lib/sync/remote-trip';
@@ -90,7 +91,7 @@ function shareFor(): { readonly origin: string; readonly language: string } {
 
 /** The link for a token. */
 function urlFor(token: string): string {
-  return buildTemplateUrl(window.location.origin, import.meta.env.BASE_URL || '/', token, shareFor());
+  return buildTemplateUrl(resolveLinkOrigin(window.location.origin), import.meta.env.BASE_URL || '/', token, shareFor());
 }
 
 /** The link's card for a token, or null without a preview service. */

@@ -32,7 +32,7 @@ import { getDateLocale } from '@/lib/i18n/date-locale';
 import { notify } from '@/lib/notifications';
 import { buildIcsCalendar, ICS_MIME_TYPE } from '@/lib/calendar/ics';
 import { captureEvent } from '@/lib/posthog';
-import { downloadTextFile, toFilenameSegment } from '@/lib/utils/download';
+import { saveTextFile, toFilenameSegment } from '@/lib/utils/download';
 import { formatTransportDatetime } from '@/lib/utils/datetime-format';
 import {
   RIDE_ALARM_MINUTES_BEFORE,
@@ -92,7 +92,7 @@ export const AddRunsToCalendarButton = memo(function AddRunsToCalendarButton({
     [transports, rides, vehicles, persons, myPersonId, nowMs],
   );
 
-  const handleExport = useCallback((): void => {
+  const handleExport = useCallback(async (): Promise<void> => {
     const labels: RideCalendarLabels = {
       summary: ({ direction, passengers, location }) => {
         // A car with nobody listed yet still earns a block in the calendar:
@@ -149,13 +149,19 @@ export const AddRunsToCalendarButton = memo(function AddRunsToCalendarButton({
         }),
       });
 
-    const started = downloadTextFile({
-      filename: `${toFilenameSegment(tripName, 'kikouchou')}-runs.ics`,
-      text: ics,
-      mimeType: ICS_MIME_TYPE,
-    });
+    const outcome = await saveTextFile(
+      {
+        filename: `${toFilenameSegment(tripName, 'kikouchou')}-runs.ics`,
+        text: ics,
+        mimeType: ICS_MIME_TYPE,
+      },
+      t('transports.calendar.shareTitle', 'Add your runs to a calendar'),
+    );
 
-    if (!started) {
+    if (outcome === 'cancelled') {
+      return;
+    }
+    if (outcome === 'failed') {
       notify.error(
         t(
           'transports.calendar.failed',
