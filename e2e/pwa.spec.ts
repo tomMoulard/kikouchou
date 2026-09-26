@@ -617,7 +617,7 @@ test.describe('Manifest Validation', () => {
     expect(manifest.short_name).toBe('Kikouchou');
     expect(manifest.description).toBe('Organize your vacation house rooms and arrivals');
     expect(manifest.theme_color).toBe('#0f172a');
-    expect(manifest.background_color).toBe('#ffffff');
+    expect(manifest.background_color).toBe('#f6f0e4');
     expect(manifest.display).toBe('standalone');
   });
 

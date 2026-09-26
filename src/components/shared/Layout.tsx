@@ -40,6 +40,7 @@ import {
   Wallet,
 } from 'lucide-react';
 
+import { BrandMark } from '@/components/shared/BrandMark';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -361,8 +362,12 @@ const Header = memo(function Header({
         </Button>
       )}
 
-      {/* App name - links to trips list */}
-      <Link to="/trips" className="text-lg font-semibold hover:text-primary transition-colors">
+      {/* Logo and app name - links to trips list */}
+      <Link
+        to="/trips"
+        className="inline-flex items-center gap-2 text-lg font-semibold hover:text-primary transition-colors"
+      >
+        <BrandMark />
         {t('app.name')}
       </Link>
 

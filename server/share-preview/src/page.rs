@@ -123,7 +123,7 @@ fn document(
     <title>{title}</title>
     <meta name="robots" content="noindex, nofollow" />
 {refresh}{head}{script}  </head>
-  <body style="margin:0;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a;background:#f8fafc">
+  <body style="margin:0;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#2a1d36;background:#f6f0e4">
     <main style="max-width:34rem;margin:15vh auto;padding:0 1.5rem;text-align:center">
 {body}
     </main>
@@ -249,9 +249,9 @@ pub fn render_preview_page(preview: &TripPreview, context: &PageContext) -> Stri
     let target = context.join_url();
     let body = format!(
         r#"      <h1 style="font-size:1.4rem;margin:0 0 .5rem">{name}</h1>
-      <p style="margin:0 0 1.5rem;color:#55637a">{span}</p>
-      <p style="margin:0 0 1.5rem;color:#55637a">{opening}</p>
-      <p><a href="{target}" style="color:#0f766e;font-weight:600">{open}</a></p>"#,
+      <p style="margin:0 0 1.5rem;color:#554a5e">{span}</p>
+      <p style="margin:0 0 1.5rem;color:#554a5e">{opening}</p>
+      <p><a href="{target}" style="color:#7a3786;font-weight:600">{open}</a></p>"#,
         name = escape(&preview.name),
         span = escape(&span),
         opening = escape(language.opening()),
@@ -315,9 +315,9 @@ pub fn render_template_page(preview: &TemplatePreview, context: &PageContext) ->
     let target = context.template_url();
     let body = format!(
         r#"      <h1 style="font-size:1.4rem;margin:0 0 .5rem">{name}</h1>
-      <p style="margin:0 0 1.5rem;color:#55637a">{place}</p>
-      <p style="margin:0 0 1.5rem;color:#55637a">{opening}</p>
-      <p><a href="{target}" style="color:#0f766e;font-weight:600">{open}</a></p>"#,
+      <p style="margin:0 0 1.5rem;color:#554a5e">{place}</p>
+      <p style="margin:0 0 1.5rem;color:#554a5e">{opening}</p>
+      <p><a href="{target}" style="color:#7a3786;font-weight:600">{open}</a></p>"#,
         name = escape(&preview.name),
         place = escape(preview.location.as_deref().unwrap_or("")),
         opening = escape(language.opening()),
@@ -367,8 +367,8 @@ pub fn render_unavailable_page(context: &PageContext) -> String {
 
     let body = format!(
         r#"      <h1 style="font-size:1.4rem;margin:0 0 .5rem">{title}</h1>
-      <p style="margin:0 0 1.5rem;color:#55637a">{explanation}</p>
-      <p><a href="{app}" style="color:#0f766e;font-weight:600">{go}</a></p>"#,
+      <p style="margin:0 0 1.5rem;color:#554a5e">{explanation}</p>
+      <p><a href="{app}" style="color:#7a3786;font-weight:600">{go}</a></p>"#,
         title = escape(language.gone_title()),
         explanation = escape(language.gone_body()),
         app = escape(&context.app_origin),

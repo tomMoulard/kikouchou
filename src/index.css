@@ -99,24 +99,39 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-brand-soleil: var(--brand-soleil);
+  --color-brand-corail: var(--brand-corail);
+  --color-brand-framboise: var(--brand-framboise);
+  --color-brand-prune: var(--brand-prune);
 }
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0.03 50);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0.03 50);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0.03 50);
-  --primary: oklch(0.25 0.04 185);
-  --primary-foreground: oklch(0.985 0.005 185);
-  --secondary: oklch(0.96 0.015 55);
-  --secondary-foreground: oklch(0.25 0.04 185);
-  --muted: oklch(0.96 0.015 55);
-  --muted-foreground: oklch(0.47 0.03 50);
-  --accent: oklch(0.96 0.02 70);
-  --accent-foreground: oklch(0.25 0.03 50);
+  /*
+   * Brand, "Soleil couchant": the four rooms of the logo, in the order roof,
+   * tall room, top-right room, bottom-right room. Only the logo reads them.
+   * The theme below is built from the same kit: Encre ink on Creme paper,
+   * Prune for the primary, Framboise for the focus ring, and Nuit as the
+   * dark background.
+   */
+  --brand-soleil: oklch(0.757 0.150 65.3);
+  --brand-corail: oklch(0.646 0.169 30.9);
+  --brand-framboise: oklch(0.573 0.167 5.0);
+  --brand-prune: oklch(0.459 0.141 321.3);
+  --background: oklch(0.957 0.017 84.6);
+  --foreground: oklch(0.259 0.049 307.2);
+  --card: oklch(0.991 0.010 87.5);
+  --card-foreground: oklch(0.259 0.049 307.2);
+  --popover: oklch(0.991 0.010 87.5);
+  --popover-foreground: oklch(0.259 0.049 307.2);
+  --primary: oklch(0.459 0.141 321.3);
+  --primary-foreground: oklch(0.991 0.010 87.5);
+  --secondary: oklch(0.927 0.026 84.6);
+  --secondary-foreground: oklch(0.259 0.049 307.2);
+  --muted: oklch(0.927 0.026 84.6);
+  --muted-foreground: oklch(0.428 0.035 309.7);
+  --accent: oklch(0.931 0.019 331.1);
+  --accent-foreground: oklch(0.259 0.049 307.2);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0.01 25);
   --destructive-surface: oklch(0.965 0.02 20);
@@ -137,39 +152,44 @@
   --departure-surface: oklch(0.97 0.025 70);
   --departure-on-surface: oklch(0.5 0.16 42);
   --departure-border: oklch(0.89 0.08 65);
-  --border: oklch(0.92 0.02 55);
-  --input: oklch(0.92 0.02 55);
-  --ring: oklch(0.65 0.08 185);
-  --chart-1: oklch(0.65 0.18 25);
-  --chart-2: oklch(0.60 0.12 185);
-  --chart-3: oklch(0.75 0.15 85);
+  --border: oklch(0.883 0.031 81.7);
+  --input: oklch(0.883 0.031 81.7);
+  --ring: oklch(0.573 0.167 5.0);
+  --chart-1: oklch(0.646 0.169 30.9);
+  --chart-2: oklch(0.459 0.141 321.3);
+  --chart-3: oklch(0.757 0.150 65.3);
   --chart-4: oklch(0.65 0.10 145);
-  --chart-5: oklch(0.65 0.12 290);
-  --sidebar: oklch(0.985 0.005 55);
-  --sidebar-foreground: oklch(0.145 0.03 50);
-  --sidebar-primary: oklch(0.25 0.04 185);
-  --sidebar-primary-foreground: oklch(0.985 0.005 185);
-  --sidebar-accent: oklch(0.96 0.02 70);
-  --sidebar-accent-foreground: oklch(0.25 0.03 50);
-  --sidebar-border: oklch(0.92 0.02 55);
-  --sidebar-ring: oklch(0.65 0.08 185);
+  --chart-5: oklch(0.573 0.167 5.0);
+  --sidebar: oklch(0.948 0.019 83.1);
+  --sidebar-foreground: oklch(0.259 0.049 307.2);
+  --sidebar-primary: oklch(0.459 0.141 321.3);
+  --sidebar-primary-foreground: oklch(0.991 0.010 87.5);
+  --sidebar-accent: oklch(0.931 0.019 331.1);
+  --sidebar-accent-foreground: oklch(0.259 0.049 307.2);
+  --sidebar-border: oklch(0.883 0.031 81.7);
+  --sidebar-ring: oklch(0.573 0.167 5.0);
 }
 
 .dark {
-  --background: oklch(0.15 0.025 50);
-  --foreground: oklch(0.96 0.01 55);
-  --card: oklch(0.22 0.025 50);
-  --card-foreground: oklch(0.96 0.01 55);
-  --popover: oklch(0.22 0.025 50);
-  --popover-foreground: oklch(0.96 0.01 55);
-  --primary: oklch(0.75 0.10 185);
-  --primary-foreground: oklch(0.15 0.03 185);
-  --secondary: oklch(0.28 0.02 50);
-  --secondary-foreground: oklch(0.96 0.01 55);
-  --muted: oklch(0.28 0.02 50);
-  --muted-foreground: oklch(0.72 0.03 55);
-  --accent: oklch(0.28 0.025 70);
-  --accent-foreground: oklch(0.96 0.01 55);
+  /* The dark values of the four rooms, made for Nuit. */
+  --brand-soleil: oklch(0.832 0.137 71.5);
+  --brand-corail: oklch(0.734 0.164 31.2);
+  --brand-framboise: oklch(0.687 0.179 3.3);
+  --brand-prune: oklch(0.652 0.167 314.0);
+  --background: oklch(0.208 0.040 265.8);
+  --foreground: oklch(0.957 0.017 84.6);
+  --card: oklch(0.256 0.048 266.0);
+  --card-foreground: oklch(0.957 0.017 84.6);
+  --popover: oklch(0.256 0.048 266.0);
+  --popover-foreground: oklch(0.957 0.017 84.6);
+  --primary: oklch(0.728 0.141 315.6);
+  --primary-foreground: oklch(0.208 0.040 265.8);
+  --secondary: oklch(0.288 0.050 265.9);
+  --secondary-foreground: oklch(0.957 0.017 84.6);
+  --muted: oklch(0.288 0.050 265.9);
+  --muted-foreground: oklch(0.826 0.018 308.2);
+  --accent: oklch(0.302 0.057 283.9);
+  --accent-foreground: oklch(0.957 0.017 84.6);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.18 0.04 25);
   --destructive-surface: oklch(0.28 0.06 22);
@@ -192,20 +212,20 @@
   --departure-border: oklch(0.42 0.09 50);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.55 0.06 185);
-  --chart-1: oklch(0.70 0.16 25);
-  --chart-2: oklch(0.70 0.12 185);
-  --chart-3: oklch(0.80 0.15 85);
+  --ring: oklch(0.687 0.179 3.3);
+  --chart-1: oklch(0.734 0.164 31.2);
+  --chart-2: oklch(0.652 0.167 314.0);
+  --chart-3: oklch(0.832 0.137 71.5);
   --chart-4: oklch(0.70 0.10 145);
-  --chart-5: oklch(0.70 0.12 290);
-  --sidebar: oklch(0.18 0.025 50);
-  --sidebar-foreground: oklch(0.96 0.01 55);
-  --sidebar-primary: oklch(0.75 0.10 185);
-  --sidebar-primary-foreground: oklch(0.15 0.03 185);
-  --sidebar-accent: oklch(0.28 0.025 70);
-  --sidebar-accent-foreground: oklch(0.96 0.01 55);
+  --chart-5: oklch(0.687 0.179 3.3);
+  --sidebar: oklch(0.234 0.045 266.2);
+  --sidebar-foreground: oklch(0.957 0.017 84.6);
+  --sidebar-primary: oklch(0.728 0.141 315.6);
+  --sidebar-primary-foreground: oklch(0.208 0.040 265.8);
+  --sidebar-accent: oklch(0.302 0.057 283.9);
+  --sidebar-accent-foreground: oklch(0.957 0.017 84.6);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.55 0.06 185);
+  --sidebar-ring: oklch(0.687 0.179 3.3);
 }
 
 @layer base {
