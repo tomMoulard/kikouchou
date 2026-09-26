@@ -644,7 +644,22 @@ export const TripCreateWizard = memo(function TripCreateWizard({
               className="h-12 text-lg"
               autoComplete="off"
             />
-            <Button type="button" variant="outline" className="h-12" onClick={addGuest}>
+            {/* A tap on the button would move focus off the field and close a
+                phone's keyboard before the next name. Refusing the mousedown
+                keeps focus where it is; the refocus in the click covers a
+                keyboard user who tabbed here. */}
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12"
+              onMouseDown={(event) => {
+                event.preventDefault();
+              }}
+              onClick={() => {
+                addGuest();
+                inputRef.current?.focus();
+              }}
+            >
               <Plus className="size-4" aria-hidden="true" />
               {t('trips.wizard.addGuest', 'Add')}
             </Button>
