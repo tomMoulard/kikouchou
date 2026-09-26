@@ -87,40 +87,43 @@ export type Database = {
       push_subscriptions: {
         Row: {
           analytics_id: string | null
-          auth: string
+          auth: string | null
           created_at: string
           endpoint: string
           id: string
           last_seen_at: string
           locale: string
-          p256dh: string
+          p256dh: string | null
           person_id: string | null
+          transport: string
           trip_id: string
           user_id: string | null
         }
         Insert: {
           analytics_id?: string | null
-          auth: string
+          auth: string | null
           created_at?: string
           endpoint: string
           id?: string
           last_seen_at?: string
           locale?: string
-          p256dh: string
+          p256dh: string | null
           person_id?: string | null
+          transport?: string
           trip_id: string
           user_id?: string | null
         }
         Update: {
           analytics_id?: string | null
-          auth?: string
+          auth?: string | null
           created_at?: string
           endpoint?: string
           id?: string
           last_seen_at?: string
           locale?: string
-          p256dh?: string
+          p256dh?: string | null
           person_id?: string | null
+          transport?: string
           trip_id?: string
           user_id?: string | null
         }
@@ -197,21 +200,21 @@ export type Database = {
       }
       trip_doc_updates: {
         Row: {
-          author_id: string
+          author_id: string | null
           created_at: string
           id: number
           trip_id: string
           update: string
         }
         Insert: {
-          author_id?: string
+          author_id?: string | null
           created_at?: string
           id?: never
           trip_id: string
           update: string
         }
         Update: {
-          author_id?: string
+          author_id?: string | null
           created_at?: string
           id?: never
           trip_id?: string
@@ -230,7 +233,7 @@ export type Database = {
       trip_invites: {
         Row: {
           created_at: string
-          created_by: string
+          created_by: string | null
           expires_at: string | null
           max_uses: number | null
           revoked_at: string | null
@@ -240,7 +243,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          created_by: string
+          created_by?: string | null
           expires_at?: string | null
           max_uses?: number | null
           revoked_at?: string | null
@@ -250,7 +253,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          created_by?: string
+          created_by?: string | null
           expires_at?: string | null
           max_uses?: number | null
           revoked_at?: string | null
@@ -382,6 +385,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_my_account: { Args: Record<PropertyKey, never>; Returns: undefined }
       publish_trip_snapshot: {
         Args: { p_state: string; p_through_id: number; p_trip_id: string }
         Returns: number

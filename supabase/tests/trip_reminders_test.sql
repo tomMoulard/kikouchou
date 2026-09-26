@@ -8,7 +8,7 @@
 -- Run with:  bunx supabase test db
 
 begin;
-select plan(29);
+select plan(35);
 
 -- ===========================================================================
 -- Fixtures
@@ -332,6 +332,67 @@ select is(
   1::bigint,
   'only the owner''s subscription remains'
 );
+
+-- ===========================================================================
+-- A store app subscribes with a device token
+-- ===========================================================================
+
+select tests.act_as_anon();
+
+select isnt(
+  public.subscribe_trip_reminders(
+    'token-still-valid-01',
+    jsonb_build_object('transport', 'apns', 'token', repeat('a1', 32)),
+    'person-alice', 'fr', null
+  ),
+  null,
+  'an iPhone app subscribes with its APNs token'
+);
+
+select tests.act_as_postgres();
+
+select is(
+  (select transport || ':' || coalesce(p256dh, 'none') || ':' || coalesce(auth, 'none')
+   from public.push_subscriptions where endpoint = repeat('a1', 32)),
+  'apns:none:none',
+  'the token is stored as the endpoint, with the transport and no Web Push keys'
+);
+
+select is(
+  (select transport from public.live_push_subscriptions where endpoint = repeat('a1', 32)),
+  'apns',
+  'the sender reads the transport from the view'
+);
+
+select tests.act_as_anon();
+
+select throws_ok(
+  $$select public.subscribe_trip_reminders(
+      'token-still-valid-01',
+      jsonb_build_object('transport', 'fcm', 'token', 'too-short'),
+      null, 'en', null)$$,
+  '22023',
+  'subscription must carry a device token',
+  'a token outside the bounds is refused'
+);
+
+select throws_ok(
+  $$select public.subscribe_trip_reminders(
+      'token-still-valid-01',
+      jsonb_build_object('transport', 'carrier-pigeon', 'token', repeat('b2', 32)),
+      null, 'en', null)$$,
+  '22023',
+  'unsupported push transport',
+  'an unknown transport is refused'
+);
+
+select is(
+  public.unsubscribe_reminders(repeat('a1', 32)),
+  1,
+  'the token alone stops the app''s reminders'
+);
+
+select tests.act_as_postgres();
 
 select * from finish();
 rollback;
