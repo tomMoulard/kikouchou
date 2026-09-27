@@ -71,6 +71,8 @@ vi.mock('@/lib/sync/templates', async () => {
     // The URL builder is the real one: a test that faked it would not notice
     // the hook dropping the share origin or the language.
     buildTemplateUrl: actual.buildTemplateUrl,
+    // Real too, so the payload assertions below read what the trip says.
+    buildTemplatePayload: actual.buildTemplatePayload,
     readTemplateState: vi.fn(),
     publishTemplate: vi.fn(),
     unpublishTemplate: vi.fn(),

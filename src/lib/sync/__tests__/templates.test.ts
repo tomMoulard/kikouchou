@@ -20,6 +20,7 @@ import {
   publishTemplate,
   readTemplateState,
   readTripTemplate,
+  refreshTemplatePayload,
   unpublishTemplate,
   type TripTemplatePayload,
 } from '../templates';
@@ -475,6 +476,57 @@ describe('unpublishTemplate', () => {
 
     await expect(unpublishTemplate(client, 'remote-1')).resolves.toMatchObject({
       status: 'error',
+    });
+  });
+});
+
+// ============================================================================
+// Refresh
+// ============================================================================
+
+describe('refreshTemplatePayload', () => {
+  it('updates the payload row, and never inserts one', async () => {
+    const { client, calls } = stubClient({
+      updateRows: { data: [{ trip_id: 'remote-1' }], error: null },
+    });
+
+    const result = await refreshTemplatePayload(client, 'remote-1', PAYLOAD);
+
+    expect(result).toEqual({ status: 'refreshed' });
+    expect(calls.upserts).toHaveLength(0);
+    expect(calls.updates).toEqual([
+      {
+        table: 'trip_templates',
+        row: expect.objectContaining({
+          name: 'Chalet Marmotte',
+          description: 'Check-in after 3pm.',
+          latitude: 45.9237,
+          longitude: 6.8694,
+          rooms: [{ name: 'Attic', capacity: 4, icon: 'bed-double' }],
+        }),
+      },
+    ]);
+  });
+
+  it('reports a trip with no row it may write as not published', async () => {
+    const { client } = stubClient({ updateRows: { data: [], error: null } });
+
+    await expect(refreshTemplatePayload(client, 'remote-1', PAYLOAD)).resolves.toEqual({
+      status: 'not-published',
+    });
+  });
+
+  it('reports a server error and a thrown fetch as errors', async () => {
+    const refused = stubClient({ updateRows: { data: null, error: { message: 'denied' } } });
+    await expect(refreshTemplatePayload(refused.client, 'remote-1', PAYLOAD)).resolves.toEqual({
+      status: 'error',
+      message: 'denied',
+    });
+
+    const offline = stubClient({ throws: new Error('Failed to fetch') });
+    await expect(refreshTemplatePayload(offline.client, 'remote-1', PAYLOAD)).resolves.toEqual({
+      status: 'error',
+      message: 'Failed to fetch',
     });
   });
 });

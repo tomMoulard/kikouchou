@@ -29,6 +29,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { useYjsContext } from '@/lib/yjs/YjsProvider';
 import { syncRemoteTripMetadata } from './remote-trip';
 import type { SyncState } from './SupabaseYjsProvider';
+import { useTemplateRefresh } from './useTemplateRefresh';
 import { useTripSync } from './useTripSync';
 import { useViewerSync } from './useViewerSync';
 import type { TripId } from '@/types';
@@ -153,6 +154,15 @@ export function SupabaseTripSync({
     // a guest — does not fire a pointless update.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Keyed on `previewKey` deliberately, for the reason directly above.
   }, [previewKey]);
+
+  // Keep a published template's copy in step with the trip, the same way the
+  // preview above follows the name. Never from a viewer, for the same reason.
+  useTemplateRefresh({
+    tripId,
+    remoteTripId: isViewer ? null : (remoteTripId ?? null),
+    userId: session !== null ? userId : null,
+    online: state.status !== 'offline',
+  });
 
   /**
    * Reports sync falling over and coming back, on the transition only.

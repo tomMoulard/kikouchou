@@ -189,12 +189,12 @@ describe('TripTemplateCard', () => {
     );
   });
 
-  it('says the payload is a copy, so publishing again is what refreshes it', () => {
+  it('says the link follows the trip, and keeps publishing again by hand', () => {
     answering({ kind: 'published', url: 'https://x.test/t/a', token: 'a' });
 
     render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
 
-    expect(screen.getByText(/Publish again after you change the trip/)).toBeInTheDocument();
+    expect(screen.getByText(/reach the link on their own/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Publish again' })).toBeInTheDocument();
   });
 

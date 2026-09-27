@@ -11,8 +11,8 @@
  *
  * The payload is built here rather than on the server, because the five fields
  * live in the local trip and its rooms: the server holds a name and two dates
- * and nothing else about a trip. Every publish rewrites it, so pressing Publish
- * again after editing the trip is what refreshes what customers see.
+ * and nothing else about a trip. Every publish rewrites it, and between two
+ * publishes `useTemplateRefresh` rewrites it after each edit.
  *
  * @module features/sharing/hooks/useTripTemplateLink
  */
@@ -20,19 +20,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAuth } from '@/features/auth/AuthContext';
-import { getRoomsByTripId } from '@/lib/db';
 import { getCurrentLanguage } from '@/lib/i18n';
 import { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureRemoteTrip } from '@/lib/sync/remote-trip';
 import {
+  buildTemplatePayload,
   buildTemplateUrl,
   publishTemplate,
   readTemplateState,
   unpublishTemplate,
-  type TripTemplatePayload,
 } from '@/lib/sync/templates';
-import { DEFAULT_ROOM_ICON } from '@/types';
 import type { Trip } from '@/types';
 
 // ============================================================================
@@ -72,31 +70,6 @@ export interface UseTripTemplateLinkResult {
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/**
- * The five published fields, read out of the local trip.
- *
- * The rooms come from Dexie in display order, so the customer's copy lists them
- * the way the enterprise arranged them.
- *
- * @param trip - The trip being published
- * @returns What an anonymous reader will see
- */
-async function buildPayload(trip: Trip): Promise<TripTemplatePayload> {
-  const rooms = await getRoomsByTripId(trip.id);
-  return {
-    name: trip.name,
-    description: trip.description ?? null,
-    location: trip.location ?? null,
-    coordinates: trip.coordinates ?? null,
-    currency: trip.currency ?? null,
-    rooms: rooms.map((room) => ({
-      name: room.name,
-      capacity: room.capacity,
-      icon: room.icon ?? DEFAULT_ROOM_ICON,
-    })),
-  };
-}
 
 /** The link for a token, in the language the publisher is reading in. */
 function urlFor(token: string): string {
@@ -238,7 +211,7 @@ export function useTripTemplateLink(
       }
 
       const existing = await readTemplateState(client, remote.remoteTripId);
-      const payload = await buildPayload(trip);
+      const payload = await buildTemplatePayload(trip);
       const result = await publishTemplate(
         client,
         remote.remoteTripId,
