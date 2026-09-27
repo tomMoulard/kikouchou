@@ -14,6 +14,7 @@ import { InstallPromptProvider } from '@/contexts/InstallPromptContext';
 import { Toaster } from '@/components/ui/sonner';
 import { StatusAnnouncer } from '@/components/shared/StatusAnnouncer';
 import { InstallPrompt, OfflineIndicator } from '@/components/pwa';
+import { applyStoredPalette } from '@/lib/palette';
 import { applyStoredTheme, THEME_STORAGE_KEY } from '@/lib/theme';
 import { router } from '@/router';
 
@@ -40,8 +41,12 @@ import { router } from '@/router';
   The provider and this call cannot disagree: both read `THEME_STORAGE_KEY`,
   and `applyStoredTheme` normalises the stored value so next-themes only ever
   sees one it understands.
+
+  The palette (`lib/palette`) is a second attribute on the same element, owned
+  by no provider, so this call is the only thing that paints it on load.
 */
 applyStoredTheme();
+applyStoredPalette();
 
 // ============================================================================
 // Component

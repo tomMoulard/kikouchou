@@ -1513,6 +1513,18 @@
       "dark": "Sombre",
       "system": "Système"
     },
+    "palette": "Couleurs",
+    "paletteDescription": "Chaque palette existe en version claire et sombre. Certaines n'apparaissent qu'à certains moments de l'année.",
+    "paletteSeasonal": "Ce mois-ci seulement",
+    "palettes": {
+      "default": "Soleil couchant",
+      "ocean": "Océan",
+      "forest": "Forêt",
+      "valentine": "Saint-Valentin",
+      "stpatrick": "Saint-Patrick",
+      "halloween": "Halloween",
+      "christmas": "Noël"
+    },
     "about": "À propos",
     "aboutDescription": "Informations sur l'application",
     "version": "Version",
