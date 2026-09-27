@@ -18,10 +18,11 @@ import { cn } from '@/lib/utils';
 
 /**
  * Default color palette for person colors.
- * These colors provide good visual distinction and contrast.
+ * These colors provide good visual distinction and contrast. There is no red:
+ * red means an error or a destructive action in this app, and a guest drawn in
+ * it on the calendar or a room card reads as a warning.
  */
 const DEFAULT_COLORS = [
-  '#ef4444', // Red
   '#f97316', // Orange
   '#f59e0b', // Amber
   '#eab308', // Yellow
@@ -32,6 +33,7 @@ const DEFAULT_COLORS = [
   '#3b82f6', // Blue
   '#6366f1', // Indigo
   '#8b5cf6', // Violet
+  '#a855f7', // Purple
   '#ec4899', // Pink
 ] as const,
 
@@ -40,7 +42,6 @@ const DEFAULT_COLORS = [
  * Maps hex color codes to i18n translation keys.
  */
  COLOR_KEYS: Readonly<Record<string, string>> = {
-  '#ef4444': 'colors.red',
   '#f97316': 'colors.orange',
   '#f59e0b': 'colors.amber',
   '#eab308': 'colors.yellow',
@@ -51,6 +52,7 @@ const DEFAULT_COLORS = [
   '#3b82f6': 'colors.blue',
   '#6366f1': 'colors.indigo',
   '#8b5cf6': 'colors.violet',
+  '#a855f7': 'colors.purple',
   '#ec4899': 'colors.pink',
 },
 

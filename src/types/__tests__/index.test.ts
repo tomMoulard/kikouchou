@@ -34,7 +34,7 @@ describe('DEFAULT_PERSON_COLORS', () => {
   it('has expected color values in order', () => {
     // Verify the exact palette order
     expect(DEFAULT_PERSON_COLORS).toEqual([
-      '#ef4444', // Red
+      '#6366f1', // Indigo
       '#f97316', // Orange
       '#eab308', // Yellow
       '#22c55e', // Green
@@ -45,8 +45,12 @@ describe('DEFAULT_PERSON_COLORS', () => {
     ]);
   });
 
-  it('starts with Red (#ef4444)', () => {
-    expect(DEFAULT_PERSON_COLORS[0]).toBe('#ef4444');
+  it('starts with Indigo (#6366f1)', () => {
+    expect(DEFAULT_PERSON_COLORS[0]).toBe('#6366f1');
+  });
+
+  it('leaves out red, the error and destructive colour', () => {
+    expect(DEFAULT_PERSON_COLORS).not.toContain('#ef4444');
   });
 
   it('ends with Pink (#ec4899)', () => {
@@ -71,8 +75,8 @@ describe('DEFAULT_PERSON_COLORS', () => {
 
 describe('getDefaultPersonColor', () => {
   describe('basic index access (0-7)', () => {
-    it('returns Red (#ef4444) for index 0', () => {
-      expect(getDefaultPersonColor(0)).toBe('#ef4444');
+    it('returns Indigo (#6366f1) for index 0', () => {
+      expect(getDefaultPersonColor(0)).toBe('#6366f1');
     });
 
     it('returns Orange (#f97316) for index 1', () => {
@@ -112,7 +116,7 @@ describe('getDefaultPersonColor', () => {
 
   describe('returns colors cyclically based on index', () => {
     it('wraps to index 0 when index equals palette length (8)', () => {
-      expect(getDefaultPersonColor(8)).toBe('#ef4444'); // Same as index 0
+      expect(getDefaultPersonColor(8)).toBe('#6366f1'); // Same as index 0
     });
 
     it('wraps to index 1 when index is 9', () => {
@@ -120,7 +124,7 @@ describe('getDefaultPersonColor', () => {
     });
 
     it('wraps to index 0 when index is 16 (2 full cycles)', () => {
-      expect(getDefaultPersonColor(16)).toBe('#ef4444'); // Same as index 0
+      expect(getDefaultPersonColor(16)).toBe('#6366f1'); // Same as index 0
     });
 
     it('wraps to index 7 when index is 15', () => {
@@ -152,9 +156,9 @@ describe('getDefaultPersonColor', () => {
       expect(getDefaultPersonColor(-1)).toBe('#f97316');
     });
 
-    it('returns Red (#ef4444) for index -8 (Math.abs(-8) % 8 = 0)', () => {
+    it('returns Indigo (#6366f1) for index -8 (Math.abs(-8) % 8 = 0)', () => {
       // Math.abs(-8) % 8 = 0
-      expect(getDefaultPersonColor(-8)).toBe('#ef4444');
+      expect(getDefaultPersonColor(-8)).toBe('#6366f1');
     });
 
     it('returns Orange (#f97316) for index -9 (Math.abs(-9) % 8 = 1)', () => {
@@ -184,7 +188,7 @@ describe('getDefaultPersonColor', () => {
     it('handles -0 same as 0', () => {
       // JavaScript treats -0 and 0 as equal
       expect(getDefaultPersonColor(-0)).toBe(getDefaultPersonColor(0));
-      expect(getDefaultPersonColor(-0)).toBe('#ef4444');
+      expect(getDefaultPersonColor(-0)).toBe('#6366f1');
     });
   });
 
@@ -261,12 +265,12 @@ describe('getDefaultPersonColor', () => {
 
   describe('edge cases', () => {
     it('handles 0 correctly', () => {
-      expect(getDefaultPersonColor(0)).toBe('#ef4444');
+      expect(getDefaultPersonColor(0)).toBe('#6366f1');
     });
 
     it('handles the boundary between last and first color (7 to 8)', () => {
       expect(getDefaultPersonColor(7)).toBe('#ec4899'); // Last color (Pink)
-      expect(getDefaultPersonColor(8)).toBe('#ef4444'); // Wraps to first (Red)
+      expect(getDefaultPersonColor(8)).toBe('#6366f1'); // Wraps to first (Indigo)
     });
 
     it('handles decimal numbers by implicit truncation', () => {
