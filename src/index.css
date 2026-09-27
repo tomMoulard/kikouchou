@@ -945,3 +945,133 @@ body:has(
   animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
   animation-fill-mode: both;
 }
+
+/*
+ * Seasonal decorations (`components/shared/SeasonalDecor.tsx`).
+ *
+ * Every piece has a resting position from its own utility classes, and the
+ * motion below only runs for a viewer who has not asked for stillness. Under
+ * `prefers-reduced-motion: reduce` the bats, hearts and clovers stand where
+ * they rest, and the snow is not drawn, because a still snowflake is a stray
+ * dot.
+ *
+ * Timing (`animation-duration`, `animation-delay`) is set per piece with
+ * arbitrary-value classes, so these rules name the animation only.
+ */
+.seasonal-snowflake {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes seasonal-fly {
+    from {
+      left: -2rem;
+      transform: translateY(0);
+    }
+
+    25% {
+      transform: translateY(0.4rem);
+    }
+
+    50% {
+      transform: translateY(-0.2rem);
+    }
+
+    75% {
+      transform: translateY(0.3rem);
+    }
+
+    to {
+      left: calc(100% + 2rem);
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes seasonal-snow {
+    from {
+      transform: translate3d(0, -2vh, 0);
+    }
+
+    to {
+      transform: translate3d(2.5rem, 102vh, 0);
+    }
+  }
+
+  @keyframes seasonal-rise {
+    from {
+      opacity: 0;
+      transform: translateY(1rem);
+    }
+
+    30% {
+      opacity: 1;
+    }
+
+    to {
+      opacity: 0;
+      transform: translateY(-3.5rem);
+    }
+  }
+
+  @keyframes seasonal-sway {
+    from {
+      transform: rotate(-12deg);
+    }
+
+    to {
+      transform: rotate(12deg);
+    }
+  }
+
+  @keyframes seasonal-twinkle {
+    from {
+      opacity: 1;
+    }
+
+    to {
+      opacity: 0.25;
+    }
+  }
+
+  @keyframes seasonal-dangle {
+    from {
+      transform: translateY(0);
+    }
+
+    to {
+      transform: translateY(0.6rem);
+    }
+  }
+
+  .seasonal-bat {
+    animation-name: seasonal-fly;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+
+  .seasonal-snowflake {
+    display: block;
+    animation-name: seasonal-snow;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+
+  .seasonal-rise {
+    animation-name: seasonal-rise;
+    animation-timing-function: ease-out;
+    animation-iteration-count: infinite;
+  }
+
+  .seasonal-sway {
+    transform-origin: 50% 100%;
+    animation: seasonal-sway 3s ease-in-out infinite alternate;
+  }
+
+  .seasonal-twinkle {
+    animation: seasonal-twinkle 1.8s ease-in-out infinite alternate;
+  }
+
+  .seasonal-dangle {
+    animation: seasonal-dangle 4s ease-in-out infinite alternate;
+  }
+}
