@@ -2017,10 +2017,11 @@ export type TripUpdate = Readonly<Pick<Trip, 'id'>> &
 /**
  * Default color palette for person assignment.
  * Used when automatically assigning colors to new persons.
- * These are pre-validated hex colors cast to the branded type.
+ * These are pre-validated hex colors cast to the branded type. No red: it is
+ * the error and destructive colour, so a guest drawn in it reads as a warning.
  */
 export const DEFAULT_PERSON_COLORS: readonly HexColor[] = [
-  '#ef4444' as HexColor, // Red
+  '#6366f1' as HexColor, // Indigo
   '#f97316' as HexColor, // Orange
   '#eab308' as HexColor, // Yellow
   '#22c55e' as HexColor, // Green

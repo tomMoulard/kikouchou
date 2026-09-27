@@ -71,7 +71,7 @@ describe('ColorPicker Selection', () => {
   it('shows checkmark on selected color', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
+    render(<ColorPicker value="#f97316" onChange={onChange} />, { withProviders: false });
 
     // Find the selected button
     const selectedButton = screen.getByRole('radio', { checked: true });
@@ -82,7 +82,7 @@ describe('ColorPicker Selection', () => {
   it('does not show checkmark on unselected colors', () => {
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
+    render(<ColorPicker value="#f97316" onChange={onChange} />, { withProviders: false });
 
     // Counted rather than looped over: exactly one checkmark exists in the
     // whole group, so a component that ticked every swatch — or none — fails.
@@ -142,14 +142,14 @@ describe('ColorPicker Selection', () => {
     const onChange = vi.fn();
 
     // Uppercase hex should still match
-    render(<ColorPicker value="#EF4444" onChange={onChange} />, { withProviders: false });
+    render(<ColorPicker value="#F97316" onChange={onChange} />, { withProviders: false });
 
     // Which swatch matters: "something is checked" would also pass if the
     // lowercasing picked the wrong entry in the palette.
     const buttons = screen.getAllByRole('radio');
     const selectedButton = screen.getByRole('radio', { checked: true });
 
-    expect(buttons.indexOf(selectedButton)).toBe(DEFAULT_COLORS.indexOf('#ef4444'));
+    expect(buttons.indexOf(selectedButton)).toBe(DEFAULT_COLORS.indexOf('#f97316'));
   });
 });
 
@@ -162,7 +162,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
+    render(<ColorPicker value="#f97316" onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[0]!.focus();
@@ -190,7 +190,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
+    render(<ColorPicker value="#f97316" onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[0]!.focus();
@@ -280,7 +280,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const onChange = vi.fn();
     const lastIndex = DEFAULT_COLORS.length - 1;
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
+    render(<ColorPicker value="#f97316" onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[0]!.focus();
@@ -308,7 +308,7 @@ describe('ColorPicker Keyboard Navigation', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} />, { withProviders: false });
+    render(<ColorPicker value="#f97316" onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[0]!.focus();
@@ -365,7 +365,7 @@ describe('ColorPicker Disabled State', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
 
-    render(<ColorPicker value="#ef4444" onChange={onChange} disabled />, { withProviders: false });
+    render(<ColorPicker value="#f97316" onChange={onChange} disabled />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
     buttons[0]!.focus();
@@ -457,7 +457,6 @@ describe('ColorPicker Accessibility', () => {
       .map((button) => button.getAttribute('aria-label'));
 
     expect(labels).toEqual([
-      'colors.red',
       'colors.orange',
       'colors.amber',
       'colors.yellow',
@@ -468,8 +467,13 @@ describe('ColorPicker Accessibility', () => {
       'colors.blue',
       'colors.indigo',
       'colors.violet',
+      'colors.purple',
       'colors.pink',
     ]);
+  });
+
+  it('offers no red swatch, since red means an error in this app', () => {
+    expect(DEFAULT_COLORS).not.toContain('#ef4444');
   });
 
   it('falls back to a generic name for a colour outside the palette', () => {
@@ -525,7 +529,7 @@ describe('ColorPicker Visual', () => {
     render(<ColorPicker onChange={onChange} />, { withProviders: false });
 
     const buttons = screen.getAllByRole('radio');
-    expect(buttons[0]).toHaveStyle({ backgroundColor: '#ef4444' });
+    expect(buttons[0]).toHaveStyle({ backgroundColor: '#f97316' });
   });
 
   it('shows hover scale on non-disabled buttons', () => {
