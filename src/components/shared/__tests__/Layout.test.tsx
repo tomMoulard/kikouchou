@@ -436,6 +436,34 @@ describe('Layout', () => {
       expect(tripInfo).not.toHaveTextContent('Brittany');
     });
 
+    it('offers directions to the trip when it has a pin', () => {
+      const pinned = { ...mockTrip, coordinates: { lat: 48.2, lon: -3.1 } };
+      mockUseTripContext.mockReturnValue({
+        currentTrip: pinned,
+        trips: [pinned],
+        isLoading: false,
+        error: null,
+        setCurrentTrip: vi.fn(),
+        checkConnection: vi.fn(),
+      });
+
+      renderLayout();
+
+      const tripInfo = screen.getByTestId('trip-info-section');
+      expect(
+        within(tripInfo).getByRole('button', { name: /map\.getDirections/ }),
+      ).toBeInTheDocument();
+    });
+
+    it('offers no directions for a location with no pin', () => {
+      renderLayout();
+
+      const tripInfo = screen.getByTestId('trip-info-section');
+      expect(
+        within(tripInfo).queryByRole('button', { name: /map\.getDirections/ }),
+      ).not.toBeInTheDocument();
+    });
+
     it('shows "My Trips" link in sidebar', () => {
       renderLayout();
 

@@ -36,6 +36,7 @@ import { PrintSummaryCard } from '@/features/trips/components/PrintSummaryCard';
 import { TripTemplateCard } from '@/features/sharing/components/TripTemplateCard';
 import { TripDescriptionCard } from '@/features/trips/components/TripDescriptionCard';
 import { TripForm } from '@/features/trips/components/TripForm';
+import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
 import { ShareDialog } from '@/features/sharing';
 import { tripAccessOf } from '@/hooks/useTripAccess';
 import { useTripContext } from '@/contexts/TripContext';
@@ -543,6 +544,18 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
                   <div>
                     <dt className="text-muted-foreground">{t('trips.location')}</dt>
                     <dd className="font-medium">{trip.location}</dd>
+                  </div>
+                )}
+                {/* A guest reading the trip from an invite link is exactly the
+                    person who needs to know how to get there. */}
+                {trip.coordinates && (
+                  <div className="sm:col-span-2">
+                    <DirectionsButton
+                      coordinates={trip.coordinates}
+                      locationName={trip.location ?? trip.name}
+                      variant="outline"
+                      size="sm"
+                    />
                   </div>
                 )}
                 <div>
