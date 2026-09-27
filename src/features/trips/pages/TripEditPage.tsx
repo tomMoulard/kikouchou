@@ -34,6 +34,7 @@ import { Button } from '@/components/ui/button';
 import { GuestIdentitySelector } from '@/features/trips/components/GuestIdentitySelector';
 import { PrintSummaryCard } from '@/features/trips/components/PrintSummaryCard';
 import { TripTemplateCard } from '@/features/sharing/components/TripTemplateCard';
+import { TripDescriptionCard } from '@/features/trips/components/TripDescriptionCard';
 import { TripForm } from '@/features/trips/components/TripForm';
 import { ShareDialog } from '@/features/sharing';
 import { tripAccessOf } from '@/hooks/useTripAccess';
@@ -94,13 +95,18 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [isDescriptionDirty, setIsDescriptionDirty] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
 
   // ============================================================================
   // Unsaved Changes Guard
   // ============================================================================
 
-  const { isBlocked, proceed, reset, skipNextBlock } = useUnsavedChanges(isDirty);
+  // Two editors on one page, one guard: a half-written description is as
+  // unsaved as a half-edited form.
+  const { isBlocked, proceed, reset, skipNextBlock } = useUnsavedChanges(
+    isDirty || isDescriptionDirty,
+  );
 
   const handleDirtyChange = useCallback((dirty: boolean) => {
     setIsDirty(dirty);
@@ -260,6 +266,34 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
       navigate(`/trips/${tripId}/calendar`);
     },
     [tripId, navigate, skipNextBlock, notifySuccess, t],
+  );
+
+  /**
+   * Saves the description on its own, from its card.
+   *
+   * Unlike the form, this stays on the page: the point of editing a note in
+   * place is to read it back formatted. The local row is patched rather than
+   * reloaded, so the form below keeps whatever is being typed into it.
+   */
+  const handleDescriptionSave = useCallback(
+    async (description: string): Promise<void> => {
+      if (!tripId) return;
+
+      await updateTrip(tripId as TripId, { description });
+
+      captureUsage('trip_updated');
+
+      if (!isMountedRef.current) {
+        return;
+      }
+      setTrip((previous) =>
+        previous === null
+          ? previous
+          : { ...previous, description: description === '' ? undefined : description },
+      );
+      notifySuccess(t('trips.descriptionEdit.saved', 'Description saved'));
+    },
+    [tripId, notifySuccess, t],
   );
 
   /**
@@ -530,6 +564,16 @@ export const TripEditPage = memo(function TripEditPage(): ReactElement {
             )}
           </CardContent>
         </Card>
+
+        {/* The description, rendered. Members edit it in place; a viewer trip
+            reads it, which it never could when the form was the only place
+            that showed it. */}
+        <TripDescriptionCard
+          description={trip.description}
+          canEdit={canEdit}
+          onSave={handleDescriptionSave}
+          onDirtyChange={setIsDescriptionDirty}
+        />
 
         {/* Which guest this browser is — under the trip it belongs to, because
             the answer is per trip and means nothing without one. */}

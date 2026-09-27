@@ -410,4 +410,52 @@ describe('TripEditPage', () => {
       ).toBeInTheDocument();
     });
   });
+
+  describe('description', () => {
+    it('shows the description rendered, with an edit button', async () => {
+      mockGetTripById.mockResolvedValue({ ...mockTrip, description: 'Bring **towels**' });
+      render(<TripEditPage />, { withProviders: false });
+
+      const strong = await screen.findByText('towels');
+      expect(strong.tagName).toBe('STRONG');
+      expect(
+        screen.getByRole('button', { name: 'trips.descriptionEdit.editAria' }),
+      ).toBeInTheDocument();
+    });
+
+    it('saves the description alone and stays on the page', async () => {
+      const { userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      render(<TripEditPage />, { withProviders: false });
+
+      await user.click(
+        await screen.findByRole('button', { name: 'trips.descriptionEdit.editAria' }),
+      );
+      const editor = screen.getByRole('textbox', { name: 'trips.description' });
+      expect(editor).toHaveValue('A great trip');
+      await user.type(editor, ' with **sun**');
+      await user.click(screen.getByRole('button', { name: 'common.save' }));
+
+      await waitFor(() => {
+        expect(mockUpdateTrip).toHaveBeenCalledWith('trip-1', {
+          description: 'A great trip with **sun**',
+        });
+      });
+      expect(mockSuccessToast).toHaveBeenCalledWith('trips.descriptionEdit.saved');
+      expect(mockNavigate).not.toHaveBeenCalled();
+      // Back to the rendered view, showing what was just saved.
+      expect((await screen.findByText('sun')).tagName).toBe('STRONG');
+      expect(screen.queryByRole('textbox', { name: 'trips.description' })).toBeNull();
+    });
+
+    it('reads the description on a viewer trip, with no way to edit it', async () => {
+      mockGetTripById.mockResolvedValue({ ...mockTrip, viewerToken: 'token-1' });
+      render(<TripEditPage />, { withProviders: false });
+
+      expect(await screen.findByText('A great trip')).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: 'trips.descriptionEdit.editAria' }),
+      ).toBeNull();
+    });
+  });
 });

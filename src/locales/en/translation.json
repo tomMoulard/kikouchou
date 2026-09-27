@@ -160,6 +160,23 @@
     "spendTimelineAriaLabel_one": "What the trip had cost over time: 1 point, {{total}} in all",
     "spendTimelineAriaLabel_other": "What the trip had cost over time: {{count}} points, {{total}} in all"
   },
+  "markdown": {
+    "write": "Write",
+    "preview": "Preview",
+    "toolbar": "Formatting",
+    "heading": "Heading",
+    "bold": "Bold",
+    "italic": "Italic",
+    "link": "Link",
+    "bulletList": "Bulleted list",
+    "numberedList": "Numbered list",
+    "checklist": "Checklist",
+    "boldPlaceholder": "bold text",
+    "italicPlaceholder": "italic text",
+    "linkPlaceholder": "link text",
+    "hint": "Markdown works here: **bold**, _italic_, - lists, [links](https://…)",
+    "nothingToPreview": "Nothing to preview yet."
+  },
   "trips": {
     "title": "My trips",
     "new": "New trip",
@@ -173,6 +190,12 @@
     "endDate": "End date",
     "description": "Description",
     "descriptionPlaceholder": "Instructions, tricount link, notes...",
+    "descriptionEdit": {
+      "editAria": "Edit the description",
+      "emptyEditable": "No description yet. Add the door code, the Tricount link or what to bring.",
+      "empty": "No description yet.",
+      "saved": "Description saved"
+    },
     "guests": "Guests",
     "guestsHint": "Who is coming? Clear your own name if you are not going. You can add guests later.",
     "guestYou": "You",

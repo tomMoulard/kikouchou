@@ -679,36 +679,68 @@ describe('TripForm Description', () => {
     expect(screen.getByText('5/1000')).toBeInTheDocument();
   });
 
-  it('includes description in submission', async () => {
+  it('includes the description in a create-mode submission, trimmed', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
+    await fillRequiredTripFields(user);
+    await user.type(screen.getByLabelText(/trips\.description/i), '  **Door code** 1234  ');
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ description: '**Door code** 1234' }),
+      );
+    });
+  });
+
+  it('converts an empty description to undefined on a create-mode submit', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(<TripForm onSubmit={onSubmit} onCancel={vi.fn()} />);
+    await fillRequiredTripFields(user);
+    await user.click(screen.getByRole('button', { name: /common\.save/i }));
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ description: undefined }),
+      );
+    });
+  });
+
+  it('has no description field in edit mode, where its own card edits it', () => {
+    const trip = createTestTrip({ description: 'Existing description' });
+    render(<TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} />);
+    expect(screen.queryByLabelText(/trips\.description/i)).toBeNull();
+  });
+
+  it('leaves the description out of an edit-mode submission', async () => {
+    // The card saves the description on its own. Sending the value this form
+    // loaded would overwrite whatever the card saved since.
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const trip = createTestTrip({ description: 'Trip notes' });
     render(<TripForm trip={trip} onSubmit={onSubmit} onCancel={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: /common\.save/i }));
     await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({ description: 'Trip notes' })
-      );
+      expect(onSubmit).toHaveBeenCalledTimes(1);
     });
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('description');
   });
 
-  it('converts empty description to undefined on submit', async () => {
-    const user = userEvent.setup();
-    const onSubmit = vi.fn().mockResolvedValue(undefined);
-    const trip = createTestTrip({ description: '' });
-    render(<TripForm trip={trip} onSubmit={onSubmit} onCancel={vi.fn()} />);
-    await user.click(screen.getByRole('button', { name: /common\.save/i }));
-    await waitFor(() => {
-      expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({ description: undefined })
-      );
-    });
-  });
-
-  it('pre-fills description in edit mode', () => {
-    const trip = createTestTrip({ description: 'Existing description' });
-    render(<TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.getByLabelText(/trips\.description/i)).toHaveValue('Existing description');
+  it('does not read as dirty when the trip description changes under it', () => {
+    const onDirtyChange = vi.fn();
+    const trip = createTestTrip({ description: 'Before' });
+    const { rerender } = render(
+      <TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} onDirtyChange={onDirtyChange} />,
+    );
+    rerender(
+      <TripForm
+        trip={{ ...trip, description: 'After' }}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        onDirtyChange={onDirtyChange}
+      />,
+    );
+    expect(onDirtyChange).not.toHaveBeenCalledWith(true);
   });
 
   it('reports dirty state via onDirtyChange callback', async () => {
@@ -755,7 +787,7 @@ describe('TripForm Edge Cases', () => {
   it('renders with undefined description', () => {
     const trip = createTestTrip({ description: undefined });
     render(<TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.getByLabelText(/trips\.description/i)).toHaveValue('');
+    expect(screen.getByLabelText(/trips\.name/i)).toHaveValue('Beach Vacation');
   });
 
   it('renders with undefined location', () => {
@@ -813,10 +845,10 @@ describe('TripForm Edge Cases', () => {
     });
   });
 
-  it('shows character count for description in edit mode', () => {
+  it('shows no description character count in edit mode', () => {
     const trip = createTestTrip({ description: 'Hello World' });
     render(<TripForm trip={trip} onSubmit={vi.fn()} onCancel={vi.fn()} />);
-    expect(screen.getByText('11/1000')).toBeInTheDocument();
+    expect(screen.queryByText('11/1000')).toBeNull();
   });
 });
 
