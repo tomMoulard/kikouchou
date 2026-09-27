@@ -719,6 +719,7 @@ export type AnalyticsEvent =
   | 'run_calendar_exported'
   // Preferences
   | 'language_changed'
+  | 'palette_changed'
   | 'theme_changed'
   // Would anybody pay? The fake-door test — see `features/upgrade`
   | 'upgrade_intent_declared'

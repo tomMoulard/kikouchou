@@ -28,6 +28,8 @@ import {
 } from '@/lib/theme';
 import { captureEvent } from '@/lib/posthog';
 
+import { PalettePicker } from './PalettePicker';
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -50,7 +52,8 @@ const THEME_ICONS: Record<ThemePreference, LucideIcon> = {
 // ============================================================================
 
 /**
- * Lets the user pick light, dark, or the operating system setting.
+ * Lets the user pick light, dark, or the operating system setting, and below
+ * that a colour palette (`PalettePicker`). The two are independent axes.
  *
  * The choice is persisted by `next-themes` (see `App.tsx`) and takes effect
  * immediately, so — unlike the language selector next to it — there is no
@@ -112,7 +115,7 @@ export const ThemeSelector = memo(function ThemeSelector(): ReactElement {
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         <ViewSwitcher
           value={current}
           onValueChange={handleChange}
@@ -120,6 +123,20 @@ export const ThemeSelector = memo(function ThemeSelector(): ReactElement {
           ariaLabel={t('settings.theme', 'Theme')}
           className="w-full sm:w-[320px]"
         />
+        <div className="space-y-2">
+          <div>
+            <p className="text-sm font-medium">
+              {t('settings.palette', 'Colors')}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {t(
+                'settings.paletteDescription',
+                'Each palette has a light and a dark version. Some only show up at certain times of the year.',
+              )}
+            </p>
+          </div>
+          <PalettePicker />
+        </div>
       </CardContent>
     </Card>
   );

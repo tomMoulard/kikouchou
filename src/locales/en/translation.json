@@ -1513,6 +1513,18 @@
       "dark": "Dark",
       "system": "System"
     },
+    "palette": "Colors",
+    "paletteDescription": "Each palette has a light and a dark version. Some only show up at certain times of the year.",
+    "paletteSeasonal": "This month only",
+    "palettes": {
+      "default": "Sunset",
+      "ocean": "Ocean",
+      "forest": "Forest",
+      "valentine": "Valentine's Day",
+      "stpatrick": "Saint Patrick's",
+      "halloween": "Halloween",
+      "christmas": "Christmas"
+    },
     "about": "About",
     "aboutDescription": "Application information",
     "version": "Version",
