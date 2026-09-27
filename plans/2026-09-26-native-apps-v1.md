@@ -578,7 +578,8 @@ The branch `feat/native-apps` carries the whole of Route A:
 ## What a person still has to do
 
 No agent or script can do these, because each one needs an account, a key or
-a decision.
+a decision. `docs/releasing-the-store-apps.md` gives each one as exact
+steps and commands.
 
 1. Create the Apple Developer and Google Play accounts (S1). Create the app
    `app.kikouchou` in App Store Connect and in the Play Console, and upload the

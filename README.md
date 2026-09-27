@@ -108,6 +108,8 @@ bunx cap open android     # Open the Android project in Android Studio
 A `v*` tag builds, signs and publishes both apps (`.github/workflows/native.yml`)
 and attaches the APK and the IPA to a GitHub release. F-Droid users can add
 `https://app.kikouchou.app/fdroid/repo`.
+[`docs/releasing-the-store-apps.md`](docs/releasing-the-store-apps.md) is the
+step-by-step runbook for the first release and every one after it.
 
 ## License
 
