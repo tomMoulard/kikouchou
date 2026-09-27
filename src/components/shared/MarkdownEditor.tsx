@@ -110,6 +110,12 @@ const TOOLS: readonly ToolDef[] = [
 const WRITE_TAB = 'write';
 const PREVIEW_TAB = 'preview';
 
+/**
+ * The stock inactive tab label is `foreground` at 60% on `muted`, which
+ * measured 3.97:1 on the trip form, under the 4.5:1 AA floor. 80% clears it.
+ */
+const TAB_TRIGGER_CLASS = 'text-foreground/80 dark:text-foreground/80';
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -282,8 +288,12 @@ const MarkdownEditor = memo(function MarkdownEditor({
     <Tabs value={tab} onValueChange={setTab} className="gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <TabsList>
-          <TabsTrigger value={WRITE_TAB}>{t('markdown.write', 'Write')}</TabsTrigger>
-          <TabsTrigger value={PREVIEW_TAB}>{t('markdown.preview', 'Preview')}</TabsTrigger>
+          <TabsTrigger value={WRITE_TAB} className={TAB_TRIGGER_CLASS}>
+            {t('markdown.write', 'Write')}
+          </TabsTrigger>
+          <TabsTrigger value={PREVIEW_TAB} className={TAB_TRIGGER_CLASS}>
+            {t('markdown.preview', 'Preview')}
+          </TabsTrigger>
         </TabsList>
 
         {tab === WRITE_TAB && (
