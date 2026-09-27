@@ -879,6 +879,18 @@ describe('TripCard Description', () => {
     // Otherwise the card grows a blank line for a field nobody filled in.
     expect(container.querySelector('.line-clamp-2')).toBeNull();
   });
+
+  it('shows a Markdown description as plain words, in the text and the label', () => {
+    const trip = createTestTrip({ description: '## Arrival\n**Door code** 1234' });
+    const { container } = render(<TripCard trip={trip} persons={[]} onClick={vi.fn()} />);
+
+    // Two clamped lines have no room to render Markdown, and the raw syntax
+    // reads as noise, to the eye and to a screen reader alike.
+    const card = screen.getByRole('button', { name: /beach vacation/i });
+    expect(card.getAttribute('aria-label')).toContain('Arrival\nDoor code 1234');
+    expect(card.getAttribute('aria-label')).not.toMatch(/[#*]/);
+    expect(container.querySelector('.line-clamp-2')).toHaveTextContent('Arrival Door code 1234');
+  });
 });
 
 // ============================================================================

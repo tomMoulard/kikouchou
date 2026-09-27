@@ -160,6 +160,23 @@
     "spendTimelineAriaLabel_one": "Ce que le séjour avait coûté au fil du temps : 1 point, {{total}} au total",
     "spendTimelineAriaLabel_other": "Ce que le séjour avait coûté au fil du temps : {{count}} points, {{total}} au total"
   },
+  "markdown": {
+    "write": "Écrire",
+    "preview": "Aperçu",
+    "toolbar": "Mise en forme",
+    "heading": "Titre",
+    "bold": "Gras",
+    "italic": "Italique",
+    "link": "Lien",
+    "bulletList": "Liste à puces",
+    "numberedList": "Liste numérotée",
+    "checklist": "Liste de tâches",
+    "boldPlaceholder": "texte en gras",
+    "italicPlaceholder": "texte en italique",
+    "linkPlaceholder": "texte du lien",
+    "hint": "Le Markdown fonctionne ici : **gras**, _italique_, - listes, [liens](https://…)",
+    "nothingToPreview": "Rien à afficher pour l’instant."
+  },
   "trips": {
     "title": "Mes voyages",
     "new": "Nouveau voyage",
@@ -173,6 +190,12 @@
     "endDate": "Date de fin",
     "description": "Description",
     "descriptionPlaceholder": "Instructions, lien tricount, notes...",
+    "descriptionEdit": {
+      "editAria": "Modifier la description",
+      "emptyEditable": "Pas encore de description. Ajoutez le code de la porte, le lien Tricount ou ce qu’il faut apporter.",
+      "empty": "Pas encore de description.",
+      "saved": "Description enregistrée"
+    },
     "guests": "Invités",
     "guestsHint": "Qui vient ? Effacez votre nom si vous n'y allez pas. Vous pourrez ajouter des invités plus tard.",
     "guestYou": "Vous",

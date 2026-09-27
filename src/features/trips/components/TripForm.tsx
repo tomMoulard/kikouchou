@@ -39,13 +39,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { MarkdownEditor } from '@/components/shared/MarkdownEditor';
 import { cn } from '@/lib/utils';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { toISODateStringFromString } from '@/lib/db/utils';
@@ -507,7 +507,9 @@ const TripForm = memo(function TripForm({
       location !== initialValues.location ||
       startDate !== initialValues.startDate ||
       endDate !== initialValues.endDate ||
-      description !== initialValues.description ||
+      // Edit mode has no description field: its own card saves it, so a
+      // change arriving from there must not read as an unsaved form.
+      (isCreateMode && description !== initialValues.description) ||
       currency !== initialValues.currency ||
       !isSameCoordinates(coordinates, initialValues.coordinates) ||
       isGuestListDirty ||
@@ -521,6 +523,7 @@ const TripForm = memo(function TripForm({
       currency,
       coordinates,
       initialValues,
+      isCreateMode,
       isGuestListDirty,
       isRoomListDirty,
     ],
@@ -971,16 +974,6 @@ const TripForm = memo(function TripForm({
   }, []);
 
   /**
-   * Handles description textarea change.
-   */
-  const handleDescriptionChange = useCallback(
-    (e: ChangeEvent<HTMLTextAreaElement>) => {
-      setDescription(e.target.value);
-    },
-    [],
-  );
-
-  /**
    * Handles start date selection.
    * Uses functional update to avoid dependency on error state.
    */
@@ -1070,7 +1063,10 @@ const TripForm = memo(function TripForm({
           location: location.trim() || undefined,
           startDate: toISODateStringFromString(startDate),
           endDate: toISODateStringFromString(endDate),
-          description: description.trim() || undefined,
+          // Only a new trip carries one. In edit mode the description has its
+          // own card and its own save, and sending the value this form loaded
+          // would overwrite whatever that card saved since.
+          ...(isCreateMode ? { description: description.trim() || undefined } : {}),
           coordinates,
           currency,
         });
@@ -1086,6 +1082,7 @@ const TripForm = memo(function TripForm({
       startDate,
       endDate,
       description,
+      isCreateMode,
       coordinates,
       currency,
     ],
@@ -1151,23 +1148,23 @@ const TripForm = memo(function TripForm({
         )}
       </div>
 
-      {/* Description Field */}
-      <div className="space-y-2">
-        <Label htmlFor="trip-description">{t('trips.description')}</Label>
-        <Textarea
-          id="trip-description"
-          value={description}
-          onChange={handleDescriptionChange}
-          placeholder={t('trips.descriptionPlaceholder')}
-          disabled={isSubmitting}
-          rows={4}
-          maxLength={DESCRIPTION_MAX_LENGTH}
-          className="resize-none"
-        />
-        <p className="text-xs text-muted-foreground text-right">
-          {description.length}/{DESCRIPTION_MAX_LENGTH}
-        </p>
-      </div>
+      {/* Description Field. Create mode only: on an existing trip the
+          settings page shows the description rendered, in a card of its own
+          with its own Edit and Save (`TripDescriptionCard`). */}
+      {isCreateMode && (
+        <div className="space-y-2">
+          <Label htmlFor="trip-description">{t('trips.description')}</Label>
+          <MarkdownEditor
+            id="trip-description"
+            value={description}
+            onChange={setDescription}
+            placeholder={t('trips.descriptionPlaceholder')}
+            disabled={isSubmitting}
+            rows={4}
+            maxLength={DESCRIPTION_MAX_LENGTH}
+          />
+        </div>
+      )}
 
       {/* Currency — what the money page labels every amount with. One per
           trip: a group renting one house pays for everything in one currency,

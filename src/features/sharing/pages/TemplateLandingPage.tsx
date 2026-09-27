@@ -22,6 +22,7 @@ import { AlertTriangle, Loader2, MapPin } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card';
+import { MarkdownText } from '@/components/shared/MarkdownText';
 import {
   TripCreateWizard,
   type TripCreateWizardPrefill,
@@ -208,9 +209,10 @@ export function TemplateLandingPage(): ReactElement {
             // The enterprise's own words: check-in times, what to bring, who to
             // call. Kept above the questions, because it is what tells the
             // customer which dates and which guests to put in.
-            <p className="whitespace-pre-line text-sm text-muted-foreground">
+            // Markdown, like the trip description it was published from.
+            <MarkdownText className="text-muted-foreground">
               {template.description}
-            </p>
+            </MarkdownText>
           )}
         </header>
 

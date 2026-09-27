@@ -50,6 +50,7 @@ import { Button } from '@/components/ui/button';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
 import { formatDateRange } from '@/lib/utils/date-format';
+import { markdownToPlainText } from '@/lib/utils/markdown';
 import type { Person, Trip } from '@/types';
 import { PersonBadge } from '@/components/shared/PersonBadge';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
@@ -142,8 +143,13 @@ const TripCard = memo(function TripCard({
    overflowLabel = t('trips.moreGuests', { count: overflowCount }),
 
   // Trimmed here rather than at the source: a description of nothing but
-  // whitespace is a description the card must not make room for.
-   description = trip.description?.trim() ?? '',
+  // whitespace is a description the card must not make room for. Stripped of
+  // its Markdown too: a two-line preview has no room to render it, and the
+  // syntax printed raw reads as noise.
+   description = useMemo(
+    () => markdownToPlainText(trip.description ?? ''),
+    [trip.description],
+  ),
 
   // Format the date range
    dateRange = useMemo(
