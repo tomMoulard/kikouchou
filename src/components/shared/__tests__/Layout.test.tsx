@@ -209,6 +209,31 @@ describe('Layout', () => {
       expect(screen.getByText('app.name')).toBeInTheDocument();
     });
 
+    it('dresses the logo and decorates the page for a seasonal palette', () => {
+      document.documentElement.setAttribute('data-palette', 'halloween');
+
+      try {
+        renderLayout();
+
+        const header = screen.getByRole('banner');
+
+        expect(header.querySelector('[data-dress="halloween"]')).not.toBeNull();
+        expect(
+          header.contains(screen.getByTestId('seasonal-header-decor')),
+        ).toBe(true);
+        expect(screen.getByTestId('seasonal-backdrop')).toBeInTheDocument();
+      } finally {
+        document.documentElement.removeAttribute('data-palette');
+      }
+    });
+
+    it('draws no decoration for the default palette', () => {
+      renderLayout();
+
+      expect(screen.queryByTestId('seasonal-header-decor')).toBeNull();
+      expect(screen.queryByTestId('seasonal-backdrop')).toBeNull();
+    });
+
     it('renders skip to main content link', () => {
       renderLayout();
 

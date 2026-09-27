@@ -5,6 +5,7 @@
  */
 
 // Network status
+export { useActivePalette } from './useActivePalette';
 export { useOnlineStatus, type UseOnlineStatusResult } from './useOnlineStatus';
 
 // PWA installation

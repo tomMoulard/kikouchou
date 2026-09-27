@@ -41,6 +41,10 @@ import {
 } from 'lucide-react';
 
 import { BrandMark } from '@/components/shared/BrandMark';
+import {
+  SeasonalBackdrop,
+  SeasonalHeaderDecor,
+} from '@/components/shared/SeasonalDecor';
 import { Button } from '@/components/ui/button';
 import {
   Sheet,
@@ -54,6 +58,7 @@ import { useAssignmentContext } from '@/contexts/AssignmentContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
+import { useActivePalette } from '@/hooks/useActivePalette';
 import { useToday } from '@/hooks/useToday';
 import { useShortLandscapeViewport, useWideViewport } from '@/hooks/usePhoneViewport';
 import { getDateLocale } from '@/lib/i18n/date-locale';
@@ -345,10 +350,12 @@ const Header = memo(function Header({
   readonly tripName: string | null;
   readonly onMenuClick?: () => void;
 }): React.ReactElement {
-  const { t } = useTranslation();
+  const { t } = useTranslation(),
+    palette = useActivePalette();
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background px-4 md:px-6 print:hidden">
+      <SeasonalHeaderDecor />
       {/* Mobile menu button - only visible on mobile */}
       {onMenuClick && (
         <Button
@@ -367,7 +374,7 @@ const Header = memo(function Header({
         to="/trips"
         className="inline-flex items-center gap-2 text-lg font-semibold hover:text-primary transition-colors"
       >
-        <BrandMark />
+        <BrandMark palette={palette} />
         {t('app.name')}
       </Link>
 
@@ -1181,7 +1188,12 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
     // viewport, the one you only get once the browser chrome has retracted, so
     // the shell was always a chrome's-height taller than the window. `svh` is
     // the small viewport and never overflows; the sharing pages already use it.
-    <div className="min-h-svh bg-background">
+    //
+    // No background here: `body` paints it. A background on this element would
+    // cover `SeasonalBackdrop`, which sits at `-z-10` so that it paints over
+    // the page background and under everything else.
+    <div className="min-h-svh">
+      {showFocusedForm ? null : <SeasonalBackdrop />}
       {/* Skip link for keyboard navigation - allows users to bypass navigation */}
       <a
         href="#main-content"
