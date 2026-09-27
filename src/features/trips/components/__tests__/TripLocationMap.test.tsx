@@ -6,8 +6,8 @@
  *
  * @module features/trips/components/__tests__/TripLocationMap.test
  */
-import { describe, it, expect } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { TripLocationMap } from '../TripLocationMap';
@@ -374,5 +374,45 @@ describe('TripLocationMap Edge Cases', () => {
     const button = getPreviewButton();
     expect(button).toBeInTheDocument();
     expect(button).toHaveAttribute('aria-label');
+  });
+});
+
+// ============================================================================
+// Directions Tests
+// ============================================================================
+
+describe('TripLocationMap Directions', () => {
+  it('opens directions from the preview without opening the dialog', async () => {
+    const user = userEvent.setup();
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(<TripLocationMap {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'map.getDirections' }));
+
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining('destination=48.8566%2C2.3522'),
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    open.mockRestore();
+  });
+
+  it('offers directions in the expanded dialog, beside Open in Maps', async () => {
+    const user = userEvent.setup();
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(<TripLocationMap {...defaultProps} />);
+
+    await user.click(getPreviewButton());
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: /map\.getDirections/ }));
+
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining('/maps/dir/'),
+      '_blank',
+      'noopener,noreferrer',
+    );
+    expect(within(dialog).getByRole('button', { name: /map\.openInMaps/ })).toBeInTheDocument();
+    open.mockRestore();
   });
 });

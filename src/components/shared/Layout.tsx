@@ -75,6 +75,7 @@ import { formatDateRange } from '@/lib/utils/date-format';
 import type { Trip } from '@/types';
 
 import { TripGlancePanel } from '@/features/summary/components/TripGlancePanel';
+import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
 
 import { SyncStatusBadge } from './SyncStatusBadge';
 import { ViewerUnlockCard } from './ViewerUnlockCard';
@@ -707,6 +708,17 @@ const TripInfoSection = memo(function TripInfoSection({
             <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />
             <span className="truncate" title={trip.location}>{trip.location}</span>
           </p>
+        )}
+        {/* Only with a pin: a name alone can resolve somewhere else entirely,
+            and a route to the wrong town is worse than no button. */}
+        {trip.coordinates && (
+          <DirectionsButton
+            coordinates={trip.coordinates}
+            locationName={trip.location ?? trip.name}
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full"
+          />
         )}
       </div>
 

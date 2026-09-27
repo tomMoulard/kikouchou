@@ -155,6 +155,21 @@ describe('TripEditPage', () => {
     // Publishing somebody else's trip to the public web is not a thing a
     // read-only copy may offer.
     expect(screen.queryByTestId('trip-template-card')).not.toBeInTheDocument();
+    // No pin, no route: a name alone could send the guest to another town.
+    expect(screen.queryByRole('button', { name: /map\.getDirections/ })).not.toBeInTheDocument();
+  });
+
+  it('offers directions on a viewer trip that has a pin', async () => {
+    mockGetTripById.mockResolvedValue({
+      ...mockTrip,
+      viewerToken: 'token-1',
+      coordinates: { lat: 35.68, lon: 139.76 },
+    });
+    render(<TripEditPage />, { withProviders: false });
+
+    expect(
+      await screen.findByRole('button', { name: /map\.getDirections/ }),
+    ).toBeInTheDocument();
   });
 
   it('renders delete button', async () => {

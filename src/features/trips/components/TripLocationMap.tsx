@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { MapView, type MapMarkerData } from '@/components/shared';
+import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
 import { buildMapsUrl } from '@/lib/utils/maps-link';
 import { cn } from '@/lib/utils';
 
@@ -61,6 +62,8 @@ const EXPANDED_ZOOM = 14;
  * - Click to expand to full interactive map in a dialog
  * - Keyboard accessible (Enter/Space to expand)
  * - Shows marker at trip coordinates
+ * - Directions from where the viewer is, in their own map app, from the
+ *   preview and from the dialog
  *
  * @example
  * ```tsx
@@ -155,51 +158,67 @@ export const TripLocationMap = memo(function TripLocationMap({
 
   return (
     <>
-      {/* Preview Thumbnail */}
-      <button
-        type="button"
-        onClick={handleExpand}
-        onKeyDown={handleKeyDown}
-        className={cn(
-          'relative w-full overflow-hidden rounded-md',
-          'border border-border',
-          'cursor-pointer transition-all duration-200',
-          'hover:border-primary/50 hover:shadow-sm',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-          className
-        )}
-        style={{ height: `${previewHeight}px` }}
-        aria-label={t('map.expandMap', {
-          location,
-        })}
-        aria-haspopup="dialog"
-        aria-expanded={isExpanded}
-      >
-        {/* Static Map Preview */}
-        <MapView
-          center={[coordinates.lat, coordinates.lon]}
-          zoom={PREVIEW_ZOOM}
-          markers={markers}
-          interactive={false}
-          showZoomControl={false}
-          showAttribution={false}
-          height={previewHeight}
-          aria-label={t('map.tripPreview')}
-        />
-
-        {/* Expand Icon Overlay */}
-        <div
+      {/* The preview and its directions shortcut are siblings, not nested: a
+          button inside a button is invalid, and the shortcut must not open the
+          dialog on its way to the map app. */}
+      <div className="relative w-full">
+        {/* Preview Thumbnail */}
+        <button
+          type="button"
+          onClick={handleExpand}
+          onKeyDown={handleKeyDown}
           className={cn(
-            'absolute bottom-1 right-1 p-1',
-            'rounded bg-background/80 backdrop-blur-sm',
-            'text-muted-foreground',
-            'pointer-events-none'
+            'relative w-full overflow-hidden rounded-md',
+            'border border-border',
+            'cursor-pointer transition-all duration-200',
+            'hover:border-primary/50 hover:shadow-sm',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+            className
           )}
-          aria-hidden="true"
+          style={{ height: `${previewHeight}px` }}
+          aria-label={t('map.expandMap', {
+            location,
+          })}
+          aria-haspopup="dialog"
+          aria-expanded={isExpanded}
         >
-          <Expand className="size-3" />
-        </div>
-      </button>
+          {/* Static Map Preview */}
+          <MapView
+            center={[coordinates.lat, coordinates.lon]}
+            zoom={PREVIEW_ZOOM}
+            markers={markers}
+            interactive={false}
+            showZoomControl={false}
+            showAttribution={false}
+            height={previewHeight}
+            aria-label={t('map.tripPreview')}
+          />
+
+          {/* Expand Icon Overlay */}
+          <div
+            className={cn(
+              'absolute bottom-1 right-1 p-1',
+              'rounded bg-background/80 backdrop-blur-sm',
+              'text-muted-foreground',
+              'pointer-events-none'
+            )}
+            aria-hidden="true"
+          >
+            <Expand className="size-3" />
+          </div>
+        </button>
+
+        {/* The shortcut for the question a trip location is usually asked:
+            how do I get there. */}
+        <DirectionsButton
+          coordinates={coordinates}
+          locationName={location}
+          variant="outline"
+          size="icon"
+          showLabel={false}
+          className="absolute bottom-1 left-1 bg-background/90 backdrop-blur-sm"
+        />
+      </div>
 
       {/* Expanded Map Dialog */}
       <Dialog open={isExpanded} onOpenChange={setIsExpanded}>
@@ -246,7 +265,12 @@ export const TripLocationMap = memo(function TripLocationMap({
                 ? t('map.addressCopied', 'Address copied')
                 : t('map.copyAddress', 'Copy address')}
             </Button>
-            <Button onClick={handleOpenInMaps}>
+            <DirectionsButton
+              coordinates={coordinates}
+              locationName={location}
+              variant="default"
+            />
+            <Button variant="outline" onClick={handleOpenInMaps}>
               <ExternalLink className="mr-2 size-4" aria-hidden="true" />
               {t('map.openInMaps', 'Open in Maps')}
             </Button>
