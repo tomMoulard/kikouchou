@@ -6,10 +6,11 @@
  * message, and every customer who follows it starts a trip of their own with
  * this trip's place, description, currency and rooms already filled.
  *
- * Publish is also republish. The payload a customer reads is a copy taken when
- * the button was pressed, so a trip edited afterwards is published again by
- * pressing it again, and the screen says so rather than leaving the enterprise
- * to guess.
+ * The link follows the trip. The payload a customer reads is a copy, and
+ * `useTemplateRefresh` rewrites it after each edit on the owner's device, so the
+ * enterprise does not have to remember to publish again. Publish again stays
+ * as the way to push the copy by hand, for example from a device that was
+ * offline when the trip changed.
  *
  * **The card is shown to everybody, and `ent-trip-templates` decides only what
  * the buttons do.** It used to render nothing outside the cohort, which meant
@@ -247,8 +248,8 @@ export const TripTemplateCard = memo(function TripTemplateCard({
               {state.kind === 'published' ? (
                 <p className="text-sm text-muted-foreground">
                   {t(
-                    'sharing.template.republishHint',
-                    'Customers read a copy taken when you published. Publish again after you change the trip.',
+                    'sharing.template.followsTripHint',
+                    'Your changes to this trip reach the link on their own while you are online. The link preview can take a few minutes to follow.',
                   )}
                 </p>
               ) : null}

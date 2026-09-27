@@ -21,25 +21,28 @@
  * `trip_templates` when the owner publishes, and that row is all an anonymous
  * reader can reach.
  *
- * The copy is as fresh as the last publish, and refreshing it is a button the
- * enterprise presses rather than something that happens on every edit. That is
- * deliberate: a room is not a column of the trip row, so an automatic refresh
- * keyed on the trip would look live while missing the edit customers notice
- * most. The screen says so instead of implying otherwise.
+ * The copy follows the trip. `useTemplateRefresh` rewrites it from the owner's
+ * device after each edit of the trip or of its rooms, so a customer who opens
+ * the link reads what the trip says now. It is still a copy: an edit made on a
+ * device that is offline reaches the link when that device reconnects, and an
+ * edit a member makes reaches it once the owner's device has received it.
  *
  * @module lib/sync/templates
  */
 
 import { nanoid } from 'nanoid';
 
+import { getRoomsByTripId } from '@/lib/db';
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
 import {
+  DEFAULT_ROOM_ICON,
   MAX_ROOM_CAPACITY,
   normalizeCurrency,
   normalizeRoomIcon,
   type CurrencyCode,
   type RoomIcon,
 } from '@/types';
+import type { Trip } from '@/types';
 
 // ============================================================================
 // Constants
@@ -114,6 +117,12 @@ export type PublishTemplateResult =
   | { readonly status: 'published'; readonly token: string }
   | { readonly status: 'error'; readonly message: string };
 
+export type RefreshTemplateResult =
+  | { readonly status: 'refreshed' }
+  /** No payload row this account may write: never published, or not the owner. */
+  | { readonly status: 'not-published' }
+  | { readonly status: 'error'; readonly message: string };
+
 export type UnpublishTemplateResult =
   | { readonly status: 'unpublished' }
   | { readonly status: 'error'; readonly message: string };
@@ -165,6 +174,58 @@ export function buildTemplateUrl(
   }
   const base = basePath.endsWith('/') ? basePath : `${basePath}/`;
   return `${origin}${base}${TEMPLATE_PATH}/${encodeURIComponent(token)}`;
+}
+
+// ============================================================================
+// Payload
+// ============================================================================
+
+/**
+ * The five published fields, read out of the local trip.
+ *
+ * The rooms come from Dexie in display order, so the customer's copy lists them
+ * the way the enterprise arranged them.
+ *
+ * @param trip - The trip being published
+ * @returns What an anonymous reader will see
+ */
+export async function buildTemplatePayload(trip: Trip): Promise<TripTemplatePayload> {
+  const rooms = await getRoomsByTripId(trip.id);
+  return {
+    name: trip.name,
+    description: trip.description ?? null,
+    location: trip.location ?? null,
+    coordinates: trip.coordinates ?? null,
+    currency: trip.currency ?? null,
+    rooms: rooms.map((room) => ({
+      name: room.name,
+      capacity: room.capacity,
+      icon: room.icon ?? DEFAULT_ROOM_ICON,
+    })),
+  };
+}
+
+/**
+ * The `trip_templates` columns for a payload, bounded to what the server accepts.
+ *
+ * One function for the publish and the refresh, so the two writes can never
+ * disagree about what a row holds.
+ */
+function toTemplateRow(payload: TripTemplatePayload) {
+  return {
+    name: payload.name.slice(0, MAX_NAME),
+    description: payload.description?.slice(0, MAX_DESCRIPTION) ?? null,
+    location: payload.location?.slice(0, MAX_LOCATION) ?? null,
+    latitude: payload.coordinates?.lat ?? null,
+    longitude: payload.coordinates?.lon ?? null,
+    currency: payload.currency ?? null,
+    rooms: payload.rooms.slice(0, MAX_ROOMS).map((room) => ({
+      name: room.name.slice(0, MAX_ROOM_NAME),
+      capacity: room.capacity,
+      icon: room.icon,
+    })),
+    updated_at: new Date().toISOString(),
+  };
 }
 
 // ============================================================================
@@ -346,21 +407,7 @@ export async function publishTemplate(
 
   try {
     const { error: payloadError } = await client.from('trip_templates').upsert(
-      {
-        trip_id: remoteTripId,
-        name: payload.name.slice(0, MAX_NAME),
-        description: payload.description?.slice(0, MAX_DESCRIPTION) ?? null,
-        location: payload.location?.slice(0, MAX_LOCATION) ?? null,
-        latitude: payload.coordinates?.lat ?? null,
-        longitude: payload.coordinates?.lon ?? null,
-        currency: payload.currency ?? null,
-        rooms: payload.rooms.slice(0, MAX_ROOMS).map((room) => ({
-          name: room.name.slice(0, MAX_ROOM_NAME),
-          capacity: room.capacity,
-          icon: room.icon,
-        })),
-        updated_at: new Date().toISOString(),
-      },
+      { trip_id: remoteTripId, ...toTemplateRow(payload) },
       { onConflict: 'trip_id' },
     );
 
@@ -384,6 +431,47 @@ export async function publishTemplate(
       return { status: 'error', message: 'the trip could not be published' };
     }
     return { status: 'published', token: updated };
+  } catch (error: unknown) {
+    return { status: 'error', message: toMessage(error) };
+  }
+}
+
+/**
+ * Rewrites the published copy of a trip with what the trip says now.
+ *
+ * An UPDATE, never an upsert: a trip that was never published has no row, and
+ * an edit must not create one. The owner-only policy narrows it further, so a
+ * member's device matches nothing. Both come back as `not-published`, which is
+ * the ordinary answer for most trips and not an error.
+ *
+ * A template that was taken down keeps its row, and this keeps that row
+ * current, so publishing it again hands out what the trip says at that moment.
+ *
+ * @param client - Authenticated Supabase client
+ * @param remoteTripId - Server `trips.id`
+ * @param payload - The five fields, as the trip holds them now
+ */
+export async function refreshTemplatePayload(
+  client: TypedSupabaseClient,
+  remoteTripId: string,
+  payload: TripTemplatePayload,
+): Promise<RefreshTemplateResult> {
+  try {
+    const { data, error } = await client
+      .from('trip_templates')
+      .update(toTemplateRow(payload))
+      .eq('trip_id', remoteTripId)
+      .select('trip_id');
+
+    if (error) {
+      return { status: 'error', message: error.message };
+    }
+    // An UPDATE matching no row succeeds with no error: the affected rows are
+    // the only thing that says whether a template was there to refresh.
+    if (!data || data.length === 0) {
+      return { status: 'not-published' };
+    }
+    return { status: 'refreshed' };
   } catch (error: unknown) {
     return { status: 'error', message: toMessage(error) };
   }

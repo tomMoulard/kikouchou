@@ -1094,7 +1094,7 @@
       "republish": "Publier \u00e0 nouveau",
       "unpublish": "Retirer le mod\u00e8le",
       "linkLabel": "Le lien \u00e0 partager",
-      "republishHint": "Vos clients lisent une copie prise au moment de la publication. Publiez \u00e0 nouveau apr\u00e8s avoir modifi\u00e9 le voyage.",
+      "followsTripHint": "Vos modifications de ce voyage arrivent d'elles-mêmes sur le lien tant que vous êtes en ligne. L'aperçu du lien peut mettre quelques minutes à suivre.",
       "keepsTheLink": "Retirer un mod\u00e8le ferme toutes les copies de son lien d'un coup. Le publier \u00e0 nouveau redonne le m\u00eame lien.",
       "notOwner": "Seule la personne qui a cr\u00e9\u00e9 ce voyage peut le publier comme mod\u00e8le.",
       "notOwnerPublished": "Ce voyage est publi\u00e9 comme mod\u00e8le. Seule la personne qui l'a cr\u00e9\u00e9 peut le modifier ou le retirer.",
