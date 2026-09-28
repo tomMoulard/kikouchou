@@ -98,12 +98,13 @@ describe('TemplateLandingPage', () => {
     expect(screen.getByText(/Bring indoor shoes/)).toBeInTheDocument();
   });
 
-  it('hands the wizard the place, the pin, the currency and the rooms', () => {
+  it('hands the wizard the name, the place, the pin, the currency and the rooms', () => {
     render(<TemplateLandingPage />, { withProviders: false });
 
     expect(wizardProps).toHaveBeenCalledWith(
       expect.objectContaining({
         prefill: {
+          name: 'Chalet Marmotte',
           description: 'Check-in after 3pm. Bring indoor shoes.',
           location: 'Chamonix',
           coordinates: { lat: 45.9237, lon: 6.8694 },

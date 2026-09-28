@@ -15,7 +15,8 @@
  * place, the map pin, the description, the currency and the rooms the
  * enterprise published, the place and rooms questions come out of the flow, and
  * the customer answers the three that are left: the name, the dates and the
- * guests.
+ * guests. The name starts as the template's and the dates as today, so a
+ * customer with nothing to change reaches the guests by pressing Next twice.
  *
  * @module features/trips/components/TripCreateWizard
  */
@@ -39,6 +40,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DateRangePicker, type DateRange } from '@/components/shared/DateRangePicker';
 import { ShareDialog } from '@/features/sharing/components/ShareDialog';
+import { useToday } from '@/hooks/useToday';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { announceStatus } from '@/lib/notifications';
 import { captureEvent, captureUsage } from '@/lib/posthog';
@@ -61,8 +63,12 @@ import { createTripWithDetails, type TripCreationOutcome } from '../lib/create-t
  * are dropped and the remaining three — the name, the dates, the guests — are
  * the whole flow. The description and the currency have no question of their
  * own in the wizard at all; they travel straight into the trip.
+ *
+ * `name` is the one exception: it is only where the name question starts, and
+ * the customer may type over it.
  */
 export interface TripCreateWizardPrefill {
+  readonly name: string;
   readonly description: string | null;
   readonly location: string | null;
   readonly coordinates: TripFormData['coordinates'];
@@ -158,9 +164,17 @@ export const TripCreateWizard = memo(function TripCreateWizard({
 }: TripCreateWizardProps): ReactElement {
   const { t } = useTranslation();
 
+  const { today } = useToday();
   const [step, setStep] = useState<Step>('name');
-  const [name, setName] = useState('');
-  const [range, setRange] = useState<DateRange | undefined>(undefined);
+  const [name, setName] = useState(() =>
+    (prefill?.name ?? '').slice(0, MAX_LENGTHS.tripName),
+  );
+  // A template trip starts and ends today until the customer says otherwise,
+  // so the dates question can be passed with Next alone. `today` is a local
+  // midnight, which is what `toIsoDate` reads.
+  const [range, setRange] = useState<DateRange | undefined>(() =>
+    prefill === undefined ? undefined : { from: today, to: today },
+  );
   const [location, setLocation] = useState(() => prefill?.location ?? '');
   const [coordinates, setCoordinates] = useState<TripFormData['coordinates']>(
     () => prefill?.coordinates,

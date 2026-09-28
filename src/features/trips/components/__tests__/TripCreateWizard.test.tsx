@@ -7,6 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { format } from 'date-fns';
 
 import { TripCreateWizard } from '../TripCreateWizard';
 import { createTripWithDetails } from '../../lib/create-trip-with-details';
@@ -143,6 +144,7 @@ function renderWizard(currentUserName?: string): ReturnType<typeof render> {
 
 /** What a trip template hands the wizard. */
 const PREFILL = {
+  name: 'Chalet Marmotte',
   description: 'Check-in after 3pm.',
   location: 'Chamonix',
   coordinates: { lat: 45.9237, lon: 6.8694 },
@@ -380,12 +382,48 @@ describe('TripCreateWizard', () => {
   // --------------------------------------------------------------------------
 
   describe('with a template', () => {
+    it("starts on the template's name and today, so Next alone reaches the guests", async () => {
+      const user = userEvent.setup();
+      renderTemplateWizard();
+
+      expect(screen.getByLabelText('Trip name')).toHaveValue('Chalet Marmotte');
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByText('When is it?');
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+      await screen.findByText('Who is coming?');
+      await user.click(screen.getByRole('button', { name: 'Create the trip' }));
+
+      const today = format(new Date(), 'yyyy-MM-dd');
+      await waitFor(() => {
+        expect(mockedCreate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            form: expect.objectContaining({
+              name: 'Chalet Marmotte',
+              startDate: today,
+              endDate: today,
+            }),
+          }),
+        );
+      });
+    });
+
+    it('lets the customer type over the name the template gave', async () => {
+      const user = userEvent.setup();
+      renderTemplateWizard();
+
+      await user.clear(screen.getByLabelText('Trip name'));
+      await user.click(screen.getByRole('button', { name: 'Next' }));
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Give the trip a name to continue.');
+    });
+
     it('asks three questions instead of five', async () => {
       const user = userEvent.setup();
       renderTemplateWizard();
 
       expect(screen.getByLabelText('Step 1 of 3')).toBeInTheDocument();
 
+      await user.clear(screen.getByLabelText('Trip name'));
       await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
       await user.click(screen.getByRole('button', { name: 'Trip dates' }));
       await user.click(screen.getByRole('button', { name: 'Next' }));
@@ -399,6 +437,7 @@ describe('TripCreateWizard', () => {
       const user = userEvent.setup();
       renderTemplateWizard();
 
+      await user.clear(screen.getByLabelText('Trip name'));
       await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
       await user.click(screen.getByRole('button', { name: 'Trip dates' }));
       await user.click(screen.getByRole('button', { name: 'Next' }));
@@ -429,6 +468,7 @@ describe('TripCreateWizard', () => {
       const user = userEvent.setup();
       renderTemplateWizard();
 
+      await user.clear(screen.getByLabelText('Trip name'));
       await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
       await user.click(screen.getByRole('button', { name: 'Trip dates' }));
       await user.click(screen.getByRole('button', { name: 'Next' }));
@@ -447,6 +487,7 @@ describe('TripCreateWizard', () => {
       const user = userEvent.setup();
       renderTemplateWizard();
 
+      await user.clear(screen.getByLabelText('Trip name'));
       await user.type(screen.getByLabelText('Trip name'), 'Ski week{Enter}');
       await user.click(screen.getByRole('button', { name: 'Back' }));
 
