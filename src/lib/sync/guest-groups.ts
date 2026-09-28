@@ -88,7 +88,16 @@ export type GuestGroupSyncResult =
       /** Local groups dropped because the server no longer lists them. */
       readonly pruned: number;
     }
-  | { readonly status: 'error'; readonly message: string };
+  | {
+      readonly status: 'error';
+      readonly message: string;
+      /**
+       * `network` when the request never reached the server, which is the
+       * device going offline or a connection dropping mid-request. `server`
+       * for everything the server itself refused or failed.
+       */
+      readonly reason: 'network' | 'server';
+    };
 
 // ============================================================================
 // Constants
@@ -402,9 +411,29 @@ export async function syncGuestGroups(
 
     return { status: 'synced', pulled, pushed, pruned };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     return {
       status: 'error',
-      message: error instanceof Error ? error.message : String(error),
+      message,
+      reason: isNetworkFailureMessage(message) ? 'network' : 'server',
     };
   }
+}
+
+/**
+ * Whether a sync error says the request never reached the server.
+ *
+ * postgrest-js catches a failed `fetch()` and hands it back as an error whose
+ * message is the fetch error's `${name}: ${message}`, with no status. Each
+ * engine words it its own way: Chrome "Failed to fetch", Safari "Load failed",
+ * Firefox "NetworkError when attempting to fetch resource.". An aborted request
+ * reads `AbortError: …`.
+ *
+ * @param message - The error message the sync produced
+ * @returns True for a network failure
+ */
+export function isNetworkFailureMessage(message: string): boolean {
+  return /^(TypeError: )?(Failed to fetch|Load failed|NetworkError when attempting to fetch resource)|^AbortError: /i.test(
+    message,
+  );
 }

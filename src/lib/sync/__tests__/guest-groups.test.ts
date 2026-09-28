@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { db } from '@/lib/db/database';
-import { syncGuestGroups } from '@/lib/sync/guest-groups';
+import { isNetworkFailureMessage, syncGuestGroups } from '@/lib/sync/guest-groups';
 import type { GuestGroup, GuestGroupId, GuestGroupMemberId, HexColor } from '@/types';
 
 // ============================================================================
@@ -486,6 +486,7 @@ describe('when the server cannot be reached', () => {
     expect(await syncGuestGroups(client, USER_ID)).toEqual({
       status: 'error',
       message: 'offline',
+      reason: 'server',
     });
   });
 
@@ -506,6 +507,37 @@ describe('when the server cannot be reached', () => {
     expect(await syncGuestGroups(client, USER_ID)).toEqual({
       status: 'error',
       message: 'rejected',
+      reason: 'server',
     });
+  });
+});
+
+describe('when the request never reached the server', () => {
+  // postgrest-js hands a failed fetch back as `${name}: ${message}`.
+  it('says so, so that the caller can leave it out of error tracking', async () => {
+    const { client } = fakeClient([], { selectError: 'TypeError: Failed to fetch' });
+
+    expect(await syncGuestGroups(client, USER_ID)).toEqual({
+      status: 'error',
+      message: 'TypeError: Failed to fetch',
+      reason: 'network',
+    });
+  });
+
+  it.each([
+    'TypeError: Failed to fetch',
+    'TypeError: Load failed',
+    'TypeError: NetworkError when attempting to fetch resource.',
+    'AbortError: signal is aborted without reason',
+  ])('reads "%s" as a network failure', (message) => {
+    expect(isNetworkFailureMessage(message)).toBe(true);
+  });
+
+  it.each([
+    'permission denied for table guest_groups',
+    'JWT expired',
+    'rejected',
+  ])('reads "%s" as the server answering', (message) => {
+    expect(isNetworkFailureMessage(message)).toBe(false);
   });
 });

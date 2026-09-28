@@ -130,10 +130,17 @@ export function GuestGroupSync({ children }: GuestGroupSyncProps): ReactElement 
         // a toast on every failed background attempt would be noise. Reported
         // all the same, or a sync that is failing for everybody looks exactly
         // like one that is working.
+        //
+        // A request that never reached the server is not reported. The rest of
+        // lib/sync treats a lost connection as a warning, and this one sent
+        // every dropped request to Error tracking (issue 01a0e1ad), where it
+        // said nothing about the sync.
         console.warn('[guest-groups] sync failed:', result.message);
-        reportError(new Error(result.message ?? 'guest group sync failed'), {
-          source: 'GuestGroupSync.sync',
-        });
+        if (result.reason === 'server') {
+          reportError(new Error(result.message ?? 'guest group sync failed'), {
+            source: 'GuestGroupSync.sync',
+          });
+        }
       }
     } finally {
       inFlightRef.current = false;
