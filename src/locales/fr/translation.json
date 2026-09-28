@@ -1538,9 +1538,7 @@
     },
     "palette": "Couleurs",
     "paletteDescription": "Chaque palette existe en version claire et sombre.",
-    "seasonalPalettes": "Thèmes de saison",
-    "seasonalPalettesDescription": "Halloween en octobre, Noël en décembre, la Saint-Valentin en février et la Saint-Patrick en mars remplacent vos couleurs pendant ce mois.",
-    "seasonalPalettesActive": "Ce mois-ci : {{name}}",
+    "seasonalPalettes": "Thèmes spéciaux",
     "palettes": {
       "default": "Soleil couchant",
       "ocean": "Océan",

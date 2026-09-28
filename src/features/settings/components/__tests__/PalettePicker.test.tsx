@@ -121,7 +121,7 @@ describe('PalettePicker', () => {
 
     expect(screen.getByRole('radiogroup', { name: 'Couleurs' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Soleil couchant' })).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Thèmes de saison' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Thèmes spéciaux' })).toBeInTheDocument();
   });
 
   it('paints, stores and reports a pick', async () => {
@@ -182,9 +182,8 @@ describe('SeasonalPalettesToggle', () => {
 
     await renderWithRealI18n(<SettingsRow />, { withProviders: false });
 
-    expect(screen.getByRole('switch', { name: 'Seasonal themes' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Special themes' })).not.toBeChecked();
     expect(painted()).toBe('forest');
-    expect(screen.queryByText(/This month:/)).toBeNull();
   });
 
   it("switches to the month's palette when turned on, and back when turned off", async () => {
@@ -194,14 +193,13 @@ describe('SeasonalPalettesToggle', () => {
     const { user } = await renderWithRealI18n(<SettingsRow />, {
       withProviders: false,
     });
-    const toggle = screen.getByRole('switch', { name: 'Seasonal themes' });
+    const toggle = screen.getByRole('switch', { name: 'Special themes' });
 
     await user.click(toggle);
 
     expect(toggle).toBeChecked();
     expect(painted()).toBe('halloween');
     expect(window.localStorage.getItem(SEASONAL_PALETTES_STORAGE_KEY)).toBe('on');
-    expect(screen.getByText('This month: Halloween')).toBeInTheDocument();
     // The picker still shows the user's own choice under the seasonal one.
     expect(screen.getByRole('radio', { name: 'Forest' })).toHaveAttribute(
       'aria-checked',
@@ -224,9 +222,8 @@ describe('SeasonalPalettesToggle', () => {
 
     await renderWithRealI18n(<SettingsRow />, { withProviders: false });
 
-    expect(screen.getByRole('switch', { name: 'Seasonal themes' })).toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Special themes' })).toBeChecked();
     expect(painted()).toBe('ocean');
-    expect(screen.queryByText(/This month:/)).toBeNull();
   });
 
   it("brings the month's palette in at midnight, and hands the colors back a month later", async () => {
