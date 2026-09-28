@@ -20,6 +20,7 @@ import {
   changesetToProto,
   protoToChangeset,
 } from '@/lib/sharing/mappers';
+import { ROOM_ICONS } from '@/types';
 import type {
   HexColor,
   ISODateString,
@@ -163,6 +164,11 @@ describe('Room mappers', () => {
     const proto = roomToProto(room);
     const result = protoToRoom(proto);
     expect(result.icon).toBeUndefined();
+  });
+
+  it.each(ROOM_ICONS)('keeps the %s icon through proto and back', (icon) => {
+    const result = protoToRoom(roomToProto({ ...testRoom, icon }));
+    expect(result.icon).toBe(icon);
   });
 
   it('rejects invalid room icons', () => {
