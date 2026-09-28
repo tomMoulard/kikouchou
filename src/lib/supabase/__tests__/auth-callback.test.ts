@@ -175,3 +175,21 @@ describe('auth-callback capture', () => {
 
 
 });
+
+describe('isMissingCodeVerifier', () => {
+  it('recognises the link opened in another browser', async () => {
+    const { isMissingCodeVerifier } = await importFresh();
+
+    expect(isMissingCodeVerifier('PKCE code verifier not found in storage. This can happen if the auth flow was initiated in a different browser or device, or if the storage was cleared.')).toBe(true);
+  });
+
+  it('leaves every other exchange failure alone', async () => {
+    const { isMissingCodeVerifier } = await importFresh();
+
+    expect(
+      isMissingCodeVerifier('invalid request: both auth code and code verifier should be non-empty'),
+    ).toBe(false);
+    expect(isMissingCodeVerifier(null)).toBe(false);
+    expect(isMissingCodeVerifier(undefined)).toBe(false);
+  });
+});

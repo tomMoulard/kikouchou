@@ -28,6 +28,8 @@ import { Button } from '@/components/ui/button';
 import { PasskeyEnrolment } from '@/features/auth/components/PasskeyEnrolment';
 import { useAuth } from '@/features/auth/AuthContext';
 
+import { isMissingCodeVerifier } from '@/lib/supabase/auth-callback';
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -76,10 +78,19 @@ export const AccountSection = memo(function AccountSection(): ReactElement {
             role="alert"
           >
             <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <span>
-              {t('auth.account.signInFailed', 'The last sign-in did not complete:')}{' '}
-              {lastAuthError}
-            </span>
+            {isMissingCodeVerifier(lastAuthError) ? (
+              <span>
+                {t(
+                  'auth.account.signInOtherBrowser',
+                  'The sign-in link was opened in a different browser from the one that asked for it. Open it in the same browser, or sign in again here.',
+                )}
+              </span>
+            ) : (
+              <span>
+                {t('auth.account.signInFailed', 'The last sign-in did not complete:')}{' '}
+                {lastAuthError}
+              </span>
+            )}
           </div>
         ) : null}
         <Button asChild className="self-start">

@@ -1497,6 +1497,7 @@
       "signedInAs": "Signed in as",
       "signOutAction": "Sign out",
       "signInFailed": "The last sign-in did not complete:",
+      "signInOtherBrowser": "The sign-in link was opened in a different browser from the one that asked for it. Open it in the same browser, or sign in again here.",
       "passkeyDescription": "Add a passkey to sign in on this device with your screen lock instead of a provider.",
       "passkeyAdded": "Passkey added for this device.",
       "passkeyAction": "Add a passkey"
