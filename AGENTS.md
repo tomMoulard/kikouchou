@@ -1165,3 +1165,5 @@ e2e/
 For detailed convention rationale, see `CONVENTIONS.md`. For why the sync
 architecture is shaped as it is, and the bugs that shaped it, see
 `plans/2026-08-31-server-backed-trip-sync-v1.md`.
+
+Also, the landing page repository is located in /Users/tommoulard/workspace/kikouchou-LP
