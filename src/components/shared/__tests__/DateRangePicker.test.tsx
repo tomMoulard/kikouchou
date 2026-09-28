@@ -10,9 +10,11 @@
  * @module components/shared/__tests__/DateRangePicker.test
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@/test/utils';
 import userEvent from '@testing-library/user-event';
+
+import { PHONE_MEDIA_QUERY } from '@/hooks/usePhoneViewport';
 
 import { DateRangePicker, type DateRange } from '../DateRangePicker';
 
@@ -727,6 +729,97 @@ describe('DateRangePicker', () => {
       // `none` would pass against the bug.
       expect(document.body.style.pointerEvents).toBe('none');
       expect(screen.getByRole('dialog').style.pointerEvents).toBe('auto');
+    });
+  });
+  /**
+   * On a phone the calendar opens as a centred dialog rather than a popover
+   * anchored to the trigger, which on a 384px screen sat against one edge.
+   */
+  describe('On a phone', () => {
+    const defaultMatchMedia = window.matchMedia;
+
+    afterEach(() => {
+      window.matchMedia = defaultMatchMedia;
+    });
+
+    /** Answers the phone query only, as a narrow portrait screen does. */
+    function setPhoneViewport(): void {
+      window.matchMedia = vi.fn().mockImplementation(
+        (query: string) =>
+          ({
+            matches: query === PHONE_MEDIA_QUERY,
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+          }) as unknown as MediaQueryList,
+      );
+    }
+
+    it('opens the calendar in a titled dialog, not a popover', async () => {
+      setPhoneViewport();
+      const user = userEvent.setup();
+
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      await openCalendar(user);
+
+      const dialog = screen.getByRole('dialog', {
+        name: 'dateRangePicker.calendarDialog',
+      });
+      expect(dialog).toHaveAttribute('data-slot', 'dialog-content');
+      expect(document.querySelector('[data-slot=popover-content]')).toBeNull();
+      expect(within(dialog).getAllByRole('gridcell').length).toBeGreaterThan(27);
+    });
+
+    it('sizes the day cells to the width of the screen', async () => {
+      setPhoneViewport();
+      const user = userEvent.setup();
+
+      render(<DateRangePicker value={undefined} onChange={vi.fn()} />, {
+        withProviders: false,
+      });
+
+      await openCalendar(user);
+
+      const calendar = screen
+        .getByRole('dialog')
+        .querySelector('[data-slot=calendar]');
+      expect(calendar?.className).toContain('calc((100vw-4rem-2px)/7)');
+      // The calendar's own phone size must be gone, or it wins the cascade.
+      expect(calendar?.className).not.toContain('--spacing(11)');
+    });
+
+    it('closes the dialog once a two-day range is complete', async () => {
+      setPhoneViewport();
+      const user = userEvent.setup(),
+       onChange = vi.fn();
+
+      render(
+        <DateRangePicker
+          value={{ from: new Date(2024, 6, 15), to: new Date(2024, 6, 15) }}
+          onChange={onChange}
+          minDate={new Date(2024, 6, 1)}
+          maxDate={new Date(2024, 6, 31)}
+        />,
+        { withProviders: false },
+      );
+
+      await openCalendar(user);
+      await user.click(dayButton('2024-07-18'));
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      });
+      expect(onChange).toHaveBeenCalledWith({
+        from: new Date(2024, 6, 15),
+        to: new Date(2024, 6, 18),
+      });
     });
   });
 });

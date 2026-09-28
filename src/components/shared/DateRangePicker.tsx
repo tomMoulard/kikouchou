@@ -2,7 +2,8 @@
  * DateRangePicker Component
  *
  * A date range picker that allows users to select a start and end date.
- * Uses shadcn/ui Calendar inside a Popover with locale-aware formatting.
+ * Uses shadcn/ui Calendar inside a Popover with locale-aware formatting. On a
+ * phone the same calendar opens in a centred Dialog instead (see below).
  *
  * Selection behavior:
  * 1. First click selects the start date
@@ -39,10 +40,18 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { usePhoneViewport } from '@/hooks/usePhoneViewport';
 
 /**
  * Represents a date range with optional start and end dates.
@@ -126,6 +135,7 @@ const DateRangePicker = memo(({
   bookedRanges,
 }: DateRangePickerProps): React.ReactElement => {
   const { t, i18n } = useTranslation(),
+   isPhone = usePhoneViewport(),
    [open, setOpen] = useState(false);
 
   // Get the appropriate date-fns locale
@@ -287,6 +297,105 @@ const DateRangePicker = memo(({
     onChange(undefined);
   }, [onChange]);
 
+  const triggerButton = (
+    <Button
+      id={id}
+      variant="outline"
+      disabled={disabled}
+      aria-label={accessibleLabel}
+      aria-describedby={ariaDescribedBy}
+      aria-expanded={open}
+      aria-haspopup="dialog"
+      className={cn(
+        'w-full justify-start text-left font-normal',
+        !hasSelection && 'text-muted-foreground',
+        className
+      )}
+    >
+      <CalendarIcon className="mr-2 h-4 w-4 shrink-0" aria-hidden="true" />
+      <span className="truncate">{displayText}</span>
+    </Button>
+  ),
+
+  // The calendar and its footer, shared by the popover and the phone dialog.
+  // `calendarClassName` lets the dialog resize the day cells to its width.
+   renderCalendarBody = (calendarClassName?: string): React.ReactElement => (
+    <>
+      <Calendar
+        mode="range"
+        selected={selected}
+        onSelect={handleSelect}
+        numberOfMonths={numberOfMonths}
+        disabled={disabledDays}
+        defaultMonth={defaultMonth}
+        locale={locale}
+        modifiers={modifiers}
+        modifiersClassNames={modifiersClassNames}
+        initialFocus
+        className={calendarClassName}
+      />
+      {/* Footer with booked indicator and clear button */}
+      <div className="flex items-center justify-between px-3 pb-3">
+        {bookedDates.length > 0 ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="relative flex h-4 w-4 items-center justify-center">
+              <span className="absolute h-1 w-1 rounded-full bg-destructive opacity-70" />
+            </span>
+            <span>{t('dateRangePicker.alreadyBooked', 'Already assigned')}</span>
+          </div>
+        ) : (
+          <div />
+        )}
+        {hasSelection && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClear}
+            className="h-9 px-2 text-xs md:h-7"
+            aria-label={t('dateRangePicker.clear', 'Clear selection')}
+          >
+            <X className="h-3 w-3 mr-1" aria-hidden="true" />
+            {t('dateRangePicker.clear', 'Clear')}
+          </Button>
+        )}
+      </div>
+    </>
+  );
+
+  if (isPhone) {
+    /*
+      On a phone the calendar is a centred dialog, not a popover. A popover
+      anchors to its trigger, and the trigger sits wherever the form put it:
+      on a 384px screen the popover opened against one edge, leaned out of
+      true while Radix shifted it to fit, and left most of the screen empty
+      beside a calendar the size of a stamp. The dialog uses the gutters the
+      rest of the app's dialogs use, and the day cells grow to fill its width.
+
+      The cell width is the viewport less the dialog's inset (2rem), its
+      border (2px) and its padding (2rem), over the seven columns, capped at
+      56px so a large phone does not get a calendar taller than the screen;
+      `mx-auto` centres it once the cap stops it filling the row. The
+      calendar pads itself by `p-3` everywhere else, and here the dialog's
+      padding replaces it. `max-md:` because the calendar's own phone size is `max-md:` too, and
+      a bare utility would lose to it.
+    */
+    return (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>{triggerButton}</DialogTrigger>
+        <DialogContent className="gap-2 p-4" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>
+              {t('dateRangePicker.calendarDialog', 'Select date range')}
+            </DialogTitle>
+          </DialogHeader>
+          {renderCalendarBody(
+            'mx-auto p-0 max-md:[--cell-size:min(--spacing(14),calc((100vw-4rem-2px)/7))]',
+          )}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     /*
       `modal` is load-bearing, not a preference.
@@ -315,68 +424,14 @@ const DateRangePicker = memo(({
       anchored to a trigger on it is the behaviour you want anyway.
     */
     <Popover open={open} onOpenChange={setOpen} modal>
-      <PopoverTrigger asChild>
-        <Button
-          id={id}
-          variant="outline"
-          disabled={disabled}
-          aria-label={accessibleLabel}
-          aria-describedby={ariaDescribedBy}
-          aria-expanded={open}
-          aria-haspopup="dialog"
-          className={cn(
-            'w-full justify-start text-left font-normal',
-            !hasSelection && 'text-muted-foreground',
-            className
-          )}
-        >
-          <CalendarIcon className="mr-2 h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="truncate">{displayText}</span>
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
       <PopoverContent
         className="w-auto p-0"
         align="start"
         role="dialog"
         aria-label={t('dateRangePicker.calendarDialog', 'Select date range')}
       >
-        <Calendar
-          mode="range"
-          selected={selected}
-          onSelect={handleSelect}
-          numberOfMonths={numberOfMonths}
-          disabled={disabledDays}
-          defaultMonth={defaultMonth}
-          locale={locale}
-          modifiers={modifiers}
-          modifiersClassNames={modifiersClassNames}
-          initialFocus
-        />
-        {/* Footer with booked indicator and clear button */}
-        <div className="flex items-center justify-between px-3 pb-3">
-          {bookedDates.length > 0 ? (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="relative flex h-4 w-4 items-center justify-center">
-                <span className="absolute h-1 w-1 rounded-full bg-destructive opacity-70" />
-              </span>
-              <span>{t('dateRangePicker.alreadyBooked', 'Already assigned')}</span>
-            </div>
-          ) : (
-            <div />
-          )}
-          {hasSelection && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClear}
-              className="h-9 px-2 text-xs md:h-7"
-              aria-label={t('dateRangePicker.clear', 'Clear selection')}
-            >
-              <X className="h-3 w-3 mr-1" aria-hidden="true" />
-              {t('dateRangePicker.clear', 'Clear')}
-            </Button>
-          )}
-        </div>
+        {renderCalendarBody()}
       </PopoverContent>
     </Popover>
   );

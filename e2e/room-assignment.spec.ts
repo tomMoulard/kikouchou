@@ -383,7 +383,11 @@ async function pickStayDates(page: Page, startDate: string, endDate: string): Pr
 
   await page.getByRole('button', { name: /check-in|arriv/i }).first().click();
 
-  const calendar = page.locator('[data-radix-popper-content-wrapper] [data-slot="calendar"]');
+  // By the picker's own name, not by the popover wrapper: on a phone the
+  // picker opens as a dialog, which Radix does not wrap in a popper.
+  const calendar = page
+    .getByRole('dialog', { name: /select date range|sélectionner une période/i })
+    .locator('[data-slot="calendar"]');
   await expect(calendar).toBeVisible();
 
   await calendar.locator(`button[data-day="${await toDataDay(startDate)}"]`).click();
