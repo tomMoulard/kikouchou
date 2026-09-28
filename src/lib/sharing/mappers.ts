@@ -35,7 +35,7 @@ import {
   normalizeRoomCapacity,
   sanitizeOptionalText,
 } from '@/lib/db/sanitize';
-import { normalizePersonHeadcount } from '@/types';
+import { ROOM_ICONS, normalizePersonHeadcount } from '@/types';
 import type {
   ChildSeatKind,
   HexColor,
@@ -60,19 +60,9 @@ import type { AppChangeset, EntityCollection, TripSnapshotMeta } from '@/lib/sha
 // Room icon validation (proto carries plain strings)
 // ============================================================================
 
-const VALID_ROOM_ICONS: ReadonlySet<string> = new Set<RoomIcon>([
-  'bed-double',
-  'bed-single',
-  'bath',
-  'sofa',
-  'tent',
-  'caravan',
-  'warehouse',
-  'home',
-  'door-open',
-  'baby',
-  'armchair',
-]);
+// Built from ROOM_ICONS: a hand-written copy here stopped at the first eleven
+// icons, so a shared bunk room arrived with no icon.
+const VALID_ROOM_ICONS: ReadonlySet<string> = new Set<RoomIcon>(ROOM_ICONS);
 
 function parseRoomIcon(raw: string | undefined): RoomIcon | undefined {
   if (!raw) return undefined;
