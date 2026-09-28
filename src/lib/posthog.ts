@@ -207,6 +207,172 @@ export function foreignScriptOrigins(): string[] {
 }
 
 /**
+ * The functions Meta's in-app browser injects to report page timings to the app.
+ *
+ * "Error invoking postMessage: Java object is gone" is thrown by these, with no
+ * file, when the native side of the Facebook or Instagram webview has already
+ * been torn down (PostHog issues `01a0c807` and `01a0e2e0`, every event
+ * carrying `FB_IAB` or `Instagram … IABMV/1` in its user agent).
+ */
+const META_BRIDGE_FUNCTIONS: readonly string[] = [
+  'sendDataToNative',
+  'sendJsBlockingTimeMessage',
+  'sendINPMessage',
+];
+
+/**
+ * The native APIs a script riding along with the page is known to wrap.
+ *
+ * A wrapped `navigator.serviceWorker.register` is behind PostHog issue
+ * `01a0ddd3-d8bd`: an unhandled "Rejected" whose innermost frame is a
+ * `ServiceWorkerContainer.<anonymous>` with no source, below workbox's own
+ * call, which the app catches.
+ */
+const WATCHED_GLOBALS: readonly (readonly [string, () => unknown])[] = [
+  // Not console, fetch, XHR or history: posthog-js wraps those itself for
+  // console capture, session recording and pageviews, so they always read as
+  // patched and say nothing.
+  ['navigator.serviceWorker.register', () => navigator.serviceWorker?.register],
+  ['postMessage', () => globalThis.postMessage],
+  ['EventTarget.prototype.addEventListener', () => EventTarget.prototype.addEventListener],
+];
+
+/** How many cross-origin script loads {@link exceptionDebugContext} lists. */
+const RECENT_FOREIGN_SCRIPT_LIMIT = 5;
+
+/** When the page was last hidden with `pagehide`, on the performance clock. */
+let pageHiddenAt: number | null = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    pageHiddenAt = performance.now();
+  });
+  window.addEventListener('pageshow', () => {
+    pageHiddenAt = null;
+  });
+}
+
+/**
+ * Which of {@link WATCHED_GLOBALS} no longer read as the browser's own code.
+ *
+ * A native function prints `[native code]`, and a wrapper prints its source.
+ * A wrapper that forges its `toString` still hides, so an empty list means
+ * "nothing obvious", not "nothing".
+ */
+export function patchedGlobals(): string[] {
+  const patched: string[] = [];
+  for (const [name, read] of WATCHED_GLOBALS) {
+    try {
+      const value = read();
+      if (typeof value === 'function' && !Function.prototype.toString.call(value).includes('[native code]')) {
+        patched.push(name);
+      }
+    } catch {
+      // A getter that throws is as good as absent.
+    }
+  }
+  return patched;
+}
+
+/**
+ * The last cross-origin scripts the page fetched, as origin and path.
+ *
+ * `foreignScriptOrigins` reads the `<script>` tags, which misses a script that
+ * a third party loads and then removes, and says nothing about order. The
+ * resource timeline has both. The query is dropped: it can carry ids.
+ */
+export function recentForeignScripts(): string[] {
+  if (typeof performance === 'undefined' || typeof location === 'undefined') {
+    return [];
+  }
+  const scripts: string[] = [];
+  for (const entry of performance.getEntriesByType('resource')) {
+    const timing = entry as PerformanceResourceTiming;
+    if (timing.initiatorType !== 'script') continue;
+    try {
+      const url = new URL(timing.name);
+      if (url.origin === location.origin) continue;
+      scripts.push(`${url.origin}${url.pathname}`);
+    } catch {
+      // A name that is not a URL says nothing about where a script came from.
+    }
+  }
+  return scripts.slice(-RECENT_FOREIGN_SCRIPT_LIMIT);
+}
+
+/**
+ * Which injected bridge threw this, when the frames say so.
+ *
+ * Meta's bridge names its functions, so a stack made only of file-less frames
+ * with one of those names is Meta's. "Java object is gone" without those names
+ * is still an Android webview's JavaScript interface, just not one we know.
+ */
+function injectedBridge(list: readonly unknown[]): string | null {
+  let sawJavaBridge = false;
+  for (const entry of list) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const value = (entry as ExceptionListEntry).value;
+    if (typeof value === 'string' && /Java object is gone/i.test(value)) {
+      sawJavaBridge = true;
+    }
+    const frames = (entry as ExceptionListEntry).stacktrace?.frames;
+    if (!Array.isArray(frames) || frames.length === 0) continue;
+    // posthog-js writes `<anonymous>` for a frame the runtime gave no URL.
+    const fileless = frames.every((frame: unknown) => {
+      if (typeof frame !== 'object' || frame === null) return false;
+      const filename = (frame as { filename?: unknown }).filename;
+      return !filename || filename === '<anonymous>';
+    });
+    const named = frames.some((frame: unknown) =>
+      META_BRIDGE_FUNCTIONS.includes(String((frame as { function?: unknown }).function)),
+    );
+    if (fileless && named) return 'meta_iab';
+  }
+  return sawJavaBridge ? 'android_webview' : null;
+}
+
+/**
+ * What the page was doing when an exception was captured, for the errors the
+ * stack cannot explain.
+ *
+ * Counts, flags and enum values only. Each one answers a question left open by
+ * a third-party issue:
+ *
+ * - `page_visibility`, `page_age_ms` and `ms_since_pagehide`: whether the error
+ *   fires while an in-app browser closes the page, which is the theory behind
+ *   "Java object is gone".
+ * - `patched_globals`: whether something wrapped a native API, which is the
+ *   theory behind the service worker "Rejected".
+ * - `recent_foreign_scripts` and `meta_pixel_loaded`: which third-party
+ *   script ran last before a "Script error.". Meta's `fbevents.js` sends no
+ *   `access-control-allow-origin`, so it cannot be loaded `crossorigin` and
+ *   its errors are always opaque.
+ * - `injected_bridge`: `meta_iab` when the frames are Meta's bridge.
+ *
+ * Exported for tests. Never throws: a property it cannot read is left out.
+ */
+export function exceptionDebugContext(list: unknown): Record<string, unknown> {
+  const context: Record<string, unknown> = {};
+  try {
+    if (typeof document !== 'undefined') {
+      context['page_visibility'] = document.visibilityState;
+    }
+    if (typeof performance !== 'undefined') {
+      const now = performance.now();
+      context['page_age_ms'] = Math.round(now);
+      context['ms_since_pagehide'] = pageHiddenAt === null ? null : Math.round(now - pageHiddenAt);
+    }
+    context['patched_globals'] = patchedGlobals();
+    context['recent_foreign_scripts'] = recentForeignScripts();
+    context['meta_pixel_loaded'] =
+      typeof (globalThis as { fbq?: unknown }).fbq === 'function';
+    context['injected_bridge'] = Array.isArray(list) ? injectedBridge(list) : null;
+  } catch {
+    // Best effort. The exception is worth more than its context.
+  }
+  return context;
+}
+
+/**
  * Marks an exception the browser refused to describe, and sends it anyway.
  *
  * The issue behind this is one unhandled, synthetic `Error: Script error.` from
@@ -249,6 +415,7 @@ export function markOpaqueExceptions(event: CaptureResult | null): CaptureResult
   event.properties['foreign_script_origins'] = foreignScriptOrigins();
 
   const list: unknown = event.properties['$exception_list'];
+  Object.assign(event.properties, exceptionDebugContext(list));
   if (!Array.isArray(list) || list.length === 0) {
     return event;
   }

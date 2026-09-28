@@ -663,6 +663,131 @@ describe('foreignScriptOrigins', () => {
   });
 });
 
+describe('exceptionDebugContext', () => {
+  afterEach(() => {
+    delete (globalThis as { fbq?: unknown }).fbq;
+    vi.restoreAllMocks();
+  });
+
+  // PostHog issues 01a0c807 and 01a0e2e0: Meta's in-app browser bridge throws
+  // from file-less frames as its webview goes away.
+  it("names Meta's bridge from its file-less frames", async () => {
+    const { exceptionDebugContext } = await importPosthog();
+
+    const context = exceptionDebugContext([
+      {
+        type: 'Error',
+        value: 'Error invoking postMessage: Java object is gone',
+        stacktrace: {
+          frames: [
+            { function: 'sendDataToNative', filename: '<anonymous>' },
+            { function: 'sendJsBlockingTimeMessage' },
+            { function: '?' },
+          ],
+        },
+      },
+    ]);
+
+    expect(context['injected_bridge']).toBe('meta_iab');
+  });
+
+  it('calls an unnamed Java bridge an Android webview', async () => {
+    const { exceptionDebugContext } = await importPosthog();
+
+    expect(
+      exceptionDebugContext([
+        { type: 'Error', value: 'Error invoking postMessage: Java object is gone' },
+      ])['injected_bridge'],
+    ).toBe('android_webview');
+  });
+
+  it('blames no bridge for an error thrown by our own code', async () => {
+    const { exceptionDebugContext } = await importPosthog();
+
+    expect(
+      exceptionDebugContext([
+        {
+          type: 'Error',
+          value: 'boom',
+          stacktrace: { frames: [{ ...SOME_FRAME, function: 'sendDataToNative' }] },
+        },
+      ])['injected_bridge'],
+    ).toBeNull();
+  });
+
+  it('says what the page was doing, with no user content', async () => {
+    const { exceptionDebugContext } = await importPosthog();
+    (globalThis as { fbq?: unknown }).fbq = () => undefined;
+
+    const context = exceptionDebugContext([]);
+
+    expect(context['page_visibility']).toBe('visible');
+    expect(typeof context['page_age_ms']).toBe('number');
+    expect(context['meta_pixel_loaded']).toBe(true);
+    // jsdom's fetch and friends are polyfills, so only the shape is stable here.
+    expect(Array.isArray(context['patched_globals'])).toBe(true);
+    expect(context['recent_foreign_scripts']).toEqual([]);
+  });
+
+  it('measures the time since the page was hidden', async () => {
+    const { exceptionDebugContext } = await importPosthog();
+    expect(exceptionDebugContext([])['ms_since_pagehide']).toBeNull();
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(typeof exceptionDebugContext([])['ms_since_pagehide']).toBe('number');
+    window.dispatchEvent(new Event('pageshow'));
+    expect(exceptionDebugContext([])['ms_since_pagehide']).toBeNull();
+  });
+
+  // PostHog issue 01a0ddd3-d8bd: something wrapped serviceWorker.register.
+  it('lists a native API that a script wrapped', async () => {
+    const { patchedGlobals } = await importPosthog();
+    const original = window.postMessage;
+    window.postMessage = ((...args: Parameters<typeof window.postMessage>) =>
+      original.apply(window, args)) as typeof window.postMessage;
+    try {
+      expect(patchedGlobals()).toContain('postMessage');
+    } finally {
+      window.postMessage = original;
+    }
+  });
+
+  it('lists the last cross-origin scripts without their query', async () => {
+    const { recentForeignScripts } = await importPosthog();
+    const entries = [
+      { initiatorType: 'script', name: `${location.origin}/assets/index.js` },
+      { initiatorType: 'img', name: 'https://tiles.example/1.png' },
+      { initiatorType: 'script', name: 'not a url' },
+      ...Array.from({ length: 6 }, (_, index) => ({
+        initiatorType: 'script',
+        name: `https://connect.facebook.net/signals/config/${index}?v=2&r=stable`,
+      })),
+    ];
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue(
+      entries as unknown as PerformanceEntryList,
+    );
+
+    expect(recentForeignScripts()).toEqual([
+      'https://connect.facebook.net/signals/config/1',
+      'https://connect.facebook.net/signals/config/2',
+      'https://connect.facebook.net/signals/config/3',
+      'https://connect.facebook.net/signals/config/4',
+      'https://connect.facebook.net/signals/config/5',
+    ]);
+  });
+
+  it('is attached to every exception on its way out', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
+
+    const event = markOpaqueExceptions(exceptionEvent([{ type: 'Error', value: 'boom' }]));
+
+    expect(event?.properties).toHaveProperty('page_visibility');
+    expect(event?.properties).toHaveProperty('patched_globals');
+    expect(event?.properties).toHaveProperty('injected_bridge', null);
+  });
+});
+
 describe('resetAnalyticsIdentity', () => {
   it('puts the release back, because reset() wipes super properties', async () => {
     withCredentials();
