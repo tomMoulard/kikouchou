@@ -71,6 +71,7 @@ vi.mock('@/lib/sync/templates', async () => {
     // The URL builder is the real one: a test that faked it would not notice
     // the hook dropping the share origin or the language.
     buildTemplateUrl: actual.buildTemplateUrl,
+    buildTemplateCardUrl: actual.buildTemplateCardUrl,
     // Real too, so the payload assertions below read what the trip says.
     buildTemplatePayload: actual.buildTemplatePayload,
     readTemplateState: vi.fn(),
@@ -149,7 +150,22 @@ describe('useTripTemplateLink', () => {
         kind: 'published',
         token: 'tokentokentoken1',
         url: 'https://share.kikouchou.app/fr/t/tokentokentoken1',
+        cardUrl: 'https://share.kikouchou.app/fr/t/tokentokentoken1/card.png',
       });
+    });
+  });
+
+  it('has no card to offer when no preview service is configured', async () => {
+    vi.stubEnv('VITE_SHARE_ORIGIN', '');
+    vi.mocked(readTemplateState).mockResolvedValue({
+      status: 'ok',
+      state: { isTemplate: true, token: 'tokentokentoken1', ownerId: 'user-1' },
+    });
+
+    const { result } = renderHook(() => useTripTemplateLink(TRIP, true));
+
+    await waitFor(() => {
+      expect(result.current.state).toMatchObject({ kind: 'published', cardUrl: null });
     });
   });
 
@@ -167,6 +183,7 @@ describe('useTripTemplateLink', () => {
       expect(result.current.state).toEqual({
         kind: 'not-owner',
         url: 'https://share.kikouchou.app/fr/t/tokentokentoken1',
+        cardUrl: 'https://share.kikouchou.app/fr/t/tokentokentoken1/card.png',
       });
     });
   });
@@ -180,7 +197,7 @@ describe('useTripTemplateLink', () => {
     const { result } = renderHook(() => useTripTemplateLink(TRIP, true));
 
     await waitFor(() => {
-      expect(result.current.state).toEqual({ kind: 'not-owner', url: null });
+      expect(result.current.state).toEqual({ kind: 'not-owner', url: null, cardUrl: null });
     });
   });
 

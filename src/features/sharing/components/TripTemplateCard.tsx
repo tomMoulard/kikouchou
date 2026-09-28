@@ -32,7 +32,7 @@
  * @module features/sharing/components/TripTemplateCard
  */
 
-import { type ReactElement, memo, useCallback, useState } from 'react';
+import { type ReactElement, memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Copy, Loader2, Sparkles, Store } from 'lucide-react';
 
@@ -45,6 +45,7 @@ import { upgradeEventProperties } from '@/features/upgrade/constants';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { captureEvent } from '@/lib/posthog';
 import { copyText } from '@/lib/utils/clipboard';
+import { buildTemplateEmbedSnippets } from '@/lib/sync/templates';
 import { useTripTemplateLink } from '../hooks/useTripTemplateLink';
 import type { Trip } from '@/types';
 
@@ -86,9 +87,68 @@ export interface TripTemplateCardProps {
   readonly trip: Trip;
 }
 
+interface CopyFieldProps {
+  /** The input's id, which the label points at. */
+  readonly id: string;
+  readonly label: string;
+  readonly value: string;
+  /** The copy button's accessible name. */
+  readonly copyLabel: string;
+}
+
 // ============================================================================
 // Component
 // ============================================================================
+
+/**
+ * One read-only value and the button that copies it.
+ *
+ * Each field keeps its own "copied" tick, so copying the Markdown does not
+ * say the HTML was copied too.
+ */
+const CopyField = memo(function CopyField({
+  id,
+  label,
+  value,
+  copyLabel,
+}: CopyFieldProps): ReactElement {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async (): Promise<void> => {
+    await copyText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), COPIED_FOR_MS);
+  }, [value]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-sm font-medium" htmlFor={id}>
+        {label}
+      </label>
+      <div className="flex gap-2">
+        <input
+          id={id}
+          className="min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 text-sm"
+          readOnly
+          value={value}
+          onFocus={(event) => event.currentTarget.select()}
+        />
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => void handleCopy()}
+          aria-label={copyLabel}
+        >
+          {copied ? (
+            <Check className="size-4" aria-hidden="true" />
+          ) : (
+            <Copy className="size-4" aria-hidden="true" />
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+});
 
 /**
  * The publish control for the cohort, and the offer for everybody else.
@@ -104,7 +164,6 @@ export const TripTemplateCard = memo(function TripTemplateCard({
   const enabled = flag === true;
 
   const { state, publish, unpublish, isBusy } = useTripTemplateLink(trip, enabled);
-  const [copied, setCopied] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
   const { hasDeclared, declare } = useUpgradeInterest();
   const [offerOpen, setOfferOpen] = useState(false);
@@ -113,6 +172,15 @@ export const TripTemplateCard = memo(function TripTemplateCard({
   // button, and none of the controls behind it.
   const url =
     state.kind === 'published' ? state.url : state.kind === 'not-owner' ? state.url : null;
+  const cardUrl =
+    state.kind === 'published' || state.kind === 'not-owner' ? state.cardUrl : null;
+  const snippets = useMemo(
+    () =>
+      url !== null && cardUrl !== null
+        ? buildTemplateEmbedSnippets(url, cardUrl, trip.name)
+        : null,
+    [url, cardUrl, trip.name],
+  );
 
   /**
    * Opens the paid-tier offer, and counts the open.
@@ -134,15 +202,6 @@ export const TripTemplateCard = memo(function TripTemplateCard({
     });
     setOfferOpen(true);
   }, [hasDeclared]);
-
-  const handleCopy = useCallback(async (): Promise<void> => {
-    if (url === null) {
-      return;
-    }
-    await copyText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), COPIED_FOR_MS);
-  }, [url]);
 
   return (
     <Card>
@@ -221,30 +280,12 @@ export const TripTemplateCard = memo(function TripTemplateCard({
 
           {url !== null ? (
             <div className="flex flex-col gap-3">
-              <label className="text-sm font-medium" htmlFor="template-link">
-                {t('sharing.template.linkLabel', 'The link to share')}
-              </label>
-              <div className="flex gap-2">
-                <input
-                  id="template-link"
-                  className="min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 text-sm"
-                  readOnly
-                  value={url}
-                  onFocus={(event) => event.currentTarget.select()}
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => void handleCopy()}
-                  aria-label={t('sharing.copy', 'Copy link')}
-                >
-                  {copied ? (
-                    <Check className="size-4" aria-hidden="true" />
-                  ) : (
-                    <Copy className="size-4" aria-hidden="true" />
-                  )}
-                </Button>
-              </div>
+              <CopyField
+                id="template-link"
+                label={t('sharing.template.linkLabel', 'The link to share')}
+                value={url}
+                copyLabel={t('sharing.copy', 'Copy link')}
+              />
               {state.kind === 'published' ? (
                 <p className="text-sm text-muted-foreground">
                   {t(
@@ -254,6 +295,47 @@ export const TripTemplateCard = memo(function TripTemplateCard({
                 </p>
               ) : null}
             </div>
+          ) : null}
+
+          {/* Only the preview service draws the card, so a build without one
+              offers the bare link and nothing to embed. */}
+          {snippets !== null ? (
+            <section
+              className="flex flex-col gap-3 border-t pt-4"
+              aria-labelledby="template-embed-title"
+            >
+              <div className="flex flex-col gap-1">
+                <h3 id="template-embed-title" className="font-display text-sm font-semibold">
+                  {t('sharing.template.embedTitle', 'Put it on a web page')}
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  {t(
+                    'sharing.template.embedHint',
+                    'Paste one of these where your page accepts HTML or Markdown. It shows the card below, and a click on it opens the template.',
+                  )}
+                </p>
+              </div>
+              <img
+                src={cardUrl ?? undefined}
+                alt={t('sharing.template.cardPreviewAlt', 'The card the link shows')}
+                width={600}
+                height={315}
+                loading="lazy"
+                className="h-auto w-full max-w-sm rounded-md border"
+              />
+              <CopyField
+                id="template-embed-html"
+                label={t('sharing.template.htmlLabel', 'HTML, for a website or an email')}
+                value={snippets.html}
+                copyLabel={t('sharing.template.copyHtml', 'Copy the HTML')}
+              />
+              <CopyField
+                id="template-embed-markdown"
+                label={t('sharing.template.markdownLabel', 'Markdown, for a wiki or a README')}
+                value={snippets.markdown}
+                copyLabel={t('sharing.template.copyMarkdown', 'Copy the Markdown')}
+              />
+            </section>
           ) : null}
 
           {state.kind === 'published' || state.kind === 'unpublished' ? (
