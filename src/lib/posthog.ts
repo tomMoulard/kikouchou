@@ -46,6 +46,7 @@ import posthog from 'posthog-js';
 import type { CaptureResult } from 'posthog-js';
 
 import { isDevelopmentHost } from '@/lib/analytics/development-host';
+import { takeLandingBootstrap } from '@/lib/analytics/landing-handoff';
 import { readDisplayMode } from '@/lib/pwa/display-mode';
 
 // ============================================================================
@@ -463,6 +464,17 @@ if (!posthogKey || !posthogHost) {
     ui_host: 'https://eu.posthog.com',
 
     defaults: '2026-05-30',
+
+    /**
+     * The landing page's distinct id and session id, on a first visit only.
+     *
+     * The landing page stores nothing in the browser, so it hands its ids over
+     * on the link instead, and this continues its person and its session. See
+     * `lib/analytics/landing-handoff` for the rules: the parameters leave the
+     * address bar before this runs, a browser with an identity of its own
+     * keeps it, and a stale link carries nothing.
+     */
+    bootstrap: takeLandingBootstrap(posthogKey),
 
     /**
      * A person exists from the first pageview, with no account behind it.
