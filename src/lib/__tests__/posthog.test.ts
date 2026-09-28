@@ -167,6 +167,35 @@ describe('lib/posthog', () => {
     expect(options['internal_or_test_user_hostname']).toBeNull();
   });
 
+  it("continues the landing page's person and session from the link", async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+    const distinctID = '0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b';
+    const sessionID = '0199a1b2-c3d4-7e5f-8a9b-aaaaaaaaaaaa';
+    window.history.replaceState(
+      null,
+      '',
+      `/?ph_distinct_id=${distinctID}&ph_session_id=${sessionID}&ph_handoff_at=${Date.now()}`,
+    );
+
+    await importPosthog();
+
+    const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(options['bootstrap']).toEqual({ distinctID, sessionID });
+    // Gone before init, so no event carries them in `$current_url`.
+    expect(window.location.search).toBe('');
+  });
+
+  it('bootstraps nothing without a landing link', async () => {
+    withCredentials();
+    vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
+
+    await importPosthog();
+
+    const options = mockInit.mock.calls[0]?.[1] as Record<string, unknown>;
+    expect(options['bootstrap']).toBeUndefined();
+  });
+
   it('registers the release on every event', async () => {
     withCredentials();
     vi.stubEnv('VITE_POSTHOG_ALLOW_LOCALHOST', 'true');
