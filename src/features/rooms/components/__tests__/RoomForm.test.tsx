@@ -435,7 +435,7 @@ describe('RoomForm', () => {
       await waitFor(() => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       });
-      expect(glyphOf(iconButton())).toBe('bed');
+      expect(glyphOf(iconButton())).toBe('bed-bunk');
 
       await user.click(screen.getByText('common.save'));
       expect(onSubmit).toHaveBeenCalledWith(

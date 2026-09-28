@@ -35,6 +35,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+import { BedBunk, BedTwin } from '../room-bed-icons';
 import {
   ICON_ORDER,
   RoomIconPicker,
@@ -63,7 +64,7 @@ const EXPECTED_ICONS: ReadonlyArray<readonly [RoomIcon, string, LucideIcon]> = [
   ['door-open', 'DoorOpen', DoorOpen],
   ['baby', 'Baby', Baby],
   ['armchair', 'Armchair', Armchair],
-  ['bunk-bed', 'Bed', Bed],
+  ['bunk-bed', 'BedBunk', BedBunk],
   ['hammock', 'TreePalm', TreePalm],
   ['camper-van', 'Van', Van],
   ['campsite', 'TentTree', TentTree],
@@ -71,6 +72,7 @@ const EXPECTED_ICONS: ReadonlyArray<readonly [RoomIcon, string, LucideIcon]> = [
   ['rocking-chair', 'RockingChair', RockingChair],
   ['shower', 'ShowerHead', ShowerHead],
   ['boat', 'Sailboat', Sailboat],
+  ['bed-twin', 'BedTwin', BedTwin],
 ];
 
 /**
@@ -103,6 +105,17 @@ describe('getRoomIconComponent', () => {
     // assertions above would still report one at a time.
     const icons = new Set(ICON_ORDER.map((key) => getRoomIconComponent(key)));
     expect(icons.size).toBe(ICON_ORDER.length);
+  });
+
+  it('draws the bunk and twin beds with shapes of their own', () => {
+    // lucide has neither, and the bunks used to borrow its plain `Bed`.
+    const lucideBeds = [Bed, BedDouble, BedSingle].map(shapeOf);
+    for (const Icon of [BedBunk, BedTwin]) {
+      const shape = shapeOf(Icon);
+      expect(shape).toContain('<path');
+      expect(lucideBeds).not.toContain(shape);
+    }
+    expect(shapeOf(BedBunk)).not.toBe(shapeOf(BedTwin));
   });
 
   it('returns BedDouble for a room with no icon set', () => {

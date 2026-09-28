@@ -11,7 +11,6 @@ import {
   Armchair,
   Baby,
   Bath,
-  Bed,
   BedDouble,
   BedSingle,
   Caravan,
@@ -32,6 +31,7 @@ import {
 
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
+import { BedBunk, BedTwin } from '@/components/shared/room-bed-icons';
 import { DEFAULT_ROOM_ICON, type RoomIcon } from '@/types';
 
 // ============================================================================
@@ -77,10 +77,10 @@ interface IconConfig {
 /**
  * Map of room icon types to their lucide-react components and label keys.
  *
- * lucide 0.563 has no glyph for a bunk bed, a hammock, a crib or an air
- * mattress, so those places borrow the nearest thing it does draw: a plain
- * `Bed` for the bunks and the spare mattress, a palm tree for the hammock, and
- * the rocking chair for a nursery. A cot already has `baby`.
+ * lucide 0.563 has no glyph for a hammock or a crib, so those places borrow
+ * the nearest thing it does draw: a palm tree for the hammock and the rocking
+ * chair for a nursery. A cot already has `baby`. It has no bunk bed and no
+ * twin beds either; those two are drawn in `room-bed-icons`.
  */
 const ROOM_ICONS: Record<RoomIcon, IconConfig> = {
   'bed-double': { icon: BedDouble, labelKey: 'rooms.icons.bedDouble' },
@@ -94,7 +94,7 @@ const ROOM_ICONS: Record<RoomIcon, IconConfig> = {
   'door-open': { icon: DoorOpen, labelKey: 'rooms.icons.doorOpen' },
   'baby': { icon: Baby, labelKey: 'rooms.icons.baby' },
   'armchair': { icon: Armchair, labelKey: 'rooms.icons.armchair' },
-  'bunk-bed': { icon: Bed, labelKey: 'rooms.icons.bunkBed' },
+  'bunk-bed': { icon: BedBunk, labelKey: 'rooms.icons.bunkBed' },
   'hammock': { icon: TreePalm, labelKey: 'rooms.icons.hammock' },
   'camper-van': { icon: Van, labelKey: 'rooms.icons.camperVan' },
   'campsite': { icon: TentTree, labelKey: 'rooms.icons.campsite' },
@@ -102,6 +102,7 @@ const ROOM_ICONS: Record<RoomIcon, IconConfig> = {
   'rocking-chair': { icon: RockingChair, labelKey: 'rooms.icons.rockingChair' },
   'shower': { icon: ShowerHead, labelKey: 'rooms.icons.shower' },
   'boat': { icon: Sailboat, labelKey: 'rooms.icons.boat' },
+  'bed-twin': { icon: BedTwin, labelKey: 'rooms.icons.bedTwin' },
 } as const;
 
 /**
@@ -129,6 +130,7 @@ const ICON_ORDER: readonly RoomIcon[] = [
   'rocking-chair',
   'shower',
   'boat',
+  'bed-twin',
 ] as const;
 
 /**

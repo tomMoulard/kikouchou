@@ -35,6 +35,7 @@ import {
   errorsToMap,
   FormValidationError,
 } from '../index';
+import { ROOM_ICONS } from '@/types';
 import type { PersonId, RoomId } from '@/types';
 
 // ============================================================================
@@ -113,6 +114,14 @@ describe('Primitive Schemas', () => {
       expect(roomIconSchema.safeParse('bed-double').success).toBe(true);
       expect(roomIconSchema.safeParse('bed-single').success).toBe(true);
       expect(roomIconSchema.safeParse('tent').success).toBe(true);
+    });
+
+    it('accepts every icon the picker offers', () => {
+      // The schema used to list only the first eleven, so a bunk bed or a
+      // twin room failed validation.
+      for (const icon of ROOM_ICONS) {
+        expect(roomIconSchema.safeParse(icon).success).toBe(true);
+      }
     });
 
     it('rejects invalid room icons', () => {
