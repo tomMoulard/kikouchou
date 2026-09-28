@@ -16,6 +16,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildTemplateCardUrl,
+  buildTemplateEmbedSnippets,
   buildTemplateUrl,
   publishTemplate,
   readTemplateState,
@@ -145,6 +147,46 @@ describe('buildTemplateUrl', () => {
     expect(buildTemplateUrl('https://app.kikouchou.app', '/', 'a/b?c')).toBe(
       'https://app.kikouchou.app/template/a%2Fb%3Fc',
     );
+  });
+});
+
+describe('buildTemplateCardUrl', () => {
+  it('points at the card the preview host draws for the link', () => {
+    expect(
+      buildTemplateCardUrl('tokentokentoken1', {
+        origin: 'https://share.kikouchou.app/',
+        language: 'fr',
+      }),
+    ).toBe('https://share.kikouchou.app/fr/t/tokentokentoken1/card.png');
+  });
+
+  it('has no card without a preview host', () => {
+    expect(buildTemplateCardUrl('tokentokentoken1', { origin: '', language: 'fr' })).toBeNull();
+    expect(buildTemplateCardUrl('tokentokentoken1')).toBeNull();
+  });
+});
+
+describe('buildTemplateEmbedSnippets', () => {
+  const LINK = 'https://share.kikouchou.app/en/t/tokentokentoken1';
+  const CARD = `${LINK}/card.png`;
+
+  it('links the card to the template, with the name as its alt text', () => {
+    expect(buildTemplateEmbedSnippets(LINK, CARD, 'Chalet Marmotte')).toEqual({
+      html: `<a href="${LINK}"><img src="${CARD}" alt="Chalet Marmotte" width="600" height="315"></a>`,
+      markdown: `[![Chalet Marmotte](${CARD})](${LINK})`,
+    });
+  });
+
+  it('keeps a name from breaking out of the HTML attribute', () => {
+    const { html } = buildTemplateEmbedSnippets(LINK, CARD, 'Tom & "Jerry" <b>');
+
+    expect(html).toContain('alt="Tom &amp; &quot;Jerry&quot; &lt;b&gt;"');
+  });
+
+  it('keeps a name from closing the Markdown alt text early', () => {
+    const { markdown } = buildTemplateEmbedSnippets(LINK, CARD, 'Chalet [2026]\\n  Alps');
+
+    expect(markdown).toBe(`[![Chalet \\[2026\\]\\\\n Alps](${CARD})](${LINK})`);
   });
 });
 

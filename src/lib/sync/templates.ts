@@ -63,6 +63,18 @@ const TEMPLATE_PATH = 'template';
 /** Path segment that tells the link preview service this is a template. */
 const TEMPLATE_SHARE_SEGMENT = 't';
 
+/** Path segment the preview service draws a link's card at. */
+const CARD_SEGMENT = 'card.png';
+
+/**
+ * The size the card is shown at on somebody else's page.
+ *
+ * Half of the 1200x630 the preview service draws, so the image stays sharp on
+ * a high-density screen and fits beside a page's own text.
+ */
+const EMBED_WIDTH = 600;
+const EMBED_HEIGHT = 315;
+
 /** The server's bounds, restated so a payload is refused here rather than there. */
 const MAX_NAME = 200;
 const MAX_DESCRIPTION = 2_000;
@@ -174,6 +186,77 @@ export function buildTemplateUrl(
   }
   const base = basePath.endsWith('/') ? basePath : `${basePath}/`;
   return `${origin}${base}${TEMPLATE_PATH}/${encodeURIComponent(token)}`;
+}
+
+/**
+ * The card image for a template link, the one a chat unfurls it with.
+ *
+ * Only the preview service draws a template's card, so without a share origin
+ * there is none, and the screen offers the bare link alone.
+ *
+ * @param token - The template token
+ * @param share - The preview service's origin and the language of the card
+ * @returns An absolute URL, or null when no preview service is configured
+ */
+export function buildTemplateCardUrl(
+  token: string,
+  share?: { readonly origin: string; readonly language: string },
+): string | null {
+  if (share === undefined || share.origin === '') {
+    return null;
+  }
+  return `${buildTemplateUrl('', '/', token, share)}/${CARD_SEGMENT}`;
+}
+
+/** The two ways to put a template on a web page. */
+export interface TemplateEmbedSnippets {
+  /** An `<a>` around the card, for a site builder or an email. */
+  readonly html: string;
+  /** The same card as a Markdown image link, for a README, Notion or a wiki. */
+  readonly markdown: string;
+}
+
+/** Escapes a value for an HTML attribute in double quotes. */
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+/** Escapes the characters that would end a Markdown image's alt text early. */
+function escapeMarkdownAlt(value: string): string {
+  return value.replace(/[\\[\]]/g, (character) => `\\${character}`);
+}
+
+/**
+ * The card, linked to the template, as a snippet somebody pastes in a page.
+ *
+ * An image rather than an iframe: it shows the same card, needs nothing from
+ * the preview service beyond what a chat unfurl already reads, and it survives
+ * the places that strip iframes, an email or a site builder among them. The
+ * template's name is the alt text, because it is the only text a screen reader
+ * gets from the card.
+ *
+ * @param link - The template link, from {@link buildTemplateUrl}
+ * @param cardUrl - Its card, from {@link buildTemplateCardUrl}
+ * @param name - The template's name
+ * @returns The HTML and Markdown snippets
+ */
+export function buildTemplateEmbedSnippets(
+  link: string,
+  cardUrl: string,
+  name: string,
+): TemplateEmbedSnippets {
+  const alt = name.trim().replace(/\s+/g, ' ');
+  return {
+    html:
+      `<a href="${escapeHtmlAttribute(link)}">` +
+      `<img src="${escapeHtmlAttribute(cardUrl)}" alt="${escapeHtmlAttribute(alt)}" ` +
+      `width="${EMBED_WIDTH}" height="${EMBED_HEIGHT}"></a>`,
+    markdown: `[![${escapeMarkdownAlt(alt)}](${cardUrl})](${link})`,
+  };
 }
 
 // ============================================================================

@@ -25,6 +25,7 @@ import { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { ensureRemoteTrip } from '@/lib/sync/remote-trip';
 import {
+  buildTemplateCardUrl,
   buildTemplatePayload,
   buildTemplateUrl,
   publishTemplate,
@@ -39,8 +40,16 @@ import type { Trip } from '@/types';
 
 export type TemplateLinkState =
   | { readonly kind: 'loading' }
-  /** Published: this is the link, and it does not change. */
-  | { readonly kind: 'published'; readonly url: string; readonly token: string }
+  /**
+   * Published: this is the link, and it does not change. `cardUrl` is the
+   * image a chat unfurls it with, or null when no preview service draws one.
+   */
+  | {
+      readonly kind: 'published';
+      readonly url: string;
+      readonly cardUrl: string | null;
+      readonly token: string;
+    }
   /** The trip can be published, and is not. */
   | { readonly kind: 'unpublished' }
   /**
@@ -50,7 +59,7 @@ export type TemplateLinkState =
    * can change it. So a member is shown the link when there is one, and never a
    * button whose write the server would refuse.
    */
-  | { readonly kind: 'not-owner'; readonly url: string | null }
+  | { readonly kind: 'not-owner'; readonly url: string | null; readonly cardUrl: string | null }
   /** Publishing needs an account; the screen offers to sign in. */
   | { readonly kind: 'needs-account' }
   /** No backend in this build: there is nothing to publish to. */
@@ -71,12 +80,22 @@ export interface UseTripTemplateLinkResult {
 // Helpers
 // ============================================================================
 
-/** The link for a token, in the language the publisher is reading in. */
-function urlFor(token: string): string {
-  return buildTemplateUrl(window.location.origin, import.meta.env.BASE_URL || '/', token, {
+/** The preview service, and the language the publisher is reading in. */
+function shareFor(): { readonly origin: string; readonly language: string } {
+  return {
     origin: import.meta.env.VITE_SHARE_ORIGIN ?? '',
     language: getCurrentLanguage(),
-  });
+  };
+}
+
+/** The link for a token. */
+function urlFor(token: string): string {
+  return buildTemplateUrl(window.location.origin, import.meta.env.BASE_URL || '/', token, shareFor());
+}
+
+/** The link's card for a token, or null without a preview service. */
+function cardUrlFor(token: string): string | null {
+  return buildTemplateCardUrl(token, shareFor());
 }
 
 // ============================================================================
@@ -170,12 +189,13 @@ export function useTripTemplateLink(
         setState({
           kind: 'not-owner',
           url: isTemplate && token !== null ? urlFor(token) : null,
+          cardUrl: isTemplate && token !== null ? cardUrlFor(token) : null,
         });
         return;
       }
       setState(
         isTemplate && token !== null
-          ? { kind: 'published', url: urlFor(token), token }
+          ? { kind: 'published', url: urlFor(token), cardUrl: cardUrlFor(token), token }
           : { kind: 'unpublished' },
       );
     })();
@@ -232,7 +252,12 @@ export function useTripTemplateLink(
         republished: existing.status === 'ok' && existing.state.isTemplate,
       });
       if (isMountedRef.current) {
-        setState({ kind: 'published', url: urlFor(result.token), token: result.token });
+        setState({
+          kind: 'published',
+          url: urlFor(result.token),
+          cardUrl: cardUrlFor(result.token),
+          token: result.token,
+        });
       }
     } catch (error: unknown) {
       console.error('Failed to publish the trip template:', error);

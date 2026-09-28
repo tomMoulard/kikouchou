@@ -174,6 +174,7 @@ describe('TripTemplateCard', () => {
     answering({
       kind: 'published',
       url: 'https://share.kikouchou.app/fr/t/tokentokentoken1',
+      cardUrl: null,
       token: 'tokentokentoken1',
     });
 
@@ -190,7 +191,7 @@ describe('TripTemplateCard', () => {
   });
 
   it('says the link follows the trip, and keeps publishing again by hand', () => {
-    answering({ kind: 'published', url: 'https://x.test/t/a', token: 'a' });
+    answering({ kind: 'published', url: 'https://x.test/t/a', cardUrl: null, token: 'a' });
 
     render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
 
@@ -199,7 +200,7 @@ describe('TripTemplateCard', () => {
   });
 
   it('takes a template down when asked', async () => {
-    answering({ kind: 'published', url: 'https://x.test/t/a', token: 'a' });
+    answering({ kind: 'published', url: 'https://x.test/t/a', cardUrl: null, token: 'a' });
 
     const { user } = render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
     await user.click(screen.getByRole('button', { name: 'Take it down' }));
@@ -208,7 +209,7 @@ describe('TripTemplateCard', () => {
   });
 
   it('offers neither button on a trip somebody else owns', () => {
-    answering({ kind: 'not-owner', url: 'https://x.test/t/a' });
+    answering({ kind: 'not-owner', url: 'https://x.test/t/a', cardUrl: null });
 
     render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
 
@@ -219,7 +220,7 @@ describe('TripTemplateCard', () => {
   });
 
   it('says who may publish, on a trip somebody else has not published', () => {
-    answering({ kind: 'not-owner', url: null });
+    answering({ kind: 'not-owner', url: null, cardUrl: null });
 
     render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
 
@@ -253,6 +254,7 @@ describe('TripTemplateCard', () => {
     answering({
       kind: 'published',
       url: 'https://share.kikouchou.app/fr/t/tokentokentoken1',
+      cardUrl: null,
       token: 'tokentokentoken1',
     });
 
@@ -266,6 +268,59 @@ describe('TripTemplateCard', () => {
     // A link is copied by hand as often as by the button.
     expect(field.selectionStart).toBe(0);
     expect(field.selectionEnd).toBe(field.value.length);
+  });
+
+  it('offers the card as HTML and Markdown to paste into a web page', async () => {
+    answering({
+      kind: 'published',
+      url: 'https://share.kikouchou.app/fr/t/tokentokentoken1',
+      cardUrl: 'https://share.kikouchou.app/fr/t/tokentokentoken1/card.png',
+      token: 'tokentokentoken1',
+    });
+
+    const { user } = render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
+
+    expect(screen.getByRole('img', { name: 'The card the link shows' })).toHaveAttribute(
+      'src',
+      'https://share.kikouchou.app/fr/t/tokentokentoken1/card.png',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Copy the HTML' }));
+    await user.click(screen.getByRole('button', { name: 'Copy the Markdown' }));
+
+    expect(vi.mocked(copyText)).toHaveBeenNthCalledWith(
+      1,
+      '<a href="https://share.kikouchou.app/fr/t/tokentokentoken1">' +
+        '<img src="https://share.kikouchou.app/fr/t/tokentokentoken1/card.png" ' +
+        'alt="Chalet Marmotte" width="600" height="315"></a>',
+    );
+    expect(vi.mocked(copyText)).toHaveBeenNthCalledWith(
+      2,
+      '[![Chalet Marmotte](https://share.kikouchou.app/fr/t/tokentokentoken1/card.png)]' +
+        '(https://share.kikouchou.app/fr/t/tokentokentoken1)',
+    );
+  });
+
+  it('offers the snippets to a member too, since a member may hand the link on', () => {
+    answering({
+      kind: 'not-owner',
+      url: 'https://share.kikouchou.app/fr/t/a',
+      cardUrl: 'https://share.kikouchou.app/fr/t/a/card.png',
+    });
+
+    render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
+
+    expect(screen.getByRole('button', { name: 'Copy the Markdown' })).toBeInTheDocument();
+  });
+
+  it('offers nothing to embed when no preview service draws a card', () => {
+    answering({ kind: 'published', url: 'https://x.test/t/a', cardUrl: null, token: 'a' });
+
+    render(<TripTemplateCard trip={TRIP} />, { withProviders: false });
+
+    expect(screen.getByDisplayValue('https://x.test/t/a')).toBeInTheDocument();
+    expect(screen.queryByText('Put it on a web page')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Copy the HTML' })).not.toBeInTheDocument();
   });
 
   it('says when the build has no server, rather than spinning forever', () => {
