@@ -16,6 +16,7 @@ import {
   STALE_CHUNK_RELOAD_COOLDOWN_MS,
   STALE_CHUNK_RELOAD_KEY,
   isModuleLoadError,
+  logCaughtError,
   reloadForStaleChunk,
 } from '@/lib/pwa/stale-chunk';
 
@@ -198,5 +199,40 @@ describe('reloadForStaleChunk', () => {
       }),
     ).toBe(true);
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('logCaughtError', () => {
+  // React 19 logs what a boundary caught with console.error, and PostHog's
+  // console capture turned that line into an "unhandled" twin of every stale
+  // chunk the boundary had already reloaded away (issue 01a0a104).
+  it('says nothing about a stale chunk the boundary reloads away', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      logCaughtError(
+        new TypeError(
+          'Failed to fetch dynamically imported module: https://app.kikouchou.app/assets/TripEditPage-CfPSMXkw.js',
+        ),
+        { componentStack: '\n    at TripEditPage' },
+      );
+
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  it('keeps logging every other error with its component stack', () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const error = new Error('Trip not found');
+      logCaughtError(error, { componentStack: '\n    at TripPage' });
+      logCaughtError('a thrown string', {});
+
+      expect(consoleError).toHaveBeenNthCalledWith(1, error, '\n    at TripPage');
+      expect(consoleError).toHaveBeenNthCalledWith(2, 'a thrown string', '');
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

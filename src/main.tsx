@@ -31,6 +31,7 @@ import '@/lib/google-tag';
 // is free to normalise away. See lib/notifications/opened.
 import '@/lib/notifications/opened';
 import { registerServiceWorker } from '@/lib/pwa/register';
+import { logCaughtError } from '@/lib/pwa/stale-chunk';
 import App from './App.tsx';
 import './index.css';
 
@@ -100,7 +101,7 @@ async function initializeApp(): Promise<void> {
   }
 
   // Render the application
-  createRoot(rootElement).render(
+  createRoot(rootElement, { onCaughtError: logCaughtError }).render(
     <StrictMode>
       <App />
     </StrictMode>,

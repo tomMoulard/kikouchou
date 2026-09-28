@@ -153,6 +153,23 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
       console.error('Component stack:', errorInfo.componentStack);
     }
 
+    // A chunk the origin no longer serves is not the user's problem to solve,
+    // and the retry button is the only way out of it: reload here rather than
+    // asking for a tap. `reloadForStaleChunk` keeps the once-per-tab guard;
+    // when it declines, the fallback below stays on screen with its button.
+    //
+    // The reload comes before the report, and a reload that went ahead is not
+    // reported at all. A tab left open across a deploy asks for a chunk the new
+    // build replaced, and the reload fixes it: that is the expected life of a
+    // PWA, and reporting it filled error tracking with an issue nobody could
+    // act on (PostHog `01a0a104-252e-7b53-8c95-eb0341c6f733`). A broken deploy
+    // still reaches it, because its chunk is missing after the reload too, and
+    // the second failure finds the guard set.
+    const isStaleChunk = isModuleLoadError(error);
+    if (isStaleChunk && reloadForStaleChunk()) {
+      return;
+    }
+
     // A boundary that renders a fallback has, by definition, handled the error,
     // so PostHog's unhandled-error capture never sees it. Every crash this
     // boundary absorbed used to be invisible in error tracking while the
@@ -162,17 +179,8 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
     reportError(error, {
       source: 'ErrorBoundary',
       component_stack: errorInfo.componentStack ?? undefined,
+      ...(isStaleChunk ? { stale_chunk: true } : {}),
     });
-
-    // A chunk the origin no longer serves is not the user's problem to solve,
-    // and the retry button is the only way out of it: reload here rather than
-    // asking for a tap. Reported first, so the reload never costs the one
-    // record error tracking gets of a bad deploy. `reloadForStaleChunk` keeps
-    // the once-per-tab guard; when it declines, the fallback below stays on
-    // screen with its button, exactly as before.
-    if (isModuleLoadError(error)) {
-      reloadForStaleChunk();
-    }
   }
 
   /**

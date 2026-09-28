@@ -995,9 +995,9 @@ export function captureDeletion(
  * error tracking held nothing at all, which is what happened to the room
  * assignment failure this helper was written for.
  *
- * `console_errors` is deliberately still off: it would capture the 118 existing
- * `console.error` sites indiscriminately, including the noisy ones. This is the
- * opt-in counterpart — a call site that reports says so.
+ * `capture_console_errors` is on as well, so a `console.error` beside a report
+ * reaches PostHog a second time, flagged unhandled. Log an expected failure with
+ * `console.warn`, and report it here only when somebody can act on it.
  *
  * `context` names where the error came from, because a wrapped error's own
  * message rarely does. Everything passed here must be app-domain detail, never
