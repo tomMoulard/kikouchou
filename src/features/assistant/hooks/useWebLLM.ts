@@ -117,6 +117,27 @@ export function isLoadCancelledError(
 }
 
 /**
+ * Error used to settle what an old worker still owed when a model on the
+ * other engine replaced it. Not a failure either: the worker was taken down on
+ * purpose, and the request that replaced it owns the status from then on.
+ */
+export interface WorkerReplacedError extends Error {
+  readonly replaced: true;
+}
+
+/**
+ * Whether a request was dropped because its worker was replaced.
+ */
+export function isWorkerReplacedError(
+  error: unknown,
+): error is WorkerReplacedError {
+  return (
+    error instanceof Error &&
+    (error as { readonly replaced?: unknown }).replaced === true
+  );
+}
+
+/**
  * Why a model failed to load, as far as the error message can be trusted to
  * say. Four different fixes: ship a device gate, shrink the prompt or the
  * preset, retry the download, or go and read the message.
@@ -450,7 +471,12 @@ function getWorker(engine: AssistantEngine): Worker {
   if (workerInstance !== null) {
     // A different engine: the old worker still holds its model in memory and
     // will never be asked for it again.
-    terminateWorker(new Error('Switched to a model with a different runtime.'));
+    terminateWorker(
+      Object.assign(
+        new Error('Switched to a model with a different runtime.'),
+        { replaced: true } as const,
+      ) satisfies WorkerReplacedError,
+    );
   }
 
   const worker =
@@ -562,6 +588,8 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
 
   // Track whether we're currently loading (to prevent double-loading)
   const loadingRef = useRef(false);
+  /** Counts loads, so an unload can tell that one started while it waited. */
+  const loadGenerationRef = useRef(0);
   const activeModelIdRef = useRef(preset.modelId);
   const cacheProbeVersionRef = useRef(0);
 
@@ -629,6 +657,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
 
     const loadingFromCache = isCached === true;
     loadingRef.current = true;
+    loadGenerationRef.current += 1;
     downloadFilesRef.current = new Map();
     setStatus('loading');
     setError(null);
@@ -664,6 +693,14 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       setLoadProgress(null);
       setIsCached(true);
     } catch (err) {
+      if (isWorkerReplacedError(err)) {
+        // Another load, for a model on the other engine, took the worker down.
+        // That load reports its own outcome; this one only steps aside.
+        setStatus('idle');
+        setLoadProgress(null);
+        return;
+      }
+
       if (isLoadCancelledError(err)) {
         // The user asked for this, so it is not an error: no capture, no red
         // card, and a status the auto-load effect will not immediately undo.
@@ -781,6 +818,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   // unload
   // ------------------------------------------------------------------
   const unload = useCallback(async (): Promise<void> => {
+    const generation = loadGenerationRef.current;
     if (workerInstance !== null) {
       try {
         await sendRequest(preset.engine, {
@@ -788,8 +826,19 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
           requestId: nextRequestId(),
         });
       } catch (unloadError) {
-        console.error('Failed to unload assistant model:', unloadError);
+        // A replaced worker took its model with it, which is what the unload
+        // asked for. Logging it sent PostHog an unhandled error for every
+        // quick switch between engines (issue 01a0ddd3-88f1).
+        if (!isWorkerReplacedError(unloadError)) {
+          console.error('Failed to unload assistant model:', unloadError);
+        }
       }
+    }
+
+    // A load started while the worker was unloading owns the status and the
+    // loaded model now. Resetting them here would show "idle" over a download.
+    if (loadGenerationRef.current !== generation) {
+      return;
     }
 
     loadedModelId = null;

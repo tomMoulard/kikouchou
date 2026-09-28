@@ -435,6 +435,140 @@ describe('useWebLLM — unloading', () => {
   });
 });
 
+describe('useWebLLM — switching to a model on the other engine', () => {
+  // PostHog issue 01a0ddd3-88f1-7391-85b5-ab35055140cc. Changing the preset
+  // awaits unload() on the old worker, but the preset change has already sent
+  // the status back to idle, so the Load button is live. Loading a model that
+  // runs on the other engine replaces the worker, which rejected the pending
+  // unload with "Switched to a model with a different runtime." The unload's
+  // console.error reached PostHog as an unhandled error, and its status reset
+  // then overwrote the new load.
+  it('lets the new load own the status, and logs nothing', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const transformers = ASSISTANT_MODEL_PRESETS.find(
+      (candidate) => candidate.engine === 'transformers',
+    )!;
+    const needle = ASSISTANT_MODEL_PRESETS.find(
+      (candidate) => candidate.engine === 'needle',
+    )!;
+
+    vi.resetModules();
+    const { useWebLLM } = await import('../useWebLLM');
+    const posthog = (await import('@/lib/posthog')).default as unknown as {
+      readonly captureException: ReturnType<typeof vi.fn>;
+    };
+    const view = renderHook(({ current }) => useWebLLM(current), {
+      initialProps: { current: transformers },
+    });
+
+    await waitFor(() => {
+      expect(view.result.current.isCached).not.toBeNull();
+    });
+    act(() => {
+      void view.result.current.loadModel();
+    });
+    const oldWorker = FakeWorker.instances.at(-1)!;
+    await waitFor(() => {
+      expect(oldWorker.lastRequestOfType('load')).toBeDefined();
+    });
+    await act(async () => {
+      oldWorker.reply({
+        type: 'loaded',
+        requestId: oldWorker.lastRequestOfType('load')!.requestId,
+      });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(view.result.current.status).toBe('ready');
+    });
+
+    // AssistantPage: setSelectedModelId(value), then `await unload()` with
+    // the unload of the render before. The old worker never answers it.
+    const unloadOld = view.result.current.unload;
+    view.rerender({ current: needle });
+    let unloading: Promise<void> | undefined;
+    act(() => {
+      unloading = unloadOld();
+    });
+    await waitFor(() => {
+      expect(oldWorker.lastRequestOfType('unload')).toBeDefined();
+    });
+    await waitFor(() => {
+      expect(view.result.current.status).toBe('idle');
+    });
+
+    // The user taps Load on the needle preset before the unload settles.
+    act(() => {
+      void view.result.current.loadModel();
+    });
+    await act(async () => {
+      await unloading;
+    });
+
+    const newWorker = FakeWorker.instances.at(-1)!;
+    expect(newWorker).not.toBe(oldWorker);
+    expect(oldWorker.terminate).toHaveBeenCalled();
+    expect(view.result.current.status).toBe('loading');
+
+    await act(async () => {
+      newWorker.reply({
+        type: 'loaded',
+        requestId: newWorker.lastRequestOfType('load')!.requestId,
+      });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(view.result.current.status).toBe('ready');
+    });
+
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(posthog.captureException).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+});
+
+describe('useWebLLM — a load whose worker is replaced', () => {
+  it('steps aside without reporting a failure', async () => {
+    const transformers = ASSISTANT_MODEL_PRESETS.find(
+      (candidate) => candidate.engine === 'transformers',
+    )!;
+    const needle = ASSISTANT_MODEL_PRESETS.find(
+      (candidate) => candidate.engine === 'needle',
+    )!;
+
+    vi.resetModules();
+    const { useWebLLM } = await import('../useWebLLM');
+    const posthog = (await import('@/lib/posthog')).default as unknown as {
+      readonly captureException: ReturnType<typeof vi.fn>;
+    };
+    // Two hooks share the module's one worker, as two screens would.
+    const first = renderHook(() => useWebLLM(transformers));
+    const second = renderHook(() => useWebLLM(needle));
+    await waitFor(() => {
+      expect(first.result.current.isCached).not.toBeNull();
+      expect(second.result.current.isCached).not.toBeNull();
+    });
+
+    act(() => {
+      void first.result.current.loadModel();
+    });
+    await waitFor(() => {
+      expect(first.result.current.status).toBe('loading');
+    });
+
+    act(() => {
+      void second.result.current.loadModel();
+    });
+
+    await waitFor(() => {
+      expect(first.result.current.status).toBe('idle');
+    });
+    expect(first.result.current.error).toBeNull();
+    expect(second.result.current.status).toBe('loading');
+    expect(posthog.captureException).not.toHaveBeenCalled();
+  });
+});
+
 describe('useWebLLM — when the worker itself fails', () => {
   it('reports the worker error against the request in flight', async () => {
     const { result } = await renderFreshHook();
