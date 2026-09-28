@@ -136,6 +136,21 @@ export function consumeAuthCode(): string | null {
 
 
 
+/**
+ * Whether a failed code exchange means the link was opened in another browser.
+ *
+ * The PKCE verifier lives in the storage of the browser that asked for the
+ * link. A magic link opened in a mail app's webview, or on another device,
+ * finds no verifier and the exchange refuses. That is a person using the link
+ * in the wrong place, not a bug, and it needs its own words on screen.
+ *
+ * @param message - GoTrue's error message, if any
+ * @returns True when the verifier was missing
+ */
+export function isMissingCodeVerifier(message: string | null | undefined): boolean {
+  return message !== null && message !== undefined && /code verifier not found/i.test(message);
+}
+
 /** The provider's error for this page load, if it sent one instead of a code. */
 export function getCapturedAuthError(): string | null {
   return captured.error;

@@ -243,6 +243,23 @@ describe('AccountSection', () => {
     );
   });
 
+  it('tells somebody who opened the link in another browser what to do', () => {
+    mockedUseAuth.mockReturnValue(authState({ lastAuthError: 'PKCE code verifier not found in storage. This can happen if the auth flow was initiated in a different browser or device, or if the storage was cleared.' }));
+
+    render(<AccountSection />, isolated);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('auth.account.signInOtherBrowser');
+    expect(screen.queryByText(/PKCE/)).not.toBeInTheDocument();
+  });
+
+  it('shows any other failed sign-in as it came back', () => {
+    mockedUseAuth.mockReturnValue(authState({ lastAuthError: 'access_denied' }));
+
+    render(<AccountSection />, isolated);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('auth.account.signInFailed access_denied');
+  });
+
   it('renders neither state until the session resolves', () => {
     mockedUseAuth.mockReturnValue(authState({ isResolved: false }));
 

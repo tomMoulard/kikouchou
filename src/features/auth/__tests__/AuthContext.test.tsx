@@ -58,7 +58,10 @@ vi.mock('@/lib/supabase/client', () => ({
   resetSupabaseClientForTests: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/auth-callback', () => ({
+vi.mock('@/lib/supabase/auth-callback', async (importOriginal) => ({
+  // The classifier stays real: which failures count as expected is under test.
+  isMissingCodeVerifier: (await importOriginal<typeof import('@/lib/supabase/auth-callback')>())
+    .isMissingCodeVerifier,
   consumeAuthCode: vi.fn(() => null),
   getCapturedAuthError: vi.fn(() => null),
 }));
@@ -895,7 +898,44 @@ describe('AuthProvider — returning from the provider', () => {
     await waitFor(() => {
       expect(result.current.lastAuthError).toMatch(/code verifier/);
     });
+    expect(consoleError).toHaveBeenCalledWith('[auth] code exchange failed:', expect.any(String));
+    expect(mockCapture).toHaveBeenCalledWith('sign_in_failed', {
+      method: 'code-exchange',
+      reason: 'error',
+    });
     consoleError.mockRestore();
+  });
+
+  // PostHog issue 01a0da04: a magic link opened in another browser finds no
+  // verifier. That is expected, so it is a warning and a count, not a
+  // console.error that PostHog files as an unhandled exception.
+  it('warns, and counts, when the link was opened in another browser', async () => {
+    const client = makeFakeClient();
+    client.auth.exchangeCodeForSession.mockResolvedValue({
+      data: { session: null },
+      error: { message: 'PKCE code verifier not found in storage. This can happen if the auth flow was initiated in a different browser or device, or if the storage was cleared.' },
+    });
+    withBackend(client);
+    mockedCapturedCode.mockReturnValue('auth-code-123');
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.lastAuthError).toMatch(/code verifier not found/);
+    });
+    expect(consoleError).not.toHaveBeenCalledWith(
+      '[auth] code exchange failed:',
+      expect.anything(),
+    );
+    expect(consoleWarn).toHaveBeenCalledWith('[auth] code exchange failed:', expect.any(String));
+    expect(mockCapture).toHaveBeenCalledWith('sign_in_failed', {
+      method: 'code-exchange',
+      reason: 'verifier-missing',
+    });
+    consoleError.mockRestore();
+    consoleWarn.mockRestore();
   });
 
   it("surfaces the provider's own error, e.g. a cancelled consent screen", async () => {

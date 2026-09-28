@@ -52,6 +52,7 @@ import type { Provider, Session, SupabaseClient, User } from '@supabase/supabase
 import {
   consumeAuthCode,
   getCapturedAuthError,
+  isMissingCodeVerifier,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
 import { isModuleLoadError, reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
@@ -546,7 +547,23 @@ export function AuthProvider({
         if (error && isMountedRef.current) {
           // A spent or mismatched code — a reload of the callback URL, or a
           // verifier lost with the browser's storage.
-          console.error('[auth] code exchange failed:', error.message);
+          //
+          // The link opened in another browser is the common case, and an
+          // expected one: a warning and a count, not a console.error that
+          // PostHog files as an unhandled exception (issue 01a0da04).
+          if (isMissingCodeVerifier(error.message)) {
+            console.warn('[auth] code exchange failed:', error.message);
+            captureEvent('sign_in_failed', {
+              method: 'code-exchange',
+              reason: 'verifier-missing',
+            });
+          } else {
+            console.error('[auth] code exchange failed:', error.message);
+            captureEvent('sign_in_failed', {
+              method: 'code-exchange',
+              reason: 'error',
+            });
+          }
           setExchangeError(error.message);
         }
         // Either way the subscription above has the outcome; nothing else to do.

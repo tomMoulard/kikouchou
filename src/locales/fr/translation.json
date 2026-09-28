@@ -1497,6 +1497,7 @@
       "signedInAs": "Connecté en tant que",
       "signOutAction": "Se déconnecter",
       "signInFailed": "La dernière connexion n'a pas abouti :",
+      "signInOtherBrowser": "Le lien de connexion a été ouvert dans un autre navigateur que celui qui l'a demandé. Ouvrez-le dans le même navigateur, ou reconnectez-vous ici.",
       "passkeyDescription": "Ajoutez une clé d'accès pour vous connecter sur cet appareil avec son verrouillage d'écran, sans passer par un fournisseur.",
       "passkeyAdded": "Clé d'accès ajoutée pour cet appareil.",
       "passkeyAction": "Ajouter une clé d'accès"
