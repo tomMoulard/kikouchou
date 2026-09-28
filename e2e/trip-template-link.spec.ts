@@ -59,13 +59,6 @@ async function newVisitor(browser: Browser, stub: SupabaseStub): Promise<Page> {
   return page;
 }
 
-/** Picks the 15th and the 22nd of whatever month the picker opens on. */
-async function fillDates(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /trip dates/i }).click();
-  await page.getByRole('gridcell').filter({ hasText: /^15$/ }).first().click();
-  await page.getByRole('gridcell').filter({ hasText: /^22$/ }).first().click();
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -88,12 +81,13 @@ test.describe('a trip template link opened with no account', () => {
     await expect(page.getByRole('button', { name: /^sign in$/i })).toHaveCount(0);
 
     // Three questions, not five: the place and the rooms came with the link.
+    // The name starts as the template's and the dates as today, so a customer
+    // with nothing to change only presses Next.
     await expect(page.getByText('What is the trip called?')).toBeVisible();
-    await page.getByLabel('Trip name').fill('Ski week');
+    await expect(page.getByLabel('Trip name')).toHaveValue('Chalet Marmotte');
     await page.getByRole('button', { name: /^next$/i }).click();
 
     await expect(page.getByText('When is it?')).toBeVisible();
-    await fillDates(page);
     await page.getByRole('button', { name: /^next$/i }).click();
 
     await expect(page.getByText('Who is coming?')).toBeVisible();
@@ -105,7 +99,7 @@ test.describe('a trip template link opened with no account', () => {
     await page.getByRole('button', { name: /create the trip/i }).click();
 
     await expect(page.getByTestId('trip-wizard-done')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/ski week is ready/i)).toBeVisible();
+    await expect(page.getByText(/chalet marmotte is ready/i)).toBeVisible();
 
     await page.getByRole('button', { name: /open the calendar/i }).click();
     await expect(page).toHaveURL(/\/trips\/[^/]+\/calendar/, { timeout: 30_000 });

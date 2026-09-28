@@ -12,6 +12,9 @@
  * the promise of the link, and it is why this page reads through the one
  * anonymous function rather than through the invite path.
  *
+ * The name question starts as the template's name and the dates as today, so
+ * a customer who has nothing to change only presses Next.
+ *
  * @module features/sharing/pages/TemplateLandingPage
  */
 
@@ -102,6 +105,7 @@ export function TemplateLandingPage(): ReactElement {
     }
     const { template } = phase;
     return {
+      name: template.name,
       description: template.description,
       location: template.location,
       coordinates: template.coordinates ?? undefined,
