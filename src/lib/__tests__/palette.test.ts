@@ -1,6 +1,6 @@
 /**
- * @fileoverview Tests for the palette preference and the calendar that gates
- * the seasonal palettes.
+ * @fileoverview Tests for the palette preferences and the calendar that
+ * decides when a seasonal palette takes over.
  *
  * Dates are built from local components (`new Date(y, m, d)`), because the
  * module reads the local month. A `Z`-suffixed fixture would pass or fail by
@@ -13,17 +13,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   applyStoredPalette,
+  BASE_PALETTES,
   DEFAULT_PALETTE,
+  getPalettePreferences,
+  isBasePalette,
   isPalette,
-  isPaletteAvailable,
-  listAvailablePalettes,
   PALETTE_ATTRIBUTE,
   PALETTE_STORAGE_KEY,
   PALETTES,
-  readStoredPalette,
+  readStoredPalettePreferences,
   resolvePalette,
   SEASONAL_PALETTE_MONTHS,
-  storePalette,
+  SEASONAL_PALETTES_STORAGE_KEY,
+  seasonalPaletteFor,
+  storeBasePalette,
+  storeSeasonalPalettes,
+  subscribePalettePreferences,
 } from '@/lib/palette';
 
 /**
@@ -57,53 +62,28 @@ function installLocalStorage(): Storage {
   return store;
 }
 
-const OCTOBER_FIRST = new Date(2026, 9, 1),
+const SEPTEMBER = new Date(2026, 8, 27),
+  OCTOBER_FIRST = new Date(2026, 9, 1, 0, 0),
   OCTOBER_LAST = new Date(2026, 9, 31, 23, 59),
   NOVEMBER_FIRST = new Date(2026, 10, 1, 0, 0);
 
-describe('isPalette', () => {
+describe('palette identifiers', () => {
   it('accepts every declared palette and nothing else', () => {
     for (const palette of PALETTES) {
       expect(isPalette(palette)).toBe(true);
     }
     expect(isPalette('sepia')).toBe(false);
     expect(isPalette(null)).toBe(false);
-    expect(isPalette(3)).toBe(false);
+  });
+
+  it('offers only the year-round palettes as a base', () => {
+    expect(BASE_PALETTES).toEqual(['default', 'ocean', 'forest']);
+    expect(isBasePalette('ocean')).toBe(true);
+    expect(isBasePalette('halloween')).toBe(false);
   });
 });
 
-describe('isPaletteAvailable', () => {
-  it('offers the year-round palettes every month', () => {
-    for (let month = 0; month < 12; month += 1) {
-      const date = new Date(2026, month, 15);
-
-      expect(isPaletteAvailable('default', date)).toBe(true);
-      expect(isPaletteAvailable('ocean', date)).toBe(true);
-      expect(isPaletteAvailable('forest', date)).toBe(true);
-    }
-  });
-
-  it('offers Halloween from the first to the last minute of October', () => {
-    expect(isPaletteAvailable('halloween', OCTOBER_FIRST)).toBe(true);
-    expect(isPaletteAvailable('halloween', OCTOBER_LAST)).toBe(true);
-    expect(isPaletteAvailable('halloween', NOVEMBER_FIRST)).toBe(false);
-    expect(isPaletteAvailable('halloween', new Date(2026, 8, 30, 23, 59))).toBe(
-      false,
-    );
-  });
-
-  it('offers each seasonal palette in exactly one month', () => {
-    for (const [palette, month] of Object.entries(SEASONAL_PALETTE_MONTHS)) {
-      const months = Array.from({ length: 12 }, (_, index) => index).filter(
-        (index) =>
-          isPalette(palette) &&
-          isPaletteAvailable(palette, new Date(2026, index, 10)),
-      );
-
-      expect(months).toEqual([(month ?? 0) - 1]);
-    }
-  });
-
+describe('seasonalPaletteFor', () => {
   it('puts the four occasions in their months', () => {
     expect(SEASONAL_PALETTE_MONTHS).toEqual({
       valentine: 2,
@@ -111,42 +91,56 @@ describe('isPaletteAvailable', () => {
       halloween: 10,
       christmas: 12,
     });
-  });
-});
-
-describe('listAvailablePalettes', () => {
-  it('lists only the year-round palettes in September', () => {
-    expect(listAvailablePalettes(new Date(2026, 8, 27))).toEqual([
-      'default',
-      'ocean',
-      'forest',
-    ]);
+    expect(seasonalPaletteFor(new Date(2026, 1, 14))).toBe('valentine');
+    expect(seasonalPaletteFor(new Date(2026, 2, 17))).toBe('stpatrick');
+    expect(seasonalPaletteFor(new Date(2026, 11, 24))).toBe('christmas');
   });
 
-  it('adds Christmas in December, after the year-round ones', () => {
-    expect(listAvailablePalettes(new Date(2026, 11, 24))).toEqual([
-      'default',
-      'ocean',
-      'forest',
-      'christmas',
-    ]);
+  it('covers October from its first to its last minute, and nothing either side', () => {
+    expect(seasonalPaletteFor(new Date(2026, 8, 30, 23, 59))).toBeUndefined();
+    expect(seasonalPaletteFor(OCTOBER_FIRST)).toBe('halloween');
+    expect(seasonalPaletteFor(OCTOBER_LAST)).toBe('halloween');
+    expect(seasonalPaletteFor(NOVEMBER_FIRST)).toBeUndefined();
+  });
+
+  it('leaves the other eight months alone', () => {
+    const ordinary = Array.from({ length: 12 }, (_, month) => month).filter(
+      (month) => seasonalPaletteFor(new Date(2026, month, 10)) === undefined,
+    );
+
+    expect(ordinary).toEqual([0, 3, 4, 5, 6, 7, 8, 10]);
   });
 });
 
 describe('resolvePalette', () => {
-  it('keeps a valid palette in season', () => {
-    expect(resolvePalette('halloween', OCTOBER_FIRST)).toBe('halloween');
-    expect(resolvePalette('ocean', NOVEMBER_FIRST)).toBe('ocean');
+  it('never paints a seasonal palette while the toggle is off', () => {
+    for (let month = 0; month < 12; month += 1) {
+      expect(
+        resolvePalette({ base: 'ocean', seasonal: false }, new Date(2026, month, 10)),
+      ).toBe('ocean');
+    }
   });
 
-  it('falls back when the season is over or the value is unknown', () => {
-    expect(resolvePalette('halloween', NOVEMBER_FIRST)).toBe(DEFAULT_PALETTE);
-    expect(resolvePalette('sepia', OCTOBER_FIRST)).toBe(DEFAULT_PALETTE);
-    expect(resolvePalette(null, OCTOBER_FIRST)).toBe(DEFAULT_PALETTE);
+  it("paints the month's palette over the base when the toggle is on", () => {
+    expect(resolvePalette({ base: 'ocean', seasonal: true }, OCTOBER_FIRST)).toBe(
+      'halloween',
+    );
+    expect(resolvePalette({ base: 'forest', seasonal: true }, new Date(2026, 11, 1))).toBe(
+      'christmas',
+    );
+  });
+
+  it('paints the base in an ordinary month even with the toggle on', () => {
+    expect(resolvePalette({ base: 'forest', seasonal: true }, SEPTEMBER)).toBe(
+      'forest',
+    );
+    expect(resolvePalette({ base: 'forest', seasonal: true }, NOVEMBER_FIRST)).toBe(
+      'forest',
+    );
   });
 });
 
-describe('storage', () => {
+describe('stored preferences', () => {
   beforeEach(() => {
     document.documentElement.removeAttribute(PALETTE_ATTRIBUTE);
   });
@@ -156,57 +150,21 @@ describe('storage', () => {
     vi.useRealTimers();
   });
 
-  it('reads the default when storage is missing', () => {
-    Reflect.deleteProperty(window, 'localStorage');
+  it('defaults to the brand palette with seasonal palettes off', () => {
+    installLocalStorage();
 
-    expect(readStoredPalette(OCTOBER_FIRST)).toBe(DEFAULT_PALETTE);
+    expect(readStoredPalettePreferences()).toEqual({
+      base: DEFAULT_PALETTE,
+      seasonal: false,
+    });
   });
 
-  it('paints and persists a picked palette, and removes the key for the default', () => {
-    const store = installLocalStorage();
+  it('reads the defaults when storage is missing or throws', () => {
+    expect(readStoredPalettePreferences()).toEqual({
+      base: 'default',
+      seasonal: false,
+    });
 
-    storePalette('ocean');
-    expect(store.getItem(PALETTE_STORAGE_KEY)).toBe('ocean');
-    expect(document.documentElement.getAttribute(PALETTE_ATTRIBUTE)).toBe(
-      'ocean',
-    );
-
-    storePalette('default');
-    expect(store.getItem(PALETTE_STORAGE_KEY)).toBeNull();
-    expect(document.documentElement.getAttribute(PALETTE_ATTRIBUTE)).toBe(
-      'default',
-    );
-  });
-
-  it('paints the stored seasonal palette in its month', () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(OCTOBER_FIRST);
-    const store = installLocalStorage();
-    store.setItem(PALETTE_STORAGE_KEY, 'halloween');
-
-    applyStoredPalette();
-
-    expect(document.documentElement.getAttribute(PALETTE_ATTRIBUTE)).toBe(
-      'halloween',
-    );
-    expect(store.getItem(PALETTE_STORAGE_KEY)).toBe('halloween');
-  });
-
-  it('forgets a seasonal palette once its month is over, so it does not return next year', () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(NOVEMBER_FIRST);
-    const store = installLocalStorage();
-    store.setItem(PALETTE_STORAGE_KEY, 'halloween');
-
-    applyStoredPalette();
-
-    expect(document.documentElement.getAttribute(PALETTE_ATTRIBUTE)).toBe(
-      'default',
-    );
-    expect(store.getItem(PALETTE_STORAGE_KEY)).toBeNull();
-  });
-
-  it('does not throw when storage throws', () => {
     Object.defineProperty(window, 'localStorage', {
       configurable: true,
       get() {
@@ -214,9 +172,90 @@ describe('storage', () => {
       },
     });
 
+    expect(readStoredPalettePreferences()).toEqual({
+      base: 'default',
+      seasonal: false,
+    });
     expect(() => applyStoredPalette()).not.toThrow();
+  });
+
+  it('reads a seasonal palette stored as the base by the earlier build as the default', () => {
+    const store = installLocalStorage();
+    store.setItem(PALETTE_STORAGE_KEY, 'halloween');
+
+    expect(readStoredPalettePreferences().base).toBe('default');
+  });
+
+  it('stores each choice, and removes the key for its default', () => {
+    const store = installLocalStorage();
+
+    storeBasePalette('ocean');
+    storeSeasonalPalettes(true);
+    expect(store.getItem(PALETTE_STORAGE_KEY)).toBe('ocean');
+    expect(store.getItem(SEASONAL_PALETTES_STORAGE_KEY)).toBe('on');
+
+    storeBasePalette('default');
+    storeSeasonalPalettes(false);
+    expect(store.getItem(PALETTE_STORAGE_KEY)).toBeNull();
+    expect(store.getItem(SEASONAL_PALETTES_STORAGE_KEY)).toBeNull();
+  });
+
+  it('tells subscribers about a write, and hands back the same object until one', () => {
+    installLocalStorage();
+    const listener = vi.fn(),
+      unsubscribe = subscribePalettePreferences(listener),
+      before = getPalettePreferences();
+
+    expect(getPalettePreferences()).toBe(before);
+
+    storeSeasonalPalettes(true);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(getPalettePreferences()).toEqual({ base: 'default', seasonal: true });
+    expect(getPalettePreferences()).not.toBe(before);
+
+    unsubscribe();
+  });
+
+  it('follows a write made in another tab', () => {
+    const store = installLocalStorage(),
+      listener = vi.fn(),
+      unsubscribe = subscribePalettePreferences(listener);
+
+    store.setItem(PALETTE_STORAGE_KEY, 'forest');
+    window.dispatchEvent(new StorageEvent('storage', { key: PALETTE_STORAGE_KEY }));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated' }));
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(getPalettePreferences().base).toBe('forest');
+
+    unsubscribe();
+  });
+
+  it("paints the month's palette before the first frame when the toggle is on", () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(OCTOBER_FIRST);
+    const store = installLocalStorage();
+    store.setItem(PALETTE_STORAGE_KEY, 'ocean');
+    store.setItem(SEASONAL_PALETTES_STORAGE_KEY, 'on');
+
+    applyStoredPalette();
+
     expect(document.documentElement.getAttribute(PALETTE_ATTRIBUTE)).toBe(
-      'default',
+      'halloween',
+    );
+  });
+
+  it('paints the base before the first frame when the toggle is off', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(OCTOBER_FIRST);
+    const store = installLocalStorage();
+    store.setItem(PALETTE_STORAGE_KEY, 'ocean');
+
+    applyStoredPalette();
+
+    expect(document.documentElement.getAttribute(PALETTE_ATTRIBUTE)).toBe(
+      'ocean',
     );
   });
 });

@@ -12,6 +12,7 @@ import { RouterProvider } from 'react-router-dom';
 import { AppProviders } from '@/contexts/AppProviders';
 import { InstallPromptProvider } from '@/contexts/InstallPromptContext';
 import { Toaster } from '@/components/ui/sonner';
+import { PaletteSync } from '@/components/shared/PaletteSync';
 import { StatusAnnouncer } from '@/components/shared/StatusAnnouncer';
 import { InstallPrompt, OfflineIndicator } from '@/components/pwa';
 import { applyStoredPalette } from '@/lib/palette';
@@ -43,7 +44,8 @@ import { router } from '@/router';
   sees one it understands.
 
   The palette (`lib/palette`) is a second attribute on the same element, owned
-  by no provider, so this call is the only thing that paints it on load.
+  by no provider. This call paints it on load, and `PaletteSync` below keeps it
+  right afterwards, including the switch to a seasonal palette at midnight.
 */
 applyStoredTheme();
 applyStoredPalette();
@@ -163,6 +165,7 @@ function App(): ReactElement {
         itself.
       */}
       <StatusAnnouncer />
+      <PaletteSync />
       <InstallPrompt />
       <OfflineIndicator />
       </InstallPromptProvider>
