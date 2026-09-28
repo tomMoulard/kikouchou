@@ -9,59 +9,30 @@ import {
   type ReactElement,
   memo,
   useCallback,
-  useEffect,
-  useMemo,
   useRef,
-  useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  Check,
-  Clover,
-  Ghost,
-  Heart,
-  TreePine,
-  type LucideIcon,
-} from 'lucide-react';
+import { Check } from 'lucide-react';
 
-import { useToday } from '@/hooks/useToday';
+import { usePalettePreferences } from '@/hooks/usePalettePreferences';
 import {
-  DEFAULT_PALETTE,
-  isPaletteAvailable,
-  isSeasonalPalette,
-  listPalettesForMonth,
-  readStoredPalette,
-  storePalette,
-  type Palette,
+  BASE_PALETTES,
+  storeBasePalette,
+  type BasePalette,
 } from '@/lib/palette';
 import { captureEvent } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/**
- * The mark drawn on a seasonal swatch, so it reads as an occasion rather than
- * as one more colour.
- */
-const SEASONAL_ICONS: Partial<Record<Palette, LucideIcon>> = {
-  valentine: Heart,
-  stpatrick: Clover,
-  halloween: Ghost,
-  christmas: TreePine,
-};
 
 // ============================================================================
 // Component
 // ============================================================================
 
 /**
- * Lets the user pick a colour palette.
+ * Lets the user pick their base palette, one of the year-round ones.
  *
- * Seasonal palettes are listed only in their month (`lib/palette`). The day
- * comes from `useToday`, so a tab left open across midnight on 31 October
- * drops Halloween, and the page with it, without a reload.
+ * Seasonal palettes are not listed: they are not picked, they take over for
+ * their month when `SeasonalPalettesToggle` is on. So the checked swatch is
+ * always the user's own choice, even in October when Halloween is on screen.
  *
  * Each swatch carries its own `data-palette`, so `index.css` paints it in that
  * palette's colours, in the current light or dark mode, with plain utility
@@ -71,22 +42,12 @@ const SEASONAL_ICONS: Partial<Record<Palette, LucideIcon>> = {
  */
 export const PalettePicker = memo(function PalettePicker(): ReactElement {
   const { t } = useTranslation();
-  const { today } = useToday();
-  const [selected, setSelected] = useState<Palette>(() => readStoredPalette());
-  const refs = useRef(new Map<Palette, HTMLButtonElement>());
-  const month = today.getMonth() + 1;
-  const options = useMemo(() => listPalettesForMonth(month), [month]);
-  const current = isPaletteAvailable(selected, today)
-    ? selected
-    : DEFAULT_PALETTE;
+  const { base } = usePalettePreferences();
+  const refs = useRef(new Map<BasePalette, HTMLButtonElement>());
 
-  const select = useCallback((palette: Palette): void => {
-    captureEvent('palette_changed', {
-      palette,
-      seasonal: isSeasonalPalette(palette),
-    });
-    storePalette(palette);
-    setSelected(palette);
+  const select = useCallback((palette: BasePalette): void => {
+    captureEvent('palette_changed', { palette });
+    storeBasePalette(palette);
   }, []);
 
   const handleKeyDown = useCallback(
@@ -103,19 +64,22 @@ export const PalettePicker = memo(function PalettePicker(): ReactElement {
       }
 
       event.preventDefault();
-      const index = options.indexOf(current),
-        next = options[(index + delta + options.length) % options.length];
+      const index = BASE_PALETTES.indexOf(base),
+        next =
+          BASE_PALETTES[
+            (index + delta + BASE_PALETTES.length) % BASE_PALETTES.length
+          ];
 
       if (next !== undefined) {
         select(next);
         refs.current.get(next)?.focus();
       }
     },
-    [current, options, select],
+    [base, select],
   );
 
   const registerRef = useCallback(
-    (palette: Palette, node: HTMLButtonElement | null): void => {
+    (palette: BasePalette, node: HTMLButtonElement | null): void => {
       if (node) {
         refs.current.set(palette, node);
       } else {
@@ -125,26 +89,16 @@ export const PalettePicker = memo(function PalettePicker(): ReactElement {
     [],
   );
 
-  // The month ran out while the page was open: paint the default again and
-  // forget the seasonal choice, the same thing a reload would do. `selected`
-  // keeps its old value on purpose; `current` is what every render reads.
-  useEffect(() => {
-    if (current !== selected) {
-      storePalette(current);
-    }
-  }, [current, selected]);
-
   return (
     // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- APG's radio-group pattern puts a roving `tabIndex` on the radios and leaves the group itself out of the tab order, as `ViewSwitcher` does.
     <div
       role="radiogroup"
       aria-label={t('settings.palette', 'Colors')}
-      className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+      className="grid grid-cols-3 gap-2"
       onKeyDown={handleKeyDown}
     >
-      {options.map((palette) => {
-        const checked = palette === current,
-          SeasonalIcon = SEASONAL_ICONS[palette];
+      {BASE_PALETTES.map((palette) => {
+        const checked = palette === base;
 
         return (
           <button
@@ -169,9 +123,6 @@ export const PalettePicker = memo(function PalettePicker(): ReactElement {
               <span className="size-5 rounded-full bg-primary" />
               <span className="size-5 rounded-full bg-accent" />
               <span className="size-5 rounded-full bg-ring" />
-              {SeasonalIcon && (
-                <SeasonalIcon className="ml-auto size-4 text-primary" />
-              )}
             </span>
             <span className="flex items-center justify-between gap-1">
               <span className="font-medium">
@@ -181,11 +132,6 @@ export const PalettePicker = memo(function PalettePicker(): ReactElement {
                 <Check className="size-4 text-primary" aria-hidden="true" />
               )}
             </span>
-            {SeasonalIcon && (
-              <span className="text-xs text-muted-foreground">
-                {t('settings.paletteSeasonal', 'This month only')}
-              </span>
-            )}
           </button>
         );
       })}

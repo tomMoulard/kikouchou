@@ -1537,8 +1537,10 @@
       "system": "System"
     },
     "palette": "Colors",
-    "paletteDescription": "Each palette has a light and a dark version. Some only show up at certain times of the year.",
-    "paletteSeasonal": "This month only",
+    "paletteDescription": "Each palette has a light and a dark version.",
+    "seasonalPalettes": "Seasonal themes",
+    "seasonalPalettesDescription": "Halloween in October, Christmas in December, Valentine's Day in February and Saint Patrick's in March replace your colors for that month.",
+    "seasonalPalettesActive": "This month: {{name}}",
     "palettes": {
       "default": "Sunset",
       "ocean": "Ocean",

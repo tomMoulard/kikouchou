@@ -1,5 +1,6 @@
 /**
- * @fileoverview Tests for the colour palette picker.
+ * @fileoverview Tests for the colour palette picker and the seasonal toggle
+ * beside it.
  *
  * Rendered through a real i18next, as `ThemeSelector.test.tsx` is: the option
  * names come from computed keys (`settings.palettes.${palette}`) that no grep
@@ -13,9 +14,15 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithRealI18n, screen } from '@/test/utils';
-import { PALETTE_ATTRIBUTE, PALETTE_STORAGE_KEY } from '@/lib/palette';
+import { PaletteSync } from '@/components/shared/PaletteSync';
+import {
+  PALETTE_ATTRIBUTE,
+  PALETTE_STORAGE_KEY,
+  SEASONAL_PALETTES_STORAGE_KEY,
+} from '@/lib/palette';
 
 import { PalettePicker } from '../PalettePicker';
+import { SeasonalPalettesToggle } from '../SeasonalPalettesToggle';
 
 vi.unmock('i18next');
 vi.unmock('react-i18next');
@@ -63,6 +70,23 @@ function pretendItIs(date: Date): void {
   vi.setSystemTime(date);
 }
 
+/**
+ * The settings row as the theme card renders it, plus the app-level painter.
+ */
+function SettingsRow(): React.ReactElement {
+  return (
+    <>
+      <PalettePicker />
+      <SeasonalPalettesToggle />
+      <PaletteSync />
+    </>
+  );
+}
+
+function painted(): string | null {
+  return document.documentElement.getAttribute(PALETTE_ATTRIBUTE);
+}
+
 describe('PalettePicker', () => {
   beforeEach(() => {
     installLocalStorage();
@@ -75,8 +99,8 @@ describe('PalettePicker', () => {
     Reflect.deleteProperty(window, 'localStorage');
   });
 
-  it('offers only the year-round palettes out of season', async () => {
-    pretendItIs(new Date(2026, 8, 27));
+  it('offers only the year-round palettes, even in October', async () => {
+    pretendItIs(new Date(2026, 9, 12));
 
     await renderWithRealI18n(<PalettePicker />, { withProviders: false });
 
@@ -89,69 +113,38 @@ describe('PalettePicker', () => {
     );
   });
 
-  it('reveals Halloween in October, marked as seasonal', async () => {
-    pretendItIs(new Date(2026, 9, 12));
-
-    await renderWithRealI18n(<PalettePicker />, { withProviders: false });
-
-    expect(
-      screen.getByRole('radio', { name: /Halloween.*This month only/ }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole('radio', { name: /Christmas/ })).toBeNull();
-  });
-
-  it('names the options in French', async () => {
-    pretendItIs(new Date(2026, 11, 3));
-
-    await renderWithRealI18n(<PalettePicker />, {
+  it('names the options and the toggle in French', async () => {
+    await renderWithRealI18n(<SettingsRow />, {
       language: 'fr',
       withProviders: false,
     });
 
     expect(screen.getByRole('radiogroup', { name: 'Couleurs' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Soleil couchant' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('radio', { name: /Noël.*Ce mois-ci seulement/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Thèmes de saison' })).toBeInTheDocument();
   });
 
   it('paints, stores and reports a pick', async () => {
-    pretendItIs(new Date(2026, 9, 12));
+    pretendItIs(new Date(2026, 8, 27));
 
-    const { user } = await renderWithRealI18n(<PalettePicker />, {
+    const { user } = await renderWithRealI18n(<SettingsRow />, {
       withProviders: false,
     });
 
-    await user.click(screen.getByRole('radio', { name: /Halloween/ }));
+    await user.click(screen.getByRole('radio', { name: 'Ocean' }));
 
-    expect(document.documentElement.getAttribute(PALETTE_ATTRIBUTE)).toBe(
-      'halloween',
-    );
-    expect(window.localStorage.getItem(PALETTE_STORAGE_KEY)).toBe('halloween');
-    expect(screen.getByRole('radio', { name: /Halloween/ })).toHaveAttribute(
+    expect(painted()).toBe('ocean');
+    expect(window.localStorage.getItem(PALETTE_STORAGE_KEY)).toBe('ocean');
+    expect(screen.getByRole('radio', { name: 'Ocean' })).toHaveAttribute(
       'aria-checked',
       'true',
     );
     expect(
       captureEvent.mock.calls.find(([event]) => event === 'palette_changed'),
-    ).toEqual(['palette_changed', { palette: 'halloween', seasonal: true }]);
-  });
-
-  it('shows a stored seasonal palette as the default once its month is over', async () => {
-    pretendItIs(new Date(2026, 10, 1));
-    window.localStorage.setItem(PALETTE_STORAGE_KEY, 'halloween');
-
-    await renderWithRealI18n(<PalettePicker />, { withProviders: false });
-
-    expect(screen.getByRole('radio', { name: 'Sunset' })).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
+    ).toEqual(['palette_changed', { palette: 'ocean' }]);
   });
 
   it('moves the selection with the arrow keys and wraps around', async () => {
-    pretendItIs(new Date(2026, 8, 27));
-
     const { user } = await renderWithRealI18n(<PalettePicker />, {
       withProviders: false,
     });
@@ -169,31 +162,92 @@ describe('PalettePicker', () => {
 
     expect(window.localStorage.getItem(PALETTE_STORAGE_KEY)).toBe('forest');
   });
+});
 
-  it('drops Halloween at midnight on 31 October without a reload', async () => {
-    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
-    vi.setSystemTime(new Date(2026, 9, 31, 23, 59));
-    window.localStorage.setItem(PALETTE_STORAGE_KEY, 'halloween');
+describe('SeasonalPalettesToggle', () => {
+  beforeEach(() => {
+    installLocalStorage();
+    captureEvent.mockClear();
+    document.documentElement.removeAttribute(PALETTE_ATTRIBUTE);
+  });
 
-    await renderWithRealI18n(<PalettePicker />, { withProviders: false });
-    expect(screen.getByRole('radio', { name: /Halloween/ })).toHaveAttribute(
+  afterEach(() => {
+    vi.useRealTimers();
+    Reflect.deleteProperty(window, 'localStorage');
+  });
+
+  it('is off by default, and October stays in the chosen colors', async () => {
+    pretendItIs(new Date(2026, 9, 12));
+    window.localStorage.setItem(PALETTE_STORAGE_KEY, 'forest');
+
+    await renderWithRealI18n(<SettingsRow />, { withProviders: false });
+
+    expect(screen.getByRole('switch', { name: 'Seasonal themes' })).not.toBeChecked();
+    expect(painted()).toBe('forest');
+    expect(screen.queryByText(/This month:/)).toBeNull();
+  });
+
+  it("switches to the month's palette when turned on, and back when turned off", async () => {
+    pretendItIs(new Date(2026, 9, 12));
+    window.localStorage.setItem(PALETTE_STORAGE_KEY, 'forest');
+
+    const { user } = await renderWithRealI18n(<SettingsRow />, {
+      withProviders: false,
+    });
+    const toggle = screen.getByRole('switch', { name: 'Seasonal themes' });
+
+    await user.click(toggle);
+
+    expect(toggle).toBeChecked();
+    expect(painted()).toBe('halloween');
+    expect(window.localStorage.getItem(SEASONAL_PALETTES_STORAGE_KEY)).toBe('on');
+    expect(screen.getByText('This month: Halloween')).toBeInTheDocument();
+    // The picker still shows the user's own choice under the seasonal one.
+    expect(screen.getByRole('radio', { name: 'Forest' })).toHaveAttribute(
       'aria-checked',
       'true',
     );
+    expect(
+      captureEvent.mock.calls.find(([event]) => event === 'seasonal_palettes_toggled'),
+    ).toEqual(['seasonal_palettes_toggled', { enabled: true }]);
+
+    await user.click(toggle);
+
+    expect(painted()).toBe('forest');
+    expect(window.localStorage.getItem(SEASONAL_PALETTES_STORAGE_KEY)).toBeNull();
+  });
+
+  it('keeps the chosen colors in an ordinary month when on', async () => {
+    pretendItIs(new Date(2026, 8, 27));
+    window.localStorage.setItem(PALETTE_STORAGE_KEY, 'ocean');
+    window.localStorage.setItem(SEASONAL_PALETTES_STORAGE_KEY, 'on');
+
+    await renderWithRealI18n(<SettingsRow />, { withProviders: false });
+
+    expect(screen.getByRole('switch', { name: 'Seasonal themes' })).toBeChecked();
+    expect(painted()).toBe('ocean');
+    expect(screen.queryByText(/This month:/)).toBeNull();
+  });
+
+  it("brings the month's palette in at midnight, and hands the colors back a month later", async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] });
+    vi.setSystemTime(new Date(2026, 8, 30, 23, 59));
+    window.localStorage.setItem(PALETTE_STORAGE_KEY, 'ocean');
+    window.localStorage.setItem(SEASONAL_PALETTES_STORAGE_KEY, 'on');
+
+    await renderWithRealI18n(<PaletteSync />, { withProviders: false });
+    expect(painted()).toBe('ocean');
+
+    await act(async () => {
+      vi.setSystemTime(new Date(2026, 9, 1, 0, 1));
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(painted()).toBe('halloween');
 
     await act(async () => {
       vi.setSystemTime(new Date(2026, 10, 1, 0, 1));
       await vi.advanceTimersByTimeAsync(60_000);
     });
-
-    expect(screen.queryByRole('radio', { name: /Halloween/ })).toBeNull();
-    expect(screen.getByRole('radio', { name: 'Sunset' })).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
-    expect(document.documentElement.getAttribute(PALETTE_ATTRIBUTE)).toBe(
-      'default',
-    );
-    expect(window.localStorage.getItem(PALETTE_STORAGE_KEY)).toBeNull();
+    expect(painted()).toBe('ocean');
   });
 });

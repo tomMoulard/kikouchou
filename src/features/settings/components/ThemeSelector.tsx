@@ -29,6 +29,7 @@ import {
 import { captureEvent } from '@/lib/posthog';
 
 import { PalettePicker } from './PalettePicker';
+import { SeasonalPalettesToggle } from './SeasonalPalettesToggle';
 
 // ============================================================================
 // Constants
@@ -131,11 +132,12 @@ export const ThemeSelector = memo(function ThemeSelector(): ReactElement {
             <p className="text-sm text-muted-foreground">
               {t(
                 'settings.paletteDescription',
-                'Each palette has a light and a dark version. Some only show up at certain times of the year.',
+                'Each palette has a light and a dark version.',
               )}
             </p>
           </div>
           <PalettePicker />
+          <SeasonalPalettesToggle />
         </div>
       </CardContent>
     </Card>

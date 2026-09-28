@@ -720,6 +720,7 @@ export type AnalyticsEvent =
   // Preferences
   | 'language_changed'
   | 'palette_changed'
+  | 'seasonal_palettes_toggled'
   | 'theme_changed'
   // Would anybody pay? The fake-door test — see `features/upgrade`
   | 'upgrade_intent_declared'
