@@ -144,6 +144,26 @@ export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
   return true;
 }
 
+/**
+ * `createRoot`'s `onCaughtError`: React's own logging, minus stale chunks.
+ *
+ * React 19 logs every error a boundary catches with `console.error`, and
+ * `capture_console_errors` turns that line into a second, "unhandled" copy of
+ * what the boundary reports or recovers from. For a stale chunk the boundary
+ * reloads the tab and the log line is the only report left, so it is dropped
+ * here. Every other error keeps its log.
+ *
+ * @param error - What the boundary caught
+ * @param errorInfo - Where in the tree it was thrown
+ */
+export function logCaughtError(
+  error: unknown,
+  errorInfo: { readonly componentStack?: string | null | undefined },
+): void {
+  if (error instanceof Error && isModuleLoadError(error)) return;
+  console.error(error, errorInfo.componentStack ?? '');
+}
+
 // ============================================================================
 // Internals
 // ============================================================================

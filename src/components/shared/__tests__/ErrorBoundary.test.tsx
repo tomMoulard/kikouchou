@@ -19,6 +19,7 @@ import { Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import type { ReactElement } from 'react';
 
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
+import { reportError } from '@/lib/posthog';
 import { reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
 
 // The helper's own decisions — the once-per-tab guard, the storage failures —
@@ -30,8 +31,15 @@ vi.mock('@/lib/pwa/stale-chunk', async (importOriginal) => {
   return { ...actual, reloadForStaleChunk: vi.fn(() => true) };
 });
 
+vi.mock('@/lib/posthog', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/posthog')>();
+  return { ...actual, reportError: vi.fn() };
+});
+
 /** The mocked helper, typed for assertions. */
 const reloadMock = vi.mocked(reloadForStaleChunk);
+/** The mocked reporter, typed for assertions. */
+const reportMock = vi.mocked(reportError);
 
 /** The message Chrome throws when a deploy has removed the chunk. */
 const STALE_CHUNK_MESSAGE =
@@ -181,6 +189,52 @@ describe('ErrorBoundary', () => {
     beforeEach(() => {
       reloadMock.mockClear();
       reloadMock.mockReturnValue(true);
+      reportMock.mockClear();
+    });
+
+    // A tab left open across a deploy is the normal life of a PWA, and the
+    // reload cures it. Reporting it anyway made PostHog issue 01a0a104.
+    it('reports nothing when the reload goes ahead', () => {
+      render(
+        <ErrorBoundary>
+          <ThrowingComponent message={STALE_CHUNK_MESSAGE} />
+        </ErrorBoundary>,
+        { withProviders: false }
+      );
+
+      expect(reloadMock).toHaveBeenCalledTimes(1);
+      expect(reportMock).not.toHaveBeenCalled();
+    });
+
+    // The guard holding the reload back means one reload already failed to
+    // fix it: a chunk missing from the new build too, which is a bad deploy.
+    it('reports a stale chunk the reload did not cure', () => {
+      reloadMock.mockReturnValue(false);
+
+      render(
+        <ErrorBoundary>
+          <ThrowingComponent message={STALE_CHUNK_MESSAGE} />
+        </ErrorBoundary>,
+        { withProviders: false }
+      );
+
+      expect(reportMock).toHaveBeenCalledTimes(1);
+      expect(reportMock).toHaveBeenCalledWith(
+        expect.objectContaining({ message: STALE_CHUNK_MESSAGE }),
+        expect.objectContaining({ source: 'ErrorBoundary', stale_chunk: true })
+      );
+    });
+
+    it('reports an ordinary error without the stale chunk flag', () => {
+      render(
+        <ErrorBoundary>
+          <ThrowingComponent message="Trip not found" />
+        </ErrorBoundary>,
+        { withProviders: false }
+      );
+
+      expect(reportMock).toHaveBeenCalledTimes(1);
+      expect(reportMock.mock.calls[0]?.[1]).not.toHaveProperty('stale_chunk');
     });
 
     it('reloads the tab without waiting for a click', () => {
