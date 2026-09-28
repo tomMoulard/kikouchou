@@ -28,6 +28,7 @@ import {
   MIN_PERSON_HEADCOUNT,
   MIN_ROOM_CAPACITY,
   MIN_VEHICLE_SEAT_COUNT,
+  ROOM_ICONS,
 } from '@/types';
 import type {
   ActivityCategory,
@@ -103,20 +104,14 @@ export const hexColorSchema = z
 
 /**
  * Room icon validator.
+ *
+ * Built from `ROOM_ICONS` rather than spelled out: a hand-written list here
+ * stopped at the first eleven icons, so every icon added after them failed
+ * validation.
  */
-export const roomIconSchema = z.enum([
-  'bed-double',
-  'bed-single',
-  'bath',
-  'sofa',
-  'tent',
-  'caravan',
-  'warehouse',
-  'home',
-  'door-open',
-  'baby',
-  'armchair',
-]) satisfies z.ZodType<RoomIcon>;
+export const roomIconSchema = z.enum(
+  ROOM_ICONS as readonly [RoomIcon, ...RoomIcon[]],
+) satisfies z.ZodType<RoomIcon>;
 
 /**
  * Transport type validator.

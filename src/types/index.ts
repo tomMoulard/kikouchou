@@ -428,7 +428,8 @@ export type RoomIcon =
   | 'hotel'        // Hotel room nearby
   | 'rocking-chair'// Nursery
   | 'shower'       // Shower room
-  | 'boat';        // Boat cabin
+  | 'boat'         // Boat cabin
+  | 'bed-twin';    // Two single beds, a twin room
 
 /**
  * Default room icon when none is selected.
@@ -463,6 +464,7 @@ export const ROOM_ICONS: readonly RoomIcon[] = [
   'rocking-chair',
   'shower',
   'boat',
+  'bed-twin',
 ] as const;
 
 /**
