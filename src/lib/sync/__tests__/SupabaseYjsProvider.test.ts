@@ -832,6 +832,59 @@ describe('reconciliation', () => {
     expect(await outbox.pendingCount(TRIP_ID)).toBe(0);
   });
 
+  it('sends a row queued while another flush was running, whichever finishes last', async () => {
+    // The test above, with the one ordering it left to chance pinned down.
+    // There, reconciliation's closing `flush()` usually runs after Bob's flush
+    // has finished, and it picks Carol up. Under load, CI saw the other order:
+    // Bob's flush was still acknowledging its row, the closing `flush()` found
+    // `flushing` set and returned, and Bob's flush then ended with Carol still
+    // queued and nobody left to send her.
+    const server = new FakeServer();
+    const doc = new Y.Doc();
+    addGuest(doc, 'p1', 'Alice');
+
+    // Only a flush acknowledges a non-empty list here, since reconciliation's
+    // own list is empty: nothing was queued when it read the queue. Slowing
+    // that write keeps Bob's flush running past reconciliation's closing call.
+    const acknowledge = outbox.acknowledge;
+    const slowAcknowledge = vi.spyOn(outbox, 'acknowledge').mockImplementation(async (ids) => {
+      if (ids.length > 0) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 20);
+        });
+      }
+      await acknowledge(ids);
+    });
+
+    const release = server.gateWrites();
+    const provider = track(makeProvider(server, doc));
+    const started = provider.start();
+    await settle(4);
+
+    addGuest(doc, 'p2', 'Bob');
+    await settle(2);
+    addGuest(doc, 'p3', 'Carol');
+    await settle(2);
+
+    release();
+    await started;
+
+    // Drained, and idle: a flush still finishing would write its cursor into
+    // the next test's database after this one ends.
+    await waitUntil(
+      async () =>
+        (await outbox.pendingCount(TRIP_ID)) === 0 && provider.getState().status !== 'syncing',
+      'the queue to drain and the provider to go idle',
+    );
+    slowAcknowledge.mockRestore();
+
+    const rebuilt = new Y.Doc();
+    for (const row of server.rows) {
+      Y.applyUpdate(rebuilt, Uint8Array.from(atob(row.update), (c) => c.charCodeAt(0)));
+    }
+    expect(guestNames(rebuilt)).toEqual(['Alice', 'Bob', 'Carol']);
+  });
+
   it('does not record server state when the push failed', async () => {
     const server = new FakeServer();
     const doc = new Y.Doc();
