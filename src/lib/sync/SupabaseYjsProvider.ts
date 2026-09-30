@@ -220,6 +220,12 @@ export class SupabaseYjsProvider {
   private channel: RealtimeChannel | null = null;
   private destroyed = false;
   private flushing = false;
+  /**
+   * Set when `flush()` is asked for while one is already running. The running
+   * flush sends only the rows it read when it started, so it goes round again
+   * for whatever was queued behind it.
+   */
+  private flushRequested = false;
   private pulling = false;
   private failures = 0;
   // Health is tracked per direction. A successful push must not report "synced"
@@ -776,54 +782,68 @@ export class SupabaseYjsProvider {
    * hammering a server that is refusing writes.
    */
   private async flush(): Promise<void> {
-    if (this.destroyed || this.flushing) {
+    if (this.destroyed) {
+      return;
+    }
+    if (this.flushing) {
+      // Not dropped: the running flush picks this up when it goes round again.
+      this.flushRequested = true;
       return;
     }
     this.flushing = true;
 
     try {
-      const rows = await outbox.pending(this.tripId);
-      if (rows.length === 0) {
-        return;
-      }
+      let failed = false;
 
-      this.setState({ status: 'syncing' });
-      const sent: number[] = [];
+      do {
+        this.flushRequested = false;
 
-      for (const row of rows) {
-        if (this.destroyed) {
+        const rows = await outbox.pending(this.tripId);
+        if (rows.length === 0) {
           break;
         }
-        try {
-          await this.insertUpdate(row.update);
-          if (row.id !== undefined) {
-            sent.push(row.id);
+
+        this.setState({ status: 'syncing' });
+        const sent: number[] = [];
+
+        for (const row of rows) {
+          if (this.destroyed) {
+            break;
           }
-        } catch (error: unknown) {
-          this.pushHealthy = false;
-          this.noteFailure(error);
-          break;
+          try {
+            await this.insertUpdate(row.update);
+            if (row.id !== undefined) {
+              sent.push(row.id);
+            }
+          } catch (error: unknown) {
+            this.pushHealthy = false;
+            this.noteFailure(error);
+            failed = true;
+            break;
+          }
         }
-      }
 
-      await outbox.acknowledge(sent);
+        await outbox.acknowledge(sent);
 
-      const remaining = await outbox.pendingCount(this.tripId);
-      if (remaining === 0 && sent.length > 0) {
-        this.pushHealthy = true;
-        this.failures = 0;
-        this.setState({ lastSyncedAt: Date.now() });
+        const remaining = await outbox.pendingCount(this.tripId);
+        if (remaining === 0 && sent.length > 0) {
+          this.pushHealthy = true;
+          this.failures = 0;
+          this.setState({ lastSyncedAt: Date.now() });
 
-        // An empty queue is not on its own evidence that the server holds the
-        // document. The document emits synchronously and the queue row is
-        // written asynchronously, so an edit made while this flush was in
-        // flight can be in the document with no row to represent it — and a
-        // vector recorded here would cover it, making `reconcile()` compute an
-        // empty diff and strand it permanently.
-        if (this.unqueued === 0) {
-          await recordServerState(this.tripId, Y.encodeStateVector(this.doc));
+          // An empty queue is not on its own evidence that the server holds the
+          // document. The document emits synchronously and the queue row is
+          // written asynchronously, so an edit made while this flush was in
+          // flight can be in the document with no row to represent it — and a
+          // vector recorded here would cover it, making `reconcile()` compute an
+          // empty diff and strand it permanently.
+          if (this.unqueued === 0) {
+            await recordServerState(this.tripId, Y.encodeStateVector(this.doc));
+          }
         }
-      }
+        // A failure stops here and leaves the rest to the retry schedule, so a
+        // server refusing writes is not asked again in a tight loop.
+      } while (this.flushRequested && !failed && !this.destroyed);
     } finally {
       this.flushing = false;
       await this.refreshPending();
