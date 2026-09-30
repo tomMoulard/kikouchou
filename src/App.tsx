@@ -15,6 +15,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { PaletteSync } from '@/components/shared/PaletteSync';
 import { StatusAnnouncer } from '@/components/shared/StatusAnnouncer';
 import { InstallPrompt, OfflineIndicator } from '@/components/pwa';
+import { PetMount } from '@/features/pet/components/PetMount';
 import { applyStoredPalette } from '@/lib/palette';
 import { applyStoredTheme, THEME_STORAGE_KEY } from '@/lib/theme';
 import { router } from '@/router';
@@ -168,6 +169,12 @@ function App(): ReactElement {
       <PaletteSync />
       <InstallPrompt />
       <OfflineIndicator />
+      {/*
+        The pet, when the user turned it on in Settings. Out here with the
+        rest of the global chrome so that selecting a trip does not remount it
+        and drop it back at the top of the screen. It reads no trip.
+      */}
+      <PetMount />
       </InstallPromptProvider>
     </ThemeProvider>
   );

@@ -1999,5 +1999,78 @@
     "accepting": "Accepting your invitation…",
     "acceptFailed": "Your invitation could not be accepted.",
     "stillReadOnly": "This copy stays read-only until it is."
+  },
+  "pet": {
+    "label": "{{name}}, your pet. Press to play. Drag it, or use the arrow keys, to move it.",
+    "heart": "{{name}} sends you a heart",
+    "tipLabel": "Tip",
+    "species": {
+      "pomeranian": "Pomeranian",
+      "papillon": "Continental Toy Spaniel",
+      "beaver": "Beaver",
+      "cat": "Cat"
+    },
+    "sounds": {
+      "pomeranian": "Yip yip!",
+      "papillon": "Woof! *flaps ears*",
+      "beaver": "Chomp chomp.",
+      "cat": "Mrrrow."
+    },
+    "phrases": {
+      "hello": "Oh, hi! I was waiting for you.",
+      "happy": "You came back! Best day ever.",
+      "favorite": "You are my favorite human. Do not tell the others.",
+      "adventure": "Where are we going next?",
+      "snacks": "I packed the snacks. I also ate the snacks.",
+      "scratch": "A little to the left. Perfect."
+    },
+    "jokes": {
+      "suitcase": "I tried to fit in the suitcase. I am the suitcase now.",
+      "dates": "Why did the calendar blush? It saw the trip dates.",
+      "roomService": "I asked for room service. They sent a squeaky toy. Five stars.",
+      "tent": "Camping tip: never let the cat pitch the tent.",
+      "carpool": "Carpool rule: the pet gets the window seat."
+    },
+    "tips": {
+      "share": "Share a trip with an invite link, and your friends see the plan too.",
+      "rooms": "Put your guests in rooms, and I count the beds for you.",
+      "headcount": "One guest can count for a couple or a whole family.",
+      "transports": "Add arrivals and departures, and you see who needs a pickup.",
+      "money": "The Money page splits the bill by the nights each guest stays.",
+      "assistant": "Ask the assistant about your trip. It runs on your device.",
+      "offline": "No signal? Keep going. Your changes are saved on this device.",
+      "groups": "Save the friends you always invite as a group, and add them all to a trip in one go.",
+      "drag": "You can pick me up and drop me anywhere. I always land on my feet."
+    },
+    "settings": {
+      "title": "Pet",
+      "description": "A little friend who walks around the app. Tap it to play, drag it to move it.",
+      "enabled": "Show my pet",
+      "species": "Animal",
+      "surprise": "Surprise me",
+      "slots": {
+        "hat": "Hat",
+        "coat": "Coat",
+        "pants": "Pants",
+        "shoes": "Shoes"
+      }
+    },
+    "items": {
+      "none": "None",
+      "beret": "Beret",
+      "party": "Party hat",
+      "crown": "Crown",
+      "beanie": "Beanie",
+      "bow": "Bow",
+      "scarf": "Scarf",
+      "raincoat": "Raincoat",
+      "sweater": "Sweater",
+      "jeans": "Jeans",
+      "shorts": "Shorts",
+      "tutu": "Tutu",
+      "sneakers": "Sneakers",
+      "boots": "Rain boots",
+      "socks": "Socks"
+    }
   }
 }

@@ -39,6 +39,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { AccountSection } from '@/features/auth/components/AccountSection';
 import { NotificationSettings } from '@/features/settings/components/NotificationSettings';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
+import { PetSettingsCard } from '@/features/pet';
 import { UpgradePrompt } from '@/features/upgrade';
 import { db } from '@/lib/db';
 import { SUPPORTED_LANGUAGES, changeLanguage, getCurrentLanguage, isLanguageSupported } from '@/lib/i18n';
@@ -293,6 +294,7 @@ const DataSection = memo(function DataSection(): ReactElement {
  * - Account: sign in with Google, sign out
  * - Language selector (French/English)
  * - Theme selector (light/dark/system)
+ * - Pet: an optional companion that walks around the app
  * - Ride alerts: opt in to OS notifications for the cars you drive
  * - App version display
  * - Clear data option with confirmation
@@ -328,6 +330,9 @@ function SettingsPageComponent(): ReactElement {
 
         {/* Theme Section - grouped with Language: both are presentation preferences */}
         <ThemeSelector />
+
+        {/* The pet - a presentation preference too, so it sits with the theme. */}
+        <PetSettingsCard />
 
         {/* Ride alerts — below the presentation preferences because it is the
             only card here that asks the browser for something, and above About

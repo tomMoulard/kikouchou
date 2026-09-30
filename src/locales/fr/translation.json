@@ -1999,5 +1999,78 @@
     "accepting": "Acceptation de votre invitation…",
     "acceptFailed": "Votre invitation n'a pas pu être acceptée.",
     "stillReadOnly": "Cette copie reste en lecture seule tant que ce n'est pas fait."
+  },
+  "pet": {
+    "label": "{{name}}, votre compagnon. Appuyez pour jouer. Faites-le glisser, ou utilisez les flèches, pour le déplacer.",
+    "heart": "{{name}} vous envoie un cœur",
+    "tipLabel": "Astuce",
+    "species": {
+      "pomeranian": "Loulou de Poméranie",
+      "papillon": "Épagneul nain continental",
+      "beaver": "Castor",
+      "cat": "Chat"
+    },
+    "sounds": {
+      "pomeranian": "Wif wif !",
+      "papillon": "Ouaf ! *agite les oreilles*",
+      "beaver": "Crunch crunch.",
+      "cat": "Mrrraou."
+    },
+    "phrases": {
+      "hello": "Oh, coucou ! Je vous attendais.",
+      "happy": "Vous voilà ! Meilleur jour de ma vie.",
+      "favorite": "Vous êtes mon humain préféré. Ne le dites pas aux autres.",
+      "adventure": "On part où, la prochaine fois ?",
+      "snacks": "J'ai préparé le goûter. J'ai aussi mangé le goûter.",
+      "scratch": "Un peu plus à gauche. Parfait."
+    },
+    "jokes": {
+      "suitcase": "J'ai essayé de rentrer dans la valise. Maintenant, c'est moi la valise.",
+      "dates": "Pourquoi le calendrier rougit ? Il a vu les dates du séjour.",
+      "roomService": "J'ai demandé le service en chambre. On m'a apporté un jouet qui couine. Cinq étoiles.",
+      "tent": "Conseil camping : ne laissez jamais le chat monter la tente.",
+      "carpool": "Règle du covoiturage : le compagnon a la place côté fenêtre."
+    },
+    "tips": {
+      "share": "Partagez un séjour avec un lien d'invitation, et vos amis voient le programme eux aussi.",
+      "rooms": "Placez vos invités dans les chambres, et je compte les lits pour vous.",
+      "headcount": "Un invité peut compter pour un couple ou une famille entière.",
+      "transports": "Ajoutez les arrivées et les départs, et vous voyez qui a besoin qu'on vienne le chercher.",
+      "money": "La page Argent partage la note selon les nuits de chaque invité.",
+      "assistant": "Posez vos questions sur le séjour à l'assistant. Il tourne sur votre appareil.",
+      "offline": "Pas de réseau ? Continuez. Vos modifications sont enregistrées sur cet appareil.",
+      "groups": "Enregistrez vos invités habituels dans un groupe, et ajoutez-les tous au séjour d'un coup.",
+      "drag": "Vous pouvez m'attraper et me poser n'importe où. Je retombe toujours sur mes pattes."
+    },
+    "settings": {
+      "title": "Compagnon",
+      "description": "Un petit ami qui se promène dans l'application. Touchez-le pour jouer, faites-le glisser pour le déplacer.",
+      "enabled": "Afficher mon compagnon",
+      "species": "Animal",
+      "surprise": "Surprends-moi",
+      "slots": {
+        "hat": "Chapeau",
+        "coat": "Manteau",
+        "pants": "Pantalon",
+        "shoes": "Chaussures"
+      }
+    },
+    "items": {
+      "none": "Aucun",
+      "beret": "Béret",
+      "party": "Chapeau de fête",
+      "crown": "Couronne",
+      "beanie": "Bonnet",
+      "bow": "Nœud",
+      "scarf": "Écharpe",
+      "raincoat": "Ciré",
+      "sweater": "Pull",
+      "jeans": "Jean",
+      "shorts": "Short",
+      "tutu": "Tutu",
+      "sneakers": "Baskets",
+      "boots": "Bottes de pluie",
+      "socks": "Chaussettes"
+    }
   }
 }

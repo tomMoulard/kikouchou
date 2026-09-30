@@ -1075,3 +1075,156 @@ body:has(
     animation: seasonal-dangle 4s ease-in-out infinite alternate;
   }
 }
+
+/*
+ * The pet (`features/pet`).
+ *
+ * `PetSprite` names its parts (`pet-tail`, `pet-eyes`, `pet-leg-left`, ...)
+ * and `PetOverlay` says what the pet is doing with `data-pet-pose` on an
+ * ancestor. These rules join the two. They are keyframes, which have no
+ * utility form, and they only run for a viewer who has not asked for
+ * stillness: under `prefers-reduced-motion: reduce` the pet stands still,
+ * does not wander, and still answers a tap.
+ *
+ * `transform-box: view-box` makes every `transform-origin` below a point in
+ * the sprite's 100 x 100 box rather than in the part's own bounding box.
+ */
+.pet-sprite * {
+  transform-box: view-box;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes pet-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3%); }
+  }
+
+  @keyframes pet-step {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+
+  @keyframes pet-breathe {
+    0%, 100% { transform: scale(1, 1); }
+    50% { transform: scale(1.02, 0.975); }
+  }
+
+  @keyframes pet-blink {
+    0%, 92%, 100% { transform: scaleY(1); }
+    95% { transform: scaleY(0.1); }
+  }
+
+  @keyframes pet-wag {
+    from { transform: rotate(-9deg); }
+    to { transform: rotate(9deg); }
+  }
+
+  @keyframes pet-dangle {
+    from { transform: rotate(-7deg); }
+    to { transform: rotate(7deg); }
+  }
+
+  @keyframes pet-zzz {
+    0% { opacity: 0; transform: translate(0, 4px); }
+    30% { opacity: 1; }
+    100% { opacity: 0; transform: translate(4px, -8px); }
+  }
+
+  @keyframes pet-hop {
+    0%, 100% { transform: translateY(0) scale(1, 1); }
+    20% { transform: translateY(0) scale(1.08, 0.9); }
+    55% { transform: translateY(-18%) scale(0.95, 1.06); }
+  }
+
+  @keyframes pet-land {
+    0%, 100% { transform: scale(1, 1); }
+    35% { transform: scale(1.12, 0.86); }
+  }
+
+  @keyframes pet-bubble-in {
+    from { opacity: 0; transform: translateY(6px) scale(0.85); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .pet-eyes {
+    transform-origin: 50px 42px;
+    animation: pet-blink 4.6s infinite;
+  }
+
+  .pet-tail {
+    transform-origin: 34px 82px;
+    animation: pet-wag 0.45s ease-in-out infinite alternate;
+  }
+
+  /* Where each tail joins the body. */
+  [data-pet-species='pomeranian'] .pet-tail {
+    transform-origin: 36px 70px;
+  }
+
+  [data-pet-species='papillon'] .pet-tail {
+    transform-origin: 34px 72px;
+  }
+
+  [data-pet-pose='sleep'] .pet-tail {
+    animation: none;
+  }
+
+  [data-pet-pose='idle'] .pet-body,
+  [data-pet-pose='sleep'] .pet-body {
+    transform-origin: 50px 92px;
+    animation: pet-breathe 2.6s ease-in-out infinite;
+  }
+
+  [data-pet-pose='sleep'] .pet-body {
+    animation-duration: 4s;
+  }
+
+  [data-pet-pose='walk'] .pet-sprite {
+    animation: pet-bob 0.34s ease-in-out infinite;
+  }
+
+  [data-pet-pose='walk'] .pet-leg-left,
+  [data-pet-pose='walk'] .pet-leg-right {
+    animation: pet-step 0.34s ease-in-out infinite;
+  }
+
+  [data-pet-pose='walk'] .pet-leg-right {
+    animation-delay: -0.17s;
+  }
+
+  [data-pet-pose='held'] .pet-sprite {
+    transform-origin: 50% 5%;
+    animation: pet-dangle 0.5s ease-in-out infinite alternate;
+  }
+
+  [data-pet-pose='held'] .pet-leg-left,
+  [data-pet-pose='held'] .pet-leg-right {
+    animation: pet-step 0.25s ease-in-out infinite;
+  }
+
+  [data-pet-pose='held'] .pet-leg-right {
+    animation-delay: -0.12s;
+  }
+
+  .pet-zzz path {
+    animation: pet-zzz 2.4s ease-out infinite;
+  }
+
+  .pet-zzz path + path {
+    animation-delay: 1.2s;
+  }
+
+  [data-pet-hop='true'] .pet-sprite {
+    transform-origin: 50% 100%;
+    animation: pet-hop 0.45s ease-out;
+  }
+
+  [data-pet-landed='true'] .pet-sprite {
+    transform-origin: 50% 100%;
+    animation: pet-land 0.22s ease-out;
+  }
+
+  .pet-bubble {
+    animation: pet-bubble-in 0.18s ease-out;
+  }
+}
