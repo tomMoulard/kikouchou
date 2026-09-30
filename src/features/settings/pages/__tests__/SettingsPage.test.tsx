@@ -148,6 +148,7 @@ describe('SettingsPage', () => {
     expect(screen.getByText('auth.account.title')).toBeInTheDocument();
     expect(screen.getByText('settings.language')).toBeInTheDocument();
     expect(screen.getByText('settings.theme')).toBeInTheDocument();
+    expect(screen.getByText('pet.settings.title')).toBeInTheDocument();
     expect(screen.getByText('settings.about')).toBeInTheDocument();
     expect(screen.getByText('settings.dataManagement')).toBeInTheDocument();
   });

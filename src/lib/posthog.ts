@@ -899,6 +899,9 @@ export type AnalyticsEvent =
   // Preferences
   | 'language_changed'
   | 'palette_changed'
+  | 'pet_customized'
+  | 'pet_interacted'
+  | 'pet_toggled'
   | 'seasonal_palettes_toggled'
   | 'theme_changed'
   // Would anybody pay? The fake-door test — see `features/upgrade`
