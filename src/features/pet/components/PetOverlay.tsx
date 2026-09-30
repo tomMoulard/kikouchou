@@ -706,13 +706,6 @@ export const PetOverlay = memo(function PetOverlay(): ReactElement {
       data-pet-landed={landed ? 'true' : undefined}
       className="pointer-events-none fixed left-0 top-0 z-50 size-15 will-change-transform print:hidden"
     >
-      {pose !== 'fall' && pose !== 'held' && (
-        <span
-          aria-hidden="true"
-          className="absolute bottom-0 left-1/2 h-1.5 w-9 -translate-x-1/2 translate-y-1/2 rounded-full bg-foreground/15"
-        />
-      )}
-
       <button
         type="button"
         aria-label={t('pet.label', {
