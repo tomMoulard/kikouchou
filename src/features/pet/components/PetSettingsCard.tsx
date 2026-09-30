@@ -213,7 +213,6 @@ export const PetSettingsCard = memo(function PetSettingsCard(): ReactElement {
 
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
           <div
-            data-pet-pose="idle"
             className="flex shrink-0 flex-col items-center gap-2 self-center rounded-2xl bg-muted/60 px-6 pb-3 pt-6 sm:self-start"
           >
             <PetSprite species={species} outfit={outfit} className="size-28" />

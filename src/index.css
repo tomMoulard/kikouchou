@@ -1146,22 +1146,28 @@ body:has(
     to { opacity: 1; transform: translateY(0) scale(1); }
   }
 
-  .pet-eyes {
+  /*
+   * Only the pet on screen moves: every rule below sits under a
+   * `data-pet-pose`. The previews on the settings card carry none, so they
+   * stand still, and a page that waits for its animations to finish (see
+   * `e2e/touch-targets.spec.ts`) does not wait forever on an endless blink.
+   */
+  [data-pet-pose] .pet-eyes {
     transform-origin: 50px 42px;
     animation: pet-blink 4.6s infinite;
   }
 
-  .pet-tail {
+  [data-pet-pose] .pet-tail {
     transform-origin: 34px 82px;
     animation: pet-wag 0.45s ease-in-out infinite alternate;
   }
 
   /* Where each tail joins the body. */
-  [data-pet-species='pomeranian'] .pet-tail {
+  [data-pet-pose] [data-pet-species='pomeranian'] .pet-tail {
     transform-origin: 36px 70px;
   }
 
-  [data-pet-species='papillon'] .pet-tail {
+  [data-pet-pose] [data-pet-species='papillon'] .pet-tail {
     transform-origin: 34px 72px;
   }
 
@@ -1206,11 +1212,11 @@ body:has(
     animation-delay: -0.12s;
   }
 
-  .pet-zzz path {
+  [data-pet-pose] .pet-zzz path {
     animation: pet-zzz 2.4s ease-out infinite;
   }
 
-  .pet-zzz path + path {
+  [data-pet-pose] .pet-zzz path + path {
     animation-delay: 1.2s;
   }
 
