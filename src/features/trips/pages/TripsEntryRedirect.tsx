@@ -120,9 +120,18 @@ function markSentToTheForm(): void {
  */
 export function TripsEntryRedirect(): ReactElement {
   const navigate = useNavigate();
-  const { trips, isLoading, error } = useTripContext();
+  const { trips, sampleTripId, isLoading, error } = useTripContext();
   const { isResolved } = useAuth();
-  const { remoteOnly, isChecking } = useRemoteTrips(trips.length);
+
+  /**
+   * The trips that are the visitor's own. The sample trip seeded on first open
+   * is not: counting it would skip the create form on every first launch.
+   */
+  const ownTripCount = useMemo(
+    () => trips.filter((trip) => trip.id !== sampleTripId).length,
+    [sampleTripId, trips],
+  );
+  const { remoteOnly, isChecking } = useRemoteTrips(ownTripCount);
 
   /**
    * Whether the wait has run out. Started on mount and never restarted: the
@@ -149,7 +158,7 @@ export function TripsEntryRedirect(): ReactElement {
    * waiting for — up to the deadline.
    */
   const destination = useMemo((): string | null => {
-    if (trips.length > 0) {
+    if (ownTripCount > 0) {
       return TRIP_LIST_PATH;
     }
 
@@ -167,7 +176,7 @@ export function TripsEntryRedirect(): ReactElement {
     return hasNothingToOpen && !hasBeenSentToTheForm()
       ? TRIP_CREATE_PATH
       : TRIP_LIST_PATH;
-  }, [error, hasTimedOut, isChecking, isLoading, isResolved, remoteOnly.length, trips.length]);
+  }, [error, hasTimedOut, isChecking, isLoading, isResolved, remoteOnly.length, ownTripCount]);
 
   /**
    * Navigates once the decision is made.

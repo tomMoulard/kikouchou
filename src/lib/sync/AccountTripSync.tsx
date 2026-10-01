@@ -33,6 +33,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { db } from '@/lib/db/database';
+import { getSampleTripId } from '@/lib/db/repositories/settings-repository';
 import { captureEvent } from '@/lib/posthog';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { syncAccountTrips } from './account-sync';
@@ -67,8 +68,10 @@ export function AccountTripSync(): null {
    * a list it has not seen.
    */
   const pendingUploadKey = useLiveQuery(async () => {
-    const trips = await db.trips.toArray();
+    const [trips, sampleTripId] = await Promise.all([db.trips.toArray(), getSampleTripId()]);
     return trips
+      // The sample trip is never uploaded, so it is never pending.
+      .filter((trip) => trip.id !== sampleTripId)
       // A viewer trip is pending in the same sense: signed in, the sweep turns
       // it into a member trip, and until then it has work waiting.
       .filter((trip) => trip.remoteTripId === undefined || trip.viewerToken !== undefined)

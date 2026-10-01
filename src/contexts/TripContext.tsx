@@ -80,6 +80,7 @@ function areTripsEqual(a: Trip | null, b: Trip | null): boolean {
 interface TripQueryResult {
   readonly trips: Trip[];
   readonly currentTripId: TripId | undefined;
+  readonly sampleTripId: TripId | undefined;
 }
 
 /**
@@ -98,6 +99,13 @@ export interface TripContextValue {
    * Updated reactively when trips are added, modified, or deleted.
    */
   readonly trips: Trip[];
+
+  /**
+   * The sample trip seeded on this device's first open, if any.
+   * It is in {@link trips} like any other; this says which one is not the user's own.
+   * Optional so a test double of the context may leave it out.
+   */
+  readonly sampleTripId?: TripId | undefined;
 
   /**
    * True while trip data is being loaded from IndexedDB.
@@ -191,14 +199,18 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
         db.trips.orderBy('startDate').reverse().toArray(),
         getSettings(),
       ]);
-      return { trips, currentTripId: settings.currentTripId };
+      return {
+        trips,
+        currentTripId: settings.currentTripId,
+        sampleTripId: settings.sampleTripId,
+      };
     } catch (err) {
       // Surface query errors to the error state
       const queryError =
         err instanceof Error ? err : new Error('Failed to load trips');
       setError(queryError);
       // Return empty result to prevent crash
-      return { trips: [], currentTripId: undefined };
+      return { trips: [], currentTripId: undefined, sampleTripId: undefined };
     }
   }, []),
 
@@ -211,6 +223,8 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
 
   // Extract current trip ID from query result
    currentTripId = queryResult?.currentTripId,
+
+   sampleTripId = queryResult?.sampleTripId,
 
   // State to preserve referential equality of currentTrip
   // This prevents unnecessary re-renders in consumers when other trips change
@@ -322,12 +336,13 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
     () => ({
       currentTrip,
       trips,
+      sampleTripId,
       isLoading,
       error,
       setCurrentTrip,
       checkConnection,
     }),
-    [currentTrip, trips, isLoading, error, setCurrentTrip, checkConnection],
+    [currentTrip, trips, sampleTripId, isLoading, error, setCurrentTrip, checkConnection],
   );
 
   return (

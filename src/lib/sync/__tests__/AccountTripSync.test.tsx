@@ -20,6 +20,7 @@ import { createTrip } from '@/lib/db/repositories/trip-repository';
 import { syncAccountTrips } from '@/lib/sync/account-sync';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { isoDate } from '@/test/utils';
+import { seedSampleTripOnce } from '@/features/trips/utils/seed-sample-trip';
 import { AccountTripSync } from '../AccountTripSync';
 
 // ============================================================================
@@ -215,6 +216,21 @@ describe('AccountTripSync', () => {
     await waitFor(() => {
       expect(mockedSweep).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('does not sweep again for the sample trip, which is never uploaded', async () => {
+    signedInAs('user-1');
+    render(<AccountTripSync />);
+    await waitFor(() => {
+      expect(mockedSweep).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      await seedSampleTripOnce('en');
+    });
+
+    await settle();
+    expect(mockedSweep).toHaveBeenCalledTimes(1);
   });
 
   it('does not sweep again when an already-queued trip lands on the server', async () => {

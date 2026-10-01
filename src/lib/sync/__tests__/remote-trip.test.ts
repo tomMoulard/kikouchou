@@ -24,6 +24,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
+import { updateSettings } from '@/lib/db/repositories/settings-repository';
 import { readCursor, recordServerState } from '@/lib/sync/cursors';
 import {
   ensureRemoteTrip,
@@ -151,6 +152,22 @@ beforeEach(async () => {
 // ============================================================================
 
 describe('ensureRemoteTrip', () => {
+  it('refuses to upload the sample trip seeded on first open', async () => {
+    const trip = await createTrip({
+      name: TRIP_NAME,
+      startDate: isoDate(TRIP_START),
+      endDate: isoDate(TRIP_END),
+    });
+    await updateSettings({ sampleTripId: trip.id });
+
+    const { client, inserts } = clientWithRows([]);
+    const result = await ensureRemoteTrip(client, 'user-1', trip.id);
+
+    expect(result.status).toBe('error');
+    expect(inserts).toHaveLength(0);
+    expect((await db.trips.get(trip.id))?.remoteTripId).toBeUndefined();
+  });
+
   it('reuses a server row that is still there', async () => {
     const trip = await makeSharedTrip();
 

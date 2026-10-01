@@ -35,6 +35,7 @@
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
 
 import { db } from '@/lib/db/database';
+import { getSampleTripId } from '@/lib/db/repositories/settings-repository';
 import type { Trip, TripId } from '@/types';
 
 // ============================================================================
@@ -246,6 +247,12 @@ export async function ensureRemoteTrip(
   const trip = await db.trips.get(tripId);
   if (!trip) {
     return { status: 'missing' };
+  }
+
+  // The sample trip seeded on first open stays on the device: uploading it
+  // would give every account that signs in a server copy of the same demo.
+  if (trip.id === (await getSampleTripId())) {
+    return { status: 'error', message: 'The sample trip stays on this device and cannot be shared.' };
   }
 
   if (trip.remoteTripId) {

@@ -56,9 +56,15 @@ const trip: Trip = {
 /**
  * Sets the trip list this device holds, and whether it is still loading.
  */
-function givenLocalTrips(trips: Trip[], isLoading = false, error: Error | null = null): void {
+function givenLocalTrips(
+  trips: Trip[],
+  isLoading = false,
+  error: Error | null = null,
+  sampleTripId?: Trip['id'],
+): void {
   mockedUseTripContext.mockReturnValue({
     trips,
+    sampleTripId,
     isLoading,
     error,
     currentTrip: null,
@@ -119,6 +125,28 @@ describe('TripsEntryRedirect', () => {
 
   it('sends a device that already holds a trip to the list', async () => {
     givenLocalTrips([trip]);
+
+    renderRedirect();
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/trips', { replace: true });
+    });
+  });
+
+  it('sends a first launch to the create form when the only trip is the sample', async () => {
+    givenLocalTrips([trip], false, null, trip.id);
+
+    renderRedirect();
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/trips/new', { replace: true });
+    });
+    expect(mockedUseRemoteTrips).toHaveBeenCalledWith(0);
+  });
+
+  it('counts a trip the visitor made beside the sample', async () => {
+    const own: Trip = { ...trip, id: 'trip-2' as Trip['id'] };
+    givenLocalTrips([trip, own], false, null, trip.id);
 
     renderRedirect();
 
