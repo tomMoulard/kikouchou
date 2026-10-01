@@ -1,0 +1,308 @@
+/**
+ * @fileoverview Calendar timeline (horizontal) view.
+ *
+ * @module features/calendar/components/CalendarTimeline
+ */
+
+import { type ReactElement, type ReactNode, memo, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Calendar as CalendarIcon, Users } from 'lucide-react';
+
+import { EmptyState } from '@/components/shared/EmptyState';
+import { TimelineScaleControls } from '@/components/shared/TimelineScaleControls';
+import { TripTimelineFrame } from '@/components/shared/TripTimelineFrame';
+import { ActivityTimelineRow } from '@/features/activities/components/ActivityTimelineRow';
+import {
+  buildActivityTimelineModel,
+  collectActivityDayKeys,
+} from '@/features/activities/utils/activity-timeline-utils';
+import { toLocalISODateString } from '@/lib/db/utils';
+import { useTimelineAxis } from '@/components/shared/useTimelineAxis';
+import { buildDayColumnsCovering, toDayKeys } from '@/lib/utils/trip-days';
+import type { ISODateString } from '@/types';
+import type { CalendarTimelineProps } from '../types';
+import { buildDailyHeadcounts } from '../utils/headcount-utils';
+import {
+  buildCalendarTimelineModel,
+  collectAssignmentDayKeys,
+  collectTransportDayKeys,
+} from '../utils/timeline-utils';
+import { CalendarTimelineRow } from './CalendarTimelineRow';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/**
+ * Width of the sticky guest-name column.
+ *
+ * Exported because the page's own width decision has to count the same number
+ * of pixels this frame reserves — see `timelineNeedsFullPageWidth`.
+ */
+export const CALENDAR_TIMELINE_LABEL_COLUMN_WIDTH_PX = 200;
+
+// ============================================================================
+// Component
+// ============================================================================
+
+const CalendarTimeline = memo(function CalendarTimeline(props: CalendarTimelineProps): ReactElement {
+  const { t } = useTranslation();
+
+  // Both halves of the timeline are drawn on one day axis, so each model is
+  // built over the union of both sets of events — otherwise widening the guest
+  // half for an early flight would slide the activity bands off the days they
+  // belong to.
+  const guestDayKeys = useMemo(
+    () => [
+      ...collectTransportDayKeys([...props.arrivals, ...props.departures]),
+      ...collectAssignmentDayKeys(props.assignments),
+    ],
+    [props.arrivals, props.assignments, props.departures],
+  );
+
+  const activityDayKeys = useMemo(
+    () => collectActivityDayKeys(props.activities),
+    [props.activities],
+  );
+
+  // The trip's own days, widened to reach every event drawn on them: a guest
+  // who flies in the day before the trip starts has no column on a trip-only
+  // axis, and a pill with no column is a pill nobody can see.
+  const tripDays = useMemo(
+    () =>
+      buildDayColumnsCovering({
+        startKey: props.trip.startDate,
+        endKey: props.trip.endDate,
+        mustInclude: [...guestDayKeys, ...activityDayKeys],
+      }),
+    [props.trip.startDate, props.trip.endDate, guestDayKeys, activityDayKeys],
+  );
+
+  const tripDayKeys = useMemo(() => toDayKeys(tripDays), [tripDays]);
+
+  // One axis for both halves of the timeline. Building it here rather than
+  // inside each model is what guarantees the guest rows and the activity bands
+  // line up: they are not two axes that agree, they are the same axis.
+  const axis = useTimelineAxis({
+    days: tripDays,
+    dayKeys: tripDayKeys,
+    dateLocale: props.dateLocale,
+    today: props.today,
+  });
+  const columns = axis.columns;
+
+  const model = useMemo(
+    () =>
+      buildCalendarTimelineModel({
+        trip: props.trip,
+        persons: props.persons,
+        rooms: props.rooms,
+        assignments: props.assignments,
+        arrivals: props.arrivals,
+        departures: props.departures,
+        unknownLabel: t('common.unknown'),
+        columns,
+      }),
+    [
+      props.trip,
+      props.persons,
+      props.rooms,
+      props.assignments,
+      props.arrivals,
+      props.departures,
+      columns,
+      t,
+    ],
+  );
+
+  // The shared agenda gets its own bands under the guest rows, on that same
+  // axis.
+  const activityModel = useMemo(
+    () =>
+      buildActivityTimelineModel({
+        trip: props.trip,
+        activities: props.activities,
+        columns,
+      }),
+    [props.trip, props.activities, columns],
+  );
+
+  const todayKey = toLocalISODateString(props.today) as ISODateString;
+
+  // The axis can now reach past the trip, so the header says which columns are
+  // the trip itself and which are the days either side of it.
+  const tripRange = useMemo(
+    () => ({ startKey: props.trip.startDate, endKey: props.trip.endDate }),
+    [props.trip.startDate, props.trip.endDate],
+  );
+
+  // People on site each night — hosts read this row to plan meals.
+  const headcountsByDate = useMemo(
+    () =>
+      buildDailyHeadcounts({
+        persons: props.persons,
+        arrivals: props.arrivals,
+        departures: props.departures,
+        assignments: props.assignments,
+        tripWindow: { startDate: props.trip.startDate, endDate: props.trip.endDate },
+        dayKeys: model.dayKeys,
+      }),
+    [
+      model.dayKeys,
+      props.arrivals,
+      props.assignments,
+      props.departures,
+      props.persons,
+      props.trip.endDate,
+      props.trip.startDate,
+    ],
+  );
+
+  const renderDayHeadcount = useCallback(
+    (dayKey: ISODateString): ReactNode => {
+      const people = headcountsByDate.get(dayKey)?.people ?? 0;
+      if (people === 0) {
+        return null;
+      }
+
+      const label = t('calendar.peopleOnSite', '{{count}} people on site', { count: people });
+
+      return (
+        <div
+          className="mt-1 flex items-center gap-0.5 text-xs text-muted-foreground"
+          title={label}
+          data-testid={`timeline-headcount-${dayKey}`}
+        >
+          <Users className="size-2.5 shrink-0" aria-hidden="true" />
+          <span className="tabular-nums" aria-hidden="true">
+            {people}
+          </span>
+          <span className="sr-only">{label}</span>
+        </div>
+      );
+    },
+    [headcountsByDate, t],
+  );
+
+  const showEmptyState =
+    props.hideEmptyState !== true &&
+    props.assignments.length === 0 &&
+    props.arrivals.length === 0 &&
+    props.departures.length === 0 &&
+    activityModel.rows.length === 0 &&
+    model.rows.every((r) => r.staySpan === undefined);
+
+  const handleActivityClick = props.onActivityClick;
+
+  const frame = (
+    <TripTimelineFrame
+      ariaLabel={t('calendar.timeline.ariaLabel', 'Timeline calendar')}
+      labelColumnWidth={CALENDAR_TIMELINE_LABEL_COLUMN_WIDTH_PX}
+      leftHeader={<span className="text-sm font-medium">{t('calendar.timeline.persons', 'Guests')}</span>}
+      days={model.tripDays}
+      dayKeys={model.dayKeys}
+      columns={model.columns}
+      dateLocale={props.dateLocale}
+      preferredColumnWidthPx={axis.preferredColumnWidthPx}
+      todayKey={todayKey}
+      now={props.today}
+      recenterToken={axis.recenterToken}
+      tripRange={tripRange}
+      outsideTripLabel={t('calendar.outsideTripDates', 'Outside the trip dates')}
+      nowLabel={t('common.currentTime', 'Current time')}
+      scrollbarLabel={t('common.scrollTimeline', 'Scroll the timeline')}
+      toolbar={
+        <TimelineScaleControls value={axis.scale} onChange={axis.setScale} onNow={axis.goToNow} />
+      }
+      renderDayMeta={renderDayHeadcount}
+    >
+      {(viewport) => (
+        <>
+          <div role="list" aria-label={t('calendar.timeline.rows', 'Timeline rows')}>
+            {model.rows.map((row) => (
+              <div key={row.person.id} role="listitem">
+                <CalendarTimelineRow
+                  model={row}
+                  viewport={viewport}
+                  dateLocale={props.dateLocale}
+                  onAssignmentClick={props.onAssignmentClick}
+                  onTransportClick={props.onTransportClick}
+                  rideForTransport={props.rideForTransport}
+                />
+              </div>
+            ))}
+          </div>
+
+          {activityModel.rows.length > 0 && handleActivityClick && (
+            <>
+              <div
+                className="sticky left-0 border-t-2 border-muted bg-muted/40 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                style={{ width: viewport.labelColumnWidth + viewport.canvasWidth }}
+              >
+                {t('activities.title')}
+              </div>
+              <div role="list" aria-label={t('activities.timeline.rows', 'Timeline rows')}>
+                {activityModel.rows.map((row) => (
+                  <div key={`activity-${row.category}`} role="listitem">
+                    <ActivityTimelineRow
+                      model={row}
+                      viewport={viewport}
+                      dateLocale={props.dateLocale}
+                      onActivityClick={handleActivityClick}
+                    />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+        </>
+      )}
+    </TripTimelineFrame>
+  );
+
+  if (!showEmptyState) {
+    return frame;
+  }
+
+  return (
+    <>
+      {frame}
+      {/* Outside the frame on purpose. The frame's canvas is as wide as the
+          trip is long — 32 days is ~1450px — and it scrolls horizontally
+          inside the viewport. An `mx-auto` empty state in there centres on the
+          canvas, not on the screen, so on a phone it sat several hundred
+          pixels off to the right and simply could not be seen. Out here it
+          centres on the page, which is where a "nothing here yet" message and
+          its two buttons belong anyway.
+
+          Same EmptyState, copy and icon as the month view's, so switching
+          views does not change how "nothing here yet" is presented. A caller
+          with something better to say under the frame passes
+          `hideEmptyState` and draws it itself. */}
+      <EmptyState
+        icon={CalendarIcon}
+        title={t('calendar.noAssignmentsTitle', 'Nothing scheduled yet')}
+        description={t('calendar.noAssignments')}
+        action={
+          props.onAddGuests
+            ? {
+                label: t('calendar.addGuests', 'Add guests'),
+                onClick: props.onAddGuests,
+              }
+            : undefined
+        }
+        secondaryAction={
+          props.onAddRooms
+            ? {
+                label: t('calendar.addRooms', 'Add rooms'),
+                onClick: props.onAddRooms,
+              }
+            : undefined
+        }
+      />
+    </>
+  );
+});
+
+export { CalendarTimeline };

@@ -1,0 +1,199 @@
+name: Deploy to GitHub Pages
+
+on:
+  # Gated on CI rather than on the push itself.
+  #
+  # `on: push` deployed whatever landed on main, green or red — there is no
+  # cross-workflow `needs:`, so nothing was waiting for the tests, the type
+  # check, the coverage floor, the pgTAP suite or the e2e run. A merge that
+  # broke the build shipped to production while the CI run that would have said
+  # so was still going. The `if:` below is what makes this a gate: a
+  # `workflow_run` fires on failure too.
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches:
+      - main
+
+  # Allows manual trigger from Actions tab
+  workflow_dispatch:
+
+# Sets permissions for GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # A manual dispatch deploys on request; a CI run deploys only when it
+    # passed. Without this half the trigger above is not a gate at all, because
+    # `workflow_run` fires whatever the conclusion was.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    # Lifted to the job so the source-map step can test it in an `if:` — the
+    # `secrets` context is not available there, but `env` is.
+    env:
+      POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+      # The public half of the VAPID pair, for trip reminders. Lifted here for
+      # the same reason: the step below warns when it is missing.
+      VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+      # The commit this deploy is actually built from. On a `workflow_run`,
+      # `github.sha` is the default branch's head at trigger time rather than
+      # the commit CI tested, so `app_version` and the PostHog release would
+      # name a build nobody deployed.
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The commit CI tested, not whatever main happens to be now. A
+          # `workflow_run` checkout defaults to the default branch's head, so a
+          # second merge landing while CI ran would otherwise be deployed
+          # having been tested by nobody.
+          ref: ${{ env.DEPLOY_SHA }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js (for sharp in generate-icons)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate icons
+        run: bun run generate-icons
+
+      # A missing key is not a failure — the app ships and simply never offers
+      # reminders, and every phone sees the install nudge instead. It is
+      # silent, though, and the VITE_SHARE_ORIGIN note below records what
+      # silent cost the last time a deploy went out without one of these.
+      - name: Warn when trip reminders are unconfigured
+        if: ${{ env.VAPID_PUBLIC_KEY == '' }}
+        run: |
+          echo "::warning title=No trip reminders::VAPID_PUBLIC_KEY is unset, so this build ships without Web Push reminders. Generate a pair with scripts/generate-vapid-keys.mjs and add the public half as a repository secret."
+
+      - name: Build
+        run: bun run build
+        env:
+          VITE_APP_VERSION: ${{ github.ref_name }}@${{ env.DEPLOY_SHA }}
+          # Secret names keep their NEXT_PUBLIC_ prefix in GitHub; Vite only
+          # exposes VITE_* to import.meta.env, so map them here rather than
+          # renaming the secrets.
+          VITE_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          # The repository secrets are named NEXT_PUBLIC_*; Vite only inlines
+          # VITE_-prefixed variables into import.meta.env, so they are mapped
+          # here. Rename the secrets and both sides if that ever gets confusing.
+          # Absent values are not fatal: src/lib/posthog.ts leaves the client
+          # undefined and every capture becomes a no-op.
+          VITE_POSTHOG_KEY: ${{ secrets.NEXT_PUBLIC_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ secrets.NEXT_PUBLIC_POSTHOG_HOST }}
+          # The link preview service, server/share-preview. With it set, the
+          # share dialog hands out https://share.kikouchou.app/<lang>/<token>,
+          # which shows that trip's own name, dates and occupancy when the link
+          # is pasted into a chat. Without it the dialog hands out the direct
+          # /join/<token> link and every share shows the generic card.
+          #
+          # A literal, not a secret: it is a hostname, it is in the built bundle
+          # by design, and a missing secret would fail silently back to the old
+          # link — which is exactly what happened on the first deploy of this.
+          VITE_SHARE_ORIGIN: https://share.kikouchou.app
+          # The Meta Pixel id, for ad measurement. A literal for the same
+          # reason as the line above: it is public by design — Meta own
+          # snippet puts it in the page source — so a secret would buy nothing
+          # and a missing one would turn the pixel off without saying so.
+          # src/lib/meta-pixel.ts loads nothing when it is absent.
+          VITE_META_PIXEL_ID: '2066436523976108'
+          # The Google pair, the same two the landing page loads: the Tag
+          # Manager container and the Google Ads tag. Literals for the reason
+          # the pixel id is one — both are public by construction, and Google's
+          # own instructions put them in the page source.
+          VITE_GTM_CONTAINER_ID: 'GTM-THNTTWRZ'
+          VITE_GOOGLE_ADS_ID: 'AW-18455477906'
+          # The conversion action a PWA install counts as. Whole rather than a
+          # label appended to the account above: a half-built identifier fails
+          # silently in an ad platform.
+          VITE_GOOGLE_ADS_INSTALL_CONVERSION: 'AW-18455477906/KKbVCKuNgfocEJL9oOBE'
+          # Trip reminders over Web Push. The public half of the VAPID pair —
+          # public by design: every browser sends it to its push service and it
+          # ships in the bundle. The private half is the one that matters, and
+          # it lives only on the VPS as VAPID_PRIVATE_KEY, never here.
+          #
+          # Unset, `isPushSupported()` is false: the reminder card never
+          # renders and the calendar offers the install nudge instead. Nothing
+          # breaks, so the step above says so out loud.
+          VITE_VAPID_PUBLIC_KEY: ${{ env.VAPID_PUBLIC_KEY }}
+
+      # Rewrites the built bundles in place to carry a chunk ID, then uploads
+      # the .map files to PostHog and deletes them. It must run between the
+      # build and the Pages upload: the *injected* bundles are what has to ship,
+      # because PostHog matches a stack trace to its map by that chunk ID.
+      - name: Upload source maps to PostHog
+        if: ${{ env.POSTHOG_CLI_API_KEY != '' }}
+        uses: PostHog/upload-source-maps@v2
+        with:
+          directory: dist
+          api-key: ${{ env.POSTHOG_CLI_API_KEY }}
+          project-id: '263292'
+          # This project lives on EU cloud; the input wants the app host, not
+          # the ingestion host that VITE_POSTHOG_HOST points at.
+          host: https://eu.posthog.com
+          release-version: ${{ env.DEPLOY_SHA }}
+          delete-after-upload: 'true'
+
+      # Safety net: source maps must never reach GitHub Pages, which serves the
+      # artifact publicly. delete-after-upload already removes them, but this
+      # also covers the path where the step above was skipped for a missing key.
+      - name: Strip any remaining source maps
+        run: find dist -name '*.map' -type f -print -delete
+
+      # A Pages deploy publishes a full snapshot, so it *deletes* the previous
+      # build's hashed chunks. A tab that booted on the old build then asks for
+      # a file nothing serves any more and `import()` rejects — five sessions
+      # hit that between 2026-09-14 and 2026-09-20. This downloads the last two
+      # builds' assets from the live site and ships them again inside the new
+      # artifact, so those tabs keep working instead of needing a reload.
+      #
+      # After the source-map steps deliberately: carried files already carry
+      # the chunk IDs of the deploy that built them, and their maps were
+      # uploaded then. Re-injecting them would break the stack traces PostHog
+      # matches by those IDs.
+      #
+      # Never fails the deploy. An unreachable site or a missing file is a
+      # warning, and the build ships with whatever was reachable.
+      - name: Carry the previous deploys' assets
+        run: node scripts/carry-previous-assets.js dist
+        env:
+          DEPLOY_ORIGIN: https://app.kikouchou.app
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
