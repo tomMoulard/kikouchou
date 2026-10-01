@@ -935,7 +935,15 @@ export async function syncDocToDexie(
         db.expenses,
       ],
       async () => {
-        await db.trips.put(nextTrip);
+        // Rebuilt from the row as it is now, not as it was read above. The
+        // device-local fields (`remoteTripId`, `viewerToken`) come from that
+        // row, and the first upload links the trip while a projection can be
+        // running: writing the earlier copy dropped the link, so the next sweep
+        // inserted the trip again and pulled down a second local copy of it.
+        const latest = await db.trips.get(tripId);
+        await db.trips.put(
+          latest === undefined ? nextTrip : (buildTripRecord(doc, tripId, latest) ?? nextTrip),
+        );
 
         const currentGuests = await db.persons.where('tripId').equals(tripId).toArray();
         // Read through the plain `tripId` index (schema 12), not the compound
