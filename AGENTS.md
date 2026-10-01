@@ -261,7 +261,9 @@ How the seed behaves, and why:
   sample, and a deleted sample never comes back.
 - **It stays on the device.** `settings.sampleTripId` names it. The account
   sweep skips it, and `ensureRemoteTrip` refuses it, so it is never uploaded or
-  shared. For the same reason it has no guest group: a group is synced with the
+  shared. `AccountTripSync` still counts it as pending, which costs one sweep
+  that uploads nothing. Do not add a settings read to that live query: it made
+  `trip-sharing-sync.spec.ts` fail twice as often under load. For the same reason it has no guest group: a group is synced with the
   account.
 - **It is not the user's own trip.** `TripsEntryRedirect` does not count it, so
   a first open still goes to the create form and the first-trip wizard
