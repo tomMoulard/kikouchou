@@ -150,14 +150,24 @@ function Tail({ species, look }: { readonly species: PetSpecies; readonly look: 
         </>
       );
     case 'papillon':
+      // A plume, not a blade: long locks fan out from the base and fall away.
       return (
-        <path
-          d="M34 78 C18 77 9 63 15 49 C21 56 26 64 37 69 Z"
-          fill={look.fur}
-          stroke={OUTLINE}
-          strokeWidth={2}
-          strokeLinejoin="round"
-        />
+        <>
+          <path
+            d="M36 74 C28 70 24 60 26 47 C22 45 17 44 13 46 C16 48 18 50 17 53 C12 51 7 52 4 55 C8 56 11 58 11 61 C7 62 3 65 2 69 C6 69 10 70 12 72 C9 74 7 77 7 81 C12 78 18 78 22 79 C23 81 24 83 26 85 C29 81 32 79 36 78 Z"
+            fill={look.fur}
+            stroke={OUTLINE}
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+          <path
+            d="M32 70 C26 66 23 59 22 52 M30 73 C23 70 17 64 13 58 M30 76 C24 75 17 73 11 70 M31 78 C27 79 23 80 19 80"
+            fill="none"
+            stroke="#E2D6C6"
+            strokeWidth={1.3}
+            strokeLinecap="round"
+          />
+        </>
       );
     case 'beaver':
       return (
@@ -188,17 +198,28 @@ function Ear({ species, look }: { readonly species: PetSpecies; readonly look: L
         </>
       );
     case 'papillon':
+      // Large, upright and triangular, with long fringe falling off the outer
+      // edge. The leather carries no outline on that edge, so the fringe reads
+      // as hair growing from it rather than a second shape behind it.
       return (
         <>
           <path
-            d="M37 24 C27 4 9 -1 4 13 C1 26 14 35 31 32 Z"
+            d="M12 0 C7 -1 3 1 1 5 C5 5 9 6 13 7 C8 9 4 13 3 18 C8 16 12 15 16 14 C11 18 8 23 7 28 C12 25 16 23 19 21 C15 26 13 31 13 37 C18 34 22 32 28 32 Z"
             fill={look.shade}
             stroke={OUTLINE}
             strokeWidth={2}
             strokeLinejoin="round"
           />
-          <path d="M33 26 C25 12 13 7 10 15 C8 23 17 29 29 29 Z" fill="#C98B5E" />
-          <path d="M5 11 L2 9 M3 17 L0 17 M5 24 L2 26" stroke={look.shade} strokeWidth={1.6} strokeLinecap="round" />
+          <path d="M43 19 C36 10 22 3 12 0 C13 12 18 25 28 33 Z" fill={look.shade} />
+          <path d="M43 19 C36 10 22 3 12 0" fill="none" stroke={OUTLINE} strokeWidth={2} strokeLinecap="round" />
+          <path d="M39 21 C33 14 24 9 17 6 C18 14 22 22 29 28 Z" fill="#C98B5E" />
+          <path
+            d="M13 10 C10 12 7 15 6 18 M16 17 C13 20 11 23 10 27 M20 24 C18 27 16 30 16 34"
+            fill="none"
+            stroke="#6E3D20"
+            strokeWidth={1.2}
+            strokeLinecap="round"
+          />
         </>
       );
     case 'beaver':
