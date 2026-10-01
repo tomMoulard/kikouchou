@@ -1675,6 +1675,24 @@ export interface AppSettings extends Identifiable {
    * identity and then to the claimed trip membership when this is empty.
    */
   myPersonIdByTripId?: Record<string, string>;
+
+  /**
+   * Whether this device has already decided about the sample trip.
+   *
+   * True once the first open wrote it, or once a boot found the app had run
+   * here before and declined. Never cleared, so the sample is seeded once.
+   * @see features/trips/utils/seed-sample-trip
+   */
+  sampleTripSeeded?: boolean;
+
+  /**
+   * The sample trip written on this device's first open, if it was.
+   *
+   * Device-local, like the rest of this row: it is what keeps the sample off
+   * the server and out of the first-run redirect's trip count. Stale once the
+   * user deletes the trip, which is harmless: it matches nothing.
+   */
+  sampleTripId?: TripId;
 }
 
 // ============================================================================

@@ -109,6 +109,14 @@ vi.mock('../../components/RemoteTripsSection', () => ({
   RemoteTripsSection: () => <div data-testid="remote-trips-section" />,
 }));
 
+// Stub the "plan your own trip" card down to the trips it is asked about: its
+// own rules are covered in features/trips/components/__tests__.
+vi.mock('../../components/PlanOwnTripPrompt', () => ({
+  PlanOwnTripPrompt: ({ trips }: { readonly trips: readonly Trip[] }) => (
+    <div data-testid="plan-own-trip" data-trip-ids={trips.map((trip) => trip.id).join(',')} />
+  ),
+}));
+
 const mockSetTripArchived = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@/lib/db', () => ({
@@ -152,6 +160,24 @@ describe('TripListPage', () => {
       expect(screen.getByText('trips.title')).toBeInTheDocument();
       expect(screen.getByText('Test Trip')).toBeInTheDocument();
     });
+  });
+
+  it('does not ask the "plan your own trip" card about the sample trip', () => {
+    const sample: Trip = { ...mockTrip, id: 'sample-1' as Trip['id'], name: 'Sample' };
+    vi.mocked(useTripContext).mockReturnValue({
+      trips: [mockTrip, sample],
+      sampleTripId: sample.id,
+      isLoading: false,
+      error: null,
+      currentTrip: null,
+      setCurrentTrip: mockSetCurrentTrip,
+      checkConnection: mockCheckConnection,
+    });
+
+    render(<TripListPage />, { withProviders: false });
+
+    expect(screen.getByText('Sample')).toBeInTheDocument();
+    expect(screen.getByTestId('plan-own-trip')).toHaveAttribute('data-trip-ids', 'trip-1');
   });
 
   it('renders loading state', () => {

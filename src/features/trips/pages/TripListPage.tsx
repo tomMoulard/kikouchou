@@ -64,7 +64,7 @@ const EMPTY_PERSONS_BY_TRIP: ReadonlyMap<TripId, Person[]> = new Map();
 const TripListPage = memo(function TripListPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { trips, isLoading, error, setCurrentTrip, checkConnection } =
+  const { trips, sampleTripId, isLoading, error, setCurrentTrip, checkConnection } =
     useTripContext();
 
   // Track if we're currently navigating to prevent double-clicks
@@ -113,6 +113,16 @@ const TripListPage = memo(function TripListPage() {
   const archivedTrips = useMemo(
     () => trips.filter((trip) => trip.archived === true),
     [trips],
+  );
+
+  /**
+   * The active trips without the sample trip seeded on first open. The
+   * "plan your own trip" card asks whether every trip here is a joined one,
+   * and the sample, which nobody joined, would hide it from every guest.
+   */
+  const ownActiveTrips = useMemo(
+    () => activeTrips.filter((trip) => trip.id !== sampleTripId),
+    [activeTrips, sampleTripId],
   );
 
   const [importQrOpen, setImportQrOpen] = useState(false);
@@ -441,7 +451,7 @@ const TripListPage = memo(function TripListPage() {
 
         {/* Above the view, not inside the list branch: a guest who left the
             page on the map view is the same person the invitation is for. */}
-        <PlanOwnTripPrompt trips={activeTrips} onCreateTrip={handleCreateClick} />
+        <PlanOwnTripPrompt trips={ownActiveTrips} onCreateTrip={handleCreateClick} />
 
         {/* Below the invitation to plan a trip, not above it: somebody who has
             not organised anything yet is being asked to start, and an offer to

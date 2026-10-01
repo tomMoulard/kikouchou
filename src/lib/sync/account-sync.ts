@@ -49,6 +49,7 @@
 import type { TypedSupabaseClient } from '@/lib/supabase/client';
 
 import { db } from '@/lib/db/database';
+import { getSampleTripId } from '@/lib/db/repositories/settings-repository';
 import { downloadTripDocument } from './download-document';
 import { materialiseJoinedTrip } from './join-trip';
 import { ensureRemoteTrip, listRemoteTripsMissingLocally } from './remote-trip';
@@ -189,7 +190,12 @@ async function pushLocalTrips(
   // `remoteTripId` back to Dexie, so re-reading mid-sweep would be answering a
   // different question each time.
   const local = await db.trips.toArray();
-  const neverUploaded = local.filter((trip) => trip.remoteTripId === undefined);
+  // The sample trip never leaves the device; `ensureRemoteTrip` would refuse it
+  // anyway, and counting that refusal as a failure would fail every sweep.
+  const sampleTripId = await getSampleTripId();
+  const neverUploaded = local.filter(
+    (trip) => trip.remoteTripId === undefined && trip.id !== sampleTripId,
+  );
 
   let uploaded = 0;
   let failed = 0;

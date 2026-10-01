@@ -219,11 +219,32 @@ export async function getLanguage(): Promise<Language> {
  *
  * Useful for testing or when user wants to clear preferences.
  *
+ * Keeps the sample trip fields: they are facts about this device rather than
+ * preferences, and dropping `sampleTripId` would make the sample uploadable.
+ *
  * @example
  * ```typescript
  * await resetSettings();
  * ```
  */
 export async function resetSettings(): Promise<void> {
-  await db.settings.put(DEFAULT_SETTINGS);
+  const { sampleTripSeeded, sampleTripId } = await getSettings();
+  await db.settings.put({
+    ...DEFAULT_SETTINGS,
+    ...(sampleTripSeeded !== undefined && { sampleTripSeeded }),
+    ...(sampleTripId !== undefined && { sampleTripId }),
+  });
+}
+
+/**
+ * Gets the id of the sample trip seeded on this device's first open.
+ *
+ * Read by everything that must treat the sample as not the user's own: the
+ * account sweep and `ensureRemoteTrip`, which never upload it.
+ *
+ * @returns The sample trip id, or undefined if none was seeded
+ */
+export async function getSampleTripId(): Promise<TripId | undefined> {
+  const settings = await getSettings();
+  return settings.sampleTripId;
 }

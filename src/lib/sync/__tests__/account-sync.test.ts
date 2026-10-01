@@ -27,6 +27,7 @@ import * as Y from 'yjs';
 
 import { db } from '@/lib/db/database';
 import { createTrip } from '@/lib/db/repositories/trip-repository';
+import { updateSettings } from '@/lib/db/repositories/settings-repository';
 import { syncAccountTrips } from '@/lib/sync/account-sync';
 import { populateDocFromDexie } from '@/lib/yjs/dexie-bridge';
 import { isoDate } from '@/test/utils';
@@ -329,6 +330,18 @@ describe('syncAccountTrips', () => {
 
       expect(result.uploaded).toBe(3);
       expect(server.trips).toHaveLength(3);
+    });
+
+    it('leaves the sample trip on the device, without counting it a failure', async () => {
+      const sample = await makeLocalTrip('Sample');
+      await updateSettings({ sampleTripId: sample.id });
+      await makeLocalTrip('Brittany');
+
+      const result = await syncAccountTrips(server.client, USER);
+
+      expect(result).toMatchObject({ uploaded: 1, failed: 0 });
+      expect(server.trips.some((row) => row.local_id === sample.id)).toBe(false);
+      expect((await db.trips.get(sample.id))?.remoteTripId).toBeUndefined();
     });
 
     it('carries on when one trip cannot be uploaded', async () => {

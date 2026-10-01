@@ -12,10 +12,15 @@
 import '@/lib/supabase/auth-callback';
 
 // Initialize i18n before any React components load.
-import { i18nReady } from '@/lib/i18n';
+import { getCurrentLanguage, i18nReady } from '@/lib/i18n';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+
+import {
+  seedSampleTripOnce,
+  shouldOfferSampleTrip,
+} from '@/features/trips/utils/seed-sample-trip';
 
 import { ensureSettings } from '@/lib/db';
 import '@/lib/posthog';
@@ -58,8 +63,9 @@ function getRootElement(): HTMLElement {
  *
  * Performs the following initialization steps:
  * 1. Waits for i18n to be fully initialized (prevents flash of untranslated content)
- * 2. Ensures database settings exist (required for liveQuery read-only operations)
- * 3. Renders the React application
+ * 2. Seeds the sample trip on this device's first open, in the user's language
+ * 3. Ensures database settings exist (required for liveQuery read-only operations)
+ * 4. Renders the React application
  */
 /**
  * How long to wait for the database before rendering anyway.
@@ -89,8 +95,17 @@ async function initializeApp(): Promise<void> {
     // never settles would leave the user on a blank page with no error, because
     // createRoot().render() below is never reached. Rendering slightly early is
     // safe — getSettings() falls back to defaults.
+    //
+    // The sample trip goes first: it tells a first open from a returning one by
+    // the settings row that ensureSettings() is about to create. A failed seed
+    // costs the sample and nothing else.
     await Promise.race([
-      ensureSettings(),
+      (shouldOfferSampleTrip()
+        ? seedSampleTripOnce(getCurrentLanguage()).catch((error: unknown) => {
+            console.error('Failed to seed the sample trip:', error);
+          })
+        : Promise.resolve()
+      ).then(() => ensureSettings()),
       new Promise<void>((resolve) => {
         setTimeout(resolve, DB_READY_TIMEOUT_MS);
       }),

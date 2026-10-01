@@ -240,6 +240,7 @@ export {
   setCurrentTrip,
   setLanguage,
   getCurrentTripId,
+  getSampleTripId,
   getLanguage,
   resetSettings,
 } from './repositories/settings-repository';

@@ -231,6 +231,51 @@ its `label` and field descriptions short.
 
 ---
 
+## Sample Trip: Keep It Complete
+
+The first open of the app on a device writes one sample trip, in the language
+the user reads the app in. It is the demo of what the app can do, so it must use
+every feature.
+
+**Adding or changing a trip feature, entity or field? Update the sample in the
+same change:**
+
+1. **`src/features/trips/utils/sample-trip.ts`.** Add rows or the new field to
+   `buildSampleTrip()`. Add the text to both the `en` and `fr` copy. The text is
+   data, not UI, so it lives in that file and not in the locale bundles.
+2. **New Dexie table?** Add its rows to `SampleTripRows` and write them in
+   `seed-sample-trip.ts`, inside the same transaction.
+3. **Tests.** `__tests__/sample-trip.test.ts` fails when a trip-scoped table
+   has no sample rows, when a field of a form schema has no sample value, or
+   when a value of an activity category, money kind, money category, split mode
+   or ride direction is missing. Add the data to make it pass. Use the exclusion
+   lists in that test only for a table or field that is device-local or
+   deprecated, and write the reason next to it.
+
+How the seed behaves, and why:
+
+- **It runs once per device.** `main.tsx` calls `seedSampleTripOnce()` before
+  `ensureSettings()`. A missing settings row means the first open. The decision
+  goes in `settings.sampleTripSeeded`, in the same transaction as the rows, so
+  two tabs cannot seed twice. A device that ran the app before never gets the
+  sample, and a deleted sample never comes back.
+- **It stays on the device.** `settings.sampleTripId` names it. The account
+  sweep skips it, and `ensureRemoteTrip` refuses it, so it is never uploaded or
+  shared. For the same reason it has no guest group: a group is synced with the
+  account.
+- **It is not the user's own trip.** `TripsEntryRedirect` does not count it, so
+  a first open still goes to the create form and the first-trip wizard
+  experiment keeps its traffic. The "plan your own trip" card does not count it
+  either. Read it from `useTripContext().sampleTripId`.
+- **It starts two weeks from today.** Dates are relative, so the sample does not
+  go stale, and no reminder or "leave now" notice fires for it.
+- **Automation does not get it.** `navigator.webdriver` turns the seed off, so
+  every e2e spec opens an empty app, also on the live run.
+  `e2e/sample-trip.spec.ts` sets `localStorage['kikouchou-sample-trip'] = 'on'`
+  to turn it back on.
+
+---
+
 ## Invariants — Learned The Hard Way
 
 Each rule below exists because its absence shipped a real bug. They are cheap to
@@ -361,6 +406,8 @@ Adding a **trip-scoped** Dexie table means:
    outlive the trip forever;
 2. nothing to do in `src/test/setup.ts` — it derives the list from `db.tables`.
    Keep it that way; the hand-maintained array missed two tables.
+3. add sample rows to the sample trip (see "Sample Trip: Keep It Complete"),
+   or `sample-trip.test.ts` fails.
 
 Also give every trip-scoped table a plain `tripId` index, not only a compound
 one. A row missing the compound's second component is invisible to every trip
