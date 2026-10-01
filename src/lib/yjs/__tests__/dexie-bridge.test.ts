@@ -239,6 +239,34 @@ describe('syncDocToDexie — trust boundary', () => {
     expect((await db.trips.get(trip.id))?.remoteTripId).toBe('the-real-server-row');
   });
 
+  it('keeps a remoteTripId stored while the projection was running', async () => {
+    const trip = await createTrip({
+      name: 'Shared trip',
+      startDate: isoDate('2024-08-01'),
+      endDate: isoDate('2024-08-05'),
+    });
+    const doc = makeDoc({
+      name: 'Shared trip',
+      startDate: '2024-08-01',
+      endDate: '2024-08-05',
+    });
+
+    // The first upload links the trip with `db.trips.update` while the
+    // projection is between its read of the row and its write. The read here
+    // returns the row as it was, then the link lands: exactly that interleaving.
+    const realGet = db.trips.get.bind(db.trips);
+    const get = vi.spyOn(db.trips, 'get').mockImplementationOnce((async (key: TripId) => {
+      const before = await realGet(key);
+      await db.trips.update(key, { remoteTripId: 'server-row' });
+      return before;
+    }) as never);
+
+    await syncDocToDexie(doc, trip.id);
+    get.mockRestore();
+
+    expect((await db.trips.get(trip.id))?.remoteTripId).toBe('server-row');
+  });
+
   it('does not read anything from the page URL', async () => {
     const trip = await createTrip({
       name: 'Shared trip',
