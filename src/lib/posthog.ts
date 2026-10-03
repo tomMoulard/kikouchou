@@ -302,9 +302,11 @@ export function recentForeignScripts(): string[] {
 /**
  * Which injected bridge threw this, when the frames say so.
  *
- * Meta's bridge names its functions, so a stack made only of file-less frames
- * with one of those names is Meta's. "Java object is gone" without those names
- * is still an Android webview's JavaScript interface, just not one we know.
+ * Meta's bridge names its functions, so a stack made only of file-less or
+ * `iabjs://` frames with one of those names is Meta's. `iabjs://` is the scheme
+ * Meta's in-app browser loads its own scripts from. "Java object is gone"
+ * without those names is still an Android webview's JavaScript interface, just
+ * not one we know.
  */
 function injectedBridge(list: readonly unknown[]): string | null {
   let sawJavaBridge = false;
@@ -317,15 +319,19 @@ function injectedBridge(list: readonly unknown[]): string | null {
     const frames = (entry as ExceptionListEntry).stacktrace?.frames;
     if (!Array.isArray(frames) || frames.length === 0) continue;
     // posthog-js writes `<anonymous>` for a frame the runtime gave no URL.
-    const fileless = frames.every((frame: unknown) => {
+    const metaFiles = frames.every((frame: unknown) => {
       if (typeof frame !== 'object' || frame === null) return false;
       const filename = (frame as { filename?: unknown }).filename;
-      return !filename || filename === '<anonymous>';
+      return (
+        !filename ||
+        filename === '<anonymous>' ||
+        (typeof filename === 'string' && filename.startsWith('iabjs://'))
+      );
     });
     const named = frames.some((frame: unknown) =>
       META_BRIDGE_FUNCTIONS.includes(String((frame as { function?: unknown }).function)),
     );
-    if (fileless && named) return 'meta_iab';
+    if (metaFiles && named) return 'meta_iab';
   }
   return sawJavaBridge ? 'android_webview' : null;
 }
