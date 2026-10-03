@@ -595,11 +595,6 @@ export function AuthProvider({
         await attach(resolvedClient);
       })
       .catch((error: unknown) => {
-        // A chunk that will not load — offline on a cold launch, or a stale
-        // service worker. Sign-in is unavailable; everything else is unaffected.
-        console.error('[auth] failed to load the Supabase client:', error);
-        reportError(error, { source: 'AuthContext.getSupabaseClient' });
-
         // A deploy replaces every hashed file under `assets/`, and this import
         // runs in an effect rather than in a render, so no ErrorBoundary is on
         // the stack to take the reload that recovers a lazy route chunk. Left
@@ -610,8 +605,24 @@ export function AuthProvider({
         // what makes this safe — a chunk missing from the new build too would
         // otherwise reload forever — and when it declines, the degraded state
         // below is exactly what the user gets today.
-        if (isModuleLoadError(error instanceof Error ? error : null)) {
-          reloadForStaleChunk();
+        //
+        // The reload comes before the report, as in `ErrorBoundary`: a tab the
+        // reload cures is the expected life of a PWA, not an error to file.
+        const staleChunkReload = isModuleLoadError(error instanceof Error ? error : null)
+          ? reloadForStaleChunk()
+          : null;
+
+        // A chunk that will not load — offline on a cold launch, or a stale
+        // chunk the reload could not cure. Sign-in is unavailable; everything
+        // else is unaffected.
+        if (staleChunkReload !== 'reloading') {
+          console.error('[auth] failed to load the Supabase client:', error);
+          reportError(error, {
+            source: 'AuthContext.getSupabaseClient',
+            ...(staleChunkReload === null
+              ? {}
+              : { stale_chunk: true, stale_chunk_reload_declined: staleChunkReload }),
+          });
         }
 
         // Resolved means "we know the answer", not "there is a session". This

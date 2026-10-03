@@ -69,6 +69,21 @@ export const STALE_CHUNK_RELOAD_KEY = 'kikouchou:stale-chunk-reload',
 // ============================================================================
 
 /**
+ * Why {@link reloadForStaleChunk} held the reload back.
+ *
+ * Sent with the report, so an event that reaches error tracking says which
+ * guard stopped the reload: `cooldown` is the broken-deploy case the guard
+ * exists for, the other two are a browser that keeps no session storage.
+ */
+export type StaleChunkReloadDecline = 'cooldown' | 'no-storage' | 'storage-error';
+
+/**
+ * What {@link reloadForStaleChunk} did. `reloading` covers a reload this call
+ * started and one an earlier call in the same document already started.
+ */
+export type StaleChunkReloadOutcome = 'reloading' | StaleChunkReloadDecline;
+
+/**
  * The environment {@link reloadForStaleChunk} touches, injectable for tests.
  */
 export interface StaleChunkReloadDeps {
@@ -101,22 +116,43 @@ export function isModuleLoadError(error: Error | null | undefined): boolean {
  *
  * Declining is the safe answer, so every reason to doubt the guard — no
  * session storage, a store that throws, a reload recorded a moment ago —
- * returns false and leaves the caller's fallback UI on screen.
+ * returns the reason and leaves the caller's fallback UI on screen.
+ *
+ * A second call while this document's own reload is under way answers
+ * `reloading`, not `cooldown`. One failed chunk often reaches more than one
+ * catch: every `TripCard` wraps its lazy map preview in a boundary of its own,
+ * so a trip list with several cards fails the same import several times in
+ * one commit. The first catch starts the reload and records it; the others
+ * used to find that record, read it as a reload that had not cured the tab,
+ * and report the stale chunk while the tab was already reloading. The mark
+ * is held in memory, so it dies with the document: after the reload, a
+ * chunk that is still missing finds only the stored record and gets
+ * `cooldown`. It also lapses with the cooldown, because a `beforeunload`
+ * prompt can cancel the reload and keep this document alive.
  *
  * @param deps - Overrides for the environment, for tests
- * @returns True when a reload was started
+ * @returns `reloading` when a reload was started, or why it was not
  */
-export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
-  const storage = 'storage' in deps ? deps.storage : sessionStorageOrUndefined();
-  if (!storage) return false;
-
+export function reloadForStaleChunk(
+  deps: StaleChunkReloadDeps = {},
+): StaleChunkReloadOutcome {
   const now = deps.now ? deps.now() : Date.now();
+
+  if (
+    reloadStartedAt !== null &&
+    Math.abs(now - reloadStartedAt) < STALE_CHUNK_RELOAD_COOLDOWN_MS
+  ) {
+    return 'reloading';
+  }
+
+  const storage = 'storage' in deps ? deps.storage : sessionStorageOrUndefined();
+  if (!storage) return 'no-storage';
 
   let previous: string | null;
   try {
     previous = storage.getItem(STALE_CHUNK_RELOAD_KEY);
   } catch {
-    return false;
+    return 'storage-error';
   }
 
   if (previous !== null) {
@@ -124,7 +160,7 @@ export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
     // `Math.abs` rather than `now - at`: a clock that has gone backwards since
     // the record was written must still hold the reload, not free it.
     if (Number.isFinite(at) && Math.abs(now - at) < STALE_CHUNK_RELOAD_COOLDOWN_MS) {
-      return false;
+      return 'cooldown';
     }
   }
 
@@ -133,15 +169,26 @@ export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
   } catch {
     // Without a record there is no guard, and without a guard a reload can
     // loop. An error screen is the better failure.
-    return false;
+    return 'storage-error';
   }
 
+  reloadStartedAt = now;
   if (deps.reload) {
     deps.reload();
   } else {
     window.location.reload();
   }
-  return true;
+  return 'reloading';
+}
+
+/**
+ * Forgets the reload this document started, so each test starts clean.
+ * Not for production paths.
+ *
+ * @internal
+ */
+export function resetStaleChunkReloadForTests(): void {
+  reloadStartedAt = null;
 }
 
 /**
@@ -167,6 +214,9 @@ export function logCaughtError(
 // ============================================================================
 // Internals
 // ============================================================================
+
+/** When this document started its reload, or null when it has not. */
+let reloadStartedAt: number | null = null;
 
 /**
  * `sessionStorage`, or undefined where reading it is not allowed.

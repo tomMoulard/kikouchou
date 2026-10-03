@@ -10,7 +10,7 @@
  * @module lib/pwa/__tests__/stale-chunk.test
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   STALE_CHUNK_RELOAD_COOLDOWN_MS,
@@ -18,6 +18,7 @@ import {
   isModuleLoadError,
   logCaughtError,
   reloadForStaleChunk,
+  resetStaleChunkReloadForTests,
 } from '@/lib/pwa/stale-chunk';
 
 // ============================================================================
@@ -101,6 +102,10 @@ describe('isModuleLoadError', () => {
 });
 
 describe('reloadForStaleChunk', () => {
+  beforeEach(() => {
+    resetStaleChunkReloadForTests();
+  });
+
   it('reloads and records when the tab has not reloaded yet', () => {
     const entries = new Map<string, string>(),
       reload = vi.fn();
@@ -111,7 +116,7 @@ describe('reloadForStaleChunk', () => {
       reload,
     });
 
-    expect(reloaded).toBe(true);
+    expect(reloaded).toBe('reloading');
     expect(reload).toHaveBeenCalledTimes(1);
     expect(entries.get(STALE_CHUNK_RELOAD_KEY)).toBe('1000');
   });
@@ -126,7 +131,7 @@ describe('reloadForStaleChunk', () => {
       reload,
     });
 
-    expect(reloaded).toBe(false);
+    expect(reloaded).toBe('cooldown');
     expect(reload).not.toHaveBeenCalled();
   });
 
@@ -140,7 +145,7 @@ describe('reloadForStaleChunk', () => {
       reload,
     });
 
-    expect(reloaded).toBe(true);
+    expect(reloaded).toBe('reloading');
     expect(reload).toHaveBeenCalledTimes(1);
     expect(entries.get(STALE_CHUNK_RELOAD_KEY)).toBe(
       String(1_000 + STALE_CHUNK_RELOAD_COOLDOWN_MS),
@@ -157,7 +162,7 @@ describe('reloadForStaleChunk', () => {
       reload,
     });
 
-    expect(reloaded).toBe(false);
+    expect(reloaded).toBe('cooldown');
     expect(reload).not.toHaveBeenCalled();
   });
 
@@ -170,7 +175,7 @@ describe('reloadForStaleChunk', () => {
       reload,
     });
 
-    expect(reloaded).toBe(false);
+    expect(reloaded).toBe('storage-error');
     expect(reload).not.toHaveBeenCalled();
   });
 
@@ -183,7 +188,7 @@ describe('reloadForStaleChunk', () => {
       reload,
     });
 
-    expect(reloaded).toBe(false);
+    expect(reloaded).toBe('no-storage');
     expect(reload).not.toHaveBeenCalled();
   });
 
@@ -197,8 +202,54 @@ describe('reloadForStaleChunk', () => {
         now: () => 1_000,
         reload,
       }),
-    ).toBe(true);
+    ).toBe('reloading');
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The 2026-10-03 report: a trip list where every card wraps its lazy map
+   * preview in its own boundary. The first card started the reload, and the
+   * next one found that reload's record and filed the stale chunk as if a
+   * reload had failed to cure it.
+   */
+  it('answers reloading to a second catch while its own reload is under way', () => {
+    const entries = new Map<string, string>(),
+      reload = vi.fn(),
+      deps = { storage: fakeStorage(entries), now: () => 1_000, reload };
+
+    expect(reloadForStaleChunk(deps)).toBe('reloading');
+    expect(reloadForStaleChunk(deps)).toBe('reloading');
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('still holds back the reload in the next document', () => {
+    const entries = new Map<string, string>(),
+      reload = vi.fn();
+
+    reloadForStaleChunk({ storage: fakeStorage(entries), now: () => 1_000, reload });
+    resetStaleChunkReloadForTests();
+
+    expect(
+      reloadForStaleChunk({ storage: fakeStorage(entries), now: () => 2_000, reload }),
+    ).toBe('cooldown');
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  // A `beforeunload` prompt can cancel the reload, and the document lives on.
+  it('reloads again once a reload that never happened is a cooldown old', () => {
+    const entries = new Map<string, string>(),
+      reload = vi.fn();
+
+    reloadForStaleChunk({ storage: fakeStorage(entries), now: () => 1_000, reload });
+
+    expect(
+      reloadForStaleChunk({
+        storage: fakeStorage(entries),
+        now: () => 1_000 + STALE_CHUNK_RELOAD_COOLDOWN_MS,
+        reload,
+      }),
+    ).toBe('reloading');
+    expect(reload).toHaveBeenCalledTimes(2);
   });
 });
 
