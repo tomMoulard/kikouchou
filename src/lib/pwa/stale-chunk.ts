@@ -69,19 +69,14 @@ export const STALE_CHUNK_RELOAD_KEY = 'kikouchou:stale-chunk-reload',
 // ============================================================================
 
 /**
- * Why {@link reloadForStaleChunk} held the reload back.
- *
- * Sent with the report, so an event that reaches error tracking says which
- * guard stopped the reload: `cooldown` is the broken-deploy case the guard
- * exists for, the other two are a browser that keeps no session storage.
- */
-export type StaleChunkReloadDecline = 'cooldown' | 'no-storage' | 'storage-error';
-
-/**
  * What {@link reloadForStaleChunk} did. `reloading` covers a reload this call
  * started and one an earlier call in the same document already started.
+ *
+ * Every other value is why the reload was held back, and goes out with the
+ * report: `cooldown` is the broken-deploy case the guard exists for, the other
+ * two are a browser that keeps no session storage.
  */
-export type StaleChunkReloadOutcome = 'reloading' | StaleChunkReloadDecline;
+export type StaleChunkReloadOutcome = 'reloading' | 'cooldown' | 'no-storage' | 'storage-error';
 
 /**
  * The environment {@link reloadForStaleChunk} touches, injectable for tests.
