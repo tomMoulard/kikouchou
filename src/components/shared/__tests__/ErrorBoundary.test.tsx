@@ -28,7 +28,7 @@ import { reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
 // errors a reload can actually fix.
 vi.mock('@/lib/pwa/stale-chunk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/pwa/stale-chunk')>();
-  return { ...actual, reloadForStaleChunk: vi.fn(() => true) };
+  return { ...actual, reloadForStaleChunk: vi.fn(() => 'reloading' as const) };
 });
 
 vi.mock('@/lib/posthog', async (importOriginal) => {
@@ -188,7 +188,7 @@ describe('ErrorBoundary', () => {
   describe('Stale chunk recovery', () => {
     beforeEach(() => {
       reloadMock.mockClear();
-      reloadMock.mockReturnValue(true);
+      reloadMock.mockReturnValue('reloading');
       reportMock.mockClear();
     });
 
@@ -209,7 +209,7 @@ describe('ErrorBoundary', () => {
     // The guard holding the reload back means one reload already failed to
     // fix it: a chunk missing from the new build too, which is a bad deploy.
     it('reports a stale chunk the reload did not cure', () => {
-      reloadMock.mockReturnValue(false);
+      reloadMock.mockReturnValue('cooldown');
 
       render(
         <ErrorBoundary>
@@ -221,7 +221,27 @@ describe('ErrorBoundary', () => {
       expect(reportMock).toHaveBeenCalledTimes(1);
       expect(reportMock).toHaveBeenCalledWith(
         expect.objectContaining({ message: STALE_CHUNK_MESSAGE }),
-        expect.objectContaining({ source: 'ErrorBoundary', stale_chunk: true })
+        expect.objectContaining({
+          source: 'ErrorBoundary',
+          stale_chunk: true,
+          stale_chunk_reload_declined: 'cooldown',
+        })
+      );
+    });
+
+    it('names a store that kept the reload from starting', () => {
+      reloadMock.mockReturnValue('no-storage');
+
+      render(
+        <ErrorBoundary>
+          <ThrowingComponent message={STALE_CHUNK_MESSAGE} />
+        </ErrorBoundary>,
+        { withProviders: false }
+      );
+
+      expect(reportMock.mock.calls[0]?.[1]).toHaveProperty(
+        'stale_chunk_reload_declined',
+        'no-storage'
       );
     });
 
@@ -260,7 +280,7 @@ describe('ErrorBoundary', () => {
     });
 
     it('keeps the fallback on screen when the reload is held back', () => {
-      reloadMock.mockReturnValue(false);
+      reloadMock.mockReturnValue('cooldown');
 
       render(
         <ErrorBoundary>

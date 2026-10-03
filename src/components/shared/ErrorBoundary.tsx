@@ -164,9 +164,10 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
     // PWA, and reporting it filled error tracking with an issue nobody could
     // act on (PostHog `01a0a104-252e-7b53-8c95-eb0341c6f733`). A broken deploy
     // still reaches it, because its chunk is missing after the reload too, and
-    // the second failure finds the guard set.
-    const isStaleChunk = isModuleLoadError(error);
-    if (isStaleChunk && reloadForStaleChunk()) {
+    // the second failure finds the guard set. A reload that another catch in
+    // this document already started is not reported either.
+    const staleChunkReload = isModuleLoadError(error) ? reloadForStaleChunk() : null;
+    if (staleChunkReload === 'reloading') {
       return;
     }
 
@@ -179,7 +180,9 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
     reportError(error, {
       source: 'ErrorBoundary',
       component_stack: errorInfo.componentStack ?? undefined,
-      ...(isStaleChunk ? { stale_chunk: true } : {}),
+      ...(staleChunkReload === null
+        ? {}
+        : { stale_chunk: true, stale_chunk_reload_declined: staleChunkReload }),
     });
   }
 
