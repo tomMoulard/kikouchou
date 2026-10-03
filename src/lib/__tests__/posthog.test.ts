@@ -691,6 +691,27 @@ describe('exceptionDebugContext', () => {
     expect(context['injected_bridge']).toBe('meta_iab');
   });
 
+  it("names Meta's bridge from its iabjs:// frames", async () => {
+    const { exceptionDebugContext } = await importPosthog();
+    const filename = 'iabjs://navigation_performance_logger_android';
+
+    // The frames that reach error tracking carry this file, not `<anonymous>`.
+    const context = exceptionDebugContext([
+      {
+        type: 'Error',
+        value: 'Error invoking postMessage: Java object is gone',
+        stacktrace: {
+          frames: [
+            { function: 'sendDataToNative', filename, lineno: 1, colno: 1 },
+            { function: 'sendJsBlockingTimeMessage', filename, lineno: 1, colno: 1 },
+          ],
+        },
+      },
+    ]);
+
+    expect(context['injected_bridge']).toBe('meta_iab');
+  });
+
   it('calls an unnamed Java bridge an Android webview', async () => {
     const { exceptionDebugContext } = await importPosthog();
 
