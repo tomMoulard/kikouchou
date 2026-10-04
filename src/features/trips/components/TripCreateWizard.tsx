@@ -43,6 +43,7 @@ import { ShareDialog } from '@/features/sharing/components/ShareDialog';
 import { useToday } from '@/hooks/useToday';
 import { MAX_LENGTHS } from '@/lib/db/sanitize';
 import { announceStatus } from '@/lib/notifications';
+import { pushDataLayerEvent } from '@/lib/google-tag';
 import { captureEvent, captureUsage } from '@/lib/posthog';
 import { cn } from '@/lib/utils';
 import { DEFAULT_ROOM_ICON } from '@/types';
@@ -294,6 +295,13 @@ export const TripCreateWizard = memo(function TripCreateWizard({
         imported_rooms: outcome.counts.importedRooms,
         guest_count: outcome.counts.guests,
         imported_guests: outcome.counts.importedGuests,
+        room_count: outcome.counts.rooms,
+      });
+      // The conversion Google Ads optimises against, through a GTM trigger.
+      // Counts and the enum only, like every other Google tag event.
+      pushDataLayerEvent('trip_created', {
+        via: prefill === undefined ? 'wizard' : 'template',
+        guest_count: outcome.counts.guests,
         room_count: outcome.counts.rooms,
       });
       announceStatus(
