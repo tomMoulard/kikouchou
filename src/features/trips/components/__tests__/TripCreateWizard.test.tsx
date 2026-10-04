@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 
 import { TripCreateWizard } from '../TripCreateWizard';
 import { createTripWithDetails } from '../../lib/create-trip-with-details';
+import { pushDataLayerEvent } from '@/lib/google-tag';
 import { announceStatus } from '@/lib/notifications';
 import { captureEvent, captureUsage } from '@/lib/posthog';
 
@@ -89,6 +90,7 @@ vi.mock('canvas-confetti', () => ({ default: (...args: unknown[]) => confetti(..
 
 vi.mock('../../lib/create-trip-with-details', () => ({ createTripWithDetails: vi.fn() }));
 vi.mock('@/lib/notifications', () => ({ announceStatus: vi.fn() }));
+vi.mock('@/lib/google-tag', () => ({ pushDataLayerEvent: vi.fn() }));
 // One spy behind both shapes — see `TripLinkPage.test.tsx`.
 vi.mock('@/lib/posthog', () => {
   const capture = vi.fn();
@@ -258,6 +260,10 @@ describe('TripCreateWizard', () => {
     });
     expect(await screen.findByTestId('trip-wizard-done')).toHaveTextContent('Lake house is ready');
     expect(vi.mocked(captureUsage)).toHaveBeenCalledWith(
+      'trip_created',
+      expect.objectContaining({ via: 'wizard' }),
+    );
+    expect(vi.mocked(pushDataLayerEvent)).toHaveBeenCalledWith(
       'trip_created',
       expect.objectContaining({ via: 'wizard' }),
     );
@@ -477,6 +483,10 @@ describe('TripCreateWizard', () => {
 
       await waitFor(() => {
         expect(vi.mocked(captureUsage)).toHaveBeenCalledWith(
+          'trip_created',
+          expect.objectContaining({ via: 'template' }),
+        );
+        expect(vi.mocked(pushDataLayerEvent)).toHaveBeenCalledWith(
           'trip_created',
           expect.objectContaining({ via: 'template' }),
         );

@@ -37,6 +37,7 @@ import {
   type GuestGroupSelection,
 } from '@/features/guest-groups';
 import { setCurrentTrip } from '@/lib/db';
+import { pushDataLayerEvent } from '@/lib/google-tag';
 import { captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
@@ -252,6 +253,13 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
         imported_rooms: outcome.counts.importedRooms,
         guest_count: outcome.counts.guests,
         imported_guests: outcome.counts.importedGuests,
+        room_count: outcome.counts.rooms,
+      });
+      // The conversion Google Ads optimises against, through a GTM trigger.
+      // Counts and the enum only, like every other Google tag event.
+      pushDataLayerEvent('trip_created', {
+        via: 'form',
+        guest_count: outcome.counts.guests,
         room_count: outcome.counts.rooms,
       });
 

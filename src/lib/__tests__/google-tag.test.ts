@@ -215,14 +215,68 @@ describe('lib/google-tag', () => {
     ]);
   });
 
+  it('pushes a custom event a GTM trigger can match', async () => {
+    withTags();
+    onDeployedHost();
+
+    const { pushDataLayerEvent } = await importGoogleTag();
+    pushDataLayerEvent('trip_created', { via: 'form', guest_count: 3 });
+
+    // A plain object with `event`, not a `gtag()` push: a GTM Custom Event
+    // trigger reads only the former.
+    expect(dataLayerEntries().at(-1)).toEqual({
+      event: 'trip_created',
+      via: 'form',
+      guest_count: 3,
+    });
+  });
+
+  it('keeps the event name when a parameter is called `event`', async () => {
+    withTags();
+    onDeployedHost();
+
+    const { pushDataLayerEvent } = await importGoogleTag();
+    pushDataLayerEvent('trip_created', { event: 'something_else' });
+
+    expect(dataLayerEntries().at(-1)).toEqual({ event: 'trip_created' });
+  });
+
+  it('pushes no custom event on a dev host', async () => {
+    withTags();
+    const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    const { pushDataLayerEvent } = await importGoogleTag();
+    pushDataLayerEvent('trip_created');
+
+    // A trip created on `bun run dev` must not count as a conversion.
+    expect(window.dataLayer).toBeUndefined();
+    consoleInfo.mockRestore();
+  });
+
+  it('pushes no custom event without a container', async () => {
+    vi.stubEnv('VITE_GOOGLE_ADS_ID', 'AW-18455477906');
+    onDeployedHost();
+
+    const { pushDataLayerEvent } = await importGoogleTag();
+    const before = dataLayerEntries().length;
+    pushDataLayerEvent('trip_created');
+
+    expect(dataLayerEntries()).toHaveLength(before);
+  });
+
   it('swallows every call when the tags are off, rather than throwing', async () => {
     // `main.tsx` imports this at bootstrap and call sites do not check, so a
     // throw here would blank the app over a lost ad event.
-    const { trackGoogleTagEvent, reportGoogleAdsConversion, reportGoogleAdsInstallConversion } =
-      await importGoogleTag();
+    const {
+      trackGoogleTagEvent,
+      reportGoogleAdsConversion,
+      reportGoogleAdsInstallConversion,
+      pushDataLayerEvent,
+    } = await importGoogleTag();
 
     expect(() => {
       trackGoogleTagEvent('page_view');
+      pushDataLayerEvent('trip_created');
       reportGoogleAdsConversion({ send_to: 'AW-1/abc' });
       reportGoogleAdsInstallConversion();
     }).not.toThrow();

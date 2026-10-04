@@ -186,6 +186,9 @@ function loadAdsTag(id: string): Gtag {
  */
 let gtagClient: Gtag | undefined;
 
+/** Whether the GTM container loaded, so a `dataLayer` event has a reader. */
+let containerLoaded = false;
+
 if (!containerId && !adsId) {
   if (import.meta.env.DEV && !import.meta.env.VITEST) {
     console.warn(
@@ -206,6 +209,7 @@ if (!containerId && !adsId) {
   // share `dataLayer`.
   if (containerId) {
     loadContainer(containerId);
+    containerLoaded = true;
   }
   if (adsId) {
     gtagClient = loadAdsTag(adsId);
@@ -227,6 +231,28 @@ export function trackGoogleTagEvent(
   parameters?: Readonly<Record<string, unknown>>,
 ): void {
   gtagClient?.('event', event, parameters);
+}
+
+/**
+ * Pushes one custom event onto `dataLayer`, for a trigger in the GTM container.
+ *
+ * A plain object with an `event` key, not a `gtag('event', …)` call: a GTM
+ * "Custom Event" trigger reads only the former, and a `gtag()` push is an
+ * `Arguments` object it does not match against. What the container then does
+ * with the event (a Google Ads conversion, for example) is configured in the
+ * GTM UI.
+ *
+ * A no-op when the container is off. `event` is written last so a parameter
+ * cannot replace it.
+ */
+export function pushDataLayerEvent(
+  event: string,
+  parameters?: Readonly<Record<string, unknown>>,
+): void {
+  if (!containerLoaded) {
+    return;
+  }
+  window.dataLayer?.push({ ...parameters, event });
 }
 
 /**

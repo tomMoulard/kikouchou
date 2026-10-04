@@ -998,6 +998,12 @@ share `dataLayer`. Same contract as `lib/meta-pixel`: guarded by
   access is part of this app's security boundary — which is why the Ads tag is
   configured in code beside it rather than inside it, and why a leak onto a dev
   server matters more here than for the other two trackers.
+- **A trip creation goes to the container, not to the Ads tag.** Both
+  creation paths (`TripCreatePage` and `TripCreateWizard`) call
+  `pushDataLayerEvent('trip_created', …)` beside PostHog's `trip_created`, with
+  `via`, `guest_count` and `room_count`. It is a plain `{ event }` object,
+  because a GTM Custom Event trigger does not match a `gtag()` push. The Google
+  Ads conversion that reads it is configured in the GTM UI.
 - **A conversion is a whole `send_to`**, `AW-…/<label>`, never an account and a
   label joined at the call site. A half-built identifier fails silently in an
   ad platform.

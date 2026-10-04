@@ -60,6 +60,11 @@ vi.mock('@/features/trips/components/TripCreateWizard', () => ({
   TripCreateWizard: () => <div data-testid="trip-wizard">wizard</div>,
 }));
 
+const mockPushDataLayerEvent = vi.fn();
+vi.mock('@/lib/google-tag', () => ({
+  pushDataLayerEvent: (...args: unknown[]) => mockPushDataLayerEvent(...args),
+}));
+
 const mockErrorToast = vi.fn();
 
 vi.mock('sonner', () => ({ toast: { error: (...args: unknown[]) => mockErrorToast(...args) } }));
@@ -200,6 +205,23 @@ describe('TripCreatePage', () => {
     // Through the offline-aware helper, like every other entity: a trip
     // created offline must not claim a success the network never saw.
     expect(mockSuccessToast).toHaveBeenCalledWith('trips.created');
+  });
+
+  it('hands the creation to the GTM container, with counts only', async () => {
+    const { userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    render(<TripCreatePage />, { withProviders: false });
+
+    await user.click(screen.getByTestId('guests-btn'));
+    await user.click(screen.getByTestId('submit-btn'));
+
+    // The conversion Google Ads optimises against. No trip name goes to an
+    // ad network.
+    expect(mockPushDataLayerEvent).toHaveBeenCalledWith('trip_created', {
+      via: 'form',
+      guest_count: 2,
+      room_count: 0,
+    });
   });
 
   it('clones rooms when import source is set', async () => {
