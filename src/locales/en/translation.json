@@ -1456,6 +1456,11 @@
         "description": "Largest preset with the strongest reasoning quality in this app.",
         "hint": "Needs a stronger WebGPU-capable device, and it is the biggest download of the three."
       },
+      "cloud-auto": {
+        "name": "Auto (cloud)",
+        "description": "OpenRouter picks a model for each question, among low-cost ones.",
+        "hint": "Works on any device with a connection. The model, and its company, can change from one answer to the next."
+      },
       "cloud-claude-haiku": {
         "name": "Claude Haiku (cloud)",
         "description": "Fast and low cost. Runs at Anthropic through your OpenRouter account.",

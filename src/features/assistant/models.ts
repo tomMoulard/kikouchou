@@ -146,9 +146,11 @@ export const DEFAULT_ASSISTANT_MODEL_ID: AssistantModelId = 'gemma-4-e2b';
  *   last in capability: it performs actions and never answers in words.
  * - The cloud presets come last. They download nothing and run on any device,
  *   which is the point: a phone that cannot run Gemma can still use the
- *   assistant. Cheapest first. The slugs are pinned versions rather than
- *   OpenRouter's `~…-latest` aliases, so an answer does not change model under
- *   the user without a release here.
+ *   assistant. The Auto Router first, then the pinned models cheapest first.
+ *   Those slugs are pinned versions rather than OpenRouter's `~…-latest`
+ *   aliases, so an answer does not change model under the user without a
+ *   release here. The Auto Router is the one deliberate exception: choosing it
+ *   is choosing to let OpenRouter pick.
  */
 export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
   {
@@ -253,6 +255,24 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
     fallbackName: 'Best quality',
     fallbackDescription: 'Largest preset with the strongest reasoning quality in this app.',
     fallbackHint: 'Needs a stronger WebGPU-capable device and the biggest download.',
+  },
+  {
+    id: 'cloud-auto',
+    engine: 'openrouter',
+    cacheName: NO_CACHE,
+    // OpenRouter's Auto Router: it classifies each prompt and sends it to the
+    // model the market spends most on for that kind of task. With no
+    // `cost_tier` in the request it routes in the `low` band, which suits a
+    // trip question and keeps the user's bill small. The model can change from
+    // one turn to the next, and so can the vendor that receives the trip.
+    modelId: 'openrouter/auto',
+    approxDownloadBytes: 0,
+    nameKey: 'assistant.models.cloud-auto.name',
+    descriptionKey: 'assistant.models.cloud-auto.description',
+    hintKey: 'assistant.models.cloud-auto.hint',
+    fallbackName: 'Auto (cloud)',
+    fallbackDescription: 'OpenRouter picks a model for each question, among low-cost ones.',
+    fallbackHint: 'Works on any device with a connection. The model, and its company, can change from one answer to the next.',
   },
   {
     id: 'cloud-claude-haiku',
