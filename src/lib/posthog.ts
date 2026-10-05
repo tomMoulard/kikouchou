@@ -129,6 +129,19 @@ function isOpaqueCrossOriginException(entry: ExceptionListEntry): boolean {
 const OPAQUE_EXCEPTION_FINGERPRINT = 'opaque-cross-origin-script';
 
 /**
+ * The fingerprint every exception thrown by Meta's in-app browser bridge is
+ * filed under.
+ *
+ * The computed fingerprint follows the stack, and the bridge throws from a
+ * different function each time (`sendJsBlockingTimeMessage`,
+ * `sendBeforeUnloadMessage`, `sendINPMessage`), so one cause was split into
+ * PostHog issues `01a0c807`, `01a0d4a3` and a third. Named here, they are one
+ * issue that one suppression rule can hold. The landing page uses the same
+ * constant, in `assets/analytics.js`.
+ */
+const META_BRIDGE_FINGERPRINT = 'meta-iab-bridge';
+
+/**
  * In-app browsers, by the token each one writes into the user agent.
  *
  * An in-app browser injects its own JavaScript into every page it opens, and
@@ -218,6 +231,7 @@ const META_BRIDGE_FUNCTIONS: readonly string[] = [
   'sendDataToNative',
   'sendJsBlockingTimeMessage',
   'sendINPMessage',
+  'sendBeforeUnloadMessage',
 ];
 
 /**
@@ -435,8 +449,16 @@ export function markOpaqueExceptions(event: CaptureResult | null): CaptureResult
   event.properties['foreign_script_origins'] = foreignScriptOrigins();
 
   const list: unknown = event.properties['$exception_list'];
-  Object.assign(event.properties, exceptionDebugContext(list));
+  const context = exceptionDebugContext(list);
+  Object.assign(event.properties, context);
   if (!Array.isArray(list) || list.length === 0) {
+    return event;
+  }
+  if (context['injected_bridge'] === 'meta_iab') {
+    // Not our code, and nothing on the page can stop it. Sent, so the volume
+    // stays visible, but as a warning in an issue of its own.
+    event.properties['$exception_fingerprint'] = META_BRIDGE_FINGERPRINT;
+    event.properties['$exception_level'] = 'warning';
     return event;
   }
   const everyEntryIsOpaque = list.every(
