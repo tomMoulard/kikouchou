@@ -1457,22 +1457,22 @@
         "hint": "Nécessite un appareil WebGPU plus puissant, et c'est le plus gros téléchargement des trois."
       },
       "cloud-auto": {
-        "name": "Auto (cloud)",
+        "name": "Auto",
         "description": "OpenRouter choisit un modèle pour chaque question, parmi les moins coûteux.",
         "hint": "Fonctionne sur tout appareil connecté. Le modèle, et son entreprise, peuvent changer d'une réponse à l'autre."
       },
       "cloud-claude-haiku": {
-        "name": "Claude Haiku (cloud)",
+        "name": "Claude Haiku",
         "description": "Rapide et peu coûteux. Tourne chez Anthropic via votre compte OpenRouter.",
         "hint": "Fonctionne sur tout appareil connecté. Rien à télécharger."
       },
       "cloud-claude-sonnet": {
-        "name": "Claude Sonnet (cloud)",
+        "name": "Claude Sonnet",
         "description": "Les meilleures réponses. Tourne chez Anthropic via votre compte OpenRouter.",
         "hint": "Fonctionne sur tout appareil connecté. Coûte plus cher par réponse que Haiku."
       },
       "cloud-gpt-sol": {
-        "name": "GPT Sol (cloud)",
+        "name": "GPT Sol",
         "description": "Modèle d'OpenAI. Tourne chez OpenAI via votre compte OpenRouter.",
         "hint": "Fonctionne sur tout appareil connecté. Rien à télécharger."
       }

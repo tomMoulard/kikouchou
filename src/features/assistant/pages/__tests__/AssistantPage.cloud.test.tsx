@@ -127,6 +127,22 @@ describe('AssistantPage with a cloud model', () => {
     expect(mockConnect).toHaveBeenCalledTimes(1);
   });
 
+  it('names a cloud option once, without its id, and keeps the id on a local one', async () => {
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+    const { user } = render(<AssistantPage />, { withProviders: false });
+    await screen.findByRole('button', { name: 'assistant.cloud.connect' });
+
+    await user.click(screen.getByRole('combobox', { name: 'assistant.modelLabel' }));
+
+    const auto = await screen.findByRole('option', { name: /assistant\.models\.cloud-auto\.name/ });
+    expect(auto).toHaveTextContent(/^assistant\.models\.cloud-auto\.nameassistant\.cloud\.badge$/);
+    expect(
+      screen.getByRole('option', { name: /assistant\.models\.qwen3-1-7b\.name/ }),
+    ).toHaveTextContent('(qwen3-1-7b)');
+  });
+
   it('shows why the user is back on the connect card', async () => {
     mockUseWebLLM.mockReturnValue(engine({ error: 'Your OpenRouter connection is no longer valid.' }));
 
