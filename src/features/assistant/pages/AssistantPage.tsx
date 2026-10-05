@@ -187,6 +187,19 @@ const PresetSizeLabel = memo(function PresetSizeLabel({
 });
 
 /**
+ * A preset's name in the picker. A local preset carries its id, which tells
+ * the models apart for whoever reports a bug. A cloud preset does not: its
+ * name is already the model, and the cloud badge beside it says the rest.
+ */
+function presetOptionLabel(
+  preset: AssistantModelPreset,
+  t: (key: string, fallback: string) => string,
+): string {
+  const name = t(preset.nameKey, preset.fallbackName);
+  return isCloudPreset(preset) ? name : `${name} (${preset.id})`;
+}
+
+/**
  * Compact model picker for the header when the engine is ready (replaces the full card).
  */
 const AssistantModelCompactSelect = memo(function AssistantModelCompactSelect({
@@ -220,7 +233,7 @@ const AssistantModelCompactSelect = memo(function AssistantModelCompactSelect({
         {ASSISTANT_MODEL_PRESETS.map((preset) => (
           <SelectItem key={preset.id} value={preset.id}>
             <span className="inline-flex items-center gap-1.5">
-              <span>{`${t(preset.nameKey, preset.fallbackName)} (${preset.id})`}</span>
+              <span>{presetOptionLabel(preset, t)}</span>
               {/* The size belongs next to the name: this list is where the
                   user picks what gets downloaded. */}
               <PresetSizeLabel preset={preset} />
@@ -282,7 +295,7 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
             {ASSISTANT_MODEL_PRESETS.map((preset) => (
               <SelectItem key={preset.id} value={preset.id}>
                 <span className="inline-flex items-center gap-1.5">
-                  <span>{`${t(preset.nameKey, preset.fallbackName)} (${preset.id})`}</span>
+                  <span>{presetOptionLabel(preset, t)}</span>
                   <PresetSizeLabel preset={preset} />
                   {cachedModelIds.has(preset.id) ? <CachedModelIcon /> : null}
                 </span>

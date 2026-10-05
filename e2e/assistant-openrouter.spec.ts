@@ -108,7 +108,7 @@ test.describe('Assistant on a cloud model', () => {
     await waitForRoute(page);
 
     await page.getByRole('combobox', { name: /assistant model|modèle de l'assistant/i }).click();
-    await page.getByRole('option', { name: /cloud-claude-haiku/ }).click();
+    await page.getByRole('option', { name: /^Claude Haiku/ }).click();
 
     await page.getByRole('button', { name: /connect with openrouter|se connecter avec openrouter/i }).click();
 
@@ -145,7 +145,7 @@ test.describe('Assistant on a cloud model', () => {
     await waitForRoute(page);
 
     await page.getByRole('combobox', { name: /assistant model|modèle de l'assistant/i }).click();
-    await page.getByRole('option', { name: /cloud-claude-haiku/ }).click();
+    await page.getByRole('option', { name: /^Claude Haiku/ }).click();
     await page.getByRole('button', { name: /connect with openrouter|se connecter avec openrouter/i }).click();
 
     const disconnect = page.getByRole('button', { name: /disconnect openrouter|déconnecter openrouter/i });
