@@ -221,6 +221,16 @@ const META_BRIDGE_FUNCTIONS: readonly string[] = [
 ];
 
 /**
+ * The scheme Meta's in-app browser serves its injected scripts from.
+ *
+ * The bridge frames are not file-less: posthog-js reads them as
+ * `iabjs://navigation_performance_logger_android`, so a file-less test alone
+ * never matched one, and every event of PostHog issue `01a0c807` read
+ * `injected_bridge: android_webview`.
+ */
+const META_BRIDGE_SCHEME = 'iabjs://';
+
+/**
  * The native APIs a script riding along with the page is known to wrap.
  *
  * A wrapped `navigator.serviceWorker.register` is behind PostHog issue
@@ -302,8 +312,9 @@ export function recentForeignScripts(): string[] {
 /**
  * Which injected bridge threw this, when the frames say so.
  *
- * Meta's bridge names its functions, so a stack made only of file-less frames
- * with one of those names is Meta's. "Java object is gone" without those names
+ * Meta's bridge names its functions and serves them from `iabjs://`, so a stack
+ * made only of file-less or `iabjs://` frames, with one of those names or that
+ * scheme, is Meta's. "Java object is gone" without those names
  * is still an Android webview's JavaScript interface, just not one we know.
  */
 function injectedBridge(list: readonly unknown[]): string | null {
@@ -317,15 +328,24 @@ function injectedBridge(list: readonly unknown[]): string | null {
     const frames = (entry as ExceptionListEntry).stacktrace?.frames;
     if (!Array.isArray(frames) || frames.length === 0) continue;
     // posthog-js writes `<anonymous>` for a frame the runtime gave no URL.
-    const fileless = frames.every((frame: unknown) => {
+    const foreign = frames.every((frame: unknown) => {
       if (typeof frame !== 'object' || frame === null) return false;
       const filename = (frame as { filename?: unknown }).filename;
-      return !filename || filename === '<anonymous>';
+      return (
+        !filename ||
+        filename === '<anonymous>' ||
+        (typeof filename === 'string' && filename.startsWith(META_BRIDGE_SCHEME))
+      );
     });
-    const named = frames.some((frame: unknown) =>
-      META_BRIDGE_FUNCTIONS.includes(String((frame as { function?: unknown }).function)),
-    );
-    if (fileless && named) return 'meta_iab';
+    const named = frames.some((frame: unknown) => {
+      if (typeof frame !== 'object' || frame === null) return false;
+      const { filename, function: name } = frame as { filename?: unknown; function?: unknown };
+      return (
+        (typeof filename === 'string' && filename.startsWith(META_BRIDGE_SCHEME)) ||
+        META_BRIDGE_FUNCTIONS.includes(String(name))
+      );
+    });
+    if (foreign && named) return 'meta_iab';
   }
   return sawJavaBridge ? 'android_webview' : null;
 }

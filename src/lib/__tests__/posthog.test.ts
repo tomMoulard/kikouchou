@@ -691,6 +691,62 @@ describe('exceptionDebugContext', () => {
     expect(context['injected_bridge']).toBe('meta_iab');
   });
 
+  // The live shape of 01a0c807: every frame comes from an `iabjs://` file, so
+  // the file-less test alone missed all of them.
+  it("names Meta's bridge from its iabjs:// frames", async () => {
+    const { exceptionDebugContext } = await importPosthog();
+    const filename = 'iabjs://navigation_performance_logger_android';
+
+    const context = exceptionDebugContext([
+      {
+        type: 'Error',
+        value: 'Error invoking postMessage: Java object is gone',
+        stacktrace: {
+          frames: [
+            { function: '?', filename },
+            { function: 'sendJsBlockingTimeMessage', filename },
+            { function: 'sendDataToNative', filename },
+          ],
+        },
+      },
+    ]);
+
+    expect(context['injected_bridge']).toBe('meta_iab');
+  });
+
+  it('reads past a frame that is not an object', async () => {
+    const { exceptionDebugContext } = await importPosthog();
+
+    expect(
+      exceptionDebugContext([
+        {
+          type: 'Error',
+          value: 'Error invoking postMessage: Java object is gone',
+          stacktrace: { frames: [null, { function: 'sendDataToNative' }] },
+        },
+      ])['injected_bridge'],
+    ).toBe('android_webview');
+  });
+
+  it("does not call a stack that holds one of our files Meta's", async () => {
+    const { exceptionDebugContext } = await importPosthog();
+
+    expect(
+      exceptionDebugContext([
+        {
+          type: 'Error',
+          value: 'boom',
+          stacktrace: {
+            frames: [
+              SOME_FRAME,
+              { function: 'sendDataToNative', filename: 'iabjs://navigation_performance_logger_android' },
+            ],
+          },
+        },
+      ])['injected_bridge'],
+    ).toBeNull();
+  });
+
   it('calls an unnamed Java bridge an Android webview', async () => {
     const { exceptionDebugContext } = await importPosthog();
 
