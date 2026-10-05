@@ -279,27 +279,13 @@ describe('TripContext', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      await expect(
-        act(async () => {
-          await result.current.setCurrentTrip('nonexistent_trip_id');
-        })
-      ).rejects.toThrow('Trip with ID "nonexistent_trip_id" not found');
-    });
-
-    it('rejects with a TripNotFoundError, so a trip page can tell it apart', async () => {
-      const { result } = renderHook(() => useTripContext(), {
-        wrapper: TripContextWrapper,
+      const rejection = act(async () => {
+        await result.current.setCurrentTrip('nonexistent_trip_id');
       });
 
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      await expect(
-        act(async () => {
-          await result.current.setCurrentTrip('nonexistent_trip_id');
-        })
-      ).rejects.toBeInstanceOf(TripNotFoundError);
+      // A typed error, so a trip page can tell a missing trip from a failure.
+      await expect(rejection).rejects.toBeInstanceOf(TripNotFoundError);
+      await expect(rejection).rejects.toThrow('Trip with ID "nonexistent_trip_id" not found');
     });
 
     it('sets error state when setCurrentTrip fails', async () => {

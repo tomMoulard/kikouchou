@@ -12,13 +12,23 @@
  * @module features/trips/components/TripNotOnDeviceState
  */
 
-import { type ReactElement, memo, useCallback, useState } from 'react';
+import { type ReactElement, Suspense, lazy, memo, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Smartphone } from 'lucide-react';
 
 import { EmptyState } from '@/components/shared/EmptyState';
-import { ImportTripQrDialog } from '@/features/sharing/components/ImportTripQrDialog';
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/** Loaded on the first click: the scanner has no place on every trip page. */
+const ImportTripQrDialog = lazy(() =>
+  import('@/features/sharing/components/ImportTripQrDialog').then((module) => ({
+    default: module.ImportTripQrDialog,
+  })),
+);
 
 // ============================================================================
 // Component
@@ -46,7 +56,11 @@ export const TripNotOnDeviceState = memo(function TripNotOnDeviceState(): ReactE
         action={{ label: t('errors.backToTrips'), onClick: handleBackToTrips }}
         secondaryAction={{ label: t('trips.joinWithInvite'), onClick: handleOpenImport }}
       />
-      <ImportTripQrDialog open={importOpen} onOpenChange={setImportOpen} />
+      {importOpen ? (
+        <Suspense fallback={null}>
+          <ImportTripQrDialog open onOpenChange={setImportOpen} />
+        </Suspense>
+      ) : null}
     </>
   );
 });

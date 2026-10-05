@@ -13,7 +13,6 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
 
 import { useTripContext } from '@/contexts/TripContext';
 import { TripNotFoundError } from '@/lib/db/trip-not-found-error';
@@ -47,14 +46,13 @@ function tripPageOf(pathname: string): string {
 /**
  * Keeps `TripContext` on the trip the URL names.
  *
- * Must be used within `TripProvider` and a router.
+ * Must be used within `TripProvider`.
  *
  * @param tripIdFromUrl - The `:tripId` route param
  * @returns Whether the trip is not on this device
  */
 export function useTripFromUrl(tripIdFromUrl: string | undefined): UseTripFromUrlResult {
   const { currentTrip, isLoading, setCurrentTrip } = useTripContext();
-  const page = tripPageOf(useLocation().pathname);
   const [missingTripId, setMissingTripId] = useState<string | null>(null);
   const currentTripId = currentTrip?.id;
 
@@ -67,21 +65,22 @@ export function useTripFromUrl(tripIdFromUrl: string | undefined): UseTripFromUr
     setCurrentTrip(tripIdFromUrl).catch((err: unknown) => {
       if (!(err instanceof TripNotFoundError)) {
         console.error('Failed to set current trip from URL:', err);
-      } else if (!cancelled) {
+        return;
+      }
+      if (!cancelled) {
         setMissingTripId(tripIdFromUrl);
-        captureEvent('trip_missing_on_device', { page });
+        captureEvent('trip_missing_on_device', {
+          page: tripPageOf(window.location.pathname),
+        });
       }
     });
 
     return () => {
       cancelled = true;
     };
-  }, [tripIdFromUrl, currentTripId, isLoading, setCurrentTrip, page]);
+  }, [tripIdFromUrl, currentTripId, isLoading, setCurrentTrip]);
 
   return {
-    isTripMissing:
-      tripIdFromUrl !== undefined &&
-      missingTripId === tripIdFromUrl &&
-      currentTripId !== tripIdFromUrl,
+    isTripMissing: missingTripId === tripIdFromUrl && currentTripId !== tripIdFromUrl,
   };
 }
