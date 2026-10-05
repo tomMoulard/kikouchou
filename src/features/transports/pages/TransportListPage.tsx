@@ -77,6 +77,8 @@ import {
   User,
 } from 'lucide-react';
 
+import { TripNotOnDeviceState } from '@/features/trips/components/TripNotOnDeviceState';
+import { useTripFromUrl } from '@/hooks/useTripFromUrl';
 import { useTripContext } from '@/contexts/TripContext';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useRideContext } from '@/contexts/RideContext';
@@ -1070,7 +1072,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
    { notifySuccess } = useOfflineAwareNotify(),
    { canEdit } = useTripAccess(),
 
-   { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext(),
+   { currentTrip, isLoading: isTripLoading } = useTripContext(),
    { persons, isLoading: isPersonsLoading } = usePersonContext(),
    {
     arrivals,
@@ -1293,14 +1295,7 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
     );
   }, [searchParams, setSearchParams]);
 
-  // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
-  useEffect(() => {
-    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
-      setCurrentTrip(tripIdFromUrl).catch((err) => {
-        console.error('Failed to set current trip from URL:', err);
-      });
-    }
-  }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
+  const { isTripMissing } = useTripFromUrl(tripIdFromUrl);
 
   // Validate tripId matches current trip
   const tripMismatch = useMemo(() => {
@@ -1605,18 +1600,22 @@ const TransportListPage = memo(function TransportListPage(): ReactElement {
       <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('transports.title')} backLink="/trips" />
         <div className="flex-1 flex items-center justify-center min-h-[200px]">
-          <EmptyState
-            icon={Plane}
-            title={t('errors.tripNotFound', 'Trip not found')}
-            description={t(
-              'errors.tripNotFoundDescription',
-              'The trip you are looking for does not exist or you do not have access to it.',
-            )}
-            action={{
-              label: t('common.back'),
-              onClick: () => navigate('/trips'),
-            }}
-          />
+          {isTripMissing ? (
+            <TripNotOnDeviceState />
+          ) : (
+            <EmptyState
+              icon={Plane}
+              title={t('errors.tripNotFound', 'Trip not found')}
+              description={t(
+                'errors.tripNotFoundDescription',
+                'The trip you are looking for does not exist or you do not have access to it.',
+              )}
+              action={{
+                label: t('common.back'),
+                onClick: () => navigate('/trips'),
+              }}
+            />
+          )}
         </div>
       </div>
     );
