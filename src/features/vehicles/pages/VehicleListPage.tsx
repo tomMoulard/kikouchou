@@ -214,10 +214,7 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
   const { notifySuccess } = useOfflineAwareNotify();
 
-  const {
-    currentTrip,
-    isLoading: isTripLoading,
-  } = useTripContext();
+  const { currentTrip, isLoading: isTripLoading } = useTripContext();
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
   const {
     vehicles,

@@ -1033,7 +1033,8 @@ export function captureEvent(
  *   cell and wifi in somebody's pocket is not a person doing something.
  * - `trip_join_failed`, `trip_join_blocked`, `trip_share_blocked`,
  *   `trip_identity_claim_failed`, `trip_missing_on_device` and
- *   `assistant_answer_failed` are attempts that went nowhere. Counting them lets a broken invite raise engagement.
+ *   `assistant_answer_failed` are attempts that went nowhere. Counting them
+ *   lets a broken invite raise engagement.
  * - `assistant_answer_received` is the reply to `assistant_prompt_sent`; both
  *   would count one action twice.
  * - `trip_identity_claimed` and `trip_identity_skipped` are steps inside the
