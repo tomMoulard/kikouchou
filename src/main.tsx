@@ -5,7 +5,13 @@
  * @module main
  */
 
-// FIRST. Reads the OAuth `?code=` synchronously at import time, before
+// FIRST OF ALL. OpenRouter returns to the assistant with a `?code=` of its own,
+// and the Supabase capture below would take it for a sign-in. This one claims
+// it only on the assistant page, and only when this browser started an
+// OpenRouter sign-in, then strips it. See features/assistant/openrouter/callback.
+import '@/features/assistant/openrouter/callback';
+
+// THEN. Reads the OAuth `?code=` synchronously at import time, before
 // router.tsx is evaluated and before main() awaits i18n and the database — by
 // which point the query string has had seconds and a router initialisation to
 // disappear in. See lib/supabase/auth-callback for the bug this fixes.

@@ -489,16 +489,20 @@ export function normalizeRoomIcon(value: unknown): RoomIcon {
 export type Language = 'en' | 'fr';
 
 /**
- * Supported on-device assistant model presets.
+ * Supported assistant model presets: on-device ones, then the cloud models the
+ * user reaches through their own OpenRouter account.
  *
  * These are symbolic preset identifiers stored in user settings; the concrete
- * Hugging Face model IDs live in the assistant feature module.
+ * model IDs live in the assistant feature module.
  */
 export type AssistantModelId =
   | 'needle-v3'
   | 'qwen3-1-7b'
   | 'gemma-4-e2b'
-  | 'gemma-4-e4b';
+  | 'gemma-4-e4b'
+  | 'cloud-claude-haiku'
+  | 'cloud-claude-sonnet'
+  | 'cloud-gpt-sol';
 
 // ============================================================================
 // Base Interfaces

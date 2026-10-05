@@ -1,6 +1,7 @@
 /**
- * @fileoverview AI Assistant page that runs a selectable local model on-device
- * via @huggingface/transformers (Transformers.js). Users can ask questions
+ * @fileoverview AI Assistant page that runs a selectable model: a local one
+ * on-device via @huggingface/transformers (Transformers.js) or Needle, or a
+ * cloud one through the user's own OpenRouter account. Users can ask questions
  * about their trip and request modifications to trip attributes (guests,
  * rooms, transports, assignments).
  *
@@ -22,9 +23,12 @@ import { nanoid } from 'nanoid';
 import {
   Bot,
   Check,
+  Cloud,
   Download,
   ListPlus,
   Loader2,
+  LogIn,
+  LogOut,
   RotateCw,
   Send,
   Square,
@@ -83,10 +87,14 @@ import {
 } from '../hooks/useWebLLM';
 import {
   ASSISTANT_MODEL_PRESETS,
+  type AssistantModelPreset,
   DEFAULT_ASSISTANT_MODEL_ID,
   getAssistantModelPreset,
   isAssistantModelId,
+  isCloudPreset,
 } from '../models';
+import { completeOpenRouterConnect } from '../openrouter/auth';
+import { consumeOpenRouterCallback } from '../openrouter/callback';
 import posthog, { captureEvent, captureUsage } from '@/lib/posthog';
 import { notify } from '@/lib/notifications';
 import { formatBytes } from '@/lib/utils/format-bytes';
@@ -111,6 +119,8 @@ async function getCachedAssistantModelIds(): Promise<Set<AssistantModelId>> {
   const keysByCache = new Map<string, readonly Request[]>();
 
   for (const preset of ASSISTANT_MODEL_PRESETS) {
+    // A cloud preset has no files and no bucket to look in.
+    if (isCloudPreset(preset)) continue;
     try {
       let keys = keysByCache.get(preset.cacheName);
       if (keys === undefined) {
@@ -145,6 +155,33 @@ const CachedModelIcon = memo(function CachedModelIcon(): ReactElement {
         className="absolute size-2.5 text-foreground"
         strokeWidth={3}
       />
+    </span>
+  );
+});
+
+/**
+ * What the picker shows after a preset's name: its download size, or that it
+ * runs in the cloud and downloads nothing.
+ */
+const PresetSizeLabel = memo(function PresetSizeLabel({
+  preset,
+}: {
+  readonly preset: AssistantModelPreset;
+}): ReactElement {
+  const { t } = useTranslation();
+
+  if (isCloudPreset(preset)) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <Cloud className="size-3.5" aria-hidden="true" />
+        {t('assistant.cloud.badge', 'Cloud')}
+      </span>
+    );
+  }
+
+  return (
+    <span className="text-xs text-muted-foreground tabular-nums">
+      {formatBytes(preset.approxDownloadBytes)}
     </span>
   );
 });
@@ -186,9 +223,7 @@ const AssistantModelCompactSelect = memo(function AssistantModelCompactSelect({
               <span>{`${t(preset.nameKey, preset.fallbackName)} (${preset.id})`}</span>
               {/* The size belongs next to the name: this list is where the
                   user picks what gets downloaded. */}
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {formatBytes(preset.approxDownloadBytes)}
-              </span>
+              <PresetSizeLabel preset={preset} />
               {cachedModelIds.has(preset.id) ? <CachedModelIcon /> : null}
             </span>
           </SelectItem>
@@ -214,6 +249,7 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
   const { t } = useTranslation();
   const selectedModel = getAssistantModelPreset(selectedModelId);
   const downloadSize = formatBytes(selectedModel.approxDownloadBytes);
+  const isCloud = isCloudPreset(selectedModel);
 
   return (
     <Card className="mb-4">
@@ -225,7 +261,7 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
           <p className="text-xs text-muted-foreground">
             {t(
               'assistant.modelDescription',
-              'Pick a smaller model for weaker devices or a bigger one for better quality.',
+              'Pick a smaller model for weaker devices or a bigger one for better quality. The size next to each name is what the first use downloads. A cloud model downloads nothing and runs on any device.',
             )}
           </p>
         </div>
@@ -247,9 +283,7 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
               <SelectItem key={preset.id} value={preset.id}>
                 <span className="inline-flex items-center gap-1.5">
                   <span>{`${t(preset.nameKey, preset.fallbackName)} (${preset.id})`}</span>
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {formatBytes(preset.approxDownloadBytes)}
-                  </span>
+                  <PresetSizeLabel preset={preset} />
                   {cachedModelIds.has(preset.id) ? <CachedModelIcon /> : null}
                 </span>
               </SelectItem>
@@ -257,10 +291,15 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground font-mono break-all">
-          {t('assistant.hubModelLabel', {
-            defaultValue: 'HF model: {{model}}',
-            model: selectedModel.modelId,
-          })}
+          {isCloud
+            ? t('assistant.cloud.modelLabel', {
+                defaultValue: 'OpenRouter model: {{model}}',
+                model: selectedModel.modelId,
+              })
+            : t('assistant.hubModelLabel', {
+                defaultValue: 'HF model: {{model}}',
+                model: selectedModel.modelId,
+              })}
         </p>
 
         <div className="space-y-1">
@@ -270,7 +309,7 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
           <p className="text-xs text-muted-foreground">
             {t(selectedModel.hintKey, selectedModel.fallbackHint)}
           </p>
-          {isCached !== true && (
+          {!isCloud && isCached !== true && (
             <p className="text-xs text-muted-foreground">
               {t('assistant.modelDownloadSize', {
                 defaultValue: 'First use downloads about {{size}}.',
@@ -278,7 +317,7 @@ const AssistantModelPanel = memo(function AssistantModelPanel({
               })}
             </p>
           )}
-          {isCached === true && (
+          {!isCloud && isCached === true && (
             <p className="text-xs text-primary">
               {t(
                 'assistant.modelCached',
@@ -353,6 +392,85 @@ function resolveDeviceSupport(
 /**
  * Model loading card shown before the engine is ready.
  */
+/**
+ * The card a cloud preset shows instead of the download: what connecting
+ * means, where the trip goes, and the button that starts the sign-in.
+ *
+ * The privacy line is not small print. The system prompt carries every
+ * guest's name, phone and notes, and those people never agreed to anything,
+ * so the user reads where it goes before the first byte leaves the device.
+ */
+const CloudConnectCard = memo(function CloudConnectCard({
+  onConnect,
+  error,
+}: {
+  readonly onConnect: () => void;
+  readonly error: string | null;
+}): ReactElement {
+  const { t } = useTranslation();
+  const [isStarting, setIsStarting] = useState(false);
+
+  // A failed start reports an error, which hands the button back.
+  const isBusy = isStarting && error === null;
+
+  // Back from openrouter.ai without signing in: the browser can restore this
+  // page from its back-forward cache, spinner and all.
+  useEffect(() => {
+    const handlePageShow = (event: PageTransitionEvent): void => {
+      if (event.persisted) setIsStarting(false);
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
+
+  const handleConnect = useCallback((): void => {
+    setIsStarting(true);
+    onConnect();
+  }, [onConnect]);
+
+  return (
+    <div className="flex flex-1 items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary/10 mb-2">
+            <Cloud className="size-7 text-primary" aria-hidden="true" />
+          </div>
+          <CardTitle className="text-lg">
+            {t('assistant.cloud.connectTitle', 'Connect your OpenRouter account')}
+          </CardTitle>
+          <CardDescription>
+            {t(
+              'assistant.cloud.connectDescription',
+              'OpenRouter gives you Claude and GPT models with one account. You sign in on openrouter.ai, and the app gets a key that belongs to you. Answers are billed to your OpenRouter account.',
+            )}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {error && (
+            <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground text-center">
+            {t(
+              'assistant.cloud.privacyNotice',
+              'Each question sends your trip details, guest names included, to OpenRouter and to the company that runs the model. The key stays on this device. To revoke it, delete it on openrouter.ai.',
+            )}
+          </p>
+          <Button className="w-full" onClick={handleConnect} disabled={isBusy}>
+            {isBusy ? (
+              <Loader2 className="size-4 mr-2 animate-spin" aria-hidden="true" />
+            ) : (
+              <LogIn className="size-4 mr-2" aria-hidden="true" />
+            )}
+            {t('assistant.cloud.connect', 'Connect with OpenRouter')}
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+});
+
 const ModelLoadingCard = memo(function ModelLoadingCard({
   onLoad,
   onCancel,
@@ -756,7 +874,10 @@ function AssistantPageComponent(): ReactElement {
     generate,
     interrupt,
     unload,
+    connect,
+    disconnect,
   } = useWebLLM(selectedModel);
+  const isCloud = isCloudPreset(selectedModel);
   const { systemPrompt, buildSystemPrompt } = useTripSystemPrompt();
   const { executeActions } = useTripActions();
 
@@ -838,6 +959,35 @@ function AssistantPageComponent(): ReactElement {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Back from openrouter.ai: exchange the code for the key. Once per page load,
+  // which consumeOpenRouterCallback enforces across StrictMode's remount.
+  useEffect(() => {
+    const callback = consumeOpenRouterCallback();
+    if (callback === null) return;
+
+    void completeOpenRouterConnect(callback).then((result) => {
+      if (result.ok) {
+        captureEvent('assistant_provider_connected', { provider: 'openrouter' });
+        // Deliberately a raw confirmation: the key is a device preference.
+        notify.success(
+          tRef.current('assistant.cloud.connected', 'OpenRouter account connected'),
+        );
+        return;
+      }
+
+      captureEvent('assistant_provider_connect_failed', {
+        provider: 'openrouter',
+        reason: result.reason,
+      });
+      notify.error(
+        tRef.current(
+          'assistant.cloud.connectFailed',
+          'Could not connect your OpenRouter account. Try again.',
+        ),
+      );
+    });
   }, []);
 
   // Restore LLM turn history from persisted UI messages (see runTurn for live updates).
@@ -1052,20 +1202,26 @@ function AssistantPageComponent(): ReactElement {
 
         // One $ai_generation per turn, sharing the turn's trace id and the
         // conversation's session id so PostHog groups them into a trace tree.
+        const ranInCloud = isCloudPreset(selectedModelRef.current);
         posthog?.capture('$ai_generation', {
           $ai_trace_id: traceId,
           $ai_session_id: sessionIdRef.current,
           $ai_model: selectedModelRef.current.modelId,
-          $ai_provider: 'huggingface',
+          $ai_provider: ranInCloud ? 'openrouter' : 'huggingface',
           $ai_input: redactAiMessages(fullMessages),
           $ai_output_choices: redactAiOutput(response),
           $ai_latency: (Date.now() - startedAt) / 1000,
           $ai_stream: true,
-          // Runs fully on-device via Transformers.js — there is no vendor
-          // token cost to estimate.
-          $ai_input_cost_usd: 0,
-          $ai_output_cost_usd: 0,
-          $ai_total_cost_usd: 0,
+          // An on-device answer has no vendor token cost. A cloud one does, and
+          // it is billed to the user's OpenRouter account rather than to this
+          // project, so no cost is claimed for it here rather than a false 0.
+          ...(ranInCloud
+            ? {}
+            : {
+                $ai_input_cost_usd: 0,
+                $ai_output_cost_usd: 0,
+                $ai_total_cost_usd: 0,
+              }),
         });
 
         return 'answered';
@@ -1108,7 +1264,9 @@ function AssistantPageComponent(): ReactElement {
           $ai_trace_id: traceId,
           $ai_session_id: sessionIdRef.current,
           $ai_model: selectedModelRef.current.modelId,
-          $ai_provider: 'huggingface',
+          $ai_provider: isCloudPreset(selectedModelRef.current)
+            ? 'openrouter'
+            : 'huggingface',
           $ai_input: redactAiMessages(fullMessages),
           $ai_latency: (Date.now() - startedAt) / 1000,
           $ai_stream: true,
@@ -1293,6 +1451,22 @@ function AssistantPageComponent(): ReactElement {
                 disabled={isModelSelectionLocked}
                 cachedModelIds={cachedModelIds}
               />
+              {isCloud ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  aria-label={t('assistant.cloud.disconnect', 'Disconnect OpenRouter')}
+                  onClick={disconnect}
+                  disabled={isAnswering}
+                >
+                  <LogOut className="size-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">
+                    {t('assistant.cloud.disconnect', 'Disconnect OpenRouter')}
+                  </span>
+                </Button>
+              ) : null}
               {messages.length > 0 ? (
                 <Button
                   type="button"
@@ -1325,15 +1499,24 @@ function AssistantPageComponent(): ReactElement {
             cachedModelIds={cachedModelIds}
           />
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-            <ModelLoadingCard
-              onLoad={loadModel}
-              onCancel={cancelLoad}
-              status={status}
-              loadProgress={loadProgress}
-              error={error}
-              deviceSupport={deviceSupport}
-              downloadSize={formatBytes(selectedModel.approxDownloadBytes)}
-            />
+            {isCloud ? (
+              <CloudConnectCard
+                onConnect={() => {
+                  void connect();
+                }}
+                error={error}
+              />
+            ) : (
+              <ModelLoadingCard
+                onLoad={loadModel}
+                onCancel={cancelLoad}
+                status={status}
+                loadProgress={loadProgress}
+                error={error}
+                deviceSupport={deviceSupport}
+                downloadSize={formatBytes(selectedModel.approxDownloadBytes)}
+              />
+            )}
           </div>
         </>
       ) : (

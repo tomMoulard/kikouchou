@@ -1,8 +1,9 @@
 /**
- * @fileoverview Assistant model presets for local/browser inference.
+ * @fileoverview Assistant model presets: local/browser inference, and cloud
+ * models reached through the user's own OpenRouter account.
  *
- * These presets map stable app-level IDs to concrete Hugging Face
- * Transformers.js-compatible model identifiers and runtime options.
+ * These presets map stable app-level IDs to concrete model identifiers (a
+ * Hugging Face repository, or an OpenRouter slug) and runtime options.
  *
  * @module features/assistant/models
  */
@@ -24,8 +25,14 @@ import type { AssistantModelId } from '@/types';
  *
  * `needle` means Needle 3 specifically: it is the generation this app ships,
  * and its container is the only one `NeedleV3Wasm` loads.
+ *
+ * `openrouter` runs nowhere on the device. It sends the conversation, system
+ * prompt included, to OpenRouter with the user's own key, and OpenRouter
+ * forwards it to the model's vendor. It answers in words like `transformers`,
+ * downloads nothing, and needs a connection and a connected account instead of
+ * WebGPU. See `openrouter/auth.ts` for why it is OpenRouter.
  */
-export type AssistantEngine = 'transformers' | 'needle';
+export type AssistantEngine = 'transformers' | 'needle' | 'openrouter';
 
 /**
  * Runtime configuration for one assistant model preset.
@@ -35,7 +42,10 @@ export interface AssistantModelPreset {
   readonly id: AssistantModelId;
   /** Which runtime loads and runs this preset. */
   readonly engine: AssistantEngine;
-  /** Hugging Face model identifier — the repository the weights come from. */
+  /**
+   * Hugging Face model identifier (the repository the weights come from), or
+   * the OpenRouter model slug on `openrouter`.
+   */
   readonly modelId: string;
   /**
    * Quantization / precision option passed to Transformers.js.
@@ -72,7 +82,8 @@ export interface AssistantModelPreset {
    * Cache Storage bucket holding this preset's downloaded files, so the
    * "already downloaded" probe looks where the files actually landed:
    * Transformers.js owns `transformers-cache`, and the Needle worker writes
-   * its one `.cact` into a bucket of its own.
+   * its one `.cact` into a bucket of its own. Empty on `openrouter`, which
+   * downloads nothing.
    */
   readonly cacheName: string;
   /** Translation key for the preset display name. */
@@ -93,7 +104,7 @@ export interface AssistantModelPreset {
    * files, so they move when a repository is re-exported: they are a size
    * order to warn the user with, not a promise. Rendered with `formatBytes`,
    * the same helper the download counter uses, so the announced size and the
-   * counter agree on units.
+   * counter agree on units. Zero on `openrouter`.
    */
   readonly approxDownloadBytes: number;
   /** Short human-readable fallback name. */
@@ -114,6 +125,9 @@ export const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
 /** Cache Storage bucket the Needle worker writes its `.cact` image into. */
 export const NEEDLE_CACHE_NAME = 'needle-cache';
 
+/** No bucket: a cloud preset keeps nothing in Cache Storage. */
+const NO_CACHE = '';
+
 /**
  * Keep the current shipping model as the default so existing users keep the
  * same quality/performance profile unless they explicitly opt into another one.
@@ -130,6 +144,11 @@ export const DEFAULT_ASSISTANT_MODEL_ID: AssistantModelId = 'gemma-4-e2b';
  *   use.
  * - Needle is first because it is the smallest by two orders of magnitude, and
  *   last in capability: it performs actions and never answers in words.
+ * - The cloud presets come last. They download nothing and run on any device,
+ *   which is the point: a phone that cannot run Gemma can still use the
+ *   assistant. Cheapest first. The slugs are pinned versions rather than
+ *   OpenRouter's `~…-latest` aliases, so an answer does not change model under
+ *   the user without a release here.
  */
 export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
   {
@@ -235,6 +254,45 @@ export const ASSISTANT_MODEL_PRESETS: readonly AssistantModelPreset[] = [
     fallbackDescription: 'Largest preset with the strongest reasoning quality in this app.',
     fallbackHint: 'Needs a stronger WebGPU-capable device and the biggest download.',
   },
+  {
+    id: 'cloud-claude-haiku',
+    engine: 'openrouter',
+    cacheName: NO_CACHE,
+    modelId: 'anthropic/claude-haiku-4.5',
+    approxDownloadBytes: 0,
+    nameKey: 'assistant.models.cloud-claude-haiku.name',
+    descriptionKey: 'assistant.models.cloud-claude-haiku.description',
+    hintKey: 'assistant.models.cloud-claude-haiku.hint',
+    fallbackName: 'Claude Haiku (cloud)',
+    fallbackDescription: 'Fast and low cost. Runs at Anthropic through your OpenRouter account.',
+    fallbackHint: 'Works on any device with a connection. Nothing to download.',
+  },
+  {
+    id: 'cloud-claude-sonnet',
+    engine: 'openrouter',
+    cacheName: NO_CACHE,
+    modelId: 'anthropic/claude-sonnet-5.5',
+    approxDownloadBytes: 0,
+    nameKey: 'assistant.models.cloud-claude-sonnet.name',
+    descriptionKey: 'assistant.models.cloud-claude-sonnet.description',
+    hintKey: 'assistant.models.cloud-claude-sonnet.hint',
+    fallbackName: 'Claude Sonnet (cloud)',
+    fallbackDescription: 'The strongest answers. Runs at Anthropic through your OpenRouter account.',
+    fallbackHint: 'Works on any device with a connection. Costs more per answer than Haiku.',
+  },
+  {
+    id: 'cloud-gpt-sol',
+    engine: 'openrouter',
+    cacheName: NO_CACHE,
+    modelId: 'openai/gpt-6.1-sol',
+    approxDownloadBytes: 0,
+    nameKey: 'assistant.models.cloud-gpt-sol.name',
+    descriptionKey: 'assistant.models.cloud-gpt-sol.description',
+    hintKey: 'assistant.models.cloud-gpt-sol.hint',
+    fallbackName: 'GPT Sol (cloud)',
+    fallbackDescription: 'OpenAI model. Runs at OpenAI through your OpenRouter account.',
+    fallbackHint: 'Works on any device with a connection. Nothing to download.',
+  },
 ] as const;
 
 // ============================================================================
@@ -260,6 +318,13 @@ const REPLACED_ASSISTANT_MODEL_IDS: Readonly<Record<string, AssistantModelId>> =
     'needle-v2': 'needle-v3',
     'gemma-3-1b': 'qwen3-1-7b',
   };
+
+/**
+ * Whether the preset runs off the device, through the user's OpenRouter key.
+ */
+export function isCloudPreset(preset: AssistantModelPreset): boolean {
+  return preset.engine === 'openrouter';
+}
 
 /**
  * Type guard for values restored from settings/UI events.

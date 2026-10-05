@@ -922,6 +922,10 @@ export type AnalyticsEvent =
   | 'assistant_device_unsupported'
   | 'assistant_model_load_cancelled'
   | 'assistant_model_load_failed'
+  | 'assistant_provider_connect_failed'
+  | 'assistant_provider_connect_started'
+  | 'assistant_provider_connected'
+  | 'assistant_provider_disconnected'
   // Reading what the app worked out
   | 'analytics_viewed'
   | 'calendar_view_changed'
