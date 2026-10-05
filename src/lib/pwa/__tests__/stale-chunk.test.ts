@@ -10,7 +10,7 @@
  * @module lib/pwa/__tests__/stale-chunk.test
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   STALE_CHUNK_RELOAD_COOLDOWN_MS,
@@ -18,6 +18,7 @@ import {
   isModuleLoadError,
   logCaughtError,
   reloadForStaleChunk,
+  resetStaleChunkReloadForTests,
   tryReloadForStaleChunk,
 } from '@/lib/pwa/stale-chunk';
 
@@ -99,6 +100,12 @@ describe('isModuleLoadError', () => {
     expect(isModuleLoadError(null)).toBe(false);
     expect(isModuleLoadError(undefined)).toBe(false);
   });
+});
+
+// The reload this document started is held in module state, so no test may
+// inherit one from the test before it.
+beforeEach(() => {
+  resetStaleChunkReloadForTests();
 });
 
 describe('reloadForStaleChunk', () => {
@@ -239,6 +246,51 @@ describe('tryReloadForStaleChunk', () => {
 
     expect(tryReloadForStaleChunk({ storage, now: () => 1_000, reload })).toBe('storage_error');
     expect(reload).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The 2026-10-03 report: a trip list where every card wraps its lazy map
+   * preview in its own boundary. The first card started the reload, and the
+   * next one found that reload's record and filed the stale chunk as if a
+   * reload had failed to cure it.
+   */
+  it('says reloaded to a second catch while its own reload is under way', () => {
+    const reload = vi.fn(),
+      deps = { storage: fakeStorage(), now: () => 1_000, reload };
+
+    expect(tryReloadForStaleChunk(deps)).toBe('reloaded');
+    expect(tryReloadForStaleChunk(deps)).toBe('reloaded');
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('still holds back the reload in the next document', () => {
+    const entries = new Map<string, string>(),
+      reload = vi.fn();
+
+    tryReloadForStaleChunk({ storage: fakeStorage(entries), now: () => 1_000, reload });
+    resetStaleChunkReloadForTests();
+
+    expect(
+      tryReloadForStaleChunk({ storage: fakeStorage(entries), now: () => 2_000, reload }),
+    ).toBe('cooldown');
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  // A `beforeunload` prompt can cancel the reload, and the document lives on.
+  it('reloads again once a reload that never happened is a cooldown old', () => {
+    const entries = new Map<string, string>(),
+      reload = vi.fn();
+
+    tryReloadForStaleChunk({ storage: fakeStorage(entries), now: () => 1_000, reload });
+
+    expect(
+      tryReloadForStaleChunk({
+        storage: fakeStorage(entries),
+        now: () => 1_000 + STALE_CHUNK_RELOAD_COOLDOWN_MS,
+        reload,
+      }),
+    ).toBe('reloaded');
+    expect(reload).toHaveBeenCalledTimes(2);
   });
 });
 

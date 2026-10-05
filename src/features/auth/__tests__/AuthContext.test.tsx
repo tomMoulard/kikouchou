@@ -24,7 +24,8 @@ import {
   getCapturedAuthError,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import { reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
+import { tryReloadForStaleChunk } from '@/lib/pwa/stale-chunk';
+import { reportError } from '@/lib/posthog';
 
 // ============================================================================
 // Test doubles
@@ -71,10 +72,11 @@ vi.mock('@/lib/supabase/auth-callback', async (importOriginal) => ({
 // against a second, drifting copy of them.
 vi.mock('@/lib/pwa/stale-chunk', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/pwa/stale-chunk')>()),
-  reloadForStaleChunk: vi.fn(() => true),
+  tryReloadForStaleChunk: vi.fn(() => 'reloaded' as const),
 }));
 
-const mockedReloadForStaleChunk = vi.mocked(reloadForStaleChunk);
+const mockedReloadForStaleChunk = vi.mocked(tryReloadForStaleChunk);
+const mockedReportError = vi.mocked(reportError);
 const mockedGetClient = vi.mocked(getSupabaseClient);
 const mockedIsConfigured = vi.mocked(isSupabaseConfigured);
 const mockedCapturedCode = vi.mocked(consumeAuthCode);
@@ -798,6 +800,47 @@ describe('AuthProvider — state', () => {
 
     await waitFor(() => {
       expect(mockedReloadForStaleChunk).toHaveBeenCalled();
+    });
+
+    consoleError.mockRestore();
+  });
+
+  // The 2026-09-30 report: the provider filed the error before it reloaded, so
+  // every tab the reload cured still left an event behind.
+  it('reports nothing when the reload goes ahead', async () => {
+    mockedIsConfigured.mockReturnValue(true);
+    mockedGetClient.mockRejectedValue(new TypeError('Importing a module script failed.'));
+    mockedReloadForStaleChunk.mockClear();
+    mockedReportError.mockClear();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isResolved).toBe(true);
+    });
+    expect(mockedReloadForStaleChunk).toHaveBeenCalledTimes(1);
+    expect(mockedReportError).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+
+    consoleError.mockRestore();
+  });
+
+  it('reports a stale chunk with the reason the reload was held back', async () => {
+    mockedIsConfigured.mockReturnValue(true);
+    mockedGetClient.mockRejectedValue(new TypeError('Importing a module script failed.'));
+    mockedReloadForStaleChunk.mockReturnValueOnce('cooldown');
+    mockedReportError.mockClear();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(mockedReportError).toHaveBeenCalledWith(expect.any(TypeError), {
+        source: 'AuthContext.getSupabaseClient',
+        stale_chunk: true,
+        reload_declined: 'cooldown',
+      });
     });
 
     consoleError.mockRestore();
