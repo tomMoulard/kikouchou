@@ -18,7 +18,11 @@ import { type TFunction } from 'i18next';
 
 import { cn } from '@/lib/utils';
 import { reportError } from '@/lib/posthog';
-import { isModuleLoadError, reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
+import {
+  isModuleLoadError,
+  STALE_CHUNK_RELOAD_OUTCOMES,
+  tryReloadForStaleChunk,
+} from '@/lib/pwa/stale-chunk';
 import { Button } from '@/components/ui/button';
 
 // ============================================================================
@@ -155,7 +159,7 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
 
     // A chunk the origin no longer serves is not the user's problem to solve,
     // and the retry button is the only way out of it: reload here rather than
-    // asking for a tap. `reloadForStaleChunk` keeps the once-per-tab guard;
+    // asking for a tap. `tryReloadForStaleChunk` keeps the once-per-tab guard;
     // when it declines, the fallback below stays on screen with its button.
     //
     // The reload comes before the report, and a reload that went ahead is not
@@ -165,8 +169,13 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
     // act on (PostHog `01a0a104-252e-7b53-8c95-eb0341c6f733`). A broken deploy
     // still reaches it, because its chunk is missing after the reload too, and
     // the second failure finds the guard set.
+    //
+    // When it is held back, `reload_declined` says why. `cooldown` is the
+    // broken deploy; `no_storage` and `storage_error` are a browser where the
+    // reload was never tried, which is a stale chunk the guard could not cure.
     const isStaleChunk = isModuleLoadError(error);
-    if (isStaleChunk && reloadForStaleChunk()) {
+    const reloadOutcome = isStaleChunk ? tryReloadForStaleChunk() : undefined;
+    if (reloadOutcome === STALE_CHUNK_RELOAD_OUTCOMES.reloaded) {
       return;
     }
 
@@ -179,7 +188,7 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
     reportError(error, {
       source: 'ErrorBoundary',
       component_stack: errorInfo.componentStack ?? undefined,
-      ...(isStaleChunk ? { stale_chunk: true } : {}),
+      ...(isStaleChunk ? { stale_chunk: true, reload_declined: reloadOutcome } : {}),
     });
   }
 

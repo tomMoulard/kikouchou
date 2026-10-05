@@ -18,6 +18,7 @@ import {
   isModuleLoadError,
   logCaughtError,
   reloadForStaleChunk,
+  tryReloadForStaleChunk,
 } from '@/lib/pwa/stale-chunk';
 
 // ============================================================================
@@ -199,6 +200,45 @@ describe('reloadForStaleChunk', () => {
       }),
     ).toBe(true);
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+});
+
+// PostHog issue 01a0edf6: a declined reload was reported with no reason, so a
+// broken deploy and a browser that cannot hold the guard read the same.
+describe('tryReloadForStaleChunk', () => {
+  it('says reloaded when the reload went ahead', () => {
+    expect(
+      tryReloadForStaleChunk({ storage: fakeStorage(), now: () => 1_000, reload: vi.fn() }),
+    ).toBe('reloaded');
+  });
+
+  it('says cooldown when a reload already ran a moment ago', () => {
+    const entries = new Map([[STALE_CHUNK_RELOAD_KEY, '1000']]);
+
+    expect(
+      tryReloadForStaleChunk({ storage: fakeStorage(entries), now: () => 2_000, reload: vi.fn() }),
+    ).toBe('cooldown');
+  });
+
+  it('says no_storage without a store', () => {
+    expect(tryReloadForStaleChunk({ storage: undefined, reload: vi.fn() })).toBe('no_storage');
+  });
+
+  it('says storage_error when the store throws on read', () => {
+    expect(
+      tryReloadForStaleChunk({ storage: fakeStorage(new Map(), true), reload: vi.fn() }),
+    ).toBe('storage_error');
+  });
+
+  it('says storage_error when the store reads but cannot record', () => {
+    const storage = fakeStorage();
+    storage.setItem = (): void => {
+      throw new DOMException('QuotaExceededError');
+    };
+    const reload = vi.fn();
+
+    expect(tryReloadForStaleChunk({ storage, now: () => 1_000, reload })).toBe('storage_error');
+    expect(reload).not.toHaveBeenCalled();
   });
 });
 
