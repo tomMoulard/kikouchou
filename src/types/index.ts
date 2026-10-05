@@ -500,6 +500,7 @@ export type AssistantModelId =
   | 'qwen3-1-7b'
   | 'gemma-4-e2b'
   | 'gemma-4-e4b'
+  | 'cloud-auto'
   | 'cloud-claude-haiku'
   | 'cloud-claude-sonnet'
   | 'cloud-gpt-sol';

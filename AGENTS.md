@@ -208,7 +208,8 @@ field says which:
   not available to it: it fills arguments from the words in the request, and an
   action needing an id the user did not say is one it cannot complete.
 
-- `openrouter`: the `cloud-*` presets (Claude Haiku, Claude Sonnet, GPT Sol).
+- `openrouter`: the `cloud-*` presets (the Auto Router, Claude Haiku, Claude
+  Sonnet, GPT Sol).
   Nothing runs on the device: `useWebLLM` streams a chat completion from
   OpenRouter over `fetch`, with a key that belongs to the user. It answers in
   words and ```action blocks like `transformers`, needs no WebGPU, and is the
@@ -247,6 +248,9 @@ for.
   set to 0.
 - **A pinned slug, not `~…-latest`.** An answer must not change model without a
   release here. When OpenRouter retires a slug, change the preset and its test.
+  `cloud-auto` (`openrouter/auto`) is the one exception, and on purpose: the
+  user who picks it asks OpenRouter to choose the model for each question. It
+  sends no `cost_tier`, so it routes in the `low` band.
 
 Two things follow for the steps above. A new action reaches Needle through
 `needle-tools.ts`, which derives the tool catalogue from `ACTION_SCHEMAS` — so

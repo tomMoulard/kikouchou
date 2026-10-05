@@ -22,6 +22,7 @@ describe('assistant model presets', () => {
       'qwen3-1-7b',
       'gemma-4-e2b',
       'gemma-4-e4b',
+      'cloud-auto',
       'cloud-claude-haiku',
       'cloud-claude-sonnet',
       'cloud-gpt-sol',
@@ -118,6 +119,7 @@ describe('assistant model presets', () => {
     const cloud = ASSISTANT_MODEL_PRESETS.filter(isCloudPreset);
 
     expect(cloud.map((preset) => preset.id)).toEqual([
+      'cloud-auto',
       'cloud-claude-haiku',
       'cloud-claude-sonnet',
       'cloud-gpt-sol',
@@ -128,12 +130,25 @@ describe('assistant model presets', () => {
       // phones the cloud presets exist for.
       expect(preset.device).toBeUndefined();
       expect(preset.approxDownloadBytes).toBe(0);
-      // A pinned vendor/model slug, never OpenRouter's moving `~…-latest`.
-      expect(preset.modelId).toMatch(/^(anthropic|openai)\/[a-z0-9.-]+$/);
+      expect(preset.modelId).not.toMatch(/^~/);
     }
   });
 
+  it('pins every cloud model but the Auto Router, which picks by design', () => {
+    const pinned = ASSISTANT_MODEL_PRESETS.filter(
+      (preset) => isCloudPreset(preset) && preset.id !== 'cloud-auto',
+    );
+
+    // A vendor/model slug, never OpenRouter's moving `~…-latest`: an answer
+    // must not change model without a release here.
+    for (const preset of pinned) {
+      expect(preset.modelId).toMatch(/^(anthropic|openai)\/[a-z0-9.-]+$/);
+    }
+    expect(getAssistantModelPreset('cloud-auto').modelId).toBe('openrouter/auto');
+  });
+
   it('validates persisted cloud model ids', () => {
+    expect(isAssistantModelId('cloud-auto')).toBe(true);
     expect(isAssistantModelId('cloud-claude-haiku')).toBe(true);
     expect(isAssistantModelId('cloud-claude-sonnet')).toBe(true);
     expect(isAssistantModelId('cloud-gpt-sol')).toBe(true);
