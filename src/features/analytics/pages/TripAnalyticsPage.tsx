@@ -31,6 +31,8 @@ import {
   loadTripStats,
   readAnalytics,
 } from '@/features/analytics/lib/trip-stats';
+import { TripNotOnDeviceState } from '@/features/trips/components/TripNotOnDeviceState';
+import { useTripFromUrl } from '@/hooks/useTripFromUrl';
 import { useTripContext } from '@/contexts/TripContext';
 import type { TripId } from '@/types';
 import { captureEvent } from '@/lib/posthog';
@@ -53,10 +55,8 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
 
   const {
     trips,
-    currentTrip,
     isLoading: isTripLoading,
     error: tripError,
-    setCurrentTrip,
     checkConnection,
   } = useTripContext();
   // Live: "pickups needing a driver" only counts *upcoming* pickups, so the
@@ -64,13 +64,7 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
   // clock every minute for the same reason.
   const { now, retryToken, retry } = useAnalyticsClock({ live: true });
 
-  useEffect(() => {
-    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
-      setCurrentTrip(tripIdFromUrl).catch((err) => {
-        console.error('Failed to set current trip from URL:', err);
-      });
-    }
-  }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
+  const { isTripMissing } = useTripFromUrl(tripIdFromUrl);
 
   // Existence is decided from the trips list, not from `currentTrip`: during a
   // switch `currentTrip` is still the previous trip, and treating that as "trip
@@ -241,15 +235,19 @@ const TripAnalyticsPage = memo(function TripAnalyticsPage(): ReactElement {
         <PageHeader title={t('analytics.tripTitle')} backLink="/trips" />
         <AnalyticsScopeSelector active="trip" tripHref={tripAnalyticsHref} />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
-          <EmptyState
-            icon={BarChart2}
-            title={t('errors.tripNotFound')}
-            description={t('errors.tripNotFoundDescription')}
-            action={{
-              label: t('common.back'),
-              onClick: handleBack,
-            }}
-          />
+          {isTripMissing ? (
+            <TripNotOnDeviceState />
+          ) : (
+            <EmptyState
+              icon={BarChart2}
+              title={t('errors.tripNotFound')}
+              description={t('errors.tripNotFoundDescription')}
+              action={{
+                label: t('common.back'),
+                onClick: handleBack,
+              }}
+            />
+          )}
         </div>
       </div>
     );

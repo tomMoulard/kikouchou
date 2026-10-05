@@ -17,7 +17,6 @@ import {
   type ReactElement,
   memo,
   useCallback,
-  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -38,6 +37,8 @@ import { useOfflineAwareNotify } from '@/hooks';
 import { useTripAccess } from '@/hooks/useTripAccess';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useRideContext } from '@/contexts/RideContext';
+import { TripNotOnDeviceState } from '@/features/trips/components/TripNotOnDeviceState';
+import { useTripFromUrl } from '@/hooks/useTripFromUrl';
 import { useTripContext } from '@/contexts/TripContext';
 import { cn } from '@/lib/utils';
 import { CHILD_SEAT_KINDS } from '@/types';
@@ -216,7 +217,6 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
   const {
     currentTrip,
     isLoading: isTripLoading,
-    setCurrentTrip,
   } = useTripContext();
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
   const {
@@ -232,14 +232,7 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
 
   const isLoading = isTripLoading || isPersonsLoading || isVehiclesLoading;
 
-  // Sync URL tripId with context, as every other trip-scoped page does.
-  useEffect(() => {
-    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
-      setCurrentTrip(tripIdFromUrl).catch((error: unknown) => {
-        console.error('Failed to set current trip from URL:', error);
-      });
-    }
-  }, [currentTrip?.id, isTripLoading, setCurrentTrip, tripIdFromUrl]);
+  const { isTripMissing } = useTripFromUrl(tripIdFromUrl);
 
   const tripMismatch = useMemo(() => {
     if (!tripIdFromUrl || !currentTrip) {
@@ -348,15 +341,19 @@ const VehicleListPage = memo(function VehicleListPage(): ReactElement {
       <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('vehicles.title')} backLink="/trips" />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
-          <EmptyState
-            icon={Car}
-            title={t('errors.tripNotFound')}
-            description={t('errors.tripNotFoundDescription')}
-            action={{
-              label: t('common.back'),
-              onClick: () => navigate('/trips'),
-            }}
-          />
+          {isTripMissing ? (
+            <TripNotOnDeviceState />
+          ) : (
+            <EmptyState
+              icon={Car}
+              title={t('errors.tripNotFound')}
+              description={t('errors.tripNotFoundDescription')}
+              action={{
+                label: t('common.back'),
+                onClick: () => navigate('/trips'),
+              }}
+            />
+          )}
         </div>
       </div>
     );

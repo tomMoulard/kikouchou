@@ -22,7 +22,7 @@
  * @module features/money/pages/TripMoneyPage
  */
 
-import { type ReactElement, memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactElement, memo, useCallback, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -45,6 +45,8 @@ import { loadTripMoney } from '@/features/money/lib/trip-money';
 import { useOfflineAwareNotify, useTripIdentity } from '@/hooks';
 import { useTripAccess } from '@/hooks/useTripAccess';
 import { useToday } from '@/hooks/useToday';
+import { TripNotOnDeviceState } from '@/features/trips/components/TripNotOnDeviceState';
+import { useTripFromUrl } from '@/hooks/useTripFromUrl';
 import { useTripContext } from '@/contexts/TripContext';
 import {
   createExpense,
@@ -100,10 +102,8 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
 
   const {
     trips,
-    currentTrip,
     isLoading: isTripLoading,
     error: tripError,
-    setCurrentTrip,
     checkConnection,
   } = useTripContext();
 
@@ -111,13 +111,7 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
   const { myPersonId } = useTripIdentity();
   const { runId: confettiRunId, registerTap } = useMoneyEasterEgg();
 
-  useEffect(() => {
-    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
-      setCurrentTrip(tripIdFromUrl).catch((err) => {
-        console.error('Failed to set current trip from URL:', err);
-      });
-    }
-  }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
+  const { isTripMissing } = useTripFromUrl(tripIdFromUrl);
 
   // Existence is decided from the trips list rather than from `currentTrip`,
   // which is still the previous trip while a switch is in flight.
@@ -359,12 +353,16 @@ const TripMoneyPage = memo(function TripMoneyPage(): ReactElement {
       <div className="container max-w-3xl py-6 md:py-8">
         <PageHeader title={t('money.title')} backLink="/trips" />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
-          <EmptyState
-            icon={Wallet}
-            title={t('errors.tripNotFound')}
-            description={t('errors.tripNotFoundDescription')}
-            action={{ label: t('common.back'), onClick: handleBack }}
-          />
+          {isTripMissing ? (
+            <TripNotOnDeviceState />
+          ) : (
+            <EmptyState
+              icon={Wallet}
+              title={t('errors.tripNotFound')}
+              description={t('errors.tripNotFoundDescription')}
+              action={{ label: t('common.back'), onClick: handleBack }}
+            />
+          )}
         </div>
       </div>
     );

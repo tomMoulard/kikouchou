@@ -15,7 +15,7 @@
  * @module features/summary/pages/TripSummaryPage
  */
 
-import { type ReactElement, memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactElement, memo, useCallback, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -30,6 +30,8 @@ import { readAnalytics } from '@/features/analytics/lib/trip-stats';
 import { SummarySheet } from '@/features/summary/components/SummarySheet';
 import { loadTripSummary } from '@/features/summary/lib/trip-summary';
 import { useTripShareLink } from '@/features/sharing/hooks/useTripShareLink';
+import { TripNotOnDeviceState } from '@/features/trips/components/TripNotOnDeviceState';
+import { useTripFromUrl } from '@/hooks/useTripFromUrl';
 import { useTripContext } from '@/contexts/TripContext';
 import type { TripId } from '@/types';
 import { captureEvent } from '@/lib/posthog';
@@ -48,20 +50,12 @@ const TripSummaryPage = memo(function TripSummaryPage(): ReactElement {
 
   const {
     trips,
-    currentTrip,
     isLoading: isTripLoading,
     error: tripError,
-    setCurrentTrip,
     checkConnection,
   } = useTripContext();
 
-  useEffect(() => {
-    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
-      setCurrentTrip(tripIdFromUrl).catch((err) => {
-        console.error('Failed to set current trip from URL:', err);
-      });
-    }
-  }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
+  const { isTripMissing } = useTripFromUrl(tripIdFromUrl);
 
   // Existence is decided from the trips list rather than from `currentTrip`,
   // which is still the previous trip while a switch is in flight.
@@ -180,12 +174,16 @@ const TripSummaryPage = memo(function TripSummaryPage(): ReactElement {
       <div className="container max-w-4xl py-6 md:py-8">
         <PageHeader title={t('summary.title')} backLink="/trips" />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
-          <EmptyState
-            icon={Printer}
-            title={t('errors.tripNotFound')}
-            description={t('errors.tripNotFoundDescription')}
-            action={{ label: t('common.back'), onClick: handleBack }}
-          />
+          {isTripMissing ? (
+            <TripNotOnDeviceState />
+          ) : (
+            <EmptyState
+              icon={Printer}
+              title={t('errors.tripNotFound')}
+              description={t('errors.tripNotFoundDescription')}
+              action={{ label: t('common.back'), onClick: handleBack }}
+            />
+          )}
         </div>
       </div>
     );
