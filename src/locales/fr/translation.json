@@ -1361,7 +1361,7 @@
     "description": "Exécutez un modèle localement sur votre appareil pour gérer votre voyage en langage naturel.",
     "pageDescription": "Posez des questions ou modifiez votre voyage en langage naturel",
     "modelLabel": "Modèle de l'assistant",
-    "modelDescription": "Choisissez un petit modèle pour les appareils modestes, ou un plus gros pour une meilleure qualité. La taille indiquée à côté de chaque nom est ce que télécharge la première utilisation.",
+    "modelDescription": "Choisissez un petit modèle pour les appareils modestes, ou un plus gros pour une meilleure qualité. La taille indiquée à côté de chaque nom est ce que télécharge la première utilisation. Un modèle cloud ne télécharge rien et fonctionne sur tout appareil.",
     "modelDownloadSize": "La première utilisation télécharge environ {{size}}.",
     "hubModelLabel": "Modèle HF : {{model}}",
     "modelCached": "Ce modèle est déjà en cache sur cet appareil.",
@@ -1416,6 +1416,25 @@
     "roomNotFound": "Cette chambre est introuvable.",
     "invalidActivity": "Ces informations d'activité sont invalides, rien n'a été enregistré.",
     "tripSwitched": "Passage à {{name}}",
+    "cloud": {
+      "badge": "Cloud",
+      "modelLabel": "Modèle OpenRouter : {{model}}",
+      "connectTitle": "Connectez votre compte OpenRouter",
+      "connectDescription": "OpenRouter donne accès aux modèles Claude et GPT avec un seul compte. Vous vous connectez sur openrouter.ai, et l'application reçoit une clé qui vous appartient. Les réponses sont facturées sur votre compte OpenRouter.",
+      "privacyNotice": "Chaque question envoie les détails du séjour, noms des invités compris, à OpenRouter et à l'entreprise qui fait tourner le modèle. La clé reste sur cet appareil. Pour la révoquer, supprimez-la sur openrouter.ai.",
+      "connect": "Se connecter avec OpenRouter",
+      "disconnect": "Déconnecter OpenRouter",
+      "connected": "Compte OpenRouter connecté",
+      "connectFailed": "Impossible de connecter votre compte OpenRouter. Réessayez.",
+      "errors": {
+        "unauthorized": "Votre connexion OpenRouter n'est plus valide. Reconnectez-vous pour continuer avec ce modèle.",
+        "insufficientCredits": "Votre compte OpenRouter n'a plus de crédits. Ajoutez-en sur openrouter.ai, puis réessayez.",
+        "rateLimited": "Trop de requêtes pour le moment. Patientez un instant, puis réessayez.",
+        "network": "Impossible de joindre OpenRouter. Vérifiez votre connexion.",
+        "notConnected": "Connectez votre compte OpenRouter pour utiliser ce modèle.",
+        "connectFailed": "Impossible de lancer la connexion à OpenRouter. Réessayez."
+      }
+    },
     "models": {
       "needle-v3": {
         "name": "Minuscule",
@@ -1436,6 +1455,21 @@
         "name": "Meilleure qualité",
         "description": "Le plus gros preset de l'application, avec la meilleure qualité de raisonnement.",
         "hint": "Nécessite un appareil WebGPU plus puissant, et c'est le plus gros téléchargement des trois."
+      },
+      "cloud-claude-haiku": {
+        "name": "Claude Haiku (cloud)",
+        "description": "Rapide et peu coûteux. Tourne chez Anthropic via votre compte OpenRouter.",
+        "hint": "Fonctionne sur tout appareil connecté. Rien à télécharger."
+      },
+      "cloud-claude-sonnet": {
+        "name": "Claude Sonnet (cloud)",
+        "description": "Les meilleures réponses. Tourne chez Anthropic via votre compte OpenRouter.",
+        "hint": "Fonctionne sur tout appareil connecté. Coûte plus cher par réponse que Haiku."
+      },
+      "cloud-gpt-sol": {
+        "name": "GPT Sol (cloud)",
+        "description": "Modèle d'OpenAI. Tourne chez OpenAI via votre compte OpenRouter.",
+        "hint": "Fonctionne sur tout appareil connecté. Rien à télécharger."
       }
     },
     "actionDetails": {

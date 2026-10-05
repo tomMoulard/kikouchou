@@ -193,10 +193,10 @@ fields only — the `optional:` line documents the rest.
 Done check: *could the assistant both answer a question about this feature and
 change it, from the prompt alone?* If not, the feature is not finished.
 
-### Two engines, and only one of them talks
+### Three engines, and one of them never talks
 
-The presets in `models.ts` run on two different runtimes, and the `engine` field
-says which:
+The presets in `models.ts` run on three different runtimes, and the `engine`
+field says which:
 
 - `transformers` — the Qwen3 and Gemma 4 presets. A chat model: it answers in
   words and puts its changes in a ```action block inside that answer. `qwen3-1-7b`
@@ -208,8 +208,45 @@ says which:
   not available to it: it fills arguments from the words in the request, and an
   action needing an id the user did not say is one it cannot complete.
 
-Each engine has its own worker and its own Cache Storage bucket. Anything that
-reads a preset and expects an answer in words has to branch on `engine`.
+- `openrouter`: the `cloud-*` presets (Claude Haiku, Claude Sonnet, GPT Sol).
+  Nothing runs on the device: `useWebLLM` streams a chat completion from
+  OpenRouter over `fetch`, with a key that belongs to the user. It answers in
+  words and ```action blocks like `transformers`, needs no WebGPU, and is the
+  only way a phone too small for Gemma can use the assistant.
+
+The two local engines each have their own worker and their own Cache Storage
+bucket; `openrouter` has neither. Anything that reads a preset and expects an
+answer in words has to branch on `engine`.
+
+### A cloud preset sends the trip off the device
+
+The `cloud-*` presets reach Anthropic and OpenAI through **OpenRouter**, and
+not through either vendor directly, because no vendor offers a sign-in a page
+with no server can finish (see `openrouter/auth.ts` for the details checked on
+2026-10-05). Anthropic reserves a Claude plan's OAuth tokens for Claude Code
+and claude.ai. OpenAI's website sign-in is identity only, and its model-access
+flow takes a `127.0.0.1` redirect only. OpenRouter runs a public PKCE flow with
+no client secret, and the exchange returns an API key the user owns and pays
+for.
+
+- **The key lives in `localStorage`, under `kikouchou-openrouter-key`, and
+  nowhere else.** Not in Dexie, so it is in no export, no sync and no trip
+  document. Disconnecting forgets it on the device. Only the user can revoke it,
+  on openrouter.ai.
+- **OpenRouter's callback carries a `?code=`, and so does Supabase's.**
+  `openrouter/callback.ts` claims the code on `/assistant` when this browser
+  started an OpenRouter sign-in, and strips it. `main.tsx` imports it **before**
+  `lib/supabase/auth-callback`, which would otherwise exchange the code with
+  Supabase and show a sign-in error. `e2e/assistant-openrouter.spec.ts` fails if
+  the order is swapped.
+- **The system prompt goes to OpenRouter and to the model's vendor**, guest
+  names, phones and notes included. `CloudConnectCard` says so before the first
+  sign-in. Keep that notice when you change the card.
+- **`$ai_generation` claims no cost for a cloud answer.** The user pays
+  OpenRouter, not this project, so the cost fields are left out rather than
+  set to 0.
+- **A pinned slug, not `~…-latest`.** An answer must not change model without a
+  release here. When OpenRouter retires a slug, change the preset and its test.
 
 Two things follow for the steps above. A new action reaches Needle through
 `needle-tools.ts`, which derives the tool catalogue from `ACTION_SCHEMAS` — so

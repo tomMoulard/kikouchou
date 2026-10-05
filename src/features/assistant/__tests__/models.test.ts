@@ -12,6 +12,7 @@ import {
   DEFAULT_ASSISTANT_MODEL_ID,
   getAssistantModelPreset,
   isAssistantModelId,
+  isCloudPreset,
 } from '../models';
 
 describe('assistant model presets', () => {
@@ -21,6 +22,9 @@ describe('assistant model presets', () => {
       'qwen3-1-7b',
       'gemma-4-e2b',
       'gemma-4-e4b',
+      'cloud-claude-haiku',
+      'cloud-claude-sonnet',
+      'cloud-gpt-sol',
     ]);
   });
 
@@ -35,10 +39,10 @@ describe('assistant model presets', () => {
     expect(getAssistantModelPreset(undefined).id).toBe(DEFAULT_ASSISTANT_MODEL_ID);
   });
 
-  it('carries a download size for every preset, growing with the model', () => {
-    const sizes = ASSISTANT_MODEL_PRESETS.map(
-      (preset) => preset.approxDownloadBytes,
-    );
+  it('carries a download size for every local preset, growing with the model', () => {
+    const sizes = ASSISTANT_MODEL_PRESETS.filter(
+      (preset) => !isCloudPreset(preset),
+    ).map((preset) => preset.approxDownloadBytes);
 
     // A preset with no size would render "0.0 GB" next to its name, which is
     // worse than the silence this replaced.
@@ -108,5 +112,30 @@ describe('assistant model presets', () => {
     expect(
       getAssistantModelPreset('gemma-4-e2b').chatTemplateOptions,
     ).toBeUndefined();
+  });
+
+  it('runs every cloud preset on OpenRouter, with nothing to download', () => {
+    const cloud = ASSISTANT_MODEL_PRESETS.filter(isCloudPreset);
+
+    expect(cloud.map((preset) => preset.id)).toEqual([
+      'cloud-claude-haiku',
+      'cloud-claude-sonnet',
+      'cloud-gpt-sol',
+    ]);
+    for (const preset of cloud) {
+      expect(preset.engine).toBe('openrouter');
+      // A WebGPU gate on a model that runs on a server would lock out the very
+      // phones the cloud presets exist for.
+      expect(preset.device).toBeUndefined();
+      expect(preset.approxDownloadBytes).toBe(0);
+      // A pinned vendor/model slug, never OpenRouter's moving `~…-latest`.
+      expect(preset.modelId).toMatch(/^(anthropic|openai)\/[a-z0-9.-]+$/);
+    }
+  });
+
+  it('validates persisted cloud model ids', () => {
+    expect(isAssistantModelId('cloud-claude-haiku')).toBe(true);
+    expect(isAssistantModelId('cloud-claude-sonnet')).toBe(true);
+    expect(isAssistantModelId('cloud-gpt-sol')).toBe(true);
   });
 });

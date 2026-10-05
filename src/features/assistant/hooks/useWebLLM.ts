@@ -1,22 +1,41 @@
 /**
- * @fileoverview Custom hook for managing a selectable local LLM via
- * @huggingface/transformers (Transformers.js).
+ * @fileoverview Custom hook for managing a selectable LLM: a local one via
+ * @huggingface/transformers (Transformers.js) or Needle, or a cloud one through
+ * the user's OpenRouter account.
  *
- * The heavy lifting — downloading weights, building the ONNX session and the
- * token loop — runs inside a dedicated worker (see `workers/llm.worker.ts`), so
- * loading or answering never freezes the page. This hook is the main-thread
- * client: it owns the worker, translates progress events into UI state, and
- * exposes a promise-based API.
+ * For the local engines the heavy lifting (downloading weights, building the
+ * ONNX session and the token loop) runs inside a dedicated worker (see
+ * `workers/llm.worker.ts`), so loading or answering never freezes the page.
+ * This hook is the main-thread client: it owns the worker, translates progress
+ * events into UI state, and exposes a promise-based API.
+ *
+ * The `openrouter` engine has no worker and nothing to load. "Ready" means a
+ * key is stored, and `generate` streams over `fetch` (see `openrouter/client`).
  *
  * @module features/assistant/hooks/useWebLLM
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 
 import i18n from '@/lib/i18n';
 import posthog, { captureEvent } from '@/lib/posthog';
 import { formatBytes } from '@/lib/utils/format-bytes';
 import type { AssistantEngine, AssistantModelPreset } from '../models';
+import {
+  disconnectOpenRouter,
+  getOpenRouterKey,
+  isOpenRouterConnected,
+  prepareOpenRouterConnect,
+  subscribeOpenRouterConnection,
+} from '../openrouter/auth';
+import { OPENROUTER_CALLBACK_SEGMENT } from '../openrouter/callback';
+import { OpenRouterError, streamOpenRouterChat } from '../openrouter/client';
 import type {
   HubProgressEvent,
   LLMWorkerRequest,
@@ -195,6 +214,13 @@ export interface UseWebLLMReturn {
   interrupt: () => void;
   /** Unload the model and free resources */
   unload: () => Promise<void>;
+  /**
+   * Cloud presets only: sends the user to OpenRouter to sign in. The page
+   * navigates away, and the callback lands back on the assistant.
+   */
+  connect: () => Promise<void>;
+  /** Cloud presets only: forgets the OpenRouter key on this device. */
+  disconnect: () => void;
 }
 
 interface FileEntry {
@@ -390,6 +416,12 @@ interface PendingRequest {
 
 const pendingRequests = new Map<string, PendingRequest>();
 
+/**
+ * The cloud answer in flight, if any. Module-level like the worker, so the
+ * page's stop button reaches it from any render.
+ */
+let cloudAbortController: AbortController | null = null;
+
 function nextRequestId(): string {
   requestCounter += 1;
   return `llm-${requestCounter}`;
@@ -527,6 +559,47 @@ function toWorkerModelConfig(preset: AssistantModelPreset): WorkerModelConfig {
 }
 
 /**
+ * The words a failed cloud answer is shown with.
+ *
+ * The raw message is a vendor's, in English; most of the time the user can fix
+ * the cause, so the kinds that have a fix say what it is.
+ */
+function describeOpenRouterError(error: OpenRouterError): string {
+  switch (error.kind) {
+    case 'unauthorized':
+      return i18n.t('assistant.cloud.errors.unauthorized', {
+        defaultValue:
+          'Your OpenRouter connection is no longer valid. Connect again to keep using this model.',
+      });
+    case 'insufficient-credits':
+      return i18n.t('assistant.cloud.errors.insufficientCredits', {
+        defaultValue:
+          'Your OpenRouter account has no credits left. Add credits on openrouter.ai, then try again.',
+      });
+    case 'rate-limited':
+      return i18n.t('assistant.cloud.errors.rateLimited', {
+        defaultValue: 'Too many requests for now. Wait a moment, then try again.',
+      });
+    case 'network':
+      return i18n.t('assistant.cloud.errors.network', {
+        defaultValue: 'Could not reach OpenRouter. Check your connection.',
+      });
+    case 'provider':
+      return error.message;
+  }
+}
+
+/**
+ * Where OpenRouter sends the user back: the assistant page, absolute.
+ */
+function getOpenRouterCallbackUrl(): string {
+  return new URL(
+    `${import.meta.env.BASE_URL}${OPENROUTER_CALLBACK_SEGMENT}`,
+    window.location.origin,
+  ).toString();
+}
+
+/**
  * Every worker request except the fire-and-forget `interrupt`.
  */
 type TrackedWorkerRequest = Extract<LLMWorkerRequest, { requestId: string }>;
@@ -579,9 +652,16 @@ function sendRequest(
  * ```
  */
 export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
-  const [status, setStatus] = useState<EngineStatus>(
-    loadedModelId === preset.modelId ? 'ready' : 'idle',
+  const isCloud = preset.engine === 'openrouter';
+  const cloudConnected = useSyncExternalStore(
+    subscribeOpenRouterConnection,
+    isOpenRouterConnected,
+    () => false,
   );
+  const [status, setStatus] = useState<EngineStatus>(() => {
+    if (isCloud) return isOpenRouterConnected() ? 'ready' : 'idle';
+    return loadedModelId === preset.modelId ? 'ready' : 'idle';
+  });
   const [loadProgress, setLoadProgress] = useState<LoadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isCached, setIsCached] = useState<boolean | null>(null);
@@ -620,6 +700,24 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   useEffect(() => {
     activeModelIdRef.current = preset.modelId;
 
+    if (isCloud) {
+      // Nothing to probe or load: the stored key is the whole of "ready". An
+      // error is kept on disconnect, because a revoked key disconnects the
+      // account and the card has to say why the user is back on it.
+      cacheProbeVersionRef.current += 1;
+      setLoadProgress(null);
+      setIsCached(cloudConnected);
+      setStatus((prev) =>
+        prev === 'generating' && cloudConnected
+          ? prev
+          : cloudConnected
+            ? 'ready'
+            : 'idle',
+      );
+      if (cloudConnected) setError(null);
+      return;
+    }
+
     if (loadedModelId === preset.modelId) {
       cacheProbeVersionRef.current += 1;
       // Already loaded in the worker — no need to check cache.
@@ -634,7 +732,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     setIsCached(null);
 
     refreshCacheStatus(preset.modelId, preset.cacheName);
-  }, [preset.cacheName, preset.modelId, refreshCacheStatus]);
+  }, [cloudConnected, isCloud, preset.cacheName, preset.modelId, refreshCacheStatus]);
 
   useEffect(
     () => () => {
@@ -648,6 +746,13 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   // ------------------------------------------------------------------
   const loadModel = useCallback(async (): Promise<void> => {
     if (loadingRef.current) {
+      return;
+    }
+
+    if (preset.engine === 'openrouter') {
+      // Never a sign-in from here: the auto-load effect calls this, and a
+      // redirect the user did not ask for would take them off the page.
+      if (isOpenRouterConnected()) setStatus('ready');
       return;
     }
 
@@ -765,6 +870,63 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   }, []);
 
   // ------------------------------------------------------------------
+  // generateInCloud
+  // ------------------------------------------------------------------
+  const generateInCloud = useCallback(async (
+    messages: ChatMessage[],
+    onChunk?: (chunk: string) => void,
+  ): Promise<string> => {
+    const apiKey = getOpenRouterKey();
+    if (apiKey === null) {
+      throw new Error(
+        i18n.t('assistant.cloud.errors.notConnected', {
+          defaultValue: 'Connect your OpenRouter account to use this model.',
+        }),
+      );
+    }
+
+    const controller = new AbortController();
+    cloudAbortController?.abort();
+    cloudAbortController = controller;
+    setStatus('generating');
+    setError(null);
+
+    try {
+      const response = await streamOpenRouterChat({
+        apiKey,
+        model: preset.modelId,
+        messages,
+        referer: window.location.origin,
+        signal: controller.signal,
+        onChunk,
+      });
+      setStatus('ready');
+      return response;
+    } catch (err) {
+      if (!(err instanceof OpenRouterError)) {
+        setStatus('ready');
+        throw err;
+      }
+
+      const message = describeOpenRouterError(err);
+      setError(message);
+      if (err.kind === 'unauthorized') {
+        // A revoked key will refuse every later turn too. Forgetting it sends
+        // the page back to the connect card, which shows the message.
+        disconnectOpenRouter();
+        setStatus('idle');
+      } else {
+        setStatus('ready');
+      }
+      throw new Error(message, { cause: err });
+    } finally {
+      if (cloudAbortController === controller) {
+        cloudAbortController = null;
+      }
+    }
+  }, [preset.modelId]);
+
+  // ------------------------------------------------------------------
   // generate
   // ------------------------------------------------------------------
   const generate = useCallback(
@@ -772,6 +934,10 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       messages: ChatMessage[],
       onChunk?: (chunk: string) => void,
     ): Promise<string> => {
+      if (preset.engine === 'openrouter') {
+        return generateInCloud(messages, onChunk);
+      }
+
       if (loadedModelId !== preset.modelId) {
         throw new Error('Model not loaded. Call loadModel() first.');
       }
@@ -803,13 +969,43 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
         throw err;
       }
     },
-    [preset.engine, preset.modelId],
+    [generateInCloud, preset.engine, preset.modelId],
   );
+
+  // ------------------------------------------------------------------
+  // connect / disconnect
+  // ------------------------------------------------------------------
+  const connect = useCallback(async (): Promise<void> => {
+    setError(null);
+    try {
+      const url = await prepareOpenRouterConnect(getOpenRouterCallbackUrl());
+      captureEvent('assistant_provider_connect_started', {
+        provider: 'openrouter',
+        model_id: preset.modelId,
+      });
+      window.location.assign(url);
+    } catch (err) {
+      console.error('Failed to start the OpenRouter sign-in:', err);
+      setError(
+        i18n.t('assistant.cloud.errors.connectFailed', {
+          defaultValue: 'Could not start the OpenRouter sign-in. Try again.',
+        }),
+      );
+    }
+  }, [preset.modelId]);
+
+  const disconnect = useCallback((): void => {
+    cloudAbortController?.abort();
+    disconnectOpenRouter();
+    captureEvent('assistant_provider_disconnected', { provider: 'openrouter' });
+  }, []);
 
   // ------------------------------------------------------------------
   // interrupt
   // ------------------------------------------------------------------
   const interrupt = useCallback((): void => {
+    // The cloud answer resolves with what already arrived, like a local one.
+    cloudAbortController?.abort();
     if (workerInstance === null) return;
     workerInstance.postMessage({ type: 'interrupt' } satisfies LLMWorkerRequest);
   }, []);
@@ -818,6 +1014,14 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
   // unload
   // ------------------------------------------------------------------
   const unload = useCallback(async (): Promise<void> => {
+    if (preset.engine === 'openrouter') {
+      // Nothing is held on the device. Stopping the answer in flight is all
+      // there is; the connection stays, so switching between two cloud models
+      // does not sign the user out.
+      cloudAbortController?.abort();
+      return;
+    }
+
     const generation = loadGenerationRef.current;
     if (workerInstance !== null) {
       try {
@@ -841,6 +1045,15 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
       return;
     }
 
+    // The page switched preset while the worker was unloading, and the new
+    // preset's effect already set the status and the cache flag. Writing this
+    // preset's over them would show a connected cloud model as idle, or the
+    // old model's cache state under the new one's name.
+    if (activeModelIdRef.current !== preset.modelId) {
+      loadedModelId = null;
+      return;
+    }
+
     loadedModelId = null;
     activeModelIdRef.current = preset.modelId;
     setStatus('idle');
@@ -860,5 +1073,7 @@ export function useWebLLM(preset: AssistantModelPreset): UseWebLLMReturn {
     generate,
     interrupt,
     unload,
+    connect,
+    disconnect,
   };
 }
