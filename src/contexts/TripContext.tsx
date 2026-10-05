@@ -24,6 +24,7 @@ import {
   getTripById,
   setCurrentTrip as repositorySetCurrentTrip,
 } from '@/lib/db';
+import { TripNotFoundError } from '@/lib/db/trip-not-found-error';
 import type { Trip, TripId } from '@/types';
 
 // ============================================================================
@@ -285,7 +286,7 @@ export function TripProvider({ children }: TripProviderProps): ReactElement {
             // Validate trip exists before persisting
             const trip = await getTripById(normalizedTripId as TripId);
             if (!trip) {
-              throw new Error(`Trip with ID "${normalizedTripId}" not found`);
+              throw new TripNotFoundError(normalizedTripId);
             }
           }
 

@@ -17,6 +17,7 @@ import type { ReactNode } from 'react';
 
 import { TripProvider, useTripContext } from '@/contexts/TripContext';
 import { db } from '@/lib/db/database';
+import { TripNotFoundError } from '@/lib/db/trip-not-found-error';
 import {
   createTrip,
   getTripById,
@@ -283,6 +284,22 @@ describe('TripContext', () => {
           await result.current.setCurrentTrip('nonexistent_trip_id');
         })
       ).rejects.toThrow('Trip with ID "nonexistent_trip_id" not found');
+    });
+
+    it('rejects with a TripNotFoundError, so a trip page can tell it apart', async () => {
+      const { result } = renderHook(() => useTripContext(), {
+        wrapper: TripContextWrapper,
+      });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      await expect(
+        act(async () => {
+          await result.current.setCurrentTrip('nonexistent_trip_id');
+        })
+      ).rejects.toBeInstanceOf(TripNotFoundError);
     });
 
     it('sets error state when setCurrentTrip fails', async () => {

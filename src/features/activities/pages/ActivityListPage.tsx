@@ -21,7 +21,6 @@ import {
   type ReactElement,
   memo,
   useCallback,
-  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -42,6 +41,8 @@ import { Button } from '@/components/ui/button';
 import { ViewSwitcher } from '@/components/ui/view-switcher';
 import { useActivityContext } from '@/contexts/ActivityContext';
 import { usePersonContext } from '@/contexts/PersonContext';
+import { TripNotOnDeviceState } from '@/features/trips/components/TripNotOnDeviceState';
+import { useTripFromUrl } from '@/hooks/useTripFromUrl';
 import { useTripContext } from '@/contexts/TripContext';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { getDateLocale } from '@/lib/i18n/date-locale';
@@ -155,7 +156,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
   const { notifySuccess } = useOfflineAwareNotify();
   const { today } = useToday();
 
-  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
+  const { currentTrip, isLoading: isTripLoading } = useTripContext();
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
   const {
     activities,
@@ -239,14 +240,7 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
     [pastActivities, dateLocale],
   );
 
-  // Sync URL tripId with context
-  useEffect(() => {
-    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
-      setCurrentTrip(tripIdFromUrl).catch((err) => {
-        console.error('Failed to set current trip from URL:', err);
-      });
-    }
-  }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
+  const { isTripMissing } = useTripFromUrl(tripIdFromUrl);
 
   const tripMismatch = useMemo(() => {
     if (!tripIdFromUrl || !currentTrip) {
@@ -382,18 +376,22 @@ const ActivityListPage = memo(function ActivityListPage(): ReactElement {
       <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('activities.title')} backLink="/trips" />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
-          <EmptyState
-            icon={CalendarDays}
-            title={t('errors.tripNotFound', 'Trip not found')}
-            description={t(
-              'errors.tripNotFoundDescription',
-              'The trip you are looking for does not exist or you do not have access to it.',
-            )}
-            action={{
-              label: t('common.back'),
-              onClick: () => navigate('/trips'),
-            }}
-          />
+          {isTripMissing ? (
+            <TripNotOnDeviceState />
+          ) : (
+            <EmptyState
+              icon={CalendarDays}
+              title={t('errors.tripNotFound', 'Trip not found')}
+              description={t(
+                'errors.tripNotFoundDescription',
+                'The trip you are looking for does not exist or you do not have access to it.',
+              )}
+              action={{
+                label: t('common.back'),
+                onClick: () => navigate('/trips'),
+              }}
+            />
+          )}
         </div>
       </div>
     );

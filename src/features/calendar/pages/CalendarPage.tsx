@@ -48,6 +48,8 @@ import {
 } from 'date-fns';
 import { Calendar as CalendarIcon } from 'lucide-react';
 
+import { TripNotOnDeviceState } from '@/features/trips/components/TripNotOnDeviceState';
+import { useTripFromUrl } from '@/hooks/useTripFromUrl';
 import { useTripContext } from '@/contexts/TripContext';
 import { useRoomContext } from '@/contexts/RoomContext';
 import { useAssignmentContext } from '@/contexts/AssignmentContext';
@@ -165,7 +167,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   const { canEdit } = useTripAccess();
 
   // Context hooks
-  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
+  const { currentTrip, isLoading: isTripLoading } = useTripContext();
   const { rooms, isLoading: isRoomsLoading, error: roomsError } = useRoomContext();
   const {
     assignments,
@@ -311,14 +313,7 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
   const [isActivityDialogOpen, setIsActivityDialogOpen] = useState(false);
   const [selectedActivityId, setSelectedActivityId] = useState<ActivityId | undefined>();
 
-  // Sync URL tripId with context - if URL has a tripId but context doesn't match, update context
-  useEffect(() => {
-    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
-      setCurrentTrip(tripIdFromUrl).catch((err) => {
-        console.error('Failed to set current trip from URL:', err);
-      });
-    }
-  }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
+  const { isTripMissing } = useTripFromUrl(tripIdFromUrl);
 
   // Sync currentMonth with trip start date when trip loads (but not if user already navigated)
   useEffect(() => {
@@ -1247,14 +1242,18 @@ const CalendarPage = memo(function CalendarPage(): ReactElement {
       <div className="container max-w-6xl py-6 md:py-8">
         <PageHeader title={t('calendar.title')} backLink="/trips" />
         <div className="flex-1 flex items-center justify-center min-h-[400px]">
-          <EmptyState
-            icon={CalendarIcon}
-            title={t('errors.tripNotFound')}
-            description={t(
-              'errors.tripNotFoundDescription',
-              'The trip you are looking for does not exist or you do not have access to it.',
-            )}
-          />
+          {isTripMissing ? (
+            <TripNotOnDeviceState />
+          ) : (
+            <EmptyState
+              icon={CalendarIcon}
+              title={t('errors.tripNotFound')}
+              description={t(
+                'errors.tripNotFoundDescription',
+                'The trip you are looking for does not exist or you do not have access to it.',
+              )}
+            />
+          )}
         </div>
       </div>
     );

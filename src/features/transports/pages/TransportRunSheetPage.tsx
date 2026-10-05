@@ -29,6 +29,8 @@ import { PersonBadge } from '@/components/shared/PersonBadge';
 import { usePersonContext } from '@/contexts/PersonContext';
 import { useRideContext } from '@/contexts/RideContext';
 import { useTransportContext } from '@/contexts/TransportContext';
+import { TripNotOnDeviceState } from '@/features/trips/components/TripNotOnDeviceState';
+import { useTripFromUrl } from '@/hooks/useTripFromUrl';
 import { useTripContext } from '@/contexts/TripContext';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { cn } from '@/lib/utils';
@@ -242,7 +244,7 @@ const TransportRunSheetPage = memo(function TransportRunSheetPage(): ReactElemen
   const { tripId: tripIdFromUrl } = useParams<'tripId'>();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const { currentTrip, isLoading: isTripLoading, setCurrentTrip } = useTripContext();
+  const { currentTrip, isLoading: isTripLoading } = useTripContext();
   const { persons, isLoading: isPersonsLoading } = usePersonContext();
   // A pickup counts as covered once its car has a driver, so this selection
   // needs the trip's rides as well as its legs.
@@ -367,14 +369,7 @@ const TransportRunSheetPage = memo(function TransportRunSheetPage(): ReactElemen
     });
   }
 
-  // Sync the URL's trip with the context, the way every trip-scoped page does.
-  useEffect(() => {
-    if (tripIdFromUrl && !isTripLoading && currentTrip?.id !== tripIdFromUrl) {
-      setCurrentTrip(tripIdFromUrl).catch((error: unknown) => {
-        console.error('Failed to set current trip from URL:', error);
-      });
-    }
-  }, [tripIdFromUrl, currentTrip?.id, isTripLoading, setCurrentTrip]);
+  const { isTripMissing } = useTripFromUrl(tripIdFromUrl);
 
   // Who opens the run sheet, with which filter, and whether it had anything
   // in it. The route has its own `$pageview`, but the filter lives in a query
@@ -426,18 +421,22 @@ const TransportRunSheetPage = memo(function TransportRunSheetPage(): ReactElemen
       <div className="container max-w-4xl py-6 md:py-8">
         <PageHeader title={t('transports.runSheet', 'Run sheet')} backLink="/trips" />
         <div className="flex min-h-[200px] flex-1 items-center justify-center">
-          <EmptyState
-            icon={Plane}
-            title={t('errors.tripNotFound', 'Trip not found')}
-            description={t(
-              'errors.tripNotFoundDescription',
-              'The trip you are looking for does not exist or you do not have access to it.',
-            )}
-            action={{
-              label: t('common.back'),
-              onClick: () => navigate('/trips'),
-            }}
-          />
+          {isTripMissing ? (
+            <TripNotOnDeviceState />
+          ) : (
+            <EmptyState
+              icon={Plane}
+              title={t('errors.tripNotFound', 'Trip not found')}
+              description={t(
+                'errors.tripNotFoundDescription',
+                'The trip you are looking for does not exist or you do not have access to it.',
+              )}
+              action={{
+                label: t('common.back'),
+                onClick: () => navigate('/trips'),
+              }}
+            />
+          )}
         </div>
       </div>
     );
