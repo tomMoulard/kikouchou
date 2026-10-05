@@ -55,7 +55,11 @@ import {
   isMissingCodeVerifier,
 } from '@/lib/supabase/auth-callback';
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase/client';
-import { isModuleLoadError, reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
+import {
+  STALE_CHUNK_RELOAD_OUTCOMES,
+  isModuleLoadError,
+  tryReloadForStaleChunk,
+} from '@/lib/pwa/stale-chunk';
 import posthog, { captureEvent, reportError, resetAnalyticsIdentity } from '@/lib/posthog';
 
 import { getAccountDisplayName } from './display-name';
@@ -595,23 +599,31 @@ export function AuthProvider({
         await attach(resolvedClient);
       })
       .catch((error: unknown) => {
-        // A chunk that will not load — offline on a cold launch, or a stale
-        // service worker. Sign-in is unavailable; everything else is unaffected.
-        console.error('[auth] failed to load the Supabase client:', error);
-        reportError(error, { source: 'AuthContext.getSupabaseClient' });
-
         // A deploy replaces every hashed file under `assets/`, and this import
         // runs in an effect rather than in a render, so no ErrorBoundary is on
         // the stack to take the reload that recovers a lazy route chunk. Left
         // alone, a tab that booted on the old build keeps running with sign-in
         // dead for the rest of its life: `getSupabaseClient` clears its pending
         // promise so later callers retry, but they retry the same chunk name
-        // the origin stopped serving. The guard inside `reloadForStaleChunk` is
-        // what makes this safe — a chunk missing from the new build too would
-        // otherwise reload forever — and when it declines, the degraded state
-        // below is exactly what the user gets today.
-        if (isModuleLoadError(error instanceof Error ? error : null)) {
-          reloadForStaleChunk();
+        // the origin stopped serving. The guard inside `tryReloadForStaleChunk`
+        // is what makes this safe — a chunk missing from the new build too
+        // would otherwise reload forever — and when it declines, the degraded
+        // state below is exactly what the user gets today.
+        //
+        // The reload comes before the report, as in `ErrorBoundary`: a tab the
+        // reload cures is the expected life of a PWA, not an error to file.
+        const isStaleChunk = isModuleLoadError(error instanceof Error ? error : null);
+        const reloadOutcome = isStaleChunk ? tryReloadForStaleChunk() : undefined;
+
+        // A chunk that will not load — offline on a cold launch, or a stale
+        // chunk the reload could not cure. Sign-in is unavailable; everything
+        // else is unaffected.
+        if (reloadOutcome !== STALE_CHUNK_RELOAD_OUTCOMES.reloaded) {
+          console.error('[auth] failed to load the Supabase client:', error);
+          reportError(error, {
+            source: 'AuthContext.getSupabaseClient',
+            ...(isStaleChunk ? { stale_chunk: true, reload_declined: reloadOutcome } : {}),
+          });
         }
 
         // Resolved means "we know the answer", not "there is a session". This

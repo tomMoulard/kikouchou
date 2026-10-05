@@ -124,16 +124,36 @@ export function isModuleLoadError(error: Error | null | undefined): boolean {
  * holds the reload back and leaves the caller's fallback UI on screen. The
  * outcome says which of them it was.
  *
+ * A second call while this document's own reload is under way answers
+ * `reloaded`, not `cooldown`. One failed chunk often reaches more than one
+ * catch: every `TripCard` wraps its lazy map preview in a boundary of its own,
+ * so a trip list with several cards fails the same import several times in
+ * one commit. The first catch starts the reload and records it; the others
+ * used to find that record, read it as a reload that had not cured the tab,
+ * and report the stale chunk while the tab was already reloading. The mark
+ * is held in memory, so it dies with the document: after the reload, a
+ * chunk that is still missing finds only the stored record and gets
+ * `cooldown`. It also lapses with the cooldown, because a `beforeunload`
+ * prompt can cancel the reload and keep this document alive.
+ *
  * @param deps - Overrides for the environment, for tests
- * @returns `reloaded` when a reload was started, otherwise why it was not
+ * @returns `reloaded` when a reload was started, by this call or an earlier
+ *   one in this document, otherwise why it was not
  */
 export function tryReloadForStaleChunk(
   deps: StaleChunkReloadDeps = {},
 ): StaleChunkReloadOutcome {
+  const now = deps.now ? deps.now() : Date.now();
+
+  if (
+    reloadStartedAt !== null &&
+    Math.abs(now - reloadStartedAt) < STALE_CHUNK_RELOAD_COOLDOWN_MS
+  ) {
+    return STALE_CHUNK_RELOAD_OUTCOMES.reloaded;
+  }
+
   const storage = 'storage' in deps ? deps.storage : sessionStorageOrUndefined();
   if (!storage) return STALE_CHUNK_RELOAD_OUTCOMES.noStorage;
-
-  const now = deps.now ? deps.now() : Date.now();
 
   let previous: string | null;
   try {
@@ -159,6 +179,7 @@ export function tryReloadForStaleChunk(
     return STALE_CHUNK_RELOAD_OUTCOMES.storageError;
   }
 
+  reloadStartedAt = now;
   if (deps.reload) {
     deps.reload();
   } else {
@@ -176,6 +197,16 @@ export function tryReloadForStaleChunk(
  */
 export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
   return tryReloadForStaleChunk(deps) === STALE_CHUNK_RELOAD_OUTCOMES.reloaded;
+}
+
+/**
+ * Forgets the reload this document started, so each test starts clean.
+ * Not for production paths.
+ *
+ * @internal
+ */
+export function resetStaleChunkReloadForTests(): void {
+  reloadStartedAt = null;
 }
 
 /**
@@ -201,6 +232,9 @@ export function logCaughtError(
 // ============================================================================
 // Internals
 // ============================================================================
+
+/** When this document started its reload, or null when it has not. */
+let reloadStartedAt: number | null = null;
 
 /**
  * `sessionStorage`, or undefined where reading it is not allowed.
