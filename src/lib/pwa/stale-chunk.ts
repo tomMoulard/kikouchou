@@ -64,12 +64,32 @@ export const STALE_CHUNK_RELOAD_KEY = 'kikouchou:stale-chunk-reload',
     'unable to preload css',
   ] as const;
 
+/**
+ * What {@link tryReloadForStaleChunk} did, and why when it held back.
+ *
+ * Reported with a stale chunk the reload did not cure, because the reasons
+ * mean different things. `cooldown` is a chunk still missing one reload later,
+ * which is a broken deploy. `no_storage` and `storage_error` are a browser
+ * that cannot hold the guard, such as a private window, where the reload was
+ * never tried.
+ */
+export const STALE_CHUNK_RELOAD_OUTCOMES = {
+  reloaded: 'reloaded',
+  noStorage: 'no_storage',
+  storageError: 'storage_error',
+  cooldown: 'cooldown',
+} as const;
+
 // ============================================================================
 // Type Definitions
 // ============================================================================
 
+/** One of {@link STALE_CHUNK_RELOAD_OUTCOMES}. */
+export type StaleChunkReloadOutcome =
+  (typeof STALE_CHUNK_RELOAD_OUTCOMES)[keyof typeof STALE_CHUNK_RELOAD_OUTCOMES];
+
 /**
- * The environment {@link reloadForStaleChunk} touches, injectable for tests.
+ * The environment {@link tryReloadForStaleChunk} touches, injectable for tests.
  */
 export interface StaleChunkReloadDeps {
   /** Where the guard is recorded. Defaults to `sessionStorage`. */
@@ -101,14 +121,17 @@ export function isModuleLoadError(error: Error | null | undefined): boolean {
  *
  * Declining is the safe answer, so every reason to doubt the guard — no
  * session storage, a store that throws, a reload recorded a moment ago —
- * returns false and leaves the caller's fallback UI on screen.
+ * holds the reload back and leaves the caller's fallback UI on screen. The
+ * outcome says which of them it was.
  *
  * @param deps - Overrides for the environment, for tests
- * @returns True when a reload was started
+ * @returns `reloaded` when a reload was started, otherwise why it was not
  */
-export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
+export function tryReloadForStaleChunk(
+  deps: StaleChunkReloadDeps = {},
+): StaleChunkReloadOutcome {
   const storage = 'storage' in deps ? deps.storage : sessionStorageOrUndefined();
-  if (!storage) return false;
+  if (!storage) return STALE_CHUNK_RELOAD_OUTCOMES.noStorage;
 
   const now = deps.now ? deps.now() : Date.now();
 
@@ -116,7 +139,7 @@ export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
   try {
     previous = storage.getItem(STALE_CHUNK_RELOAD_KEY);
   } catch {
-    return false;
+    return STALE_CHUNK_RELOAD_OUTCOMES.storageError;
   }
 
   if (previous !== null) {
@@ -124,7 +147,7 @@ export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
     // `Math.abs` rather than `now - at`: a clock that has gone backwards since
     // the record was written must still hold the reload, not free it.
     if (Number.isFinite(at) && Math.abs(now - at) < STALE_CHUNK_RELOAD_COOLDOWN_MS) {
-      return false;
+      return STALE_CHUNK_RELOAD_OUTCOMES.cooldown;
     }
   }
 
@@ -133,7 +156,7 @@ export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
   } catch {
     // Without a record there is no guard, and without a guard a reload can
     // loop. An error screen is the better failure.
-    return false;
+    return STALE_CHUNK_RELOAD_OUTCOMES.storageError;
   }
 
   if (deps.reload) {
@@ -141,7 +164,18 @@ export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
   } else {
     window.location.reload();
   }
-  return true;
+  return STALE_CHUNK_RELOAD_OUTCOMES.reloaded;
+}
+
+/**
+ * {@link tryReloadForStaleChunk}, for a caller that only needs to know whether
+ * the tab is going away.
+ *
+ * @param deps - Overrides for the environment, for tests
+ * @returns True when a reload was started
+ */
+export function reloadForStaleChunk(deps: StaleChunkReloadDeps = {}): boolean {
+  return tryReloadForStaleChunk(deps) === STALE_CHUNK_RELOAD_OUTCOMES.reloaded;
 }
 
 /**

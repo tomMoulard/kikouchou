@@ -20,7 +20,7 @@ import type { ReactElement } from 'react';
 
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { reportError } from '@/lib/posthog';
-import { reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
+import { tryReloadForStaleChunk } from '@/lib/pwa/stale-chunk';
 
 // The helper's own decisions — the once-per-tab guard, the storage failures —
 // are covered in `src/lib/pwa/__tests__/stale-chunk.test.ts`. What matters here
@@ -28,7 +28,7 @@ import { reloadForStaleChunk } from '@/lib/pwa/stale-chunk';
 // errors a reload can actually fix.
 vi.mock('@/lib/pwa/stale-chunk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/pwa/stale-chunk')>();
-  return { ...actual, reloadForStaleChunk: vi.fn(() => true) };
+  return { ...actual, tryReloadForStaleChunk: vi.fn(() => 'reloaded' as const) };
 });
 
 vi.mock('@/lib/posthog', async (importOriginal) => {
@@ -37,7 +37,7 @@ vi.mock('@/lib/posthog', async (importOriginal) => {
 });
 
 /** The mocked helper, typed for assertions. */
-const reloadMock = vi.mocked(reloadForStaleChunk);
+const reloadMock = vi.mocked(tryReloadForStaleChunk);
 /** The mocked reporter, typed for assertions. */
 const reportMock = vi.mocked(reportError);
 
@@ -188,7 +188,7 @@ describe('ErrorBoundary', () => {
   describe('Stale chunk recovery', () => {
     beforeEach(() => {
       reloadMock.mockClear();
-      reloadMock.mockReturnValue(true);
+      reloadMock.mockReturnValue('reloaded');
       reportMock.mockClear();
     });
 
@@ -209,7 +209,7 @@ describe('ErrorBoundary', () => {
     // The guard holding the reload back means one reload already failed to
     // fix it: a chunk missing from the new build too, which is a bad deploy.
     it('reports a stale chunk the reload did not cure', () => {
-      reloadMock.mockReturnValue(false);
+      reloadMock.mockReturnValue('cooldown');
 
       render(
         <ErrorBoundary>
@@ -221,9 +221,34 @@ describe('ErrorBoundary', () => {
       expect(reportMock).toHaveBeenCalledTimes(1);
       expect(reportMock).toHaveBeenCalledWith(
         expect.objectContaining({ message: STALE_CHUNK_MESSAGE }),
-        expect.objectContaining({ source: 'ErrorBoundary', stale_chunk: true })
+        expect.objectContaining({
+          source: 'ErrorBoundary',
+          stale_chunk: true,
+          reload_declined: 'cooldown',
+        })
       );
     });
+
+    // PostHog issue 01a0edf6: a declined reload reported only `stale_chunk`,
+    // so a broken deploy and a browser without session storage read the same.
+    it.each(['no_storage', 'storage_error'] as const)(
+      'says the reload was held back by %s',
+      (outcome) => {
+        reloadMock.mockReturnValue(outcome);
+
+        render(
+          <ErrorBoundary>
+            <ThrowingComponent message={STALE_CHUNK_MESSAGE} />
+          </ErrorBoundary>,
+          { withProviders: false }
+        );
+
+        expect(reportMock.mock.calls[0]?.[1]).toMatchObject({
+          stale_chunk: true,
+          reload_declined: outcome,
+        });
+      }
+    );
 
     it('reports an ordinary error without the stale chunk flag', () => {
       render(
@@ -235,6 +260,7 @@ describe('ErrorBoundary', () => {
 
       expect(reportMock).toHaveBeenCalledTimes(1);
       expect(reportMock.mock.calls[0]?.[1]).not.toHaveProperty('stale_chunk');
+      expect(reportMock.mock.calls[0]?.[1]).not.toHaveProperty('reload_declined');
     });
 
     it('reloads the tab without waiting for a click', () => {
@@ -260,7 +286,7 @@ describe('ErrorBoundary', () => {
     });
 
     it('keeps the fallback on screen when the reload is held back', () => {
-      reloadMock.mockReturnValue(false);
+      reloadMock.mockReturnValue('cooldown');
 
       render(
         <ErrorBoundary>
