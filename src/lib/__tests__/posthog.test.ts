@@ -452,6 +452,47 @@ describe('markOpaqueExceptions', () => {
     expect(markOpaqueExceptions(event)?.properties['opaque_cross_origin']).toBe(true);
   });
 
+  // PostHog issues 01a0c807 and 01a0d4a3: one cause, split in two because the
+  // bridge threw from a different function.
+  it.each(['sendJsBlockingTimeMessage', 'sendBeforeUnloadMessage', 'sendINPMessage'])(
+    "files Meta's bridge throwing from %s under one warning issue",
+    async (name) => {
+      const { markOpaqueExceptions } = await importPosthog();
+      const filename = 'iabjs://navigation_performance_logger_android';
+
+      const event = markOpaqueExceptions(
+        exceptionEvent([
+          {
+            type: 'Error',
+            value: 'Error invoking postMessage: Java object is gone',
+            stacktrace: {
+              frames: [
+                { function: '?', filename },
+                { function: name, filename },
+                { function: 'sendDataToNative', filename },
+              ],
+            },
+          },
+        ]),
+      );
+
+      expect(event?.properties['$exception_fingerprint']).toBe('meta-iab-bridge');
+      expect(event?.properties['$exception_level']).toBe('warning');
+      expect(event?.properties['opaque_cross_origin']).toBeUndefined();
+    },
+  );
+
+  it('keeps the computed fingerprint and level of our own errors', async () => {
+    const { markOpaqueExceptions } = await importPosthog();
+
+    const event = markOpaqueExceptions(
+      exceptionEvent([{ type: 'Error', value: 'boom', stacktrace: { frames: [SOME_FRAME] } }]),
+    );
+
+    expect(event?.properties['$exception_fingerprint']).toBeUndefined();
+    expect(event?.properties['$exception_level']).toBeUndefined();
+  });
+
   it('leaves a real error that happens to carry that message alone', async () => {
     const { markOpaqueExceptions } = await importPosthog();
 
