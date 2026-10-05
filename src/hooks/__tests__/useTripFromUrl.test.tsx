@@ -4,10 +4,8 @@
  * @module hooks/__tests__/useTripFromUrl.test
  */
 
-import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 
 import { useTripFromUrl } from '@/hooks/useTripFromUrl';
 import { useTripContext } from '@/contexts/TripContext';
@@ -29,24 +27,17 @@ function withContext(currentTripId: string | null): void {
   } as never);
 }
 
-function wrapper({ children }: { readonly children: ReactNode }): ReactNode {
-  return (
-    <MemoryRouter initialEntries={['/trips/trip-far/transports?new=1']}>
-      {children}
-    </MemoryRouter>
-  );
-}
-
 describe('useTripFromUrl', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.pushState({}, '', '/trips/trip-far/transports?new=1');
   });
 
   it('makes the URL trip current when it is not current yet', () => {
     setCurrentTrip.mockResolvedValue(undefined);
     withContext('trip-other');
 
-    const { result } = renderHook(() => useTripFromUrl('trip-here'), { wrapper });
+    const { result } = renderHook(() => useTripFromUrl('trip-here'));
 
     expect(setCurrentTrip).toHaveBeenCalledWith('trip-here');
     expect(result.current.isTripMissing).toBe(false);
@@ -55,7 +46,7 @@ describe('useTripFromUrl', () => {
   it('does nothing when the URL trip is already current', () => {
     withContext('trip-here');
 
-    renderHook(() => useTripFromUrl('trip-here'), { wrapper });
+    renderHook(() => useTripFromUrl('trip-here'));
 
     expect(setCurrentTrip).not.toHaveBeenCalled();
   });
@@ -65,7 +56,7 @@ describe('useTripFromUrl', () => {
     setCurrentTrip.mockRejectedValue(new TripNotFoundError('trip-far'));
     withContext(null);
 
-    const { result } = renderHook(() => useTripFromUrl('trip-far'), { wrapper });
+    const { result } = renderHook(() => useTripFromUrl('trip-far'));
 
     await waitFor(() => {
       expect(result.current.isTripMissing).toBe(true);
@@ -83,7 +74,7 @@ describe('useTripFromUrl', () => {
     setCurrentTrip.mockRejectedValue(failure);
     withContext(null);
 
-    const { result } = renderHook(() => useTripFromUrl('trip-here'), { wrapper });
+    const { result } = renderHook(() => useTripFromUrl('trip-here'));
 
     await waitFor(() => {
       expect(consoleError).toHaveBeenCalledWith('Failed to set current trip from URL:', failure);
