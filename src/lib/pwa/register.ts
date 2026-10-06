@@ -38,7 +38,12 @@ export function registerServiceWorker(): void {
     onRegisterError: (error: unknown) => {
       // Non-fatal by construction: without a worker the app simply loses
       // offline support and always loads the current build from the network.
-      console.error('[pwa] service worker registration failed:', error);
+      // A warning, not an error: capture_console_errors reports a
+      // console.error as an unhandled exception. Some Android webviews wrap
+      // navigator.serviceWorker.register and reject the call with
+      // "Rejected" (PostHog issues 01a10e23 and 01a0ddd3), and nobody here
+      // can act on that.
+      console.warn('[pwa] service worker registration failed:', error);
     },
   });
 }
