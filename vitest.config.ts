@@ -201,6 +201,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(import.meta.dirname, './src'),
+      // vite-plugin-pwa creates this module in a Vite build only.
+      'virtual:pwa-register': resolve(import.meta.dirname, './src/test/pwa-register-stub.ts'),
     },
   },
 });
