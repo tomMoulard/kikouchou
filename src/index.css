@@ -1,0 +1,1236 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * The same two typefaces as the landing page, so the site and the app look
+ * like one product. Self-hosted, Latin subset (it holds the French accents,
+ * œ and €), SIL Open Font License. Vite hashes the files and the service
+ * worker precaches them, so the app still has its fonts offline.
+ */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("./assets/fonts/bricolage-grotesque.woff2") format("woff2");
+  font-weight: 200 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Sans";
+  src: url("./assets/fonts/instrument-sans.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme inline {
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  /*
+   * Status palette (DESIGN_BOARD_BRIEF §5 "Status coloring"):
+   * green = arrival / success / online · orange = departure ·
+   * amber = warning / offline reassurance / pickups / guest onboarding ·
+   * red = destructive / errors (the existing `--destructive`).
+   *
+   * Four slots per tone, so a status can be drawn four ways without anyone
+   * reaching for a raw palette shade again:
+   *   `--x`            solid fill (button, dot, progress bar, strong border)
+   *   `--x-foreground` content ON that solid fill
+   *   `--x-surface`    tinted panel background
+   *   `--x-on-surface` content on that tint, and on `--background`/`--card`
+   *   `--x-border`     hairline around the tint
+   * `src/components/ui/status.variants.ts` is the only intended consumer.
+   */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-surface: var(--success-surface);
+  --color-success-on-surface: var(--success-on-surface);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-surface: var(--warning-surface);
+  --color-warning-on-surface: var(--warning-on-surface);
+  --color-warning-border: var(--warning-border);
+  --color-departure: var(--departure);
+  --color-departure-foreground: var(--departure-foreground);
+  --color-departure-surface: var(--departure-surface);
+  --color-departure-on-surface: var(--departure-on-surface);
+  --color-departure-border: var(--departure-border);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-surface: var(--destructive-surface);
+  --color-destructive-on-surface: var(--destructive-on-surface);
+  --color-destructive-border: var(--destructive-border);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-brand-soleil: var(--brand-soleil);
+  --color-brand-corail: var(--brand-corail);
+  --color-brand-framboise: var(--brand-framboise);
+  --color-brand-prune: var(--brand-prune);
+}
+
+:root,
+[data-palette="default"] {
+  --radius: 0.625rem;
+  /*
+   * Brand, "Soleil couchant": the four rooms of the logo, in the order roof,
+   * tall room, top-right room, bottom-right room. Only the logo reads them.
+   * The theme below is built from the same kit: Encre ink on Creme paper,
+   * Prune for the primary, Framboise for the focus ring, and Nuit as the
+   * dark background.
+   */
+  --brand-soleil: oklch(0.757 0.150 65.3);
+  --brand-corail: oklch(0.646 0.169 30.9);
+  --brand-framboise: oklch(0.573 0.167 5.0);
+  --brand-prune: oklch(0.459 0.141 321.3);
+  --background: oklch(0.957 0.017 84.6);
+  --foreground: oklch(0.259 0.049 307.2);
+  --card: oklch(0.991 0.010 87.5);
+  --card-foreground: oklch(0.259 0.049 307.2);
+  --popover: oklch(0.991 0.010 87.5);
+  --popover-foreground: oklch(0.259 0.049 307.2);
+  --primary: oklch(0.459 0.141 321.3);
+  --primary-foreground: oklch(0.991 0.010 87.5);
+  --secondary: oklch(0.927 0.026 84.6);
+  --secondary-foreground: oklch(0.259 0.049 307.2);
+  --muted: oklch(0.927 0.026 84.6);
+  --muted-foreground: oklch(0.428 0.035 309.7);
+  --accent: oklch(0.931 0.019 331.1);
+  --accent-foreground: oklch(0.259 0.049 307.2);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0.01 25);
+  --destructive-surface: oklch(0.965 0.02 20);
+  --destructive-on-surface: oklch(0.47 0.2 27);
+  --destructive-border: oklch(0.89 0.06 20);
+  --success: oklch(0.53 0.15 150);
+  --success-foreground: oklch(0.98 0.01 150);
+  --success-surface: oklch(0.965 0.03 155);
+  --success-on-surface: oklch(0.45 0.13 150);
+  --success-border: oklch(0.9 0.07 155);
+  --warning: oklch(0.8 0.16 78);
+  --warning-foreground: oklch(0.28 0.06 60);
+  --warning-surface: oklch(0.975 0.025 90);
+  --warning-on-surface: oklch(0.45 0.11 55);
+  --warning-border: oklch(0.9 0.1 88);
+  --departure: oklch(0.55 0.185 42);
+  --departure-foreground: oklch(0.99 0.01 60);
+  --departure-surface: oklch(0.97 0.025 70);
+  --departure-on-surface: oklch(0.5 0.16 42);
+  --departure-border: oklch(0.89 0.08 65);
+  --border: oklch(0.883 0.031 81.7);
+  --input: oklch(0.883 0.031 81.7);
+  --ring: oklch(0.573 0.167 5.0);
+  --chart-1: oklch(0.646 0.169 30.9);
+  --chart-2: oklch(0.459 0.141 321.3);
+  --chart-3: oklch(0.757 0.150 65.3);
+  --chart-4: oklch(0.65 0.10 145);
+  --chart-5: oklch(0.573 0.167 5.0);
+  --sidebar: oklch(0.948 0.019 83.1);
+  --sidebar-foreground: oklch(0.259 0.049 307.2);
+  --sidebar-primary: oklch(0.459 0.141 321.3);
+  --sidebar-primary-foreground: oklch(0.991 0.010 87.5);
+  --sidebar-accent: oklch(0.931 0.019 331.1);
+  --sidebar-accent-foreground: oklch(0.259 0.049 307.2);
+  --sidebar-border: oklch(0.883 0.031 81.7);
+  --sidebar-ring: oklch(0.573 0.167 5.0);
+}
+
+.dark,
+.dark [data-palette="default"] {
+  /* The dark values of the four rooms, made for Nuit. */
+  --brand-soleil: oklch(0.832 0.137 71.5);
+  --brand-corail: oklch(0.734 0.164 31.2);
+  --brand-framboise: oklch(0.687 0.179 3.3);
+  --brand-prune: oklch(0.652 0.167 314.0);
+  --background: oklch(0.208 0.040 265.8);
+  --foreground: oklch(0.957 0.017 84.6);
+  --card: oklch(0.256 0.048 266.0);
+  --card-foreground: oklch(0.957 0.017 84.6);
+  --popover: oklch(0.256 0.048 266.0);
+  --popover-foreground: oklch(0.957 0.017 84.6);
+  --primary: oklch(0.728 0.141 315.6);
+  --primary-foreground: oklch(0.208 0.040 265.8);
+  --secondary: oklch(0.288 0.050 265.9);
+  --secondary-foreground: oklch(0.957 0.017 84.6);
+  --muted: oklch(0.288 0.050 265.9);
+  --muted-foreground: oklch(0.826 0.018 308.2);
+  --accent: oklch(0.302 0.057 283.9);
+  --accent-foreground: oklch(0.957 0.017 84.6);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.18 0.04 25);
+  --destructive-surface: oklch(0.28 0.06 22);
+  --destructive-on-surface: oklch(0.83 0.13 22);
+  --destructive-border: oklch(0.42 0.1 22);
+  --success: oklch(0.7 0.16 150);
+  --success-foreground: oklch(0.18 0.04 150);
+  --success-surface: oklch(0.27 0.05 152);
+  --success-on-surface: oklch(0.85 0.14 152);
+  --success-border: oklch(0.4 0.08 150);
+  --warning: oklch(0.82 0.15 80);
+  --warning-foreground: oklch(0.22 0.05 60);
+  --warning-surface: oklch(0.28 0.05 75);
+  --warning-on-surface: oklch(0.87 0.13 85);
+  --warning-border: oklch(0.42 0.08 78);
+  --departure: oklch(0.72 0.17 47);
+  --departure-foreground: oklch(0.18 0.04 47);
+  --departure-surface: oklch(0.28 0.05 55);
+  --departure-on-surface: oklch(0.83 0.13 55);
+  --departure-border: oklch(0.42 0.09 50);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.687 0.179 3.3);
+  --chart-1: oklch(0.734 0.164 31.2);
+  --chart-2: oklch(0.652 0.167 314.0);
+  --chart-3: oklch(0.832 0.137 71.5);
+  --chart-4: oklch(0.70 0.10 145);
+  --chart-5: oklch(0.687 0.179 3.3);
+  --sidebar: oklch(0.234 0.045 266.2);
+  --sidebar-foreground: oklch(0.957 0.017 84.6);
+  --sidebar-primary: oklch(0.728 0.141 315.6);
+  --sidebar-primary-foreground: oklch(0.208 0.040 265.8);
+  --sidebar-accent: oklch(0.302 0.057 283.9);
+  --sidebar-accent-foreground: oklch(0.957 0.017 84.6);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.687 0.179 3.3);
+}
+
+
+/*
+ * ============================================================================
+ * Palettes
+ * ============================================================================
+ *
+ * `data-palette` on `<html>` (lib/palette.ts) swaps the surfaces and the
+ * primary colour. The mode is a separate axis: each palette has a light block
+ * and a `.dark` block, and `palettes.test.ts` fails the build when the two
+ * declare different properties, because a token only the light block sets
+ * would leak its light value into dark mode.
+ *
+ * The status tokens are deliberately left alone. Green still means arrival,
+ * orange departure, amber warning and red destructive in every palette, which
+ * is why Halloween's primary is violet rather than pumpkin and Christmas focus
+ * rings are gold rather than red.
+ *
+ * The selectors also match a nested `[data-palette]`, which is how the picker
+ * draws each swatch in its own colours without an inline style.
+ */
+
+[data-palette="ocean"] {
+  --background: oklch(0.962 0.013 225);
+  --foreground: oklch(0.255 0.050 250);
+  --card: oklch(0.992 0.006 225);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.470 0.120 245);
+  --primary-foreground: oklch(0.992 0.006 225);
+  --secondary: oklch(0.925 0.022 228);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.440 0.040 245);
+  --accent: oklch(0.925 0.035 210);
+  --accent-foreground: var(--foreground);
+  --border: oklch(0.880 0.028 228);
+  --input: oklch(0.880 0.028 228);
+  --ring: oklch(0.600 0.130 215);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.952 0.016 226);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+.dark[data-palette="ocean"],
+.dark [data-palette="ocean"] {
+  --background: oklch(0.205 0.038 245);
+  --foreground: oklch(0.960 0.012 225);
+  --card: oklch(0.252 0.045 245);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.760 0.115 225);
+  --primary-foreground: oklch(0.205 0.038 245);
+  --secondary: oklch(0.290 0.048 245);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.820 0.022 230);
+  --accent: oklch(0.310 0.055 225);
+  --accent-foreground: var(--foreground);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.740 0.130 210);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.230 0.042 245);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+[data-palette="forest"] {
+  --background: oklch(0.958 0.016 105);
+  --foreground: oklch(0.255 0.040 150);
+  --card: oklch(0.990 0.008 105);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.440 0.085 140);
+  --primary-foreground: oklch(0.990 0.008 105);
+  --secondary: oklch(0.922 0.026 108);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.430 0.035 145);
+  --accent: oklch(0.925 0.035 130);
+  --accent-foreground: var(--foreground);
+  --border: oklch(0.878 0.032 108);
+  --input: oklch(0.878 0.032 108);
+  --ring: oklch(0.600 0.110 115);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.948 0.019 106);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+.dark[data-palette="forest"],
+.dark [data-palette="forest"] {
+  --background: oklch(0.205 0.028 160);
+  --foreground: oklch(0.955 0.016 105);
+  --card: oklch(0.250 0.034 160);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.760 0.110 140);
+  --primary-foreground: oklch(0.205 0.028 160);
+  --secondary: oklch(0.290 0.038 158);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.820 0.020 130);
+  --accent: oklch(0.310 0.045 145);
+  --accent-foreground: var(--foreground);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.740 0.120 115);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.228 0.031 160);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+[data-palette="valentine"] {
+  --background: oklch(0.965 0.018 350);
+  --foreground: oklch(0.260 0.055 350);
+  --card: oklch(0.993 0.007 350);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.520 0.170 355);
+  --primary-foreground: oklch(0.993 0.007 350);
+  --secondary: oklch(0.930 0.030 350);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.440 0.050 350);
+  --accent: oklch(0.925 0.045 345);
+  --accent-foreground: var(--foreground);
+  --border: oklch(0.885 0.040 350);
+  --input: oklch(0.885 0.040 350);
+  --ring: oklch(0.650 0.160 350);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.955 0.022 350);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+.dark[data-palette="valentine"],
+.dark [data-palette="valentine"] {
+  --background: oklch(0.205 0.040 340);
+  --foreground: oklch(0.960 0.015 350);
+  --card: oklch(0.255 0.050 340);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.780 0.130 355);
+  --primary-foreground: oklch(0.205 0.040 340);
+  --secondary: oklch(0.295 0.055 342);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.830 0.030 350);
+  --accent: oklch(0.320 0.065 348);
+  --accent-foreground: var(--foreground);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.760 0.150 350);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.230 0.045 340);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+[data-palette="stpatrick"] {
+  --background: oklch(0.965 0.022 150);
+  --foreground: oklch(0.250 0.050 160);
+  --card: oklch(0.993 0.008 150);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.460 0.130 152);
+  --primary-foreground: oklch(0.993 0.008 150);
+  --secondary: oklch(0.925 0.035 150);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.430 0.050 158);
+  --accent: oklch(0.930 0.045 140);
+  --accent-foreground: var(--foreground);
+  --border: oklch(0.880 0.045 150);
+  --input: oklch(0.880 0.045 150);
+  --ring: oklch(0.720 0.140 90);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.955 0.026 150);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+.dark[data-palette="stpatrick"],
+.dark [data-palette="stpatrick"] {
+  --background: oklch(0.200 0.042 158);
+  --foreground: oklch(0.960 0.018 150);
+  --card: oklch(0.248 0.050 158);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.770 0.160 150);
+  --primary-foreground: oklch(0.200 0.042 158);
+  --secondary: oklch(0.288 0.055 156);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.830 0.030 150);
+  --accent: oklch(0.310 0.065 150);
+  --accent-foreground: var(--foreground);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.820 0.140 90);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.225 0.046 158);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+[data-palette="halloween"] {
+  --background: oklch(0.952 0.032 68);
+  --foreground: oklch(0.245 0.045 300);
+  --card: oklch(0.990 0.014 72);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.360 0.110 298);
+  --primary-foreground: oklch(0.990 0.014 72);
+  --secondary: oklch(0.915 0.045 66);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.430 0.050 300);
+  --accent: oklch(0.910 0.060 58);
+  --accent-foreground: var(--foreground);
+  --border: oklch(0.870 0.050 66);
+  --input: oklch(0.870 0.050 66);
+  --ring: oklch(0.660 0.170 50);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.940 0.038 67);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+.dark[data-palette="halloween"],
+.dark [data-palette="halloween"] {
+  --background: oklch(0.175 0.030 300);
+  --foreground: oklch(0.955 0.025 70);
+  --card: oklch(0.225 0.042 300);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.740 0.150 300);
+  --primary-foreground: oklch(0.175 0.030 300);
+  --secondary: oklch(0.265 0.048 300);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.820 0.030 60);
+  --accent: oklch(0.320 0.070 50);
+  --accent-foreground: var(--foreground);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.740 0.170 52);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.200 0.036 300);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+[data-palette="christmas"] {
+  --background: oklch(0.968 0.012 95);
+  --foreground: oklch(0.245 0.040 160);
+  --card: oklch(0.994 0.005 95);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.420 0.095 158);
+  --primary-foreground: oklch(0.994 0.005 95);
+  --secondary: oklch(0.928 0.020 95);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.430 0.040 160);
+  --accent: oklch(0.935 0.030 20);
+  --accent-foreground: var(--foreground);
+  --border: oklch(0.885 0.025 95);
+  --input: oklch(0.885 0.025 95);
+  --ring: oklch(0.720 0.130 85);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.958 0.015 95);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+.dark[data-palette="christmas"],
+.dark [data-palette="christmas"] {
+  --background: oklch(0.200 0.035 165);
+  --foreground: oklch(0.960 0.012 95);
+  --card: oklch(0.250 0.042 165);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.770 0.115 155);
+  --primary-foreground: oklch(0.200 0.035 165);
+  --secondary: oklch(0.290 0.045 163);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--secondary);
+  --muted-foreground: oklch(0.830 0.020 100);
+  --accent: oklch(0.330 0.070 22);
+  --accent-foreground: var(--foreground);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.820 0.130 85);
+  --chart-2: var(--primary);
+  --sidebar: oklch(0.225 0.038 165);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+}
+
+@layer base {
+  /* Headings and component titles take the display face, body text the sans. */
+  :where(h1, h2, h3, [data-slot="card-title"], [data-slot="dialog-title"], [data-slot="alert-dialog-title"], [data-slot="sheet-title"]) {
+    @apply font-display;
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+
+    /*
+     * The horizontal half of the safe area, once and for everybody.
+     *
+     * `viewport-fit=cover` (index.html) also pushes the layout viewport under
+     * the notch in landscape, where `safe-area-inset-left` is ~47px on a
+     * notched iPhone. Putting it on `body` insets the whole in-flow tree —
+     * header, sidebar, `<main>`, every page — in one rule, and costs nothing in
+     * portrait where both insets are 0. Fixed and sticky descendants are
+     * unaffected because their containing block is the viewport, not this box;
+     * the mobile nav bar and the FABs are hidden above `md`/`sm` anyway, which
+     * is every width a phone can be in landscape.
+     */
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+}
+
+/*
+ * ============================================================================
+ * The mobile bottom edge
+ * ============================================================================
+ *
+ * `index.html` asks for `viewport-fit=cover`, so the layout viewport now runs
+ * under the home indicator instead of stopping above it. That is what lets the
+ * app paint edge to edge, and it is also why everything anchored to the bottom
+ * has to be lifted by `env(safe-area-inset-bottom)` from here on — otherwise it
+ * renders under a bar the OS owns and cannot be tapped.
+ *
+ * The stack, measured upwards from the bottom of the *safe* area:
+ *
+ *   0                   the safe-area inset itself (0 on a phone without one)
+ *   0     - 4rem  (64px) the mobile nav bar, `h-16` (Layout.tsx, `md:hidden`)
+ *   5rem  - 8.5rem       the FAB, `size-14` at `bottom-nav-safe` (`sm:hidden`)
+ *   9rem  - 12.5rem      a second FAB, on a non-empty `/trips` only
+ *                       (`bottom-fab-safe`)
+ *   9rem                 error toasts (App.tsx's `mobileOffset`)
+ *   9.5rem               the first pixel a page's own content may occupy
+ *
+ * Every number below is that table. Do not spell one out at a call site: the
+ * whole reason the FAB and the toasts and the install prompt kept landing on
+ * top of each other is that each of them carried its own arithmetic.
+ *
+ * And the check that something new down here clears the stack is a hit test at
+ * the covered element's own centre — `document.elementFromPoint(x, y)` — not a
+ * look at a screenshot. See `e2e/mobile-bottom-edge.spec.ts`.
+ */
+
+/**
+ * Nothing under it but the home indicator.
+ *
+ * For a bar that is *meant* to sit flush with the physical bottom: its
+ * background fills the inset while its content stays above it.
+ */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/**
+ * Clear of the mobile nav bar (4rem) plus a 1rem gutter, plus the inset.
+ *
+ * For overlays that cover the nav bar rather than sitting in front of it — the
+ * "More" sheet — where the bar is visually still there behind the scrim.
+ */
+@utility pb-nav-safe {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/**
+ * `--bottom-stack`: how much room the stack needs at this width, in one place.
+ *
+ * Below `sm` all three layers are up, so it clears the FAB's top edge (8.5rem)
+ * with a 1rem gutter. From `sm` the FAB is `sm:hidden` and only the nav bar is
+ * left; from `md` the nav bar is `md:hidden` too and a page gutter is enough.
+ *
+ * It is a variable rather than three copies of the arithmetic because two
+ * different properties need the same number: `padding-bottom`, for a scroll
+ * container whose last row must stay tappable, and `bottom`, for a fixed
+ * overlay that has to start above the stack instead of reaching down into it.
+ */
+:root {
+  --bottom-stack: calc(9.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (width >= theme(--breakpoint-sm)) {
+  :root {
+    --bottom-stack: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (width >= theme(--breakpoint-md)) {
+  :root {
+    --bottom-stack: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/**
+ * The shared rule: bottom padding for anything whose last row must stay
+ * tappable, at every width.
+ *
+ * One utility rather than `pb-… sm:pb-… md:pb-…` at each call site, deliberately
+ * — four list pages each carried their own version of this sum, and the two
+ * that got it wrong were invisible until someone tried to tap the last card.
+ */
+@utility pb-bottom-stack {
+  padding-bottom: var(--bottom-stack);
+}
+
+/**
+ * The same number as a *position*: the overlay's bottom edge starts where the
+ * stack ends.
+ *
+ * `pb-bottom-stack` would look like it does the same job and does not. Padding
+ * is part of an element's box and hit-tests like the rest of it, so a fixed
+ * overlay at `bottom-0` with 9.5rem of bottom padding still swallows every tap
+ * across the FAB's band — the padding paints nothing and takes the tap anyway.
+ * Measured: `document.elementFromPoint` at the FAB's centre returned the
+ * install prompt's wrapper. Anchoring `bottom` instead gives the element a box
+ * that ends where its content ends.
+ */
+@utility bottom-above-stack {
+  bottom: var(--bottom-stack);
+}
+
+/**
+ * The extra clearance a page owes when it stacks a *second* FAB.
+ *
+ * `pb-bottom-stack` on `<main>` clears one FAB (top edge 8.5rem); `/trips`
+ * puts a QR-import button above the create button, whose top edge is 12.5rem.
+ * This is the 4rem difference, applied inside `<main>` so the two paddings add.
+ *
+ * Only once `/trips` has trips on it. An empty list floats the create button
+ * alone and QR import sits in the empty state, so that branch takes the plain
+ * `pb-bottom-stack` and this utility would pad under nothing.
+ */
+@utility pb-second-fab {
+  padding-bottom: 4rem;
+
+  @media (width >= theme(--breakpoint-sm)) {
+    padding-bottom: 0;
+  }
+}
+
+/**
+ * A FAB's own offset: directly above the nav bar and the home indicator.
+ */
+@utility bottom-nav-safe {
+  bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/**
+ * A second FAB's offset: directly above the first one (8.5rem) with a 0.5rem
+ * gap between the two circles.
+ */
+@utility bottom-fab-safe {
+  bottom: calc(9rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Calendar booked dates indicator */
+.rdp-day-booked {
+  position: relative;
+}
+
+.rdp-day-booked::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--destructive);
+  opacity: 0.7;
+}
+
+/* Ensure the dot is visible even when the day is selected */
+.rdp-day-booked[data-range-start=true]::after,
+.rdp-day-booked[data-range-end=true]::after,
+.rdp-day-booked[data-range-middle=true]::after,
+.rdp-day-booked[data-selected-single=true]::after {
+  background-color: var(--primary-foreground);
+  opacity: 0.8;
+}
+
+/*
+ * Keep Leaflet's z-index scale inside the map.
+ *
+ * Leaflet numbers its own layers 200 (tiles) to 1000 (zoom and attribution
+ * controls), and gives the container nothing that makes it a stacking context —
+ * so those numbers were resolved against the page root, where the app's own
+ * scale tops out at the dialog overlay's 50. Every map therefore painted over
+ * every dialog, sheet, popover and the sticky header: opening the share dialog
+ * on `/trips` left the trip cards' map previews sitting on top of it.
+ *
+ * `isolation: isolate` makes the container a stacking context, which contains
+ * 200-1000 without renumbering anything. The map itself then paints as one
+ * positioned box in normal order, under anything the app deliberately raises.
+ * It belongs here rather than on a `className`: it has to hold for every map,
+ * including the ones a future page mounts.
+ */
+.leaflet-container {
+  isolation: isolate;
+}
+
+/*
+ * Hide a PostHog survey while a modal is open, and give it back afterwards.
+ *
+ * Creating a room and being asked for feedback at the same time deadlocked the
+ * page: the survey popup was painted over the dialog, but nothing in it could
+ * be clicked or typed into, and the only way out was to close the half-filled
+ * room form. Stacking order was never the problem — posthog-js gives the popup
+ * `z-index: 2147483645`, far above the app's `z-50` dialog layer, so it really
+ * was the top-most thing on screen.
+ *
+ * What blocks it is the modality of the dialog underneath. A Radix modal sets
+ * `pointer-events: none` on `body` and traps focus inside its content, so every
+ * pointer event over the popup is discarded and every focus the popup takes is
+ * pulled straight back into the dialog. The popup is a `div.PostHogSurvey-<id>`
+ * appended to `body` (or to a host element for an inline survey), which puts it
+ * outside the dialog on both counts.
+ *
+ * Letting it through instead was considered and dropped: restoring
+ * `pointer-events` is one line, but the first click would then reach Radix's
+ * dismiss layer as an outside interaction and close the dialog the person was
+ * filling in, and the focus trap would still refuse the text field.
+ *
+ * So the survey waits. `display: none` leaves it mounted with its shadow root
+ * intact, and it reappears exactly as it was the moment the last modal closes,
+ * which is when it can finally be answered. PostHog has already captured
+ * `survey shown` by then; only the time to dismissal is skewed, and the survey
+ * is not marked seen until the person dismisses or completes it.
+ *
+ * The three overlays are the app's modal layers — dialog, sheet and alert
+ * dialog, all three of them Radix `Dialog` underneath. Popovers, selects and
+ * dropdown menus are left out: they make nothing outside them inert, and they
+ * close on the outside click anyway. Radix unmounts an overlay with its
+ * content, so the presence of one in the DOM is what "a modal is open" means.
+ */
+body:has(
+    [data-slot='dialog-overlay'],
+    [data-slot='sheet-overlay'],
+    [data-slot='alert-dialog-overlay']
+  )
+  div[class*='PostHogSurvey-'] {
+  display: none;
+}
+
+/*
+ * Paper.
+ *
+ * `print:hidden` on the header, the sidebar and the bottom bar removes the
+ * navigation from a printed page, but `<main>` still carries the offsets it
+ * needs *on screen* to sit beside the sidebar and above the bottom bar
+ * (`md:ml-60`, `pb-bottom-stack`). Both are media-query utilities, so a
+ * `print:` utility beside them would win or lose on stylesheet order rather
+ * than on intent — hence the reset here, where the page box is also the only
+ * thing that can set its own margins.
+ *
+ * The trip summary (`/trips/:tripId/summary`) is the page written for this,
+ * but nothing here is specific to it: every page prints better without a
+ * sidebar's worth of empty left margin.
+ */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  /*
+   * Ink on paper is dark on white whatever the screen was set to. Printing
+   * from dark mode otherwise puts the theme's pale text on the white of the
+   * sheet. Overriding the four tokens the printable surfaces use is enough,
+   * and it keeps every component on its theme tokens rather than sprouting a
+   * `print:text-black` at each call site.
+   */
+  :root,
+  .dark {
+    --background: white;
+    --foreground: black;
+    --muted-foreground: oklch(0.45 0 0);
+    --border: oklch(0.8 0 0);
+  }
+
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
+
+/*
+ * The money page's easter egg: ten taps on the title and the emoji fall.
+ *
+ * Here rather than in the component because a keyframe animation has no utility
+ * form: the piece's own drift, spin and scale are drawn per piece and passed in
+ * as custom properties, and this is the rule that reads them.
+ *
+ * `MoneyConfetti` is not rendered at all under `prefers-reduced-motion`, so
+ * this never runs for a viewer who asked for stillness.
+ */
+@keyframes money-confetti-fall {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -10vh, 0) rotate(0deg) scale(var(--money-scale, 1));
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  90% {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(var(--money-drift, 0), 110vh, 0)
+      rotate(var(--money-spin, 0deg)) scale(var(--money-scale, 1));
+  }
+}
+
+.money-confetti-piece {
+  position: absolute;
+  top: 0;
+  font-size: 1.75rem;
+  line-height: 1;
+  will-change: transform, opacity;
+  animation-name: money-confetti-fall;
+  animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+  animation-fill-mode: both;
+}
+
+/*
+ * Seasonal decorations (`components/shared/SeasonalDecor.tsx`).
+ *
+ * Every piece has a resting position from its own utility classes, and the
+ * motion below only runs for a viewer who has not asked for stillness. Under
+ * `prefers-reduced-motion: reduce` the bats, hearts and clovers stand where
+ * they rest, and the snow is not drawn, because a still snowflake is a stray
+ * dot.
+ *
+ * Timing (`animation-duration`, `animation-delay`) is set per piece with
+ * arbitrary-value classes, so these rules name the animation only.
+ */
+.seasonal-snowflake {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes seasonal-fly {
+    from {
+      left: -2rem;
+      transform: translateY(0);
+    }
+
+    25% {
+      transform: translateY(0.4rem);
+    }
+
+    50% {
+      transform: translateY(-0.2rem);
+    }
+
+    75% {
+      transform: translateY(0.3rem);
+    }
+
+    to {
+      left: calc(100% + 2rem);
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes seasonal-snow {
+    from {
+      transform: translate3d(0, -2vh, 0);
+    }
+
+    to {
+      transform: translate3d(2.5rem, 102vh, 0);
+    }
+  }
+
+  @keyframes seasonal-rise {
+    from {
+      opacity: 0;
+      transform: translateY(1rem);
+    }
+
+    30% {
+      opacity: 1;
+    }
+
+    to {
+      opacity: 0;
+      transform: translateY(-3.5rem);
+    }
+  }
+
+  @keyframes seasonal-sway {
+    from {
+      transform: rotate(-12deg);
+    }
+
+    to {
+      transform: rotate(12deg);
+    }
+  }
+
+  @keyframes seasonal-twinkle {
+    from {
+      opacity: 1;
+    }
+
+    to {
+      opacity: 0.25;
+    }
+  }
+
+  @keyframes seasonal-dangle {
+    from {
+      transform: translateY(0);
+    }
+
+    to {
+      transform: translateY(0.6rem);
+    }
+  }
+
+  .seasonal-bat {
+    animation-name: seasonal-fly;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+
+  .seasonal-snowflake {
+    display: block;
+    animation-name: seasonal-snow;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+
+  .seasonal-rise {
+    animation-name: seasonal-rise;
+    animation-timing-function: ease-out;
+    animation-iteration-count: infinite;
+  }
+
+  .seasonal-sway {
+    transform-origin: 50% 100%;
+    animation: seasonal-sway 3s ease-in-out infinite alternate;
+  }
+
+  .seasonal-twinkle {
+    animation: seasonal-twinkle 1.8s ease-in-out infinite alternate;
+  }
+
+  .seasonal-dangle {
+    animation: seasonal-dangle 4s ease-in-out infinite alternate;
+  }
+}
+
+/*
+ * The pet (`features/pet`).
+ *
+ * `PetSprite` names its parts (`pet-tail`, `pet-eyes`, `pet-leg-left`, ...)
+ * and `PetOverlay` says what the pet is doing with `data-pet-pose` on an
+ * ancestor. These rules join the two. They are keyframes, which have no
+ * utility form, and they only run for a viewer who has not asked for
+ * stillness: under `prefers-reduced-motion: reduce` the pet stands still,
+ * does not wander, and still answers a tap.
+ *
+ * `transform-box: view-box` makes every `transform-origin` below a point in
+ * the sprite's 100 x 100 box rather than in the part's own bounding box.
+ */
+.pet-sprite * {
+  transform-box: view-box;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes pet-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3%); }
+  }
+
+  @keyframes pet-step {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+
+  @keyframes pet-breathe {
+    0%, 100% { transform: scale(1, 1); }
+    50% { transform: scale(1.02, 0.975); }
+  }
+
+  @keyframes pet-blink {
+    0%, 92%, 100% { transform: scaleY(1); }
+    95% { transform: scaleY(0.1); }
+  }
+
+  @keyframes pet-wag {
+    from { transform: rotate(-9deg); }
+    to { transform: rotate(9deg); }
+  }
+
+  @keyframes pet-dangle {
+    from { transform: rotate(-7deg); }
+    to { transform: rotate(7deg); }
+  }
+
+  @keyframes pet-zzz {
+    0% { opacity: 0; transform: translate(0, 4px); }
+    30% { opacity: 1; }
+    100% { opacity: 0; transform: translate(4px, -8px); }
+  }
+
+  @keyframes pet-hop {
+    0%, 100% { transform: translateY(0) scale(1, 1); }
+    20% { transform: translateY(0) scale(1.08, 0.9); }
+    55% { transform: translateY(-18%) scale(0.95, 1.06); }
+  }
+
+  @keyframes pet-land {
+    0%, 100% { transform: scale(1, 1); }
+    35% { transform: scale(1.12, 0.86); }
+  }
+
+  @keyframes pet-bubble-in {
+    from { opacity: 0; transform: translateY(6px) scale(0.85); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /*
+   * Only the pet on screen moves: every rule below sits under a
+   * `data-pet-pose`. The previews on the settings card carry none, so they
+   * stand still, and a page that waits for its animations to finish (see
+   * `e2e/touch-targets.spec.ts`) does not wait forever on an endless blink.
+   */
+  [data-pet-pose] .pet-eyes {
+    transform-origin: 50px 42px;
+    animation: pet-blink 4.6s infinite;
+  }
+
+  [data-pet-pose] .pet-tail {
+    transform-origin: 34px 82px;
+    animation: pet-wag 0.45s ease-in-out infinite alternate;
+  }
+
+  /* Where each tail joins the body. */
+  [data-pet-pose] [data-pet-species='pomeranian'] .pet-tail {
+    transform-origin: 36px 70px;
+  }
+
+  [data-pet-pose] [data-pet-species='papillon'] .pet-tail {
+    transform-origin: 34px 72px;
+  }
+
+  [data-pet-pose='sleep'] .pet-tail {
+    animation: none;
+  }
+
+  [data-pet-pose='idle'] .pet-body,
+  [data-pet-pose='sleep'] .pet-body {
+    transform-origin: 50px 92px;
+    animation: pet-breathe 2.6s ease-in-out infinite;
+  }
+
+  [data-pet-pose='sleep'] .pet-body {
+    animation-duration: 4s;
+  }
+
+  [data-pet-pose='walk'] .pet-sprite {
+    animation: pet-bob 0.34s ease-in-out infinite;
+  }
+
+  [data-pet-pose='walk'] .pet-leg-left,
+  [data-pet-pose='walk'] .pet-leg-right {
+    animation: pet-step 0.34s ease-in-out infinite;
+  }
+
+  [data-pet-pose='walk'] .pet-leg-right {
+    animation-delay: -0.17s;
+  }
+
+  [data-pet-pose='held'] .pet-sprite {
+    transform-origin: 50% 5%;
+    animation: pet-dangle 0.5s ease-in-out infinite alternate;
+  }
+
+  [data-pet-pose='held'] .pet-leg-left,
+  [data-pet-pose='held'] .pet-leg-right {
+    animation: pet-step 0.25s ease-in-out infinite;
+  }
+
+  [data-pet-pose='held'] .pet-leg-right {
+    animation-delay: -0.12s;
+  }
+
+  [data-pet-pose] .pet-zzz path {
+    animation: pet-zzz 2.4s ease-out infinite;
+  }
+
+  [data-pet-pose] .pet-zzz path + path {
+    animation-delay: 1.2s;
+  }
+
+  [data-pet-hop='true'] .pet-sprite {
+    transform-origin: 50% 100%;
+    animation: pet-hop 0.45s ease-out;
+  }
+
+  [data-pet-landed='true'] .pet-sprite {
+    transform-origin: 50% 100%;
+    animation: pet-land 0.22s ease-out;
+  }
+
+  .pet-bubble {
+    animation: pet-bubble-in 0.18s ease-out;
+  }
+}
