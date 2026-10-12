@@ -41,9 +41,11 @@ vi.mock('@/lib/sharing/guest-identity', () => ({
 }));
 
 // The page decides between the form and the first-trip wizard from the trip
-// list and a feature flag. Both are held here so the form tests stay about the
-// form: a device with a trip, a flag that says no.
-const mockTrips = vi.fn<() => { trips: unknown[]; isLoading: boolean }>(() => ({
+// list. It is held here so the form tests stay about the form: a device with a
+// trip of its own.
+const mockTrips = vi.fn<
+  () => { trips: unknown[]; isLoading: boolean; sampleTripId?: string }
+>(() => ({
   trips: [{ id: 'existing-trip' }],
   isLoading: false,
 }));
@@ -51,9 +53,9 @@ vi.mock('@/contexts/TripContext', () => ({
   useTripContext: () => mockTrips(),
 }));
 
-const mockFlag = vi.fn<() => boolean | undefined>(() => false);
-vi.mock('@/hooks/useFeatureFlag', () => ({
-  useFeatureFlag: () => mockFlag(),
+const mockHideNavigation = vi.fn();
+vi.mock('@/contexts/NavigationVisibilityContext', () => ({
+  useHideNavigation: (hidden: boolean) => mockHideNavigation(hidden),
 }));
 
 vi.mock('@/features/trips/components/TripCreateWizard', () => ({
@@ -123,7 +125,6 @@ describe('TripCreatePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockTrips.mockReturnValue({ trips: [{ id: 'existing-trip' }], isLoading: false });
-    mockFlag.mockReturnValue(false);
     mockCreateTrip.mockResolvedValue({ id: 'new-trip-1', shareId: 'share-1' });
     mockCloneRoomsToTrip.mockResolvedValue(undefined);
     mockCreatePersonWithAutoColor.mockResolvedValue(undefined);
@@ -139,9 +140,8 @@ describe('TripCreatePage', () => {
   });
 
   describe('the first-trip wizard', () => {
-    it('replaces the form for a first trip when the flag is on', () => {
+    it('replaces the form for a first trip', () => {
       mockTrips.mockReturnValue({ trips: [], isLoading: false });
-      mockFlag.mockReturnValue(true);
 
       render(<TripCreatePage />, { withProviders: false });
 
@@ -150,9 +150,20 @@ describe('TripCreatePage', () => {
       expect(screen.getByText('trips.wizard.title')).toBeInTheDocument();
     });
 
-    it('waits for the flag rather than flashing the form first', () => {
-      mockTrips.mockReturnValue({ trips: [], isLoading: false });
-      mockFlag.mockReturnValue(undefined);
+    it('does not count the sample trip as a trip of the visitor', () => {
+      mockTrips.mockReturnValue({
+        trips: [{ id: 'sample-trip' }],
+        sampleTripId: 'sample-trip',
+        isLoading: false,
+      });
+
+      render(<TripCreatePage />, { withProviders: false });
+
+      expect(screen.getByTestId('trip-wizard')).toBeInTheDocument();
+    });
+
+    it('waits for the trip list rather than flashing the form first', () => {
+      mockTrips.mockReturnValue({ trips: [], isLoading: true });
 
       render(<TripCreatePage />, { withProviders: false });
 
@@ -160,9 +171,8 @@ describe('TripCreatePage', () => {
       expect(screen.queryByTestId('trip-wizard')).not.toBeInTheDocument();
     });
 
-    it('keeps the form for a device that already holds a trip, flag or not', () => {
+    it('keeps the form for a device that already holds a trip', () => {
       mockTrips.mockReturnValue({ trips: [{ id: 'existing-trip' }], isLoading: false });
-      mockFlag.mockReturnValue(true);
 
       render(<TripCreatePage />, { withProviders: false });
 
@@ -170,13 +180,18 @@ describe('TripCreatePage', () => {
       expect(screen.queryByTestId('trip-wizard')).not.toBeInTheDocument();
     });
 
-    it('keeps the form when the flag is off', () => {
+    it('hides the navigation while the wizard is on screen', () => {
       mockTrips.mockReturnValue({ trips: [], isLoading: false });
-      mockFlag.mockReturnValue(false);
 
       render(<TripCreatePage />, { withProviders: false });
 
-      expect(screen.getByTestId('trip-form')).toBeInTheDocument();
+      expect(mockHideNavigation).toHaveBeenLastCalledWith(true);
+    });
+
+    it('keeps the navigation beside the form', () => {
+      render(<TripCreatePage />, { withProviders: false });
+
+      expect(mockHideNavigation).toHaveBeenLastCalledWith(false);
     });
   });
 

@@ -76,7 +76,7 @@ afterEach(() => {
 describe('useFeatureFlag', () => {
   it('is undecided until PostHog has answered, then follows the flag', () => {
     client.enabled = true;
-    const { result } = renderHook(() => useFeatureFlag('first-trip-wizard'));
+    const { result } = renderHook(() => useFeatureFlag('ent-trip-templates'));
 
     // No flash of either arm while the flags load.
     expect(result.current).toBeUndefined();
@@ -89,7 +89,7 @@ describe('useFeatureFlag', () => {
   });
 
   it('reads off when PostHog says so', () => {
-    const { result } = renderHook(() => useFeatureFlag('first-trip-wizard'));
+    const { result } = renderHook(() => useFeatureFlag('ent-trip-templates'));
 
     act(() => {
       client.callbacks.forEach((callback) => callback());
@@ -99,7 +99,7 @@ describe('useFeatureFlag', () => {
   });
 
   it('gives up on PostHog after a while and shows the control arm', () => {
-    const { result } = renderHook(() => useFeatureFlag('first-trip-wizard'));
+    const { result } = renderHook(() => useFeatureFlag('ent-trip-templates'));
 
     act(() => {
       vi.advanceTimersByTime(2_500);
@@ -111,32 +111,32 @@ describe('useFeatureFlag', () => {
   it('is off at once when there is no analytics client', () => {
     client.present = false;
 
-    const { result } = renderHook(() => useFeatureFlag('first-trip-wizard'));
+    const { result } = renderHook(() => useFeatureFlag('ent-trip-templates'));
 
     expect(result.current).toBe(false);
   });
 
   it('lets a local override force either arm without PostHog', () => {
-    stored.set('kikouchou-flag:first-trip-wizard', 'on');
-    expect(readFlagOverride('first-trip-wizard')).toBe(true);
-    expect(renderHook(() => useFeatureFlag('first-trip-wizard')).result.current).toBe(true);
+    stored.set('kikouchou-flag:ent-trip-templates', 'on');
+    expect(readFlagOverride('ent-trip-templates')).toBe(true);
+    expect(renderHook(() => useFeatureFlag('ent-trip-templates')).result.current).toBe(true);
 
-    stored.set('kikouchou-flag:first-trip-wizard', 'off');
+    stored.set('kikouchou-flag:ent-trip-templates', 'off');
     client.enabled = true;
-    expect(renderHook(() => useFeatureFlag('first-trip-wizard')).result.current).toBe(false);
+    expect(renderHook(() => useFeatureFlag('ent-trip-templates')).result.current).toBe(false);
 
     // Nothing was asked of PostHog either time.
     expect(client.callbacks).toHaveLength(0);
   });
 
   it('ignores an override it does not understand', () => {
-    stored.set('kikouchou-flag:first-trip-wizard', 'maybe');
+    stored.set('kikouchou-flag:ent-trip-templates', 'maybe');
 
-    expect(readFlagOverride('first-trip-wizard')).toBeUndefined();
+    expect(readFlagOverride('ent-trip-templates')).toBeUndefined();
   });
 
   it('stops listening when the component goes away', () => {
-    const { unmount } = renderHook(() => useFeatureFlag('first-trip-wizard'));
+    const { unmount } = renderHook(() => useFeatureFlag('ent-trip-templates'));
     expect(client.callbacks).toHaveLength(1);
 
     unmount();

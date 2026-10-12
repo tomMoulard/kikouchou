@@ -13,6 +13,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 import { Layout } from '../Layout';
+import { useHideNavigation } from '@/contexts/NavigationVisibilityContext';
 import { toLocalISODateString } from '@/lib/db/utils';
 import type { HexColor, ISODateString, Person, RoomAssignment, Trip } from '@/types';
 import { isoDate } from '@/test/utils';
@@ -1178,6 +1179,61 @@ describe('Layout', () => {
       renderLayoutAt('/trips/new/');
 
       expect(screen.queryByRole('banner')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Navigation hidden by the page', () => {
+    // An upright viewport, so the focused form above cannot be what hid it.
+    beforeEach(() => {
+      vi.mocked(window.matchMedia).mockImplementation(
+        (query: string) =>
+          ({
+            matches: false,
+            media: query,
+            onchange: null,
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(),
+          }) as unknown as MediaQueryList,
+      );
+    });
+
+    function HidingPage({ hidden }: { readonly hidden: boolean }) {
+      useHideNavigation(hidden);
+      return <div data-testid="hiding-page">Page</div>;
+    }
+
+    it('drops the sidebar and the bottom bar but keeps the header', () => {
+      renderLayoutAt('/trips/new', <HidingPage hidden />);
+
+      expect(getSidebar()).not.toBeInTheDocument();
+      expect(getMobileNav()).not.toBeInTheDocument();
+      expect(screen.getByRole('banner')).toBeInTheDocument();
+      expect(screen.getByTestId('hiding-page')).toBeInTheDocument();
+    });
+
+    it('keeps the navigation when the page does not ask', () => {
+      renderLayoutAt('/trips/new', <HidingPage hidden={false} />);
+
+      expect(getSidebar()).toBeInTheDocument();
+      expect(getMobileNav()).toBeInTheDocument();
+    });
+
+    it('puts the navigation back when the page unmounts', () => {
+      const { rerender } = renderLayoutAt('/trips/new', <HidingPage hidden />);
+      expect(getMobileNav()).not.toBeInTheDocument();
+
+      rerender(
+        <MemoryRouter initialEntries={['/trips/new']}>
+          <Layout>
+            <div>Next page</div>
+          </Layout>
+        </MemoryRouter>,
+      );
+
+      expect(getMobileNav()).toBeInTheDocument();
     });
   });
 });

@@ -82,9 +82,9 @@ function initialValue(key: string): boolean | undefined {
  *
  * @example
  * ```tsx
- * const wizard = useFeatureFlag('first-trip-wizard');
- * if (wizard === undefined) return <LoadingState />;
- * return wizard ? <Wizard /> : <Form />;
+ * const publish = useFeatureFlag('ent-trip-templates');
+ * if (publish === undefined) return <LoadingState />;
+ * return publish ? <PublishControls /> : <UpgradeOffer />;
  * ```
  */
 export function useFeatureFlag(key: string): boolean | undefined {

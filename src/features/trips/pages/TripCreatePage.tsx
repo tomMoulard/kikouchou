@@ -5,12 +5,11 @@
  * @module features/trips/pages/TripCreatePage
  */
 
-import { type ReactElement, memo, useCallback, useRef, useState } from 'react';
+import { type ReactElement, memo, useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { UsersRound } from 'lucide-react';
 import { useOfflineAwareNotify, useUnsavedChanges } from '@/hooks';
-import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useShortLandscapeViewport } from '@/hooks/usePhoneViewport';
 
 import { LoadingState } from '@/components/shared/LoadingState';
@@ -18,6 +17,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { UnsavedChangesDialog } from '@/components/shared/UnsavedChangesDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useHideNavigation } from '@/contexts/NavigationVisibilityContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { TripCreateWizard } from '@/features/trips/components/TripCreateWizard';
 import {
@@ -43,18 +43,6 @@ import { notify } from '@/lib/notifications';
 import { cn } from '@/lib/utils';
 import type { Trip, TripFormData, TripId } from '@/types';
 import { reportError } from '@/lib/posthog';
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-/**
- * The PostHog flag that swaps the one-page form for the first-trip wizard.
- *
- * Only for a device that holds no trip yet: the comparison is about the first
- * creation, and somebody who has made a trip before knows the form.
- */
-export const FIRST_TRIP_WIZARD_FLAG = 'first-trip-wizard';
 
 // ============================================================================
 // Component
@@ -83,8 +71,7 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   const { t } = useTranslation();
   const { notifySuccess } = useOfflineAwareNotify();
   const { user } = useAuth();
-  const { trips, isLoading: tripsLoading } = useTripContext();
-  const wizardFlag = useFeatureFlag(FIRST_TRIP_WIZARD_FLAG);
+  const { trips, sampleTripId, isLoading: tripsLoading } = useTripContext();
 
   /**
    * How much vertical room the page may spend on its own frame.
@@ -104,20 +91,30 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   /**
    * Which experience this visit gets.
    *
-   * The wizard only ever replaces the form for a first trip, and only once the
-   * flag has answered: rendering the form and then swapping it for the wizard
-   * a second later would be the worst of both. A device with a trip already
-   * skips the question entirely.
+   * A first trip gets the wizard, one question per screen. Somebody who has
+   * made a trip before knows the one-page form and gets it. The sample trip
+   * seeded on first open is not the visitor's own, so it does not count, the
+   * same rule `TripsEntryRedirect` applies.
    */
-  const isFirstTrip = !tripsLoading && trips.length === 0;
+  const ownTripCount = useMemo(
+    () => trips.filter((trip) => trip.id !== sampleTripId).length,
+    [sampleTripId, trips],
+  );
+  const isFirstTrip = !tripsLoading && ownTripCount === 0;
   /**
    * Latched the moment the wizard starts writing: the trip list grows with the
    * first write, which would otherwise swap the wizard for the form between
    * the last question and the done screen.
    */
   const [wizardBusy, setWizardBusy] = useState(false);
-  const showWizard = wizardFlag === true && (isFirstTrip || wizardBusy);
-  const decidingWizard = isFirstTrip && wizardFlag === undefined && !wizardBusy;
+  const showWizard = isFirstTrip || wizardBusy;
+
+  /*
+    No navigation beside the wizard. On a first visit every trip tab is
+    disabled, so the bar can go nowhere useful and only competes with the
+    question on screen. The page keeps its own back link.
+  */
+  useHideNavigation(showWizard);
 
   /**
    * What to pre-fill the first guest — "you" — with.
@@ -331,7 +328,9 @@ export const TripCreatePage = memo(function TripCreatePage(): ReactElement {
   // Render
   // ============================================================================
 
-  if (decidingWizard) {
+  // Rendering the form and then swapping it for the wizard once the trip list
+  // arrives would be the worst of both.
+  if (tripsLoading && !wizardBusy) {
     return (
       <div className={containerClass}>
         <PageHeader title={t('trips.new')} backLink="/trips" className={headerClass} />
