@@ -944,6 +944,8 @@ export type AnalyticsEvent =
   | 'run_calendar_exported'
   // Preferences
   | 'language_changed'
+  | 'nav_bar_reordered'
+  | 'nav_mode_changed'
   | 'palette_changed'
   | 'pet_customized'
   | 'pet_interacted'

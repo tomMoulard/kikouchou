@@ -37,6 +37,7 @@ import { Separator } from '@/components/ui/separator';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { AccountSection } from '@/features/auth/components/AccountSection';
+import { NavBarSettings } from '@/features/settings/components/NavBarSettings';
 import { NotificationSettings } from '@/features/settings/components/NotificationSettings';
 import { ThemeSelector } from '@/features/settings/components/ThemeSelector';
 import { PetSettingsCard } from '@/features/pet';
@@ -329,6 +330,9 @@ function SettingsPageComponent(): ReactElement {
 
         {/* Theme Section - grouped with Language: both are presentation preferences */}
         <ThemeSelector />
+
+        {/* The phone's navigation - how the app is laid out, so beside the theme. */}
+        <NavBarSettings />
 
         {/* The pet - a presentation preference too, so it sits with the theme. */}
         <PetSettingsCard />

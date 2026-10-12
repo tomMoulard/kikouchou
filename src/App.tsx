@@ -190,11 +190,12 @@ function App(): ReactElement {
         `viewport-fit=cover` now exposes — the same sum `bottom-fab-safe` in
         `src/index.css` applies to the second FAB on `/trips`. Sonner takes this
         as a raw offset string rather than a class, so it is the one place the
-        arithmetic is repeated; keep the two in step.
+        arithmetic is repeated; keep the two in step. `--nav-bar-height` is 0
+        when Settings turned the bar off, which brings the toasts down with it.
       */}
       <Toaster
         position="bottom-center"
-        mobileOffset={{ bottom: 'calc(9rem + env(safe-area-inset-bottom, 0px))' }}
+        mobileOffset={{ bottom: 'calc(var(--nav-bar-height, 4rem) + 5rem + env(safe-area-inset-bottom, 0px))' }}
         richColors
         closeButton
       />

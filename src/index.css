@@ -647,7 +647,8 @@
  * The stack, measured upwards from the bottom of the *safe* area:
  *
  *   0                   the safe-area inset itself (0 on a phone without one)
- *   0     - 4rem  (64px) the mobile nav bar, `h-16` (Layout.tsx, `md:hidden`)
+ *   0     - 4rem  (64px) the mobile nav bar, `h-16` (Layout.tsx, `md:hidden`),
+ *                       or nothing when the user turned it off (see below)
  *   5rem  - 8.5rem       the FAB, `size-14` at `bottom-nav-safe` (`sm:hidden`)
  *   9rem  - 12.5rem      a second FAB, on a non-empty `/trips` only
  *                       (`bottom-fab-safe`)
@@ -657,6 +658,11 @@
  * Every number below is that table. Do not spell one out at a call site: the
  * whole reason the FAB and the toasts and the install prompt kept landing on
  * top of each other is that each of them carried its own arithmetic.
+ *
+ * The bar's 4rem is `--nav-bar-height`, not a literal, because Settings can
+ * turn the bar off (the header's menu button replaces it). `Layout` then puts
+ * `data-nav-bar="hidden"` on the root, the variable drops to 0, and every
+ * layer above it moves down by the same 4rem instead of floating over a hole.
  *
  * And the check that something new down here clears the stack is a hit test at
  * the covered element's own centre — `document.elementFromPoint(x, y)` — not a
@@ -680,7 +686,7 @@
  * "More" sheet — where the bar is visually still there behind the scrim.
  */
 @utility pb-nav-safe {
-  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(var(--nav-bar-height) + 1rem + env(safe-area-inset-bottom, 0px));
 }
 
 /**
@@ -696,12 +702,17 @@
  * overlay that has to start above the stack instead of reaching down into it.
  */
 :root {
-  --bottom-stack: calc(9.5rem + env(safe-area-inset-bottom, 0px));
+  --nav-bar-height: 4rem;
+  --bottom-stack: calc(var(--nav-bar-height) + 5.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+:root[data-nav-bar='hidden'] {
+  --nav-bar-height: 0rem;
 }
 
 @media (width >= theme(--breakpoint-sm)) {
   :root {
-    --bottom-stack: calc(5rem + env(safe-area-inset-bottom, 0px));
+    --bottom-stack: calc(var(--nav-bar-height) + 1rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -762,7 +773,7 @@
  * A FAB's own offset: directly above the nav bar and the home indicator.
  */
 @utility bottom-nav-safe {
-  bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--nav-bar-height) + 1rem + env(safe-area-inset-bottom, 0px));
 }
 
 /**
@@ -770,7 +781,7 @@
  * gap between the two circles.
  */
 @utility bottom-fab-safe {
-  bottom: calc(9rem + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--nav-bar-height) + 5rem + env(safe-area-inset-bottom, 0px));
 }
 
 /* Calendar booked dates indicator */

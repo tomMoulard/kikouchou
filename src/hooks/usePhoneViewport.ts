@@ -44,6 +44,17 @@ export const WIDE_MEDIA_QUERY = '(min-width: 1280px)';
 export const SHORT_LANDSCAPE_MEDIA_QUERY =
   '(max-height: 500px) and (orientation: landscape)';
 
+/**
+ * When the `auto` navigation mode gives up the bottom bar for the header's
+ * menu button.
+ *
+ * Two screens, joined by the comma (a media-query "or"). Under 360px wide, the
+ * bar's five evenly split labels wrap: "Activities" and "Transport" no longer
+ * fit a fifth of 320px. A phone held sideways is the other: its 400-odd pixels
+ * of height lose 64 to the bar.
+ */
+export const COMPACT_NAV_MEDIA_QUERY = `(max-width: 359px), ${SHORT_LANDSCAPE_MEDIA_QUERY}`;
+
 // ============================================================================
 // Hooks
 // ============================================================================
@@ -79,4 +90,13 @@ export function useWideViewport(): boolean {
  */
 export function useShortLandscapeViewport(): boolean {
   return useMediaQuery(SHORT_LANDSCAPE_MEDIA_QUERY);
+}
+
+/**
+ * True where the `auto` navigation mode swaps the bottom bar for a menu.
+ *
+ * @returns Whether the viewport matches {@link COMPACT_NAV_MEDIA_QUERY}
+ */
+export function useCompactNavViewport(): boolean {
+  return useMediaQuery(COMPACT_NAV_MEDIA_QUERY);
 }

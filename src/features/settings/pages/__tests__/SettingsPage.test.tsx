@@ -62,6 +62,9 @@ const mockDbOpen = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@/lib/db', () => ({
   db: { delete: (...args: unknown[]) => mockDbDelete(...args), open: (...args: unknown[]) => mockDbOpen(...args) },
+  // Read and written by the phone navigation card, which has its own tests.
+  getSettings: () => Promise.resolve({ id: 'settings', language: 'fr' }),
+  updateSettings: () => Promise.resolve(),
 }));
 
 const mockChangeLanguage = vi.fn().mockResolvedValue(undefined);
@@ -292,6 +295,12 @@ describe('SettingsPage', () => {
   });
 
   describe('Additional edge cases', () => {
+    it('renders the phone navigation card', () => {
+      render(<SettingsPage />, { withProviders: false });
+
+      expect(screen.getByText('settings.navBar.title')).toBeInTheDocument();
+    });
+
     it('renders about section with version', () => {
       render(<SettingsPage />, { withProviders: false });
       expect(screen.getByText('settings.about')).toBeInTheDocument();

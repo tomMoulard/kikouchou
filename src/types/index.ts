@@ -1658,6 +1658,41 @@ export interface GuestGroup extends Identifiable, WithTimestamps {
 }
 
 /**
+ * The trip pages a phone's bottom bar can hold, in the default order.
+ *
+ * Each value is the page's path under `/trips/:tripId/`.
+ */
+export const MOBILE_NAV_PAGES = [
+  'calendar',
+  'rooms',
+  'persons',
+  'money',
+  'activities',
+  'transports',
+  'analytics',
+  'edit',
+] as const;
+
+/** One of {@link MOBILE_NAV_PAGES}. */
+export type MobileNavPage = (typeof MOBILE_NAV_PAGES)[number];
+
+/** How many trip pages the bottom bar holds beside its "More" button. */
+export const MOBILE_NAV_BAR_SLOTS = 4;
+
+/**
+ * How a phone reaches the pages.
+ *
+ * - `auto`: the bottom bar, except on a very narrow or short screen, where a
+ *   menu button in the header takes its place.
+ * - `bar`: always the bottom bar.
+ * - `menu`: always the menu button.
+ */
+export const MOBILE_NAV_MODES = ['auto', 'bar', 'menu'] as const;
+
+/** One of {@link MOBILE_NAV_MODES}. */
+export type MobileNavMode = (typeof MOBILE_NAV_MODES)[number];
+
+/**
  * Application settings stored as a singleton record.
  *
  * @description Stores user preferences and application state.
@@ -1729,6 +1764,22 @@ export interface AppSettings extends Identifiable {
    * user deletes the trip, which is harmless: it matches nothing.
    */
   sampleTripId?: TripId;
+
+  /**
+   * The trip pages in the order this device wants them on a phone.
+   *
+   * The first {@link MOBILE_NAV_BAR_SLOTS} go in the bottom bar, the rest in
+   * its "More" sheet. Undefined means the default order. Read it through
+   * `resolveMobileNavOrder`, which drops unknown pages and appends missing
+   * ones, so a page added in a later release still reaches the user.
+   */
+  mobileNavOrder?: readonly MobileNavPage[];
+
+  /**
+   * Whether a phone shows the bottom bar or a menu button in the header.
+   * Undefined means `auto`.
+   */
+  mobileNavMode?: MobileNavMode;
 }
 
 // ============================================================================

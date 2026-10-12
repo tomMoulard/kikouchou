@@ -20,24 +20,15 @@ import { createPortal } from 'react-dom';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  BarChart2,
-  Calendar,
-  Car,
   ChevronLeft,
   ChevronRight,
-  Home,
-  type LucideIcon,
   Luggage,
   MapPin,
   Menu,
   MoreHorizontal,
-  PartyPopper,
   Settings,
-  Settings2,
   Sparkles,
-  Users,
   UsersRound,
-  Wallet,
 } from 'lucide-react';
 
 import { BrandMark } from '@/components/shared/BrandMark';
@@ -61,19 +52,22 @@ import { useTransportContext } from '@/contexts/TransportContext';
 import { useTripContext } from '@/contexts/TripContext';
 import { useActivePalette } from '@/hooks/useActivePalette';
 import { useToday } from '@/hooks/useToday';
-import { useShortLandscapeViewport, useWideViewport } from '@/hooks/usePhoneViewport';
+import { useMobileNavPreferences } from '@/hooks/useMobileNavPreferences';
+import {
+  useCompactNavViewport,
+  useShortLandscapeViewport,
+  useWideViewport,
+} from '@/hooks/usePhoneViewport';
 import { getDateLocale } from '@/lib/i18n/date-locale';
 import { toLocalISODateString } from '@/lib/db/utils';
 import { cn } from '@/lib/utils';
 import {
-  CalendarSolid,
-  HouseSolid,
-  type SolidIconProps,
-  UsersSolid,
-  WalletSolid,
-} from '@/components/shared/nav-icons';
+  type NavItem,
+  TRIP_NAV_ITEMS,
+  tripNavItemsInOrder,
+} from '@/components/shared/nav-items';
 import { formatDateRange } from '@/lib/utils/date-format';
-import type { Trip } from '@/types';
+import { MOBILE_NAV_BAR_SLOTS, type Trip } from '@/types';
 
 import { TripGlancePanel } from '@/features/summary/components/TripGlancePanel';
 import { DirectionsButton } from '@/features/transports/components/DirectionsButton';
@@ -89,40 +83,28 @@ import { isPushSupported } from '@/lib/notifications/push';
 // ============================================================================
 
 /**
- * Navigation item configuration.
- */
-interface NavItem {
-  /** Translation key for the label */
-  readonly labelKey: string;
-  /** Route path suffix (will be prefixed with tripId for trip-scoped routes) */
-  readonly pathSuffix: string;
-  /** Lucide icon component */
-  readonly icon: LucideIcon;
-  /**
-   * Solid twin of {@link NavItem.icon}, drawn instead of it in the mobile tab
-   * bar while this item is the current page.
-   *
-   * Only the primary tabs carry one — see `components/shared/nav-icons` for why
-   * the set is closed. An item without one keeps its outline and is marked
-   * current by colour alone, as everything did before.
-   */
-  readonly activeIcon?: SolidIcon;
-  /** Whether this route requires a trip (trip-scoped) */
-  readonly requiresTrip: boolean;
-}
-
-/**
- * A filled glyph drawn in place of an outline one. Structurally what a
- * `LucideIcon` is used as here, minus the stroke props a fill ignores.
- */
-type SolidIcon = (props: SolidIconProps) => React.ReactElement;
-
-/**
  * Props for the navigation components.
  */
 interface NavProps {
   /** Current trip ID for building trip-scoped paths */
   readonly tripId: string | null;
+}
+
+/**
+ * Props for {@link MobileNav}.
+ */
+interface MobileNavProps extends NavProps {
+  /** The trip pages in this device's order; the first four go in the bar */
+  readonly tripItems: readonly NavItem[];
+  /**
+   * Whether the bottom bar is drawn. Off, the header's menu button opens the
+   * same sheet, listing every page instead of only the ones the bar left out.
+   */
+  readonly showBar: boolean;
+  /** Whether the sheet is open; owned by `Layout` so the header can open it */
+  readonly isSheetOpen: boolean;
+  /** Opens or closes the sheet */
+  readonly onSheetOpenChange: (open: boolean) => void;
 }
 
 /**
@@ -136,51 +118,6 @@ interface LayoutProps {
 // ============================================================================
 // Constants
 // ============================================================================
-
-/**
- * Navigation items that require a trip to be selected.
- */
-const TRIP_NAV_ITEMS: readonly NavItem[] = [
-  {
-    labelKey: 'nav.calendar',
-    pathSuffix: 'calendar',
-    icon: Calendar,
-    activeIcon: CalendarSolid,
-    requiresTrip: true,
-  },
-  {
-    labelKey: 'nav.rooms',
-    pathSuffix: 'rooms',
-    icon: Home,
-    activeIcon: HouseSolid,
-    requiresTrip: true,
-  },
-  {
-    labelKey: 'nav.persons',
-    pathSuffix: 'persons',
-    icon: Users,
-    activeIcon: UsersSolid,
-    requiresTrip: true,
-  },
-  {
-    labelKey: 'nav.money',
-    pathSuffix: 'money',
-    icon: Wallet,
-    activeIcon: WalletSolid,
-    requiresTrip: true,
-  },
-  // The trip's cars are deliberately absent: they hang off the transport list
-  // (`/transports/vehicles`), because a car is only ever entered in order to be
-  // picked on a ride and nobody navigates to one for its own sake.
-  { labelKey: 'nav.activities', pathSuffix: 'activities', icon: PartyPopper, requiresTrip: true },
-  { labelKey: 'nav.transports', pathSuffix: 'transports', icon: Car, requiresTrip: true },
-  { labelKey: 'nav.tripAnalytics', pathSuffix: 'analytics', icon: BarChart2, requiresTrip: true },
-  // The trip's own settings — its name, its dates, who you are on it, and
-  // deleting it. `nav.settings` below is the app's: the language, the theme,
-  // the account. Two entries because they are two different things, and the
-  // trip's used to be reachable only through the app's.
-  { labelKey: 'nav.tripSettings', pathSuffix: 'edit', icon: Settings2, requiresTrip: true },
-] as const;
 
 /**
  * Navigation items that don't require a trip (always visible).
@@ -275,45 +212,6 @@ const ASSISTANT_NAV_ITEM: NavItem = {
 };
 
 /**
- * Trip sections kept out of the mobile bottom bar, in the order they appear
- * inside the "More" sheet. The bar holds 4 trip items + "More".
- *
- * Guests used to be in here, which put one of the pages people open most often
- * two taps away behind "More". Five slots is the ceiling — the bar splits the
- * width evenly, and a sixth makes the labels wrap on a small phone.
- */
-const MOBILE_SECONDARY_TRIP_PATHS: readonly string[] = [
-  'activities',
-  'transports',
-  'analytics',
-  'edit',
-];
-
-/**
- * Primary mobile bottom nav items (max 5 for UX: 4 trip items + "More").
- * Calendar, Rooms, Guests and Money are directly accessible.
- * Activities, Transport, Analytics, Trip settings, Trips, Settings are inside
- * the "More" sheet.
- * Derived from canonical arrays to avoid duplication.
- */
-const MOBILE_PRIMARY_NAV_ITEMS: readonly NavItem[] = TRIP_NAV_ITEMS.filter(
-  (item) => !MOBILE_SECONDARY_TRIP_PATHS.includes(item.pathSuffix),
-);
-
-/**
- * Items shown inside the "More" sheet on mobile.
- * Derived from canonical arrays to avoid duplication.
- */
-const MOBILE_MORE_NAV_ITEMS: readonly NavItem[] = [
-  ...MOBILE_SECONDARY_TRIP_PATHS.map(
-    (pathSuffix) => TRIP_NAV_ITEMS.find((item) => item.pathSuffix === pathSuffix)!,
-  ),
-  ...GLOBAL_NAV_ITEMS,
-  ASSISTANT_NAV_ITEM,
-  SETTINGS_NAV_ITEM,
-];
-
-/**
  * Builds the navigation path for a nav item.
  *
  * @param item - The navigation item
@@ -348,9 +246,11 @@ function buildNavPath(item: NavItem, tripId: string | null): string {
 const Header = memo(function Header({
   tripName,
   onMenuClick,
+  isMenuOpen = false,
 }: {
   readonly tripName: string | null;
   readonly onMenuClick?: () => void;
+  readonly isMenuOpen?: boolean;
 }): React.ReactElement {
   const { t } = useTranslation(),
     palette = useActivePalette();
@@ -358,7 +258,12 @@ const Header = memo(function Header({
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b bg-background px-4 md:px-6 print:hidden">
       <SeasonalHeaderDecor />
-      {/* Mobile menu button - only visible on mobile */}
+      {/*
+        Mobile menu button: only when the bottom bar is off (see the
+        navigation mode in Settings), and only below `md`, where the sidebar
+        is gone too. Without it a phone in that mode would have no way to
+        leave the page it is on.
+      */}
       {onMenuClick && (
         <Button
           variant="ghost"
@@ -366,6 +271,8 @@ const Header = memo(function Header({
           className="md:hidden"
           onClick={onMenuClick}
           aria-label={t('common.menu', 'Menu')}
+          aria-haspopup="dialog"
+          aria-expanded={isMenuOpen}
         >
           <Menu className="h-5 w-5" aria-hidden="true" />
         </Button>
@@ -393,16 +300,39 @@ const Header = memo(function Header({
 });
 
 /**
- * Mobile bottom navigation bar.
- * Fixed at the bottom of the screen, visible only on mobile.
- * Shows 3 primary items + a "More" button that opens a bottom sheet.
+ * Mobile navigation: the bottom bar and the sheet behind it.
+ *
+ * With the bar on, it is fixed at the bottom of the screen below `md` and
+ * shows the first {@link MOBILE_NAV_BAR_SLOTS} trip pages of this device's
+ * order plus a "More" button; the sheet holds the rest. With the bar off, the
+ * header's menu button opens the sheet and it holds every page.
+ *
  * Memoized to prevent unnecessary re-renders on route changes.
  */
-const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElement {
+const MobileNav = memo(function MobileNav({
+  tripId,
+  tripItems,
+  showBar,
+  isSheetOpen: isMoreOpen,
+  onSheetOpenChange: setIsMoreOpen,
+}: MobileNavProps): React.ReactElement {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const primaryItems = useMemo(
+    () => (showBar ? tripItems.slice(0, MOBILE_NAV_BAR_SLOTS) : []),
+    [showBar, tripItems],
+  );
+  const sheetItems = useMemo(
+    () => [
+      ...(showBar ? tripItems.slice(MOBILE_NAV_BAR_SLOTS) : tripItems),
+      ...GLOBAL_NAV_ITEMS,
+      ASSISTANT_NAV_ITEM,
+      SETTINGS_NAV_ITEM,
+    ],
+    [showBar, tripItems],
+  );
+  const sheetTitle = showBar ? t('nav.more', 'More') : t('common.menu', 'Menu');
   // One shared description for every trip-gated link in this nav. The sheet
   // needs its own copy: Radix marks the rest of the document `aria-hidden`
   // while it is open, and a description that lives in an aria-hidden subtree is
@@ -436,18 +366,20 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
     setIsMoreOpen(false);
     // Defer navigation to let Sheet exit animation start before route change
     requestAnimationFrame(() => navigate(path));
-  }, [navigate]);
+  }, [navigate, setIsMoreOpen]);
 
   // Check if any "More" item's route is currently active
   const isMoreItemActive = useMemo(() => {
-    return MOBILE_MORE_NAV_ITEMS.some((item) => {
+    return sheetItems.some((item) => {
       const path = buildNavPath(item, tripId);
       return location.pathname === path || location.pathname.startsWith(path + '/');
     });
-  }, [tripId, location.pathname]);
+  }, [sheetItems, tripId, location.pathname]);
 
   return (
     <>
+      {showBar ? (
+      <>
       {/*
         `pb-safe` rather than a taller bar: the background fills the home
         indicator's strip while the `h-16` row of links stays above it. Without
@@ -459,7 +391,7 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
         aria-label={t('nav.mobileMain', 'Mobile navigation')}
       >
         <ul className="flex h-16 items-center justify-around">
-          {MOBILE_PRIMARY_NAV_ITEMS.map((item) => {
+          {primaryItems.map((item) => {
             const path = buildNavPath(item, tripId),
              isDisabled = item.requiresTrip && !tripId;
 
@@ -558,8 +490,10 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
           </span>
         ) : null}
       </nav>
+      </>
+      ) : null}
 
-      {/* "More" bottom sheet */}
+      {/* "More" bottom sheet, or the whole menu when the bar is off */}
       <Sheet open={isMoreOpen} onOpenChange={setIsMoreOpen}>
         {/*
           The sheet covers the nav bar rather than sitting in front of it, but
@@ -571,21 +505,26 @@ const MobileNav = memo(function MobileNav({ tripId }: NavProps): React.ReactElem
           attribute for `aria-disabled` stopped Radix's FocusScope skipping
           those rows, so without this the sheet lands focus on a disabled item.
         */}
+        {/*
+          From the left when the header's menu button opened it, the side that
+          button sits on. Either way it scrolls: the full menu is a dozen rows,
+          and a phone held sideways has about 400px to put them in.
+        */}
         <SheetContent
-          side="bottom"
+          side={showBar ? 'bottom' : 'left'}
           showCloseButton={false}
-          className="pb-nav-safe"
+          className="max-h-svh overflow-y-auto pb-nav-safe"
           onOpenAutoFocus={handleSheetOpenAutoFocus}
         >
           <SheetHeader>
-            <SheetTitle>{t('nav.more', 'More')}</SheetTitle>
+            <SheetTitle>{sheetTitle}</SheetTitle>
             <SheetDescription className="sr-only">
               {t('nav.main', 'Main navigation')}
             </SheetDescription>
           </SheetHeader>
           <nav ref={sheetNavRef} aria-label={t('nav.moreNavigation', 'More navigation')}>
             <ul className="space-y-1">
-              {MOBILE_MORE_NAV_ITEMS.map((item) => {
+              {sheetItems.map((item) => {
                 const path = buildNavPath(item, tripId);
                 const isDisabled = item.requiresTrip && !tripId;
                 const isActive = location.pathname === path || location.pathname.startsWith(path + '/');
@@ -1136,7 +1075,21 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
    location = useLocation(),
    isWideViewport = useWideViewport(),
    isShortLandscape = useShortLandscapeViewport(),
+   isCompactNav = useCompactNavViewport(),
+   { order: navOrder, mode: navMode } = useMobileNavPreferences(),
    [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false),
+   [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false),
+   tripNavItems = useMemo(() => tripNavItemsInOrder(navOrder), [navOrder]),
+
+  /**
+   * Whether a phone gets the bottom bar, or the header's menu button instead.
+   *
+   * `auto` keeps the bar except where it costs too much of the screen (see
+   * `COMPACT_NAV_MEDIA_QUERY`); the other two modes are the user overruling
+   * that from Settings. Above `md` neither is drawn, whatever this says.
+   */
+   showBottomBar = navMode === 'bar' || (navMode === 'auto' && !isCompactNav),
+   openMobileMenu = useCallback(() => setIsMobileSheetOpen(true), [setIsMobileSheetOpen]),
   /**
    * Whether the page on screen asked for the navigation to go, through
    * `useHideNavigation`. The first-trip wizard does: on a first visit no
@@ -1206,7 +1159,29 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
    * Whether the sidebar and the bottom bar are off the screen. The header
    * stays unless the focused form drops it too: it carries no navigation.
    */
-   hideNavigation = showFocusedForm || isNavigationHiddenByPage;
+   hideNavigation = showFocusedForm || isNavigationHiddenByPage,
+
+  /** Whether the bottom bar is actually on screen below `md`. */
+   isBottomBarDrawn = showBottomBar && !hideNavigation;
+
+  /*
+    The bottom stack in `src/index.css` counts the bar's 4rem under every FAB,
+    toast and page bottom. With the bar off that is a 64px hole, so the root
+    says so and `--nav-bar-height` drops to 0. On the root rather than on this
+    tree because the toasts are portalled outside it. A layout effect, so the
+    FAB never paints a frame at the old height.
+  */
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    if (isBottomBarDrawn) {
+      delete root.dataset.navBar;
+    } else {
+      root.dataset.navBar = 'hidden';
+    }
+    return () => {
+      delete root.dataset.navBar;
+    };
+  }, [isBottomBarDrawn]);
 
   return (
     // `min-h-svh`, not `min-h-screen` (`100vh`): on a phone `100vh` is the tall
@@ -1236,7 +1211,17 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
         </a>
 
         {/* Header */}
-        {showFocusedForm ? null : <Header tripName={tripName} />}
+        {/*
+          The menu button stands in for the bar, so it goes wherever the bar
+          goes: a page that hides the navigation hides it too.
+        */}
+        {showFocusedForm ? null : (
+          <Header
+            tripName={tripName}
+            onMenuClick={showBottomBar || hideNavigation ? undefined : openMobileMenu}
+            isMenuOpen={isMobileSheetOpen}
+          />
+        )}
 
         {/* Desktop sidebar */}
         {hideNavigation ? null : (
@@ -1298,7 +1283,15 @@ export function Layout({ children }: LayoutProps): React.ReactElement {
         </main>
 
         {/* Mobile bottom navigation */}
-        {hideNavigation ? null : <MobileNav tripId={tripId} />}
+        {hideNavigation ? null : (
+          <MobileNav
+            tripId={tripId}
+            tripItems={tripNavItems}
+            showBar={showBottomBar}
+            isSheetOpen={isMobileSheetOpen}
+            onSheetOpenChange={setIsMobileSheetOpen}
+          />
+        )}
       </div>
     </NavigationVisibilityContext.Provider>
   );
