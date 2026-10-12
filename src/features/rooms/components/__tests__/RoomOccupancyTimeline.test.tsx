@@ -290,14 +290,11 @@ describe('RoomOccupancyTimeline', () => {
     expect(labelTitleOf()).toContain('rooms.doubleClickToEdit');
   });
 
-  // The room board and the guest calendar offer the same zooms: one of them
-  // gaining a scale the other has not is a difference the reader has to
-  // relearn every time they switch screens.
-  it('offers the same scale controls as the guest calendar', () => {
+  it('offers no zoom and no button back to now', () => {
     render(<RoomOccupancyTimeline {...defaultProps} />);
 
-    expect(screen.getByTestId('timeline-scale-select')).toBeInTheDocument();
-    expect(screen.getByTestId('timeline-now-button')).toBeInTheDocument();
+    expect(screen.queryByTestId('timeline-scale-select')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('timeline-now-button')).not.toBeInTheDocument();
   });
 
   it('says which way a booking went when the row has scrolled past it', () => {
