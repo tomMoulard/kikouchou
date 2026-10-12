@@ -28,6 +28,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { Locale } from 'date-fns';
 import {
+  AlertTriangle,
   ArrowDownToLine,
   ArrowLeft,
   ArrowUpFromLine,
@@ -325,7 +326,13 @@ const TransportPopupContent = memo(function TransportPopupContent({
 
       {/* Needs pickup indicator — only while nobody is driving the leg */}
       {transport.needsPickup && !isLegCovered(transport, drivenRideIds) && (
-        <div className={cn('text-xs font-medium', statusVariants({ tone: 'warning', emphasis: 'text' }))}>
+        <div
+          className={cn(
+            'flex items-center gap-1 text-xs font-medium',
+            statusVariants({ tone: 'warning', emphasis: 'text' }),
+          )}
+        >
+          <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
           {t('transports.needsPickup')}
         </div>
       )}
@@ -484,6 +491,7 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
     scope,
     canFilter: canFilterScope,
     myPersonId,
+    needsDriverIds,
     visibleTransports,
     hiddenCount,
     setScope,
@@ -502,8 +510,13 @@ const TransportMapPage = memo(function TransportMapPage(): ReactElement {
     if (scope === 'all' || myPersonId === undefined) {
       return drawable;
     }
-    return drawable.filter((journey) => rideConcernsPerson(journey, myPersonId));
-  }, [journeys, myPersonId, scope]);
+    // A car carrying a leg that needs a driver stays, like the leg itself.
+    return drawable.filter(
+      (journey) =>
+        rideConcernsPerson(journey, myPersonId) ||
+        journey.legs.some((leg) => needsDriverIds.has(leg.transport.id)),
+    );
+  }, [journeys, myPersonId, needsDriverIds, scope]);
 
   /** Line from start to end when both GPS points exist */
   const routePolylines = useMemo((): readonly MapPolylineData[] => {

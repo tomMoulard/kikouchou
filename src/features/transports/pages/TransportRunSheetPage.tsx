@@ -15,7 +15,14 @@
 import { type ReactElement, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowDownToLine, ArrowUpFromLine, Car, Clock, MapPin, Plane } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Clock,
+  MapPin,
+  Plane,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -206,7 +213,7 @@ const RunSheetRow = memo(function RunSheetRow({
             variant="outline"
             className={cn('shrink-0', statusVariants({ tone: 'warning', emphasis: 'outline' }))}
           >
-            <Car className="mr-1 size-3.5" aria-hidden="true" />
+            <AlertTriangle className="mr-1 size-3.5" aria-hidden="true" />
             {t('pickups.needsDriver')}
           </Badge>
         )}
